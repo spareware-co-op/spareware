@@ -1059,6 +1059,22 @@
       "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+      "mutant": "replace < with <= in midpoint",
+      "line_text": "if m < x.lo() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when m == lo, where the mutant returns lo and the original m. These are the same bits: a nonzero lo equal to m is the same double, and a zero lo is +0 (a box stores a zero bound as +0) with hi >= 0, so m = +0 + 0.5*hi is +0 too. Every step's midpoint, and so every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+      "mutant": "replace > with >= in midpoint",
+      "line_text": "} else if m > x.hi() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when m == hi, where the mutant returns hi and the original m. These are the same bits: a nonzero hi equal to m is the same double, and a zero hi is +0 with lo <= 0, so m = 0.5*lo + +0 equals zero only as -0 + +0 or +0 + +0, both +0. Every step's midpoint, and so every result, is the same."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
       "mutant": "replace sub -> Result<usize, LinalgError> with Ok(1)",
       "line_text": "a.checked_sub(b).ok_or(LinalgError::Defect)",

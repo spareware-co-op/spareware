@@ -1213,3 +1213,43 @@ fn nested_duals_give_second_derivatives() {
     let [y, xx] = Dual::<Dual<Interval, 2>, 2>::variables([yi, xi]);
     assert!(y.atan2(xx).is_ok());
 }
+
+/// The midpoint is inside the box even where halving the bounds rounds it out, as the operators'
+/// proofs need: x/x − 1 has no value at 0, so a midpoint left at 0 (the rounded centre of
+/// [2^−1074, 2^−1074]) or at −0 (that of [−2^−1074, −2^−1074]) would fail with
+/// `DivisorContainsZero` where the step at the box's own point goes on.
+#[test]
+fn the_midpoint_stays_in_the_box() {
+    struct Ratio;
+    impl Residuals<1> for Ratio {
+        fn residuals<S: Scalar>(&self, [x]: [S; 1]) -> Result<[S; 1], NumError> {
+            Ok([x.div(x)?.sub(c(1.0))?])
+        }
+    }
+    let tiny = f64::from_bits(1);
+    for v in [tiny, -tiny] {
+        assert_eq!(
+            0.5 * v + 0.5 * v,
+            0.0,
+            "the centre of [{v:e}, {v:e}] rounds to zero"
+        );
+        let at_point = Ratio.residuals([Interval::point(v).unwrap()]);
+        assert!(at_point.is_ok(), "{at_point:?}");
+        assert_eq!(
+            Ratio.residuals([Interval::point(0.0).unwrap()]),
+            Err(NumError::DivisorContainsZero)
+        );
+        for (name, op) in both::<Ratio, 1>() {
+            let step = op(&Ratio, [iv(v, v)]);
+            assert_ne!(
+                step,
+                Err(NewtonError::Num(NumError::DivisorContainsZero)),
+                "{name} at {v:e}"
+            );
+            assert!(
+                matches!(step, Err(NewtonError::Singular) | Ok(_)),
+                "{name} at {v:e}: {step:?}"
+            );
+        }
+    }
+}
