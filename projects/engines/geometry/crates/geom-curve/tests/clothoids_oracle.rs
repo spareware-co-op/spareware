@@ -23,7 +23,11 @@
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
     clippy::float_cmp,
+    clippy::many_single_char_names,
     clippy::indexing_slicing,
     clippy::unwrap_used,
     clippy::panic,
@@ -264,5 +268,5 @@ fn the_comparison_runs_on_the_kernels_own_points() {
     let out = compare(&cases, &(moved.join("\n") + "\n"));
     assert_eq!(out.agree, cases.len() - 1);
     assert_eq!(out.theirs.len(), 1, "{out:?}");
-    assert!(out.ours.is_empty());
+    assert_eq!(out.ours, Vec::<String>::new());
 }

@@ -45,10 +45,10 @@
 //! cosine, and O(k²) more operations for the k-th derivative.
 //!
 //! Consulted: IFC 4.3 documentation (buildingSMART), CC-BY-ND-4.0,
-//!  https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas,
-//!  the curvature and heading formulas of IfcAlignmentHorizontalSegmentTypeEnum's transitions,
-//!  IfcClothoid, the second-, third- and seventh-order polynomial spirals, IfcCosineSpiral and
-//!  IfcSineSpiral, whose formulas the laws implement; no text adapted
+//!   <https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas>,
+//!   for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s
+//!   transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals,
+//!   `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement. No text adapted.
 
 #![allow(
     clippy::many_single_char_names,
@@ -269,7 +269,7 @@ impl Transition {
         let norm = tight::norm(&d)?;
         let unit = [tight::div(d[0], norm)?, tight::div(d[1], norm)?];
         let (first, second) = headings(&law, length)?;
-        let (panels, remainder) = build(&first, second.as_ref(), length, meter)?;
+        let (panels, remainder) = build(&first, second.as_ref(), length, MAX_PANELS, meter)?;
         Ok(Transition {
             start,
             direction,
@@ -354,9 +354,6 @@ impl Transition {
             return Ok(());
         };
         *first = self.point(t)?;
-        if rest.is_empty() {
-            return Ok(());
-        }
         let (panel, _, xi) = self.panel_of(t)?;
         let units = self.units(self.heading_of(panel), xi, rest.len())?;
         for (slot, g) in rest.iter_mut().zip(&units) {
@@ -464,8 +461,8 @@ impl Transition {
         let last = count.checked_sub(1).ok_or(CurveError::Defect)?;
         let mut index = form::floor_index(xi * form::count(count)?)?.min(last);
         // ξ was rounded, so it may lie past a panel end that t/L does not: at most one, since a
-        // panel is at least 2⁻¹⁶ wide.
-        if index > 0 && !reaches(t, self.length, ratio(index, count)?) {
+        // panel is at least 2⁻¹⁶ wide. Every t reaches the first panel's start, 0.
+        if !reaches(t, self.length, ratio(index, count)?) {
             index = index.checked_sub(1).ok_or(CurveError::Defect)?;
         } else if index < last {
             let next = index.checked_add(1).ok_or(CurveError::Defect)?;
@@ -730,12 +727,13 @@ fn unit_derivatives<N: Num>(turn: N, rates: &[N]) -> Result<Vec<[N; 2]>, CurveEr
     Ok(g)
 }
 
-/// The panels: the smallest power-of-two count whose remainders sum to at most L·2⁻⁵⁶, with the
-/// integrals to each panel's start; and the sum of the remainders.
+/// The panels: the smallest power-of-two count, at most `cap`, whose remainders sum to at most
+/// L·2⁻⁵⁶, with the integrals to each panel's start; and the sum of the remainders.
 fn build(
     first: &Heading,
     second: Option<&Heading>,
     length: f64,
+    cap: usize,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<Panel>, f64), CurveError> {
     let tolerance = length * TOLERANCE;
@@ -763,7 +761,7 @@ fn build(
             return Ok((integrate(first, second, length, &bounds)?, total.hi()));
         }
         count = count.checked_mul(2).ok_or(CurveError::Defect)?;
-        if count > MAX_PANELS {
+        if count > cap {
             return Err(CurveError::TooManyPanels);
         }
     }
@@ -1112,9 +1110,10 @@ impl Wave {
 
 /// The heading with its doubles and degree.
 fn finish(poly: [Interval; TERMS], wave: Option<Wave>) -> Result<Heading, CurveError> {
+    let zero = point(0.0)?;
     let len = poly
         .iter()
-        .rposition(|c| c.lo() != 0.0 || c.hi() != 0.0)
+        .rposition(|c| *c != zero)
         .map_or(Ok(0), |k| k.checked_add(1).ok_or(CurveError::Defect))?;
     Ok(Heading {
         poly,
@@ -1229,6 +1228,58 @@ mod tests {
             }
         }
         assert_eq!(size.to_bits(), 0x4159_9827_b4f5_5741);
+    }
+
+    #[test]
+    fn the_remainders_widen_the_enclosures() {
+        // Remainders far above the rounding: each panel's start holds every earlier one's, and a
+        // station's enclosure its own panel's too.
+        let h = quadratic(0.25);
+        let panels = integrate(&h, None, 2.0, &[0.5, 0.25, 0.125, 0.0625]).unwrap();
+        for (p, widened) in panels.iter().zip([0.0, 0.5, 0.75, 0.875]) {
+            for i in [p.x, p.y] {
+                let width = i.hi() - i.lo();
+                assert!(
+                    width >= 2.0 * widened && width <= 2.0 * widened + 1e-12,
+                    "{i:?}"
+                );
+            }
+            assert!(!p.second);
+        }
+        let law = CurvatureLaw::Clothoid {
+            start: 0.0,
+            end: 0.5,
+        };
+        let mut meter = WorkMeter::new(geom_run::Budget::UNLIMITED);
+        let mut t = Transition::new([0.0, 0.0], [1.0, 0.0], 2.0, law, &mut meter).unwrap();
+        let narrow = t.enclose(1.0, 0, &mut meter).unwrap()[0];
+        let last = t.panels.len() - 1;
+        t.panels[last].remainder = 0.5;
+        let wide = t.enclose(2.0, 0, &mut meter).unwrap()[0];
+        for (n, w) in narrow.iter().zip(wide) {
+            assert!(
+                n.hi() - n.lo() < 1e-12 && w.hi() - w.lo() >= 1.0,
+                "{n:?} {w:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_cap_is_the_last_count_tried() {
+        // This Bloss transition needs four panels (attack_g63.rs pins it): a cap of four builds
+        // them, a cap of two refuses.
+        let law = CurvatureLaw::Bloss {
+            start: 1.0 / 1000.0,
+            end: 1.0 / 350.0,
+        };
+        let (h, _) = headings(&law, 200.0).unwrap();
+        let mut meter = WorkMeter::new(geom_run::Budget::UNLIMITED);
+        let (panels, _) = build(&h, None, 200.0, 4, &mut meter).unwrap();
+        assert_eq!(panels.len(), 4);
+        assert_eq!(
+            build(&h, None, 200.0, 2, &mut meter),
+            Err(CurveError::TooManyPanels)
+        );
     }
 
     #[test]
