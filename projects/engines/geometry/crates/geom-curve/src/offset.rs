@@ -449,15 +449,9 @@ impl<const D: usize> Offset<D> {
                 let mut lat: f64 = 0.0;
                 let (mut vlo, mut vhi) = (f64::INFINITY, f64::NEG_INFINITY);
                 for x in s {
-                    if x.lateral.abs() > lat {
-                        lat = x.lateral.abs();
-                    }
-                    if x.vertical < vlo {
-                        vlo = x.vertical;
-                    }
-                    if x.vertical > vhi {
-                        vhi = x.vertical;
-                    }
+                    lat = tight::larger(lat, x.lateral.abs());
+                    vlo = tight::smaller(vlo, x.vertical);
+                    vhi = tight::larger(vhi, x.vertical);
                 }
                 (lat, Interval::new(vlo, vhi)?)
             }
@@ -537,12 +531,8 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
                 .zip(out.hi.iter_mut())
                 .zip(b.lo.iter().zip(&b.hi))
             {
-                if x < *l {
-                    *l = x;
-                }
-                if y > *h {
-                    *h = y;
-                }
+                *l = tight::smaller(*l, x);
+                *h = tight::larger(*h, y);
             }
         }
         Ok(out)
@@ -567,12 +557,8 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
             };
             let x = e.get(order).ok_or(CurveError::Defect)?;
             for ((l, h), v) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(x) {
-                if v.lo() < *l {
-                    *l = v.lo();
-                }
-                if v.hi() > *h {
-                    *h = v.hi();
-                }
+                *l = tight::smaller(*l, v.lo());
+                *h = tight::larger(*h, v.hi());
             }
         }
         Ok(DerivativeBound::Bounded(out))
@@ -590,7 +576,7 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
         let scale =
             b.lo.iter()
                 .chain(&b.hi)
-                .fold(1.0_f64, |s, x| if x.abs() > s { x.abs() } else { s });
+                .fold(1.0_f64, |s, x| tight::larger(s, x.abs()));
         let mut per = 8;
         loop {
             let cuts = taylor::cuts_between(self.domain(), &breaks, per)?;

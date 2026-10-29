@@ -149,10 +149,7 @@ fn composite(pieces: &[MapPiece], t: f64) -> Result<Interval, CurveError> {
         point(a)?,
         tight::mul(tight::sub(point(t)?, point(piece.start)?)?, r)?,
     )?;
-    let (lo, hi) = (
-        if l.lo() < a { a } else { l.lo() },
-        if l.hi() > b { b } else { l.hi() },
-    );
+    let (lo, hi) = (tight::larger(l.lo(), a), tight::smaller(l.hi(), b));
     let at = |x: f64| -> Result<Interval, CurveError> {
         match &piece.map {
             LocalMap::Same => point(x),
@@ -161,8 +158,8 @@ fn composite(pieces: &[MapPiece], t: f64) -> Result<Interval, CurveError> {
         }
     };
     // Each map is increasing, so its ends bound it over [lo, hi].
-    let (u0, u1) = (at(lo)?, at(if hi < lo { lo } else { hi })?);
-    let u = Interval::new(u0.lo(), if u1.hi() < u0.lo() { u0.lo() } else { u1.hi() })?;
+    let (u0, u1) = (at(lo)?, at(tight::larger(hi, lo))?);
+    let u = Interval::new(u0.lo(), tight::larger(u1.hi(), u0.lo()))?;
     tight::add(u, point(piece.shift)?)
 }
 
