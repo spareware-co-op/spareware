@@ -217,16 +217,16 @@ impl Decimal {
             let tail = text
                 .get(after..)
                 .ok_or(DecimalError::Syntax { at: after })?;
-            let unsigned = tail.strip_prefix(['+', '-']).unwrap_or(tail);
-            if let Some(bad) = unsigned.bytes().position(|c| !c.is_ascii_digit()) {
-                let offset = tail.len().saturating_sub(unsigned.len());
-                let at = after
-                    .checked_add(offset)
-                    .and_then(|a| a.checked_add(bad))
-                    .unwrap_or(after);
+            // The exponent's digits start after an optional sign: at `after` or one byte later.
+            let first = after
+                .checked_add(usize::from(matches!(bytes.get(after), Some(b'+' | b'-'))))
+                .ok_or(DecimalError::Syntax { at: after })?;
+            let digits: &[u8] = bytes.get(first..).unwrap_or(&[]);
+            if let Some(bad) = digits.iter().position(|c| !c.is_ascii_digit()) {
+                let at = first.checked_add(bad).unwrap_or(first);
                 return Err(DecimalError::Syntax { at });
             }
-            if unsigned.is_empty() {
+            if digits.is_empty() {
                 return Err(DecimalError::Syntax { at: bytes.len() });
             }
             i64::from(i32::from_str(tail).map_err(|_| DecimalError::ExponentRange)?)
