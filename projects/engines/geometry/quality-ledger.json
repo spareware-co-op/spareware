@@ -693,7 +693,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/frame.rs",
       "mutant": "delete - in not_parallel",
-      "line_text": "sum.add_slice(&[x, ex, -y, -ey]);",
+      "line_text": "sum.add(-ey);",
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The mutant sums x + ex - y + ey for the cross product's coordinate. Where the exact coordinate is zero the two products are equal, so they round alike and the doubles' cross product is zero too: Frame::unit refuses it as Degenerate either way. Where it is not zero, the mutant can only call it zero (refusing a frame that is nearly degenerate), never accept a parallel one."
