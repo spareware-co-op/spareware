@@ -29,12 +29,12 @@
 //!   to the nearest step, ties to even, moving it by at most half a step
 //!   ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.
 //! - Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or
-//!   in [`wide`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends
-//!   on overflow checks being on: a result that does not fit is `None` or an error, never a
-//!   silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and
-//!   each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo
-//!   2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches
-//!   2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside
+//!   in [`wide`] and [`wide32`] the `overflowing_*` limb steps, whose carry or borrow is kept), so
+//!   nothing depends on overflow checks being on: a result that does not fit is `None` or an error,
+//!   never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose,
+//!   and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule,
+//!   modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never
+//!   reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside
 //!   [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a
 //!   double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum
 //!   of the significands is recovered. In those two a `wrapping_*` method is the specified
@@ -44,9 +44,9 @@
 //!   bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so
 //!   a wrap there is the computation the proof describes, never a lost value. Every other integer
 //!   step in the ports is checked too: its `None`, which each step proves cannot come, ends the
-//!   computation with the canonical NaN, which the public functions report as `NotFinite`. Only
-//!   the compiler's evaluation of constants uses native operators, where an overflow stops the
-//!   build. Counts of steps never saturate: a saturated bound would understate the truth.
+//!   computation with the canonical NaN, which the public functions report as `NotFinite`. Only the
+//!   compiler's evaluation of constants uses native operators, where an overflow stops the build.
+//!   Counts of steps never saturate: a saturated bound would understate the truth.
 //! - No floating-point value produced here from finite inputs is NaN. [`math`] returns a
 //!   [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as
 //!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a
@@ -100,6 +100,7 @@ pub mod real;
 pub mod rng;
 pub mod sign;
 pub mod wide;
+pub mod wide32;
 
 pub use dd::DD;
 pub use error::NumError;
@@ -109,3 +110,4 @@ pub use grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 pub use real::Real;
 pub use sign::Sign;
 pub use wide::{I256, I320, I384, I512, Wide};
+pub use wide32::Wide32;
