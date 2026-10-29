@@ -1,11 +1,18 @@
 //! Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`,
 //! `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`,
-//! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight` and
-//! `predicate-ssi-side`: the kernel's predicates, from their descriptions; `verus-orient2d`,
-//! `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`,
-//! `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and
-//! `verus-ssi-side`, the Verus twins of those exact paths; and `gappa-orient2d`, `gappa-orient3d`, `fptaylor-orient2d` and `fptaylor-orient3d`, the
-//! problems that machine-check those filters' error bounds ([`crate::predicate_certificates`]).
+//! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`,
+//! `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their
+//! descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`,
+//! `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`,
+//! `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and
+//! `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`,
+//! `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`,
+//! `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`,
+//! `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`,
+//! `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
+//! `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`,
+//! `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that
+//! machine-check the filters' error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
 //! orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose
@@ -15,7 +22,9 @@
 //! (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the
 //! generators that derive each one ([`crate::predicate_derive`]) and write its module into
 //! `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and
-//! [`OUTPUT_DIR`]`/mod.rs` for the module that holds them. `geom-num`'s `predicate.rs` calls the
+//! [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] and
+//! [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of
+//! chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the
 //! four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane
 //! ones, and `crossing.rs` the 2D crossing ones.
 //!
@@ -48,14 +57,15 @@
 //!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
 //!   for its one description per predicate. No code copied.
 //!
-//! Cost: each generator derives one predicate, or all eleven for the parent module: a few hundred
-//! exact operations each.
+//! Cost: each generator derives one predicate, or all eleven for the parent module and each
+//! variant: a few hundred exact operations each.
 
 use crate::generator::GenError;
-use crate::predicate_certificates::{fptaylor_problem, gappa_problem};
+use crate::predicate_certificates::{fptaylor_problem, gappa_case_problem, gappa_problem};
 use crate::predicate_derive::{Derivation, derive};
 use crate::predicate_emit::{
-    Comparison, EmitError, parent_module, predicate_module_serving, verus_twin,
+    Comparison, EmitError, Style, parent_module, predicate_module_serving, variant_module,
+    verus_twin,
 };
 
 /// The folder the generated modules are written into, relative to the workspace root.
@@ -702,6 +712,53 @@ pub fn generate_verus_insphere() -> Result<Vec<u8>, GenError> {
     twin_of("insphere")
 }
 
+/// The name of the generator of the plain-`i128` variant (chapter 23.3; piece G42).
+pub const PLAIN_GENERATOR: &str = "predicate-variant-plain";
+
+/// Where the plain-`i128` variant is written: beside the predicate modules, whose helpers it
+/// shares.
+pub const PLAIN_OUTPUT: &str = "projects/engines/geometry/crates/geom-num/src/generated/plain.rs";
+
+/// Generator `predicate-variant-plain`: every predicate's exact path in plain `i128`, the
+/// baseline of chapter 23.3's comparison of exact-path variants.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if a derivation or the emission fails.
+pub fn generate_plain() -> Result<Vec<u8>, GenError> {
+    let mut derivations = Vec::new();
+    for p in &PREDICATES {
+        derivations.push(derivation(p)?);
+    }
+    let refs: Vec<&Derivation> = derivations.iter().collect();
+    variant_module(&refs, PLAIN_GENERATOR, Style::Plain)
+        .map(String::into_bytes)
+        .map_err(|e| GenError::generator(PLAIN_GENERATOR, e.0))
+}
+
+/// The name of the generator of the width-aware limb variant (chapter 23.3; piece G42).
+pub const LIMBS_GENERATOR: &str = "predicate-variant-limbs";
+
+/// Where the limb variant is written: beside the predicate modules, whose helpers it shares.
+pub const LIMBS_OUTPUT: &str = "projects/engines/geometry/crates/geom-num/src/generated/limbs.rs";
+
+/// Generator `predicate-variant-limbs`: every predicate's exact path in width-aware 32-bit limbs,
+/// with the bounded proofs of each kind of limb step.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if a derivation or the emission fails.
+pub fn generate_limbs() -> Result<Vec<u8>, GenError> {
+    let mut derivations = Vec::new();
+    for p in &PREDICATES {
+        derivations.push(derivation(p)?);
+    }
+    let refs: Vec<&Derivation> = derivations.iter().collect();
+    variant_module(&refs, LIMBS_GENERATOR, Style::Limbs)
+        .map(String::into_bytes)
+        .map_err(|e| GenError::generator(LIMBS_GENERATOR, e.0))
+}
+
 /// Generator `verus-ssi-weight`: `ssi_weight`'s exact path as a Verus-annotated twin (piece
 /// G39).
 ///
@@ -773,7 +830,7 @@ pub fn generate_verus_lpi_side() -> Result<Vec<u8>, GenError> {
 
 /// The folder the certificates' problems are written into: geom-gen's generated folder, outside
 /// every crate's sources; `kernel-certificates.yml` runs the tools on them.
-pub const CERTIFICATES_DIR: &str = "projects/engines/geometry/crates/geom-gen/generated";
+pub const CERTIFICATES_DIR: &str = crate::predicate_certificates::PROBLEMS_DIR;
 
 /// One problem of a filter certificate (chapter 28.6; piece G35), as bytes.
 fn certificate(
@@ -805,6 +862,166 @@ pub fn generate_gappa_orient3d() -> Result<Vec<u8>, GenError> {
     certificate("orient3d", "gappa-orient3d", gappa_problem)
 }
 
+/// One case of a filter certificate whose scale has several monomials (piece G40), as bytes: the
+/// case `case` names, one of [`crate::predicate_certificates::gappa_cases`]'s.
+fn case_certificate(
+    predicate: &str,
+    generator: &'static str,
+    case: &str,
+) -> Result<Vec<u8>, GenError> {
+    let d = derivation(named(predicate)?)?;
+    gappa_case_problem(&d, generator, case)
+        .map(String::into_bytes)
+        .map_err(|e| GenError::generator(generator, e.0))
+}
+
+/// Generator `gappa-incircle-x`: incircle's filter for Gappa in the case where `m_x` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_incircle_x() -> Result<Vec<u8>, GenError> {
+    case_certificate("incircle", "gappa-incircle-x", "x")
+}
+
+/// Generator `gappa-incircle-y`: incircle's filter for Gappa in the case where `m_y` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_incircle_y() -> Result<Vec<u8>, GenError> {
+    case_certificate("incircle", "gappa-incircle-y", "y")
+}
+
+/// Generator `gappa-insphere-x`: insphere's filter for Gappa in the case where `m_x` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_insphere_x() -> Result<Vec<u8>, GenError> {
+    case_certificate("insphere", "gappa-insphere-x", "x")
+}
+
+/// Generator `gappa-insphere-y`: insphere's filter for Gappa in the case where `m_y` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_insphere_y() -> Result<Vec<u8>, GenError> {
+    case_certificate("insphere", "gappa-insphere-y", "y")
+}
+
+/// Generator `gappa-insphere-z`: insphere's filter for Gappa in the case where `m_z` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_insphere_z() -> Result<Vec<u8>, GenError> {
+    case_certificate("insphere", "gappa-insphere-z", "z")
+}
+
+/// Generator `gappa-plane-side-d`: `plane_side`'s filter for Gappa in the case where
+/// `m_d` is the largest term of the scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_plane_side_d() -> Result<Vec<u8>, GenError> {
+    case_certificate("plane_side", "gappa-plane-side-d", "d")
+}
+
+/// Generator `gappa-plane-side-z-n`: `plane_side`'s filter for Gappa in the case where
+/// `m_z * m_n` is the largest term of the scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_plane_side_z_n() -> Result<Vec<u8>, GenError> {
+    case_certificate("plane_side", "gappa-plane-side-z-n", "z-n")
+}
+
+/// Generator `gappa-plane-side-y-n`: `plane_side`'s filter for Gappa in the case where
+/// `m_y * m_n` is the largest term of the scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_plane_side_y_n() -> Result<Vec<u8>, GenError> {
+    case_certificate("plane_side", "gappa-plane-side-y-n", "y-n")
+}
+
+/// Generator `gappa-plane-side-x-n`: `plane_side`'s filter for Gappa in the case where
+/// `m_x * m_n` is the largest term of the scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_plane_side_x_n() -> Result<Vec<u8>, GenError> {
+    case_certificate("plane_side", "gappa-plane-side-x-n", "x-n")
+}
+
+/// Generator `gappa-tpi-weight`: `tpi_weight`'s filter for Gappa, whose proof Rocq checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_tpi_weight() -> Result<Vec<u8>, GenError> {
+    certificate("tpi_weight", "gappa-tpi-weight", gappa_problem)
+}
+
+/// Generator `gappa-ssi-weight`: `ssi_weight`'s filter for Gappa, whose proof Rocq checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_ssi_weight() -> Result<Vec<u8>, GenError> {
+    certificate("ssi_weight", "gappa-ssi-weight", gappa_problem)
+}
+
+/// Generator `gappa-ssi-side`: `ssi_side`'s filter for Gappa, whose proof Rocq checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_ssi_side() -> Result<Vec<u8>, GenError> {
+    certificate("ssi_side", "gappa-ssi-side", gappa_problem)
+}
+
+/// Generator `gappa-lpi-weight-z-n`: `lpi_weight`'s filter for Gappa in the case where `m_z * m_n` is
+/// the largest term of its scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_lpi_weight_z_n() -> Result<Vec<u8>, GenError> {
+    case_certificate("lpi_weight", "gappa-lpi-weight-z-n", "z-n")
+}
+
+/// Generator `gappa-lpi-weight-y-n`: `lpi_weight`'s filter for Gappa in the case where `m_y * m_n` is
+/// the largest term of its scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_lpi_weight_y_n() -> Result<Vec<u8>, GenError> {
+    case_certificate("lpi_weight", "gappa-lpi-weight-y-n", "y-n")
+}
+
+/// Generator `gappa-lpi-weight-x-n`: `lpi_weight`'s filter for Gappa in the case where `m_x * m_n` is
+/// the largest term of its scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_lpi_weight_x_n() -> Result<Vec<u8>, GenError> {
+    case_certificate("lpi_weight", "gappa-lpi-weight-x-n", "x-n")
+}
+
 /// Generator `fptaylor-orient2d`: orient2d's normalised filter for `FPTaylor`, whose certificate
 /// HOL Light checks.
 ///
@@ -823,6 +1040,96 @@ pub fn generate_fptaylor_orient2d() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_fptaylor_orient3d() -> Result<Vec<u8>, GenError> {
     certificate("orient3d", "fptaylor-orient3d", fptaylor_problem)
+}
+
+/// Generator `fptaylor-incircle`: incircle's normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_incircle() -> Result<Vec<u8>, GenError> {
+    certificate("incircle", "fptaylor-incircle", fptaylor_problem)
+}
+
+/// Generator `fptaylor-insphere`: insphere's normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_insphere() -> Result<Vec<u8>, GenError> {
+    certificate("insphere", "fptaylor-insphere", fptaylor_problem)
+}
+
+/// Generator `fptaylor-plane-side`: `plane_side`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_plane_side() -> Result<Vec<u8>, GenError> {
+    certificate("plane_side", "fptaylor-plane-side", fptaylor_problem)
+}
+
+/// Generator `fptaylor-tpi-weight`: `tpi_weight`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_tpi_weight() -> Result<Vec<u8>, GenError> {
+    certificate("tpi_weight", "fptaylor-tpi-weight", fptaylor_problem)
+}
+
+/// Generator `fptaylor-tpi-side`: `tpi_side`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_tpi_side() -> Result<Vec<u8>, GenError> {
+    certificate("tpi_side", "fptaylor-tpi-side", fptaylor_problem)
+}
+
+/// Generator `fptaylor-lpi-weight`: `lpi_weight`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_lpi_weight() -> Result<Vec<u8>, GenError> {
+    certificate("lpi_weight", "fptaylor-lpi-weight", fptaylor_problem)
+}
+
+/// Generator `fptaylor-lpi-side`: `lpi_side`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_lpi_side() -> Result<Vec<u8>, GenError> {
+    certificate("lpi_side", "fptaylor-lpi-side", fptaylor_problem)
+}
+
+/// Generator `fptaylor-ssi-weight`: `ssi_weight`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_ssi_weight() -> Result<Vec<u8>, GenError> {
+    certificate("ssi_weight", "fptaylor-ssi-weight", fptaylor_problem)
+}
+
+/// Generator `fptaylor-ssi-side`: `ssi_side`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_ssi_side() -> Result<Vec<u8>, GenError> {
+    certificate("ssi_side", "fptaylor-ssi-side", fptaylor_problem)
 }
 
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.
@@ -974,6 +1281,8 @@ mod tests {
         let mut expected: Vec<(&str, &str)> =
             PREDICATES.iter().map(|p| (p.generator, p.output)).collect();
         expected.push((MODULE_GENERATOR, MODULE_OUTPUT));
+        expected.push((PLAIN_GENERATOR, PLAIN_OUTPUT));
+        expected.push((LIMBS_GENERATOR, LIMBS_OUTPUT));
         for (name, output) in &expected {
             let g = REGISTRY.generators.iter().find(|g| g.name == *name);
             assert_eq!(g.map(|g| g.output), Some(*output), "{name}");

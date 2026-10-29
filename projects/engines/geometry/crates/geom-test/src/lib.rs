@@ -78,6 +78,15 @@
 //! - [`rust_source`]: reads Rust source for them: test code, functions, branch sites and marks.
 //! - [`miri`]: the plan of the weekly Miri run, one job per kernel test suite.
 //!
+//! Gate 1 (piece G43) adds:
+//!
+//! - [`trip`]: one planted violation for each gate whose verdict is an outside tool's (rustfmt,
+//!   Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun and Wasmtime's fuel). The binary `trip`
+//!   plants it, runs the gate's own command and requires the tool's report of it (`cargo run -p
+//!   geom-test --bin trip -- <violation> -- <command>`); each of those workflow jobs runs it.
+//! - `guard prove --golden-run <arguments>`: the toolchain guard's proof through `golden run`, so
+//!   the WebAssembly legs are shown to fail on a changed digest too.
+//!
 //! Piece G57 adds the first reference implementation of section 28.9:
 //!
 //! - [`nurbs_reference`]: NURBS curves in exact rationals, evaluated by de Boor's algorithm, with
@@ -202,6 +211,7 @@ pub mod rng;
 pub mod rust_source;
 pub mod scan;
 pub mod seed;
+pub mod trip;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};
 pub use seed::Seed;
