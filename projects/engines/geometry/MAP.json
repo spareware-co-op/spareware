@@ -1582,13 +1582,13 @@
       "modules": [
         {
           "cost": "linear in the number of limbs for addition and shifts, quadratic for multiplication; the generator's numbers have at most a few dozen limbs.",
-          "does": "[`Nat`] is a natural number of any size (little-endian 64-bit limbs) with exact addition, multiplication, shifts, comparison and a decimal form; the predicate generator's bit-range certificate holds every bound as one. [`UPoly`] is a polynomial in u with non-negative whole coefficients: every bound of the filter's error analysis is one, because the analysis only adds, multiplies, and multiplies by u or by 1 + u. [`UPoly::round_up_to_f64`] gives the smallest `f64` at least the polynomial's exact value at u = 2^-53, as its bits.",
+          "does": "[`Nat`] is a natural number of any size (little-endian 64-bit limbs) with exact addition, multiplication, shifts, comparison and a decimal form; the predicate generator's bit-range certificate holds every bound as one. [`UPoly`] is a polynomial in u with non-negative whole coefficients: every bound of the filter's error analysis is one, because the analysis only adds, multiplies, and multiplies by u or by 1 + u. [`UPoly::round_up_to_f64`] gives the smallest `f64` at least the polynomial's exact value at u = 2^-53, as its bits, and [`Nat::nearest_f64`] the `f64` nearest a natural number, as the number it is: the largest a rounded input's `f64` copy can be.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/bignum.rs",
           "guarantees": [
             "**Exact or nothing.** Every operation is exact. One whose result would not fit (a coefficient beyond `u128`, a shift beyond `u32` bits, a value beyond the largest `f64`) returns `None`, never a rounded or wrapped value; nothing panics.",
             "**Canonical.** A [`Nat`] has no zero top limb and a [`UPoly`] no zero top coefficient, so equal values compare equal and print the same.",
-            "**Rounded up, once, on purpose.** [`UPoly::round_up_to_f64`] is the only rounding here, and it rounds towards +∞: the `f64` it gives is never below the exact value."
+            "**Rounded only on purpose.** [`UPoly::round_up_to_f64`] rounds towards +∞, so the `f64` it gives is never below the exact value; [`Nat::nearest_f64`] rounds to nearest with ties to even, exactly as the filters convert a rounded input. Nothing else here rounds."
           ],
           "job": "Exact numbers for the predicate generator: natural numbers of any size, and polynomials in the unit roundoff u = 2^-53 with whole coefficients.",
           "method": {
@@ -1715,22 +1715,24 @@
           "target": "bin"
         },
         {
-          "cost": "linear in the description's steps; no allocation beyond the text.",
-          "does": "a generated filter computes the description's steps in `f64` on the coordinate differences, the scale S from the axis maxima, and the bound `fl(C · scale)`, and answers when the computed value is beyond the bound. [`gappa_problem`] states exactly that computation in Gappa's binary64 with rounding to nearest, beside the same steps evaluated exactly, on whole-number differences bounded by their axis maxima, and asks Gappa to prove that the error is within K · S and the computed bound within a relative error R of C · S, with K = C · (1 − R): together, |error| ≤ K · S ≤ bound, so an answer has the exact sign. [`fptaylor_problem`] states the normalised problem for `FPTaylor`, every difference in [−1, 1] so that S is 1, with the same K, which HOL Light compares the certificate's bound with. Both problems carry Gappa's hints and HOL Light's bound in their text, so the tools' runs need nothing else.",
+          "cost": "linear in the description's steps times the ways its scale's larger-ofs resolve (one per case); no allocation beyond the text.",
+          "does": "a generated filter computes the description's steps in `f64` on its inputs (coordinates, their differences, and the `f64` copies of wider integers), the scale S from the groups' maxima, and the bound `fl(C · scale)`, and answers when the computed value is beyond the bound. [`gappa_problem`] states exactly that computation in Gappa's binary64 with rounding to nearest, beside the same steps evaluated exactly, on whole-number inputs bounded by their groups' maxima, and asks Gappa to prove that the error is within K · S and the computed bound within a relative error R of C · S, with K = C · (1 − R): together, |error| ≤ K · S ≤ bound, so an answer has the exact sign. Where the result's scale has several monomials (the larger of `m_x^3 m_y` and `m_x m_y^3`, say), one problem cannot state it: [`gappa_case_problem`] states one problem per case ([`gappa_cases`]), the case where one group's maximum is the largest when the monomials share one degree, and otherwise where one monomial is the largest of the result's, each with S that monomial and the hypotheses the case implies. [`fptaylor_problem`] states the normalised problem for `FPTaylor`, each step divided by its scale S(v), the largest of its monomials at the group maxima, so every input is in [−1, 1] and the result's scale is 1, with a ratio parameter in [0, 1] where a sum's operand has a smaller scale set; one problem covers every input, with the same K, which HOL Light compares the certificate's bound with. [`proof_sentence`] is the label: proven, naming the problems, when the Gappa problems state the filter in every case, and otherwise \"checked, not proven\" with the open issue [`UNPROVEN`] gives it. Every problem carries Gappa's hints and HOL Light's bound in its text, so the tools' runs need nothing else.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicate_certificates.rs",
           "guarantees": [
             "**The shipped steps.** Each problem holds one rounded definition per operation of the filter, in the generated code's order, with its operands and operation, and the constant and the scale's product order as the code has them; `tests/certificate_problems.rs` holds the committed problems to the committed filters statement by statement.",
-            "**Exact numbers.** R = (k + 1)u, for the k roundings between the axis maxima and the bound, bounds the bound's relative error ((1 + u)^k − 1 < (k + 1)u for u = 2^−53), and K = C · (1 − R) is computed exactly from the constant's bits: both are dyadic, written exactly.",
-            "**Refused, never approximated.** A filter the problems cannot state yet, one with rounded inputs, a scale of several monomials, or a coordinate loaded without a translation, is refused with the reason; piece G40 extends them to every filter."
+            "**Every input covered, nothing assumed that fails.** A filter's cases together cover every input, one problem for each way its scale's larger-ofs resolve, and each hypothesis holds for every input of its case; `tests/certificate_problems.rs` justifies each one independently.",
+            "**Exact numbers.** R = (k + 1)u, for the k roundings between the maxima and the bound, bounds the bound's relative error ((1 + u)^k − 1 < (k + 1)u for u = 2^−53), and K = C · (1 − R) is computed exactly from the constant's bits: both are dyadic, written exactly. A rounded input's largest copy is its bound rounded to the nearest `f64`, exactly ([`crate::bignum::Nat`]).",
+            "**Refused, never approximated.** A filter the Gappa problems cannot state (a scale term formed from more than two inputs, say) is refused with the reason, and its label says \"checked, not proven\" with its issue; with no issue in [`UNPROVEN`] its module cannot be generated.",
+            "**Ratios, never more.** Each ratio parameter of an `FPTaylor` problem is S(operand) / S(sum) for the pairs of scale sets named in the problem's header, each the same ratio once their common factor is cancelled, and every use of it is one of those pairs: the problem's box holds every input's normalised values, never fewer."
           ],
-          "job": "The problems that machine-check a predicate filter's error bound (chapter 28.6 of the kernel architecture; piece G35): the filter's claim stated for Gappa, whose proof Rocq checks, and for `FPTaylor`, whose certificate HOL Light checks.",
+          "job": "The problems that machine-check a predicate filter's error bound (chapter 28.6 of the kernel architecture; pieces G35 and G40): the filter's claim stated for Gappa, whose proof Rocq checks, and for `FPTaylor`, whose certificate HOL Light checks; and the label each generated module carries, proven or \"checked, not proven\".",
           "method": {
             "links": [
               "https://doi.org/10.1051/ita:2007005",
               "https://doi.org/10.1145/3230733"
             ],
-            "text": "Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous predicate's error as a multiple of the product of its inputs' maxima (*Formally certified floating-point filters for homogeneous geometric predicates*, RAIRO Theoretical Informatics and Applications 41 (2007), <https://doi.org/10.1051/ita:2007005>), with Gappa's `LIN` predicate (`a // b`) in place of their special rounding operators, which current Gappa no longer has; and `FPTaylor`'s symbolic Taylor forms on the normalised problem (Solovyev et al., *Rigorous Estimation of Floating-Point Round-off Errors with Symbolic Taylor Expansions*, ACM TOPLAS 41 (2018), <https://doi.org/10.1145/3230733>)."
+            "text": "Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous predicate's error as a multiple of the product of its inputs' maxima (*Formally certified floating-point filters for homogeneous geometric predicates*, RAIRO Theoretical Informatics and Applications 41 (2007), <https://doi.org/10.1051/ita:2007005>), with Gappa's `LIN` predicate (`a // b`) in place of their special rounding operators, which current Gappa no longer has, and a case split for a scale that takes a larger-of; and `FPTaylor`'s symbolic Taylor forms on the normalised problem (Solovyev et al., *Rigorous Estimation of Floating-Point Round-off Errors with Symbolic Taylor Expansions*, ACM TOPLAS 41 (2018), <https://doi.org/10.1145/3230733>)."
           },
           "path": "geom_gen::predicate_certificates",
           "provenance": [],
@@ -1871,7 +1873,7 @@
             "**The same formulas as `predicate.rs`, `plane.rs` and `crossing.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term; `tpi_weight` and `tpi_side` evaluate the three-plane point's weight and its classification as `Tpi::homogeneous` and `Plane::side_of_tpi` do, except that the classification subtracts n · (−X) where `plane.rs` adds n · X, the same value; and the line-plane and crossing descriptions evaluate what `plane.rs` and `crossing.rs` document for them, step for step.",
             "**Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every target."
           ],
-          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `fptaylor-orient2d` and `fptaylor-orient3d`, the problems that machine-check those filters' error bounds ([`crate::predicate_certificates`]).",
+          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`, `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`, `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`, `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`, `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that machine-check the filters' error bounds ([`crate::predicate_certificates`]).",
           "method": {
             "links": [
               "https://doi.org/10.1016/j.cad.2015.10.004",
@@ -2873,7 +2875,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/incircle.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-incircle-x.g`, `gappa-incircle-y.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-incircle.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-incircle` (seed: none, it uses no randomness), from the description `INCIRCLE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2893,7 +2895,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/insphere.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-insphere-x.g`, `gappa-insphere-y.g`, `gappa-insphere-z.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-insphere.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-insphere` (seed: none, it uses no randomness), from the description `INSPHERE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2933,7 +2935,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-lpi-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-lpi-side` (seed: none, it uses no randomness), from the description `LPI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2953,7 +2955,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-lpi-weight-z-n.g`, `gappa-lpi-weight-y-n.g`, `gappa-lpi-weight-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-lpi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-lpi-weight` (seed: none, it uses no randomness), from the description `LPI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2975,7 +2977,7 @@
           "guarantees": [
             "**A filter never gives a wrong sign.** When `filter` returns `Some(sign)`, `sign` is the sign of the exact value, for every input in the domain (the proof below). It returns `None` when it cannot tell, never a guess.",
             "**The exact path is exact.** `value` returns the exact value for every input in the domain: the certificate bounds every intermediate within its type, and a step that did not fit would give `None`, never a wrapped value, since every step is a checked method. Nothing depends on overflow checks being on.",
-            "**Checked, not proven** (chapter 28.6). The bounds are derived exactly by the written proof below and re-derived by an independent checker in geom-gen's tests (its own parser, big integers and analysis), which also reads this committed code, this module's helpers included; the filters are tested against the exact paths on millions of random and near-degenerate inputs at the grid's extremes and on inputs placed just inside and just outside each bound. They are not yet machine-checked by `FPTaylor` or Gappa, which chapter 28.6 asks before a filter is called proven.",
+            "**Proven, or checked and labelled so** (chapter 28.6). The bounds are derived exactly by the written proof below and re-derived by an independent checker in geom-gen's tests (its own parser, big integers and analysis), which also reads this committed code, this module's helpers included; the filters are tested against the exact paths on millions of random and near-degenerate inputs at the grid's extremes and on inputs placed just inside and just outside each bound. On top of that, each module's guarantees say whether its filter's bound is machine-checked: proven where Gappa's proofs, checked by Rocq, cover every input (`kernel-certificates.yml`, pieces G35 and G40), and \"checked, not proven\" with its open issue otherwise.",
             "**Deterministic.** `f64` addition, subtraction and multiplication are correctly rounded on every target and Rust never fuses them (RFC 3514); the conversion of a rounded input rounds to nearest, ties to even, on every target; the maxima use comparisons only. The same inputs give the same answer on every target, and the answer is the exact sign whenever it is given, so the filter can never change a result.",
             "**No overflow, no underflow, no NaN, no panic, no allocation.** Every value the filter computes is a whole number below 2^1000 in magnitude (checked by the generator), so none is subnormal or infinite."
           ],
@@ -2999,7 +3001,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/orient2d.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-orient2d.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-orient2d.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-orient2d` (seed: none, it uses no randomness), from the description `ORIENT2D` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -3019,7 +3021,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/orient3d.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-orient3d.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-orient3d.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-orient3d` (seed: none, it uses no randomness), from the description `ORIENT3D` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -3059,7 +3061,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/plane_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-plane-side-d.g`, `gappa-plane-side-z-n.g`, `gappa-plane-side-y-n.g`, `gappa-plane-side-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-plane-side.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-plane-side` (seed: none, it uses no randomness), from the description `PLANE_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -3079,7 +3081,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/ssi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-ssi-side.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-ssi-side.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-ssi-side` (seed: none, it uses no randomness), from the description `SSI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -3099,7 +3101,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/ssi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-ssi-weight.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-ssi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-ssi-weight` (seed: none, it uses no randomness), from the description `SSI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -3119,7 +3121,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-tpi-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-tpi-side` (seed: none, it uses no randomness), from the description `TPI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -3139,7 +3141,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/tpi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-tpi-weight.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-tpi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-tpi-weight` (seed: none, it uses no randomness), from the description `TPI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -4731,7 +4733,7 @@
           "target": "bin"
         },
         {
-          "cost": "one `cargo metadata`, a copy of `libm`'s crate, and one build and run of `geom-num`'s determinism test against the changed copy.",
+          "cost": "one `cargo metadata`, a copy of `libm`'s crate, and one build and run of `geom-num`'s determinism test against the changed copy; with `--golden-run`, a build of `golden`, a second `cargo metadata`, and one build and run of every golden's test target instead.",
           "does": "`prove` finds the `libm` the workspace resolves (`cargo metadata --locked`), copies its crate into `<dir>/guard/libm-<version>`, applies [`geom_test::guard::perturb_sin`] (`sin`'s last bit flipped), and runs `cargo test --release -p geom-num --test determinism` with that copy patched in for `libm` (`--config patch.crates-io.libm.path=...`), building in `<dir>/guard/target` so the workspace's own build is untouched. It prints the run's output and then [`geom_test::guard::verdict`]'s answer: the golden `geom-num/determinism` must report a digest that differs from the store's. `<dir>` defaults to the workspace's `target` folder.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/guard.rs",
@@ -4829,6 +4831,23 @@
             "none": "it parses its arguments and calls [`geom_test::scan::repo`], whose module headers carry the method."
           },
           "path": "source-scan",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "one read and two writes of the file, and one run of the command.",
+          "does": "finds the violation `<violation>` in [`geom_test::trip::VIOLATIONS`], plants it in the working tree ([`geom_test::trip::apply`]: one line of one kernel file changed), runs the gate's command from the repository root, prints its output, restores the file, and prints [`geom_test::trip::verdict`]'s answer: the command must fail, printing the tool's own report of the violation.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/trip.rs",
+          "guarantees": [
+            "the file is restored byte for byte after the run, whether the run passed, failed or could not start; `RUSTUP_TOOLCHAIN`, which a `cargo run` passes down, is removed from the command's environment, so the command picks its toolchain as the job would (Verus names its own). Exit codes: 0 when the gate tripped as it must; 1 when it did not (the run passed, or failed for another reason); 2 for a usage error or a step that cannot be done."
+          ],
+          "job": "`trip`: proves a gate that runs an outside tool fails on a planted violation (gate 1, piece G43).",
+          "method": {
+            "none": "it runs the command and calls [`geom_test::trip`], whose module header carries the method."
+          },
+          "path": "trip",
           "provenance": [],
           "spdx": null,
           "target": "bin"
@@ -6171,9 +6190,10 @@
           "guarantees": [
             "**The language's own grammar.** Comments, strings, raw strings, character literals and nested block comments are told apart by `proc-macro2`'s lexer, and items by `syn`'s parser, so a brace or a word inside a string or a comment is never read as code.",
             "**An error, never a partial answer.** A file that does not parse as Rust is a [`ScanError`] naming the line, because a gate must not pass on a file it could not read.",
+            "**What a test reaches is read from its tokens.** [`references`] walks token trees, not expressions, so code inside any macro's arguments is read as the compiler will expand it in the common case; it follows only the file's own items, by name, and when two items in different modules share a name it follows both, which can only find more.",
             "**A comment is a comment.** A citation is read only from a line that starts with `//` and is not inside a string literal that spans lines; the walk up from a mark passes only over such lines and over the lines of other attributes, and stops at anything else."
           ],
-          "job": "Rust source, read for the quality gates: which lines are test code, whether a file has code that runs, where its branches are, every `coverage(off)` mark with the proof it cites, and whether a file defines a cited proof.",
+          "job": "Rust source, read for the quality gates: which lines are test code, whether a file has code that runs, where its branches are, every `coverage(off)` mark with the proof it cites, whether a file defines a cited proof, and what a test reaches in its own file.",
           "method": {
             "links": [
               "https://docs.rs/syn/3.0.9/syn/",
@@ -6284,6 +6304,30 @@
             "text": "the replay discipline of sections 28.5 and 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`): \"Every generator prints its seed, so any failure replays exactly\", and \"Seeds belong to test generators only, and every one is printed\". The environment variable mirrors the seed variables of proptest (`PROPTEST_RNG_SEED`, <https://github.com/proptest-rs/proptest>) and bolero (`BOLERO_RANDOM_SEED`, <https://github.com/camshaft/bolero>), with one name for every Spare Kit test, so one value replays any of them."
           },
           "path": "geom_test::seed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the file's length and the run's output.",
+          "does": "gate 1 (chapter 30.3) asks that every merge gate fail on a seeded violation, the pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]). Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun's Callgrind comparison and Wasmtime's fuel. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool prints when it catches it. The binary `trip` writes the changed line into the working tree, runs the gate's own command, restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason. Each workflow job runs it with its real check, so a job that could no longer fail (a tool that stopped checking, a command that checks nothing) fails instead. The two count gates run it last, comparing the planted run with the pull request's own run measured just before; the `ClusterFuzzLite` gate runs it in a job of its own, `clusterfuzzlite-seeded`, because its actions build a fresh clone of the pull request, which a planted line never reaches.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/trip.rs",
+          "guarantees": [
+            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own build and fuzzing must report through whichever target meets it first (each target's law names its own break, \"broken law: \"; its address sanitizer reports the abort that follows); and `Sign::of_i128` reading its argument through an opaque copy (`core::hint::black_box`), the same answer for more work, which both count gates must report as a rise of more than 5% on its benchmark.",
+            "**An anchor found once, or no run.** [`apply`] refuses a file that holds the anchor line other than exactly once, so a refactor that moves it fails `tests/attack_g43.rs` (which checks every anchor in the repository) and the job, loudly, instead of planting nothing.",
+            "**A trip counts only for the right reason.** [`verdict`] accepts a run only when the command failed and printed every line [`Violation::caught`] names: the tool's own words for a found violation. A build error, a missing tool or any other failure proves nothing and is refused.",
+            "**Line ends kept.** The anchor is matched on a line with its line end set aside, so a Windows checkout's CRLF files work the same, and the line end is kept."
+          ],
+          "job": "Seeded violations for the gates that run an outside tool on the kernel's own code (gate 1, piece G43): each such gate is shown to fail when a violation is planted on purpose.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/30-build-order.md"
+            ],
+            "text": "the seeded-violation pattern of the kernel's merge gate (chapter 28.8, `projects/engines/geometry/architecture/28-testing.md`; pieces G12 and G20, `guard`): plant one violation, run the real tool as the gate runs it, and require the tool's own report of that violation. Gate 1's condition is chapter 30.3's (`projects/engines/geometry/architecture/30-build-order.md`)."
+          },
+          "path": "geom_test::trip",
           "provenance": [],
           "spdx": null,
           "target": "lib"

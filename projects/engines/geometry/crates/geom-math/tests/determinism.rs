@@ -1939,7 +1939,7 @@ fn golden_hash_is_the_same_on_every_target() {
 )]
 fn golden_hash_is_the_same_on_every_thread_count() {
     let one = hex(corpus().total.finish());
-    for threads in [1usize, 2, 3, 8] {
+    for threads in geom_test::golden::THREAD_COUNTS {
         let hashes: Vec<String> = std::thread::scope(|sc| {
             let handles: Vec<_> = (0..threads)
                 .map(|_| sc.spawn(|| hex(corpus().total.finish())))
