@@ -419,6 +419,11 @@ fn only_a_dispatch_narrows_the_full_run() {
     assert_eq!(keys(&w["on"]["workflow_dispatch"]["inputs"]), ["files"]);
     // ... that no caller can set (kernel-release.yml's run is whole) ...
     assert!(w["on"]["workflow_call"].is_null() || w["on"]["workflow_call"]["inputs"].is_badvalue());
+    // ... with a concurrency group of its own, so it never queues behind a whole run ...
+    assert_eq!(
+        text(&w["concurrency"]["group"]),
+        "kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}"
+    );
     // ... reaching the steps only through the environment, never pasted into a script.
     assert_eq!(text(&w["env"]["FILES"]), "${{ inputs.files }}");
     for (job, step) in steps(&w) {

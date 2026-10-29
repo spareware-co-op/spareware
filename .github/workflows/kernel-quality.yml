@@ -94,8 +94,10 @@ permissions:
   contents: read
 
 # A newer push to the same pull request cancels the runs it supersedes; scheduled runs all run.
+# Dispatches on one branch queue behind each other only when they narrow to the same files, so a
+# narrowed run never waits hours behind a whole one.
 concurrency:
-  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}
+  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
