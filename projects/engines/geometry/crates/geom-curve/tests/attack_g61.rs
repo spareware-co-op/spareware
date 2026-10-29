@@ -649,3 +649,473 @@ fn long_helices_and_far_involutes() {
     let n = inv.to_nurbs(m).unwrap();
     assert!(n.deviation < 1e-10, "{}", n.deviation);
 }
+
+// ---- The mutation gate's attacks (each a claim the first gate run left untested) ----
+
+fn std3() -> Frame<3> {
+    Frame::standard().unwrap()
+}
+
+fn sinpi(x: f64) -> f64 {
+    geom_num::math::sinpi(x).unwrap().get()
+}
+
+fn cospi(x: f64) -> f64 {
+    geom_num::math::cospi(x).unwrap().get()
+}
+
+fn near(a: f64, b: f64) -> bool {
+    (a - b).abs() <= 1e-12 * (1.0 + a.abs() + b.abs())
+}
+
+/// Claim: each kind gives back what it was built from.
+#[test]
+fn kinds_give_back_their_definitions() {
+    let c = [1.5, -2.0, 0.25];
+    assert_eq!(Circle::new(c, 3.0, std3(), (0.0, 1.0)).unwrap().center(), c);
+    let axes = Axes::Frame {
+        frame: std3(),
+        a: 2.0,
+        b: 1.0,
+    };
+    assert_eq!(Hyperbola::new(c, axes, (-1.0, 1.0)).unwrap().center(), c);
+    assert_eq!(Parabola::new(c, axes, (-1.0, 1.0)).unwrap().vertex(), c);
+    assert_eq!(
+        Involute::new(c, 2.0, std3(), (0.0, 1.0)).unwrap().center(),
+        c
+    );
+    let helix = HelixAxes::Frame {
+        frame: std3(),
+        radius: 2.0,
+        pitch: 0.5,
+    };
+    assert_eq!(Helix::new(c, helix, (0.0, 1.0)).unwrap().center(), c);
+    let line = Line::new(c, [0.5, 0.25, -1.0], (0.0, 2.0)).unwrap();
+    assert_eq!((line.origin(), line.direction()), (c, [0.5, 0.25, -1.0]));
+    let coefficients = vec![c, [1.0, 0.0, 0.0], [0.0, 2.0, -1.0]];
+    let p = Polynomial::new(coefficients.clone(), (0.0, 1.0)).unwrap();
+    assert_eq!(p.coefficients(), &coefficients[..]);
+}
+
+/// Claim: a split's halves cover the two parts of the domain, for every analytic kind.
+#[test]
+fn split_halves_have_their_parts_of_the_domain() {
+    let m = &mut meter();
+    let c = [0.0, 0.0, 0.0];
+    let axes = Axes::Frame {
+        frame: std3(),
+        a: 2.0,
+        b: 1.0,
+    };
+    let helix = HelixAxes::Frame {
+        frame: std3(),
+        radius: 2.0,
+        pitch: 0.5,
+    };
+    let kinds: Vec<CurveKind<3>> = vec![
+        CurveKind::Circle(Circle::new(c, 3.0, std3(), (0.0, 1.5)).unwrap()),
+        CurveKind::Ellipse(Ellipse::new(c, axes, (0.0, 1.5)).unwrap()),
+        CurveKind::Hyperbola(Hyperbola::new(c, axes, (-1.0, 0.5)).unwrap()),
+        CurveKind::Parabola(Parabola::new(c, axes, (-1.0, 0.5)).unwrap()),
+        CurveKind::Helix(Helix::new(c, helix, (0.0, 1.5)).unwrap()),
+        CurveKind::Involute(Involute::new(c, 2.0, std3(), (0.0, 1.5)).unwrap()),
+        CurveKind::Polynomial(
+            Polynomial::new(vec![c, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], (-1.0, 0.5)).unwrap(),
+        ),
+    ];
+    for kind in kinds {
+        let (a, b) = kind.domain();
+        let t = f64::midpoint(a, b);
+        let (left, right) = kind.split(t, m).unwrap();
+        assert_eq!(left.value.domain(), (a, t), "{kind:?}");
+        assert_eq!(right.value.domain(), (t, b), "{kind:?}");
+        for at in [a, b] {
+            assert!(
+                kind.split(at, m).is_err(),
+                "split at the end {at}: {kind:?}"
+            );
+        }
+    }
+}
+
+/// Claim: a parabola by its focal length is the parabola of axes (f, 2f).
+#[test]
+fn a_parabola_by_focal_length_is_the_one_of_its_axes() {
+    let f = 3.0;
+    let by_focal = Parabola::focal([0.0, 0.0, 0.0], f, std3(), (-1.0, 1.0)).unwrap();
+    let by_axes = Parabola::new(
+        [0.0, 0.0, 0.0],
+        Axes::Frame {
+            frame: std3(),
+            a: f,
+            b: 2.0 * f,
+        },
+        (-1.0, 1.0),
+    )
+    .unwrap();
+    for k in 0..=8 {
+        let t = -1.0 + f64::from(k) / 4.0;
+        assert_eq!(
+            by_focal.point(t, Limit::FromRight).unwrap(),
+            by_axes.point(t, Limit::FromRight).unwrap()
+        );
+    }
+}
+
+/// Claim: refusals by kind: a point that is not finite, a helix of no pitch or a pitch that is not
+/// finite, and domains that are not finite, empty or reversed.
+#[test]
+fn malformed_kinds_are_refused_by_kind() {
+    use geom_curve::CurveError;
+    let axes = Axes::Frame {
+        frame: std3(),
+        a: 2.0,
+        b: 1.0,
+    };
+    assert_eq!(
+        Circle::new([f64::NAN, 0.0, 0.0], 1.0, std3(), (0.0, 1.0)).err(),
+        Some(CurveError::NotFinite)
+    );
+    // The point is checked first: a bad point with a bad domain is refused for the point.
+    assert_eq!(
+        Circle::new([f64::NAN, 0.0, 0.0], 1.0, std3(), (2.0, 1.0)).err(),
+        Some(CurveError::NotFinite)
+    );
+    for (pitch, e) in [
+        (0.0, CurveError::Degenerate),
+        (f64::NAN, CurveError::NotFinite),
+    ] {
+        let h = HelixAxes::Frame {
+            frame: std3(),
+            radius: 1.0,
+            pitch,
+        };
+        assert_eq!(
+            Helix::new([0.0; 3], h, (0.0, 1.0)).err(),
+            Some(e),
+            "pitch {pitch}"
+        );
+    }
+    for d in [
+        (f64::NAN, 1.0),
+        (0.0, f64::INFINITY),
+        (1.0, 1.0),
+        (2.0, 1.0),
+    ] {
+        assert_eq!(
+            Parabola::new([0.0; 3], axes, d).err(),
+            Some(CurveError::SpanOutside),
+            "{d:?}"
+        );
+        assert_eq!(
+            Polynomial::new(vec![[0.0; 3], [1.0, 0.0, 0.0]], d).err(),
+            Some(CurveError::SpanOutside),
+            "{d:?}"
+        );
+    }
+}
+
+/// Claim: a turn is at most two half-turns, measured exactly: −1 to 1.5 is more, 1 to 2.5 is not,
+/// and −2^−53 to 2 is more by its rounding error.
+#[test]
+fn a_turn_is_measured_exactly() {
+    use geom_curve::CurveError;
+    let circle = |d| Circle::new([0.0; 3], 1.0, std3(), d);
+    assert_eq!(circle((-1.0, 1.5)).err(), Some(CurveError::SpanOutside));
+    assert!(circle((1.0, 2.5)).is_ok());
+    assert!(circle((-1.0, 1.0)).is_ok());
+    assert_eq!(
+        circle((-f64::EPSILON / 2.0, 2.0)).err(),
+        Some(CurveError::SpanOutside)
+    );
+}
+
+/// Claim: a circle's higher derivatives are the formula's: C(t) = c + r(cos πt, sin πt).
+#[test]
+fn a_circle_has_its_formula_derivatives() {
+    let r = 3.0;
+    let c = Circle::new([1.0, 2.0, 0.0], r, std3(), (0.0, 2.0)).unwrap();
+    for k in 0..=8 {
+        let t = f64::from(k) / 4.0;
+        let mut d = [[0.0; 3]; 4];
+        c.derivatives(t, Limit::FromRight, &mut d).unwrap();
+        let p = std::f64::consts::PI;
+        let (s, co) = (sinpi(t), cospi(t));
+        let want = [
+            [1.0 + r * co, 2.0 + r * s],
+            [-r * p * s, r * p * co],
+            [-r * p * p * co, -r * p * p * s],
+            [r * p * p * p * s, -r * p * p * p * co],
+        ];
+        for (order, w) in want.iter().enumerate() {
+            for i in 0..2 {
+                assert!(
+                    near(d[order][i], w[i]),
+                    "t {t} order {order}: {} against {}",
+                    d[order][i],
+                    w[i]
+                );
+            }
+        }
+    }
+}
+
+/// Claim: similarity transforms keep circles circles: a turn and a uniform scale by 2 doubles the
+/// radius and moves the center; a translation moves the center by the translation.
+#[test]
+fn similarities_move_circles_to_circles() {
+    let m = &mut meter();
+    let c = Circle::new([1.0, 2.0, 3.0], 1.5, std3(), (0.0, 1.0)).unwrap();
+    let turn = Transform::rotation(Axis::Z, 0.25)
+        .unwrap()
+        .compose(&Transform::rotation(Axis::X, 0.25).unwrap())
+        .unwrap()
+        .compose(&Transform::uniform_scale(2.0).unwrap())
+        .unwrap();
+    let moved = c.transformed(&TypedTransform::from(turn), m).unwrap();
+    let CurveKind::Circle(d) = moved.value else {
+        panic!("not a circle: {moved:?}");
+    };
+    assert!(near(d.radius(), 3.0), "{}", d.radius());
+    let shift = TypedTransform::Exact(GridTransform::translation([7, -3, 2]).unwrap());
+    let moved = c.transformed(&shift, m).unwrap();
+    let CurveKind::Circle(d) = moved.value else {
+        panic!("not a circle");
+    };
+    assert_eq!(d.center(), [8.0, -1.0, 5.0]);
+    // A scale by 3 from an integer matrix with every entry of its first column nonzero: the
+    // radius triples exactly.
+    let rows = [
+        [2.0, -2.0, 1.0, 0.0],
+        [2.0, 1.0, -2.0, 0.0],
+        [1.0, 2.0, 2.0, 0.0],
+    ];
+    let three = TypedTransform::from(Transform::from_rows(rows).unwrap());
+    let CurveKind::Circle(d) = c.transformed(&three, m).unwrap().value else {
+        panic!("not a circle");
+    };
+    assert_eq!(d.radius(), 4.5);
+    // A scale whose column length underflows is refused as not finite, not taken for zero.
+    let tiny = TypedTransform::from(Transform::uniform_scale(1e-170).unwrap());
+    assert_eq!(
+        c.transformed(&tiny, m).err(),
+        Some(geom_curve::CurveError::NotFinite)
+    );
+}
+
+/// Claim: a frame needs a reference vector certainly not along the normal: one exactly along it
+/// (twice the normal, products that round alike) is refused, and so is one whose cross product
+/// overflows, which cannot be decided.
+#[test]
+fn a_frame_refuses_a_reference_along_its_normal() {
+    use geom_curve::CurveError;
+    let n = [0.1, 0.3, 0.7];
+    let x = [0.2, 0.6, 1.4];
+    assert_eq!(Frame::<3>::new(x, n).err(), Some(CurveError::Degenerate));
+    // The overflowing cross product leaves the decision open, which counts as parallel.
+    assert_eq!(
+        Frame::<3>::new([1e200, 0.0, 0.0], [0.0, 1e200, 0.0]).err(),
+        Some(CurveError::Degenerate)
+    );
+    assert!(Frame::<3>::new([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]).is_ok());
+}
+
+/// Claim: a conic's parameter map refuses parameters outside its breaks, and at a break gives
+/// that break's NURBS parameter, inside the piece's span; inside a piece it is a true enclosure.
+#[test]
+fn parameter_maps_stay_in_their_pieces() {
+    use geom_curve::CurveError;
+    let m = &mut meter();
+    let c = Circle::new([0.0; 3], 1.0, std3(), (0.0, 2.0)).unwrap();
+    let form = c.to_nurbs(m).unwrap().value;
+    let ParamMap::Circular(breaks) = &form.map else {
+        panic!("not circular: {:?}", form.map);
+    };
+    let (first, last) = (breaks[0], *breaks.last().unwrap());
+    for t in [first - 0.25, last + 0.25, f64::NAN] {
+        assert_eq!(
+            form.map.enclose(t),
+            Err(CurveError::ParameterOutside),
+            "{t}"
+        );
+    }
+    for (k, w) in breaks.windows(2).enumerate() {
+        let kf = k as f64;
+        let at0 = form.map.enclose(w[0]).unwrap();
+        assert!(at0.lo() >= kf && at0.contains(kf), "break {k}: {at0:?}");
+        let at1 = form.map.enclose(w[1]).unwrap();
+        assert!(
+            at1.hi() <= kf + 1.0 && at1.contains(kf + 1.0),
+            "break {}: {at1:?}",
+            k + 1
+        );
+        let mid = form.map.enclose(f64::midpoint(w[0], w[1])).unwrap();
+        assert!(
+            mid.lo() > kf && mid.hi() < kf + 1.0 && mid.hi() > mid.lo(),
+            "{mid:?}"
+        );
+    }
+}
+
+/// Claim: an arc whose breaks would round together is refused, and so is a helix too long to cut
+/// into pieces.
+#[test]
+fn conversions_too_fine_or_too_long_are_refused() {
+    use geom_curve::CurveError;
+    let m = &mut meter();
+    // Breaks that round onto the one before, or onto the end (parameters near 2^52, where the
+    // spacing of doubles is 1).
+    for d in [
+        (1e16, 1e16 + 2.0),
+        (4_503_599_627_370_496.0, 4_503_599_627_370_497.0),
+        (4_503_599_627_370_497.0, 4_503_599_627_370_498.0),
+    ] {
+        let far = Circle::new([0.0; 3], 1.0, std3(), d).unwrap();
+        assert_eq!(far.to_nurbs(m).err(), Some(CurveError::Degenerate), "{d:?}");
+    }
+    let helix = HelixAxes::Frame {
+        frame: std3(),
+        radius: 1.0,
+        pitch: 0.5,
+    };
+    let long = Helix::new([0.0; 3], helix, (0.0, 1e12)).unwrap();
+    assert_eq!(long.to_nurbs(m).err(), Some(CurveError::NotFinite));
+}
+
+/// Claim: the contract's stand-ins for an infinite end lie past the parameters given, so a ray
+/// checked only at its start, or from a start far below zero, keeps every law.
+#[test]
+fn rays_keep_the_contract_from_any_start() {
+    use geom_curve::contract::check;
+    let t = TypedTransform::Exact(GridTransform::quarter_turns(Axis::Z, 1));
+    let ray = Line::ray([1.0, 2.0, 0.0], [0.5, -1.0, 0.25]).unwrap();
+    check(&ray, &[0.0], &t, &mut meter()).unwrap();
+    for (a, ps) in [(-5.0, vec![-5.0, 0.0]), (-5000.0, vec![-5000.0])] {
+        let r = Line::new([1.0, 2.0, 0.0], [0.5, -1.0, 0.25], (a, f64::INFINITY)).unwrap();
+        check(&r, &ps, &t, &mut meter()).unwrap_or_else(|e| panic!("from {a}: {e}"));
+    }
+}
+
+/// A circle that claims to have no NURBS form.
+#[derive(Clone, Debug)]
+struct NoForm(Circle<3>);
+
+impl ParamCurve<3> for NoForm {
+    fn domain(&self) -> (f64, f64) {
+        self.0.domain()
+    }
+    fn point(&self, t: f64, side: Limit) -> Result<[f64; 3], geom_curve::CurveError> {
+        self.0.point(t, side)
+    }
+    fn derivatives(
+        &self,
+        t: f64,
+        side: Limit,
+        out: &mut [[f64; 3]],
+    ) -> Result<(), geom_curve::CurveError> {
+        self.0.derivatives(t, side, out)
+    }
+    fn enclose(
+        &self,
+        t: f64,
+        side: Limit,
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<[Interval; 3]>, geom_curve::CurveError> {
+        self.0.enclose(t, side, order, meter)
+    }
+    fn bound(
+        &self,
+        span: (f64, f64),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Bounds<3>, geom_curve::CurveError> {
+        self.0.bound(span, meter)
+    }
+    fn derivative_bound(
+        &self,
+        span: (f64, f64),
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<geom_curve::DerivativeBound<3>, geom_curve::CurveError> {
+        self.0.derivative_bound(span, order, meter)
+    }
+    fn to_nurbs(
+        &self,
+        _meter: &mut WorkMeter<'_>,
+    ) -> Result<geom_nurbs::Changed<NurbsForm<3>>, geom_curve::CurveError> {
+        Err(geom_curve::CurveError::Unbounded)
+    }
+    fn split(
+        &self,
+        t: f64,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<
+        (
+            geom_nurbs::Changed<CurveKind<3>>,
+            geom_nurbs::Changed<CurveKind<3>>,
+        ),
+        geom_curve::CurveError,
+    > {
+        self.0.split(t, meter)
+    }
+    fn reversed(
+        &self,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<geom_nurbs::Changed<CurveKind<3>>, geom_curve::CurveError> {
+        self.0.reversed(meter)
+    }
+    fn transformed(
+        &self,
+        transform: &TypedTransform,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<geom_nurbs::Changed<CurveKind<3>>, geom_curve::CurveError> {
+        self.0.transformed(transform, meter)
+    }
+}
+
+/// Claim: only a kind with an infinite end may have no NURBS form; a bounded one that says it has
+/// none breaks the conversion law.
+#[test]
+fn a_bounded_kind_without_a_nurbs_form_is_caught() {
+    use geom_curve::Law;
+    use geom_curve::contract::check;
+    let t = TypedTransform::Exact(GridTransform::quarter_turns(Axis::Z, 1));
+    let c = Circle::new([0.0; 3], 1.0, std3(), (0.0, 1.0)).unwrap();
+    let e = check(&NoForm(c), &[0.0, 0.5, 1.0], &t, &mut meter()).unwrap_err();
+    assert_eq!(e.law, Law::NurbsWithinItsError, "{e}");
+}
+
+/// Claim: an involute's derivatives are its formula's: c + r(cos θ + θ sin θ, sin θ − θ cos θ),
+/// θ = πt.
+#[test]
+fn an_involute_has_its_formula_derivatives() {
+    let r = 2.0;
+    let inv = Involute::new([1.0, -1.0, 0.0], r, std3(), (-1.0, 1.5)).unwrap();
+    let p = std::f64::consts::PI;
+    for k in 0..=10 {
+        let t = -1.0 + f64::from(k) / 4.0;
+        let mut d = [[0.0; 3]; 4];
+        inv.derivatives(t, Limit::FromRight, &mut d).unwrap();
+        let th = p * t;
+        let (s, c) = (sinpi(t), cospi(t));
+        let want = [
+            [1.0 + r * (c + th * s), -1.0 + r * (s - th * c)],
+            [r * p * th * c, r * p * th * s],
+            [r * p * p * (c - th * s), r * p * p * (s + th * c)],
+            [
+                r * p * p * p * (-2.0 * s - th * c),
+                r * p * p * p * (2.0 * c - th * s),
+            ],
+        ];
+        for (order, w) in want.iter().enumerate() {
+            for i in 0..2 {
+                assert!(
+                    (d[order][i] - w[i]).abs() <= 1e-9 * (1.0 + w[i].abs()),
+                    "t {t} order {order}: {} against {}",
+                    d[order][i],
+                    w[i]
+                );
+            }
+        }
+    }
+}

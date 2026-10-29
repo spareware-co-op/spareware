@@ -94,7 +94,7 @@ impl<const D: usize> Trimmed<D> {
         let (lo, hi) = self.interval;
         let mut deviation = point(0.0)?;
         let mut piece = match &self.basis {
-            Basis::Bulge(p) if lo > a || hi < b => {
+            Basis::Bulge(p) => {
                 let n = p.to_nurbs(meter)?;
                 deviation = point(n.deviation)?;
                 Basis::Nurbs(n.value.curve)
@@ -160,9 +160,9 @@ impl<const D: usize> Trimmed<D> {
         ))
     }
 
-    /// The parameters inside the interval where the basis may not be smooth.
+    /// The parameters where the basis may not be smooth (`Basis::breaks`).
     pub(crate) fn breaks(&self) -> Vec<f64> {
-        self.basis.breaks(self.interval)
+        self.basis.breaks()
     }
 }
 

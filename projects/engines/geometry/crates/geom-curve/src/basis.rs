@@ -106,10 +106,11 @@ impl<const D: usize> TryFrom<CurveKind<D>> for Basis<D> {
 }
 
 impl<const D: usize> Basis<D> {
-    /// The parameters strictly inside `interval` where the leaf may not be smooth: a NURBS
-    /// curve's distinct interior knots, a bulge polyline's vertices; none for the analytic kinds.
-    pub(crate) fn breaks(&self, (lo, hi): (f64, f64)) -> Vec<f64> {
-        let mut out: Vec<f64> = match self {
+    /// The parameters where the leaf may not be smooth, in increasing order, some perhaps
+    /// repeated or outside a trimmed interval (their users keep the ones inside a span): a NURBS
+    /// curve's knots, a bulge polyline's vertices; none for the analytic kinds.
+    pub(crate) fn breaks(&self) -> Vec<f64> {
+        match self {
             Basis::Nurbs(c) => c.basis().knots().to_vec(),
             Basis::Bulge(p) => {
                 let (a, _) = ParamCurve::domain(p);
@@ -119,10 +120,7 @@ impl<const D: usize> Basis<D> {
                     .collect()
             }
             _ => Vec::new(),
-        };
-        out.retain(|&x| lo < x && x < hi);
-        out.dedup();
-        out
+        }
     }
 }
 

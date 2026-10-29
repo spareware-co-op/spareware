@@ -197,10 +197,7 @@ pub(crate) fn conic<const D: usize>(
         let mut eps = 0.0;
         for (s, w) in [(s1, w1), (s2w, w2)] {
             let r = tight::sub(tight::div(point(s)?, w)?, one)?;
-            let m = tight::magnitude(r);
-            if m > eps {
-                eps = m;
-            }
+            eps = tight::larger(eps, tight::magnitude(r));
         }
         if eps.is_nan() || eps >= 0.5 {
             return Err(CurveError::NotFinite);
@@ -211,27 +208,19 @@ pub(crate) fn conic<const D: usize>(
         let p2 = middles(q2);
         let mut moved = 0.0;
         for (p, q) in [(&p0, q0), (&p1, &q1), (&p2, q2)] {
-            let d = tight::distance_to(p, q)?;
-            if d > moved {
-                moved = d;
-            }
+            moved = tight::larger(moved, tight::distance_to(p, q)?);
         }
         let mut piece = point(moved)?;
         if eps > 0.0 {
             let mut reach = 0.0;
             for q in [&q1, q2] {
-                let d = tight::distance(q, q0)?;
-                if d > reach {
-                    reach = d;
-                }
+                reach = tight::larger(reach, tight::distance(q, q0)?);
             }
             let e = point(eps)?;
             let factor = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(one, e)?)?;
             piece = tight::add(piece, tight::mul(factor, point(reach)?)?)?;
         }
-        if piece.hi() > deviation.hi() {
-            deviation = point(piece.hi())?;
-        }
+        deviation = point(tight::larger(deviation.hi(), piece.hi()))?;
         if k == 0 {
             points.push(p0);
             weights.push(joint);

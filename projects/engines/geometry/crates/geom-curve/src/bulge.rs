@@ -262,10 +262,11 @@ impl<const D: usize> BulgePolyline<D> {
         check_parameter(ParamCurve::domain(self), t)?;
         let n = self.segments();
         let (x, e) = two_sum(t, -self.start);
-        let mut i = crate::form::floor_index(if x < 0.0 { 0.0 } else { x })?;
+        let mut i = crate::form::floor_index(tight::larger(x, 0.0))?;
         let whole = count(i)? == x;
-        // Below the vertex exactly, or at it from the left: the segment before.
-        if whole && i > 0 && (e < 0.0 || (e == 0.0 && side == Limit::FromLeft)) {
+        // Below the vertex exactly, or at it from the left: the segment before (none before the
+        // first).
+        if whole && (e < 0.0 || (e == 0.0 && side == Limit::FromLeft)) {
             i = i.saturating_sub(1);
         }
         if i >= n {
@@ -273,11 +274,8 @@ impl<const D: usize> BulgePolyline<D> {
         }
         // x − i is exact (Sterbenz: i ≤ x ≤ 2i, or i = 0), and e is the rest.
         let v = tight::add(point(x - count(i)?)?, point(e)?)?;
-        let (lo, hi) = (
-            if v.lo() < 0.0 { 0.0 } else { v.lo() },
-            if v.hi() > 1.0 { 1.0 } else { v.hi() },
-        );
-        Ok((i, Interval::new(lo, if hi < lo { lo } else { hi })?))
+        let (lo, hi) = (tight::larger(v.lo(), 0.0), tight::smaller(v.hi(), 1.0));
+        Ok((i, Interval::new(lo, tight::larger(hi, lo))?))
     }
 
     /// The local parameters of the span [lo, hi] within segment i, rounded outward and cut to
@@ -287,13 +285,7 @@ impl<const D: usize> BulgePolyline<D> {
         let l = tight::sub(point(lo)?, a)?.lo();
         let h = tight::sub(point(hi)?, a)?.hi();
         let l = l.clamp(0.0, 1.0);
-        let h = if h > 1.0 {
-            1.0
-        } else if h < l {
-            l
-        } else {
-            h
-        };
+        let h = tight::larger(tight::smaller(h, 1.0), l);
         Ok(Interval::new(l, h)?)
     }
 }
@@ -323,17 +315,11 @@ pub(crate) fn rational_derivatives<const D: usize>(
     let wq = quadratic(seg.w, v)?;
     let [_, w1, _] = seg.w;
     let floor = tight::mul(tight::add(point(1.0)?, w1)?, point(0.5)?)?;
-    let mut w0 = *wq.first().ok_or(CurveError::Defect)?;
-    if w0.lo() < floor.lo() {
-        w0 = Interval::new(
-            floor.lo(),
-            if w0.hi() < floor.lo() {
-                floor.lo()
-            } else {
-                w0.hi()
-            },
-        )?;
-    }
+    let w = *wq.first().ok_or(CurveError::Defect)?;
+    let w0 = Interval::new(
+        tight::larger(w.lo(), floor.lo()),
+        tight::larger(w.hi(), floor.lo()),
+    )?;
     let mut a: [[Interval; D]; 3] = [[zero; D]; 3];
     for d in 0..D {
         let c = [
@@ -472,9 +458,7 @@ impl<const D: usize> ParamCurve<D> for BulgePolyline<D> {
             let parts = pieces_for(b);
             for piece in subdivide(&seg, parts)? {
                 let dev = piece_deviation(&piece)?;
-                if dev > deviation.hi() {
-                    deviation = point(dev)?;
-                }
+                deviation = point(tight::larger(deviation.hi(), dev))?;
                 let [h0, h1, h2] = piece.h;
                 let [w0, w1, w2] = piece.w;
                 if homs.is_empty() {
@@ -586,17 +570,13 @@ impl<const D: usize> ParamCurve<D> for BulgePolyline<D> {
                 );
                 let image = m.homogeneous_image(&h, w)?;
                 let d = tight::distance(new.h.get(k).ok_or(CurveError::Defect)?, &image)?;
-                if d > worst {
-                    worst = d;
-                }
+                worst = tight::larger(worst, d);
             }
             if worst != 0.0 {
                 let [_, w1, _] = old.w;
                 let floor = tight::mul(tight::add(point(1.0)?, w1)?, point(0.5)?)?;
                 let dev = tight::div(point(worst)?, Interval::new(floor.lo(), floor.lo())?)?.hi();
-                if dev > deviation.hi() {
-                    deviation = point(dev)?;
-                }
+                deviation = point(tight::larger(deviation.hi(), dev))?;
             }
         }
         Ok(Changed {
@@ -628,12 +608,8 @@ fn hull<const D: usize>(
         let e = rational_derivatives(&p.segment(i)?, v, order)?;
         let x = e.last().ok_or(CurveError::Defect)?;
         for ((lo, hi), v) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(x) {
-            if v.lo() < *lo {
-                *lo = v.lo();
-            }
-            if v.hi() > *hi {
-                *hi = v.hi();
-            }
+            *lo = tight::smaller(*lo, v.lo());
+            *hi = tight::larger(*hi, v.hi());
         }
     }
     Ok(out)
@@ -713,9 +689,7 @@ fn piece_deviation<const D: usize>(s: &Segment<D>) -> Result<f64, CurveError> {
         let w: Interval = *s.w.get(k).ok_or(CurveError::Defect)?;
         let sw = point(tight::middle(w))?;
         let r = tight::magnitude(tight::sub(tight::div(sw, w)?, one)?);
-        if r > eps {
-            eps = r;
-        }
+        eps = tight::larger(eps, r);
         let erow: &mut [Interval; D] = exact.get_mut(k).ok_or(CurveError::Defect)?;
         let srow: &mut [Interval; D] = stored.get_mut(k).ok_or(CurveError::Defect)?;
         for ((e, st), &x) in erow.iter_mut().zip(srow.iter_mut()).zip(&h) {
@@ -734,13 +708,9 @@ fn piece_deviation<const D: usize>(s: &Segment<D>) -> Result<f64, CurveError> {
             stored.get(k).ok_or(CurveError::Defect)?,
         );
         let d = tight::distance(st, e)?;
-        if d > moved {
-            moved = d;
-        }
+        moved = tight::larger(moved, d);
         let r = tight::distance(e, exact.first().ok_or(CurveError::Defect)?)?;
-        if r > reach {
-            reach = r;
-        }
+        reach = tight::larger(reach, r);
     }
     let mut total = point(moved)?;
     if eps > 0.0 {
