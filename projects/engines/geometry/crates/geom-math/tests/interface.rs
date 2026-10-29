@@ -487,9 +487,11 @@ fn a_grid_image_of_tiny_terms_that_cancel_is_exactly_zero() {
 
 #[test]
 fn a_small_but_certain_determinant_decides_the_orientation() {
-    // det = 2^−52, exactly, after the rows are scaled: small, but its sign is certain.
+    // det = 2^−49 exactly (the rows need no scaling): small, but the enclosure of the determinant
+    // of the exact entries, about ±2^−50.2 wide, certifies its sign. The enclosure of entries each
+    // a step wider would not.
     let row_a = [1.0, 1.0, 0.0, 0.0];
-    let row_b = [1.0, 1.0 + pow2(-52), 0.0, 0.0];
+    let row_b = [1.0, 1.0 + pow2(-49), 0.0, 0.0];
     let z = [0.0, 0.0, 1.0, 0.0];
     for (rows, mirror) in [([row_a, row_b, z], false), ([row_b, row_a, z], true)] {
         let c = Transform::from_rows(rows).unwrap().classify().unwrap();
