@@ -253,7 +253,13 @@ impl RationalTransform {
     /// [`NumError::OutOfRange`] if `k_n` or `k_d` exceeds 2^40 after reduction (a [`Scale`] is
     /// reduced, so only ratios with very large parts are refused).
     pub fn uniform_scale(scale: Scale) -> Result<RationalTransform, NumError> {
-        let (n, d) = (i64::from(scale.num()), i64::from(scale.den()));
+        // A part beyond i64 is beyond 2^40 too, and refused the same way.
+        let part = |v: u64| {
+            i64::try_from(v).map_err(|_| NumError::OutOfRange {
+                value: i128::from(v),
+            })
+        };
+        let (n, d) = (part(scale.num())?, part(scale.den())?);
         RationalTransform::new([[n, 0, 0], [0, n, 0], [0, 0, n]], [0; 3], d)
     }
 
