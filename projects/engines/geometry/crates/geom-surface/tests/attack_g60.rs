@@ -13,13 +13,13 @@
     reason = "tests: native arithmetic and indexing, and a failure stops the test"
 )]
 
-use geom_curve::{ContractError, CurveError, DerivativeBound, Law};
+use geom_curve::{ContractError, CurveError, DerivativeBound, Law, ParamMap};
 use geom_math::{Axis, GridTransform, TypedTransform};
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Direction, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::contract::check;
-use geom_surface::{ParamBox, ParamSurface, SurfaceKind};
+use geom_surface::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -176,10 +176,14 @@ impl ParamSurface for Faulty {
         }
         Ok(b)
     }
-    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<Surface<3>>, CurveError> {
+    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<SurfaceForm>, CurveError> {
         if let Fault::Nurbs(dx, deviation) = self.fault {
             return Ok(Changed {
-                value: shifted(&self.inner, dx),
+                value: SurfaceForm {
+                    surface: shifted(&self.inner, dx),
+                    u: ParamMap::Same,
+                    v: ParamMap::Same,
+                },
                 deviation,
             });
         }
