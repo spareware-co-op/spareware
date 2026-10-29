@@ -8,19 +8,25 @@
       "goldens": [
         {
           "id": "geom-num/determinism",
-          "what": "geom-num's determinism corpus: 87,618 calls into every module of the numbers layer (predicates, planes, three-plane points, grid steps, wide integers, error-free transformations, intervals, the maths module and the scalars), each result in the canonical encoding of tests/determinism.rs.",
+          "what": "geom-num's determinism corpus: 88,218 calls into every module of the numbers layer (predicates, planes, three-plane points, grid steps, wide integers, error-free transformations, intervals, the maths module and the scalars), each result in the canonical encoding of tests/determinism.rs.",
           "check": {
             "crate": "geom-num",
             "test": "determinism",
             "function": "golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "fb19edfc7c58ca5e93a8921dfbdd2ab2dfacc2d180fbe6dec540efbede954564",
+          "sha256": "81ed30a1251227dc3f2264d29de7d5efe8ba162d10a9b57e88152a9c44f9f2d0",
           "history": [
             {
               "sha256": "c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8",
               "kind": "improvement",
               "piece": "G05",
               "why": "The correctly rounded maths of piece G05 (issue #174): 92 of G02's 7,677 maths records moved by one unit in the last place to the correctly rounded value (exp 9, ln 3, sinpi 52, cospi 19, atan2 9); the refusals of Interval::exp and Interval::ln moved from the interval section to the maths section, now certified; 2,700 records were added from their own generator (SEED_G05) for the libm twins and the interval versions. No error changed; the other sections give G02's digests unchanged."
+            },
+            {
+              "sha256": "fb19edfc7c58ca5e93a8921dfbdd2ab2dfacc2d180fbe6dec540efbede954564",
+              "kind": "improvement",
+              "piece": "G47",
+              "why": "Interval::atan2 is certified now (piece G47): its refusal (index 2) left the interval section, and the maths section gains 601 records of it (index 32) from a generator of their own (SEED_G47), after every earlier record; no other record moved, and the sections predicates, planes, tpi, grid, wide, eft and scalars are unchanged. The same digest on wasm32 under Wasmtime, where exp's exact product error is now Dekker's two-product."
             }
           ]
         },
@@ -154,7 +160,7 @@
           "id": "geom-bench/output-hashes",
           "what": "geom-bench's golden file (piece G06, chapter 23.13's output hashes): the SHA-256 of every benchmark's inputs and results, one line per benchmark, which every benchmark harness checks; pinned here by the SHA-256 of the file's text with LF line ends, so an edit to it is an edit to the store.",
           "file": "projects/engines/geometry/crates/geom-bench/src/golden.txt",
-          "history": [{"sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a", "kind": "corpus", "piece": "G29", "why": "74 new benchmarks: the line-plane point, the 2D crossing and their generated predicates; no existing digest moved"}, {"sha256": "e8a4b32fa50de11e27cfde59f8d624a9fe47420e6b292e73f1fe70c17110175f", "kind": "corpus", "piece": "G30", "why": "8 new benchmarks: the perturbed predicates' exact path and ties; no existing digest moved"}, {"sha256": "46bed21bdaf52d1360dd3e3903f10d4e5eee5d4fddeb8e33243083a2f5dd4c31", "kind": "corpus", "piece": "G42", "why": "176 new benchmarks: the plain-i128 and width-aware limb variants of every generated exact path, Avnaim et al.'s signs of orient2d and orient3d, and Wide32 at the widths Wide is measured at; no existing digest moved; merged after G30's 8 perturbation benchmarks, whose rows are kept unchanged."}], "sha256": "d4795e4681d510f670cf38db23c2707f3de7eb94dd049957e8c9d4c53a73a872"
+          "history": [{"sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a", "kind": "corpus", "piece": "G29", "why": "74 new benchmarks: the line-plane point, the 2D crossing and their generated predicates; no existing digest moved"}, {"sha256": "e8a4b32fa50de11e27cfde59f8d624a9fe47420e6b292e73f1fe70c17110175f", "kind": "corpus", "piece": "G30", "why": "8 new benchmarks: the perturbed predicates' exact path and ties; no existing digest moved"}, {"sha256": "46bed21bdaf52d1360dd3e3903f10d4e5eee5d4fddeb8e33243083a2f5dd4c31", "kind": "corpus", "piece": "G42", "why": "176 new benchmarks: the plain-i128 and width-aware limb variants of every generated exact path, Avnaim et al.'s signs of orient2d and orient3d, and Wide32 at the widths Wide is measured at; no existing digest moved; merged after G30's 8 perturbation benchmarks, whose rows are kept unchanged."}, {"sha256": "d4795e4681d510f670cf38db23c2707f3de7eb94dd049957e8c9d4c53a73a872", "kind": "corpus", "piece": "G47", "why": "2 new benchmarks: Interval::atan2 on typical and extreme boxes, now that its enclosure is built; no existing digest moved"}], "sha256": "11b171b62bfa15cac6b9b442d40f91a5e0aad5f76d2706911c341dbf513ef6ad"
         }
       ]
     }

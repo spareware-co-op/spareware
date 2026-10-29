@@ -1,5 +1,5 @@
-//! Small total helpers shared by the correctly rounded ports: the fused multiply-add, shifts that
-//! cannot overflow, the halves and the two's complement reading of an integer without a cast,
+//! Small total helpers shared by the correctly rounded ports: the fused multiply-add and the exact
+//! error of a product, shifts that cannot overflow, the halves and the two's complement reading of an integer without a cast,
 //! table reads that cannot panic, and the C sources' fast two-sum.
 //!
 //! The C sources lean on things that are undefined, partial or silent in C and would panic, be
@@ -37,6 +37,29 @@
 #[inline]
 pub(super) fn fma(a: f64, b: f64, c: f64) -> f64 {
     libm::fma(a, b, c)
+}
+
+/// The exact error `a·b − h` of the product `h = RN(a·b)`, for a product whose error a double
+/// holds (`|a·b| ≥ 2^−969`, Lemma 3 (ii) of [`super`]), as C's `__builtin_fma(a, b, -h)`.
+///
+/// By the fused multiply-add [`fma`], except on WebAssembly, which has no fused multiply-add
+/// instruction: there `libm` computes one in software, about three times the cost of Dekker's
+/// two-product, which gives the same exact error without one (evidence note 05, section 7: "An
+/// FMA `TwoProduct` would therefore be a slow software call there, so keep Dekker"), so there the
+/// error is [`crate::eft::two_prod`]'s. The two are the same bits: each is the exact value
+/// `a·b − h`, and a zero is +0 in both (IEEE 754's sign of an exact zero sum of operands of
+/// opposite sign, and `crate::eft`'s one-zero rule). Natively the code is the C source's.
+#[inline]
+pub(super) fn product_error(a: f64, b: f64, h: f64) -> f64 {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        fma(a, b, -h)
+    }
+    #[cfg(target_family = "wasm")]
+    {
+        let _ = h;
+        crate::eft::two_prod(a, b).1
+    }
 }
 
 /// `x · 2^n` truncated to 64 bits, for any `n`: 0 once every bit has been shifted out.

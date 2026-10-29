@@ -14,6 +14,10 @@
 //! A file that is not present is reported and skipped. For `sinpi` the images of the file's set (b)
 //! under every power of two up to `2^968`, which the file says to add, are checked too.
 //!
+//! Every night `.github/workflows/kernel-nightly.yml` (piece G47) fetches the five files at that
+//! commit, checks each against its SHA-256, so none can be missing or changed, and runs these
+//! tests, before `math_oracle.rs`'s ten million inputs per function.
+//!
 //! The functions return a `Real` or an error (the module documentation of `geom_num::math`): each
 //! call is checked against what it owes, `reference::owed`, from the reference's IEEE 754 value
 //! (with a zero `sinpi` or `cospi` as +0, the crate's one-zero rule).
