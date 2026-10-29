@@ -33,12 +33,13 @@
 //! Gauss–Legendre quadrature (chapter 17.8). The laws are IFC 4.3's
 //! (`IfcAlignmentHorizontalSegmentTypeEnum` and the `IfcSpiral` subtypes, in the record below). An
 //! `IfcSineSpiral` is read by its heading, as `IfcSpiral` defines the curve (x = ∫cos Θ dl), where
-//! its printed curvature disagrees with the heading's derivative. The remainder bound is L. N. Trefethen, "Is Gauss quadrature better than
-//! Clenshaw–Curtis?", SIAM Review 50 (2008), <https://doi.org/10.1137/060659831>, Theorem 4.5: on
-//! [−1, 1], |I − Iₙ| ≤ (64/15)·M·ρ⁻²ⁿ/(ρ² − 1) for f analytic in the open ellipse Eρ with
-//! |f| ≤ M there; for f = cos πh or sin πh, M ≤ cosh(π·sup |Im h|). The ellipse of a part of a
-//! panel lies inside the panel's, so the panel's bound holds for every station in it. No code from
-//! the Clothoids library's `Fresnel.cc`: the clothoid uses this same evaluator.
+//! its printed curvature disagrees with the heading's derivative. The remainder bound is
+//! L. N. Trefethen, "Is Gauss quadrature better than Clenshaw–Curtis?", SIAM Review 50 (2008),
+//! <https://doi.org/10.1137/060659831>, Theorem 4.5: on [−1, 1], |I − Iₙ| ≤ (64/15)·M·ρ⁻²ⁿ/(ρ² − 1)
+//! for f analytic in the open ellipse Eρ with |f| ≤ M there; for f = cos πh or sin πh,
+//! M ≤ cosh(π·sup |Im h|). The ellipse of a part of a panel lies inside the panel's, so the
+//! panel's bound holds for every station in it. No code from the Clothoids library's `Fresnel.cc`:
+//! the clothoid uses this same evaluator.
 //!
 //! Cost: construction O(P·n) evaluations of the heading for P panels of n nodes, with up to twelve
 //! ellipses tried per panel; each evaluation n evaluations of the heading and of its sine and
