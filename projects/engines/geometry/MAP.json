@@ -4474,6 +4474,16 @@
               "shape": "unit"
             },
             {
+              "doc": "Two Bernstein forms to be combined are on different domains.",
+              "name": "Domains",
+              "shape": "unit"
+            },
+            {
+              "doc": "A shape gives no direction where one is needed: a fat line of a curve whose control points coincide, or a fat plane of a patch whose corners do.",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
               "doc": "The work meter stopped the operation: over its budget, cancelled, or a large allocation was refused (chapter 23.10).",
               "name": "Stopped",
               "shape": "tuple"
@@ -4623,6 +4633,31 @@
             }
           ],
           "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "extraction O(s·p²·D) in intervals for s spans (O(`s_u`·`s_v`·(p + q)·p·q·D) for a surface); a box, slab or hodograph is linear in the coefficients; a clip O(p²); each result one allocation, charged first.",
+          "does": "[`Curve::bernstein`] and [`Surface::bernstein`] run Bezier extraction (A5.6, A5.7) in `geom-num`'s interval arithmetic, so each piece's coefficients enclose the exact Bernstein coefficients of the exact curve or surface the stored doubles define. On a piece, [`BernsteinCurve::bound`] and [`BernsteinPatch::bound`] give a box holding every point of it; [`BernsteinCurve::hodograph`] and [`BernsteinPatch::partial`] give the derivative as a Bernstein form of one degree less (nonrational); [`BernsteinCurve::derivative_bound`] and [`BernsteinPatch::derivative_bound`] bound the derivative of a rational piece too, through the quotient rule's numerator and the weights' range. [`BernsteinCurve::slab`] and [`BernsteinPatch::slab`] bound the signed distance n·(x − o) over a piece, for any direction n; [`BernsteinCurve::fat_line`] (in the plane) and [`BernsteinPatch::fat_plane`] choose n from the piece's end points or corners, as Sederberg and Nishita's fat line does. [`BernsteinCurve::clip`] is a Bezier clipping step: the part of a curve's domain where it can meet a slab.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+          "guarantees": [
+            "**Enclosures of the exact.** Every coefficient is an interval holding the exact Bernstein coefficient: extraction makes the same operations as in doubles, each rounded outward (`crate::arith`). Every bound below is computed from these intervals with outward rounding, so it holds for the exact curve or surface, not only for its doubles.",
+            "**The convex hull property.** A Bezier piece lies in the convex hull of its control points (for a rational piece, of its Euclidean points, since the weights are positive), so a box, a slab or any linear function's range over the coefficients bounds the piece (The NURBS Book, properties P3.4 and P4.4; Farouki and Rajan, *Computer Aided Geometric Design* 5(1) (1988), 1–26). A derivative is bounded from the hodograph, the derivative's own Bernstein form; a rational derivative C′ = (A′·W − A·W′)/W² from its numerator's coefficients and the smallest and largest weights, W lying between them.",
+            "**Clipping keeps every meeting.** [`BernsteinCurve::clip`] returns a parameter range outside which the exact curve is outside the slab, or `None` when the whole curve is: the hull of the control polygon of the distance to each side of the slab, computed with each coefficient at its upper bound and every crossing rounded outward.",
+            "**Typed refusals.** A piece needs a domain of more than one value, coefficients that are finite, and positive weights ([`NurbsError::Weight`]); hodographs and products of rational pieces are [`NurbsError::Rational`] (bound their numerators instead); a fat line or plane of a piece whose end points or corners give no direction is [`NurbsError::Degenerate`].",
+            "**Deterministic.** Fixed loops in index order; no fused multiply-add."
+          ],
+          "job": "Bernstein forms: the Bezier pieces of curves and surfaces as interval enclosures of their exact Bernstein coefficients, and the bounds the convex hull property gives them: boxes, derivative boxes from hodographs, slabs, fat lines and fat planes, and the parameter range a Bezier clipping step keeps.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0010-4485(90"
+            ],
+            "text": "Bezier extraction (The NURBS Book, 2nd ed., algorithms A5.6 and A5.7, <https://doi.org/10.1007/978-3-642-59223-2>) in interval arithmetic, the convex hull property and hodographs (sections 1.4 and 3.3), and Bezier clipping with fat lines (T. W. Sederberg and T. Nishita, \"Curve intersection using Bézier clipping\", *Computer-Aided Design* 22(9) (1990), 538–549, <https://doi.org/10.1016/0010-4485(90)90039-F>), its hull taken over every pair of control points so it needs no convex hull routine."
+          },
+          "path": "geom_nurbs::bernstein",
+          "provenance": [],
+          "spdx": null,
           "target": "lib"
         },
         {
@@ -4821,6 +4856,29 @@
             "none": "an error enum and its `Display` and `Error` implementations."
           },
           "path": "geom_nurbs::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the control points for a plane; O(p²·q²) wide multiplications for a normal patch; one allocation per result, charged first.",
+          "does": "a Bezier piece whose control points are grid points (chapter 6.1) has integer Bernstein coefficients. [`plane_coefficients`] gives the coefficients of n·x + d over it, for a plane of `geom-num`'s exact [`Plane`] type: they are n·`P_k` + d, by affine invariance, so the signs of [`Signs`] decide exactly whether the piece can meet the plane (chapter 12.3's exact path: \"all of its signs, zeros included, are then exact\"). [`normal_patch`] gives the normal patch of a nonrational grid Bezier patch in scaled form, its coefficient (a, b) being C(2p − 1, a)·C(2q − 1, b)·`n_ab` times a positive constant, so each has the direction and sign of the Bernstein coefficient `n_ab` of `S_u` × `S_v`; a boundary edge whose control points are one grid point is divided out exactly.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/exact.rs",
+          "guarantees": [
+            "**Plane coefficients within 2^126.** [`Plane`] holds |`n_i`| < 2^83 and |d| < 2^125 (checked at construction). Each |`n_i`·`x_i`| < 2^83·2^40 = 2^123, the sum of three below 3·2^123 < 2^125, and with d below 2^126: in `i128` (limit 2^127), every step checked.",
+            "**Normal coefficients within 2^193.** In scaled form the partial derivatives' coefficients are C(p − 1, i)·C(q, j)·(`P_(i+1,j)` − `P_ij`) and C(p, i)·C(q − 1, j)·(`P_(i,j+1)` − `P_ij`), differences of at most 2M < 2^41. Products of scaled forms are plain convolutions (the binomials are already inside), and a cross product's component is a difference of two products, so coefficient (a, b) is at most 2·(2M)²·Σ C(p − 1, i1)·C(p, i2)·C(q, j1)·C(q − 1, j2) = 2·(2M)²·C(2p − 1, a)·C(2q − 1, b) < 2^83·2^(2p−1)·2^(2q−1) = 2^(81+2p+2q) ≤ 2^193 for p, q ≤ 28 ([`crate::MAX_DEGREE`]), and every partial sum below the same bound: in `geom-num`'s [`I256`] (limit 2^255), every step checked. A check that fails would be a defect in this derivation, reported as [`NurbsError::Defect`], never a wrong sign.",
+            "**Collapsed edges, exactly.** An edge counts only when its grid points are equal; then the normal patch's row along it is zero (checked), and in scaled form dividing by the factor that vanishes there is dropping that row: f = Σ `c_k`·t^k·(1 − t)^(n−k) with `c_0` = 0 is t·Σ `c_(k+1)`·t^k·(1 − t)^(n−1−k), and with `c_n` = 0 it is (1 − t)·Σ `c_k`·t^k·(1 − t)^(n−1−k).",
+            "**Deterministic.** Integer arithmetic only."
+          ],
+          "job": "Exact integer paths for Bernstein forms on the grid: the Bernstein coefficients of a plane's equation over a grid Bezier piece, and the normal patch of a grid Bezier patch, with every sign (zeros included) exact, each within a written bit budget.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0167-8396(88"
+            ],
+            "text": "exact integer evaluation with bit budgets derived before the code, as chapter 6.2 requires, on the Bernstein form's affine invariance and products in the scaled basis t^k·(1 − t)^(n−k) (R. T. Farouki and V. T. Rajan, *Computer Aided Geometric Design* 5(1) (1988), 1–26; the normal patch as in `crate::product`, after Sederberg and Meyers 1988, <https://doi.org/10.1016/0167-8396(88)90029-5>)."
+          },
+          "path": "geom_nurbs::exact",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5076,6 +5134,44 @@
           "target": "lib"
         },
         {
+          "cost": "a product of degrees (p1, q1) and (p2, q2) takes O((p1 + 1)(p2 + 1)(q1 + 1)(q2 + 1)·D) interval operations; a rational normal patch three products of degree (3p − 1, 3q − 1); one allocation per result, charged first.",
+          "does": "the product of two polynomials in Bernstein form is a polynomial of the summed degree in Bernstein form, coefficient k being Σ C(p, i)·C(q, k − i)/C(p + q, k) · `a_i`·`b_(k−i)` (and the same in each direction of a patch). On that rule, [`BernsteinCurve::scaled_by`], [`BernsteinCurve::dot`] and [`BernsteinCurve::cross`] multiply curves exactly, as polynomials, and [`BernsteinPatch::scaled_by`], [`BernsteinPatch::dot`] and [`BernsteinPatch::cross`] patches. [`BernsteinPatch::normal`] builds the normal patch: `S_u` × `S_v` for a nonrational patch, and for a rational one S = A / W the polynomial N = W·(`A_u` × `A_v`) − `W_v`·(`A_u` × A) − `W_u`·(A × `A_v`) = W³·(`S_u` × `S_v`), a positive multiple of the normal. [`Surface::normal_patches`] gives the normal patch of every Bezier patch of a surface, and where a boundary edge of the surface is collapsed to one point (a pole, an apex) divides the factor that vanishes along it out of the patches on that edge, so the bound keeps the normals' directions instead of containing zero.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/product.rs",
+          "guarantees": [
+            "**Exact products, enclosed.** Each coefficient of a product is computed in interval arithmetic from enclosures of its factors' exact coefficients and of the binomial ratios, so it encloses the exact coefficient of the exact product. The binomials come from Pascal's rule in intervals, exact while they stay below 2^53.",
+            "**The normal patch's sign and direction.** For a nonrational patch the normal patch's value at (u, v) is `S_u` × `S_v`; for a rational one W³ times it, W > 0. Either way the hull of its coefficients bounds the normals' directions (the Gauss map).",
+            "**Collapsed edges divided exactly.** An edge counts as collapsed only when the surface's stored control points along it are one point exactly: identical doubles, or for a rational surface identical quotients w·P / w, compared through exact products (`geom-num`'s `two_prod`). Then S along the edge is a constant, the partial derivative along it vanishes there, and so does N, exactly: N = v·T (edge v = v0), and T's coefficients are N's with the vanishing row dropped and row j scaled by q/(j + 1) (q/(q − j) for v = v1; likewise in u). Chapter 12.9 names this derivation as ours, to be proven in its build piece: the proof is these lines and `tests/bernstein.rs`.",
+            "**Typed refusals.** Products of rational forms are [`NurbsError::Rational`] (multiply their numerators and weight functions); factors on different domains are [`NurbsError::Domains`].",
+            "**Deterministic.** Sums in index order; no fused multiply-add."
+          ],
+          "job": "Symbolic products of Bernstein forms, and the normal patch of a surface with its collapsed edges divided out: the Gauss-map bound of chapter 12.6.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0010-4485(96",
+              "https://doi.org/10.1016/0167-8396(88"
+            ],
+            "text": "products of polynomials in Bernstein form (R. T. Farouki and V. T. Rajan, \"Algorithms for polynomials in Bernstein form\", *Computer Aided Geometric Design* 5(1) (1988), 1–26) as Piegl and Tiller use them for symbolic operators on NURBS (L. Piegl and W. Tiller, \"Symbolic operators for NURBS\", *Computer-Aided Design* 29(5) (1997), 361–368, <https://doi.org/10.1016/S0010-4485(96)00074-7>) and `NLib` implements them; the normal patch for Gauss-map bounds (T. W. Sederberg and R. J. Meyers, \"Loop detection in surface patch intersections\", *Computer Aided Geometric Design* 5(2) (1988), 161–171, <https://doi.org/10.1016/0167-8396(88)90029-5>)."
+          },
+          "path": "geom_nurbs::product",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_BezFuncMultiplyBezCrvMatrix`, `N_BezFuncMultiplyBezFunc`, `N_BezSrfFuncMultiply`, `N_BezCrossProduct`, `N_BezSrfCrossProduct` and `N_BezSrfDotProduct`, in interval arithmetic so every coefficient is certified; the binomial ratios from Pascal's rule in intervals instead of `NLib`'s table of 18 rows; the normal patch of rational patches and the division of collapsed edges are ours.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "O(s·p²) operations for s spans to reduce, and an elevation and a refinement of the result in intervals to certify, O(s·p²) more; the candidate and the enclosures are allocated once each.",
           "does": "[`Curve::reduce_degree`] walks the knot vector as Bezier extraction does (A5.6), reduces each Bezier piece from degree p to p − 1 (the book's equations 5.41 to 5.44: points solved from both ends, the middle one averaged for odd degree), and removes one copy of each knot again, averaging the two estimates where the removal sweeps cross with `NLib`'s weight λ = α / (α + β) (`NLib`'s `N_CrvReduceDegreeOnce`). Every distinct knot loses one copy, so knots of multiplicity 1 disappear. Whether the result is kept is not decided by `NLib`'s error estimate but certified: the candidate is raised back to degree p (A5.9) and the knots it lost are inserted (A5.4), both exact operations run in interval arithmetic, which gives the input's knots and an enclosure of the control points the candidate has on the input's basis; their largest distance from the input's points bounds the distance between the curves (`crate::remove`'s difference bound, with the rational form of `crate::ops`).",
           "family": [],
@@ -5192,7 +5288,7 @@
       "provenance": [],
       "sections": "7, 12.3, 12.12, 13 (introduction), 14.1 and 15.6; 29.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "basis, evaluation and knot operations (G56) and fitting (G58) built; the Bernstein toolkit (G59) and the rest (G259) to come.",
+      "status": "basis, evaluation and knot operations (G56), fitting (G58) and the Bernstein toolkit (G59) built; the rest (G259) to come.",
       "summary": "Spare Kit geometry kernel: NURBS algorithms."
     },
     {
@@ -7857,6 +7953,17 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-nurbs/src/basis.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/product.rs"
       ]
     },
     {

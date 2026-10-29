@@ -139,9 +139,9 @@ pub(crate) fn usable_weight(w: f64) -> bool {
     w.is_finite() && w > 0.0
 }
 
-/// The larger of two bounds, neither NaN. At a tie either is the same number: every bound here is
-/// an interval's upper end, a width, a weight or an absolute value, never −0 (intervals keep a zero
-/// end as +0).
+/// The larger of two bounds, neither NaN. At a tie either is the same number: every value here is
+/// an interval's end, a width, a weight, an absolute value or a parameter clamped to [0, 1], never
+/// −0 (intervals keep a zero end as +0).
 pub(crate) fn larger(a: f64, b: f64) -> f64 {
     if b > a { b } else { a }
 }
