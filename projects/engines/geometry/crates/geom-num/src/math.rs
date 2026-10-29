@@ -311,6 +311,16 @@ pub fn sqrt(x: f64) -> Result<Real, NumError> {
 /// # Errors
 ///
 /// [`NumError::NotFinite`] for a NaN or infinite argument, or when the result overflows.
+///
+/// Always inline: `Interval::mul_add` calls it eight times and the double-double operations
+/// several times each, and left to LLVM, how many of those calls it inlined changed with unrelated
+/// code. G47's count gate on x86-64 caught `mul_add` going from five inlined calls to four, 8%
+/// more instructions, with neither function changed.
+#[allow(
+    clippy::inline_always,
+    reason = "measured: the inliner's choice moved with unrelated code; every call is a few instructions"
+)]
+#[inline(always)]
 pub fn fma(a: f64, b: f64, c: f64) -> Result<Real, NumError> {
     Real::new(libm::fma(finite(a)?, finite(b)?, finite(c)?))
 }
