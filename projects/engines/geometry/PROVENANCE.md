@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 33 | 32 |
+| PORT METHOD | 34 | 32 |
 | DEPEND | 2 | 2 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -63,6 +63,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | IFC 4.3 documentation (buildingSMART) | CC-BY-ND-4.0 | readable | <https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas> | none | `projects/engines/geometry/crates/geom-curve/src/transition.rs`: for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement. No text adapted. |
 | Kani 0.68.0 `library/std/src/lib.rs` | MIT OR Apache-2.0 | allowed | <https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs> | none | `projects/engines/geometry/crates/geom-fuzz/src/lib.rs`: for its `assert!` and `panic!`, which leave their messages unformatted during verification, the rule [`Finding::new`] follows for a finding's detail. No code copied. |
 | `libm` 0.2.16 | MIT | allowed | <https://github.com/rust-lang/compiler-builtins/tree/dfd2203a4d6110820ad7bb65cafe1bf331a03a3d/libm/src/math> | none | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for which instruction or routine its square root and fused multiply-add use on each target, as the guarantees above state. |
+| libmalloc's xzone malloc | MIT | allowed | <https://github.com/apple-oss-distributions/libmalloc/blob/c49dafa25f1efe8607701ae6014a663ad2ee437f/src/xzone_malloc/xzone_malloc.c> | none | `projects/engines/geometry/crates/geom-test/src/golden/perturb.rs`: with `src/xzone_malloc/xzone_malloc.h` (MIT) at the same commit, for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists, its four pools per size class and its keyed choice of pool), to explain what CI measured. No code copied. |
 | npm `hosted-git-info` 10.1.1 | ISC | allowed | <https://github.com/npm/hosted-git-info/blob/8c3bebb5e42142b7bce06b085b4c1bd1adba7371/lib/hosts.js> | none | `projects/engines/geometry/crates/geom-test/src/map/links.rs`: for the address layouts of GitHub, Bitbucket, GitLab, gists and sourcehut and where each puts its revision. No code copied. |
 | NURBS-Python (geomdl) | MIT | allowed | <https://github.com/orbingol/NURBS-Python/blob/9d2555ae8217b5480ee83afb526a835ac3cc3c27/geomdl/fitting.py> | none | `projects/engines/geometry/crates/geom-nurbs/src/fit.rs`: for the book's equation numbers of the parameter rules and the least-squares knot placement. |
 | PROJ (its copy of the EPSG dataset, whose own terms of use cover the data) | MIT | allowed | <https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql> | none | `projects/engines/geometry/crates/geom-math/src/frame.rs`: for the defining parameters of EPSG:2193, NZTM2000. No code copied. |
