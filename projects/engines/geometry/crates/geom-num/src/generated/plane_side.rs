@@ -15,7 +15,13 @@
 //! input in the domain below, and it returns `None` when it cannot tell, never a guess; `value`
 //! returns the exact value for every input in the domain, each step in the type the certificate
 //! below shows holds it and every step a checked method, so a step that did not fit would give
-//! `None`, never a wrapped value; and `exact` is that value's sign.
+//! `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven
+//! (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every
+//! input (`gappa-plane-side-d.g`, `gappa-plane-side-z-n.g`, `gappa-plane-side-y-n.g`,
+//! `gappa-plane-side-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq
+//! checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate
+//! (`fptaylor-plane-side.fpt`); `kernel-certificates.yml` runs them on every change and every
+//! night.
 //!
 //! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
 //! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.
