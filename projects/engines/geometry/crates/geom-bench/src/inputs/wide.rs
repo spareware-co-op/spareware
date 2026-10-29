@@ -226,7 +226,12 @@ pub(crate) fn cmp_pairs<const L: usize>(op: &str, class: Class) -> Vec<(Wide<L>,
 /// positive values with only the top limb set, in rotation.
 #[must_use]
 pub fn signum<const L: usize>(class: Class) -> Vec<Wide<L>> {
-    let mut g = rng(&format!("wide::signum::{L}"), class);
+    signum_values::<L>(&format!("wide::signum::{L}"), class)
+}
+
+/// Values for signum, from the seed `op`.
+pub(crate) fn signum_values<const L: usize>(op: &str, class: Class) -> Vec<Wide<L>> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|n| {
             Some(match n % 4 {
@@ -259,7 +264,12 @@ pub fn signum<const L: usize>(class: Class) -> Vec<Wide<L>> {
 /// value fits an `i128`, so that overflow batch is empty.
 #[must_use]
 pub fn to_i128<const L: usize>(class: Class) -> Vec<Wide<L>> {
-    let mut g = rng(&format!("wide::to_i128::{L}"), class);
+    to_i128_values::<L>(&format!("wide::to_i128::{L}"), class)
+}
+
+/// Values for the conversion to `i128`, from the seed `op`.
+pub(crate) fn to_i128_values<const L: usize>(op: &str, class: Class) -> Vec<Wide<L>> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|n| {
             Some(match n {
@@ -290,7 +300,12 @@ pub fn to_i128<const L: usize>(class: Class) -> Vec<Wide<L>> {
 /// `i128::MIN` and `i128::MAX` first.
 #[must_use]
 pub fn from_i128<const L: usize>(class: Class) -> Vec<i128> {
-    let mut g = rng(&format!("wide::from_i128::{L}"), class);
+    from_i128_values(&format!("wide::from_i128::{L}"), class)
+}
+
+/// Values for the conversion from `i128`, from the seed `op`.
+pub(crate) fn from_i128_values(op: &str, class: Class) -> Vec<i128> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|n| {
             Some(match n {
@@ -321,7 +336,15 @@ pub fn from_i128<const L: usize>(class: Class) -> Vec<i128> {
 /// wide for `Wide<M>`.
 #[must_use]
 pub fn resize<const L: usize, const M: usize>(class: Class) -> Vec<Wide<L>> {
-    let mut g = rng(&format!("wide::to_i{}::{L}", 64 * M), class);
+    resize_values::<L, M>(&format!("wide::to_i{}::{L}", 64 * M), class)
+}
+
+/// Values for a resize from `Wide<L>` to `Wide<M>`, from the seed `op`.
+pub(crate) fn resize_values<const L: usize, const M: usize>(
+    op: &str,
+    class: Class,
+) -> Vec<Wide<L>> {
+    let mut g = rng(op, class);
     let fits = width::<L>().min(width::<M>()) - 1;
     match class {
         Class::Typical => batch_of(|_| Some(signed::<L>(&mut g, fits))),

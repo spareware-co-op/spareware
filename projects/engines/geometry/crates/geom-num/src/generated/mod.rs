@@ -116,10 +116,12 @@
 
 pub mod incircle;
 pub mod insphere;
+pub mod limbs;
 pub mod lpi_side;
 pub mod lpi_weight;
 pub mod orient2d;
 pub mod orient3d;
+pub mod plain;
 pub mod plane_side;
 pub mod ssi_side;
 pub mod ssi_weight;
