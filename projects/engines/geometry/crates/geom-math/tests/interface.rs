@@ -15,9 +15,10 @@
 //!   on a point whose value, about 2^−90 m, is far below the double-double value's own error.
 //! - A shift between frames takes a vertical offset of exactly 2^62 steps and refuses one more.
 //! - A grid image rounds to the nearest step, ties to even, with the exact flag right, on rows
-//!   whose plain double sum, or whose double-double sum, lands within its error bound of a whole
-//!   step or a midpoint on the far side from the exact value: each filter must refuse them; and a
-//!   sum of tiny terms that cancel is exactly zero.
+//!   whose plain double sum, or whose double-double sum (of products up to 2^62 that cancel), lands
+//!   within its error bound of a whole step or a midpoint on the far side from the exact value, or
+//!   on an exact step it then calls inexact: each filter must refuse them; and a sum of tiny terms
+//!   that cancel is exactly zero.
 //! - A transform whose determinant is small but certain is classified by its sign, and the
 //!   identity reverses no orientation.
 //! - The exact stage's wide path breaks a tie to the even step.
@@ -474,21 +475,14 @@ fn grid_images_round_rows_whose_float_sums_mislead() {
 
 #[test]
 fn grid_images_round_rows_whose_double_double_sums_mislead() {
-    // Rows whose double-double sum loses a term of 3·2^−80: l₀x is about 2^39, so the double-double
-    // sum of it and l₁y keeps nothing below about 2^−66, and l₂z then cancels l₀x exactly. The
-    // exact value is then 0 exactly (an exact step the double-double sum puts 3·2^−80 away), and
-    // 1/2 + 3·2^−80 (just above a midpoint the double-double sum lands on).
-    let l = 1.0 + pow2(-52);
-    let x = (1i64 << 39) - 1;
-    for t in [-3.0 * pow2(-80), 0.5] {
-        check_row([l, pow2(-80), -l, t], [x, 3, x]);
-    }
     // Rows whose products reach 2^57 to 2^62 and cancel (found by search): the double-double sum
-    // then errs by up to about 2^-46, far above the filter's slack of 2^-52, and the exact value is
-    // a whole step. Only the error bound's term in the products' sizes, 2^-98 of their sum, makes
-    // the filter refuse them; a bound that drops a product's size, or the translation's, or
-    // multiplies the slack, would call the step inexact.
-    let doubles: [([u64; 4], [i64; 3]); 3] = [
+    // then errs by up to about 2^-46, far above the filter's slack of 2^-52. In the first three the
+    // exact value is a whole step, and only the error bound's term in the products' sizes, 2^-98 of
+    // their sum, makes the filter refuse them: a bound that drops a product's size, or the
+    // translation's, or multiplies the slack, would call the step inexact. In the last the exact
+    // value is a midpoint, a tie that goes to the even step, and the double-double value lies within
+    // its error of it on the odd side: the filter must refuse a value that close to a midpoint.
+    let doubles: [([u64; 4], [i64; 3]); 4] = [
         (
             [
                 4_700_336_225_974_520_809,
@@ -515,6 +509,15 @@ fn grid_images_round_rows_whose_double_double_sums_mislead() {
                 4_870_369_108_304_076_800,
             ],
             [-791_200_041_985, -701_803_515_243, -701_803_515_243],
+        ),
+        (
+            [
+                4_604_620_448_380_987_145,
+                4_701_758_010_974_797_824,
+                13_925_130_047_829_573_632,
+                4_603_545_214_223_066_194,
+            ],
+            [495_067_433_918, -901_402_464_459, -901_402_464_459],
         ),
     ];
     for (bits, v) in doubles {
