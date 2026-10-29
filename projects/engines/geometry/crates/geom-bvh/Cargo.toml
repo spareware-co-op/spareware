@@ -24,6 +24,11 @@ geom-test = { path = "../geom-test" }
 name = "tree"
 harness = false
 
+# The 10M-point build and the welding-like pair search of the cell index (piece G55).
+[[bench]]
+name = "cells"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

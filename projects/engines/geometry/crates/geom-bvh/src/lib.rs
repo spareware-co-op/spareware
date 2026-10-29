@@ -32,19 +32,23 @@
 //! - [`build`]: the binned surface-area build, its limits ([`MAX_DEPTH`], [`LEAF_MAX`]) and its
 //!   parallel subtree phase.
 //! - [`query`]: the boxes that meet a box, the pairs within a tree and the pairs between two.
-//! - [`BvhError`], in [`error`]: why the tree could not build, change or answer.
+//! - [`cells`]: [`CellIndex`], the Morton-sorted cell index of grid points (G55), a linear octree
+//!   for point searches: the points within a radius, and the pairs within a radius.
+//! - [`BvhError`], in [`error`]: why the tree or the index could not build, change or answer.
 //!
-//! Status: the box tree built (G54); the Morton-sorted cell index to come (G55).
+//! Status: the box tree (G54) and the Morton-sorted cell index (G55) built.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 pub mod bound;
 pub mod build;
+pub mod cells;
 pub mod error;
 pub mod query;
 pub mod tree;
 
 pub use bound::{Aabb, Inflation, LIMIT};
 pub use build::{LEAF_MAX, MAX_DEPTH};
+pub use cells::{AXIS_BITS, CODE_BITS, CellIndex, Point, morton};
 pub use error::BvhError;
 pub use tree::{BoxTree, Entry, Node, NodeKind, REBUILD_FACTOR, Refitted};
