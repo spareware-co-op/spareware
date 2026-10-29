@@ -457,9 +457,11 @@ fn every_malformed_variant_of_the_real_store_is_refused() {
     push("history without a piece", &|v| {
         goldens(v)[0]["history"][0]["piece"] = Value::from(" ");
     });
+    // The last record's successor is the golden's digest, however many records come before it.
     push("history equal to its successor", &|v| {
         let digest = goldens(v)[0]["sha256"].clone();
-        goldens(v)[0]["history"][0]["sha256"] = digest;
+        let history = goldens(v)[0]["history"].as_array_mut().unwrap();
+        history.last_mut().unwrap()["sha256"] = digest;
     });
     push("negative operation version", &|v| {
         goldens(v)[0]["operations"] = serde_json::json!({"extrude": -1});
