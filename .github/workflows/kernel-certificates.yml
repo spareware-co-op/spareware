@@ -18,6 +18,12 @@ name: Kernel certificates
 # The method note, projects/kit/notes/G35-filter-certificates.md, says what each proof covers and
 # what the written argument covers. Nothing here is a dependency: the tools run as separate
 # programs and never touch the kernel's code.
+#
+# On a pull request, a problem is proved again only if it differs from the pull request's base:
+# a problem byte for byte the base's, with the scripts in certificates/ and this workflow also the
+# base's, was proved there, and the nightly run proves it again. Its FPTaylor job still shows, says
+# so and finishes at once, and the Gappa job says so for each such problem and sets it aside. The
+# nightly, dispatched and called runs (kernel-release.yml's, on a tag) prove every problem.
 
 on:
   pull_request:
@@ -47,6 +53,8 @@ env:
   OCAML_IMAGE: ocaml/opam:ubuntu-24.04-ocaml-4.11@sha256:b1a078473ec36987790399dc62e9f5147400000045d475652c4d4cc88dfc8530
   SCRIPTS: projects/engines/geometry/crates/geom-gen/certificates
   PROBLEMS: projects/engines/geometry/crates/geom-gen/generated
+  # A pull request's base, whose problems were proved there; empty on every other run.
+  BASE: ${{ github.event.pull_request.base.sha }}
 
 jobs:
   gappa:
@@ -55,13 +63,27 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The next step's command is unchanged: a problem set aside is no longer in the checkout.
+      - name: Set aside the problems the base proved
+        id: base
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch -q --no-tags --depth 1 origin "$BASE"
+          for problem in "$PROBLEMS"/gappa-*.g; do
+            if git diff --quiet "$BASE" HEAD -- "$problem" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
+              echo "$(basename "$problem"): same problem as $BASE, proved there; the nightly run proves it again"
+              rm "$problem"
+            fi
+          done
+          if ! compgen -G "$PROBLEMS/gappa-*.g" >/dev/null; then echo "none=true" >> "$GITHUB_OUTPUT"; fi
       - name: Prove the filter bounds
+        if: steps.base.outputs.none != 'true'
         run: |
           mkdir -m 777 "$RUNNER_TEMP/proofs"
           docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/proofs:/out" -e OUT=/out -w /work \
             "$ROCQ_IMAGE" bash "$SCRIPTS/gappa.sh" "$PROBLEMS"/gappa-*.g
       - name: Keep the Rocq proofs
-        if: always()
+        if: always() && steps.base.outputs.none != 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gappa-rocq-proofs
@@ -97,7 +119,19 @@ jobs:
         problem: ${{ fromJSON(needs.fptaylor-problems.outputs.problems) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set aside the problem if the base proved it
+        id: base
+        if: github.event_name == 'pull_request'
+        env:
+          PROBLEM: ${{ matrix.problem }}
+        run: |
+          git fetch -q --no-tags --depth 1 origin "$BASE"
+          if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$PROBLEM" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
+            echo "$PROBLEM: same problem as $BASE, proved there; the nightly run proves it again"
+            echo "same=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Bound the filter and check the certificate
+        if: steps.base.outputs.same != 'true'
         env:
           PROBLEM: ${{ matrix.problem }}
         run: |
