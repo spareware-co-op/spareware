@@ -25,6 +25,10 @@ geom-test = { path = "../geom-test" }
 name = "surfaces"
 harness = false
 
+[[bench]]
+name = "offsets"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

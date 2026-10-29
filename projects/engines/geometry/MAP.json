@@ -1187,6 +1187,11 @@
               "shape": "tuple"
             },
             {
+              "doc": "A procedural kind built on itself deeper than its stated bound (an offset of an offset of …): every operation recurses once per level, and the bound keeps that within the stack (chapter 28.8).",
+              "name": "TooDeep",
+              "shape": "struct"
+            },
+            {
               "doc": "A step its own bounds rule out failed: a defect in this crate, reported, never a panic.",
               "name": "Defect",
               "shape": "unit"
@@ -6198,8 +6203,33 @@
           "target": "lib"
         },
         {
-          "cost": "for each parameter pair, a few enclosures and bounds, a split, a reversal and a transform.",
-          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations; the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
+          "cost": "per try, (cells·n + 1)² samples and as many interpolation solves' worth of O(n) work, plus one certificate per span (the kind's partials to order 6 at a point, 7 along a line and 4 over a box, and O(p²) interval operations to sum them); at most four tries (n = 4 to 32); knot removal O(knots · rows · n).",
+          "does": "[`same_parameter`] cuts the kind's domain at its breaks into smooth cells, samples the kind on an n × n grid of equally spaced parameters in each cell, and interpolates the samples with a bicubic B-spline surface on those parameters (A9.4, through `geom-nurbs`'s `Curve::interpolate_at` along u and then along v), each cell's knots those averaging (9.8) gives its equally spaced parameters, joined C⁰ at the breaks, so the surface's spans never straddle a break. It then certifies the surface against the kind span by span, and samples twice as densely while the certified error is above half the target and still falls by at least a quarter with each doubling (the error itself falls about sixteen times for a smooth kind; where the certificate stops falling, rounding or a jump of the kind is what is left). Last, it removes knots (A5.8 on every row of the net at once, `geom-nurbs`'s certified `Curve::remove_knot`) while the removals' certified changes fit in what the target leaves, and returns the surface with its deviation: the certified error plus the removals' changes.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
+          "guarantees": [
+            "**Certified.** |O(u, v) − N(u, v)| is at most the deviation returned at every (u, v) of the domain: on each span the remainder form holds because both are smooth inside it (no span meets a break of the kind inside), every term is an outward-rounded enclosure, and knot removal adds no more than its own certified change (the triangle inequality; a row's change bounds the net's, since the other direction's basis functions are a partition of unity).",
+            "**Within the tolerance, or refused.** Asked for a tolerance, the result is within it or the call fails with [`NurbsError::OutsideTolerance`]; without one, the target is the fit bound `ε_fit` (`geom_num::ladder::FIT`, 64 grid steps: chapter 13 certifies a procedural kind's cache within it), and the deviation returned is what the densest sampling certified when the target is not reached: honest, never assumed.",
+            "**Same parameter.** The surface at (u, v) is within the deviation of the kind at (u, v), so both maps are `ParamMap::Same`.",
+            "**Deterministic.** Fixed sampling, fixed orders."
+          ],
+          "job": "A NURBS cache of a surface kind on its own parameters, by Piegl and Tiller's sample, interpolate and remove-knots method, certified by interval bounds.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0010-4485(98",
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "L. Piegl and W. Tiller, \"Computing offsets of NURBS curves and surfaces\", Computer-Aided Design 31(2) (1999), 147–156, <https://doi.org/10.1016/S0010-4485(98)00066-9> (sample, interpolate, remove knots), with The NURBS Book's A9.4 and A5.8 (2nd ed., <https://doi.org/10.1007/978-3-642-59223-2>) as `geom-nurbs` implements them; the error certified instead of estimated from samples, by Taylor's theorem in several variables with the Lagrange remainder in interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, on Taylor forms)."
+          },
+          "path": "geom_surface::cache",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform.",
+          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
           "guarantees": [
@@ -6240,8 +6270,30 @@
           "target": "lib"
         },
         {
+          "cost": "O(K²) for a sum; O(K⁴) for a product, quotient or root (each coefficient sums over the coefficients below it); K is at most a few in the kernel's uses.",
+          "does": "a [`Jet`] of total order K holds enclosures of the Taylor coefficients f^(i, j)/(i!·j!), where f^(i, j) = ∂^{i+j}f/∂u^i∂v^j and i + j ≤ K, at every point of a box (a point, for an enclosure; a box, for a bound), listed as [`crate::param::partial_index`] lists partials. Sums, products, quotients and square roots of jets are the jets of the sums, products, quotients and roots, by the two-variable recurrences of automatic differentiation; [`Jet::du`] and [`Jet::dv`] differentiate. So the jet of an offset surface's formula, S + d·(`S_u` × `S_v`)/|`S_u` × `S_v`|, gives all of its partials to order K from the base's partials to order K + 1: its higher derivatives come from the formula's exact rules (Leibniz's rule and the quotient and root recurrences), never from a finite difference.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/jet.rs",
+          "guarantees": [
+            "**Certified.** If each input coefficient encloses its function's coefficient at every point of the box, so does each output coefficient: every recurrence is a polynomial or a quotient in the inputs, evaluated in outward-rounded interval arithmetic (inclusion isotonicity).",
+            "**Refused where undefined.** A quotient by, or a root of, a jet whose value may be zero (or, for the root, not positive) is [`CurveError::Unbounded`], never a guess; an order above 18, where the factorials stop being exact doubles, is [`NurbsError::DerivativeOrder`]."
+          ],
+          "job": "Truncated two-variable Taylor series in interval arithmetic: every partial derivative of a formula built from surfaces' partials, enclosed, without differentiating the formula by hand.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717761",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "the Taylor-coefficient recurrences of automatic differentiation in several variables (A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), chapter 13, <https://doi.org/10.1137/1.9780898717761>: the Cauchy product of multivariate Taylor series and the division and square-root recurrences it gives), evaluated in intervals as in interval automatic differentiation (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>); the one-variable form is `geom-curve`'s jet, which this extends to two parameters."
+          },
+          "path": "geom_surface::jet",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a bound or enclosure runs Bezier extraction in intervals, O(`s_u`·`s_v`·(p + q)·p·q) for s spans, plus O(p·q·(p + q)) per patch cut; the normal bound three products per patch; a split O(n·m); a reversal or transform O(n·m).",
-          "does": "implements [`ParamSurface`] for [`Surface`]. Points and partials are A3.5, A3.6 and A4.4 (`geom-nurbs`). Enclosures and bounds come from the surface's Bernstein patches in interval arithmetic (piece G59): the patch holding (u, v), or each patch meeting the box cut down to it, its box from the convex hull; partials from the patch's partial forms, and for a rational surface `S_d` = (`A_d`·W − A·`W_d`) / W². The normal bound is the hull of the normal patches (`Surface::normal_patches`, collapsed edges divided out) cut down to the box. Conversion to NURBS is the surface itself. A split inserts the parameter until its multiplicity is the degree in that direction and parts the net; a reversal negates and reverses one knot vector; a transform maps the control points with the weights kept.",
+          "does": "implements [`ParamSurface`] for [`Surface`]. Points and partials are A3.5, A3.6 and A4.4 (`geom-nurbs`). Enclosures and bounds come from the surface's Bernstein patches in interval arithmetic (piece G59): the patch holding (u, v), or each patch meeting the box cut down to it, its box from the convex hull; partials from the patch's partial forms, and for a rational surface `S_d` = (`A_d`·W − A·`W_d`) / W². The normal bound is the hull of the normal patches (`Surface::normal_patches`, collapsed edges divided out) cut down to the box. Partials of any order are the patch's repeated partial forms, at the point or bounded by their hulls, and for a rational surface the jet quotient A/W (`crate::jet`). Conversion to NURBS is the surface itself. A split inserts the parameter until its multiplicity is the degree in that direction and parts the net; a reversal negates and reverses one knot vector; a transform maps the control points with the weights kept.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/nurbs.rs",
           "guarantees": [
@@ -6263,8 +6315,33 @@
           "target": "lib"
         },
         {
+          "cost": "an evaluation of order k is the base's of order k + 1 plus O(k⁴) interval operations (a box's twice, for its centred form); a bound O(1) evaluations per piece (each smooth part of the box cut into four by four), a normal bound up to 64 more per piece where the fold factor's sign needs smaller boxes (an explicit stack, three halvings deep: no recursion) and two of the base's normal bounds; the cache as `crate::cache` states.",
+          "does": "[`Offset`] stores its base, any [`SurfaceKind`] (an offset too), the part of the base's domain it covers, and the distance d; a positive distance moves along `S_u` × `S_v`. It is procedural (chapter 7): its points and its partials of every order come from the base's partials one order higher through two-variable interval Taylor jets (`crate::jet`), so its second and third derivatives, which Class-A blends need (chapter 13.10), are the formula's exact derivatives, never finite differences. Its NURBS form is a cache on the same parameters, built by Piegl and Tiller's sample, interpolate and remove-knots method and certified box by box in interval arithmetic (`crate::cache`), computed on demand or kept with [`Offset::cached`]; [`Offset::to_nurbs_within`] asks for a stated error.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+          "guarantees": [
+            "**Certified, or refused.** Every enclosure holds the exact offset of the stored base. Where the base's normal may vanish (a pole, a cusp, or a box too wide to separate it from zero) an enclosure is refused and a derivative bound is `Unbounded`; a bound on the points still holds there, from the base's bound widened by |d|, and the normal bound is then the whole space, which decides no sign. Elsewhere the normal bound is the base's, turned over where the offset folds, wherever the sign of 1 − 2Hd + Kd² is certified (Maekawa's identity below), and the cross product of the enclosed partials where it is not.",
+            "**Offset by d, then by −d, is the base.** Where the offset is regular (d·κ < 1 for both principal curvatures κ on the side it moves to), the offset's normal is the base's, so the offset by −d of the offset by d is the base itself, and its enclosures hold the base's points.",
+            "**Exact split and reversal.** A split narrows the domain on the same base (deviation 0); a reversal reverses the base and negates the distance (`S_u` × `S_v` turns over).",
+            "**Transforms keep the kind only when exact.** A grid transform (a signed permutation and a whole-step translation, so lengths are kept) of an offset whose base moves exactly gives an offset, a mirror negating the distance; any other transform gives the moved NURBS cache, with both deviations."
+          ],
+          "job": "The offset surface kind: a base kind moved along its unit normal, O = S + d·n with n = (`S_u` × `S_v`)/|`S_u` × `S_v`|, with symbolic higher derivatives and a certified NURBS cache.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717761",
+              "https://doi.org/10.1016/S0010-4485(99",
+              "https://doi.org/10.1016/S0010-4485(98"
+            ],
+            "text": "the offset surface as ISO 10303-42 defines it (`offset_surface`, the base moved along its normal by a distance), its derivatives by automatic differentiation in interval arithmetic (Griewank and Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), <https://doi.org/10.1137/1.9780898717761>), which re-derives what `SMLib`'s offset surface gets wrong in its third derivatives (chapter 13.11); the identity `O_u` × `O_v` = (1 − 2Hd + Kd²)·(`S_u` × `S_v`) for the regular offset (T. Maekawa, \"An overview of offset curves and surfaces\", Computer-Aided Design 31(3) (1999), <https://doi.org/10.1016/S0010-4485(99)00013-5>); the cache by L. Piegl and W. Tiller, \"Computing offsets of NURBS curves and surfaces\", Computer-Aided Design 31(2) (1999), <https://doi.org/10.1016/S0010-4485(98)00066-9>."
+          },
+          "path": "geom_surface::offset",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none here; each kind's implementation states its own.",
-          "does": "[`ParamSurface`] is the trait chapter 12.1 names: evaluation, first partial derivatives, certified enclosures, conservative bounds on the value and the partials over any parameter box, a bound on the normals' directions (the Gauss map), conversion to NURBS with an error, split, reverse and transform. [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s [`Changed`], with a certified bound on their distance from the exact result. Errors are `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).",
+          "does": "[`ParamSurface`] is the trait chapter 12.1 names: evaluation, first partial derivatives, certified enclosures, conservative bounds on the value and the partials over any parameter box, a bound on the normals' directions (the Gauss map), conversion to NURBS with an error, split, reverse and transform; with every partial derivative of any order enclosed at a point or over a box ([`ParamSurface::partials_over`], listed by [`partial_index`]) and the parameters where a kind may not be smooth ([`ParamSurface::breaks`]), which chapter 13's offsets and Class-A blends need (piece G66). [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s [`Changed`], with a certified bound on their distance from the exact result. Errors are `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/param.rs",
           "guarantees": [
@@ -6334,7 +6411,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the other kinds to come in G65, G66, G67, G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the other kinds to come in G67, G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {

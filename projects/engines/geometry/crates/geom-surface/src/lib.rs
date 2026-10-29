@@ -23,14 +23,18 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today (piece G60): [`ParamSurface`], the behaviour every kind has, and [`SurfaceKind`],
-//! the closed enum that stores every kind, in [`param`]; the NURBS kind (`nurbs`); the
-//! [`ImplicitBound`] trait, with `geom-num`'s exact plane as its first implementor, in
-//! [`implicit`]; and the kind contract any new kind must pass ([`contract`]). Errors are
-//! `geom-curve`'s `CurveError`, shared by every kind.
+//! Modules today (pieces G60, G65 and G66): [`ParamSurface`], the behaviour every kind has, and
+//! [`SurfaceKind`], the closed enum that stores every kind, in [`param`]; the NURBS kind
+//! (`nurbs`); the analytic kinds ([`analytic`]) and the swept kinds ([`swept`]) on their shared
+//! closed-form terms (`terms`); the offset kind ([`offset`]), with its two-variable interval
+//! jets (`jet`) and its certified NURBS cache (`cache`); the [`ImplicitBound`] trait, with
+//! `geom-num`'s exact plane as its first implementor, in [`implicit`]; and the kind contract any
+//! new kind must pass ([`contract`]). Errors are `geom-curve`'s `CurveError`, shared by every
+//! kind.
 //!
 //! Status: the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the
-//! other kinds to come in G65, G66, G67, G68, G253, G254, G260, G264, G315, G316, G317, G318 and
+//! analytic and swept kinds (G65); the offset kind, and every kind's partials of any order
+//! (G66); the other kinds to come in G67, G68, G253, G254, G260, G264, G315, G316, G317, G318 and
 //! G470.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
@@ -38,14 +42,18 @@
 extern crate alloc;
 
 pub mod analytic;
+mod cache;
 pub mod contract;
 pub mod implicit;
+mod jet;
 mod nurbs;
+pub mod offset;
 pub mod param;
 pub mod swept;
 mod terms;
 
 pub use analytic::{AffineSurface, Cone, Cylinder, Plane, Sphere, Torus, TorusForm};
 pub use implicit::{ImplicitBound, ImplicitEnclosure};
-pub use param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
+pub use offset::Offset;
+pub use param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
 pub use swept::{Extrusion, Revolution, Ruled};

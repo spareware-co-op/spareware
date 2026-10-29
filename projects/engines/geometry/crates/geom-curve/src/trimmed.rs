@@ -160,8 +160,11 @@ impl<const D: usize> Trimmed<D> {
         ))
     }
 
-    /// The parameters inside the interval where the basis may not be smooth.
-    pub(crate) fn breaks(&self) -> Vec<f64> {
+    /// The parameters strictly inside the interval where the basis may not be smooth (a NURBS
+    /// basis's distinct interior knots, a bulge polyline's vertices), increasing; none for the
+    /// analytic kinds. Surfaces built on the curve read them (`geom-surface`'s swept kinds).
+    #[must_use]
+    pub fn breaks(&self) -> Vec<f64> {
         self.basis.breaks(self.interval)
     }
 }

@@ -215,6 +215,16 @@
             "function": "surface_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd"
+        },
+        {
+          "id": "geom-surface/offset",
+          "what": "The offset surface kind of geom-surface (piece G66): 3 rounds of offsets of a bicubic NURBS patch with an interior knot (rational in the second round), of a cylinder and of a torus on random frames, and in the first an offset of an offset, each enclosed at nine parameter pairs, with its partials to order 3 at three, bounded with both derivative bounds and the normal bound over a box, converted to NURBS by default and the first patch's offset within 1e-1 (knots, net, weights, both parameter maps and deviation), split and reversed in each direction and transformed (each enclosed, with its deviation; the offset of an offset is not converted and moves by a grid mirror); and 4 refusals: 314 results in the canonical encoding of tests/offset_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "offset_determinism",
+            "function": "offset_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "4d203fba81810b84272b2e16d844e92691cd9af66c7d5d06e49e346cafa7931c"
         }
       ]
     }

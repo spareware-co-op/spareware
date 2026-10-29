@@ -51,7 +51,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Curve, Direction, Limit, Surface};
 use geom_run::WorkMeter;
 
-use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
+use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
 
 /// π enclosed.
 fn pi() -> Result<Interval, CurveError> {
@@ -186,7 +186,7 @@ enum At {
     Span(f64, f64),
 }
 
-/// A trimmed profile's derivative of `order` (0 or 1) at `at`, enclosed.
+/// A trimmed profile's derivative of `order` at `at`, enclosed.
 fn profile(
     p: &Trimmed<3>,
     at: At,
@@ -317,8 +317,10 @@ impl Swept {
         Ok(())
     }
 
-    /// The unplaced X^(i, j) (i, j ≤ 1, not both) at u (a point or a span) and at the profile
-    /// parameter `at` (or v over a span), enclosed.
+    /// The unplaced partial X^(i, j), of any orders, at u (a point or a span) and at the profile
+    /// parameter `at` (or v over a span), enclosed: the formulas of the module table differentiated
+    /// term by term (a revolution's cos πu and sin πu shift a quarter turn and gain π per order in
+    /// u; X is linear in v for an extrusion and a ruled surface).
     fn x(
         &self,
         u: Interval,
@@ -350,13 +352,20 @@ impl Swept {
                 let a = scale3(dot3(&w, &n)?, &n)?;
                 let b = sub3(&w, &a)?;
                 let c = cross3(&n, &w)?;
+                // The i-th derivatives of cos πu and sin πu: π^i times the pair shifted i quarter
+                // turns.
                 let (cos, sin) = (u.cospi()?, u.sinpi()?);
-                let (fc, fs) = if i == 0 {
-                    (cos, sin)
-                } else {
-                    let p = pi()?;
-                    (tight::mul(p, sin.neg())?, tight::mul(p, cos)?)
+                let (mut fc, mut fs) = match i & 3 {
+                    0 => (cos, sin),
+                    1 => (sin.neg(), cos),
+                    2 => (cos.neg(), sin.neg()),
+                    _ => (sin, cos.neg()),
                 };
+                let p = pi()?;
+                for _ in 0..i {
+                    fc = tight::mul(p, fc)?;
+                    fs = tight::mul(p, fs)?;
+                }
                 let mut out = add3(&scale3(fc, &b)?, &scale3(fs, &c)?)?;
                 if i == 0 {
                     out = add3(&out, &a)?;
@@ -370,8 +379,9 @@ impl Swept {
                 let d = pts(*direction)?;
                 match (i, j) {
                     (0, 0) => add3(&profile(p, at(u, sides.0), 0, meter)?, &scale3(v, &d)?),
-                    (1, 0) => profile(p, at(u, sides.0), 1, meter),
-                    _ => Ok(d),
+                    (_, 0) => profile(p, at(u, sides.0), i, meter),
+                    (0, 1) => Ok(d),
+                    _ => Ok([zero; 3]),
                 }
             }
             Shape::Ruled {
@@ -379,14 +389,15 @@ impl Swept {
                 second,
                 sigma,
             } => {
-                let k = if (i, j) == (0, 1) { 0 } else { i };
-                let p1 = profile(first, at(u, sides.0), k, meter)?;
-                let p2 = profile(second, at(u, sides.0), k, meter)?;
+                if j > 1 {
+                    return Ok([zero; 3]);
+                }
+                let p1 = profile(first, at(u, sides.0), i, meter)?;
+                let p2 = profile(second, at(u, sides.0), i, meter)?;
                 let diff = scale3(point(*sigma)?, &sub3(&p2, &p1)?)?;
                 if j == 1 {
                     return Ok(diff);
                 }
-                let _ = zero;
                 add3(&p1, &scale3(v, &diff)?)
             }
         }
@@ -491,6 +502,47 @@ impl Swept {
             }
         }
         Ok(r)
+    }
+
+    /// Every placed partial to `order` over `region`, each the hull of its pieces, listed by
+    /// `partial_index`.
+    fn partials_over(
+        &self,
+        region: ParamBox,
+        sides: (Limit, Limit),
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<V3>, CurveError> {
+        let mut out = Vec::with_capacity(partial_index(order.saturating_add(1), 0)?);
+        for n in 0..=order {
+            for j in 0..=n {
+                let i = n.checked_sub(j).ok_or(CurveError::Defect)?;
+                let b = self.hull(region, meter, |s, u, v, m| s.s(u, v, (i, j), sides, m))?;
+                let [l0, l1, l2] = b.lo;
+                let [h0, h1, h2] = b.hi;
+                out.push([
+                    Interval::new(l0, h0)?,
+                    Interval::new(l1, h1)?,
+                    Interval::new(l2, h2)?,
+                ]);
+            }
+        }
+        Ok(out)
+    }
+
+    /// The profiles' breaks, in the direction each runs.
+    fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+        match &self.shape {
+            Shape::Revolution { profile, .. } => (Vec::new(), profile.breaks()),
+            Shape::Extrusion { profile, .. } => (profile.breaks(), Vec::new()),
+            Shape::Ruled { first, second, .. } => {
+                let mut b = first.breaks();
+                b.extend(second.breaks());
+                b.sort_by(f64::total_cmp);
+                b.dedup();
+                (b, Vec::new())
+            }
+        }
     }
 
     fn with_shape(&self, shape: Shape, domain: ParamBox) -> Swept {
@@ -1094,6 +1146,20 @@ macro_rules! swept_surface {
                     Err(CurveError::Unbounded) => Ok(DerivativeBound::Unbounded),
                     Err(e) => Err(e),
                 }
+            }
+
+            fn partials_over(
+                &self,
+                region: ParamBox,
+                sides: (Limit, Limit),
+                order: usize,
+                meter: &mut WorkMeter<'_>,
+            ) -> Result<Vec<[Interval; 3]>, CurveError> {
+                self.inner.partials_over(region, sides, order, meter)
+            }
+
+            fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+                self.inner.breaks()
             }
 
             fn normal_bound(
