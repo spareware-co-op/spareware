@@ -1134,6 +1134,8 @@ fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
     let bottom = ground(u64::MAX);
     for (e, want) in [
         ("-9223372036854775808.5", out(i128::MIN)),
+        // MAX + 1/2, a tie whose even neighbour MAX + 1 is beyond i128: saturated.
+        ("9223372036854775808.5", out(i128::MAX)),
         (
             "-9223372036854775808.4",
             out(i128::MIN + 1_844_674_407_370_955_162),
