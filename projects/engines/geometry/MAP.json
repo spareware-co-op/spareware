@@ -4414,7 +4414,7 @@
               "shape": "unit"
             },
             {
-              "doc": "An approximation (degree reduction) cannot be certified within the tolerance asked for.",
+              "doc": "An approximation (degree reduction, or a fit to a stated error) cannot be certified within the tolerance asked for.",
               "name": "OutsideTolerance",
               "shape": "unit"
             },
@@ -4431,6 +4431,46 @@
             {
               "doc": "Inserting the knot would raise its multiplicity above the degree (or above degree + 1 at an end of the domain).",
               "name": "TooManyKnots",
+              "shape": "unit"
+            },
+            {
+              "doc": "A fit was given too few data points: interpolation of degree p needs at least p + 1, and a least-squares fit at least as many as it has control points.",
+              "name": "DataCount",
+              "shape": "struct"
+            },
+            {
+              "doc": "A data point coordinate, a derivative or a constraint value given to a fit is NaN or infinite.",
+              "name": "DataNotFinite",
+              "shape": "struct"
+            },
+            {
+              "doc": "Two neighbouring data points give the same parameter: they coincide, or lie so close together, relative to the whole polygon, that their parameters round to one value.",
+              "name": "CoincidentData",
+              "shape": "struct"
+            },
+            {
+              "doc": "Parameters given to a fit do not increase: each must be greater than the one before (interpolation), or no smaller (least squares).",
+              "name": "ParameterOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "A least-squares weight is not a positive finite number.",
+              "name": "DataWeight",
+              "shape": "struct"
+            },
+            {
+              "doc": "A fit's number of control points is below degree + 1, or above the number of data points.",
+              "name": "ControlCount",
+              "shape": "struct"
+            },
+            {
+              "doc": "The data do not determine the fit's control points: the parameters break the Schoenberg–Whitney condition (some basis function vanishes at every parameter it needs one), so the system is singular, or numerically rank-deficient.",
+              "name": "Undetermined",
+              "shape": "unit"
+            },
+            {
+              "doc": "A least-squares fit's constraints cannot all be met: there are more of them than control points, or one contradicts the others.",
+              "name": "Constraints",
               "shape": "unit"
             },
             {
@@ -4464,6 +4504,43 @@
       "layer": "2",
       "modules": [
         {
+          "cost": "each removal pass tries O(n) knots, each try O(n·D) to remove and re-insert and O(m·p) to check the data; each least-squares step O(m·n²); each projection O(p²·D) a step. All of it is charged to the meter as it goes.",
+          "does": "[`Curve::approximate`] interpolates the data at a low degree, then repeats: remove every knot it can while each data point stays within the tolerance (algorithm A9.8), raise the degree of the knot vector by one, fit by least squares on it, and move each data point's parameter to the nearest point of the new curve. When the degree asked for is reached it removes knots once more and stops. If a step fails (the least-squares system is not determined, or a point ends up beyond the tolerance), it starts again from an interpolant one degree higher, as `NLib`'s `N_FitCrvApprox` does.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+          "guarantees": [
+            "**Within the tolerance, certified.** Each data point carries a certified upper bound on its distance from the current curve at its parameter. Interpolation and least squares set it by interval evaluation (`crate::enclose`); a knot removal adds the certified change of the curve at that parameter, which re-inserting the knot in interval arithmetic bounds control point by control point: the change at u is Σ `N_l`(u)·(`P̃_l` − `P_l`), at most Σ `N_l`(u)·|`P̃_l` − `P_l`| with each `N_l`(u) bounded above by an interval enclosure. A removal is kept only if every bound stays within the tolerance, so the result is within it at every data point; its `error` is the smaller of that bound and a fresh interval evaluation, point by point. `NLib` bounds a removal's change by the same sum in floating point, with the removal's error at one control point from the book's formula.",
+            "**Never a best-so-far curve.** If even the interpolant of the degree asked for is not within the tolerance, the result is [`NurbsError::OutsideTolerance`]; `NLib` returns whatever its last attempt left.",
+            "**Parameters improve or stay.** A parameter moves by Newton's method on (C(u) − Q)·C′(u) only while each step brings the curve point nearer the data point, inside the domain; the ends stay at the ends.",
+            "**Deterministic.** Knots are tried smallest bound first, the first on a tie; every loop runs in a fixed order; Newton's method stops after at most [`NEWTON_STEPS`] steps."
+          ],
+          "job": "Curve approximation to a stated error (The NURBS Book, section 9.4.4): the curve of a given degree that passes within a tolerance of every data point, with as few control points as knot removal can leave.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0010-4485(92",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "W. Tiller's knot removal (*Computer-Aided Design* 24(8) (1992), 445–453, <https://doi.org/10.1016/0010-4485(92)90012-Y>) used for approximation as Piegl and Tiller's section 9.4.4 and algorithm A9.8 give it, with least squares at each degree (section 9.4.1) and point inversion by Newton's method (section 6.1) (The NURBS Book, 2nd ed., Springer (1997), <https://doi.org/10.1007/978-3-642-59223-2>), in the order of steps `NLib` takes."
+          },
+          "path": "geom_nurbs::approx",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_FitCrvApprox` and `N_FitRemoveKnots`, open curves only (closed data sets are not joined here); each removal's effect on the data is bounded by re-insertion in interval arithmetic instead of the book's formula in doubles; the starting degree follows `NLib`'s advice (1 for multiple knots, which keep corners, 2 otherwise); Newton's method keeps only steps that bring the point nearer, with `NLib`'s limit of 50 steps (`NL_ITLIM`) and no tolerances; failure is an error.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "constant per operation; nothing allocates.",
           "does": "each knot operation (insertion, refinement, Bezier extraction, removal, degree change) is written once, generic over [`Num`], and run once in `f64` and once in `geom-num`'s [`Interval`]. The two runs make the same operations in the same order on the same data. Every interval operation rounds to nearest and widens by one step, so it contains the exact result of the operation for any operands in its inputs; rounding to nearest is monotone, so it also contains the double the `f64` run computes from operands inside those inputs. By induction over the run, each interval contains both the exact value and the double, and its width bounds their distance. [`Hom`] is a homogeneous control point, w·P with its weight w, combined as `NLib`'s `N_Combine2CPts` combines them.",
           "family": [],
@@ -4482,6 +4559,28 @@
             "text": "interval arithmetic with outward rounding by one step (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>) as `geom-num` implements it, used as a running error bound for a floating-point computation that makes the same operations (N. J. Higham, *Accuracy and Stability of Numerical Algorithms*, 2nd ed., SIAM (2002), section 3.3, <https://doi.org/10.1137/1.9780898718027>)."
           },
           "path": "geom_nurbs::arith",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "n·`lower`·(`upper` + `width`) multiply-adds to eliminate and n·(`upper` + 1)·`width` to substitute, charged to the meter first; one allocation of n·(`lower` + `upper` + 1) doubles.",
+          "does": "a [`Band`] holds a square matrix whose row i has its nonzero entries in columns i − `lower` to i + `upper`; [`Band::solve`] solves A·X = B for a block B of `width` columns, eliminating below the diagonal in order and substituting back, all inside the band.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/band.rs",
+          "guarantees": [
+            "**Stable without pivoting, for the matrices it is given.** The B-spline collocation matrix at increasing parameters is totally positive (C. de Boor, \"Total positivity of the spline collocation matrix\", *Indiana University Mathematics Journal* 25(6) (1976), 541–551, <https://doi.org/10.1512/iumj.1976.25.25043>), and Gaussian elimination without pivoting on a totally positive matrix is backward stable, its computed factors staying nonnegative (C. de Boor and A. Pinkus, \"Backward error analysis for totally positive linear systems\", *Numerische Mathematik* 27 (1977), 485–490, <https://doi.org/10.1007/BF01399609>). The end derivative rows of section 9.2.2 come first and last and only fix their control points, so the rest is a submatrix of such a matrix, which is totally positive too.",
+            "**Refused, never guessed.** A pivot that is not positive (the Schoenberg–Whitney condition fails, or rounding has met a nearly singular matrix) is [`NurbsError::Undetermined`]; a result that is not finite is [`NurbsError::NotFinite`].",
+            "**Deterministic.** Rows eliminated in order, columns in order, no fused multiply-add."
+          ],
+          "job": "Banded linear systems solved by Gaussian elimination without pivoting, for the collocation matrices of interpolation.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/BF01399609"
+            ],
+            "text": "Gaussian elimination without pivoting on a totally positive band matrix, as de Boor and Pinkus analyse it (<https://doi.org/10.1007/BF01399609>), in the band storage and with the band triangular solves of G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 4.3; the right-hand sides are carried through the elimination."
+          },
+          "path": "geom_nurbs::band",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4686,6 +4785,29 @@
           "target": "lib"
         },
         {
+          "cost": "O(p² + k·p·D) interval operations for a curve's derivative of order k, O(p² + q² + p·q·D) for a surface point; nothing allocates but the lists of errors, charged first.",
+          "does": "[`curve_derivative`] encloses C^(k)(u) and [`surface_point`] S(u, v), for the exact curve or surface that the stored doubles define, evaluated at the exact parameter given. [`distance_bound`] turns an enclosure and a data point into an upper bound on their distance. [`curve_errors`] and [`surface_error`] apply them to every data point of a fit.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/enclose.rs",
+          "guarantees": [
+            "**Enclosure.** Every value is computed in `geom-num`'s interval arithmetic, each operation rounded outward (`crate::arith`), from the exact knots, parameter and control points, so it holds the exact value; the distance bound is the upper end of an enclosure of the Euclidean norm, so it is at least the exact distance.",
+            "**The book's schemes.** The basis functions come from the triangular scheme of de Boor and Cox (A2.2), a derivative from the differenced control points of the derivative curve (A3.3, equation 3.8) and that curve's basis, of degree p − k on the same knots; the same operations as the double-precision code, in intervals.",
+            "**Typed failures.** A rational curve or surface is [`NurbsError::Rational`] (fits make only nonrational ones); a parameter outside the domain is [`NurbsError::ParameterOutside`]; an enclosure that leaves the finite doubles is [`NurbsError::NotFinite`]."
+          ],
+          "job": "Certified evaluation: interval enclosures of the exact point and derivatives of a nonrational curve, and the exact point of a nonrational surface, at a parameter; and from them certified distances to data, the errors every fit reports.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>) on Piegl and Tiller's algorithms A2.2 and A3.3 (The NURBS Book, 2nd ed., sections 2.2 and 3.3, <https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_nurbs::enclose",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few machine words; nothing allocates.",
           "does": "[`NurbsError`] names the failure and, where one exists, the index of the knot, control point or weight at fault, so a caller can report it or repair the input (chapter 22's errors that say what to do). A construction checks the rules of chapter 24.7 (\"NURBS well formed\") and returns the first rule broken, in the order the constructor's documentation gives.",
           "family": [],
@@ -4701,6 +4823,53 @@
           "path": "geom_nurbs::error",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the number of data points (times D for the distances), plus p additions per averaged knot; each result is one allocation, charged to the meter first.",
+          "does": "a fit takes data points `Q_k` and returns a [`CurveFit`] or a [`SurfaceFit`]: the nonrational curve or surface, the parameter of each data point, and `error`, a certified upper bound on `max_k` |`Q_k` − C(`u_k`)| at those parameters (so also on the distance from every data point to the curve). [`parameters`] gives a polygon's parameters by the uniform, chord-length or centripetal rule, and [`grid_parameters`] a grid's, averaged over its rows and columns. [`averaged_knots`] builds the knot vector of an interpolation, each interior knot the average of p consecutive parameters, and [`least_squares_knots`] that of a least-squares fit with fewer control points than data points, placed so every knot span holds a parameter. Every fit takes a [`FitVersion`]: the operation log records it, and a change to any fit's result is a new version while every old one keeps its behaviour (chapter 26.2).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/fit.rs",
+          "guarantees": [
+            "**Certified errors.** Every fit's `error` is computed after the fit, by evaluating the curve or surface at each data parameter in interval arithmetic (`crate::enclose`), so it bounds the exact distance from each data point to the exact curve the returned doubles define. A fit never reports a smaller error than it has, and a fit to a stated error that cannot meet it is [`NurbsError::OutsideTolerance`], never a best-so-far curve (chapter 13.21).",
+            "**Parameters on [0, 1], strictly increasing.** The first parameter is exactly 0 and the last exactly 1. Two neighbouring points whose parameters would be equal (they coincide, or round to one value) are [`NurbsError::CoincidentData`]; `NLib` divides by a zero total in silence or leaves equal parameters that make its systems singular.",
+            "**Knots for the data.** [`averaged_knots`] gives the knots under which interpolation at the parameters is well posed (Schoenberg–Whitney's condition holds); [`least_squares_knots`] gives knots under which every span holds at least one parameter, so the least-squares system has full rank. Both are clamped on [0, 1].",
+            "**Deterministic.** Sums in index order; distances by a scaled sum of squares and `geom-num`'s correctly rounded square root; no fused multiply-add."
+          ],
+          "job": "Fitting NURBS to data (The NURBS Book, chapter 9): what every fit shares, the parameters of the data points, and the knot vectors built from them.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0010-4485(89",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "The NURBS Book, 2nd ed., section 9.2.1: the uniform rule, chord length (equations 9.4 and 9.5) and the centripetal rule (equation 9.6, after E. T. Y. Lee, \"Choosing nodes in parametric curve interpolation\", *Computer-Aided Design* 21(6) (1989), 363–370, <https://doi.org/10.1016/0010-4485(89)90003-1>); knots by averaging (equation 9.8); a grid's parameters averaged over its rows and columns (algorithm A9.3); and section 9.4.1's knot placement for least squares (equations 9.68 and 9.69). L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., Springer (1997), <https://doi.org/10.1007/978-3-642-59223-2>, as `NLib` implements them and as `geomdl` (MIT) numbers them."
+          },
+          "path": "geom_nurbs::fit",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_FitCalcCrvParamValues`, `N_FitCrvCalcKnotVector` and `N_FitCalcKnotVectorEndDerivs`; parameters that do not increase are an error instead of a silent zero division; the least-squares knots follow the book's equations 9.68 and 9.69, where `N_FitCalcKnotVectorCrvApprox` averages clusters of parameters, with the position j·(m + 1)/(n − p + 1) split in integers so each knot is rounded once.",
+              "take": "port"
+            },
+            {
+              "licence": "MIT",
+              "link": "https://github.com/orbingol/NURBS-Python/blob/9d2555ae8217b5480ee83afb526a835ac3cc3c27/geomdl/fitting.py",
+              "method_note": null,
+              "name": "NURBS-Python (geomdl)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the book's equation numbers of the parameter rules and the least-squares knot placement.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
           "target": "lib"
         },
         {
@@ -4754,6 +4923,78 @@
               ],
               "pinned": true,
               "purpose": "translated to safe `no_std` Rust from `N_CrvInsertKnot` and `N_CrvRefine`, generic over the number type so the same steps give the result and its interval enclosure; new curves are returned instead of edited in place; refinement checks that its knots are finite, ordered, interior and leave every multiplicity at most p, which `N_CrvRefine` does not; the zero test of `N_CrvRefine` compares the two knots instead of their computed difference with zero.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "O(n·p²·D) to solve a curve and O(n·p²) to certify it; a surface of r × s points costs O(r·s·(p² + q²)·D); charged to the meter first.",
+          "does": "[`Curve::interpolate`] chooses parameters by the rule asked for, knots by averaging, and solves the collocation system Σ `N_i`(`u_k`)·`P_i` = `Q_k` for the control points (A9.1). [`Curve::interpolate_at`] does the same at parameters and on a basis the caller gives. [`Curve::interpolate_with_ends`] adds two control points so the curve also has given first derivatives at its ends. [`Surface::interpolate`] interpolates a grid row by row and then column by column through the intermediate points, one system per direction for all of them (A9.4). Each returns its certified error (`crate::fit`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/interp.rs",
+          "guarantees": [
+            "**Interpolates, certified.** The error returned bounds the distance of every data point from the exact curve or surface of the returned doubles at its parameter; it is rounding, not approximation. With end derivatives, `constraint_error` bounds |C′(0) − `D_0`| and |C′(1) − `D_m`| the same way.",
+            "**Well posed or refused.** Parameters that do not increase, or that leave a basis function with no parameter in its support (the Schoenberg–Whitney condition), are refused as [`NurbsError::ParameterOrder`] or [`NurbsError::Undetermined`]; `NLib` solves on and returns whatever the elimination gives.",
+            "**Stable.** The systems are solved inside their band without pivoting (`crate::band`), which is backward stable for these totally positive matrices.",
+            "**Deterministic.** Fixed orders throughout; the same data give the same bits on every target."
+          ],
+          "job": "Global interpolation of curves and surfaces (The NURBS Book, sections 9.2.1, 9.2.2 and 9.2.5): the curve through every data point, optionally with given end derivatives, and the surface through a grid.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "Piegl and Tiller's algorithms A9.1 and A9.4 and section 9.2.2 (The NURBS Book, 2nd ed., Springer (1997), <https://doi.org/10.1007/978-3-642-59223-2>), as `NLib` implements them; the end derivatives enter as P₁ − P₀ = (`u_(p+1)` − `u_1`)/p · `D_0` and `P_n` − `P_(n−1)` = (`u_(n+p)` − `u_n`)/p · `D_m`, the first and last derivative control points of A3.3."
+          },
+          "path": "geom_nurbs::interp",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_FitCrvInterp`, `N_FitCrvInterpGivenParams` and `N_FitCrvDerivs`, for any dimension; solved by our own band elimination instead of `NLib`'s banded LU; missing end derivatives are an error where `N_FitCrvDerivs` estimates them from a cubic through four points; the end-derivative factors use the knots at both ends, where `NLib` assumes a domain of [0, 1]; every fit returns its certified error.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "a fit with m + 1 data points and n + 1 control points takes O(m·n²) for the decomposition and O(m·n) per coordinate, charged to the meter first; a surface takes one decomposition per direction and one solve per row or column and coordinate.",
+          "does": "[`Curve::least_squares`] fits a curve of n + 1 control points to m + 1 data points: parameters by the rule asked for, knots by equations 9.68 and 9.69, the end points interpolated and the interior control points minimising Σ |`Q_k` − C(`u_k`)|². [`Curve::least_squares_at`] is algorithm A9.6's general form: weighted data at the caller's parameters on the caller's basis, with points and derivatives anywhere met exactly ([`Constraint`]). [`Surface::least_squares`] fits a grid (A9.7): least squares through each column of the grid, then through each row of the result, the corners interpolated. Each returns its certified error (`crate::fit`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/lsq.rs",
+          "guarantees": [
+            "**By QR, never normal equations.** Every system goes through `geom-linalg`'s complete orthogonal decomposition (Householder QR with column pivoting), as chapter 15.6 asks: the book and `NLib` form Nᵀ·N, which squares the condition number. Constraints are met by the null-space method: a particular solution of the constraints and a basis of their null space from one decomposition, then least squares in that space.",
+            "**Determined or refused.** A system whose numerical rank is below its number of unknowns (some span with no data, the Schoenberg–Whitney condition broken) is [`NurbsError::Undetermined`], decided by a rank tolerance of max(rows, columns)·u relative to the largest pivot, `NumPy`'s default for `lstsq` (<https://numpy.org/doc/stable/reference/generated/numpy.linalg.lstsq.html>); constraints that repeat or contradict each other are [`NurbsError::Constraints`]. `NLib` solves on with whatever its LU gives.",
+            "**Certified.** `error` bounds the distance of every data point from the returned curve at its parameter, and `constraint_error` how far each constraint is missed, both by interval evaluation (`crate::enclose`); the least-squares optimum is only as good as rounding allows, but the bounds are always true.",
+            "**Deterministic.** `geom-linalg`'s fixed pivot and loop order; sums in index order."
+          ],
+          "job": "Least-squares approximation of curves and surfaces (The NURBS Book, sections 9.4.1 to 9.4.3): fewer control points than data points, the curve or surface nearest the data in the least-squares sense, with ends or other constraints met exactly.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "Piegl and Tiller's least-squares curve and surface approximation, section 9.4.1 (equations 9.63 to 9.67), algorithm A9.6 (weighted and constrained) and A9.7 (surfaces) (The NURBS Book, 2nd ed., Springer (1997), <https://doi.org/10.1007/978-3-642-59223-2>), solved by the complete orthogonal decomposition and the null-space method for equality-constrained least squares (G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), sections 5.4.2, 5.5 and 6.2) in place of the book's normal equations and Lagrange multipliers."
+          },
+          "path": "geom_nurbs::lsq",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "the problem statements of `N_FitCrvApproxLstSq`, `N_FitCrvApproxKnots` and `N_FitCrvWeightedLstSq` (which end points are fixed, what is weighted, which constraints are allowed), solved by `geom-linalg`'s QR instead of `NLib`'s banded normal equations; constraints of any derivative order at any parameter; rank checked; every fit returns its certified error.",
               "take": "port"
             }
           ],
@@ -4951,7 +5192,7 @@
       "provenance": [],
       "sections": "7, 12.3, 12.12, 13 (introduction), 14.1 and 15.6; 29.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "basis, evaluation and knot operations built (G56); interpolation and approximation (G58), the Bernstein toolkit (G59) and the rest (G259) to come.",
+      "status": "basis, evaluation and knot operations (G56) and fitting (G58) built; the Bernstein toolkit (G59) and the rest (G259) to come.",
       "summary": "Spare Kit geometry kernel: NURBS algorithms."
     },
     {
@@ -7620,6 +7861,20 @@
     },
     {
       "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+        "projects/engines/geometry/crates/geom-nurbs/src/fit.rs",
+        "projects/engines/geometry/crates/geom-nurbs/src/interp.rs",
+        "projects/engines/geometry/crates/geom-nurbs/src/lsq.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
       "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvNurb.cpp",
       "method_note": null,
       "name": "NVIDIA USD `BRep` `NLib`",
@@ -7932,6 +8187,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/links.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/orbingol/NURBS-Python/blob/9d2555ae8217b5480ee83afb526a835ac3cc3c27/geomdl/fitting.py",
+      "method_note": null,
+      "name": "NURBS-Python (geomdl)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/fit.rs"
       ]
     },
     {

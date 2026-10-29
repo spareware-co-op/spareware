@@ -376,7 +376,7 @@
       "line_text": "if b > a { b } else { a }",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The two differ only when b == a, where either is the same number: every caller passes an interval's upper end, a width or a weight, none NaN and none -0 (intervals keep a zero end as +0), so equal values have equal bits."
+      "reason": "The two differ only when b == a, where either is the same number: every caller passes an interval's upper end, a width, a weight or an absolute value, none NaN and none -0 (intervals keep a zero end as +0, and abs gives +0), so equal values have equal bits."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/ops.rs",
@@ -384,7 +384,7 @@
       "line_text": "if b < a { b } else { a }",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The two differ only when b == a, where either is the same number: every caller passes weights, which are positive, or the starting infinity, so equal values have equal bits."
+      "reason": "The two differ only when b == a, where either is the same number: every caller passes weights, which are positive, error bounds, which are interval upper ends and never -0, or the starting infinity, so equal values have equal bits."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
@@ -497,6 +497,70 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "A defect check that no input reaches: inserting u back as many times as it was removed gives exactly the input's knots (the same doubles in the same places) and as many points. Both operands are false, so the test is false with && as with ||."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+      "mutant": "replace || with && in remove_one",
+      "line_text": "if back != knots || pw.len() != pts.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check that no input reaches: re-inserting the removed copy of x once, at x's span from the right with s - 1 copies left, gives back exactly the window's knots (copies of the same doubles in the same places) and one point more than the removal left, as many as the window had. Both operands are false, so the test is false with && as with ||."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/band.rs",
+      "mutant": "replace || with && in Band::slot",
+      "line_text": "if i >= self.n || j >= self.n || add(j, self.lower)? < i || j > add(i, self.upper)? {",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "A defect check that no caller reaches: solve reads (i, k) for i from k + 1 to min(k + lower, n - 1) and (k, j) for j up to min(k + upper, n - 1), and solve_rows sets only each row's own entries, whose columns lie within the widths it measured from those rows. All four tests are false, so any && among them is false as the || is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/fit.rs",
+      "mutant": "replace FitVersion::number -> u32 with 1",
+      "line_text": "match self {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "V1 is the only FitVersion and its number is 1, so returning 1 is what the function does; a second version gets another number, and this mutant then dies."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/fit.rs",
+      "mutant": "replace > with >= in least_squares_knots",
+      "line_text": "knots.push(if knot > hi { hi } else { knot });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when knot == hi, where both push the same double unless one is +0 and the other -0. That needs hi = -0 and lo + alpha*(0 - lo) to round to 0, so alpha*|lo| to round to |lo|; but alpha = r/den is at most 1 - 1/den, and den, at most the number of parameters, is far below 2^51, so alpha*|lo| rounds below |lo|."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/interp.rs",
+      "mutant": "replace - with + in ends_points",
+      "line_text": "let a = (get(knots, add(p, 1)?)? - get(knots, 1)?) / pr;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "u_1 is +0 for every basis this function gets: curve_parameters starts every parameter list at exactly +0 (0/m for uniform, a pushed 0.0 otherwise), and end_derivative_knots puts p + 1 copies of the first parameter first, p >= 2. So x - 0 and x + 0 are the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/lsq.rs",
+      "mutant": "replace || with && in fixed_ends",
+      "line_text": "if rows < 2 || b.len() != mul(rows, width)? || count < 2 || count > rows {",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "A defect check whose operands are all false for every caller: curve_parameters refuses fewer than two points, every caller builds b with rows x width values, a basis has at least p + 1 >= 2 functions, and count <= rows is checked first (least_squares_knots refuses more, approximate returns before fitting more). So any && among them is false as the || is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+      "mutant": "replace > with >= in project",
+      "line_text": "if !(g > 0.0 && f.is_finite()) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when g is exactly 0. Then f/g is NaN when f is 0, which the next test stops on as this one would, or an infinity, which the clamp takes to an end of the domain, and that step is kept only if it brings the curve point nearer. So the mutant's parameter is one the method's rule allows (never farther), the fit is certified at the parameters it ends with and stays deterministic; 4000 random approximations never met g = 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+      "mutant": "replace || with && in project",
+      "line_text": "if !next.is_finite() || next == u {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "next is always finite here: the test above lets only g > 0 and a finite f through, so u - f/g is finite or an infinity, and the clamp brings an infinity to an end of the domain. So || gives next == u, and && gives false; when next == u the mutant evaluates the curve at u again, finds the distance not smaller and stops with the same parameter, charging nothing more (the step was charged before)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
