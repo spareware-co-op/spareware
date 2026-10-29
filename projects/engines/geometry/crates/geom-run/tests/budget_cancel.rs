@@ -503,7 +503,7 @@ fn a_long_item_that_charges_stops_soon_after_a_cancellation() {
                 loop {
                     meter.charge(1)?;
                     charges += 1;
-                    if charges % 4096 == 0 && Instant::now() > deadline {
+                    if charges.is_multiple_of(4096) && Instant::now() > deadline {
                         return Err(meter.out_of_memory());
                     }
                 }
