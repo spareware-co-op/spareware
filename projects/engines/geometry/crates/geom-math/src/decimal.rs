@@ -222,7 +222,10 @@ impl Decimal {
                 .checked_add(usize::from(matches!(bytes.get(after), Some(b'+' | b'-'))))
                 .ok_or(DecimalError::Syntax { at: after })?;
             let digits: &[u8] = bytes.get(first..).unwrap_or(&[]);
-            if let Some(bad) = digits.iter().position(|c| !c.is_ascii_digit()) {
+            if let Some(bad) = digits
+                .iter()
+                .position(|&c| char::from(c).to_digit(10).is_none())
+            {
                 let at = first.checked_add(bad).unwrap_or(first);
                 return Err(DecimalError::Syntax { at });
             }
