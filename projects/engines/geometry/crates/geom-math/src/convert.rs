@@ -1194,12 +1194,11 @@ mod tests {
                         northing: n,
                         height: n,
                     });
-                    let exact = f
-                        .horizontal_exact(Value::of_f64(e).unwrap(), Value::of_f64(n).unwrap())
-                        .and_then(|(x, y)| {
-                            f.height_exact(Value::of_f64(n).unwrap())
-                                .map(|z| point(x, y, z))
-                        });
+                    // The height first, as `to_frame` reports it.
+                    let exact = f.height_exact(Value::of_f64(n).unwrap()).and_then(|z| {
+                        f.horizontal_exact(Value::of_f64(e).unwrap(), Value::of_f64(n).unwrap())
+                            .map(|(x, y)| point(x, y, z))
+                    });
                     assert_eq!(fast, exact, "turns {turns}, e {e}, n {n}");
                 }
             }

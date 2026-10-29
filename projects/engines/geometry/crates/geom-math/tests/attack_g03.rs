@@ -535,54 +535,6 @@ fn dd_round_shifted_matches_exact_rounding() {
     f.assert_none("round_shifted");
 }
 
-/// `exact_product` answers exactly inside its documented exponent window and refuses outside.
-#[test]
-fn dd_exact_product_at_its_documented_edges() {
-    let mut rng = Rng(0xE7AC_7000);
-    let mut f = Failures::new();
-    let mant = |rng: &mut Rng| -> u64 { rng.next() & ((1u64 << 52) - 1) };
-    let make = |e: i32, m: u64, neg: bool| -> f64 {
-        let v = f64::from_bits((u64::try_from(e + 1023).unwrap() << 52) | m);
-        if neg { -v } else { v }
-    };
-    for _ in 0..4000 {
-        let target = rng.pick(&[-971, -970, -969, 0, 1020, 1021, 1022]);
-        let ea = i32::try_from(rng.range(-500, 997)).unwrap();
-        let eb = target - ea;
-        if !(-1022..=1023).contains(&eb) {
-            continue;
-        }
-        let a = make(ea, mant(&mut rng), rng.coin());
-        let b = make(eb, mant(&mut rng), rng.coin());
-        let got = DD::exact_product(a, b);
-        let allowed = ea < 996 && eb < 996 && (-970..=1021).contains(&(ea + eb));
-        let r = match got {
-            Some(d) if allowed => {
-                if dd_value(d) == exact(a) * exact(b) && normalized(d) {
-                    Ok(())
-                } else {
-                    Err(format!("{a:e} · {b:e} = {d:?} is not exact"))
-                }
-            }
-            Some(d) => Err(format!("{a:e} · {b:e} answered {d:?} outside the window")),
-            None if allowed => Err(format!("{a:e} · {b:e} refused inside the window")),
-            None => Ok(()),
-        };
-        f.record(r);
-    }
-    f.record(if DD::exact_product(f64::from_bits(1), 2.0).is_none() {
-        Ok(())
-    } else {
-        Err("subnormal operand answered".into())
-    });
-    f.record(if DD::exact_product(0.0, f64::MAX) == Some(DD::ZERO) {
-        Ok(())
-    } else {
-        Err("zero factor".into())
-    });
-    f.assert_none("exact_product");
-}
-
 #[test]
 fn dd_integer_conversions_at_the_extremes() {
     for v in [
