@@ -2945,6 +2945,38 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "q = a·r, and r = 1/ad has a's sign, so q is positive (sgn 0) every time: 0 ^ 1 and 0 | 1 are both 1."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace > with >= in hard_case",
+      "line_text": "while b.abs_diff(a) > 1 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With b - a >= 1 the binary search never ends: once b - a = 1, m = a, and x >= HARD[a][0] (the invariant) sets a = m again, for ever. Every input exp_accurate sends to hard_case (the low part within 4 units of a power of two: every HARD key and others) loops, and the tests stop it by their timeout. It hangs; it never returns a wrong value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace > with >= in exp_accurate",
+      "line_text": "if x.to_bits() > SUBNORMAL_THRESHOLD {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only for x = -0x1.6232bdd7abcd2p+9 exactly (bits equal to the threshold). tests/attack_g05.rs (exp_thresholds) checks exp at that very input against the reference, and the full run (5b9778b) found this mutant surviving it: exp is deterministic, so the mutant gives the original's correctly rounded value there (the fast path decides it, so exp_accurate never sees it), and at every other input it is the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in refine",
+      "line_text": "return sgn * h.r + sgn * h.d;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every listed hard case's offset d is below half an ulp of its r: 2^-110 or 2^-109 for the small r of SINPI_HARD, and 2^-55 against r in [1/2, 1) (half an ulp 2^-54) for the others. So sgn·r + sgn·d and sgn·r - sgn·d both round to sgn·r (C writes the sum for the inexact flag): the same double for every listed case."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in accurate",
+      "line_text": "let inv = y.abs() > x.abs();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at |y| = |x|, which never reaches accurate: there gt = 0 and dxy = 0, jt = 64 (t0 = 1), so zn = fma(-1, x, y) = 0 and z = 0, and the first fast path's bounds are F2[64] (pi/4) times the sign plus the octant offset, plus or minus 2^-90: pi/4, 3pi/4 and their negatives lie far from every midpoint, so both bounds round alike and the fast path returns."
     }
   ],
   "coverage_off": [],
