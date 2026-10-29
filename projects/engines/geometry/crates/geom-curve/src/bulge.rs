@@ -264,8 +264,9 @@ impl<const D: usize> BulgePolyline<D> {
         let (x, e) = two_sum(t, -self.start);
         let mut i = crate::form::floor_index(tight::larger(x, 0.0))?;
         let whole = count(i)? == x;
-        // Below the vertex exactly, or at it from the left: the segment before.
-        if whole && i > 0 && (e < 0.0 || (e == 0.0 && side == Limit::FromLeft)) {
+        // Below the vertex exactly, or at it from the left: the segment before (none before the
+        // first).
+        if whole && (e < 0.0 || (e == 0.0 && side == Limit::FromLeft)) {
             i = i.saturating_sub(1);
         }
         if i >= n {
@@ -314,17 +315,11 @@ pub(crate) fn rational_derivatives<const D: usize>(
     let wq = quadratic(seg.w, v)?;
     let [_, w1, _] = seg.w;
     let floor = tight::mul(tight::add(point(1.0)?, w1)?, point(0.5)?)?;
-    let mut w0 = *wq.first().ok_or(CurveError::Defect)?;
-    if w0.lo() < floor.lo() {
-        w0 = Interval::new(
-            floor.lo(),
-            if w0.hi() < floor.lo() {
-                floor.lo()
-            } else {
-                w0.hi()
-            },
-        )?;
-    }
+    let w = *wq.first().ok_or(CurveError::Defect)?;
+    let w0 = Interval::new(
+        tight::larger(w.lo(), floor.lo()),
+        tight::larger(w.hi(), floor.lo()),
+    )?;
     let mut a: [[Interval; D]; 3] = [[zero; D]; 3];
     for d in 0..D {
         let c = [

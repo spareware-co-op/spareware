@@ -177,8 +177,9 @@ pub(crate) fn same_parameter<K: ParamCurve<D>, const D: usize>(
     from_cuts(kind, degree, &cuts, meter)
 }
 
-/// The cuts of `domain`: each interval between consecutive `breaks` (sorted, inside the domain)
-/// cut into `per` equal pieces, the breaks kept exactly.
+/// The cuts of `domain`: each interval between consecutive `inner` breaks (sorted; those not
+/// strictly inside the domain, and repeats, skipped) cut into `per` equal pieces, the breaks kept
+/// exactly.
 pub(crate) fn cuts_between(
     (a, b): (f64, f64),
     inner: &[f64],
@@ -187,7 +188,8 @@ pub(crate) fn cuts_between(
     let mut ends = Vec::with_capacity(inner.len().saturating_add(2));
     ends.push(a);
     for &x in inner {
-        if a < x && x < b && ends.last().is_some_and(|&l| l < x) {
+        // Above the last end kept (the domain's start at first), so increasing and inside.
+        if x < b && ends.last().is_some_and(|&l| l < x) {
             ends.push(x);
         }
     }

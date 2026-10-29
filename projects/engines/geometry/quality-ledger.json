@@ -699,6 +699,46 @@
       "reason": "The mutant sums x + ex - y + ey for the cross product's coordinate. Where the exact coordinate is zero the two products are equal, so they round alike and the doubles' cross product is zero too: Frame::unit refuses it as Degenerate either way. Where it is not zero, the mutant can only call it zero (refusing a frame that is nearly degenerate), never accept a parallel one."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-curve/src/bulge.rs",
+      "mutant": "replace || with && in piece_deviation",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the rounding of an exact weight (a halving, an average or a rescaling by the joint's ratio): a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/bulge.rs",
+      "mutant": "replace > with >= in piece_deviation",
+      "line_text": "if eps > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only at eps == 0, where the added term is 2*0/(1 - 0) times the reach: zero. The mutant adds that zero through outward-rounded operations, so the deviation grows by at most a few subnormal steps and stays an upper bound; it never gets smaller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
+      "mutant": "replace || with && in join",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the rounding of an exact weight (a halving, an average or a rescaling by the joint's ratio): a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
+      "mutant": "replace > with >= in join",
+      "line_text": "if eps > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only at eps == 0, where the added term is 2*0/(1 - 0) times the reach: zero. The mutant adds that zero through outward-rounded operations, so the deviation grows by at most a few subnormal steps and stays an upper bound; it never gets smaller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
+      "mutant": "replace > with >= in Composite<D>::assemble",
+      "line_text": "if !meet && gap > allow {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "assemble is called with allow 0 (a new composite), where a joint whose enclosures do not meet has a gap above 0, or with allow infinite (a split, reversal or transform), where every gap is finite: gap > allow and gap >= allow agree in both."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "mutant": "replace classify -> Option<Sign> with None",
       "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",

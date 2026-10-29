@@ -209,12 +209,12 @@ impl<const D: usize> Offset<D> {
         self.cache.as_ref().map(|(n, d)| (n, *d))
     }
 
-    /// The parameters where the offset may not be smooth: the basis's breaks and the stations.
+    /// The parameters where the offset may not be smooth: the basis's breaks and the stations,
+    /// sorted, some perhaps outside the domain (`taylor::cuts_between` keeps the ones inside).
     fn breaks(&self) -> Vec<f64> {
         let mut b = self.basis.breaks();
         if let OffsetLaw::Distances(s) = &self.law {
-            let (lo, hi) = self.basis.interval();
-            b.extend(s.iter().map(|x| x.at).filter(|&x| lo < x && x < hi));
+            b.extend(s.iter().map(|x| x.at));
         }
         b.sort_by(f64::total_cmp);
         b.dedup();
@@ -282,15 +282,10 @@ impl<const D: usize> Offset<D> {
                 Jet::constant(point(s.vertical)?, order)?,
             ))
         };
-        let before = probe < first.at || (probe == first.at && side == Limit::FromLeft);
-        let after = probe > last.at || (probe == last.at && side == Limit::FromRight);
-        if before {
+        if probe < first.at || (probe == first.at && side == Limit::FromLeft) {
             return constant(first);
         }
-        if after {
-            return constant(last);
-        }
-        // The piece [a, b] holding the probe, from the side at a station.
+        // The piece [a, b] holding the probe, from the side at a station; none past the last.
         let mut i: usize = 0;
         while let (Some(_), Some(b)) = (stations.get(i), stations.get(i.saturating_add(1))) {
             if probe < b.at || (probe == b.at && side == Limit::FromLeft) {
@@ -410,29 +405,13 @@ impl<const D: usize> Offset<D> {
         Ok(out)
     }
 
-    /// The span cut at the stations inside it and into a few pieces each, for tighter jets.
+    /// The span cut at the breaks inside it and into a few pieces each, for tighter jets.
     fn pieces(&self, (lo, hi): (f64, f64)) -> Result<Vec<(f64, f64)>, CurveError> {
-        let mut cuts = alloc::vec![lo];
-        for b in self.breaks() {
-            if lo < b && b < hi {
-                cuts.push(b);
-            }
-        }
-        cuts.push(hi);
-        let mut out = Vec::new();
-        for w in cuts.windows(2) {
-            let (Some(&a), Some(&b)) = (w.first(), w.get(1)) else {
-                return Err(CurveError::Defect);
-            };
-            if a == b {
-                out.push((a, b));
-                continue;
-            }
-            let c = taylor::cuts_between((a, b), &[], 4)?;
-            for p in c.windows(2) {
-                if let (Some(&x), Some(&y)) = (p.first(), p.get(1)) {
-                    out.push((x, y));
-                }
+        let c = taylor::cuts_between((lo, hi), &self.breaks(), 4)?;
+        let mut out = Vec::with_capacity(c.len());
+        for p in c.windows(2) {
+            if let (Some(&x), Some(&y)) = (p.first(), p.get(1)) {
+                out.push((x, y));
             }
         }
         Ok(out)
@@ -577,15 +556,14 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
             b.lo.iter()
                 .chain(&b.hi)
                 .fold(1.0_f64, |s, x| tight::larger(s, x.abs()));
-        let mut per = 8;
-        loop {
+        for per in [8, 16, 32, 64, 128] {
             let cuts = taylor::cuts_between(self.domain(), &breaks, per)?;
             let n = taylor::from_cuts(self, CACHE_DEGREE, &cuts, meter)?;
-            if n.deviation <= scale * 1e-10 || per >= 128 {
+            if n.deviation <= scale * 1e-10 || per == 128 {
                 return Ok(n);
             }
-            per = per.saturating_mul(2);
         }
+        Err(CurveError::Defect)
     }
 
     fn split(
