@@ -127,7 +127,7 @@ impl Decimal {
         let mut m = significand.unsigned_abs();
         let mut e = exponent;
         // At most 38 steps: a u128 has at most 39 decimal digits, and m is not zero.
-        while m % 10 == 0 {
+        while m.is_multiple_of(10) {
             m /= 10;
             e = e.checked_add(1).ok_or(DecimalError::ExponentRange)?;
         }
@@ -219,7 +219,7 @@ impl Decimal {
                 .ok_or(DecimalError::Syntax { at: after })?;
             let unsigned = tail.strip_prefix(['+', '-']).unwrap_or(tail);
             if let Some(bad) = unsigned.bytes().position(|c| !c.is_ascii_digit()) {
-                let offset = tail.len().checked_sub(unsigned.len()).unwrap_or(0);
+                let offset = tail.len().saturating_sub(unsigned.len());
                 let at = after
                     .checked_add(offset)
                     .and_then(|a| a.checked_add(bad))

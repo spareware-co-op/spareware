@@ -126,11 +126,11 @@ impl LinearUnit {
         // left is in lowest terms in those primes, and a denominator that does not fit is one
         // whose reduced form does not fit either.
         let (mut m, mut twos, mut fives) = (m, e.unsigned_abs(), e.unsigned_abs());
-        while twos > 0 && m % 2 == 0 {
+        while twos > 0 && m.is_multiple_of(2) {
             m /= 2;
             twos = twos.checked_sub(1).ok_or(NumError::BudgetExceeded)?;
         }
-        while fives > 0 && m % 5 == 0 {
+        while fives > 0 && m.is_multiple_of(5) {
             m /= 5;
             fives = fives.checked_sub(1).ok_or(NumError::BudgetExceeded)?;
         }

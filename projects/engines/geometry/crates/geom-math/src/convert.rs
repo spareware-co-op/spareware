@@ -22,7 +22,7 @@
 //!   `DD::round_shifted`, and a quarter turn only swaps and negates.
 //! - *The exact path, for everything else.* Each value is read exactly, as m·2^a·5^b (a double:
 //!   m·2^a; a decimal m·10^e: a = b = e). The values of one point get a common denominator
-//!   d = q·2^A·5^C, so each offset W_i − O_i is an exact integer `u_i` over d, and each coordinate
+//!   d = q·2^A·5^C, so each offset `W_i` − `O_i` is an exact integer `u_i` over d, and each coordinate
 //!   is X = P/(Q·ρ) with integers P = `k_d·(α·u_E` + `β·u_N`) (or `u_H`) and Q = `k_n·d` (or d), all
 //!   formed exactly in 1536-bit integers. A double-double estimate of P/(Q·ρ), within 2^−101·|X|
 //!   (derived on `RATIO_BOUND` and `IRRATIONAL_BOUND`), gives the candidate step; a value
@@ -127,8 +127,8 @@ use geom_num::{NumError, math};
 use crate::decimal::Decimal;
 use crate::error::budget;
 use crate::exact::{
-    Big, const_pow2, divrem_u128, dyadic, leading_bits, pow2, pow2_big, pow5_big, quotient_to_f64,
-    rational_to_f64, sign_minus_sqrt,
+    Big, Square, const_pow2, divrem_u128, dyadic, leading_bits, pow2, pow2_big, pow5_big,
+    quotient_to_f64, rational_to_f64, sign_minus_sqrt,
 };
 use crate::frame::{FrameRecord, steps_per_metre};
 use crate::rounded::Rounded;
@@ -524,7 +524,10 @@ impl Axis {
         let tq = t.checked_mul(&self.q)?;
         match self.root {
             None => Some(two_p.checked_sub(&tq)?.signum()),
-            Some(n) => sign_minus_sqrt::<48>(&two_p.resize()?, &tq.resize()?, n),
+            Some(n) => {
+                let (a, b): (Square, Square) = (two_p.resize()?, tq.resize()?);
+                sign_minus_sqrt(&a, &b, n)
+            }
         }
     }
 
