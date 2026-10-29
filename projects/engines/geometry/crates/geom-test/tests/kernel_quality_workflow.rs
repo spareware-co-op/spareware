@@ -573,9 +573,15 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
         "only=(--in-diff \"$RUNNER_TEMP/plan/pr.diff\")",
         "elif [ -n \"$FILES\" ]; then\n  only=(--re \"$FILES\")",
         "cargo mutants \"${only[@]}\" --shard",
+        // A runaway mutant aborts its own test instead of shutting the runner down.
+        "ulimit -d $((8 * 1024 * 1024))",
     ] {
         assert!(shard.contains(needle), "the shards do not run {needle:?}");
     }
+    assert!(
+        shard.find("ulimit -d").unwrap() < shard.find("cargo mutants ").unwrap(),
+        "the limit is set before cargo-mutants starts"
+    );
     assert_eq!(shard.matches("cargo mutants ").count(), 1);
     assert!(shard.contains("case \"$code\" in 0|2|3) ;; *) exit \"$code\" ;; esac"));
     assert!(shard.contains("test -f \"$RUNNER_TEMP/out/mutants.out/mutants.json\""));

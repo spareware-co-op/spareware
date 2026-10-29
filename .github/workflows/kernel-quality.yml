@@ -237,6 +237,14 @@ jobs:
         run: |
           # rust-cache turns incremental compilation off for the whole job; turn it back on here.
           export CARGO_INCREMENTAL=1
+          # At most 8 GiB of data for each process (RLIMIT_DATA: its heap and private writable
+          # mappings; the runner has 16 GB). A mutant that stops a budget from ever stopping a map
+          # over usize::MAX items made a test grow until the runner ran out of memory and was shut
+          # down, losing the whole shard (runs 40947686294 and 40956182700). Under the limit such a
+          # test aborts on a failed allocation, cargo-mutants counts the mutant caught, and the
+          # shard goes on. The baseline runs under the same limit, so a test that needs more fails
+          # the shard, never one mutant.
+          ulimit -d $((8 * 1024 * 1024))
           # The plan's selection: a pull request's diff, or a narrowed full run's files.
           only=()
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
@@ -310,6 +318,14 @@ jobs:
         run: |
           # rust-cache turns incremental compilation off for the whole job; turn it back on here.
           export CARGO_INCREMENTAL=1
+          # At most 8 GiB of data for each process (RLIMIT_DATA: its heap and private writable
+          # mappings; the runner has 16 GB). A mutant that stops a budget from ever stopping a map
+          # over usize::MAX items made a test grow until the runner ran out of memory and was shut
+          # down, losing the whole shard (runs 40947686294 and 40956182700). Under the limit such a
+          # test aborts on a failed allocation, cargo-mutants counts the mutant caught, and the
+          # shard goes on. The baseline runs under the same limit, so a test that needs more fails
+          # the shard, never one mutant.
+          ulimit -d $((8 * 1024 * 1024))
           # The plan's selection: a pull request's diff, or a narrowed full run's files.
           only=()
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
