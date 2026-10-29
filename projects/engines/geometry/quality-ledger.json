@@ -3,52 +3,36 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
-      "mutant": "replace > with >= in zero",
-      "line_text": "if fb != 0.0 && (fa > 0.0) == (fb > 0.0) {",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "The two comparisons differ from their mutants only at zero. fa is not zero here: zero returned already when f(a) is zero. fb is not zero wherever its comparison is evaluated: the left operand of && is fb != 0.0. So both forms give the same sign test for every input."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
-      "mutant": "replace > with >= in zero",
-      "line_text": "if (fb > 0.0) == (fc > 0.0) && fb != 0.0 {",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "At fb = 0 the whole test is false either way, by its right operand. fc is never zero: it is set only from f(a) at the start (not zero, or zero returned already), from fa (the previous fb, and a zero fb ends the search before it can become fa), or from fb in the swap, which happens only when |fc| < |fb|, so that fb is not zero. Where neither is zero, x > 0 and x >= 0 agree."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
-      "mutant": "replace > with >= in zero",
-      "line_text": "b += if d.abs() > tol1 {",
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace > with == in grow",
+      "line_text": "if f.depth > MAX_DEPTH {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The branches differ only when |d| = tol1, and then they add the same double. d is either the bisection step xm, or an accepted interpolation p/q with p >= 0, accepted only when 2p < 3*xm*q - |tol1*q|, which needs xm*q > 0: either way d has the sign of xm (or is a zero of that sign, p/q with p = +0). So |d| = tol1 makes d equal to with_sign(tol1, xm), bit for bit, the zero cases included."
+      "reason": "A defect guard: no frame is deeper than 62. Splits from depth MEDIAN_DEPTH = 32 on are at the median, a range there holds fewer than 2^32 entries, and 30 halvings bring it to at most LEAF_MAX = 4, so leaves are at depth 62 at most and the guard's condition, depth > 64, is false for every input; depth == 64 and depth >= 64 are false for every input too."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
-      "mutant": "replace > with >= in zero",
-      "line_text": "if e.abs() >= tol1 && fa.abs() > fb.abs() {",
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace > with >= in grow",
+      "line_text": "if f.depth > MAX_DEPTH {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "A tie |fa| = |fb| makes both refuse the interpolation and bisect. With a != c (inverse quadratic) a and b lie on the same side of c, so fa = fb, s = 1, q = 0 and 2p < 0 is false. With a == c (secant) a tie can come only from a reset or the first step, as a swap leaves |fb| < |fa|; there e = b - a and 2xm = a - b, rounded alike, so fa = fb gives q = 0 and fa = -fb gives p = |e| = |0.5*e*q|, and p < |0.5*e*q| is false."
+      "reason": "A defect guard: no frame is deeper than 62. Splits from depth MEDIAN_DEPTH = 32 on are at the median, a range there holds fewer than 2^32 entries, and 30 halvings bring it to at most LEAF_MAX = 4, so leaves are at depth 62 at most and the guard's condition, depth > 64, is false for every input; depth == 64 and depth >= 64 are false for every input too."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
-      "mutant": "replace > with >= in minimum",
-      "line_text": "if q > 0.0 {",
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace || with && in split",
+      "line_text": "if left.n == 0 || rn == 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The two differ only when q is zero, of either sign, where the mutant negates p. Then 0.5*q*previous is zero, so |p| < |0.5*q*previous| is false whatever p's sign, the vertex is refused either way, and p is used nowhere else."
+      "reason": "The mutant also scores a plane with one side empty. Its cost is then area(all)·n (the empty side adds nothing, the other side holds every entry), and every plane with both sides non-empty costs strictly less: each side's box lies inside the whole and at least one is strictly smaller (two boxes equal to the whole would have the same centre, so the same bin). At least two bins are non-empty whenever the centres spread (the top centre falls in bin at least used/2 - 1 >= 1), so such a plane exists, and the strict comparison keeps it: the chosen plane is the same."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/quadrature.rs",
-      "mutant": "replace > with >= in integrate",
-      "line_text": "let goal = if tol > rel * value.get().abs() {",
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace || with && in split",
+      "line_text": "if kept == 0 || kept == count {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
+      "reason": "A defect guard: the plane comes from a sweep that skips planes with an empty side, and the partition puts each entry on the side of its bin, so both sides hold at least one entry and neither condition, alone or together, is ever true."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
@@ -265,6 +249,54 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant also tests the sign when M equals L, a resize to the same width. Then r has the very limbs of self, so its sign is self's and the test is false: resize returns the same Some(r) for every value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if fb != 0.0 && (fa > 0.0) == (fb > 0.0) {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The two comparisons differ from their mutants only at zero. fa is not zero here: zero returned already when f(a) is zero. fb is not zero wherever its comparison is evaluated: the left operand of && is fb != 0.0. So both forms give the same sign test for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if (fb > 0.0) == (fc > 0.0) && fb != 0.0 {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "At fb = 0 the whole test is false either way, by its right operand. fc is never zero: it is set only from f(a) at the start (not zero, or zero returned already), from fa (the previous fb, and a zero fb ends the search before it can become fa), or from fb in the swap, which happens only when |fc| < |fb|, so that fb is not zero. Where neither is zero, x > 0 and x >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "b += if d.abs() > tol1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The branches differ only when |d| = tol1, and then they add the same double. d is either the bisection step xm, or an accepted interpolation p/q with p >= 0, accepted only when 2p < 3*xm*q - |tol1*q|, which needs xm*q > 0: either way d has the sign of xm (or is a zero of that sign, p/q with p = +0). So |d| = tol1 makes d equal to with_sign(tol1, xm), bit for bit, the zero cases included."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if e.abs() >= tol1 && fa.abs() > fb.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A tie |fa| = |fb| makes both refuse the interpolation and bisect. With a != c (inverse quadratic) a and b lie on the same side of c, so fa = fb, s = 1, q = 0 and 2p < 0 is false. With a == c (secant) a tie can come only from a reset or the first step, as a swap leaves |fb| < |fa|; there e = b - a and 2xm = a - b, rounded alike, so fa = fb gives q = 0 and fa = -fb gives p = |e| = |0.5*e*q|, and p < |0.5*e*q| is false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in minimum",
+      "line_text": "if q > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when q is zero, of either sign, where the mutant negates p. Then 0.5*q*previous is zero, so |p| < |0.5*q*previous| is false whatever p's sign, the vertex is refused either way, and p is used nowhere else."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quadrature.rs",
+      "mutant": "replace > with >= in integrate",
+      "line_text": "let goal = if tol > rel * value.get().abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
     },
     {
       "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
