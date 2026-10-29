@@ -4978,16 +4978,19 @@
           "target": "lib"
         },
         {
-          "cost": "about a thousand allocations (8 to 32 for each of the 52 classes, and up to 16 shift blocks) and half as many frees for one perturbation, at most [`MAX_BYTES`] bytes reserved, linear in that count; nothing is written into the blocks.",
+          "cost": "about 1,400 allocations (8 to 32 for each of the 52 classes and the 16 box sizes, and up to 16 shift blocks) and half as many frees for one perturbation, at most [`MAX_BYTES`] bytes reserved, linear in that count; nothing is written into the blocks.",
           "does": "[`Heap::shift_and_fragment`] drives the program's own global allocator from a [`Seed`] into a layout no other seed gives, and holds it there until the [`Heap`] is dropped:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs",
           "guarantees": [
             "**Seeded.** Every size and choice comes from [`SplitMix64`] keyed by the seed: the requests the allocator sees, in order, are a function of the seed (where they land is the allocator's).",
-            "**Bounded.** At most [`MAX_BYTES`] bytes are requested in all, and no block exceeds 64 KiB, so a perturbation never asks for more memory than a small test does and never reaches a size that allocators serve with fresh pages (`mmap`) and return at once, which would perturb nothing.",
-            "**Nothing initialised, nothing read.** Blocks are reserved capacity (`Vec::with_capacity`), never written or read, so a perturbation costs allocator calls, not memory traffic; each block passes through `std::hint::black_box` so the optimiser cannot remove an allocation it can see unused.",
-            "**Held while the case runs.** The pinned blocks live in the returned [`Heap`] and are freed when it is dropped, after the case.",
-            "**No panic; no allocation failure ignored.** A failed allocation aborts the process, as every `Vec` allocation does, never returns a smaller heap silently."
+            "**Bounded.** At most [`MAX_BYTES`] bytes are requested in all, boxes included, and no block exceeds 64 KiB, so a perturbation never asks for more memory than a small test does and never reaches a size that allocators serve with fresh pages (`mmap`) and return at once, which would perturb nothing.",
+            "**Nothing initialised, nothing read.** Blocks are reserved capacity (`Vec::with_capacity`) or boxes of `MaybeUninit` bytes, never written or read, so a perturbation costs allocator calls, not memory traffic; each block passes through `std::hint::black_box` so the optimiser cannot remove an allocation it can see unused.",
+            "**Held while the case runs.** The pinned blocks and boxes live in the returned [`Heap`] and are freed when it is dropped, after the case.",
+            "**No panic; no allocation failure ignored.** A failed allocation aborts the process, as every `Vec` and `Box` allocation does, never returns a smaller heap silently.",
+            "**Every small allocation after it, on glibc, Windows and WebAssembly.** Their allocators keep one pool per size class (per thread or arena) whatever code allocates, so steps 2 and 3 shuffle the very pools the case draws from. Measured: sixteen orders in every one of the 1,220 sweeps on each Linux and Windows runner in each build mode, and in all 200 on wasm32-wasip1.",
+            "**Nearly every one, on macOS on x86-64.** macOS 15's allocator keeps such lists too, but about one perturbed run in 25 still hands the 64 boxes out in the order they were allocated. Sweeps gave 13 to 16 orders (16 in 2,421 of 2,440), and two runs under [`super::check`]'s two seeds gave the same order once in 1,600 (issue #230's flake of the in-process repeat).",
+            "**This module's boxes, on macOS on arm64, and other code's where it shares a pool.** macOS 26's allocator there, libmalloc's xzone malloc, keeps small blocks in separate pools chosen from a hash of each allocation's type with keys set per process (`_xzm_type_choose_ptr_bucket`), and allocations made by different code land in different pools: in debug builds a block freed from `Vec::with_capacity` never came back to `Box::new` (20 processes of 20), and boxes freed by another crate did not reorder this module's. Before step 3, sweeps there mostly saw only the boxes' own two orders (ascending, then descending, from their own reuse), and once one order (issue #370). Step 3's boxes come from this module, as [`address_order_digest`]'s do: with them, sixteen orders in every one of the 1,220 sweeps in each build mode. A golden case in another crate that orders boxed values by address may share no pool with the perturbation there and pass the repeat on that runner; the other runners still catch it."
           ],
           "job": "The perturbing allocator: a seeded shift and fragmentation of the heap before a golden case runs, so that any result that depends on where memory lands changes from run to run and is caught.",
           "method": {
@@ -4995,7 +4998,7 @@
               "https://doi.org/10.1145/2451116.2451141",
               "https://doi.org/10.1145/1133981.1133985"
             ],
-            "text": "heap-layout randomisation as in Stabilizer (C. Curtsinger and E. D. Berger, \"Stabilizer: Statistically Sound Performance Evaluation\", ASPLOS 2013, <https://doi.org/10.1145/2451116.2451141>), whose shuffling layer fills a pool per size class and hands blocks out in random order, and `DieHard`'s randomised placement (E. D. Berger and B. G. Zorn, \"`DieHard`: Probabilistic Memory Safety for Unsafe Languages\", PLDI 2006, <https://doi.org/10.1145/1133981.1133985>), applied here from outside the allocator by freeing a seeded share of each size class's pool in a seeded order; the shuffle is the Fisher-Yates shuffle of [`super::shuffle`]."
+            "text": "heap-layout randomisation as in Stabilizer (C. Curtsinger and E. D. Berger, \"Stabilizer: Statistically Sound Performance Evaluation\", ASPLOS 2013, <https://doi.org/10.1145/2451116.2451141>), whose shuffling layer fills a pool per size class and hands blocks out in random order, and `DieHard`'s randomised placement (E. D. Berger and B. G. Zorn, \"`DieHard`: Probabilistic Memory Safety for Unsafe Languages\", PLDI 2006, <https://doi.org/10.1145/1133981.1133985>), applied here from outside the allocator by freeing a seeded share of each size class's pool, as blocks and as boxes, in a seeded order; the shuffle is the Fisher-Yates shuffle of [`super::shuffle`]."
           },
           "path": "geom_test::golden::perturb",
           "provenance": [
@@ -5007,6 +5010,16 @@
               "notice": [],
               "pinned": true,
               "purpose": "for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.",
+              "take": "port-method"
+            },
+            {
+              "licence": "MIT",
+              "link": "https://github.com/apple-oss-distributions/libmalloc/blob/c49dafa25f1efe8607701ae6014a663ad2ee437f/src/xzone_malloc/xzone_malloc.c",
+              "method_note": null,
+              "name": "libmalloc's xzone malloc",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists and its choice of pool), to explain what CI measured. No code copied.",
               "take": "port-method"
             }
           ],
@@ -6473,6 +6486,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-math/src/frame.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/apple-oss-distributions/libmalloc/blob/c49dafa25f1efe8607701ae6014a663ad2ee437f/src/xzone_malloc/xzone_malloc.c",
+      "method_note": null,
+      "name": "libmalloc's xzone malloc",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs"
       ]
     },
     {

@@ -823,8 +823,16 @@ fn kernel_golden_yml_runs_the_check_and_the_approval_rule() {
 // ---------------------------------------------------------------------------------------------
 
 /// Code that orders by address sees different orders under different perturbations: on whatever
-/// allocator this target has, sixteen seeds give at least two orders of 64 boxes, and a golden
+/// allocator this target has, sixteen seeds give at least eight orders of 64 boxes, and a golden
 /// whose case orders by address fails as a repeat.
+///
+/// What holds on each of CI's allocators is in `golden::perturb`'s last three guarantees, with what
+/// was measured for issue #370: sixteen orders in every sweep of sixteen seeds but 19 of 14,840 on
+/// every runner, debug and release, alone and among busy tests, and never fewer than 13 (macOS on
+/// x86-64). Eight is a wide margin below that, so the test does not pass or fail by chance. Before
+/// the perturbation boxed the small classes, macOS on arm64 mostly gave the boxes' own two orders
+/// (ascending, then descending, from their own reuse) and once one: the old bound of two passed
+/// that by chance and failed it now and then (issue #370); eight fails it every time.
 #[test]
 fn the_perturbation_changes_what_address_ordered_code_sees() {
     let mut seen = BTreeSet::new();
@@ -833,7 +841,11 @@ fn the_perturbation_changes_what_address_ordered_code_sees() {
         seen.insert(address_order_digest(64));
         drop(heap);
     }
-    assert!(seen.len() >= 2, "every perturbation left the order alone");
+    assert!(
+        seen.len() >= 8,
+        "sixteen perturbations gave {} orders of 64 boxes",
+        seen.len()
+    );
     let store = Store::parse(&format!(
         r#"{{"format": 1, "about": "t", "editions": [{{"edition": "pre-edition", "state": "open",
         "goldens": [{{"id": "geom-x/by-address", "what": "w", "sha256": "{}",

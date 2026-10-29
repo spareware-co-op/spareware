@@ -240,6 +240,13 @@ Kani 0.68.0 `library/std/src/lib.rs`
     projects/engines/geometry/crates/geom-num/src/interval.rs
       for which instruction or routine its square root and fused multiply-add use on each target, as the guarantees above state.
 
+libmalloc's xzone malloc
+  Licence:      MIT
+  Link:         https://github.com/apple-oss-distributions/libmalloc/blob/c49dafa25f1efe8607701ae6014a663ad2ee437f/src/xzone_malloc/xzone_malloc.c
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
+      for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists and its choice of pool), to explain what CI measured. No code copied.
+
 npm `hosted-git-info` 10.1.1
   Licence:      ISC
   Link:         https://github.com/npm/hosted-git-info/blob/8c3bebb5e42142b7bce06b085b4c1bd1adba7371/lib/hosts.js
