@@ -34,6 +34,7 @@ use geom_num::plane::{Lpi, Plane, Tpi};
 use geom_num::real::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
+use geom_num::wide32::Wide32;
 use geom_num::{Exactness, NumError, Sign};
 
 use crate::sha256::{Digest, Sha256};
@@ -160,6 +161,18 @@ impl Canonical for Steps {
 
 impl<const L: usize> Canonical for Wide<L> {
     fn encode(&self, h: &mut Sha256) {
+        for limb in self.to_le_limbs() {
+            limb.encode(h);
+        }
+    }
+}
+
+/// A `Wide32` (piece G42): its limb width, 32, then its limbs, low first. The width keeps it from
+/// ever encoding as the `Wide` of the same bit width, so each benchmark's inputs keep their own
+/// digest.
+impl<const L: usize> Canonical for Wide32<L> {
+    fn encode(&self, h: &mut Sha256) {
+        32u32.encode(h);
         for limb in self.to_le_limbs() {
             limb.encode(h);
         }
