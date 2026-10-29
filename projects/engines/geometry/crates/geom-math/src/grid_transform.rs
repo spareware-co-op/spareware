@@ -20,6 +20,16 @@
 //! - **Orientation known exactly.** The determinant is ±1, computed from the permutation's parity
 //!   and the signs; [`GridTransform::reverses_orientation`] says whether a mirror is involved,
 //!   which reverses arcs, face normals and winding numbers.
+//! - **2D is the plane z = 0, with the same transforms.** The kernel has one family of transforms
+//!   for 2D and 3D (principle 8). A transform that leaves every z unchanged
+//!   ([`GridTransform::acts_in_plane`]) maps a 2D frame's plane onto itself, and
+//!   [`GridTransform::apply_2d`] and [`GridTransform::apply_vector_2d`] give exactly what
+//!   [`GridTransform::apply`] gives at z = 0; its orientation in the plane is its orientation in 3D.
+//!   Any other transform is refused for 2D input ([`MathError::NotInPlane`]), never projected.
+//!   Chapter 14.10's exact 2D transforms are all of this kind: translations in x and y, quarter
+//!   turns about z, and mirrors about axis-aligned and 45-degree lines
+//!   ([`GridTransform::mirror_diagonal`]), each composed with a translation for a line off the
+//!   origin.
 //! - **The same result in every build profile.** Every integer step (a negation, a sum) is a
 //!   checked method, never a native operator, so nothing depends on overflow checks being on. The
 //!   bit budget below proves each fits; one that did not would be reported as
@@ -43,10 +53,10 @@
 //! three translations); the determinant counts at most three inversions and three negations.
 
 use geom_num::NumError;
-use geom_num::grid::{COORD_MAX, Coord, P3};
+use geom_num::grid::{COORD_MAX, Coord, P2, P3};
 
-use crate::error::budget;
-use crate::vector::V3;
+use crate::error::{MathError, budget};
+use crate::vector::{V2, V3};
 
 /// The largest translation per axis, 2(2^40 − 1) steps: the largest distance between two grid
 /// coordinates of one frame.
@@ -216,6 +226,30 @@ impl GridTransform {
         }
     }
 
+    /// The mirror about the line y = x of the plane (`anti` false) or the line y = −x (`anti` true),
+    /// leaving z unchanged: it swaps x and y, negating both for y = −x. With [`GridTransform::mirror`]
+    /// of x and of y, these are the plane's four exact mirrors through the origin (chapter 14.10);
+    /// a mirror about a parallel line is one of them composed with a translation. It reverses
+    /// orientation.
+    #[must_use]
+    pub fn mirror_diagonal(anti: bool) -> GridTransform {
+        GridTransform {
+            rows: [
+                Row {
+                    source: Axis::Y,
+                    negate: anti,
+                    offset: 0,
+                },
+                Row {
+                    source: Axis::X,
+                    negate: anti,
+                    offset: 0,
+                },
+                Row::identity(Axis::Z),
+            ],
+        }
+    }
+
     /// The transform with `out[i] = ±in[source[i]] + translation[i]`, the sign negative where
     /// `negate[i]` is true.
     ///
@@ -331,6 +365,48 @@ impl GridTransform {
             y: out(r1)?,
             z: out(r2)?,
         })
+    }
+
+    /// Whether the transform acts in the plane: it leaves every z unchanged (its z row is +z with no
+    /// translation), so it maps the plane z = 0 of a 2D frame onto itself, and its orientation
+    /// there is [`GridTransform::reverses_orientation`]'s.
+    #[must_use]
+    pub fn acts_in_plane(&self) -> bool {
+        let [_, _, z] = self.rows;
+        z == Row::identity(Axis::Z)
+    }
+
+    /// The image of a 2D grid point: [`GridTransform::apply`] at z = 0, whose z stays 0.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane; otherwise as
+    /// [`GridTransform::apply`].
+    pub fn apply_2d(&self, p: P2) -> Result<P2, MathError> {
+        if !self.acts_in_plane() {
+            return Err(MathError::NotInPlane);
+        }
+        let q = self.apply(P3 {
+            x: p.x,
+            y: p.y,
+            z: Coord::ZERO,
+        })?;
+        Ok(P2 { x: q.x, y: q.y })
+    }
+
+    /// The image of a 2D grid vector: [`GridTransform::apply_vector`] at z = 0. Exact and always in
+    /// range, as in 3D.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane;
+    /// [`NumError::BudgetExceeded`] only as [`GridTransform::apply_vector`] reports it.
+    pub fn apply_vector_2d(&self, v: V2) -> Result<V2, MathError> {
+        if !self.acts_in_plane() {
+            return Err(MathError::NotInPlane);
+        }
+        let w = self.apply_vector(V3::new(v.x(), v.y(), 0)?)?;
+        Ok(V2::new(w.x(), w.y())?)
     }
 
     /// The image of a grid vector: the linear part only, since vectors are not translated. Exact

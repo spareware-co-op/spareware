@@ -3,6 +3,78 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace || with && in Matrix::row_pair",
+      "line_text": "if i == j || i >= self.rows || j >= self.rows {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. Every term of the guard is false for such a pair, so the guard is false with either operator in either place and no public function's result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace < with <= in Matrix::row_pair",
+      "line_text": "let (lo, hi) = if i < j { (i, j) } else { (j, i) };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. i < j and i <= j differ only when i == j, which the guard above has already refused."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace < with <= in Matrix::row_pair",
+      "line_text": "Ok(if i < j {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "row_pair is pub(crate), and its three callers pass two different rows inside the matrix: Lu::factor rows k < i < n, canonical_null_space row and i with i != row, both below d, and swap_rows only after returning early when i == j. i < j and i <= j differ only when i == j, which the guard at the top has already refused."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+      "mutant": "replace || with && in Matrix::swap_cols",
+      "line_text": "if i >= self.cols || j >= self.cols {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "swap_cols is pub(crate), and its one caller, PivotedQr::factor, passes k and the pivot p, both below n (k < min(m, n), p found among columns k..n). Both terms of the guard are false then, so it is false with either operator and no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in norm",
+      "line_text": ".fold(0.0f64, |m, v| if v.abs() > m { v.abs() } else { m });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes v.abs() also when it equals m, which is the same double (finite entries, never NaN, and an absolute value is never -0), so the scale, and every norm, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace < with <= in PivotedQr::r_diagonal",
+      "line_text": "if k < self.tau.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "tau has min(m, n) entries. The mutant also reads entry (k, k) for k = min(m, n), but the matrix has no such entry (k is at least its row or its column count), so get refuses it and .ok() gives None, as the original does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in <impl MaxZero for f64>::max_zero",
+      "line_text": "if self > 0.0 { self } else { 0.0 }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "max_zero's one caller passes 1.0 - r * r. The two versions differ only for self = 0 or -0, where the mutant returns self; a difference of doubles is -0 only when both are zeros of opposite sign, and 1.0 is not zero, so self is never -0 and +0 is returned either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace < with <= in Cod::factor",
+      "line_text": "if rank < n {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also enters the block when rank == n. Each row's reflection is then on the one coordinate k: householder on a one-entry vector finds a zero tail and returns tau = 0 and beta = the entry, so R(k, k) is set to itself, z_tau keeps its zeros and no row is updated; apply_z returns early when r == n. The work was charged before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+      "mutant": "replace > with >= in canonical_null_space",
+      "line_text": "if v > best {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant pivots on the last of several rows of equal largest magnitude instead of the first. The reduced echelon basis over the variable order is unique (chapter 15.8, the reason it is the canonical one), so the result is the same basis either way; the elimination order changes only the rounding of its entries, which the function does not promise bit for bit."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
       "mutant": "replace < with <= in abs",
       "line_text": "if x < 0.0 { -x } else { x }",
@@ -115,14 +187,6 @@
       "reason": "The validity check only skips masks whose matrix has a zero determinant, so weakening it changes no result. A mask that picks two entries of one column sets two rows to the same unit vector, a zero determinant. A mask that picks two entries of one row builds the matrix of a smaller mask (the row keeps one unit vector), which the walk visited earlier and found zero, or which itself repeats a column. Checked by simulating the walk with and without the check on 4,000 random orient2d and incircle ties: every sign agreed."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace classify -> Option<Sign> with None",
-      "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "classify runs only in side_of_tpi_hand, which Plane::side_of_tpi calls only when the generated tpi_side path returns None. That path checks its rounded inputs against their certified widths on entry, and every plane a user can make comes from Plane::through on grid points, whose coefficients lie inside those widths (G29's budget); inside them its steps cannot overflow (the certificate; G39's Verus twin of tpi_side). So no public input reaches classify, and returning None from it changes no result a user can see."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "mutant": "replace < with <= in Wide<L>::resize",
       "line_text": "if M < L {",
@@ -187,6 +251,550 @@
       "reason": "This arm runs for a negative v, where d = v - i128::MIN lies in 0..2^127, so bit 127 of d is clear: setting it with | and flipping it with ^ both give d + 2^127."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
+      "mutant": "replace > with >= in Basis::span",
+      "line_text": "while sub(high, low)? > 1 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Basis::span's binary search goes on at high - low = 1, where mid = low and neither end moves: the loop never ends for a parameter inside a span."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
+      "mutant": "replace / with % in Basis::span",
+      "line_text": "let mid = add(low, sub(high, low)? / 2)?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With (high - low) % 2, mid stays at low whenever high - low is even, and a parameter above u_mid then sets low = mid again: Basis::span's binary search never ends."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
+      "mutant": "replace > with == in Basis::span",
+      "line_text": "while sub(high, low)? > 1 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With == 1 the binary search runs only while high - low is exactly 1, where mid = low and neither end moves, so once it starts it never ends (and a parameter whose search starts there hangs)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/index.rs",
+      "mutant": "replace add -> Result<usize, NurbsError> with Ok(0)",
+      "line_text": "a.checked_add(b).ok_or(NurbsError::Defect)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every index step through add lands on 0, so run_end's scan over a run of equal knots never moves past it: Basis::new never ends on a vector with a repeated knot."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/index.rs",
+      "mutant": "replace add -> Result<usize, NurbsError> with Ok(1)",
+      "line_text": "a.checked_add(b).ok_or(NurbsError::Defect)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every index step through add lands on 1, so run_end's scan over a run of equal knots never moves past it: Basis::new never ends on a vector with a repeated knot."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/index.rs",
+      "mutant": "replace sub -> Result<usize, NurbsError> with Ok(0)",
+      "line_text": "a.checked_sub(b).ok_or(NurbsError::Defect)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Basis::span at the domain's upper end walks j down by sub while u_j = u_(j+1); with sub giving 0, j stays at 0, where a clamped vector has u_0 = u_1, and the walk never ends."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/index.rs",
+      "mutant": "replace run_end -> Result<usize, NurbsError> with Ok(0)",
+      "line_text": "let Some(&value) = v.get(start) else {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Basis::new steps through the runs of equal knots with index = run_end(index); with every run ending at 0 the index never reaches the vector's end, and the loop never ends."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/index.rs",
+      "mutant": "replace run_end -> Result<usize, NurbsError> with Ok(1)",
+      "line_text": "let Some(&value) = v.get(start) else {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Basis::new steps through the runs of equal knots with index = run_end(index); with every run ending at 1 the index never reaches the vector's end, and the loop never ends."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
+      "mutant": "replace < with == in reduce_kernel",
+      "line_text": "if b < mp {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The block under this test is what moves reduce_kernel to the next knot run (b and spn each plus one); with it skipped while b < mp, b stays where it is and the while loop over the runs never ends."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
+      "mutant": "replace < with > in reduce_kernel",
+      "line_text": "if b < mp {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The block under this test is what moves reduce_kernel to the next knot run (b and spn each plus one); with it skipped while b < mp, b stays where it is and the while loop over the runs never ends."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/ops.rs",
+      "mutant": "replace > with >= in larger",
+      "line_text": "if b > a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when b == a, where either is the same number: every caller passes an interval's end, a width, a weight, an absolute value or a parameter clamped to [0, 1], none NaN and none -0 (intervals keep a zero end as +0, abs and clamp give +0), so equal values have equal bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/ops.rs",
+      "mutant": "replace < with <= in smaller",
+      "line_text": "if b < a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when b == a, where either is the same number: every caller passes weights, which are positive, interval ends or parameters clamped to [0, 1], never -0, or a starting infinity, so equal values have equal bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+      "mutant": "replace > with >= in elevate_kernel",
+      "line_text": "if r > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At r = 0 the block's two loops are empty: r = p - mlt = 0 makes mlt >= p, so mlt + 1..=p is empty, and 1..=r is empty. Its first line, ub - ua in the exact type, cannot fail for the finite knots Basis::new admits, so nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+      "mutant": "replace > with >= in elevate_kernel",
+      "line_text": "if oldr > 1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At oldr = 1 remove_shared_knot's loop over tr in 1..oldr is empty, and what it does before the loop only reads: first = kind - 2 (kind is past the first piece, so at least q + 1), den = ub - ua > 0 and bet, none of which can fail. Nothing is written."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+      "mutant": "replace > with >= in remove_shared_knot",
+      "line_text": "while sub(j, i)? > tr {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "j - i starts at 2tr and falls by 2, so the extra step comes only for even tr, at i = kind - 1 - tr/2, j = kind - 1 + tr/2, kj = tr/2. There i >= cind = kind - q, as tr/2 < q, so Q is not written; and kj = tr/2 < lbz = oldr/2 + 1, a slot of the piece below lbz that is never copied out and that no later step reads (later steps read kj and kj + 1 above (tr+1)/2)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/elevate.rs",
+      "mutant": "replace < with <= in remove_shared_knot",
+      "line_text": "if i < cind {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at i == cind, where the mutant writes Q[cind]: the point the copy of the elevated piece (from lbz, never above q) writes first, right after this function returns. No step here reads Q[cind] in between, as i only grows past it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bezier.rs",
+      "mutant": "replace < with <= in decompose",
+      "line_text": "while ie < m {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Bezier extraction takes clamped bases only, whose last p + 1 knots are equal: the scan of the last run always reaches ie = m, and the step after it makes ie = m + 1. So the loop test never sees ie == m, the one value where the two differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bezier.rs",
+      "mutant": "replace < with <= in decompose",
+      "line_text": "if mlt < p {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At mlt == p, r = p - mlt = 0: the loop over mlt + 1..=p and the loop over 1..=r are both empty, and num, an exact difference of two finite knots, cannot fail. Nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/net.rs",
+      "mutant": "replace > with >= in Surface<D>::derivative_surface",
+      "line_text": "if order > 0 && order >= degree {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at order == 0, where the right operand is 0 >= degree, false for every basis: Basis::new refuses degree 0. So the test is false either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/net.rs",
+      "mutant": "replace > with >= in Surface<D>::derivative_surface",
+      "line_text": "if k > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At k = 0 the block rebuilds the net column by column through derivative_points with no levels, which returns the same knots and points (its loop over 1..=k is empty, its finiteness check passes on stored points); the net, rows and knots come out unchanged, and vec_for charges the meter nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/net.rs",
+      "mutant": "replace > with >= in Surface<D>::derivative_surface",
+      "line_text": "if l > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At l = 0 the block rebuilds each row through derivative_points with no levels, which returns the same knots and points; the net and knots come out unchanged, and vec_for charges the meter nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
+      "mutant": "replace || with && in Curve<D>::reduce_degree",
+      "line_text": "if back_knots.as_slice() != basis.knots() || back.len() != input.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check that no input reaches: elevating the reduced basis and inserting the knots it lacks gives back exactly the input's knots (copies of the same doubles) and as many points. Both operands are false, so the test is false with && as with ||."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/reduce.rs",
+      "mutant": "replace > with >= in reduce_kernel",
+      "line_text": "if r > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At r = 0 the block's loops are empty: r = p - mlt = 0 makes mlt >= p, so mlt + 1..=p is empty, and 1..=r is empty. Its first line is ub - ua in doubles, which cannot fail. Nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/remove.rs",
+      "mutant": "replace * with + in remove_once",
+      "line_text": "let mut rw = [zero; 2 * WIDTH];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sweeps write rw at indices 0 to last + 1 - off = p - s + 2 at most (first = r - p, last = r - s, off = first - 1, s >= 1), so at most p + 1 <= 29, and 2 + WIDTH = 31 holds them as 2 * WIDTH does. The buffer is otherwise only read where written."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/remove.rs",
+      "mutant": "replace > with >= in remove_once",
+      "line_text": "while j > i {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Both loops differ only when i meets j, which happens when first + last is even, at i = j = (first + last)/2 = (2r - p - s)/2 = fout: the one point remove_once drops from its output. Every extra write (the sweep's, the crossing average, the copy) is to that point, so the result is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/remove.rs",
+      "mutant": "replace || with && in certify",
+      "line_text": "if back.as_slice() != knots || pw.len() != original.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check that no input reaches: inserting u back as many times as it was removed gives exactly the input's knots (the same doubles in the same places) and as many points. Both operands are false, so the test is false with && as with ||."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+      "mutant": "replace || with && in remove_one",
+      "line_text": "if back != knots || pw.len() != pts.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check that no input reaches: re-inserting the removed copy of x once, at x's span from the right with s - 1 copies left, gives back exactly the window's knots (copies of the same doubles in the same places) and one point more than the removal left, as many as the window had. Both operands are false, so the test is false with && as with ||."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/band.rs",
+      "mutant": "replace || with && in Band::slot",
+      "line_text": "if i >= self.n || j >= self.n || add(j, self.lower)? < i || j > add(i, self.upper)? {",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "A defect check that no caller reaches: solve reads (i, k) for i from k + 1 to min(k + lower, n - 1) and (k, j) for j up to min(k + upper, n - 1), and solve_rows sets only each row's own entries, whose columns lie within the widths it measured from those rows. All four tests are false, so any && among them is false as the || is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/fit.rs",
+      "mutant": "replace FitVersion::number -> u32 with 1",
+      "line_text": "match self {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "V1 is the only FitVersion and its number is 1, so returning 1 is what the function does; a second version gets another number, and this mutant then dies."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/fit.rs",
+      "mutant": "replace > with >= in least_squares_knots",
+      "line_text": "knots.push(if knot > hi { hi } else { knot });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when knot == hi, where both push the same double unless one is +0 and the other -0. That needs hi = -0 and lo + alpha*(0 - lo) to round to 0, so alpha*|lo| to round to |lo|; but alpha = r/den is at most 1 - 1/den, and den, at most the number of parameters, is far below 2^51, so alpha*|lo| rounds below |lo|."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/interp.rs",
+      "mutant": "replace - with + in ends_points",
+      "line_text": "let a = (get(knots, add(p, 1)?)? - get(knots, 1)?) / pr;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "u_1 is +0 for every basis this function gets: curve_parameters starts every parameter list at exactly +0 (0/m for uniform, a pushed 0.0 otherwise), and end_derivative_knots puts p + 1 copies of the first parameter first, p >= 2. So x - 0 and x + 0 are the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/lsq.rs",
+      "mutant": "replace || with && in fixed_ends",
+      "line_text": "if rows < 2 || b.len() != mul(rows, width)? || count < 2 || count > rows {",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "A defect check whose operands are all false for every caller: curve_parameters refuses fewer than two points, every caller builds b with rows x width values, a basis has at least p + 1 >= 2 functions, and count <= rows is checked first (least_squares_knots refuses more, approximate returns before fitting more). So any && among them is false as the || is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+      "mutant": "replace > with >= in project",
+      "line_text": "if !(g > 0.0 && f.is_finite()) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when g is exactly 0. Then f/g is NaN when f is 0, which the next test stops on as this one would, or an infinity, which the clamp takes to an end of the domain, and that step is kept only if it brings the curve point nearer. So the mutant's parameter is one the method's rule allows (never farther), the fit is certified at the parameters it ends with and stays deterministic; 4000 random approximations never met g = 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/approx.rs",
+      "mutant": "replace || with && in project",
+      "line_text": "if !next.is_finite() || next == u {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "next is always finite here: the test above lets only g > 0 and a finite f through, so u - f/g is finite or an infinity, and the clamp brings an infinity to an end of the domain. So || gives next == u, and && gives false; when next == u the mutant evaluates the curve at u again, finds the distance not smaller and stops with the same parameter, charging nothing more (the step was charged before)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+      "mutant": "replace || with && in BernsteinCurve<D>::minus",
+      "line_text": "if self.degree() != other.degree() || self.domain != other.domain {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check no caller reaches: derivative_bound subtracts A·W' from A'·W, two products of one piece's own forms, both of degree 2p - 1 (p - 1 + p and p + p - 1; 0 for a constant) on the piece's domain. Both operands are false, so && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+      "mutant": "replace || with && in BernsteinPatch<D>::minus",
+      "line_text": "if self.degrees != other.degrees || self.u != other.u || self.v != other.v {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "A defect check no caller reaches: derivative_bound and normal subtract products of one patch's own forms whose degrees add up alike in each direction (2p - 1 or 3p - 1 with the q's, as the products' degree sums show), all on the patch's domain. Every operand is false, so any && among them is false as the || is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/product.rs",
+      "mutant": "replace && with || in BernsteinPatch<3>::divide",
+      "line_text": "if !c.iter().all(|x| x.lo() <= 0.0 && x.hi() >= 0.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect check no caller reaches: normal_patches divides only along edges collapsed_edges proved to be one point, where the exact normal patch's row is exactly 0 and its interval enclosure therefore holds 0, so lo <= 0 and hi >= 0 both hold: the test is false with || as with &&."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+      "mutant": "replace > with >= in BernsteinCurve<D>::clip",
+      "line_text": "if t0 > t1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
+      "mutant": "replace + with * in check",
+      "line_text": "let outside = beyond + 1.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace <= with > in check",
+      "line_text": "let side = if t <= mid {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant compares each half with the kind from the other side of t. Only points (order 0) are compared, and a kind is a continuous curve, the same point from either side, so for every kind keeping the contract both compare the same points; a half that misses the kind is caught either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
+      "mutant": "replace < with <= in piece_at",
+      "line_text": "Limit::FromLeft => (a < t || i == 0) && t <= b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search runs forward through the pieces. The two differ only from the left at t == a of a piece after the first, and there the piece before, which ends at t and comes earlier, already matched (a' < t and t <= b'), so the same piece is returned."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
+      "mutant": "replace > with >= in Round::radius_sign",
+      "line_text": "Ok(if rho.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when the radius's enclosure ends exactly at 0: the radius is then of one sign over the span and 0 at most at that end, where the normal vanishes, so the definite sign bounds every normal direction as the undecided one does, only tighter; a torus's form is then the part that reaches the axis at its domain's edge."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
+      "mutant": "replace < with <= in Round::radius_sign",
+      "line_text": "} else if rho.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when the radius's enclosure ends exactly at 0: the radius is then of one sign over the span and 0 at most at that end, where the normal vanishes, so the definite sign bounds every normal direction as the undecided one does, only tighter; a torus's form is then the part that reaches the axis at its domain's edge."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/terms.rs",
+      "mutant": "replace || with && in Terms::to_nurbs",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace || with && in net",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace > with >= in compatible_pair",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "compatible_pair takes only clamped curves (the ruled surface's own forms when both are clamped, else its Taylor forms, which are), raised to one degree p first, so each has its end knots p + 1 times: an end knot is never missing, and counting the ends in too (>= or <=), or every knot (||), adds nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace < with <= in compatible_pair",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "compatible_pair takes only clamped curves (the ruled surface's own forms when both are clamped, else its Taylor forms, which are), raised to one degree p first, so each has its end knots p + 1 times: an end knot is never missing, and counting the ends in too (>= or <=), or every knot (||), adds nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace && with || in compatible_pair",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "compatible_pair takes only clamped curves (the ruled surface's own forms when both are clamped, else its Taylor forms, which are), raised to one degree p first, so each has its end knots p + 1 times: an end knot is never missing, and counting the ends in too (>= or <=), or every knot (||), adds nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/affine.rs",
+      "mutant": "replace && with || in Entries::of",
+      "line_text": ".all(|(&d, e)| e.lo() == d && e.hi() == d);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Each exact entry is either the point interval of its double (an integer that is a double, or a certified transform's stored double), both ends equal to it, or an outward-widened enclosure (a quotient, or an integer beyond 2^53), both ends different from it. One end equal and the other not never occurs, so || gives the same as &&."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
+      "mutant": "replace && with || in piece_at",
+      "line_text": "Limit::FromLeft => (a < t || i == 0) && t <= b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search keeps a piece only if it also holds t (`inside && a <= t && t <= b`), so the side test only chooses among pieces holding t: inside a piece there is one, and at a break the piece ending at t comes first in the search and passes the original test from the left (a < t, t <= b), as it passes the mutant's."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace + with * in check",
+      "line_text": "past_end + 1.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace - with + in check",
+      "line_text": "before_start - 1.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace - with / in check",
+      "line_text": "before_start - 1.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/polynomial.rs",
+      "mutant": "replace > with >= in Polynomial<D>::centred",
+      "line_text": "if i > 1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At i = 1 the mutant multiplies the factorial, the exact point 1, by the exact point 1; the tight product of two exact doubles whose product is exact is that exact point (tight::mul through exact_product), so nothing changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+      "mutant": "replace < with <= in pieces",
+      "line_text": "if n < 1.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "n is a ceiling, a whole number checked below 2^32; at n == 1 the mutant returns 1 early, and the cast that follows returns 1 for it too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+      "mutant": "replace < with == in pieces",
+      "line_text": "if n < 1.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "pieces is called with b - a of a kind's domain (a < b, so positive, never 0 in doubles) over a positive width, so its ceiling n is at least 1: n < 1 is never true, and at n == 1 the early return gives the 1 that the cast gives."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+      "mutant": "replace && with || in conic",
+      "line_text": "if !(s1 > 0.0 && s2w > 0.0 && s1.is_finite() && s2w.is_finite()) {",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "The weights are joint times lambda or joint over lambda, lambda = 1 + tan^2 or 1 - tanh^2 of half a piece (at most half a unit, so tanh^2 < 0.22), and joint the previous piece's stored weight, which alternates between such values: every one positive and finite, so each test is true, and && or || among true terms, or >= for >, gives the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+      "mutant": "replace > with >= in conic",
+      "line_text": "if !(s1 > 0.0 && s2w > 0.0 && s1.is_finite() && s2w.is_finite()) {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The weights are joint times lambda or joint over lambda, lambda = 1 + tan^2 or 1 - tanh^2 of half a piece (at most half a unit, so tanh^2 < 0.22), and joint the previous piece's stored weight, which alternates between such values: every one positive and finite, so each test is true, and && or || among true terms, or >= for >, gives the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+      "mutant": "replace || with && in conic",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+      "mutant": "replace > with >= in conic",
+      "line_text": "if eps > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only at eps == 0, where the added term is 2*0/(1 - 0) times the reach: zero. The mutant adds that zero through outward-rounded operations, so the deviation grows by at most a few subnormal steps and stays an upper bound; it never gets smaller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/tight.rs",
+      "mutant": "replace < with <= in norm",
+      "line_text": "if s.lo() < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At s.lo() == 0 the mutant replaces s by Interval::new(0, s.hi()), which is s itself: its lower end is already 0 (intervals keep a zero end as +0)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/frame.rs",
+      "mutant": "delete - in not_parallel",
+      "line_text": "sum.add(-ey);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant sums x + ex - y + ey for the cross product's coordinate. Where the exact coordinate is zero the two products are equal, so they round alike and the doubles' cross product is zero too: Frame::unit refuses it as Degenerate either way. Where it is not zero, the mutant can only call it zero (refusing a frame that is nearly degenerate), never accept a parallel one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/bulge.rs",
+      "mutant": "replace || with && in piece_deviation",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the rounding of an exact weight (a halving, an average or a rescaling by the joint's ratio): a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/bulge.rs",
+      "mutant": "replace > with >= in piece_deviation",
+      "line_text": "if eps > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only at eps == 0, where the added term is 2*0/(1 - 0) times the reach: zero. The mutant adds that zero through outward-rounded operations, so the deviation grows by at most a few subnormal steps and stays an upper bound; it never gets smaller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
+      "mutant": "replace || with && in join",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the rounding of an exact weight (a halving, an average or a rescaling by the joint's ratio): a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
+      "mutant": "replace > with >= in Composite<D>::assemble",
+      "line_text": "if !meet && gap > allow {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "assemble is called with allow 0 (a new composite), where a joint whose enclosures do not meet has a gap above 0, or with allow infinite (a split, reversal or transform), where every gap is finite: gap > allow and gap >= allow agree in both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/jet.rs",
+      "mutant": "replace >= with < in Jet::div",
+      "line_text": "if g0.lo() <= 0.0 && g0.hi() >= 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Jet::div is called only with the jet of a normal's length from Jet::sqrt, which refuses a value whose enclosure reaches 0 or below: g0.lo() is above 0, so the test is false with g0.hi() >= 0 or g0.hi() < 0 alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace classify -> Option<Sign> with None",
+      "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "classify runs only in side_of_tpi_hand, which Plane::side_of_tpi calls only when the generated tpi_side path returns None. That path checks its rounded inputs against their certified widths on entry, and every plane a user can make comes from Plane::through on grid points, whose coefficients lie inside those widths (G29's budget); inside them its steps cannot overflow (the certificate; G39's Verus twin of tpi_side). So no public input reaches classify, and returning None from it changes no result a user can see."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "mutant": "replace || with && in Wide<L>::checked_mul_i128",
       "line_text": "if prod != 0 || carry != 0 {",
@@ -217,38 +825,498 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant also tests the sign when M equals L, a resize to the same width. Then r has the very limbs of self, so its sign is self's and the test is false: resize returns the same Some(r) for every value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
+      "mutant": "replace || with && in same_parameter",
+      "line_text": "let done = e <= target * 0.5 || n >= MOST;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With && the refinement stops on reaching its target only at the densest sampling, so every cache whose certificate keeps falling is sampled four times over, up to 32 steps a cell, before it stops: up to sixty-four times the work for each offset's cache in the suite, which then runs past cargo-mutants' time limit. Where it finishes, the golden geom-surface/offset, whose caches stop at the first sampling that meets the target, changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
+      "mutant": "replace > with >= in same_parameter",
+      "line_text": "if error > target {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the densest sampling's certificate equals the target to the last bit. The original then removes knots within a budget of 0 and returns a deviation equal to the target; the mutant refuses a tolerance that is met with nothing to spare, or, with no tolerance asked for, reports the surface before knot removal. Both results are certified; no input is known to land on the tie."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/jet.rs",
+      "mutant": "replace >= with < in Jet::div",
+      "line_text": "if g0.lo() <= 0.0 && g0.hi() >= 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every divisor the crate forms is positive at every point it is formed over: a length |S_u x S_v| that Jet::sqrt has already shown positive (it refuses otherwise), or a NURBS weight function, whose weights geom-nurbs keeps positive. On a positive divisor both tests are false; they differ only for a divisor through or below zero, which no input through the public interface produces."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace < with <= in cuts",
+      "line_text": "ends.extend(breaks.iter().copied().filter(|&x| lo < x && x < hi));",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "With <= a break exactly at one of the region's ends also cuts the region there, adding a piece of one parameter at that end. That piece's box holds the surface at the end only: inside the neighbouring piece's box where the kind is continuous, and the kind's own value at that parameter where it jumps. A bound, derivative bound or normal bound grows by nothing or by a value of the surface on the closed region, so it still holds."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace == with != in Offset::partials_of",
+      "line_text": "let point_u = u0 == u1;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only regions of one u value or of one v value change. At a point the mutant takes the centred form, whose steps are 0 there, so it is the direct enclosure intersected with itself: the same. A line along u (one v value) then takes the direct enclosure alone instead of its intersection with the centred form: a wider enclosure of the same values, still certified. The cache certifies along lines of one u value, which keep their form."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace > with >= in Offset::factor_sign",
+      "line_text": "Ok(if det.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Differs only where the enclosure of det(I - d II) over a piece ends exactly at 0.0, so the fold factor 1 - 2Hd + Kd^2 is at least 0 there and may reach 0. The mutant then takes the base's normals instead of the cross product of the enclosed partials. Where the factor is positive the offset's normal is a positive multiple of the base's; where it is 0 the normal vanishes and its limit from the rest of the piece points the same way, which the trait allows. No input is known to give an enclosure ending exactly at 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace < with == in Offset::factor_sign",
+      "line_text": "} else if det.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Differs only where the enclosure of det(I - d II) over a piece ends exactly at 0.0 from below, so the fold factor is at most 0 there and may reach 0: the mutant then turns the base's normals over instead of taking the cross product of the enclosed partials, and refuses no other piece. Where the factor is negative the offset's normal is a positive multiple of the turned-over base normal; where it is 0 the normal vanishes and its limit points the same way, which the trait allows. No input is known to give such an enclosure."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace < with <= in Offset::factor_sign",
+      "line_text": "} else if det.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Differs only where the enclosure of det(I - d II) over a piece ends exactly at 0.0 from below, so the fold factor is at most 0 and may reach 0. The mutant then turns the base's normals over instead of taking the cross product of the enclosed partials. Where the factor is negative the offset's normal is a positive multiple of the turned-over base normal; where it is 0 the normal vanishes and its limit from the rest of the piece points the same way, which the trait allows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
+      "mutant": "replace || with && in same_parameter",
+      "line_text": "if done || stuck {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With && the refinement stops only where the target is met (or the densest sampling reached) and the certificate also stops falling. A smooth kind's certificate keeps falling, so its cache is sampled twice as densely without end, each try four times the last's work: the suite never finishes, and cargo-mutants stops it at its time limit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace > with == in grow",
+      "line_text": "if f.depth > MAX_DEPTH {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect guard: no frame is deeper than 62. Splits from depth MEDIAN_DEPTH = 32 on are at the median, a range there holds fewer than 2^32 entries, and 30 halvings bring it to at most LEAF_MAX = 4, so leaves are at depth 62 at most and the guard's condition, depth > 64, is false for every input; depth == 64 and depth >= 64 are false for every input too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace > with >= in grow",
+      "line_text": "if f.depth > MAX_DEPTH {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect guard: no frame is deeper than 62. Splits from depth MEDIAN_DEPTH = 32 on are at the median, a range there holds fewer than 2^32 entries, and 30 halvings bring it to at most LEAF_MAX = 4, so leaves are at depth 62 at most and the guard's condition, depth > 64, is false for every input; depth == 64 and depth >= 64 are false for every input too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace || with && in split",
+      "line_text": "if left.n == 0 || rn == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also scores a plane with one side empty. Its cost is then area(all)·n (the empty side adds nothing, the other side holds every entry), and every plane with both sides non-empty costs strictly less: each side's box lies inside the whole and at least one is strictly smaller (two boxes equal to the whole would have the same centre, so the same bin). At least two bins are non-empty whenever the centres spread (the top centre falls in bin at least used/2 - 1 >= 1), so such a plane exists, and the strict comparison keeps it: the chosen plane is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace || with && in split",
+      "line_text": "if kept == 0 || kept == count {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A defect guard: the plane comes from a sweep that skips planes with an empty side, and the partition puts each entry on the side of its bin, so both sides hold at least one entry and neither condition, alone or together, is ever true."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 32)) & 0x001f_0000_0000_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: x holds bits 0 to 20 only, and x << 32 bits 32 to 52. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 16)) & 0x001f_0000_ff00_00ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 15 and 48 to 52, and x << 16 bits 16 to 31 (the rest leave the word). Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 8)) & 0x100f_00f0_0f00_f00f;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 7, 24 to 31 and 48 to 52, and x << 8 bits 8 to 15, 32 to 39 and 56 to 60. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "x = (x | (x << 4)) & 0x10c3_0c30_c30c_30c3;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 0 to 3, 12 to 15, 24 to 27, 36 to 39, 48 to 51 and 60, and x << 4 bits 4 to 7, 16 to 19, 28 to 31, 40 to 43 and 52 to 55. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread21",
+      "line_text": "(x | (x << 2)) & 0x1249_2492_4924_9249",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: after the last mask x holds bits 6k and 6k + 1 (and 60), and x << 2 bits 6k + 2 and 6k + 3. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "u128::from(spread21(v)) | (u128::from(spread21(v >> 21)) << 63)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: spread21 fills bits 0 to 62 at most, and the shift by 63 moves the other half to bits 63 and up. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in interleave",
+      "line_text": "spread(x) | (spread(y) << 1) | (spread(z) << 2)",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: spread sets only bits whose index is a multiple of three, so x's bits are 0 mod 3, y's 1 mod 3 and z's 2 mod 3. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace | with ^ in CellIndex::build",
+      "line_text": "codes.push((u128::from(hi) << 64) | u128::from(lo));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands have no set bit in common: lo is below 2^64 and hi << 64 has no bit below 64. Where no bit is set in both, a | b and a ^ b are the same number, so the code is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace < with <= in merge",
+      "line_text": "if b < a {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when b == a, and no two slots are equal: each holds its point's position in key order, and positions are distinct. So the merge takes the same slot first for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
+      "mutant": "replace < with <= in CellIndex::search",
+      "line_text": "let g = if at < first {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when at == first, the cell's first coordinate. There the original's other branch gives (at - last).max(0) = 0, as last >= first, and the mutant's gives first - at = 0: the same gap, so the same cells are scanned for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if fb != 0.0 && (fa > 0.0) == (fb > 0.0) {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The two comparisons differ from their mutants only at zero. fa is not zero here: zero returned already when f(a) is zero. fb is not zero wherever its comparison is evaluated: the left operand of && is fb != 0.0. So both forms give the same sign test for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if (fb > 0.0) == (fc > 0.0) && fb != 0.0 {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "At fb = 0 the whole test is false either way, by its right operand. fc is never zero: it is set only from f(a) at the start (not zero, or zero returned already), from fa (the previous fb, and a zero fb ends the search before it can become fa), or from fb in the swap, which happens only when |fc| < |fb|, so that fb is not zero. Where neither is zero, x > 0 and x >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "b += if d.abs() > tol1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The branches differ only when |d| = tol1, and then they add the same double. d is either the bisection step xm, or an accepted interpolation p/q with p >= 0, accepted only when 2p < 3*xm*q - |tol1*q|, which needs xm*q > 0: either way d has the sign of xm (or is a zero of that sign, p/q with p = +0). So |d| = tol1 makes d equal to with_sign(tol1, xm), bit for bit, the zero cases included."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in zero",
+      "line_text": "if e.abs() >= tol1 && fa.abs() > fb.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A tie |fa| = |fb| makes both refuse the interpolation and bisect. With a != c (inverse quadratic) a and b lie on the same side of c, so fa = fb, s = 1, q = 0 and 2p < 0 is false. With a == c (secant) a tie can come only from a reset or the first step, as a swap leaves |fb| < |fa|; there e = b - a and 2xm = a - b, rounded alike, so fa = fb gives q = 0 and fa = -fb gives p = |e| = |0.5*e*q|, and p < |0.5*e*q| is false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+      "mutant": "replace > with >= in minimum",
+      "line_text": "if q > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when q is zero, of either sign, where the mutant negates p. Then 0.5*q*previous is zero, so |p| < |0.5*q*previous| is false whatever p's sign, the vertex is refused either way, and p is used nowhere else."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quadrature.rs",
+      "mutant": "replace > with >= in integrate",
+      "line_text": "let goal = if tol > rel * value.get().abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace sub -> Result<usize, LinalgError> with Ok(1)",
+      "line_text": "a.checked_sub(b).ok_or(LinalgError::Defect)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With sub always 1, symmetric_qr's deflation loop sets hi = sub(hi, 1) = 1 for ever once b(1) is negligible (it is then set to zero and stays so), so while hi > 0 never ends; cargo-mutants' timeout is how the tests catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace < with == in Cols::identity",
+      "line_text": "let diag = if len < count { len } else { count };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Cols::identity is pub(crate), and both callers ask for a square identity: Svd::jacobi Cols::identity(n, n) and tridiagonalize Cols::identity(n, n). With len == count every form of the comparison gives the same diag, so no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace < with <= in Cols::identity",
+      "line_text": "let diag = if len < count { len } else { count };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Cols::identity is pub(crate), and both callers ask for a square identity: Svd::jacobi Cols::identity(n, n) and tridiagonalize Cols::identity(n, n). With len == count both branches give the same diag, so no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+      "mutant": "replace || with && in Cols::pair_mut",
+      "line_text": "if p >= q || q >= self.count {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "pair_mut is pub(crate), and every caller passes p < q < count: jacobi_sweeps pairs p < q < n, and the eigensolver's and Golub-Kahan's rotations columns k < k + 1 <= hi < n (zero_row k < j, zero_column j < hi). Both terms of the guard are false, so it is false with either operator and no public result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with == in symmetric_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: the implicit QR iteration with Wilkinson's shift converges globally on a symmetric tridiagonal matrix (J. H. Wilkinson, Linear Algebra and its Applications 1 (1968), 409-420), each eigenvalue in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with >= in symmetric_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: the implicit QR iteration with Wilkinson's shift converges globally on a symmetric tridiagonal matrix (J. H. Wilkinson, Linear Algebra and its Applications 1 (1968), 409-420), each eigenvalue in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+      "mutant": "replace > with >= in qr_step",
+      "line_text": ".fold(0.0, |m, &x| if x.abs() > m { x.abs() } else { m });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes x.abs() also when it equals m, the same double (an absolute value is never -0, and every entry is finite), so the scale, and every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in jacobi_sweeps",
+      "line_text": "let t = if zeta.abs() > 67_108_864.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The branches differ only at |zeta| = 2^26 exactly, where both give the same double: 1 / (2 zeta) = +-2^-27 exactly, and 1 + zeta^2 = 2^52 + 1 is exact, its correctly rounded square root is 2^26 (the exact root exceeds it by less than half a unit in the last place), so sign / (|zeta| + 2^26) = +-1 / 2^27 too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in bidiagonal_norm",
+      "line_text": ".fold(0.0, |m, &x| if x.abs() > m { x.abs() } else { m })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The fold keeps the largest magnitude. The mutant takes x.abs() also when it equals m, the same double (an absolute value is never -0, and every entry is finite), so the scale, and every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with == in bidiagonal_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: Golub-Kahan's implicit QR iteration is that algorithm on the tridiagonal B^T B (Golub and Van Loan 8.6.2), converging globally, each singular value in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace > with >= in bidiagonal_qr",
+      "line_text": "if steps > max_steps {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The step cap is a safeguard: Golub-Kahan's implicit QR iteration is that algorithm on the tridiagonal B^T B (Golub and Van Loan 8.6.2), converging globally, each singular value in a few steps, and no input in the tests comes near the cap. The mutant gives up at the cap's step instead of the one after it: it differs only on an input that needs exactly that many steps, where both report NoConvergence, one step apart; the crate promises only that the iteration stops by the cap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in certify",
+      "line_text": "if s > 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "certify's S above 1/2 means an angle above 2·asin(1/2) = π/3 > 1, and its series value is then at least 2S >= 1, above BOUND_MAX = 1/2 and so above every bound a caller compares it with: refusing at S = 1/2, or not refusing above it, gives the same answer to every caller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in certify",
+      "line_text": "if s > 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "certify's S above 1/2 means an angle above 2·asin(1/2) = π/3 > 1, and its series value is then at least 2S >= 1, above BOUND_MAX = 1/2 and so above every bound a caller compares it with: refusing at S = 1/2, or not refusing above it, gives the same answer to every caller."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in canonical",
+      "line_text": "let g = if lead < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The lead is the first nonzero component, or 1 when there is none, so it is never 0: lead < 0 and lead <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in RationalRotation::inverse",
+      "line_text": "q: if lead < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The lead is the first nonzero component, or 1 when there is none, so it is never 0: lead < 0 and lead <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in simplest",
+      "line_text": "if hi < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest returns early when lo <= 0 <= hi, and lo <= hi, so hi < 0 and hi <= 0 agree on what reaches this test (hi = 0 would need lo <= 0)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace || with && in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in simplest_positive",
+      "line_text": "if ln > un || ln <= 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "simplest_positive is called with 0 < lo <= hi < 1 and hi − lo > 2^−35 (the 2D search's tangents), so ln = ceil(lo·2^100) >= 1 and un = floor(hi·2^100) >= ln: the refusal is never taken, by either test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "let (k, ex, ey) = if x > 0.0 && x >= y.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "} else if y > 0.0 && y >= x.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in RationalRotation::plane_within",
+      "line_text": "} else if x < 0.0 && -x >= y.abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "scaled refuses the zero direction, so x >= |y| already makes x > 0 (x = 0 would make y = 0 too); likewise for y and −x: testing the sign with >= or <= instead changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace || with && in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "if m >= DENOMINATOR_LIMIT || n.unsigned_abs() > m.unsigned_abs() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The simplest fraction lies within the tangents of half-angles in [−π/8, π/8] (the direction is turned into the first octant's pair), so |n| < |m| strictly and m < 2^35 (the module's search bound): the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with == in RationalRotation::plane_within",
+      "line_text": "if angle > bound {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search aims the half-angle at AIM·bound (AIM = 1/2 − 2^−11), so the angle is at most (1 − 2^−10)·bound, and the certificate exceeds it by under 2^−12 of it: the certified angle is below the bound, so the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::plane_within",
+      "line_text": "if angle > bound {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search aims the half-angle at AIM·bound (AIM = 1/2 − 2^−11), so the angle is at most (1 − 2^−10)·bound, and the certificate exceeds it by under 2^−12 of it: the certified angle is below the bound, so the refusal is never taken, whichever operator it uses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::to_rational",
+      "line_text": "if n > RATIONAL_NORM2 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "|q|² = 2^40 exactly needs every component even (a sum of four squares divisible by 8 has no odd term), and a canonical quaternion is in lowest terms, so its |q|² is never 2^40: > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace > with >= in RationalRotation::from_rational",
+      "line_text": "if best.is_none_or(|(_, b)| diag > b) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Each row is a multiple of the same quaternion, so a tie between two diagonals picks a row that canonical reduces to the same rotation as the other: which one wins a tie changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+      "mutant": "replace < with <= in Pythagorean::reduced",
+      "line_text": "let g = if c < 0 { g.checked_neg()? } else { g };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For c = 0 the reduced c is 0 whatever g's sign, and the test below refuses it: the sign chosen at c = 0 never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
+      "mutant": "delete match arm (Certified(_), _) |(_, Certified(_)) in TypedTransform::compose",
+      "line_text": "(Certified(_), _) | (_, Certified(_)) => certified(),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A certified transform has no rational or rotation form, so without this arm the pair reaches the later arms, which both fall to the certified composition: the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
+      "mutant": "delete match arm (Exact(a), Exact(b)) in TypedTransform::compose",
+      "line_text": "(Exact(a), Exact(b)) => Ok(Exact(a.compose(b)?)),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Without this arm two exact transforms reach the last arm, which composes them as rational transforms and simplifies the product back to the same exact transform; past the bound both refuse with OutOfRange (the rational form's reported value may differ), since a translation is no rotation to fall back on."
     }
   ],
   "coverage_off": [],
   "awaiting_proof": [
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "None => Err(NumError::BudgetExceeded),",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let Some((oa, ob)) = self.offsets() else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "return Err(NumError::BudgetExceeded);",
-      "occurrences": 4,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let (Some(x), Some(y), Some(w)) = (",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
       "line_text": ".or_else(|| generated::ssi_weight::exact(a, b, c, d))?;",
@@ -280,48 +1348,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
       "line_text": "(self.offsets(), cross(p, q, a), cross(p, q, b))",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let Some(w) = oa.checked_sub(ob) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let s = match side::<4>(oa, ob2, ob, oa2) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "Some(s) => Some(s),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "None => side::<5>(oa, ob2, ob, oa2),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "match s {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "Some(s) => Ok(s.mul(Sign::of_i128(w))),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
@@ -1119,13 +2145,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "None => Err(NumError::BudgetExceeded),",
-      "occurrences": 7,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": "fn side_of_tpi_hand(&self, t: &Tpi) -> Result<Sign, NumError> {",
       "occurrences": 1,
       "piece": "G41",
@@ -1140,27 +2159,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "match classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "Some(s) => Ok(s),",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "None => match classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": "}",
       "occurrences": 4,
       "piece": "G41",
@@ -1169,76 +2167,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": "fn side_of_lpi_hand(&self, l: &Lpi) -> Result<Sign, NumError> {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let (Some((w1, s1p)), Some((w2, s2p))) = (",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "l.plane.weight_and_offset(l.p, l.q),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "self.weight_and_offset(l.p, l.q),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ") else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "return Err(NumError::BudgetExceeded);",
-      "occurrences": 5,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let side = match lpi_classify::<4>(w1, s2p, w2, s1p) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "Some(s) => Some(s),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "None => lpi_classify::<5>(w1, s2p, w2, s1p),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "match side {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "Some(s) => Ok(s.mul(Sign::of_i128(w1))),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
@@ -1315,20 +2243,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let Some((w, sp)) = self.plane.weight_and_offset(self.p, self.q) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let Some(sq) = sp.checked_add(w) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": "let (Some(x), Some(y), Some(z)) = (",
       "occurrences": 1,
       "piece": "G41",
@@ -1379,55 +2293,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": "fn classify<const L: usize>(n: &[i128; 3], d: i128, x: &[I320; 3], w: &I256) -> Option<Sign> {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let side = Wide::<L>::from_i128(d)",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".checked_mul(&w.resize::<L>()?)?",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".checked_add(&Wide::<L>::from_i128(nx).checked_mul(&xx.resize::<L>()?)?)?",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".checked_add(&Wide::<L>::from_i128(ny).checked_mul(&xy.resize::<L>()?)?)?",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".checked_add(&Wide::<L>::from_i128(nz).checked_mul(&xz.resize::<L>()?)?)?;",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "Some(side.signum().mul(w.signum()))",
       "occurrences": 1,
       "piece": "G41",
       "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
@@ -1588,22 +2453,8 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "None => 0,",
-      "occurrences": 15,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "line_text": "if let Some(o) = out.get_mut(i) {",
       "occurrences": 3,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "}",
-      "occurrences": 10,
       "piece": "G41",
       "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
     },
@@ -1625,6 +2476,251 @@
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "line_text": "if let Some(limb) = limbs.get_mut(1) {",
       "occurrences": 1,
+      "piece": "G41",
+      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "None => Err(NumError::BudgetExceeded),",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "let Some((oa, ob)) = self.offsets() else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "return Err(NumError::BudgetExceeded);",
+      "occurrences": 4,
+      "piece": "G41",
+      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "let (Some(x), Some(y), Some(w)) = (",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "let Some(w) = oa.checked_sub(ob) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "let s = match side::<4>(oa, ob2, ob, oa2) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "Some(s) => Some(s),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "None => side::<5>(oa, ob2, ob, oa2),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "match s {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "line_text": "Some(s) => Ok(s.mul(Sign::of_i128(w))),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "None => Err(NumError::BudgetExceeded),",
+      "occurrences": 7,
+      "piece": "G41",
+      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "match classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "Some(s) => Ok(s),",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "None => match classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let (Some((w1, s1p)), Some((w2, s2p))) = (",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "l.plane.weight_and_offset(l.p, l.q),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "self.weight_and_offset(l.p, l.q),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": ") else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "return Err(NumError::BudgetExceeded);",
+      "occurrences": 5,
+      "piece": "G41",
+      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let side = match lpi_classify::<4>(w1, s2p, w2, s1p) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "Some(s) => Some(s),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "None => lpi_classify::<5>(w1, s2p, w2, s1p),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "match side {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "Some(s) => Ok(s.mul(Sign::of_i128(w1))),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let Some((w, sp)) = self.plane.weight_and_offset(self.p, self.q) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let Some(sq) = sp.checked_add(w) else {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "let side = Wide::<L>::from_i128(d)",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": ".checked_mul(&w.resize::<L>()?)?",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": ".checked_add(&Wide::<L>::from_i128(nx).checked_mul(&xx.resize::<L>()?)?)?",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": ".checked_add(&Wide::<L>::from_i128(ny).checked_mul(&xy.resize::<L>()?)?)?",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": ".checked_add(&Wide::<L>::from_i128(nz).checked_mul(&xz.resize::<L>()?)?)?;",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "line_text": "Some(side.signum().mul(w.signum()))",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "None => 0,",
+      "occurrences": 15,
+      "piece": "G41",
+      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "line_text": "}",
+      "occurrences": 10,
       "piece": "G41",
       "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
     },

@@ -111,6 +111,16 @@
           ]
         },
         {
+          "id": "geom-nurbs/operations",
+          "what": "geom-nurbs's knot operations (piece G56) on a fixed corpus of 96 curves of degrees 1 to 5, 7, 9 and 12 and 24 surfaces: insertion, refinement (by new knots, by the curve's own and by both), elevation, Bezier extraction, knot removal and degree reduction at several tolerances, and derivative curves and surfaces, each result's knots, control points, weights and deviation, in the encoding of tests/operations_determinism.rs.",
+          "check": {
+            "crate": "geom-nurbs",
+            "test": "operations_determinism",
+            "function": "operations_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "50b0697e2ea65748b98ac98410ee0fd70511d6e62843feb75be01fa5e6fc5eb0"
+        },
+        {
           "id": "geom-run/helpers",
           "what": "geom-run's parallel helpers (piece G04) on the serial executor and on pools of 1, 2, 3 and 8 threads with chunk sizes 1, 7 and 4,096: every answer, error and meter, in the canonical encoding of tests/golden.rs.",
           "check": {
@@ -154,7 +164,137 @@
           "id": "geom-bench/output-hashes",
           "what": "geom-bench's golden file (piece G06, chapter 23.13's output hashes): the SHA-256 of every benchmark's inputs and results, one line per benchmark, which every benchmark harness checks; pinned here by the SHA-256 of the file's text with LF line ends, so an edit to it is an edit to the store.",
           "file": "projects/engines/geometry/crates/geom-bench/src/golden.txt",
-          "history": [{"sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a", "kind": "corpus", "piece": "G29", "why": "74 new benchmarks: the line-plane point, the 2D crossing and their generated predicates; no existing digest moved"}, {"sha256": "e8a4b32fa50de11e27cfde59f8d624a9fe47420e6b292e73f1fe70c17110175f", "kind": "corpus", "piece": "G30", "why": "8 new benchmarks: the perturbed predicates' exact path and ties; no existing digest moved"}, {"sha256": "46bed21bdaf52d1360dd3e3903f10d4e5eee5d4fddeb8e33243083a2f5dd4c31", "kind": "corpus", "piece": "G42", "why": "176 new benchmarks: the plain-i128 and width-aware limb variants of every generated exact path, Avnaim et al.'s signs of orient2d and orient3d, and Wide32 at the widths Wide is measured at; no existing digest moved; merged after G30's 8 perturbation benchmarks, whose rows are kept unchanged."}], "sha256": "d4795e4681d510f670cf38db23c2707f3de7eb94dd049957e8c9d4c53a73a872"
+          "history": [
+            {
+              "sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a",
+              "kind": "corpus",
+              "piece": "G29",
+              "why": "74 new benchmarks: the line-plane point, the 2D crossing and their generated predicates; no existing digest moved"
+            },
+            {
+              "sha256": "e8a4b32fa50de11e27cfde59f8d624a9fe47420e6b292e73f1fe70c17110175f",
+              "kind": "corpus",
+              "piece": "G30",
+              "why": "8 new benchmarks: the perturbed predicates' exact path and ties; no existing digest moved"
+            },
+            {
+              "sha256": "46bed21bdaf52d1360dd3e3903f10d4e5eee5d4fddeb8e33243083a2f5dd4c31",
+              "kind": "corpus",
+              "piece": "G42",
+              "why": "176 new benchmarks: the plain-i128 and width-aware limb variants of every generated exact path, Avnaim et al.'s signs of orient2d and orient3d, and Wide32 at the widths Wide is measured at; no existing digest moved; merged after G30's 8 perturbation benchmarks, whose rows are kept unchanged."
+            }
+          ],
+          "sha256": "d4795e4681d510f670cf38db23c2707f3de7eb94dd049957e8c9d4c53a73a872"
+        },
+        {
+          "id": "geom-nurbs/fit",
+          "what": "The fitting operations of geom-nurbs at FitVersion::V1 (piece G58): 64 curve interpolations, 16 with end derivatives, 32 least-squares curves, 16 weighted least-squares curves with point and derivative constraints, 8 surface interpolations, 8 least-squares surfaces, 8 approximations to a stated error (a helix, a corner and noisy data, single and multiple knots) and 5 refusals: 157 results in the canonical encoding of tests/fit_determinism.rs.",
+          "check": {
+            "crate": "geom-nurbs",
+            "test": "fit_determinism",
+            "function": "fit_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "a0bff06b629c6e61aa07b26cae5dbe28f2fbb5ce84876a53e38010321c2eb878"
+        },
+        {
+          "id": "geom-nurbs/bernstein",
+          "what": "The Bernstein toolkit of geom-nurbs (piece G59): 200 surfaces (degrees 1 to 3, one to three spans each way, rational half the time) with every patch's interval coefficients, box, derivative boxes, fat plane and normal patch; 200 pairs of plane curves with every piece's box, derivative box, fat line and clips; 50 scalar, dot and cross products; 20 exact normal patches and plane coefficients of grid patches; and 4 refusals: 5960 results in the canonical encoding of tests/bernstein_determinism.rs.",
+          "check": {
+            "crate": "geom-nurbs",
+            "test": "bernstein_determinism",
+            "function": "bernstein_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e036ec6fc907153e3ff1960bfac8b52a646e091e9c2e23f4a364efd0ea9e2c12"
+        },
+        {
+          "id": "geom-curve/analytic",
+          "what": "The analytic curve kinds of geom-curve (piece G61): 40 rounds of a line, circle, ellipse, hyperbola, parabola, polynomial and involute in 2D and the same with a helix in 3D, each evaluated in doubles and enclosed at five parameters, bounded with three derivative bounds over a span, converted to NURBS (knots, control points, weights, parameter map and deviation), split, reversed and transformed (each evaluated, with its deviation); and 6 refusals: 30606 results in the canonical encoding of tests/analytic_determinism.rs.",
+          "check": {
+            "crate": "geom-curve",
+            "test": "analytic_determinism",
+            "function": "analytic_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342"
+        },
+        {
+          "id": "geom-curve/compound",
+          "what": "The bulge polyline, trimmed, composite, offset and curve-on-surface kinds of geom-curve (piece G62): 30 rounds of a bulge polyline (straight segments, semicircles and major arcs, widths half the time), a trimmed NURBS curve, a composite of a line, an arc and a NURBS curve, three offsets (of a circle in 2D, of a helix against a reference direction, of a helix by distances) and a curve on a surface, each evaluated in doubles and enclosed at five parameters, bounded with two derivative bounds over a span, converted to NURBS (knots, control points, weights, parameter map and deviation), split, reversed and transformed (each evaluated, with its deviation); and 6 refusals: 10506 results in the canonical encoding of tests/compound_determinism.rs.",
+          "check": {
+            "crate": "geom-curve",
+            "test": "compound_determinism",
+            "function": "compound_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2"
+        },
+        {
+          "id": "geom-surface/analytic",
+          "what": "The analytic and swept surface kinds of geom-surface (piece G65): 12 rounds of a plane, cylinder, cone, sphere and torus on random frames and a surface of revolution, an extrusion and a ruled surface on fixed profiles, each enclosed at nine parameter pairs, bounded with both derivative bounds and the normal bound over a box, converted to NURBS (knots, net, weights, both parameter maps and deviation), split and reversed in each direction and transformed (each enclosed, with its deviation); and 5 refusals: 2693 results in the canonical encoding of tests/surface_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "surface_determinism",
+            "function": "surface_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd"
+        },
+        {
+          "id": "geom-surface/offset",
+          "what": "The offset surface kind of geom-surface (piece G66): 3 rounds of offsets of a bicubic NURBS patch with an interior knot each way (rational in the second round), of a cylinder and of a torus on random frames, and in the first an offset of an offset, each enclosed at nine parameter pairs, with its partials to order 3 at three, bounded with both derivative bounds and the normal bound over a box, converted to NURBS by default and the first patch's offset within 1e-1 (knots, net, weights, both parameter maps and deviation), split and reversed in each direction and transformed (each enclosed, with its deviation; the offset of an offset is not converted and moves by a grid mirror); and 4 refusals: 314 results in the canonical encoding of tests/offset_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "offset_determinism",
+            "function": "offset_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00"
+        },
+        {
+          "id": "geom-bvh/tree",
+          "what": "The box tree of geom-bvh (piece G54): 2D and 3D trees over 22 fixed sets of 1 to 9,000 boxes (sparse, dense, nested and all equal, the largest built with the parallel subtree phase), each tree's canonical bytes, the keys meeting eight query boxes, its pairs and its pairs with another tree both ways, the work each of those walks charged, and one refit of each, 3,970,021 bytes in the encoding of tests/tree_determinism.rs.",
+          "check": {
+            "crate": "geom-bvh",
+            "test": "tree_determinism",
+            "function": "tree_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9286771316237554822844bb7bebfe4dfb2ba38b8f8f1ebdee5e23100e383ee8"
+        },
+        {
+          "id": "geom-bvh/cells",
+          "what": "The Morton-sorted cell index of geom-bvh (piece G55): indexes over seven fixed sets of 1 to 20,000 grid points (sparse over the frame, dense, clustered at the frame's edge, the eight corners and 300 equal points), each index's canonical bytes, the keys within six radii of twelve centres and the work each search charged, and every pair within two radii, in the encoding of tests/cells_determinism.rs.",
+          "check": {
+            "crate": "geom-bvh",
+            "test": "cells_determinism",
+            "function": "cells_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "43aace359b854c006c7402104804f6aa51a45230484e66d5173c890586c1b541"
+        },
+        {
+          "id": "geom-num/roots-and-quadrature",
+          "what": "Brent's zero and minimum, the generated Gauss-Legendre and Gauss-Kronrod rules and the adaptive integrator (piece G51): every rule's nodes and weights, 1,790 results over fixed problems and every point each search and integration evaluated, in order, in the canonical encoding of tests/roots_quadrature_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "roots_quadrature_determinism",
+            "function": "roots_and_quadrature_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "624a2f76c0790d4cd1c05ed823c612a01217419ccce217b824f2fcd093912b26"
+        },
+        {
+          "id": "geom-math/rotations",
+          "what": "geom-math's rational rotations (piece G46): 2D searches for 175 directions at seven bounds, 3D searches for 129 quaternion targets at five bounds, 300 compositions at three bounds (exact and re-approximated) and as typed transforms, images of grid points at the frame's edges, every result's matrix, inverse, direction, rational and floating-point forms, and typed transforms of every variant composed, as tests/rotation_determinism.rs records them.",
+          "check": {
+            "crate": "geom-math",
+            "test": "rotation_determinism",
+            "function": "rotation_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "330445e67c88e24daf07e62cdf53cf1ead9abb5ae80c7219b69ed38842c91589"
+        },
+        {
+          "id": "geom-linalg/spectral",
+          "what": "The singular value decompositions (one-sided Jacobi and Golub-Kahan) and the symmetric eigensolver of geom-linalg (piece G50): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), both SVDs of each and the eigendecomposition of each square one's symmetric part, and two refusals for want of work: 546 results in the canonical encoding of tests/spectral_determinism.rs.",
+          "check": {
+            "crate": "geom-linalg",
+            "test": "spectral_determinism",
+            "function": "spectral_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9c2a12093c3d4e85570d02e82f1a918d55300c7c14935ef8c3875ebac031d54a"
         }
       ]
     }

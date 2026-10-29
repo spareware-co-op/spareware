@@ -473,6 +473,10 @@ impl Recorder {
                 self.put_i128(value);
                 self.note("FrameRangeExceeded");
             }
+            MathError::NotInPlane => {
+                self.put_u8(14);
+                self.note("NotInPlane");
+            }
         }
     }
 
@@ -639,6 +643,14 @@ impl Recorder {
                 self.put_u8(2);
                 self.note("Certified");
                 self.rows(c);
+            }
+            // Piece G46's variant; this corpus never makes one, so its digest is unchanged.
+            TypedTransform::Rotation(r) => {
+                self.put_u8(3);
+                self.note("Rotation");
+                for v in r.quaternion() {
+                    self.put_i64(v);
+                }
             }
         }
     }

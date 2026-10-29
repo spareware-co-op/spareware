@@ -1216,7 +1216,6 @@ mod repository {
             "G129 G130 G131 G132 G133 G137 G138 G139 G144 G242 G243 G244 G245 G246 G247 G248 \
              G249 G250 G324",
         ),
-        ("geom-bvh", "G54 G55"),
         ("geom-check", "G84 G85 G102 G134 G177 G322"),
         ("geom-cloud", "G350 G379 G380 G436"),
         ("geom-combine", "G336 G337"),
@@ -1224,7 +1223,6 @@ mod repository {
             "geom-convert",
             "G322 G323 G333 G334 G335 G340 G350 G351 G425",
         ),
-        ("geom-curve", "G60 G61 G62 G63 G64 G67 G68 G175 G361 G371"),
         (
             "geom-draw",
             "G387 G389 G390 G391 G394 G395 G396 G397 G398 G399 G400 G401 G402 G403 G404 G405",
@@ -1247,7 +1245,6 @@ mod repository {
              G176 G292 G320 G321 G372 G390 G392 G393 G466 G467 G468",
         ),
         ("geom-landxml", "G437"),
-        ("geom-linalg", "G49 G50 G215"),
         ("geom-make", "G101"),
         (
             "geom-mesh",
@@ -1256,7 +1253,6 @@ mod repository {
         ),
         ("geom-meshio", "G354 G434 G435"),
         ("geom-name", "G87 G89 G90 G109 G374"),
-        ("geom-nurbs", "G56 G58 G59 G259"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
         ("geom-op", "G82 G83 G86 G87 G88 G104 G143 G144 G459"),
         ("geom-p21", "G415"),
@@ -1271,10 +1267,6 @@ mod repository {
         ("geom-spatial", "G293 G294 G295 G296 G297"),
         ("geom-step", "G427 G428 G429 G476"),
         ("geom-subd", "G315 G316 G319 G323 G325"),
-        (
-            "geom-surface",
-            "G60 G65 G66 G67 G68 G253 G254 G260 G264 G315 G316 G317 G318 G470",
-        ),
         ("geom-sweep", "G255 G256 G257 G259 G260 G261 G280 G375"),
         (
             "geom-terrain",
