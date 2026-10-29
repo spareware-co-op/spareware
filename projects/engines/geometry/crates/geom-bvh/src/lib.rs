@@ -23,6 +23,32 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G54, G55.
+//! Modules today (piece G54, the box tree):
+//!
+//! - [`bound`]: [`Aabb`], boxes of whole grid steps in 2D and 3D, from `geom-math`'s boxes exactly
+//!   or from float boxes rounded outward, padded by [`Inflation`].
+//! - [`tree`]: [`BoxTree`], built from [`Entry`]s, refitted and rebuilt, with its [`Node`]s and
+//!   canonical bytes.
+//! - [`build`]: the binned surface-area build, its limits ([`MAX_DEPTH`], [`LEAF_MAX`]) and its
+//!   parallel subtree phase.
+//! - [`query`]: the boxes that meet a box, the pairs within a tree and the pairs between two.
+//! - [`cells`]: [`CellIndex`], the Morton-sorted cell index of grid points (G55), a linear octree
+//!   for point searches: the points within a radius, and the pairs within a radius.
+//! - [`BvhError`], in [`error`]: why the tree or the index could not build, change or answer.
+//!
+//! Status: the box tree (G54) and the Morton-sorted cell index (G55) built.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+pub mod bound;
+pub mod build;
+pub mod cells;
+pub mod error;
+pub mod query;
+pub mod tree;
+
+pub use bound::{Aabb, Inflation, LIMIT};
+pub use build::{LEAF_MAX, MAX_DEPTH};
+pub use cells::{AXIS_BITS, CODE_BITS, CellIndex, Point, morton};
+pub use error::BvhError;
+pub use tree::{BoxTree, Entry, Node, NodeKind, REBUILD_FACTOR, Refitted};
