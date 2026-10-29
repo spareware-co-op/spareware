@@ -3,7 +3,8 @@
 //! through the same transforms at z = 0), and every kind of frame. Piece G46 adds its rational
 //! rotation (the variant for rotations too large for a rational transform) and its searches: the
 //! closest rational rotation within the angular bound in 2D and 3D, and re-approximated
-//! compositions.
+//! compositions. Piece G48 adds frames whose map coordinates are in US survey feet (the exact
+//! path) and survey coordinates given as decimal text: reading the text, and converting it.
 //!
 //! Run with `cargo bench -p geom-math`. It uses the standard library's clock only, so it builds
 //! with no extra dependency; when the benchmark harness of chapter 28 (`geom-bench`, piece G06)
@@ -28,11 +29,11 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use geom_math::{
-    Axis, CrsId, F2, FrameRecord, GridTransform, MapPoint, RationalRotation, RationalTransform,
-    Rotation, Scale, Transform, TypedTransform,
+    Axis, CrsId, Decimal, DecimalPoint, F2, FrameRecord, GridTransform, LinearUnit, MapPoint,
+    RationalRotation, RationalTransform, Rotation, Scale, Transform, TypedTransform,
 };
 use geom_num::grid::{GridStep, P2, P3};
-use geom_num::ladder;
+use geom_num::{ladder, math};
 use geom_num::rng::{Philox, Seed, Stream, StreamId};
 
 const POINTS: usize = 1_000_000;
@@ -259,6 +260,16 @@ fn main() {
             "ground frame, irrational direction, scale",
             ground(1_000, 7),
         ),
+        (
+            "map frame in US survey feet",
+            FrameRecord::map(nztm, GridStep::Q0, origin)
+                .unwrap()
+                .with_linear_unit(LinearUnit::US_SURVEY_FOOT),
+        ),
+        (
+            "ground frame in US survey feet, irrational direction, scale",
+            ground(1_000, 7).with_linear_unit(LinearUnit::US_SURVEY_FOOT),
+        ),
     ];
     let small = &pts[..FRAME_POINTS];
     for (name, fr) in frames {
@@ -285,5 +296,41 @@ fn main() {
             check = check.wrapping_add(x as u64);
         }
         report(&format!("to_frame, {name}"), maps.len(), start, check);
+        // The same points as decimal text to the micrometre, as a survey file gives them.
+        let text: Vec<[String; 3]> = maps
+            .iter()
+            .map(|m| {
+                [m.easting, m.northing, m.height].map(|v| {
+                    Decimal::new(math::round_ties_even(v * 1e6).unwrap().get() as i128, -6)
+                        .unwrap()
+                        .to_string()
+                })
+            })
+            .collect();
+        let start = Instant::now();
+        let mut check = 0u64;
+        let mut decimals = Vec::with_capacity(text.len());
+        for t in &text {
+            let [e, n, h] = black_box(t).each_ref().map(|t| Decimal::parse(t).unwrap());
+            check = check.wrapping_add(e.significand() as u64);
+            decimals.push(DecimalPoint {
+                easting: e,
+                northing: n,
+                height: h,
+            });
+        }
+        report(&format!("parse decimal text, {name}"), text.len(), start, check);
+        let start = Instant::now();
+        let mut check = 0u64;
+        for &d in &decimals {
+            let x = fr.to_frame_decimal(black_box(d)).unwrap().value().x.get();
+            check = check.wrapping_add(x as u64);
+        }
+        report(
+            &format!("to_frame_decimal, {name}"),
+            decimals.len(),
+            start,
+            check,
+        );
     }
 }
