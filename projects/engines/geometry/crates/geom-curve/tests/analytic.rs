@@ -91,7 +91,8 @@ fn params((a, b): (f64, f64)) -> Vec<f64> {
 
 /// A random frame in D dimensions.
 fn frame<const D: usize>(rng: &mut Lcg) -> Frame<D> {
-    loop {
+    // Bounded, so a frame that never builds fails the test instead of hanging it.
+    for _ in 0..1000 {
         let x = rng.vector::<D>(1.0);
         let n = if D == 2 {
             [0.0, 0.0, if rng.below(2) == 0 { 1.0 } else { -2.0 }]
@@ -102,6 +103,7 @@ fn frame<const D: usize>(rng: &mut Lcg) -> Frame<D> {
             return f;
         }
     }
+    panic!("no frame in 1000 draws")
 }
 
 fn axes<const D: usize>(rng: &mut Lcg) -> Axes<D> {

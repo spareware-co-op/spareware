@@ -94,7 +94,7 @@ impl<const D: usize> Trimmed<D> {
         let (lo, hi) = self.interval;
         let mut deviation = point(0.0)?;
         let mut piece = match &self.basis {
-            Basis::Bulge(p) if lo > a || hi < b => {
+            Basis::Bulge(p) => {
                 let n = p.to_nurbs(meter)?;
                 deviation = point(n.deviation)?;
                 Basis::Nurbs(n.value.curve)
@@ -160,12 +160,12 @@ impl<const D: usize> Trimmed<D> {
         ))
     }
 
-    /// The parameters strictly inside the interval where the basis may not be smooth (a NURBS
-    /// basis's distinct interior knots, a bulge polyline's vertices), increasing; none for the
-    /// analytic kinds. Surfaces built on the curve read them (`geom-surface`'s swept kinds).
+    /// The parameters where the basis may not be smooth (`Basis::breaks`), in increasing order,
+    /// some perhaps repeated or outside the interval (their users keep the ones inside a span).
+    /// Surfaces built on the curve read them (`geom-surface`'s swept kinds).
     #[must_use]
     pub fn breaks(&self) -> Vec<f64> {
-        self.basis.breaks(self.interval)
+        self.basis.breaks()
     }
 }
 

@@ -131,12 +131,11 @@ enum Which {
 }
 
 /// An interval at most one turn long (2 half-turns), finite and ordered, decided exactly.
-fn check_turn((a, b): (f64, f64)) -> Result<(), CurveError> {
-    if !(a.is_finite() && b.is_finite() && a < b) {
-        return Err(CurveError::SpanOutside);
-    }
+pub(crate) fn check_turn((a, b): (f64, f64)) -> Result<(), CurveError> {
+    // b − a = s + e exactly; s is infinite or NaN when an end is not finite, and 0 or below unless
+    // a < b.
     let (s, e) = two_sum(b, -a);
-    if s < 2.0 || (s == 2.0 && e <= 0.0) {
+    if 0.0 < s && (s < 2.0 || (s == 2.0 && e <= 0.0)) {
         Ok(())
     } else {
         Err(CurveError::SpanOutside)
@@ -144,7 +143,7 @@ fn check_turn((a, b): (f64, f64)) -> Result<(), CurveError> {
 }
 
 /// A finite, ordered interval.
-fn check_finite((a, b): (f64, f64)) -> Result<(), CurveError> {
+pub(crate) fn check_finite((a, b): (f64, f64)) -> Result<(), CurveError> {
     if a.is_finite() && b.is_finite() && a < b {
         Ok(())
     } else {
@@ -261,7 +260,7 @@ fn normal_terms(which: Which, r: &Round) -> Result<Terms, CurveError> {
 }
 
 /// The pieces a direction of a box is cut into: eighths of a turn for an angle, else one.
-fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)>, CurveError> {
+pub(crate) fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)>, CurveError> {
     let n: u32 = if angular {
         let x = geom_num::math::ceil((hi - lo) * 4.0)?.get();
         if x >= 8.0 {
@@ -283,17 +282,13 @@ fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)>, CurveErr
     let mut out = Vec::with_capacity(8);
     let mut start = lo;
     for i in 1..=n {
-        let mut end = if i == n {
+        let end = if i == n {
             hi
         } else {
             lo + (hi - lo) * (f64::from(i) / f64::from(n))
         };
-        if end > hi {
-            end = hi;
-        }
-        if end < start {
-            end = start;
-        }
+        // Rounding may step past either end; the piece stays in [start, hi].
+        let end = tight::larger(tight::smaller(end, hi), start);
         out.push((start, end));
         start = end;
     }
@@ -316,12 +311,8 @@ fn hull(
             meter.charge(1)?;
             let e = f(Interval::new(u0, u1)?, Interval::new(v0, v1)?)?;
             for ((l, h), x) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(&e) {
-                if x.lo() < *l {
-                    *l = x.lo();
-                }
-                if x.hi() > *h {
-                    *h = x.hi();
-                }
+                *l = tight::smaller(*l, x.lo());
+                *h = tight::larger(*h, x.hi());
             }
         }
     }

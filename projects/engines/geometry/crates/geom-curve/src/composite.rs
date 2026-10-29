@@ -70,7 +70,7 @@ fn unlimited() -> WorkMeter<'static> {
 /// f·x, coordinate by coordinate; x itself when f is exactly 1 (a segment as long as its share of
 /// the composite's parameter), so nothing widens.
 fn scaled<const D: usize>(f: Interval, x: &[Interval; D]) -> Result<[Interval; D], CurveError> {
-    if f.lo() == 1.0 && f.hi() == 1.0 {
+    if f == point(1.0)? {
         return Ok(*x);
     }
     let mut out = [point(0.0)?; D];
@@ -114,18 +114,15 @@ impl<const D: usize> Composite<D> {
         let mut s = start;
         for seg in &segments {
             let (a, b) = seg.interval();
-            let next = s + (b - a);
-            if !(next.is_finite() && next > s) {
-                return Err(CurveError::Degenerate);
-            }
-            starts.push(next);
-            s = next;
+            s += b - a;
+            starts.push(s);
         }
         Composite::assemble(segments, starts, 0.0)
     }
 
-    /// The composite of `segments` over `starts`, whose joints may be apart by at most `allow`
-    /// beyond overlapping (a transform's deviation).
+    /// The composite of `segments` over `starts` (increasing and finite, or
+    /// [`CurveError::Degenerate`]), whose joints may be apart by at most `allow` beyond overlapping
+    /// (a transform's deviation).
     fn assemble(
         segments: Vec<Trimmed<D>>,
         starts: Vec<f64>,
@@ -137,7 +134,8 @@ impl<const D: usize> Composite<D> {
         for k in 1..starts.len() {
             let a: f64 = *starts.get(k.saturating_sub(1)).ok_or(CurveError::Defect)?;
             let b: f64 = *starts.get(k).ok_or(CurveError::Defect)?;
-            if a >= b || a.is_nan() || b.is_nan() {
+            // A segment too short for the starts' precision, or a start past the largest double.
+            if !(a < b && b.is_finite()) {
                 return Err(CurveError::Degenerate);
             }
         }
@@ -203,7 +201,8 @@ impl<const D: usize> Composite<D> {
         if k >= n {
             k = n.saturating_sub(1);
         }
-        if side == Limit::FromLeft && k > 0 && self.start(k)? == t {
+        // At a joint from the left: the segment before (none before the first).
+        if side == Limit::FromLeft && self.start(k)? == t {
             k = k.saturating_sub(1);
         }
         Ok(k)
@@ -230,9 +229,9 @@ impl<const D: usize> Composite<D> {
                 self.factor(k)?,
             )?,
         )?;
-        let lo = if l.lo() < a { a } else { l.lo() };
-        let hi = if l.hi() > b { b } else { l.hi() };
-        Ok(Interval::new(lo, if hi < lo { lo } else { hi })?)
+        let lo = tight::larger(l.lo(), a);
+        let hi = tight::smaller(l.hi(), b);
+        Ok(Interval::new(lo, tight::larger(hi, lo))?)
     }
 
     /// r^j, enclosed.
@@ -273,20 +272,14 @@ impl<const D: usize> Composite<D> {
     /// The segments a span meets, with each one's part of it in segment parameters.
     fn parts(&self, (lo, hi): (f64, f64)) -> Result<Vec<(usize, Interval)>, CurveError> {
         let first = self.locate(lo, Limit::FromRight)?;
-        let mut last = self.locate(hi, Limit::FromLeft)?;
-        if last < first {
-            last = first;
-        }
+        let last = self.locate(hi, Limit::FromLeft)?.max(first);
         let mut out = Vec::with_capacity(last.saturating_sub(first).saturating_add(1));
         for k in first..=last {
             let (s0, s1) = (self.start(k)?, self.start(k.saturating_add(1))?);
-            let x = if lo > s0 { lo } else { s0 };
-            let y = if hi < s1 { hi } else { s1 };
-            let (lx, ly) = (self.local(k, x)?, self.local(k, if y < x { x } else { y })?);
-            out.push((
-                k,
-                Interval::new(lx.lo(), if ly.hi() < lx.lo() { lx.lo() } else { ly.hi() })?,
-            ));
+            let x = tight::larger(lo, s0);
+            let y = tight::smaller(hi, s1);
+            let (lx, ly) = (self.local(k, x)?, self.local(k, tight::larger(y, x))?);
+            out.push((k, Interval::new(lx.lo(), tight::larger(ly.hi(), lx.lo()))?));
         }
         Ok(out)
     }
@@ -359,12 +352,8 @@ impl<const D: usize> ParamCurve<D> for Composite<D> {
                 .zip(out.hi.iter_mut())
                 .zip(b.lo.iter().zip(&b.hi))
             {
-                if x < *lo {
-                    *lo = x;
-                }
-                if y > *hi {
-                    *hi = y;
-                }
+                *lo = tight::smaller(*lo, x);
+                *hi = tight::larger(*hi, y);
             }
         }
         Ok(out)
@@ -388,12 +377,8 @@ impl<const D: usize> ParamCurve<D> for Composite<D> {
                 Err(e) => return Err(e),
             };
             for ((lo, hi), x) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(&e) {
-                if x.lo() < *lo {
-                    *lo = x.lo();
-                }
-                if x.hi() > *hi {
-                    *hi = x.hi();
-                }
+                *lo = tight::smaller(*lo, x.lo());
+                *hi = tight::larger(*hi, x.hi());
             }
         }
         Ok(DerivativeBound::Bounded(out))
@@ -453,11 +438,7 @@ impl<const D: usize> ParamCurve<D> for Composite<D> {
         let (h1, h2) = seg.halves(cut)?;
         // The cut moved by at most |cut − l| in the segment's parameter.
         let moved = {
-            let off = if cut - l.lo() > l.hi() - cut {
-                cut - l.lo()
-            } else {
-                l.hi() - cut
-            };
+            let off = tight::larger(cut - l.lo(), l.hi() - cut);
             if off == 0.0 {
                 0.0
             } else {
@@ -465,7 +446,7 @@ impl<const D: usize> ParamCurve<D> for Composite<D> {
                     DerivativeBound::Bounded(b) => {
                         let mut m = Vec::with_capacity(D);
                         for (&x, &y) in b.lo.iter().zip(&b.hi) {
-                            m.push(point(if x.abs() > y.abs() { x.abs() } else { y.abs() })?);
+                            m.push(point(tight::larger(x.abs(), y.abs()))?);
                         }
                         tight::norm(&m)?
                     }
@@ -514,9 +495,7 @@ impl<const D: usize> ParamCurve<D> for Composite<D> {
         let mut deviation = 0.0;
         for s in self.segments.iter().rev() {
             let r = s.reverse(meter)?;
-            if r.deviation > deviation {
-                deviation = r.deviation;
-            }
+            deviation = tight::larger(deviation, r.deviation);
             segments.push(r.value);
         }
         let starts: Vec<f64> = self.starts.iter().rev().map(|s| -s).collect();
@@ -536,9 +515,7 @@ impl<const D: usize> ParamCurve<D> for Composite<D> {
         let mut deviation = 0.0;
         for s in &self.segments {
             let r = s.moved(transform, meter)?;
-            if r.deviation > deviation {
-                deviation = r.deviation;
-            }
+            deviation = tight::larger(deviation, r.deviation);
             segments.push(r.value);
         }
         let c = Composite::assemble(segments, self.starts.clone(), f64::INFINITY)?;
@@ -565,7 +542,7 @@ fn speed<const D: usize>(c: &Curve<D>, meter: &mut WorkMeter<'_>) -> Result<Inte
         DerivativeBound::Bounded(b) => {
             let mut m = Vec::with_capacity(D);
             for (&x, &y) in b.lo.iter().zip(&b.hi) {
-                m.push(point(if x.abs() > y.abs() { x.abs() } else { y.abs() })?);
+                m.push(point(tight::larger(x.abs(), y.abs()))?);
             }
             tight::norm(&m)
         }
@@ -597,10 +574,7 @@ fn join<const D: usize>(
         let n = s.to_nurbs(meter)?;
         forms.push((n.value.curve, local_map(n.value.map)?, n.deviation));
     }
-    let p = forms
-        .iter()
-        .map(|(f, _, _)| f.degree())
-        .fold(1, |a, b| if b > a { b } else { a });
+    let p = forms.iter().map(|(f, _, _)| f.degree()).fold(1, usize::max);
     let rational = forms.iter().any(|(f, _, _)| f.is_rational());
     let mut homs: Vec<[f64; D]> = Vec::new();
     let mut weights: Vec<f64> = Vec::new();
@@ -656,20 +630,17 @@ fn join<const D: usize>(
         let first = pieces.value.first().map_or(1.0, |q| {
             q.weights().and_then(|w| w.first().copied()).unwrap_or(1.0)
         });
-        let (scale, scaled) = match weights.last() {
-            Some(&prev) if prev != first => (prev / first, true),
-            _ => (1.0, false),
-        };
+        let scale = weights.last().map_or(1.0, |&prev| prev / first);
         let mut g_start = start_u;
         let mut reach = 0.0;
         let mut eps = 0.0;
         let mut moved = 0.0;
         let mut reparam = 0.0;
         let mut origin: Option<[Interval; D]> = None;
-        for (j, piece) in pieces.value.iter().enumerate() {
+        for piece in &pieces.value {
             let (alpha, beta) = ParamCurve::domain(piece);
             let g_end = beta + shift;
-            if g_end <= g_start || g_end.is_nan() {
+            if !(g_start < g_end && g_end.is_finite()) {
                 return Err(CurveError::Degenerate);
             }
             // The rounding of the piece's shifted ends reparametrises it: |N′|·(e₁ + e₂).
@@ -684,9 +655,7 @@ fn join<const D: usize>(
             if e1 != 0.0 || e2 != 0.0 {
                 let v = speed(piece, meter)?;
                 let term = tight::mul(v, tight::add(point(e1)?, point(e2)?)?)?.hi();
-                if term > reparam {
-                    reparam = term;
-                }
+                reparam = tight::larger(reparam, term);
             }
             let ph = piece.homogeneous();
             let pw: Vec<f64> = match piece.weights() {
@@ -694,45 +663,34 @@ fn join<const D: usize>(
                 None => alloc::vec![1.0; ph.len()],
             };
             for (i, (h, &w)) in ph.iter().zip(&pw).enumerate() {
-                // A piece's first point is the previous piece's last (already stored); a
-                // segment's first point is replaced by the previous segment's last.
-                let shared = i == 0 && j > 0;
-                let joint = i == 0 && j == 0 && !homs.is_empty();
-                if shared {
-                    continue;
-                }
-                let (hs, ws) = if joint {
+                // A piece's first point is the one stored last, the previous piece's or segment's
+                // end; its distance from this one (a joint's gap, a break inside a segment, or
+                // rounding) counts below.
+                let reused = i == 0 && !homs.is_empty();
+                let (hs, ws) = if reused {
                     match (homs.last(), weights.last()) {
                         (Some(h), Some(&w)) => (*h, w),
                         _ => return Err(CurveError::Defect),
                     }
-                } else if scaled {
-                    (h.map(|x| x * scale), w * scale)
                 } else {
-                    (*h, w)
+                    // Exact when the scale is 1.
+                    (h.map(|x| x * scale), w * scale)
                 };
-                // The stored point against this segment's exact one: the joint's gap, and the
-                // rounding of the rescaled points.
+                // The stored point against this segment's exact one.
                 let exact = euclid(h, w)?;
                 let d = tight::distance(&euclid(&hs, ws)?, &exact)?;
-                if d > moved {
-                    moved = d;
-                }
+                moved = tight::larger(moved, d);
                 if rational {
                     let r = tight::magnitude(tight::sub(
                         tight::div(point(ws)?, tight::mul(point(scale)?, point(w)?)?)?,
                         point(1.0)?,
                     )?);
-                    if r > eps {
-                        eps = r;
-                    }
+                    eps = tight::larger(eps, r);
                     let o = *origin.get_or_insert(exact);
                     let rr = tight::distance(&exact, &o)?;
-                    if rr > reach {
-                        reach = rr;
-                    }
+                    reach = tight::larger(reach, rr);
                 }
-                if !joint {
+                if !reused {
                     homs.push(hs);
                     weights.push(ws);
                 }
@@ -743,19 +701,16 @@ fn join<const D: usize>(
             knots.extend(core::iter::repeat_n(g_end, p));
             g_start = g_end;
         }
-        if eps > 0.0 {
-            if eps.is_nan() || eps >= 0.5 {
-                return Err(CurveError::NotFinite);
-            }
-            let e = point(eps)?;
-            let factor = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(point(1.0)?, e)?)?;
-            moved = tight::add(point(moved)?, tight::mul(factor, point(reach)?)?)?.hi();
+        // The weights' term is exactly 0 when every stored weight is exact.
+        if eps.is_nan() || eps >= 0.5 {
+            return Err(CurveError::NotFinite);
         }
+        let e = point(eps)?;
+        let factor = tight::div(tight::mul(point(2.0)?, e)?, tight::sub(point(1.0)?, e)?)?;
+        moved = tight::add(point(moved)?, tight::mul(factor, point(reach)?)?)?.hi();
         dev = tight::add(dev, point(moved)?)?;
         dev = tight::add(dev, point(reparam)?)?;
-        if dev.hi() > deviation {
-            deviation = dev.hi();
-        }
+        deviation = tight::larger(deviation, dev.hi());
         previous_end = Some(g_start);
     }
     if let Some(&last) = knots.last() {

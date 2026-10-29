@@ -57,7 +57,8 @@ impl Jet {
         let mut c = Vec::with_capacity(d.len());
         let mut f = point(1.0)?;
         for (k, &x) in d.iter().enumerate() {
-            if k > 1 {
+            // f = k!, built step by step (exact for the orders used).
+            if k > 0 {
                 f = tight::mul(f, point(count(k)?)?)?;
             }
             c.push(tight::div(x, f)?);
@@ -65,14 +66,9 @@ impl Jet {
         Ok(Jet { c })
     }
 
-    /// The order K.
-    pub(crate) fn order(&self) -> usize {
-        self.c.len().saturating_sub(1)
-    }
-
     /// The jet of f′, one order lower: c′[k] = (k + 1)·c[k + 1].
     pub(crate) fn derivative(&self) -> Result<Jet, CurveError> {
-        let mut c = Vec::with_capacity(self.order());
+        let mut c = Vec::with_capacity(self.c.len());
         for (k, &x) in self.c.iter().enumerate().skip(1) {
             c.push(tight::mul(point(count(k)?)?, x)?);
         }
@@ -94,7 +90,7 @@ impl Jet {
         let mut out = Vec::with_capacity(self.c.len());
         let mut f = point(1.0)?;
         for (k, &x) in self.c.iter().enumerate() {
-            if k > 1 {
+            if k > 0 {
                 f = tight::mul(f, point(count(k)?)?)?;
             }
             out.push(tight::mul(x, f)?);

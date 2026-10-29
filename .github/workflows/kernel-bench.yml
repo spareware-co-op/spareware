@@ -457,18 +457,23 @@ jobs:
               ;;
           esac
 
-      # When the gate finds a rise, each regressed benchmark's Callgrind output for the merge base
-      # and the pull request, function by function (`callgrind_annotate`, part of Valgrind), so
-      # the rise can be traced to the code that costs it from the job log alone. It measures
-      # nothing and only reads the saved runs; `-e` is off so one missing output cannot end the
-      # tracing of the others.
+      # When the gate or the judge finds a rise, each regressed benchmark's Callgrind output for the
+      # merge base and the pull request, function by function (`callgrind_annotate`, part of
+      # Valgrind), so the rise can be traced to the code that costs it from the job log alone: the
+      # gate's regressions, and the judge's rises over the limit, which include miss counts the
+      # gate does not judge. It measures nothing and only reads the saved runs; `-e` is off so one
+      # missing output cannot end the tracing of the others.
       - name: Trace each rise function by function
-        if: failure() && steps.gate.outcome == 'failure'
+        if: failure() && (steps.gate.outcome == 'failure' || steps.judge.outcome == 'failure')
         run: |
           set +e
           set -uo pipefail
-          sed -n '/^Regressions:/,/^Gungraun result/p' "$RUNNER_TEMP/head.log" \
-            | sed -nE 's/^  instructions::([a-z0-9_]+)::([a-z0-9_]+) ([a-z0-9_]+):$/\1 \2 \3/p' \
+          {
+            sed -n '/^Regressions:/,/^Gungraun result/p' "$RUNNER_TEMP/head.log" \
+              | sed -nE 's/^  instructions::([a-z0-9_]+)::([a-z0-9_]+) ([a-z0-9_]+):$/\1 \2 \3/p'
+            sed -n '/^#### Rises over/,/^#### Miss counts/p' "$RUNNER_TEMP/callgrind.md" 2>/dev/null \
+              | sed -nE 's/^\| ([a-z0-9_]+)\/([a-z0-9_]+)\/([a-z0-9_]+) \|.*/\1 \2 \3/p'
+          } | sort -u \
             | while read -r group name id; do
                 echo "=== $group::$name $id"
                 find "$GUNGRAUN_HOME" -path "*/$group/*$name*" -name 'callgrind*.out*' \
