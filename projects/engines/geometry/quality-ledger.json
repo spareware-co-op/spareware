@@ -849,6 +849,70 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant also tests the sign when M equals L, a resize to the same width. Then r has the very limbs of self, so its sign is self's and the test is false: resize returns the same Some(r) for every value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
+      "mutant": "replace || with && in same_parameter",
+      "line_text": "let done = e <= target * 0.5 || n >= MOST;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With && the refinement stops on reaching its target only at the densest sampling, so every cache whose certificate keeps falling is sampled four times over, up to 32 steps a cell, before it stops: up to sixty-four times the work for each offset's cache in the suite, which then runs past cargo-mutants' time limit. Where it finishes, the golden geom-surface/offset, whose caches stop at the first sampling that meets the target, changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
+      "mutant": "replace > with >= in same_parameter",
+      "line_text": "if error > target {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the densest sampling's certificate equals the target to the last bit. The original then removes knots within a budget of 0 and returns a deviation equal to the target; the mutant refuses a tolerance that is met with nothing to spare, or, with no tolerance asked for, reports the surface before knot removal. Both results are certified; no input is known to land on the tie."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/jet.rs",
+      "mutant": "replace >= with < in Jet::div",
+      "line_text": "if g0.lo() <= 0.0 && g0.hi() >= 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every divisor the crate forms is positive at every point it is formed over: a length |S_u x S_v| that Jet::sqrt has already shown positive (it refuses otherwise), or a NURBS weight function, whose weights geom-nurbs keeps positive. On a positive divisor both tests are false; they differ only for a divisor through or below zero, which no input through the public interface produces."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace < with <= in cuts",
+      "line_text": "ends.extend(breaks.iter().copied().filter(|&x| lo < x && x < hi));",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "With <= a break exactly at one of the region's ends also cuts the region there, adding a piece of one parameter at that end. That piece's box holds the surface at the end only: inside the neighbouring piece's box where the kind is continuous, and the kind's own value at that parameter where it jumps. A bound, derivative bound or normal bound grows by nothing or by a value of the surface on the closed region, so it still holds."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace == with != in Offset::partials_of",
+      "line_text": "let point_u = u0 == u1;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only regions of one u value or of one v value change. At a point the mutant takes the centred form, whose steps are 0 there, so it is the direct enclosure intersected with itself: the same. A line along u (one v value) then takes the direct enclosure alone instead of its intersection with the centred form: a wider enclosure of the same values, still certified. The cache certifies along lines of one u value, which keep their form."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace > with >= in Offset::factor_sign",
+      "line_text": "Ok(if det.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Differs only where the enclosure of det(I - d II) over a piece ends exactly at 0.0, so the fold factor 1 - 2Hd + Kd^2 is at least 0 there and may reach 0. The mutant then takes the base's normals instead of the cross product of the enclosed partials. Where the factor is positive the offset's normal is a positive multiple of the base's; where it is 0 the normal vanishes and its limit from the rest of the piece points the same way, which the trait allows. No input is known to give an enclosure ending exactly at 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace < with == in Offset::factor_sign",
+      "line_text": "} else if det.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Differs only where the enclosure of det(I - d II) over a piece ends exactly at 0.0 from below, so the fold factor is at most 0 there and may reach 0: the mutant then turns the base's normals over instead of taking the cross product of the enclosed partials, and refuses no other piece. Where the factor is negative the offset's normal is a positive multiple of the turned-over base normal; where it is 0 the normal vanishes and its limit points the same way, which the trait allows. No input is known to give such an enclosure."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+      "mutant": "replace < with <= in Offset::factor_sign",
+      "line_text": "} else if det.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Differs only where the enclosure of det(I - d II) over a piece ends exactly at 0.0 from below, so the fold factor is at most 0 and may reach 0. The mutant then turns the base's normals over instead of taking the cross product of the enclosed partials. Where the factor is negative the offset's normal is a positive multiple of the turned-over base normal; where it is 0 the normal vanishes and its limit from the rest of the piece points the same way, which the trait allows."
     }
   ],
   "coverage_off": [],

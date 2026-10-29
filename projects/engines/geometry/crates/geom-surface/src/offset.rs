@@ -389,7 +389,9 @@ impl Offset {
         let (bu, bv) = self.breaks();
         let in_u = bu.iter().any(|&x| u0 < x && x < u1);
         let in_v = bv.iter().any(|&x| v0 < x && x < v1);
-        if (u0 == u1 && v0 == v1) || in_u || in_v {
+        let point_u = u0 == u1;
+        let point_v = v0 == v1;
+        if (point_u && point_v) || in_u || in_v {
             return self.direct(region, sides, order, meter);
         }
         let up = order.checked_add(1).ok_or(CurveError::Defect)?;

@@ -133,11 +133,13 @@ pub(crate) fn same_parameter<K: ParamSurface>(
         let (v, basis_v) = grid((c, d), &bv, n)?;
         let s = interpolate(kind, (&u, &v), (basis_u, basis_v), meter)?;
         let e = certify(kind, &s, (&u, &v), meter)?;
+        let done = e <= target * 0.5 || n >= MOST;
         // Twice the samples cut a smooth kind's bicubic error about sixteen times, and its
         // certificate at least a few times (on coarse grids the enclosures' own widths, which
         // fall with the boxes', dominate it); where the certificate does not fall by a quarter,
         // it has met rounding or a jump of the kind, and more samples would not help.
-        if e <= target * 0.5 || n >= MOST || e > last * 0.75 {
+        let stuck = e > last * 0.75;
+        if done || stuck {
             break (s, e);
         }
         last = e;
