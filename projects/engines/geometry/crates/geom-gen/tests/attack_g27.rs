@@ -18,10 +18,13 @@
 //!   not build.
 //! - `each_module_header_counts_the_bounds_multiplications`: the cost line of each generated
 //!   module.
-//! - `orient2d_on_exact_zeros_is_not_slower_than_before`: principle 12 (G01 section 3), speed
-//!   regressions over 5% block a merge; release builds only. Its baseline is the public body
-//!   before this piece, behind the same calls as the public function now (the fixer replaced a
-//!   replica that already had the new, cheaper `i64` differences).
+//! - `orient2d_on_exact_zeros_reports_its_time_against_before`: a guard that the public body
+//!   before this piece and the public function now both answer `Zero` on exactly collinear
+//!   points, and a printed wall-clock comparison of the two, which cannot fail; release builds
+//!   only. Principle 12's 5% on these inputs is judged on counts, by `geom-bench`'s
+//!   `predicate/orient2d/degenerate` in `kernel-bench.yml` (the test's documentation). Its
+//!   baseline is the public body before this piece, behind the same calls as the public function
+//!   now (the fixer replaced a replica that already had the new, cheaper `i64` differences).
 //! - `orient2d_filter_is_exact_just_inside_and_just_outside_its_bound`: chapter 28.6's inputs
 //!   placed at the bound, a guard.
 
@@ -630,7 +633,7 @@ fn each_module_header_counts_the_bounds_multiplications() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Principle 12: no speed regression over 5%.
+// Principle 12: no speed regression over 5%, judged on counts in geom-bench; reported here.
 // ---------------------------------------------------------------------------------------------
 
 /// `predicate::orient2d` before this piece, as a caller in another crate reached it: a call to a
@@ -684,13 +687,22 @@ fn time(inputs: &[[P2; 3]], f: fn(P2, P2, P2) -> Result<Sign, NumError>) -> f64 
 /// G01 section 3, principle 12: "speed regressions over 5% block a merge". Chapter 23.2: in a
 /// building many predicate calls are exactly zero, and a filter can never certify a zero, so on
 /// such calls the filter is pure overhead. The builder's own benchmark measured the public
-/// orient2d at about 1.55 to 1.65 times its old cost on degenerate data. This measures it on points
-/// of one lattice line (every value exactly zero), each route timed in turn in every round and
-/// keeping its best round, both behind the same two calls a caller in another crate makes. Release
-/// builds only: debug timings mean nothing.
+/// orient2d at about 1.55 to 1.65 times its old cost on degenerate data.
+///
+/// Where the 5% is judged: on counts, never here. `geom-bench`'s `predicate/orient2d/degenerate`
+/// runs the public orient2d on exactly collinear points (its `tests/inputs.rs` checks every answer
+/// is `Zero`), and `kernel-bench.yml`'s count gates fail a pull request that raises it by more than
+/// 5% against its merge base: instructions under Callgrind on Linux x86-64 and aarch64, where the
+/// route skips the filter, and WebAssembly fuel on wasm32, where the filter runs first (chapters
+/// 23.13 and 28.14). This test only prints a wall-clock comparison with the public body before
+/// this piece, on points of one lattice line (every value exactly zero), each route timed in turn
+/// in every round and keeping its best round, both behind the same two calls a caller in another
+/// crate makes. It cannot fail on time: at about 4 ns a call, a shared runner's noise moves the
+/// ratio by more than 5% (it read 1.26 on an unchanged route, issue #371). It fails only if either
+/// route answers anything but `Zero`. Release builds only: debug timings mean nothing.
 #[cfg_attr(debug_assertions, ignore = "a timing: release builds only")]
 #[test]
-fn orient2d_on_exact_zeros_is_not_slower_than_before() {
+fn orient2d_on_exact_zeros_reports_its_time_against_before() {
     let mut r = rng("orient2d exact zeros", 0x6727_a77a_c000_0002);
     let inputs: Vec<[P2; 3]> = (0..1 << 14)
         .map(|_| {
@@ -726,13 +738,8 @@ fn orient2d_on_exact_zeros_is_not_slower_than_before() {
         }
     }
     println!(
-        "orient2d on exact zeros: before {before:.2} ns, now {now:.2} ns, ratio {:.3}",
-        now / before
-    );
-    assert!(
-        now <= before * 1.05,
-        "orient2d on exactly collinear points takes {:.2}x its time before the generated filter \
-         ({now:.2} ns against {before:.2} ns): over principle 12's 5%",
+        "orient2d on exact zeros: before {before:.2} ns, now {now:.2} ns, ratio {:.3} (a report: \
+         geom-bench's predicate/orient2d/degenerate holds the 5% on counts)",
         now / before
     );
 }
