@@ -199,6 +199,15 @@ fn corner(y: f64, x: f64) -> Option<(f64, f64)> {
 /// where sinpi and cospi on extreme inputs then cost 5.4% and 6.2% more instructions (G41's count
 /// gate), and `#[inline]` did not bring it back. (Splitting it so the generic part only called the
 /// point function cost each call about 25 instructions more on x86-64: the count gate again.)
+///
+/// Always inline into its one caller per copy: G47's x86-64 count gate found both copies out of
+/// line, `Interval::sinpi` and `cospi` a 39-instruction call around them, 7% to 9% more
+/// instructions, after `math::fma` became always inline, an edit to neither function.
+#[allow(
+    clippy::inline_always,
+    reason = "measured: left to LLVM it went out of line after an unrelated edit, on x86-64"
+)]
+#[inline(always)]
 fn periodic(
     x: Interval,
     f: impl Fn(f64) -> f64,
