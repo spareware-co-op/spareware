@@ -47,6 +47,10 @@ pub enum LinalgError {
     OutOfWork,
     /// An allocation could not be made.
     OutOfMemory,
+    /// An iteration did not converge within its cap (the SVDs and the eigensolver).
+    NoConvergence,
+    /// The matrix is not symmetric where a symmetric one is needed (the eigensolver).
+    NotSymmetric,
     /// A step its own bounds rule out failed: a defect, reported, never answered.
     Defect,
 }
@@ -69,6 +73,8 @@ impl core::fmt::Display for LinalgError {
             LinalgError::NotPositiveDefinite => "the matrix is not symmetric positive definite",
             LinalgError::OutOfWork => "the work budget cannot cover the factorisation",
             LinalgError::OutOfMemory => "an allocation could not be made",
+            LinalgError::NoConvergence => "an iteration did not converge within its cap",
+            LinalgError::NotSymmetric => "the matrix is not symmetric",
             LinalgError::Defect => "a step its own bounds rule out failed (a defect)",
         })
     }

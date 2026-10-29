@@ -13,8 +13,14 @@
 //!   `geom-num` and every class chapter 28.6 names (random inputs, inputs one step from exact
 //!   degeneracy, inputs on both sides of the filter's bound, the corner sets, the laws), the test
 //!   that compares it with a big-integer oracle, by file and function. Each named test must exist
-//!   and its file must call the predicate; a public predicate the matrix does not list fails it,
-//!   so a new predicate cannot merge unverified.
+//!   and reach the predicate in its code, directly or through the functions and constants of its
+//!   file it uses (`geom_test::rust_source::references`, so the matrix's own strings never count:
+//!   gate 1, piece G43, found that a file-wide search let them); a public predicate the matrix does
+//!   not list fails it, so a new predicate cannot merge unverified.
+//! - **The perturbed predicates' corners and ties** (G43): all four at every sign corner of their
+//!   unperturbed predicates, insphere's 32,768 included, and on ties anywhere on the grid against
+//!   `symbolic_sign`, an oracle that multiplies the perturbed determinant out into monomials of ε,
+//!   so insphere's ties, which `attack_g30.rs`'s concrete ε cannot afford, meet an oracle too.
 //! - **The filter boundary of the implicit-point predicates**, the class G29's tests did not have:
 //!   `side_of_tpi`, `side_of_lpi` and `Ssi::orient2d`, each on families of inputs whose exact value
 //!   grows step by step from zero, searched for the step where the generated filter starts to
@@ -68,6 +74,7 @@ use geom_num::grid::{COORD_MAX, P2, P3};
 use geom_num::plane::{Lpi, Plane, Tpi};
 use geom_num::{NumError, Sign, perturb, predicate};
 use geom_test::prop;
+use geom_test::rust_source::references;
 use geom_test::seed::Seed;
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
@@ -1043,16 +1050,48 @@ fn crossing_laws() {
     .unwrap_or_else(|f| panic!("{f}"));
 }
 
-/// The perturbed predicates at every sign corner of orient2d and incircle (coordinates ±M), with
-/// points repeated so ties occur: never `Zero`, the exact sign wherever it is not `Zero`, and
-/// swapping two points with their keys flips the answer.
+/// The perturbed predicates at every sign corner of their unperturbed predicates (coordinates
+/// ±M: 256 inputs for orient2d and incircle, 4,096 for orient3d and 32,768 for insphere), where
+/// points repeat and ties abound: never `Zero`, the exact sign wherever it is not `Zero`, and
+/// swapping two points with their keys flips the answer. Debug builds take every twentieth corner
+/// of orient3d and insphere, as the suite's case counts do.
 #[test]
 fn perturbed_predicates_at_the_sign_corners() {
     let m = COORD_MAX;
-    let corner = |code: u32, i: u32| -> Pt2 {
-        let bit = |b: u32| if code >> b & 1 == 1 { m } else { -m };
-        [bit(2 * i), bit(2 * i + 1)]
+    let bit = |code: u32, b: u32| if code >> b & 1 == 1 { m } else { -m };
+    let corner = |code: u32, i: u32| -> Pt2 { [bit(code, 2 * i), bit(code, 2 * i + 1)] };
+    let corner3 = |code: u32, i: u32| -> Pt3 {
+        [bit(code, 3 * i), bit(code, 3 * i + 1), bit(code, 3 * i + 2)]
     };
+    let step = if cfg!(debug_assertions) { 20 } else { 1 };
+    for code in (0..1u32 << 12).step_by(step) {
+        let pts: [Pt3; 4] = [0, 1, 2, 3].map(|i| corner3(code, i));
+        let keyed = |i: usize| (p3(pts[i]), i as u64);
+        let exact = oracle_orient3d(pts[0], pts[1], pts[2], pts[3]);
+        let s = perturb::orient3d(keyed(0), keyed(1), keyed(2), keyed(3)).unwrap();
+        assert_ne!(s, Sign::Zero);
+        if exact != Sign::Zero {
+            assert_eq!(s, exact);
+        }
+        assert_eq!(
+            perturb::orient3d(keyed(1), keyed(0), keyed(2), keyed(3)).unwrap(),
+            s.negate()
+        );
+    }
+    for code in (0..1u32 << 15).step_by(step) {
+        let pts: [Pt3; 5] = [0, 1, 2, 3, 4].map(|i| corner3(code, i));
+        let keyed = |i: usize| (p3(pts[i]), i as u64);
+        let exact = oracle_insphere(pts[0], pts[1], pts[2], pts[3], pts[4]);
+        let s = perturb::insphere(keyed(0), keyed(1), keyed(2), keyed(3), keyed(4)).unwrap();
+        assert_ne!(s, Sign::Zero);
+        if exact != Sign::Zero {
+            assert_eq!(s, exact);
+        }
+        assert_eq!(
+            perturb::insphere(keyed(0), keyed(1), keyed(2), keyed(4), keyed(3)).unwrap(),
+            s.negate()
+        );
+    }
     for code in 0..1u32 << 8 {
         let pts: [Pt2; 4] = [0, 1, 2, 3].map(|i| corner(code, i));
         let keyed = |i: usize| (p2(pts[i]), i as u64);
@@ -1077,6 +1116,296 @@ fn perturbed_predicates_at_the_sign_corners() {
             s4.negate()
         );
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The perturbed predicates' ties, against a symbolic oracle.
+
+/// Every permutation of 0..n with whether it is odd, in lexicographic order.
+fn permutations(n: usize) -> Vec<(Vec<usize>, bool)> {
+    let mut out = Vec::new();
+    let mut perm: Vec<usize> = (0..n).collect();
+    loop {
+        let inversions = (0..n)
+            .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
+            .filter(|&(i, j)| perm[i] > perm[j])
+            .count();
+        out.push((perm.clone(), inversions % 2 == 1));
+        let Some(i) = (0..n.saturating_sub(1))
+            .rev()
+            .find(|&i| perm[i] < perm[i + 1])
+        else {
+            return out;
+        };
+        let j = (i + 1..n).rev().find(|&j| perm[j] > perm[i]).unwrap();
+        perm.swap(i, j);
+        perm[i + 1..].reverse();
+    }
+}
+
+/// The sign symbolic perturbation gives the absolute matrix whose rows are `rows`: each row is a
+/// point's perturbed entries (its coordinates, then its lifted coordinate for incircle and
+/// insphere) with the point's key, and the constant 1 closes it. Entry c of the point whose key
+/// has rank r gains ε^(2^(r·P + c)), P entries per row, and the answer is the sign of
+/// det(M + εE) as ε → 0⁺: the ordering `geom_num::perturb` states and `attack_g30.rs`'s oracle
+/// evaluates with a concrete ε.
+///
+/// Computed by neither method: the Leibniz expansion, every term multiplied out into monomials of
+/// ε in exact integers. A perturbed entry is v + ε^(2^e), so a monomial's exponent is a sum of
+/// distinct powers of two, one for each perturbed entry it took; the monomials are gathered by
+/// exponent, and the lowest exponent whose coefficient is not zero dominates. The numbers stay
+/// the size of the products of the entries, so insphere's twenty perturbed entries, which the
+/// concrete ε cannot afford, cost 120 terms of at most 16 monomials.
+fn symbolic_sign(rows: &[(Vec<i128>, u64)]) -> Sign {
+    let n = rows.len();
+    let p = n - 1;
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by_key(|&i| rows[i].1);
+    let mut rank = vec![0; n];
+    for (r, &i) in order.iter().enumerate() {
+        rank[i] = r;
+    }
+    let mut coefficients: std::collections::BTreeMap<u64, IBig> = std::collections::BTreeMap::new();
+    for (perm, odd) in permutations(n) {
+        let mut terms: Vec<(u64, IBig)> = vec![(0, IBig::ONE)];
+        for (row, &col) in perm.iter().enumerate() {
+            if col == p {
+                continue;
+            }
+            let value = IBig::from(rows[row].0[col]);
+            let e = 1u64 << (rank[row] * p + col);
+            terms = terms
+                .into_iter()
+                .flat_map(|(x, c)| [(x, &c * &value), (x | e, c)])
+                .collect();
+        }
+        for (x, c) in terms {
+            let slot = coefficients.entry(x).or_insert(IBig::ZERO);
+            if odd {
+                *slot -= c;
+            } else {
+                *slot += c;
+            }
+        }
+    }
+    coefficients
+        .values()
+        .find(|c| **c != IBig::ZERO)
+        .map_or(Sign::Zero, sign_of)
+}
+
+/// The rows of `symbolic_sign` for keyed points, lifted (incircle, insphere) or not: in `i128`,
+/// since a lifted coordinate reaches 3 · 2^80.
+fn keyed_rows<const D: usize>(points: &[([i64; D], u64)], lifted: bool) -> Vec<(Vec<i128>, u64)> {
+    points
+        .iter()
+        .map(|&(p, key)| {
+            let mut v: Vec<i128> = p.iter().map(|&c| i128::from(c)).collect();
+            if lifted {
+                v.push(v.iter().map(|c| c * c).sum());
+            }
+            (v, key)
+        })
+        .collect()
+}
+
+/// N distinct keys in a random order.
+fn keys<const N: usize>() -> impl Strategy<Value = [u64; N]> {
+    proptest::sample::subsequence((0..64u64).collect::<Vec<_>>(), N)
+        .prop_shuffle()
+        .prop_map(|v| <[u64; N]>::try_from(v).unwrap())
+}
+
+/// Integer points on x² + y² = 25.
+const CIRCLE: [Pt2; 12] = [
+    [5, 0],
+    [4, 3],
+    [3, 4],
+    [0, 5],
+    [-3, 4],
+    [-4, 3],
+    [-5, 0],
+    [-4, -3],
+    [-3, -4],
+    [0, -5],
+    [3, -4],
+    [4, -3],
+];
+
+/// Integer points on x² + y² + z² = 9.
+const SPHERE: [Pt3; 10] = [
+    [3, 0, 0],
+    [-3, 0, 0],
+    [0, 3, 0],
+    [0, -3, 0],
+    [0, 0, 3],
+    [0, 0, -3],
+    [1, 2, 2],
+    [2, -1, 2],
+    [-2, 2, 1],
+    [2, 2, -1],
+];
+
+/// Points on a line through a with direction u, a few steps apart (repeats included), anywhere on
+/// the grid.
+fn collinear() -> impl Strategy<Value = [Pt2; 3]> {
+    let reach = COORD_MAX - 8 * 1024;
+    (
+        proptest::array::uniform2(-reach..=reach),
+        proptest::array::uniform2(-1024i64..=1024),
+        proptest::array::uniform3(-8i64..=8),
+    )
+        .prop_map(|(a, u, s)| s.map(|s| [a[0] + s * u[0], a[1] + s * u[1]]))
+}
+
+/// Points on a plane through a spanned by u and v (repeats and collinear sets included).
+fn coplanar() -> impl Strategy<Value = [Pt3; 4]> {
+    let reach = COORD_MAX - 16 * 1024;
+    (
+        proptest::array::uniform3(-reach..=reach),
+        proptest::array::uniform3(-1024i64..=1024),
+        proptest::array::uniform3(-1024i64..=1024),
+        proptest::array::uniform4(proptest::array::uniform2(-8i64..=8)),
+    )
+        .prop_map(|(a, u, v, st)| st.map(|[s, t]| [0, 1, 2].map(|i| a[i] + s * u[i] + t * v[i])))
+}
+
+/// Points on a circle of radius 5s centred anywhere on the grid (repeats included).
+fn cocircular() -> impl Strategy<Value = [Pt2; 4]> {
+    (1i64..=1 << 20, proptest::array::uniform4(0..12usize))
+        .prop_flat_map(|(s, pick)| {
+            let reach = COORD_MAX - 5 * s;
+            (
+                Just(s),
+                Just(pick),
+                proptest::array::uniform2(-reach..=reach),
+            )
+        })
+        .prop_map(|(s, pick, o)| pick.map(|i| [0, 1].map(|c| CIRCLE[i][c] * s + o[c])))
+}
+
+/// Points on a sphere of radius 3s centred anywhere on the grid (repeats, and sets on one circle,
+/// included).
+fn cospherical() -> impl Strategy<Value = [Pt3; 5]> {
+    (1i64..=1 << 20, proptest::array::uniform5(0..10usize))
+        .prop_flat_map(|(s, pick)| {
+            let reach = COORD_MAX - 3 * s;
+            (
+                Just(s),
+                Just(pick),
+                proptest::array::uniform3(-reach..=reach),
+            )
+        })
+        .prop_map(|(s, pick, o)| pick.map(|i| [0, 1, 2].map(|c| SPHERE[i][c] * s + o[c])))
+}
+
+/// One keyed tie: the oracle's sign (negated where the predicate's sign is the absolute
+/// determinant's opposite) is never `Zero`, the predicate gives it, and the same points with the
+/// first one moved a step off the tie get the exact sign from both, which holds the convention.
+fn tie<const D: usize, const N: usize>(
+    points: [[i64; D]; N],
+    keys: [u64; N],
+    lifted: bool,
+    negated: bool,
+    exact: impl Fn(&[[i64; D]; N]) -> Sign,
+    perturbed: impl Fn(&[([i64; D], u64); N]) -> Result<Sign, NumError>,
+) -> Result<(), TestCaseError> {
+    let oracle = |pts: &[([i64; D], u64); N]| {
+        let s = symbolic_sign(&keyed_rows(pts, lifted));
+        if negated { s.negate() } else { s }
+    };
+    let keyed: [([i64; D], u64); N] = core::array::from_fn(|i| (points[i], keys[i]));
+    let want = oracle(&keyed);
+    prop_assert_ne!(want, Sign::Zero, "{:?}", keyed);
+    prop_assert_eq!(perturbed(&keyed), Ok(want), "{:?}", keyed);
+    let mut moved = points;
+    moved[0][0] += if moved[0][0] < COORD_MAX { 1 } else { -1 };
+    let exact = exact(&moved);
+    if exact != Sign::Zero {
+        let keyed: [([i64; D], u64); N] = core::array::from_fn(|i| (moved[i], keys[i]));
+        prop_assert_eq!(oracle(&keyed), exact, "{:?}", keyed);
+        prop_assert_eq!(perturbed(&keyed), Ok(exact), "{:?}", keyed);
+    }
+    Ok(())
+}
+
+/// The four perturbed predicates on ties (collinear, cocircular, coplanar and cospherical points
+/// anywhere on the grid, repeated points with distinct keys among them), against
+/// `symbolic_sign`, an oracle that shares no method with the module or with `attack_g30.rs`'s
+/// concrete ε; insphere, which that oracle cannot afford, is held to an oracle here for the first
+/// time (piece G43).
+#[test]
+fn perturbed_ties_match_a_symbolic_oracle() {
+    let k2 = |p: &[(Pt2, u64)], i: usize| (p2(p[i].0), p[i].1);
+    let k3 = |p: &[(Pt3, u64)], i: usize| (p3(p[i].0), p[i].1);
+    prop::run(
+        "perturbed_ties_match_a_symbolic_oracle (orient2d)",
+        Seed(0x6743_0000_0000_0001),
+        cases(512),
+        &(collinear(), keys::<3>()),
+        |(pts, keys)| {
+            tie(
+                pts,
+                keys,
+                false,
+                false,
+                |p| oracle_orient2d(p[0], p[1], p[2]),
+                |p| perturb::orient2d(k2(p, 0), k2(p, 1), k2(p, 2)),
+            )
+        },
+    )
+    .unwrap_or_else(|f| panic!("{f}"));
+    prop::run(
+        "perturbed_ties_match_a_symbolic_oracle (incircle)",
+        Seed(0x6743_0000_0000_0002),
+        cases(512),
+        &(cocircular(), keys::<4>()),
+        |(pts, keys)| {
+            tie(
+                pts,
+                keys,
+                true,
+                false,
+                |p| oracle_incircle(p[0], p[1], p[2], p[3]),
+                |p| perturb::incircle(k2(p, 0), k2(p, 1), k2(p, 2), k2(p, 3)),
+            )
+        },
+    )
+    .unwrap_or_else(|f| panic!("{f}"));
+    prop::run(
+        "perturbed_ties_match_a_symbolic_oracle (orient3d)",
+        Seed(0x6743_0000_0000_0003),
+        cases(512),
+        &(coplanar(), keys::<4>()),
+        |(pts, keys)| {
+            tie(
+                pts,
+                keys,
+                false,
+                true,
+                |p| oracle_orient3d(p[0], p[1], p[2], p[3]),
+                |p| perturb::orient3d(k3(p, 0), k3(p, 1), k3(p, 2), k3(p, 3)),
+            )
+        },
+    )
+    .unwrap_or_else(|f| panic!("{f}"));
+    prop::run(
+        "perturbed_ties_match_a_symbolic_oracle (insphere)",
+        Seed(0x6743_0000_0000_0004),
+        cases(512),
+        &(cospherical(), keys::<5>()),
+        |(pts, keys)| {
+            tie(
+                pts,
+                keys,
+                true,
+                true,
+                |p| oracle_insphere(p[0], p[1], p[2], p[3], p[4]),
+                |p| perturb::insphere(k3(p, 0), k3(p, 1), k3(p, 2), k3(p, 3), k3(p, 4)),
+            )
+        },
+    )
+    .unwrap_or_else(|f| panic!("{f}"));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1105,7 +1434,9 @@ enum Where {
     NotApplicable(&'static str),
 }
 
-/// A public predicate: its name as the files call it, and where each class is checked.
+/// A public predicate: its name, how a test names it in code (a path such as
+/// `predicate::orient2d`, matched by its last segments, or a method such as `.side`), and where
+/// each class is checked.
 struct Row {
     predicate: &'static str,
     call: &'static str,
@@ -1215,7 +1546,12 @@ fn implicit(
     }
 }
 
-fn perturbed(predicate: &'static str, call: &'static str) -> Row {
+fn perturbed(
+    predicate: &'static str,
+    call: &'static str,
+    ties: (&'static str, &'static str),
+    laws: (&'static str, &'static str),
+) -> Row {
     use Class::*;
     use Where::{NotApplicable, Test};
     Row {
@@ -1229,13 +1565,7 @@ fn perturbed(predicate: &'static str, call: &'static str) -> Row {
                     "the_exact_sign_wins_wherever_it_is_not_zero",
                 ),
             ),
-            (
-                OneStep,
-                Test(
-                    "attack_g30.rs",
-                    "incircle_and_orient3d_ties_match_the_oracle",
-                ),
-            ),
+            (OneStep, Test(ties.0, ties.1)),
             (
                 Boundary,
                 NotApplicable(
@@ -1249,13 +1579,7 @@ fn perturbed(predicate: &'static str, call: &'static str) -> Row {
                     "perturbed_predicates_at_the_sign_corners",
                 ),
             ),
-            (
-                Laws,
-                Test(
-                    "attack_g30.rs",
-                    "every_tie_obeys_the_laws_and_is_never_zero",
-                ),
-            ),
+            (Laws, Test(laws.0, laws.1)),
         ],
     }
 }
@@ -1264,13 +1588,13 @@ fn matrix() -> Vec<Row> {
     use Class::*;
     use Where::{NotApplicable, Test};
     vec![
-        explicit("predicate::orient2d", "orient2d("),
-        explicit("predicate::orient3d", "orient3d("),
-        explicit("predicate::incircle", "incircle("),
-        explicit("predicate::insphere", "insphere("),
+        explicit("predicate::orient2d", "predicate::orient2d"),
+        explicit("predicate::orient3d", "predicate::orient3d"),
+        explicit("predicate::incircle", "predicate::incircle"),
+        explicit("predicate::insphere", "predicate::insphere"),
         Row {
             predicate: "plane::Plane::side",
-            call: ".side(",
+            call: ".side",
             classes: [
                 (Random, Test("plane.rs", "plane_matches_oracle")),
                 (OneStep, Test("plane.rs", "points_almost_on_a_plane")),
@@ -1292,27 +1616,79 @@ fn matrix() -> Vec<Row> {
         },
         implicit(
             "plane::Plane::side_of_tpi",
-            ".side_of_tpi(",
+            ".side_of_tpi",
             "side_of_tpi_filter_boundary_crossed_both_ways",
             ("plane.rs", "tpi_permutation_laws"),
         ),
         implicit(
             "plane::Plane::side_of_lpi",
-            ".side_of_lpi(",
+            ".side_of_lpi",
             "side_of_lpi_filter_boundary_crossed_both_ways",
             ("verification.rs", "line_plane_point_laws"),
         ),
         implicit(
             "crossing::Ssi::orient2d",
-            ".orient2d(",
+            ".orient2d",
             "ssi_orient2d_filter_boundary_crossed_both_ways",
             ("verification.rs", "crossing_laws"),
         ),
-        perturbed("perturb::orient2d", "perturb::orient2d("),
-        perturbed("perturb::orient3d", "perturb::orient3d("),
-        perturbed("perturb::incircle", "perturb::incircle("),
-        perturbed("perturb::insphere", "perturb::insphere("),
+        perturbed(
+            "perturb::orient2d",
+            "perturb::orient2d",
+            (
+                "attack_g30.rs",
+                "orient2d_ties_match_the_oracle_and_obey_the_laws",
+            ),
+            (
+                "attack_g30.rs",
+                "orient2d_ties_match_the_oracle_and_obey_the_laws",
+            ),
+        ),
+        perturbed(
+            "perturb::orient3d",
+            "perturb::orient3d",
+            (
+                "attack_g30.rs",
+                "incircle_and_orient3d_ties_match_the_oracle",
+            ),
+            (
+                "attack_g30.rs",
+                "every_tie_obeys_the_laws_and_is_never_zero",
+            ),
+        ),
+        perturbed(
+            "perturb::incircle",
+            "perturb::incircle",
+            (
+                "attack_g30.rs",
+                "incircle_and_orient3d_ties_match_the_oracle",
+            ),
+            (
+                "attack_g30.rs",
+                "every_tie_obeys_the_laws_and_is_never_zero",
+            ),
+        ),
+        perturbed(
+            "perturb::insphere",
+            "perturb::insphere",
+            ("verification.rs", "perturbed_ties_match_a_symbolic_oracle"),
+            (
+                "attack_g30.rs",
+                "every_tie_obeys_the_laws_and_is_never_zero",
+            ),
+        ),
     ]
+}
+
+/// Whether what a test reaches names `call`: a method by its name, a path by its last segments
+/// (`geom_num::predicate::orient2d` names `predicate::orient2d`).
+fn names(reach: &std::collections::BTreeSet<String>, call: &str) -> bool {
+    if call.starts_with('.') {
+        return reach.contains(call);
+    }
+    reach
+        .iter()
+        .any(|p| p == call || p.ends_with(&format!("::{call}")))
 }
 
 /// The public predicates of a source: every `pub fn` (or `pub const fn`) returning
@@ -1392,14 +1768,17 @@ fn every_predicate_is_verified_in_every_class() {
                         .iter()
                         .find(|(f, _)| f == file)
                         .map_or_else(|| panic!("{}: no file {file}", row.predicate), |(_, t)| *t);
+                    let reach = references(text, function)
+                        .unwrap_or_else(|e| panic!("{file} is not Rust: {e}"))
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "{} {class:?}: {file} has no test `{function}`",
+                                row.predicate
+                            )
+                        });
                     assert!(
-                        text.contains(&format!("fn {function}(")),
-                        "{} {class:?}: {file} has no test `{function}`",
-                        row.predicate
-                    );
-                    assert!(
-                        text.contains(row.call),
-                        "{} {class:?}: {file} never calls `{}`",
+                        names(&reach, row.call),
+                        "{} {class:?}: `{function}` in {file} never reaches `{}`",
                         row.predicate,
                         row.call
                     );
@@ -1417,6 +1796,26 @@ fn every_predicate_is_verified_in_every_class() {
             }
         }
     }
+}
+
+/// The matrix's reach check refuses a cited test that never calls its predicate, even in a file
+/// that spells the predicate's name elsewhere, as this file's matrix does (the gap gate 1 found:
+/// a file-wide search counted the matrix's own strings).
+#[test]
+fn the_matrix_refuses_a_test_that_does_not_reach_its_predicate() {
+    let this = FILES
+        .iter()
+        .find(|(f, _)| *f == "verification.rs")
+        .unwrap()
+        .1;
+    assert!(this.contains("\"perturb::insphere\""));
+    let fixtures = references(this, "every_fixture_replays").unwrap().unwrap();
+    assert!(!names(&fixtures, "perturb::insphere"));
+    let corners = references(this, "perturbed_predicates_at_the_sign_corners")
+        .unwrap()
+        .unwrap();
+    assert!(names(&corners, "perturb::insphere"));
+    assert!(!names(&corners, ".side"));
 }
 
 #[test]

@@ -51,6 +51,10 @@
 //!   `FPTaylor`'s (`generated/fptaylor-<name>.fpt`, whose certificates HOL Light checks), for
 //!   orient2d and orient3d. `kernel-certificates.yml` runs the tools with the scripts in
 //!   `certificates/`, and `tests/certificate_problems.rs` holds each problem to the shipped filter.
+//! - [`quadrature`], the Gauss–Legendre and Gauss–Kronrod rules `geom-num` integrates with,
+//!   computed in exact rationals (Golub and Welsch's method for the Gauss rules, Kronrod's
+//!   definition for his extensions) and each node and weight rounded once, correctly, into
+//!   `geom-num`'s `src/quadrature_rules/`.
 //!
 //! Invariants this crate keeps:
 //!
@@ -80,12 +84,15 @@
 //! code's; `geom-test` already brings it.
 //!
 //! Licences of every outside package this crate brings into a build itself, on every target
-//! (`cargo tree --target all`), each record checked by `geom-test`'s `tests/licences.rs`: only its
-//! tests' `proc-macro2` and what that brings. Every other outside package in its build comes
-//! through `geom-num` or `geom-test`. Where a package offers a choice, it is taken under the
-//! permissive licences offered (MIT or Apache-2.0):
+//! (`cargo tree --target all`), each record checked by `geom-test`'s `tests/licences.rs`: the
+//! exact big integers and rationals of the quadrature-rules generator (`dashu-int`, `dashu-ratio`
+//! and what they bring), and its tests' `proc-macro2` and what that brings. Every other outside
+//! package in its build comes through `geom-num` or `geom-test`. Where a package offers a choice,
+//! it is taken under the permissive licences offered (MIT or Apache-2.0):
 //!
-//! - MIT OR Apache-2.0: `proc-macro2`.
+//! - MIT OR Apache-2.0: `cfg-if`, `dashu-base`, `dashu-int`, `dashu-ratio`, `proc-macro2`,
+//!   `static_assertions`.
+//! - Apache-2.0: `num-modular`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 #![forbid(unsafe_code)]
 
@@ -99,6 +106,7 @@ pub mod predicate_derive;
 pub mod predicate_emit;
 pub mod predicate_lang;
 pub mod predicates;
+pub mod quadrature;
 pub mod registry;
 
 pub use files::{Folder, Registry};

@@ -164,7 +164,27 @@
           "id": "geom-bench/output-hashes",
           "what": "geom-bench's golden file (piece G06, chapter 23.13's output hashes): the SHA-256 of every benchmark's inputs and results, one line per benchmark, which every benchmark harness checks; pinned here by the SHA-256 of the file's text with LF line ends, so an edit to it is an edit to the store.",
           "file": "projects/engines/geometry/crates/geom-bench/src/golden.txt",
-          "history": [{"sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a", "kind": "corpus", "piece": "G29", "why": "74 new benchmarks: the line-plane point, the 2D crossing and their generated predicates; no existing digest moved"}, {"sha256": "e8a4b32fa50de11e27cfde59f8d624a9fe47420e6b292e73f1fe70c17110175f", "kind": "corpus", "piece": "G30", "why": "8 new benchmarks: the perturbed predicates' exact path and ties; no existing digest moved"}, {"sha256": "46bed21bdaf52d1360dd3e3903f10d4e5eee5d4fddeb8e33243083a2f5dd4c31", "kind": "corpus", "piece": "G42", "why": "176 new benchmarks: the plain-i128 and width-aware limb variants of every generated exact path, Avnaim et al.'s signs of orient2d and orient3d, and Wide32 at the widths Wide is measured at; no existing digest moved; merged after G30's 8 perturbation benchmarks, whose rows are kept unchanged."}], "sha256": "d4795e4681d510f670cf38db23c2707f3de7eb94dd049957e8c9d4c53a73a872"
+          "history": [
+            {
+              "sha256": "87aaef0ad599b2af639669d5dce53496ce67b574ec71d1e055594f139130882a",
+              "kind": "corpus",
+              "piece": "G29",
+              "why": "74 new benchmarks: the line-plane point, the 2D crossing and their generated predicates; no existing digest moved"
+            },
+            {
+              "sha256": "e8a4b32fa50de11e27cfde59f8d624a9fe47420e6b292e73f1fe70c17110175f",
+              "kind": "corpus",
+              "piece": "G30",
+              "why": "8 new benchmarks: the perturbed predicates' exact path and ties; no existing digest moved"
+            },
+            {
+              "sha256": "46bed21bdaf52d1360dd3e3903f10d4e5eee5d4fddeb8e33243083a2f5dd4c31",
+              "kind": "corpus",
+              "piece": "G42",
+              "why": "176 new benchmarks: the plain-i128 and width-aware limb variants of every generated exact path, Avnaim et al.'s signs of orient2d and orient3d, and Wide32 at the widths Wide is measured at; no existing digest moved; merged after G30's 8 perturbation benchmarks, whose rows are kept unchanged."
+            }
+          ],
+          "sha256": "d4795e4681d510f670cf38db23c2707f3de7eb94dd049957e8c9d4c53a73a872"
         },
         {
           "id": "geom-nurbs/fit",
@@ -215,6 +235,56 @@
             "function": "surface_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd"
+        },
+        {
+          "id": "geom-bvh/tree",
+          "what": "The box tree of geom-bvh (piece G54): 2D and 3D trees over 22 fixed sets of 1 to 9,000 boxes (sparse, dense, nested and all equal, the largest built with the parallel subtree phase), each tree's canonical bytes, the keys meeting eight query boxes, its pairs and its pairs with another tree both ways, the work each of those walks charged, and one refit of each, 3,970,021 bytes in the encoding of tests/tree_determinism.rs.",
+          "check": {
+            "crate": "geom-bvh",
+            "test": "tree_determinism",
+            "function": "tree_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9286771316237554822844bb7bebfe4dfb2ba38b8f8f1ebdee5e23100e383ee8"
+        },
+        {
+          "id": "geom-bvh/cells",
+          "what": "The Morton-sorted cell index of geom-bvh (piece G55): indexes over seven fixed sets of 1 to 20,000 grid points (sparse over the frame, dense, clustered at the frame's edge, the eight corners and 300 equal points), each index's canonical bytes, the keys within six radii of twelve centres and the work each search charged, and every pair within two radii, in the encoding of tests/cells_determinism.rs.",
+          "check": {
+            "crate": "geom-bvh",
+            "test": "cells_determinism",
+            "function": "cells_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "43aace359b854c006c7402104804f6aa51a45230484e66d5173c890586c1b541"
+        },
+        {
+          "id": "geom-num/roots-and-quadrature",
+          "what": "Brent's zero and minimum, the generated Gauss-Legendre and Gauss-Kronrod rules and the adaptive integrator (piece G51): every rule's nodes and weights, 1,790 results over fixed problems and every point each search and integration evaluated, in order, in the canonical encoding of tests/roots_quadrature_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "roots_quadrature_determinism",
+            "function": "roots_and_quadrature_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "624a2f76c0790d4cd1c05ed823c612a01217419ccce217b824f2fcd093912b26"
+        },
+        {
+          "id": "geom-math/rotations",
+          "what": "geom-math's rational rotations (piece G46): 2D searches for 175 directions at seven bounds, 3D searches for 129 quaternion targets at five bounds, 300 compositions at three bounds (exact and re-approximated) and as typed transforms, images of grid points at the frame's edges, every result's matrix, inverse, direction, rational and floating-point forms, and typed transforms of every variant composed, as tests/rotation_determinism.rs records them.",
+          "check": {
+            "crate": "geom-math",
+            "test": "rotation_determinism",
+            "function": "rotation_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "330445e67c88e24daf07e62cdf53cf1ead9abb5ae80c7219b69ed38842c91589"
+        },
+        {
+          "id": "geom-linalg/spectral",
+          "what": "The singular value decompositions (one-sided Jacobi and Golub-Kahan) and the symmetric eigensolver of geom-linalg (piece G50): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), both SVDs of each and the eigendecomposition of each square one's symmetric part, and two refusals for want of work: 546 results in the canonical encoding of tests/spectral_determinism.rs.",
+          "check": {
+            "crate": "geom-linalg",
+            "test": "spectral_determinism",
+            "function": "spectral_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9c2a12093c3d4e85570d02e82f1a918d55300c7c14935ef8c3875ebac031d54a"
         }
       ]
     }
