@@ -131,7 +131,7 @@ impl Decimal {
             m /= 10;
             e = e.checked_add(1).ok_or(DecimalError::ExponentRange)?;
         }
-        Decimal::checked(significand < 0, m, e)
+        Decimal::checked(significand.is_negative(), m, e)
     }
 
     /// The decimal ±m·10^e for m > 0 with no trailing zero, checked against both limits.
@@ -311,7 +311,7 @@ impl fmt::Display for Decimal {
             }
             Ok(())
         };
-        if self.significand < 0 {
+        if self.significand.is_negative() {
             f.write_str("-")?;
         }
         let e = self.exponent;
@@ -319,22 +319,31 @@ impl fmt::Display for Decimal {
         let n = i32::try_from(len).map_err(|_| fmt::Error)?;
         let whole = n.checked_add(e).ok_or(fmt::Error)?;
         let lead = whole.checked_neg().ok_or(fmt::Error)?;
+        let scientific = |f: &mut fmt::Formatter<'_>| -> fmt::Result {
+            write_digits(f, 0, len)?;
+            write!(f, "e{e}")
+        };
         if (0..=PLAIN_ZEROS).contains(&e) {
             write_digits(f, 0, len)?;
             repeat(f, '0', e)
-        } else if e < 0 && whole > 0 {
-            // The point falls inside the digits.
-            let cut = usize::try_from(whole).map_err(|_| fmt::Error)?;
-            write_digits(f, 0, cut)?;
-            f.write_str(".")?;
-            write_digits(f, cut, len)
-        } else if e < 0 && lead <= PLAIN_ZEROS {
-            f.write_str("0.")?;
-            repeat(f, '0', lead)?;
-            write_digits(f, 0, len)
+        } else if e.is_negative() {
+            match whole {
+                // The point falls inside the digits.
+                1.. => {
+                    let cut = usize::try_from(whole).map_err(|_| fmt::Error)?;
+                    write_digits(f, 0, cut)?;
+                    f.write_str(".")?;
+                    write_digits(f, cut, len)
+                }
+                _ if (..=PLAIN_ZEROS).contains(&lead) => {
+                    f.write_str("0.")?;
+                    repeat(f, '0', lead)?;
+                    write_digits(f, 0, len)
+                }
+                _ => scientific(f),
+            }
         } else {
-            write_digits(f, 0, len)?;
-            write!(f, "e{e}")
+            scientific(f)
         }
     }
 }

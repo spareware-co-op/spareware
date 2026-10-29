@@ -25,7 +25,7 @@
 //!   d = q·2^A·5^C, so each offset `W_i` − `O_i` is an exact integer `u_i` over d, and each coordinate
 //!   is X = P/(Q·ρ) with integers P = `k_d·(α·u_E` + `β·u_N`) (or `u_H`) and Q = `k_n·d` (or d), all
 //!   formed exactly in 1536-bit integers. A double-double estimate of P/(Q·ρ), within 2^−101·|X|
-//!   (derived on `RATIO_BOUND` and `IRRATIONAL_BOUND`), gives the candidate step; a value
+//!   (derived on `ratio_dd` and `Axis::estimate`), gives the candidate step; a value
 //!   farther than 2^−40 from every whole step and midpoint rounds as its estimate does, and any
 //!   other is settled exactly, by the sign of 2P − t·Q·ρ for t = 2x and 2x ± 1: a product and a
 //!   subtraction when ρ = r is an integer, and a comparison of squares in 3072-bit integers when
@@ -120,7 +120,7 @@
     reason = "variable names follow the formulas of the method each function cites"
 )]
 
-use geom_num::dd::{self, DD};
+use geom_num::dd::DD;
 use geom_num::grid::{Coord, P3};
 use geom_num::sign::Sign;
 use geom_num::{NumError, math};
@@ -128,8 +128,8 @@ use geom_num::{NumError, math};
 use crate::decimal::Decimal;
 use crate::error::budget;
 use crate::exact::{
-    Big, Square, const_pow2, divrem_u128, dyadic, leading_bits, pow2, pow2_big, pow5_big,
-    quotient_to_f64, rational_to_f64, sign_minus_sqrt,
+    Big, Square, const_pow2, divrem_u128, dyadic, leading_106, pow2, pow2_big, pow5_big,
+    quotient_to_f64, rational_to_f64, scale_b, sign_minus_sqrt,
 };
 use crate::frame::{FrameRecord, steps_per_metre};
 use crate::rounded::Rounded;
@@ -150,47 +150,13 @@ const FILTER: f64 = const_pow2!(-40);
 /// documentation).
 const INPUT_BITS: u32 = 200;
 
-/// The relative half-width of the bracket around an out-of-range estimate, 2^−50: more than the
-/// estimate's proven 2^−100 plus the rounding of the `f64` subtractions that form the bracket's
-/// ends (half an ulp, 2^−53 relative).
-const FAR_MARGIN: f64 = const_pow2!(-50);
+/// The relative half-width of the bracket around an out-of-range estimate, as a power of two:
+/// 2^−50, more than the estimate's proven 2^−101 plus its trailing part and the rounding of the
+/// `f64` subtractions that form the bracket's ends (half an ulp, 2^−53 relative, each).
+const FAR_SHIFT: i32 = -50;
 
 /// The integer below `i128::MAX`: X > MAX − 1/2 = (MAX − 1) + 1/2 saturates.
 const BELOW_MAX: i128 = i128::MAX - 1;
-
-/// The bits each operand of [`ratio_dd`] keeps: 106, the most a double-double holds exactly.
-const RATIO_BITS: u32 = 106;
-
-/// A ratio whose two operands' leading bits differ by a power below 2^−1006 is below 2^−901 in
-/// magnitude, and [`ratio_dd`] returns zero for it.
-const RATIO_FLUSH: i32 = -1006;
-
-/// u² = 2^−106, the unit of double-double error bounds.
-const U2: f64 = const_pow2!(-106);
-
-/// The truncation of an operand to [`RATIO_BITS`] bits: relative error below 2^−105 = 2u².
-const TRUNCATION: f64 = const_pow2!(-105);
-
-/// The factor that covers both the higher-order terms of a product of factors (1 + εᵢ), each
-/// |εᵢ| ≤ 2^−100, and the rounding of the `f64` arithmetic that sums the bounds: Π(1 + εᵢ) − 1 ≤
-/// Σεᵢ·(1 + 2^−98), and a few roundings add at most 2^−50 relative.
-const SLACK: f64 = 1.0 + const_pow2!(-40);
-
-/// The relative error bound of [`ratio_dd`]: the two truncations (each 2^−105, the divisor's as
-/// 1/(1 − θ), covered by [`SLACK`]), the double-double division and the two exact scalings by
-/// powers of two, taken at the general bound of `mul_f64`: about 17.8u². Absolute: 2^−900 more,
-/// for results it flushes to zero or that fall below 2^−969, where a double-double cannot hold 106
-/// bits (`geom_num::dd`'s `UNDERFLOW_BOUND` per operation).
-const RATIO_BOUND: f64 = (2.0 * TRUNCATION + dd::DIV_BOUND + 2.0 * dd::MUL_F64_BOUND) * SLACK;
-
-/// The relative error bound of an irrational coordinate's estimate, the ratio divided by the
-/// double-double √n (with its own relative error, as a divisor): about 30.7u².
-const IRRATIONAL_BOUND: f64 = (RATIO_BOUND + dd::DIV_BOUND + dd::SQRT_BOUND) * SLACK;
-
-// Both estimates are within 32u² = 2^−101 of the exact value, relatively, so within 2^−59 steps for
-// every coordinate the settling sees (|X| < 2^41 + 1), absolute terms included: the settling's
-// premise.
-const _: () = assert!(RATIO_BOUND < 32.0 * U2 && IRRATIONAL_BOUND < 32.0 * U2);
 
 /// The smallest magnitude an irrational map coordinate can have, 2^−300 units (see
 /// [`FrameRecord::to_map`]): every bisection stays above it.
@@ -338,15 +304,18 @@ fn big(v: i128) -> Big {
     Big::from_i128(v)
 }
 
-/// p/q as a double-double, for q > 0: within [`RATIO_BOUND`]·|p/q| + 2^−900.
+/// p/q as a double-double, for q > 0: within about 17.8u²·|p/q| (u² = 2^−106), plus 2^−1072.
 ///
 /// Each operand keeps its leading 106 bits, truncated toward zero (exact below 2^106, and within
-/// 2^−105 relatively otherwise); the double-double quotient of the two kept parts is scaled by the
-/// power of two the truncations dropped, in two steps that stay inside the normal exponents. A
-/// quotient whose scaling is below 2^−1006 is below 2^−901 and is returned as zero.
+/// 2^−105 = 2u² relatively otherwise, the divisor's as 1/(1 − θ)); the double-double quotient of the
+/// two kept parts (`geom_num::dd`'s `DIV_BOUND`, 9.8u²) is scaled by the power of two the
+/// truncations dropped, in two steps that stay inside the normal exponents (each at the general
+/// `MUL_F64_BOUND`, 2u², though a power of two scales exactly): (1 + 2u²)(1 + 9.8u²)(1 + 2u²)³/(1 −
+/// 2u²) − 1 < 17.9u². The absolute term is `UNDERFLOW_BOUND` per operation, for results below
+/// 2^−969, where a double-double cannot hold 106 bits.
 fn ratio_dd(p: &Big, q: &Big) -> Result<DD, NumError> {
-    let (pv, ps) = budget(leading_bits(p, RATIO_BITS))?;
-    let (qv, qs) = budget(leading_bits(q, RATIO_BITS))?;
+    let (pv, ps) = budget(leading_106(p))?;
+    let (qv, qs) = budget(leading_106(q))?;
     // Both shifts are below 1536, so their difference fits i32, and so does half of it.
     let e = budget(
         i32::try_from(ps)
@@ -354,9 +323,6 @@ fn ratio_dd(p: &Big, q: &Big) -> Result<DD, NumError> {
             .zip(i32::try_from(qs).ok())
             .and_then(|(a, b)| a.checked_sub(b)),
     )?;
-    if pv == 0 || e < RATIO_FLUSH {
-        return Ok(DD::ZERO);
-    }
     let r = budget(DD::from_i128(pv))?.div(budget(DD::from_i128(qv))?)?;
     let half = budget(e.checked_div(2))?;
     let rest = budget(e.checked_sub(half))?;
@@ -406,15 +372,15 @@ impl Value {
             )?,
             &budget(pow5_big(self.five.max(0).unsigned_abs()))?,
         )?;
+        // `divrem_u128` refuses a divisor from 2^127 on, which here means a value below one unit:
+        // |m| < 2^127 (and |up| < 2^1257 is no wide integer's minimum, the one other refusal).
         let down = 2u128
             .checked_pow(self.two.min(0).unsigned_abs())
             .zip(5u128.checked_pow(self.five.min(0).unsigned_abs()))
-            .and_then(|(a, b)| a.checked_mul(b))
-            .filter(|&d| d < 1 << 127);
-        match down {
-            Some(d) => Ok(budget(divrem_u128(&up, d))?.0),
-            None => Ok(Big::ZERO),
-        }
+            .and_then(|(a, b)| a.checked_mul(b));
+        Ok(down
+            .and_then(|d| divrem_u128(&up, d))
+            .map_or(Big::ZERO, |(q, _)| q))
     }
 }
 
@@ -526,8 +492,11 @@ impl Axis {
         budget(t.and_then(|t| self.sign_half(&t)))
     }
 
-    /// A double-double within [`RATIO_BOUND`]·|X| (rational) or [`IRRATIONAL_BOUND`]·|X|
-    /// (irrational) of X, plus 2^−900.
+    /// A double-double within 2^−101·|X| + 2^−1070 of X: [`ratio_dd`]'s 17.9u² for a rational
+    /// X; for an irrational one the ratio divided by the double-double √n, whose own relative
+    /// error (`SQRT_BOUND`, 3.125u²) acts as a divisor's, and the division's `DIV_BOUND`:
+    /// (1 + 17.9u²)(1 + 9.8u²)/(1 − 3.2u²) − 1 < 31u² < 32u² = 2^−101. So for every X the settling
+    /// sees (|X| < 2^41 + 1) the estimate is within 2^−59 of X, the settling's premise.
     fn estimate(&self) -> Result<DD, NumError> {
         let ratio = ratio_dd(&self.p, &self.q)?;
         match self.root {
@@ -565,8 +534,10 @@ impl Axis {
         if self.sign_at(i128::MIN, true)? != Sign::Positive {
             return Ok(Rounded::new(i128::MIN, false));
         }
-        let size = |w: f64| math::abs(w).map(geom_num::Real::get);
-        let width = size(d.hi())? * FAR_MARGIN + size(d.lo())? + 2.0;
+        // |d.hi − X| ≤ |d.lo| + |d − X| ≤ 2^−53·|d.hi| + 2^−101·|X| + 2^−1070 < 2^−52·|d.hi|, and the
+        // f64 subtraction and addition below round by at most 2^−53·|d.hi|: a half-width of
+        // 2^−50·|d.hi| holds X with room to spare.
+        let width = budget(scale_b(math::abs(d.hi())?.get(), FAR_SHIFT))?;
         #[allow(
             clippy::cast_possible_truncation,
             reason = "a saturating conversion on purpose: X lies strictly inside i128 here, so a \
@@ -576,8 +547,10 @@ impl Axis {
             math::floor(d.hi() - width)?.get() as i128,
             (math::ceil(d.hi() + width)?.get() as i128).saturating_add(1),
         );
-        if self.sign_at(lo, false)? == Sign::Negative || self.sign_at(hi, false)? != Sign::Negative
-        {
+        if self.sign_at(lo, false)? == Sign::Negative {
+            return Err(NumError::BudgetExceeded);
+        }
+        if self.sign_at(hi, false)? != Sign::Negative {
             return Err(NumError::BudgetExceeded);
         }
         // X ≥ lo and X < hi throughout; the gap is below 2^128 and halves every step.
@@ -644,7 +617,7 @@ impl FrameRecord {
         let n = Value::of_f64(map.northing)?;
         let h = Value::of_f64(map.height)?;
         let metres = self.linear_unit().is_metre();
-        let near = |v: f64| (-MAP_MAX..=MAP_MAX).contains(&v);
+        let near = |v: f64| math::abs(v).is_ok_and(|m| (..=MAP_MAX).contains(&m.get()));
         #[allow(
             clippy::cast_precision_loss,
             reason = "the steps per metre are below 2^32 < 2^53: exact in f64"
@@ -697,7 +670,7 @@ impl FrameRecord {
         let scaling = Scaling::of(self)?;
         if scaling.beyond(h)? {
             // |W| > 2^200 and |O| ≤ 2^60: z has W's sign, the sign of m.
-            return Err(saturated(h.m < 0));
+            return Err(saturated(h.m.is_negative()));
         }
         let [_, _, oh] = self.origin();
         let ([u], d) = scaling.offsets([h], [oh])?;
@@ -974,14 +947,11 @@ impl IrrationalMap {
         let qka = self.q.checked_mul(&self.kn_a)?;
         let qo = Big::from_i128(self.origin).checked_mul(&self.q)?;
         let ps = Big::from_i128(p).checked_mul(&self.sp)?;
-        let k = f.unsigned_abs();
-        let (a, b) = if f < 0 {
-            let scale = pow2_big(k)?;
-            let a = scale.checked_mul(&qka)?;
-            (a, ps.checked_sub(&scale.checked_mul(&qo)?)?)
-        } else {
-            (qka, pow2_big(k)?.checked_mul(&ps)?.checked_sub(&qo)?)
-        };
+        // 2^f's part above and below one: one of the two is 2^0.
+        let up = pow2_big(f.max(0).unsigned_abs())?;
+        let down = pow2_big(f.min(0).unsigned_abs())?;
+        let a = down.checked_mul(&qka)?;
+        let b = up.checked_mul(&ps)?.checked_sub(&down.checked_mul(&qo)?)?;
         sign_minus_sqrt::<24>(&a, &self.kd.checked_mul(&b)?, self.n2)
     }
 

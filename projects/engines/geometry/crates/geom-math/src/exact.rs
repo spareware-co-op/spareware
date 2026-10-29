@@ -27,7 +27,7 @@
 //!   is `None`, never a wrapped value. Every rounded result is rounded once, to nearest, ties to
 //!   even: [`round_scaled`], [`rational_to_f64`] and [`quotient_to_f64`] also say whether they were
 //!   exact, and [`scale_b`], like IEEE 754's scaleB, returns ±∞ when the exact result overflows.
-//!   [`leading_bits`] truncates toward zero and says by how many bits.
+//!   [`leading_106`] truncates toward zero and says by how many bits.
 //! - **The same result in every build profile.** Every integer addition, subtraction,
 //!   multiplication, division by a variable and negation is a checked method that returns `None`
 //!   instead of wrapping, or `abs_diff`, which is exact for every input; the only native integer
@@ -40,8 +40,8 @@
 //!   values whose bound is written beside them.
 //!
 //! Cost: no allocation. [`pow2`], [`exponent`], [`dyadic`] and [`scale_b`] are a few bit operations
-//! and at most two floating-point multiplications. [`pow2_wide`], [`shl_into`], [`bit_length`],
-//! [`leading_bits`] and [`round_scaled`] are linear in the number of 64-bit limbs (24 for [`Big`],
+//! and at most two floating-point multiplications. [`pow2_big`], [`shl_into`], [`bit_length`],
+//! [`leading_106`] and [`round_scaled`] are linear in the number of 64-bit limbs (24 for [`Big`],
 //! at most 48 anywhere in the crate). [`pow5_big`] is one multiplication by a factor below 2^63 per
 //! 27 powers of five, each linear in the limbs. [`sign_minus_sqrt`] is three schoolbook
 //! multiplications of L-limb integers (at most L² limb products each) and one subtraction.
@@ -64,9 +64,6 @@ use crate::rounded::Rounded;
 /// The wide integer of the exact frame decisions: 1536 bits, range ±2^1535. The largest value they
 /// form is below 2^1494 (see `convert`), so nothing overflows.
 pub(crate) type Big = Wide<24>;
-
-/// The bits of a [`Big`], 64 per limb.
-const BIG_BITS: u32 = 1536;
 
 /// The width of the squares the irrational frame decisions compare: 3072 bits, range ±2^3071. The
 /// largest square they form is below 2^2988 (see `convert`).
@@ -210,38 +207,22 @@ pub(crate) fn scale_b(x: f64, k: i32) -> Option<f64> {
     }
 }
 
-/// 2^k as a `Wide<L>`, or `None` if it does not fit the signed range (k ≥ 64·L − 1).
-pub(crate) fn pow2_wide<const L: usize>(k: u32) -> Option<Wide<L>> {
-    let word = usize::try_from(k / 64).ok()?;
-    let mut limbs = [0u64; L];
-    // k % 64 is below 64.
-    *limbs.get_mut(word)? = 1u64 << (k % 64);
-    // 2^(64L − 1) is the top limb's sign bit: outside the signed range.
-    if limbs.last().is_some_and(|top| top >> 63 == 1) {
-        return None;
-    }
-    Some(Wide::from_le_limbs(limbs))
+/// 2^k as a [`Big`], or `None` if it does not fit (k ≥ 1535): [`shl_into`] of 1.
+pub(crate) fn pow2_big(k: u32) -> Option<Big> {
+    shl_into(1, k)
 }
 
-/// 2^k as a [`Big`], or `None` if it does not fit (k ≥ 1535).
-pub(crate) fn pow2_big(k: u32) -> Option<Big> {
-    if k >= BIG_BITS - 1 {
-        return None;
-    }
-    pow2_wide(k)
-}
+/// 5^27, the largest power of five below 2^63.
+const FIVE_27: i128 = 7_450_580_596_923_828_125;
 
 /// 5^k as a [`Big`], or `None` if it does not fit (5^661 < 2^1535 < 5^662).
 ///
-/// Built from factors 5^j with j ≤ 27 (5^27 < 2^63), each taken as the first factor of its
+/// k = 27·q + r: q factors 5^27 and one factor 5^r, each taken as the first factor of its
 /// product, whose loop runs over that factor's nonzero limbs only: one.
 pub(crate) fn pow5_big(k: u32) -> Option<Big> {
-    let mut power = Big::one();
-    let mut left = k;
-    while left > 0 {
-        let j = left.min(27);
-        power = Big::from_i128(5i128.checked_pow(j)?).checked_mul(&power)?;
-        left = left.checked_sub(j)?;
+    let mut power = Big::from_i128(5i128.checked_pow(k % 27)?);
+    for _ in 0..k / 27 {
+        power = Big::from_i128(FIVE_27).checked_mul(&power)?;
     }
     Some(power)
 }
@@ -266,24 +247,26 @@ pub(crate) fn bit_length<const L: usize>(w: &Wide<L>) -> Option<u32> {
     Some(bits)
 }
 
-/// w as v·2^shift with |v| < 2^keep (1 ≤ keep ≤ 127), v truncated toward zero: shift = 0 and
-/// v = w when |w| < 2^keep; otherwise |v| ≥ 2^(keep − 1), and the bits dropped are less than one
-/// unit of v, so |w − v·2^shift| < 2^shift ≤ 2^(1 − keep)·|w|. `None` for a `keep` outside that
-/// range or the minimum value of `Wide<L>`.
-pub(crate) fn leading_bits<const L: usize>(w: &Wide<L>, keep: u32) -> Option<(i128, u32)> {
-    if keep == 0 || keep > 127 {
-        return None;
-    }
-    let shift = bit_length(w)?.saturating_sub(keep);
+/// w as v·2^shift with |v| < 2^106, the most a double-double holds exactly, v truncated toward
+/// zero: shift = 0 and v = w when |w| < 2^106; otherwise |v| ≥ 2^105, and the bits dropped are
+/// less than one unit of v, so |w − v·2^shift| < 2^shift ≤ 2^−105·|w|. `None` for the minimum
+/// value of `Wide<L>`.
+pub(crate) fn leading_106<const L: usize>(w: &Wide<L>) -> Option<(i128, u32)> {
+    let shift = bit_length(w)?.saturating_sub(106);
     let negative = w.is_negative();
     let mag = if negative { w.checked_neg()? } else { *w }.to_le_limbs();
     let top = shr_limbs(&mag, shift);
-    // |w| >> shift is below 2^keep ≤ 2^127: two limbs, the rest zero.
+    // |w| >> shift is below 2^106: two limbs, the rest zero.
     if top.iter().skip(2).any(|&limb| limb != 0) {
         return None;
     }
-    let [t0, t1] = [0, 1].map(|i| top.get(i).copied().unwrap_or(0));
-    let v = i128::try_from(u128::from(t0) | (u128::from(t1) << 64)).ok()?;
+    // The two limbs as one u128, by its little-endian bytes.
+    let mut bytes = [0u8; 16];
+    let limbs = top.iter().take(2).flat_map(|limb| limb.to_le_bytes());
+    for (slot, b) in bytes.iter_mut().zip(limbs) {
+        *slot = b;
+    }
+    let v = i128::try_from(u128::from_le_bytes(bytes)).ok()?;
     Some((if negative { v.checked_neg()? } else { v }, shift))
 }
 
@@ -538,7 +521,7 @@ pub(crate) fn quotient_to_f64<const L: usize>(
         return None;
     }
     let s = 55i32.checked_sub(gap)?;
-    let shift = |w: &Wide<L>, k: u32| pow2_wide::<L>(k)?.checked_mul(w);
+    let shift = |w: &Wide<L>, k: u32| shl_into::<L>(1, k)?.checked_mul(w);
     let (mut rest, bottom) = if s >= 0 {
         (shift(&n, s.unsigned_abs())?, *den)
     } else {

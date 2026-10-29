@@ -124,15 +124,12 @@ impl LinearUnit {
                 .ok_or(NumError::OutsideDomain)?;
             return LinearUnit::reduced(whole, 1);
         }
-        // m / (2^k·5^k) with k = −e ≤ 340: the factors of 2 and 5 that m shares with the
-        // denominator are cancelled first (m < 2^127, so at most 126 and 54 steps), so what is
-        // left is in lowest terms in those primes, and a denominator that does not fit is one
-        // whose reduced form does not fit either.
-        let (mut m, mut twos, mut fives) = (m, e.unsigned_abs(), e.unsigned_abs());
-        while twos > 0 && m.is_multiple_of(2) {
-            m /= 2;
-            twos = twos.checked_sub(1).ok_or(NumError::BudgetExceeded)?;
-        }
+        // m / (2^k·5^k) with k = −e ≤ 340. A decimal's m is not a multiple of 10, so it shares
+        // factors of 2 or of 5 with the denominator, not both. Shared factors of 5 are cancelled
+        // first (m < 2^127, so at most 54 steps), since 2^k alone may fit 64 bits when 10^k
+        // overflows 128; shared factors of 2 would leave 5^k ≥ 5^39 > 2^64, which no reduction
+        // makes fit. So a denominator that does not fit is one whose reduced form does not fit.
+        let (mut m, twos, mut fives) = (m, e.unsigned_abs(), e.unsigned_abs());
         while fives > 0 && m.is_multiple_of(5) {
             m /= 5;
             fives = fives.checked_sub(1).ok_or(NumError::BudgetExceeded)?;

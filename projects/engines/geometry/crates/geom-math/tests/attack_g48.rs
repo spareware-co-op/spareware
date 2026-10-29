@@ -625,6 +625,10 @@ fn decimals_have_one_form_and_read_back() {
         (d("1e31"), "1e31"),
         (d("1e-30"), "0.000000000000000000000000000001"),
         (d("1e-32"), "1e-32"),
+        (d("1e-31"), "0.0000000000000000000000000000001"),
+        (d("0.125"), "0.125"),
+        (d("-12"), "-12"),
+        (d("12345e-35"), "0.00000000000000000000000000000012345"),
         (d("12345e-34"), "0.0000000000000000000000000000012345"),
         (d("12345e-36"), "12345e-36"),
         (Decimal::ZERO, "0"),
@@ -700,6 +704,9 @@ fn linear_units_are_exact_reduced_ratios_in_range() {
     let m = (five40 * BigInt::from(301)).to_i128().unwrap();
     let tiny = Decimal::new(m, -40).unwrap();
     assert_eq!(LinearUnit::from_decimal(tiny), r(301, 1 << 40));
+    // More factors of 5 than the exponent asks for: 5^45·10^−40 = 3125/2^40.
+    let more = Decimal::new(BigInt::from(5).pow(45).to_i128().unwrap(), -40).unwrap();
+    assert_eq!(LinearUnit::from_decimal(more), r(3125, 1 << 40));
     let two100 = 1i128 << 100;
     assert_eq!(
         LinearUnit::from_decimal(Decimal::new(two100 * 3, -45).unwrap()),
@@ -1170,6 +1177,71 @@ fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
             assert_eq!(got(g.to_frame_decimal(p)), want);
         }
     }
+}
+
+#[test]
+fn the_exact_path_at_its_own_edges() {
+    let metres = FrameRecord::map(NZTM, GridStep::Q0, [3, -5, 7]).unwrap();
+    // A double far beyond the frame but within the fast path's reach in magnitude only: the exact
+    // path reports its exact coordinate, 1e30·6,400,000 − 3 steps.
+    for m in [
+        MapPoint {
+            easting: 1e30,
+            northing: 0.0,
+            height: 0.0,
+        },
+        MapPoint {
+            easting: 0.0,
+            northing: -1e30,
+            height: 0.0,
+        },
+        MapPoint {
+            easting: 0.0,
+            northing: 0.0,
+            height: 1e30,
+        },
+    ] {
+        assert_eq!(
+            got(metres.to_frame(m)),
+            expected(&metres, &values_f64(m)),
+            "{m:?}"
+        );
+    }
+    // Values far below a step, of either sign, whose estimate underflows to zero: they round to
+    // the origin's opposite, inexactly.
+    let tiny = DecimalPoint {
+        easting: Decimal::parse("-1e-340").unwrap(),
+        northing: Decimal::parse("1e-340").unwrap(),
+        height: Decimal::parse("-3e-340").unwrap(),
+    };
+    let r = metres.to_frame_decimal(tiny).unwrap();
+    assert_eq!(
+        (r.value(), r.is_exact()),
+        (P3::new(-3, 5, -7).unwrap(), false)
+    );
+    // An image of exactly 2^200 steps is still within the exact budgets: x, out of range at
+    // −2^150, is reported first, though y is the larger.
+    let one_step = FrameRecord::map(NZTM, GridStep::Q0, [0; 3])
+        .unwrap()
+        .with_linear_unit(LinearUnit::new(1, 6_400_000).unwrap());
+    let m = MapPoint {
+        easting: -pow2f(150),
+        northing: pow2f(200),
+        height: 0.0,
+    };
+    assert_eq!(
+        one_step.to_frame(m),
+        Err(NumError::OutOfRange { value: i128::MIN })
+    );
+    // One ulp beyond, the larger coordinate is reported.
+    let m = MapPoint {
+        northing: step_up(pow2f(200)),
+        ..m
+    };
+    assert_eq!(
+        one_step.to_frame(m),
+        Err(NumError::OutOfRange { value: i128::MAX })
+    );
 }
 
 #[test]
