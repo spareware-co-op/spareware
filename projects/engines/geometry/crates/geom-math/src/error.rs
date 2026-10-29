@@ -2,8 +2,9 @@
 //!
 //! Most operations here fail only for numeric reasons (a coordinate out of range, a value that is
 //! not finite) and return [`NumError`] directly. Three failures are new: a transform with no
-//! inverse, two frames that cannot be related by an exact integer shift, and geometry too wide for
-//! the frame it would have to live in. [`MathError`] carries those, and wraps a [`NumError`] for
+//! inverse, two frames that cannot be related by an exact integer shift (different coordinate
+//! reference systems, linear units, epochs, deformation models, rotations or scales, or origins
+//! off a shared lattice), and geometry too wide for the frame it would have to live in. [`MathError`] carries those, and wraps a [`NumError`] for
 //! everything else, so an operation higher up can turn it into a structured error with remedies
 //! (chapter 22, which names `FrameMismatch` and `FrameRangeExceeded`).
 //!
@@ -43,6 +44,14 @@ pub enum FrameMismatch {
     /// The frames' heights refer to different vertical coordinate reference systems (or one has
     /// none): a height in one is not a height in the other.
     VerticalCrs,
+    /// The frames' map coordinates are in different linear units: the same map value is a
+    /// different length in each.
+    LinearUnit,
+    /// The frames' coordinates hold at different coordinate epochs (or one names none), so the
+    /// same map value is a different place on the ground (chapter 17.1, Epochs).
+    Epoch,
+    /// The frames name different deformation models (or one names none).
+    DeformationModel,
     /// The frames are rotated differently.
     Rotation,
     /// The frames have different scale factors.
@@ -95,6 +104,9 @@ impl fmt::Display for FrameMismatch {
             FrameMismatch::VerticalCrs => {
                 "the frames' heights use different vertical coordinate reference systems"
             }
+            FrameMismatch::LinearUnit => "the frames' map coordinates use different linear units",
+            FrameMismatch::Epoch => "the frames' coordinates hold at different epochs",
+            FrameMismatch::DeformationModel => "the frames name different deformation models",
             FrameMismatch::Rotation => "the frames are rotated differently",
             FrameMismatch::Scale => "the frames have different scale factors",
             FrameMismatch::NotOnLattice => {

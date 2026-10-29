@@ -1,7 +1,8 @@
 //! Exact helpers shared by the crate: doubles as exact dyadic numbers, exact scaling of doubles by
-//! powers of two, wide integers built from shifted products, exact rounding of a wide integer
-//! divided by a power of two, the exact sign of a − b·√n, the correctly rounded double nearest a
-//! quotient of integers, and long division of a wide integer by a 128-bit one.
+//! powers of two, wide integers built from shifted products and powers of two and five, their bit
+//! lengths and leading bits, exact rounding of a wide integer divided by a power of two, the exact
+//! sign of a − b·√n, the correctly rounded double nearest a quotient of integers (128-bit or wide),
+//! and long division of a wide integer by a 128-bit one.
 //!
 //! Method:
 //!
@@ -9,8 +10,8 @@
 //!   two is IEEE's scaleB (section 5.3.3), rounded once.
 //! - The quotient of two integers is rounded to the nearest double, ties to even (roundTiesToEven,
 //!   section 4.3.1), by binary long division that produces the 53 bits of the significand, one
-//!   more bit, and a sticky bit for whether anything nonzero remains (D. E. Knuth, *The Art of
-//!   Computer Programming*, vol. 2, section 4.3.1); IEEE 754-2019,
+//!   or more further bits, and a sticky bit for whether anything nonzero remains (D. E. Knuth, *The
+//!   Art of Computer Programming*, vol. 2, section 4.3.1); IEEE 754-2019,
 //!   <https://doi.org/10.1109/IEEESTD.2019.8766229>.
 //! - The sign of a − b·√n is decided by comparing a² with b²·n when a and b have the same sign:
 //!   exact geometric computation with algebraic numbers of degree two, evaluated in exact integers
@@ -24,8 +25,9 @@
 //!
 //! - **Exact, or it says so.** Every integer result is exact, and one that does not fit its type
 //!   is `None`, never a wrapped value. Every rounded result is rounded once, to nearest, ties to
-//!   even: [`round_scaled`] and [`rational_to_f64`] also say whether they were exact, and
-//!   [`scale_b`], like IEEE 754's scaleB, returns ±∞ when the exact result overflows.
+//!   even: [`round_scaled`], [`rational_to_f64`] and [`quotient_to_f64`] also say whether they were
+//!   exact, and [`scale_b`], like IEEE 754's scaleB, returns ±∞ when the exact result overflows.
+//!   [`leading_bits`] truncates toward zero and says by how many bits.
 //! - **The same result in every build profile.** Every integer addition, subtraction,
 //!   multiplication, division by a variable and negation is a checked method that returns `None`
 //!   instead of wrapping, or `abs_diff`, which is exact for every input; the only native integer
@@ -38,12 +40,16 @@
 //!   values whose bound is written beside them.
 //!
 //! Cost: no allocation. [`pow2`], [`exponent`], [`dyadic`] and [`scale_b`] are a few bit operations
-//! and at most two floating-point multiplications. [`pow2_big`], [`shl_into`] and [`round_scaled`]
-//! are linear in the number of 64-bit limbs (20 for [`Big`], at most 40 anywhere in the crate).
-//! [`sign_minus_sqrt`] is three schoolbook multiplications of L-limb integers (at most L² limb
-//! products each) and one subtraction. [`rational_to_f64`] is one 128-bit division and at most 181
-//! shift-and-subtract steps. [`gcd_u128`] takes at most 257 remainder steps (the remainder at least
-//! halves every two steps). [`divrem_u128`] takes exactly 64·L shift-and-subtract steps.
+//! and at most two floating-point multiplications. [`pow2_wide`], [`shl_into`], [`bit_length`],
+//! [`leading_bits`] and [`round_scaled`] are linear in the number of 64-bit limbs (24 for [`Big`],
+//! at most 48 anywhere in the crate). [`pow5_big`] is one multiplication by a factor below 2^63 per
+//! 27 powers of five, each linear in the limbs. [`sign_minus_sqrt`] is three schoolbook
+//! multiplications of L-limb integers (at most L² limb products each) and one subtraction.
+//! [`rational_to_f64`] is one 128-bit division and at most 181 shift-and-subtract steps;
+//! [`quotient_to_f64`] is 58 shifts by multiplication with a power of two, each linear in the
+//! limbs, and 56 comparisons and subtractions. [`gcd_u128`] takes at most 257 remainder steps (the
+//! remainder at least halves every two steps). [`divrem_u128`] takes exactly 64·L
+//! shift-and-subtract steps.
 
 #![allow(
     clippy::many_single_char_names,
@@ -55,9 +61,16 @@ use geom_num::wide::Wide;
 
 use crate::rounded::Rounded;
 
-/// The wide integer of the exact frame decisions: 1280 bits, range ±2^1279. The largest value they
-/// form is below 2^1234 (see `frame`), so nothing overflows.
-pub(crate) type Big = Wide<20>;
+/// The wide integer of the exact frame decisions: 1536 bits, range ±2^1535. The largest value they
+/// form is below 2^1494 (see `convert`), so nothing overflows.
+pub(crate) type Big = Wide<24>;
+
+/// The bits of a [`Big`], 64 per limb.
+const BIG_BITS: u32 = 1536;
+
+/// The width of the squares the irrational frame decisions compare: 3072 bits, range ±2^3071. The
+/// largest square they form is below 2^2988 (see `convert`).
+pub(crate) type Square = Wide<48>;
 
 /// The fraction field of a double's bits: the low 52 bits.
 const FRACTION_BITS: u64 = (1 << 52) - 1;
@@ -197,16 +210,81 @@ pub(crate) fn scale_b(x: f64, k: i32) -> Option<f64> {
     }
 }
 
-/// 2^k as a [`Big`], or `None` if it does not fit (k ≥ 1279).
-pub(crate) fn pow2_big(k: u32) -> Option<Big> {
-    if k >= 64 * 20 - 1 {
+/// 2^k as a `Wide<L>`, or `None` if it does not fit the signed range (k ≥ 64·L − 1).
+pub(crate) fn pow2_wide<const L: usize>(k: u32) -> Option<Wide<L>> {
+    let word = usize::try_from(k / 64).ok()?;
+    let mut limbs = [0u64; L];
+    // k % 64 is below 64.
+    *limbs.get_mut(word)? = 1u64 << (k % 64);
+    // 2^(64L − 1) is the top limb's sign bit: outside the signed range.
+    if limbs.last().is_some_and(|top| top >> 63 == 1) {
         return None;
     }
-    let mut limbs = [0u64; 20];
-    let slot = limbs.get_mut(usize::try_from(k / 64).ok()?)?;
-    // k % 64 is below 64.
-    *slot = 1u64 << (k % 64);
-    Some(Big::from_le_limbs(limbs))
+    Some(Wide::from_le_limbs(limbs))
+}
+
+/// 2^k as a [`Big`], or `None` if it does not fit (k ≥ 1535).
+pub(crate) fn pow2_big(k: u32) -> Option<Big> {
+    if k >= BIG_BITS - 1 {
+        return None;
+    }
+    pow2_wide(k)
+}
+
+/// 5^k as a [`Big`], or `None` if it does not fit (5^661 < 2^1535 < 5^662).
+///
+/// Built from factors 5^j with j ≤ 27 (5^27 < 2^63), each taken as the first factor of its
+/// product, whose loop runs over that factor's nonzero limbs only: one.
+pub(crate) fn pow5_big(k: u32) -> Option<Big> {
+    let mut power = Big::one();
+    let mut left = k;
+    while left > 0 {
+        let j = left.min(27);
+        power = Big::from_i128(5i128.checked_pow(j)?).checked_mul(&power)?;
+        left = left.checked_sub(j)?;
+    }
+    Some(power)
+}
+
+/// The number of bits of |w|: 0 for zero, otherwise one more than the position of its leading bit.
+/// `None` for the minimum value of `Wide<L>`, whose magnitude does not fit.
+pub(crate) fn bit_length<const L: usize>(w: &Wide<L>) -> Option<u32> {
+    let mag = if w.is_negative() {
+        w.checked_neg()?
+    } else {
+        *w
+    }
+    .to_le_limbs();
+    let mut bits = 0u32;
+    for (i, &limb) in mag.iter().enumerate() {
+        if limb != 0 {
+            // i < L ≤ 48, so 64·i fits u32, and a nonzero limb has at most 63 leading zeros.
+            let base = u32::try_from(i).ok()?.checked_mul(64)?;
+            bits = base.checked_add(64u32.checked_sub(limb.leading_zeros())?)?;
+        }
+    }
+    Some(bits)
+}
+
+/// w as v·2^shift with |v| < 2^keep (1 ≤ keep ≤ 127), v truncated toward zero: shift = 0 and
+/// v = w when |w| < 2^keep; otherwise |v| ≥ 2^(keep − 1), and the bits dropped are less than one
+/// unit of v, so |w − v·2^shift| < 2^shift ≤ 2^(1 − keep)·|w|. `None` for a `keep` outside that
+/// range or the minimum value of `Wide<L>`.
+pub(crate) fn leading_bits<const L: usize>(w: &Wide<L>, keep: u32) -> Option<(i128, u32)> {
+    if keep == 0 || keep > 127 {
+        return None;
+    }
+    let shift = bit_length(w)?.saturating_sub(keep);
+    let negative = w.is_negative();
+    let mag = if negative { w.checked_neg()? } else { *w }.to_le_limbs();
+    let top = shr_limbs(&mag, shift);
+    // |w| >> shift is below 2^keep ≤ 2^127: two limbs, the rest zero.
+    if top.iter().skip(2).any(|&limb| limb != 0) {
+        return None;
+    }
+    let [t0, t1] = [0, 1].map(|i| top.get(i).copied().unwrap_or(0));
+    let v = i128::try_from(u128::from(t0) | (u128::from(t1) << 64)).ok()?;
+    Some((if negative { v.checked_neg()? } else { v }, shift))
 }
 
 /// The low and high 64-bit halves of `t`, t = high · 2^64 + low: read from its little-endian
@@ -426,6 +504,76 @@ pub(crate) fn rational_to_f64(num: i128, den: u128) -> Option<Rounded<f64>> {
     let magnitude = mf * pow2(e)?;
     let value = if num < 0 { -magnitude } else { magnitude };
     Some(Rounded::new(value, !round_bit && !sticky))
+}
+
+/// The double nearest `num / den`, ties to even, and whether it equals the quotient exactly, for
+/// wide integers with `den` > 0 and a quotient of magnitude between 2^−1000 and 2^1000 (or zero).
+/// `None` otherwise, or if a shift does not fit `Wide<L>` (both operands below 2^(64L − 60) is
+/// enough).
+///
+/// 1. With n = |num|, bit lengths `b_n` and `b_d`, and s = 55 − (`b_n` − `b_d`), the quotient
+///    n·2^s / den lies in [2^54, 2^56): its integer part q has 55 or 56 bits.
+/// 2. q is formed by long division: from n·2^s (or from n, against den·2^−s when s < 0), den·2^i
+///    is subtracted for i from 55 down to 0 whenever it fits, setting bit i of q. What remains is
+///    the sticky part.
+/// 3. q is rounded to 53 bits, to nearest, ties to even, carrying into the exponent when the
+///    significand overflows to 2^53. The result m·2^(k − s), for the k bits dropped, is a normal
+///    double whenever the quotient is in range, so [`scale_b`] makes it exactly.
+pub(crate) fn quotient_to_f64<const L: usize>(
+    num: &Wide<L>,
+    den: &Wide<L>,
+) -> Option<Rounded<f64>> {
+    if den.signum() != Sign::Positive {
+        return None;
+    }
+    if num.is_zero() {
+        return Some(Rounded::new(0.0, true));
+    }
+    let negative = num.is_negative();
+    let n = if negative { num.checked_neg()? } else { *num };
+    let gap = i32::try_from(bit_length(&n)?)
+        .ok()?
+        .checked_sub(i32::try_from(bit_length(den)?).ok()?)?;
+    if !(-1000..=1000).contains(&gap) {
+        return None;
+    }
+    let s = 55i32.checked_sub(gap)?;
+    let shift = |w: &Wide<L>, k: u32| pow2_wide::<L>(k)?.checked_mul(w);
+    let (mut rest, bottom) = if s >= 0 {
+        (shift(&n, s.unsigned_abs())?, *den)
+    } else {
+        (n, shift(den, s.unsigned_abs())?)
+    };
+    let mut q = 0u64;
+    for i in (0..56u32).rev() {
+        let part = shift(&bottom, i)?;
+        if rest >= part {
+            rest = rest.checked_sub(&part)?;
+            q |= 1u64 << i;
+        }
+    }
+    // q has 55 or 56 bits: drop 2 or 3 of them, the highest one dropped being the round bit.
+    let drop = 64u32.checked_sub(q.leading_zeros())?.checked_sub(53)?;
+    let below = drop.checked_sub(1)?;
+    let round = (q >> below) & 1 == 1;
+    let sticky = q & !(u64::MAX << below) != 0 || !rest.is_zero();
+    let mut m = q >> drop;
+    let mut k = i32::try_from(drop).ok()?;
+    if round && (sticky || m & 1 == 1) {
+        m = m.checked_add(1)?;
+        if m == 1u64 << 53 {
+            m >>= 1;
+            k = k.checked_add(1)?;
+        }
+    }
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "m < 2^53, so the conversion to f64 is exact"
+    )]
+    let mf = m as f64;
+    let magnitude = scale_b(mf, k.checked_sub(s)?)?;
+    let value = if negative { -magnitude } else { magnitude };
+    Some(Rounded::new(value, !round && !sticky))
 }
 
 /// The greatest common divisor of two unsigned integers, by Euclid's algorithm (each step strictly
