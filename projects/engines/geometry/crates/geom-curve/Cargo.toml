@@ -16,6 +16,10 @@ geom-num = { path = "../geom-num" }
 geom-nurbs = { path = "../geom-nurbs" }
 geom-op = { path = "../geom-op" }
 
+[[bench]]
+name = "kind"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

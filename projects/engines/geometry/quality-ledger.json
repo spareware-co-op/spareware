@@ -595,6 +595,70 @@
       "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace + with * in check",
+      "line_text": "let outside = beyond + 1.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
+      "mutant": "replace + with * in check",
+      "line_text": "let outside = beyond + 1.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace <= with > in check",
+      "line_text": "let side = if t <= mid {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant compares each half with the kind from the other side of t. Only points (order 0) are compared, and a kind is a continuous curve, the same point from either side, so for every kind keeping the contract both compare the same points; a half that misses the kind is caught either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
+      "mutant": "replace < with <= in piece_at",
+      "line_text": "Limit::FromLeft => (a < t || i == 0) && t <= b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search runs forward through the pieces. The two differ only from the left at t == a of a piece after the first, and there the piece before, which ends at t and comes earlier, already matched (a' < t and t <= b'), so the same piece is returned."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/nurbs.rs",
+      "mutant": "replace < with <= in holds",
+      "line_text": "(a < t || at_start) && t <= b",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Patches are searched u outer, v inner. The two differ only from the left at t == a of a later patch in that direction, and there the patch before it in that direction (the same index in the other), which ends at t, comes earlier in the search and already matched, so the same patch is found."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/nurbs.rs",
+      "mutant": "replace && with || in holds",
+      "line_text": "let at_start = first && t == a;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For the first patch a is the domain's start and t >= a, so the test is true for every t <= b either way. For later patches `first || t == a` is `t == a`, making the test a <= t, which finds the same patch: the patch before it in that direction ends at t, comes earlier in the search and already matched."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/affine.rs",
+      "mutant": "replace && with || in Entries::of",
+      "line_text": ".all(|(&d, e)| e.lo() == d && e.hi() == d);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Each exact entry is either the point interval of its double (an integer that is a double, or a certified transform's stored double), both ends equal to it, or an outward-widened enclosure (a quotient, or an integer beyond 2^53), both ends different from it. One end equal and the other not never occurs, so || gives the same as &&."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
+      "mutant": "replace && with || in piece_at",
+      "line_text": "Limit::FromLeft => (a < t || i == 0) && t <= b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The search keeps a piece only if it also holds t (`inside && a <= t && t <= b`), so the side test only chooses among pieces holding t: inside a piece there is one, and at a break the piece ending at t comes first in the search and passes the original test from the left (a < t, t <= b), as it passes the mutant's."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "mutant": "replace classify -> Option<Sign> with None",
       "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
