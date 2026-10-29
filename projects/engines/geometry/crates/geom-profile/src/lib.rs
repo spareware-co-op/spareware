@@ -22,10 +22,8 @@
 //!
 //! Family: Sketch.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//!
-//! Proposed in chapter 27, pending the owner's decision G08.
 //!
 //! Status: scaffold only; built by pieces G229, G230.
 #![cfg_attr(not(test), no_std)]

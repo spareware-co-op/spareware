@@ -530,7 +530,7 @@
   "phase": "Phase 2",
   "crate": "geom-math",
   "size": "Medium",
-  "done_when": "Closest Pythagorean unit vector within a requested angle; rational rotations (Canny, Donald and Ressler); exact composition with one re-approximation; angle bounds checked against an oracle.",
+  "done_when": "Closest Pythagorean unit vector within a requested angle; rational rotations (Canny, Donald and Ressler) in 2D and integer-quaternion rotations in 3D within the requested angle, components below 2^36, with a typed-transform variant where |q|^2 passes 2^40 (32.14); exact composition with one re-approximation; angle bounds checked against an oracle.",
   "depends_on": [
    "G45",
    "G44"
@@ -977,7 +977,7 @@
   "phase": "Phase 3",
   "crate": "geom-topo",
   "size": "Large",
-  "done_when": "Immutable bodies made only through the builder (Solid, Sheet, Wire, Acorn, General), regions and cells, radial fin order, attributes with split and merge classes; model-based tests drive it for 100,000 random steps.",
+  "done_when": "Immutable bodies made only through the builder (Solid, Sheet, Wire, Acorn, General), regions and cells, radial fin order, attributes with split and merge classes; arena indices assigned in persistent-name order before a body is published, with a shuffle test that an output does not depend on its inputs' arena order (32.17); model-based tests drive it for 100,000 random steps.",
   "depends_on": [
    "G80",
    "G76"
@@ -1041,7 +1041,7 @@
   "phase": "Phase 3",
   "crate": "geom-op",
   "size": "Medium",
-  "done_when": "A no_std deterministic CBOR encoder for SKG's subset with one encoding per value (canonical map order, shortest integers and floats); the chosen hashes in safe Rust, passing their published test vectors; cross-checked with cbor2. NameIds and geom-format's decoder (G91) build on it.",
+  "done_when": "A no_std deterministic CBOR encoder for SKG's subset with one encoding per value (canonical map order, shortest integers and floats); SHA-256 from RustCrypto's sha2 (32.20), added to deny-no-std.toml with its audit, passing the NIST test vectors on every target; cross-checked with cbor2. NameIds and geom-format's decoder (G91) build on it.",
   "depends_on": [
    "G79",
    "G70"
@@ -1054,7 +1054,7 @@
   "phase": "Phase 3",
   "crate": "geom-op, geom-name",
   "size": "Medium",
-  "done_when": "The 128-bit NameId value, its hashing under NameScheme v1 and the TopoName, Role, PieceKey and Ordinal types in geom-op; the hash-consed name graph in geom-name; everything sorted by name; the Weak ordinal order of 20.2 with UndecidedOrder; a duplicate-name detector in all test builds. Tests: hashes equal on every target; property tests of the ordinal rule.",
+  "done_when": "The 128-bit NameId value, its hashing under NameScheme v1 and the TopoName, Role, PieceKey and Ordinal types in geom-op; the hash-consed name graph in geom-name, which keeps each node's canonical bytes and refuses a second encoding under one NameId (32.19); everything sorted by name; the Weak ordinal order of 20.2 with UndecidedOrder; a duplicate-name detector in all test builds. Tests: hashes equal on every target; property tests of the ordinal rule.",
   "depends_on": [
    "G81",
    "G86",
@@ -1550,7 +1550,7 @@
   "phase": "Phase 4",
   "crate": "geom-num, geom-poly",
   "size": "Medium",
-  "done_when": "Index checks for coplanarity, the narrow exact i64 path and axis steps before the filter; every step agrees with the exact path; step shares measured on three corpora.",
+  "done_when": "Index checks for coplanarity, the narrow exact i64 path and axis steps before the filter; every step agrees with the exact path; a filter skipped per target only where the count benchmarks show it loses, chosen at build time (32.22); step shares measured on three corpora.",
   "depends_on": [
    "G123",
    "G42",
@@ -3858,7 +3858,7 @@
   "phase": "Phase 8",
   "crate": "geom-spatial",
   "size": "Medium",
-  "done_when": "The Tight Inclusion method (MIT) for linear motions with outward rounding and a certified earliest time; no false negative on Wang et al.'s benchmark.",
+  "done_when": "The Tight Inclusion method (MIT) for linear motions with outward rounding and a certified earliest time; no false negative on the authors' Apache-2.0 time-of-impact sample and our own exact degenerate cases, and on Wang et al.'s 2021 benchmark, fetch-only, once its authors clear its terms (32.31).",
   "depends_on": [
    "G151",
    "G54",
@@ -4746,7 +4746,7 @@
   "phase": "Phase 10",
   "crate": "geom-terrain",
   "size": "Large",
-  "done_when": "Incremental integer Delaunay with name-ordered perturbation, duplicate rules, loose-point deletion; identical bytes for 1,000 insertion orders; 10M random points in 20 s on one core (to confirm).",
+  "done_when": "Incremental integer Delaunay with perturbation ordered by plan position (32.34), duplicate rules, loose-point deletion; identical bytes for 1,000 insertion orders; 10M random points in 20 s on one core (to confirm).",
   "depends_on": [
    "G153",
    "G30",
@@ -4868,7 +4868,7 @@
   "phase": "Phase 10",
   "crate": "geom-curve",
   "size": "Medium",
-  "done_when": "The kinds or compositions the owner's decision names (Helmert, Bloss, Viennese bend, the cubic spiral variant, IFC's gradient curve and segmented reference curve), each passing the kind contract with certified evaluation, conversion and transforms; Clothoids compared out of process.",
+  "done_when": "The transition kind with 32.33's laws (Helmert, Bloss, cosine, sine, the cant-coupled transition, IFC's polynomial spirals, the cubic spiral variant) and IFC's gradient curve and segmented reference curve as compositions in geom-align, each passing the kind contract with certified evaluation, conversion and transforms; Clothoids compared out of process.",
   "depends_on": [
    "G357",
    "G284"

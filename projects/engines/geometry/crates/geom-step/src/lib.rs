@@ -21,7 +21,7 @@
 //! bodies, tessellated geometry and placed instances. Generated EXPRESS validator tables (G416) are
 //! committed here by `geom-gen`.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G427, G428, G429, G476.

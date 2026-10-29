@@ -109,7 +109,7 @@ Every kind of drawing is one of these views:
 | 2. Visibility | Events along each candidate; visible and hidden pieces | One chain of candidates, against occluders found by `geom-spatial` | `geom-draw` |
 | 3. Assemble | Merge coincident lines, build cut regions, key every piece, check, sort | One view | `geom-draw`, `geom-2d`, `geom-name` |
 
-The crates follow section 27, with one exception raised as open question 2: `geom-draw` also reads exact meshes from `geom-mesh`, which section 27 reaches only through `geom-spatial`.
+The crates follow section 27. `geom-draw` also reads exact meshes from `geom-mesh` directly, an edge 27's accepted table includes (32.13), which answers open question 2.
 
 **Nothing is rounded to make a drawing.** Points keep the exact form section 6.3 gives them: a grid point where the value is one, otherwise the planes that meet there, by reference to a plane pool kept with the drawing. Curved values are certified, with their bound. Curves stay exact kinds (18.8). That canonical form is what is stored, compared, hashed and queried.
 

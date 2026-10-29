@@ -23,14 +23,15 @@ natively, for `wasm32-unknown-unknown` and for `wasm32-wasip1` with warnings den
 `clippy -D warnings` over them. The workflow takes its list of crates from the table, through the
 scaffold test's ignored `kernel_build_list`, so it holds no copy of the table.
 
-## The table is the proposed one
+## The table is the accepted one
 
-G09 depends on G08, the owner's decision on chapter 27's crate table, and G08 is not recorded yet.
-So the table here is chapter 27's proposed crate table with chapter 30.5's amendments (`geom-make`,
-and the `geom-p21`, `geom-exchange` and `geom-heal` edges), not only G01's accepted rows: its
-dependency lists are the proposed ones. Crates that only the amendments define say so in their
-headers ("Proposed in chapter 27" or, for `geom-make`, "Proposed in chapter 30", pending G08). When
-the owner decides, the table, chapter 27 and these crates change in one pull request.
+G09 depends on G08, the owner's decision on chapter 27's crate table. G09 was built to chapter 27's
+proposed table with chapter 30.5's amendments (`geom-make`, and the `geom-p21`, `geom-exchange` and
+`geom-heal` edges), and G08 accepted exactly that table on 2026-10-28 (section 32.13). So the table
+here is the accepted one, and no header says "pending" any more: the scaffold test refuses a header
+that still carries the old "Proposed in chapter 27" or "Proposed in chapter 30" mark. A new crate or
+a changed row needs an owner's change to chapter 27 first; the table, chapter 27 and the crates then
+change in one pull request.
 
 ## Crates not here, and why
 
