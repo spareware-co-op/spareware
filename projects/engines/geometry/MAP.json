@@ -6777,6 +6777,30 @@
       "layer": "2",
       "modules": [
         {
+          "cost": "constant per evaluation; a bound O(1) per piece (at most 64 pieces); a conversion O(m·n) for its control net.",
+          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a sign s = ±1 on its axial term so that reversing either parameter is exact:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
+          "guarantees": [
+            "**Stored as themselves.** Centres, radii, slopes and frames are the stored doubles, exactly.",
+            "**Certified, or refused.** Enclosures and bounds are the terms' closed forms in interval arithmetic; the normal bound is the closed-form direction, which survives the poles of a sphere and the apex of a cone (where its sign may be either: then both).",
+            "**Exact NURBS forms.** Each converts to a tensor-product rational surface (a circle in each angular direction, a line in each linear one) with a parameter map per direction, its deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).",
+            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, the frame carried, a mirror flipping the axial sign); any other transform gives the moved NURBS form. A plane takes every affine map.",
+            "**Exact split and reversal.**"
+          ],
+          "job": "The analytic surface kinds: plane, cylinder, cone, sphere and torus, each stored as itself.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the elementary surfaces of ISO 10303-42 (`plane`, `cylindrical_surface`, `conical_surface`, `spherical_surface`, `toroidal_surface`), parametrised in half-turns, with the kinds and the lemon and apple forms of chapter 7 (`projects/engines/geometry/architecture/07-geometry-types.md`); their normals by the cross product of the closed-form partials."
+          },
+          "path": "geom_surface::analytic",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "for each parameter pair, a few enclosures and bounds, a split, a reversal and a transform.",
           "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations; the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
           "family": [],
@@ -6859,6 +6883,51 @@
             "text": "the operations of chapter 7 and the trait names of chapter 12.1 (`projects/engines/geometry/architecture/12-intersections.md`), with the normal bound in place of an unbounded derivative as chapter 12.1 asks."
           },
           "path": "geom_surface::param",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an evaluation is the profiles' plus O(1); a bound O(1) profile bounds per piece; a conversion O(m·n) for its control net, plus the profiles' conversions.",
+          "does": "each kind is a placement c + L·X(u, v) of an unplaced shape X, with L a stored 3 × 3 matrix (the identity when built), so every affine transform keeps the kind on the same parameters (c′ = M·c + t, L′ = M·L):",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+          "guarantees": [
+            "**Certified.** Every enclosure and bound holds the exact value of the surface the stored profiles and placement define.",
+            "**Transforms keep the kind, on the same parameters**, with the rounding of c′ and L′ as the deviation: |Δc| + ‖ΔL‖·sup|X|.",
+            "**Exact split and reversal**: a split trims a profile or cuts the linear direction; a reversal flips the axis (revolution, in u), reverses the profiles, or negates d or σ (in v)."
+          ],
+          "job": "The swept surface kinds: surface of revolution, linear extrusion and ruled surface, each built on `geom-curve`'s trimmed curves and stored as itself.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the surfaces of ISO 10303-42 (`surface_of_revolution`, `surface_of_linear_extrusion`) and the ruled surface; their NURBS construction from L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., sections 8.3 to 8.5 (<https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_surface::swept",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(T) interval operations per evaluation of T terms; a conversion O(m·n·T) for an m × n control net.",
+          "does": "[`Fun`] names the scalar functions (1, t, cos πt, sin πt; angles in half-turns, the kernel's proven angle form), and [`Terms`] holds a kind's c and terms in doubles and as enclosures of the exact values its stored data define. It evaluates every partial derivative ∂^{i+j}S/∂u^i∂v^j in closed form: in doubles at a point, and in intervals over any box, which is both the certified evaluation and the bound. [`Terms::distance`] bounds how far two surfaces of the same terms lie apart over a box, and [`Terms::to_nurbs`] writes them as one tensor-product NURBS surface: each direction's functions are the coordinates of a unit circle (cos, sin and 1, the exact rational quadratic of `geom-curve`) or of a line (t and 1), and a product of two such curves is a tensor product (The NURBS Book, section 8.2, on surfaces of revolution, the same construction).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/terms.rs",
+          "guarantees": [
+            "**Certified.** An enclosure holds the exact value at every point of its box: `geom-num`'s proven `sinpi` and `cospi` enclosures, π between its neighbouring doubles, and `geom-curve`'s exact-where-it-can interval arithmetic.",
+            "**Derivatives in closed form.** A derivative of cos πt or sin πt shifts it a quarter turn and gains π; never a finite difference (chapter 7).",
+            "**Conversion with its error.** The NURBS surface differs from the terms by at most the direction curves' own deviations, multiplied out over the terms, plus the rounding of its control points and weights (the rational bound of `geom-curve`'s conics)."
+          ],
+          "job": "The certified evaluation the analytic surface kinds share: each is S(u, v) = c + Σ f(u)·g(v)·W, fixed vectors W times products of scalar functions of one parameter each.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "direct evaluation of the closed forms in interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>); tensor-product rational surfaces from rational curves (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., chapter 8, <https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_surface::terms",
           "provenance": [],
           "spdx": null,
           "target": "lib"

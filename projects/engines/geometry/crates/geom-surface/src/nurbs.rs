@@ -35,14 +35,14 @@
 use alloc::vec::Vec;
 
 use geom_curve::affine::Entries;
-use geom_curve::{CurveError, DerivativeBound};
+use geom_curve::{CurveError, DerivativeBound, ParamMap};
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
 use geom_num::real::Real;
 use geom_nurbs::{Basis, BernsteinPatch, Bounds, Changed, Direction, Limit, Surface};
 use geom_run::WorkMeter;
 
-use crate::param::{ParamBox, ParamSurface, SurfaceKind};
+use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
 
 /// A box inside the domain, each side ordered and finite.
 fn check_box(((u0, u1), (v0, v1)): ParamBox, ((a, b), (c, d)): ParamBox) -> Result<(), CurveError> {
@@ -225,9 +225,13 @@ impl ParamSurface for Surface<3> {
         out.ok_or(CurveError::Defect)
     }
 
-    fn to_nurbs(&self, _meter: &mut WorkMeter<'_>) -> Result<Changed<Surface<3>>, CurveError> {
+    fn to_nurbs(&self, _meter: &mut WorkMeter<'_>) -> Result<Changed<SurfaceForm>, CurveError> {
         Ok(Changed {
-            value: self.clone(),
+            value: SurfaceForm {
+                surface: self.clone(),
+                u: ParamMap::Same,
+                v: ParamMap::Same,
+            },
             deviation: 0.0,
         })
     }

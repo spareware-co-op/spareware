@@ -52,11 +52,11 @@ fn planar_class(t: &TypedTransform) -> Result<Classification, CurveError> {
 
 /// A transform read for the analytic kinds.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Motion {
+pub struct Motion {
     entries: Entries,
     class: Classification,
     /// The factor a similarity multiplies lengths by: 1 when it keeps lengths.
-    pub(crate) scale: f64,
+    pub scale: f64,
 }
 
 impl Motion {
@@ -66,7 +66,7 @@ impl Motion {
     ///
     /// [`CurveError::Dimension`] unless D is 2 or 3; [`CurveError::NotInPlane`] for a 2D kind and a
     /// transform that moves z; [`CurveError::Degenerate`] for a degenerate transform.
-    pub(crate) fn of<const D: usize>(t: &TypedTransform) -> Result<Motion, CurveError> {
+    pub fn of<const D: usize>(t: &TypedTransform) -> Result<Motion, CurveError> {
         if D != 2 && D != 3 {
             return Err(CurveError::Dimension { dimension: D });
         }
@@ -102,12 +102,14 @@ impl Motion {
     }
 
     /// Whether circles stay circles.
-    pub(crate) fn similar(&self) -> bool {
+    #[must_use]
+    pub fn similar(&self) -> bool {
         self.class.keeps_circles()
     }
 
     /// Whether the transform mirrors.
-    pub(crate) fn mirror(&self) -> bool {
+    #[must_use]
+    pub fn mirror(&self) -> bool {
         self.class.mirror
     }
 
@@ -131,17 +133,29 @@ impl Motion {
     }
 
     /// The image of a point.
-    pub(crate) fn point<const D: usize>(&self, p: [f64; D]) -> Result<[f64; D], CurveError> {
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if an image overflows.
+    pub fn point<const D: usize>(&self, p: [f64; D]) -> Result<[f64; D], CurveError> {
         Ok(lower(&self.apply(lift(&p), true)?, 0.0))
     }
 
     /// The image of a vector.
-    pub(crate) fn vector<const D: usize>(&self, v: [f64; D]) -> Result<[f64; D], CurveError> {
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if an image overflows.
+    pub fn vector<const D: usize>(&self, v: [f64; D]) -> Result<[f64; D], CurveError> {
         Ok(lower(&self.apply(lift(&v), false)?, 0.0))
     }
 
     /// The image of a normal: sign(det M)·M·n.
-    pub(crate) fn normal(&self, n: [f64; 3]) -> Result<[f64; 3], CurveError> {
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if an image overflows.
+    pub fn normal(&self, n: [f64; 3]) -> Result<[f64; 3], CurveError> {
         let m = self.apply(n, false)?;
         Ok(if self.mirror() { m.map(|x| -x) } else { m })
     }
@@ -187,7 +201,11 @@ impl Motion {
     }
 
     /// The exact image M·h + w·t of a homogeneous point h with weight w, enclosed.
-    pub(crate) fn homogeneous_image<const D: usize>(
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if an image overflows.
+    pub fn homogeneous_image<const D: usize>(
         &self,
         h: &[Interval; D],
         w: Interval,
@@ -203,7 +221,11 @@ impl Motion {
     }
 
     /// The exact image of an enclosed point (with the translation) or vector (without).
-    pub(crate) fn enclosed<const D: usize>(
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if an image overflows.
+    pub fn enclosed<const D: usize>(
         &self,
         x: &[Interval; D],
         is_point: bool,

@@ -48,6 +48,9 @@ pub struct Frame<const D: usize> {
     normal: [f64; 3],
 }
 
+/// A frame's unit vectors x̂, ŷ and n̂: in doubles, and enclosures of the exact ones.
+pub type UnitVectors = ([[f64; 3]; 3], [[Interval; 3]; 3]);
+
 /// A frame's unit vectors x̂, ŷ and n̂, in doubles and as enclosures of the exact ones.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Unit {
@@ -119,7 +122,8 @@ fn unit_enclosed(v: [Interval; 3]) -> Result<[Interval; 3], CurveError> {
 /// Whether a × b is certainly not zero, decided exactly: each coordinate's two products summed
 /// without rounding. A product whose error is not a double (below 2^−969) leaves it undecided,
 /// which counts as zero.
-pub(crate) fn not_parallel(a: [f64; 3], b: [f64; 3]) -> bool {
+#[must_use]
+pub fn not_parallel(a: [f64; 3], b: [f64; 3]) -> bool {
     let [a0, a1, a2] = a;
     let [b0, b1, b2] = b;
     [(a1, b2, a2, b1), (a2, b0, a0, b2), (a0, b1, a1, b0)]
@@ -199,6 +203,17 @@ impl<const D: usize> Frame<D> {
             x: self.x,
             normal: self.normal.map(|v| -v),
         }
+    }
+
+    /// The unit vectors x̂, ŷ and n̂: in doubles, and enclosures of the exact ones.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if a unit vector overflows (it cannot for a frame [`Frame::new`]
+    /// accepted).
+    pub fn unit_vectors(&self) -> Result<UnitVectors, CurveError> {
+        let u = self.unit()?;
+        Ok((u.doubles, u.exact))
     }
 
     /// The unit vectors, in doubles and enclosed.

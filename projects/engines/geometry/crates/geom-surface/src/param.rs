@@ -24,11 +24,26 @@
 //!
 //! Cost: none here; each kind's implementation states its own.
 
-use geom_curve::{CurveError, DerivativeBound};
+use geom_curve::{CurveError, DerivativeBound, ParamMap};
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
+
+use crate::analytic::{AffineSurface, Cone, Cylinder, Plane, Sphere, Torus};
+use crate::swept::{Extrusion, Revolution, Ruled};
+
+/// A surface kind as NURBS: the surface, and the maps from the kind's parameters to its own in
+/// each direction (the same parameter, or a conic's tangent half-angle map).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SurfaceForm {
+    /// The NURBS surface.
+    pub surface: geom_nurbs::Surface<3>,
+    /// The map of u.
+    pub u: ParamMap,
+    /// The map of v.
+    pub v: ParamMap,
+}
 
 /// A parameter box ([u0, u1], [v0, v1]).
 pub type ParamBox = ((f64, f64), (f64, f64));
@@ -96,15 +111,13 @@ pub trait ParamSurface {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Bounds<3>, CurveError>;
 
-    /// The surface as NURBS with the same parameters, and a certified bound on their distance.
+    /// The surface as NURBS, with the map from each of the kind's parameters to the surface's, and
+    /// a certified bound on |S(u, v) − N(map(u), map(v))| over the domain (0 when exact).
     ///
     /// # Errors
     ///
-    /// As [`ParamSurface::bound`].
-    fn to_nurbs(
-        &self,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<Changed<geom_nurbs::Surface<3>>, CurveError>;
+    /// [`CurveError::Unbounded`] for an unbounded plane; as [`ParamSurface::bound`].
+    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<SurfaceForm>, CurveError>;
 
     /// The surface split at `t` in `dir`, strictly inside the domain: the part before and the part
     /// after, with the same parameters.
@@ -144,29 +157,74 @@ pub trait ParamSurface {
 }
 
 /// Every surface kind, stored as itself (chapter 7): one variant per kind built. Later pieces add
-/// the analytic and swept kinds (G65), the offset surface (G66) and the subdivision limit surface.
+/// the offset surface (G66) and the subdivision limit surface.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SurfaceKind {
     /// A NURBS surface, rational or not.
     Nurbs(geom_nurbs::Surface<3>),
+    /// A plane.
+    Plane(Plane),
+    /// A cylinder.
+    Cylinder(Cylinder),
+    /// A cone.
+    Cone(Cone),
+    /// A sphere.
+    Sphere(Sphere),
+    /// A torus, ring, horn or spindle.
+    Torus(Torus),
+    /// The image of an analytic kind under an affine map that is not a similarity.
+    Affine(AffineSurface),
+    /// A surface of revolution.
+    Revolution(Revolution),
+    /// A linear extrusion.
+    Extrusion(Extrusion),
+    /// A ruled surface.
+    Ruled(Ruled),
 }
 
 impl ParamSurface for SurfaceKind {
     fn domain(&self) -> ParamBox {
         match self {
             SurfaceKind::Nurbs(s) => ParamSurface::domain(s),
+            SurfaceKind::Plane(s) => ParamSurface::domain(s),
+            SurfaceKind::Cylinder(s) => ParamSurface::domain(s),
+            SurfaceKind::Cone(s) => ParamSurface::domain(s),
+            SurfaceKind::Sphere(s) => ParamSurface::domain(s),
+            SurfaceKind::Torus(s) => ParamSurface::domain(s),
+            SurfaceKind::Affine(s) => ParamSurface::domain(s),
+            SurfaceKind::Revolution(s) => ParamSurface::domain(s),
+            SurfaceKind::Extrusion(s) => ParamSurface::domain(s),
+            SurfaceKind::Ruled(s) => ParamSurface::domain(s),
         }
     }
 
     fn point(&self, u: f64, v: f64, sides: (Limit, Limit)) -> Result<[f64; 3], CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Plane(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Cylinder(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Cone(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Sphere(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Torus(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Affine(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Revolution(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Extrusion(s) => ParamSurface::point(s, u, v, sides),
+            SurfaceKind::Ruled(s) => ParamSurface::point(s, u, v, sides),
         }
     }
 
     fn partials(&self, u: f64, v: f64, sides: (Limit, Limit)) -> Result<[[f64; 3]; 3], CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => s.partials(u, v, sides),
+            SurfaceKind::Plane(s) => s.partials(u, v, sides),
+            SurfaceKind::Cylinder(s) => s.partials(u, v, sides),
+            SurfaceKind::Cone(s) => s.partials(u, v, sides),
+            SurfaceKind::Sphere(s) => s.partials(u, v, sides),
+            SurfaceKind::Torus(s) => s.partials(u, v, sides),
+            SurfaceKind::Affine(s) => s.partials(u, v, sides),
+            SurfaceKind::Revolution(s) => s.partials(u, v, sides),
+            SurfaceKind::Extrusion(s) => s.partials(u, v, sides),
+            SurfaceKind::Ruled(s) => s.partials(u, v, sides),
         }
     }
 
@@ -179,12 +237,30 @@ impl ParamSurface for SurfaceKind {
     ) -> Result<[[Interval; 3]; 3], CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Plane(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Cylinder(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Cone(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Sphere(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Torus(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Affine(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Revolution(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Extrusion(s) => s.enclose(u, v, sides, meter),
+            SurfaceKind::Ruled(s) => s.enclose(u, v, sides, meter),
         }
     }
 
     fn bound(&self, region: ParamBox, meter: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Plane(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Cylinder(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Cone(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Sphere(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Torus(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Affine(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Revolution(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Extrusion(s) => ParamSurface::bound(s, region, meter),
+            SurfaceKind::Ruled(s) => ParamSurface::bound(s, region, meter),
         }
     }
 
@@ -196,6 +272,15 @@ impl ParamSurface for SurfaceKind {
     ) -> Result<DerivativeBound<3>, CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Plane(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Cylinder(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Cone(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Sphere(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Torus(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Affine(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Revolution(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Extrusion(s) => ParamSurface::derivative_bound(s, region, dir, meter),
+            SurfaceKind::Ruled(s) => ParamSurface::derivative_bound(s, region, dir, meter),
         }
     }
 
@@ -206,15 +291,30 @@ impl ParamSurface for SurfaceKind {
     ) -> Result<Bounds<3>, CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => s.normal_bound(region, meter),
+            SurfaceKind::Plane(s) => s.normal_bound(region, meter),
+            SurfaceKind::Cylinder(s) => s.normal_bound(region, meter),
+            SurfaceKind::Cone(s) => s.normal_bound(region, meter),
+            SurfaceKind::Sphere(s) => s.normal_bound(region, meter),
+            SurfaceKind::Torus(s) => s.normal_bound(region, meter),
+            SurfaceKind::Affine(s) => s.normal_bound(region, meter),
+            SurfaceKind::Revolution(s) => s.normal_bound(region, meter),
+            SurfaceKind::Extrusion(s) => s.normal_bound(region, meter),
+            SurfaceKind::Ruled(s) => s.normal_bound(region, meter),
         }
     }
 
-    fn to_nurbs(
-        &self,
-        meter: &mut WorkMeter<'_>,
-    ) -> Result<Changed<geom_nurbs::Surface<3>>, CurveError> {
+    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<SurfaceForm>, CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => s.to_nurbs(meter),
+            SurfaceKind::Plane(s) => s.to_nurbs(meter),
+            SurfaceKind::Cylinder(s) => s.to_nurbs(meter),
+            SurfaceKind::Cone(s) => s.to_nurbs(meter),
+            SurfaceKind::Sphere(s) => s.to_nurbs(meter),
+            SurfaceKind::Torus(s) => s.to_nurbs(meter),
+            SurfaceKind::Affine(s) => s.to_nurbs(meter),
+            SurfaceKind::Revolution(s) => s.to_nurbs(meter),
+            SurfaceKind::Extrusion(s) => s.to_nurbs(meter),
+            SurfaceKind::Ruled(s) => s.to_nurbs(meter),
         }
     }
 
@@ -226,6 +326,15 @@ impl ParamSurface for SurfaceKind {
     ) -> Result<(Changed<SurfaceKind>, Changed<SurfaceKind>), CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Plane(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Cylinder(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Cone(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Sphere(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Torus(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Affine(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Revolution(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Extrusion(s) => ParamSurface::split(s, dir, t, meter),
+            SurfaceKind::Ruled(s) => ParamSurface::split(s, dir, t, meter),
         }
     }
 
@@ -236,6 +345,15 @@ impl ParamSurface for SurfaceKind {
     ) -> Result<Changed<SurfaceKind>, CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => s.reversed(dir, meter),
+            SurfaceKind::Plane(s) => s.reversed(dir, meter),
+            SurfaceKind::Cylinder(s) => s.reversed(dir, meter),
+            SurfaceKind::Cone(s) => s.reversed(dir, meter),
+            SurfaceKind::Sphere(s) => s.reversed(dir, meter),
+            SurfaceKind::Torus(s) => s.reversed(dir, meter),
+            SurfaceKind::Affine(s) => s.reversed(dir, meter),
+            SurfaceKind::Revolution(s) => s.reversed(dir, meter),
+            SurfaceKind::Extrusion(s) => s.reversed(dir, meter),
+            SurfaceKind::Ruled(s) => s.reversed(dir, meter),
         }
     }
 
@@ -246,6 +364,15 @@ impl ParamSurface for SurfaceKind {
     ) -> Result<Changed<SurfaceKind>, CurveError> {
         match self {
             SurfaceKind::Nurbs(s) => s.transformed(transform, meter),
+            SurfaceKind::Plane(s) => s.transformed(transform, meter),
+            SurfaceKind::Cylinder(s) => s.transformed(transform, meter),
+            SurfaceKind::Cone(s) => s.transformed(transform, meter),
+            SurfaceKind::Sphere(s) => s.transformed(transform, meter),
+            SurfaceKind::Torus(s) => s.transformed(transform, meter),
+            SurfaceKind::Affine(s) => s.transformed(transform, meter),
+            SurfaceKind::Revolution(s) => s.transformed(transform, meter),
+            SurfaceKind::Extrusion(s) => s.transformed(transform, meter),
+            SurfaceKind::Ruled(s) => s.transformed(transform, meter),
         }
     }
 }
