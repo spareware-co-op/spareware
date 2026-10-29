@@ -10,7 +10,7 @@
 //! depends on this crate (`geom-test`'s dependency rule checks that), so whatever a generator needs,
 //! a multiprecision library or a proof tool, never enters a kernel build.
 //!
-//! Layer: Development, in chapter 27's proposed crate table: a development crate, outside the
+//! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
 //! (chapter 27) within the licence allow-list of 29.2. No kernel crate depends on it, by chapter
 //! 27's rule for `geom-gen` above, which is stricter than the development layer's rule that no

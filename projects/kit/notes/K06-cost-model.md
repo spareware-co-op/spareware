@@ -117,17 +117,18 @@ Running costs per unit (servers and services, maps, messages, checks and the tea
 
 Add the card or bank fee for transaction apps (middle case, Stripe NZ example): ride US$0.57, order US$0.84, booking US$8.27, job US$13.67, sale US$1.25, rent US$9.82 a month by direct debit. Total middle at-cost fee at 10,000 a month: ride US$0.75, order US$1.02, booking US$8.95, job US$14.35, sale US$1.56, tenancy month US$10.09, listing US$1.59.
 
-The geometry kernel's checks (decision 32.4, recorded by kernel pieces G07 and G10; the machines are in the kernel's chapter 28.17): nothing is bought, so each line is US$0 a month in every case.
+The geometry kernel's checks (decision 32.4, recorded by kernel pieces G07 and G10; the machines are in the kernel's chapter 28.17): one thing is bought, the organisation's GitHub plan, and every other line is US$0 a month.
 
-| Item | Cost a month | Why it costs nothing |
+| Item | Cost a month | Why |
 | --- | --- | --- |
-| Test runners for every pull request, nightly, weekly and release run (Linux, Windows and macOS on x86-64 and Arm, WebAssembly) | US$0 | GitHub's standard hosted runners are free and unlimited for public repositories ([runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), read 2026-10-22) |
+| GitHub Enterprise for the organisation, one seat (from 2026-10-28) | US$21 | It runs 500 jobs at once, 50 of them on macOS, where the free plan runs 20 and 5 ([Actions limits](https://docs.github.com/en/actions/reference/limits); [pricing](https://github.com/pricing), both read 2026-10-28). One push to a kernel pull request starts about 125 jobs, which queued for hours on the free plan. It covers every Spareware repository, not only the kernel's. Each further seat, for a member who needs one, adds US$21 |
+| Test runners for every pull request, nightly, weekly and release run (Linux, Windows and macOS on x86-64 and Arm, WebAssembly) | US$0 | GitHub's standard hosted runners; minutes are free for public repositories ([runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), read 2026-10-22; [pricing](https://github.com/pricing), read 2026-10-28) |
 | Nightly fuzzing | US$0 | On the same runners; OSS-Fuzz, also free, if it accepts the project |
-| Store for the outside oracles' container images | US$0 | The oracle repository's GitHub Actions cache, free up to 10 GB; a private package registry would cost US$0.25 a GB a month past its free 500 MB ([GitHub Packages billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages), read 2026-10-28) |
+| Store for the outside oracles' container images | US$0 | The oracle repository's GitHub Actions cache, free up to 10 GB; an evicted image is rebuilt from its pinned source. The kernel's rule 8 (chapter 29.20) keeps the images out of every registry, so the Enterprise plan's included package storage is not used for them |
 | Reference benchmark machine | US$0 | An owner's spare tower, lent every night from 19:00 to 08:00; its power is the owner's |
 | Licensed Revit machine | US$0 | An owner's workstation and Revit licence, lent; its power is the owner's |
 
-These become costs when GitHub ends its Intel macOS images (2027, so that leg needs a machine), or when a lent machine is no longer lent.
+These cost more when GitHub ends its Intel macOS images (2027, so that leg needs a machine), when the organisation needs more seats, or when a lent machine is no longer lent.
 
 The team row is the reason the fee keeps falling past 10,000 a month. It is too low there: a bigger app needs a bigger team, which this model does not yet cost.
 
