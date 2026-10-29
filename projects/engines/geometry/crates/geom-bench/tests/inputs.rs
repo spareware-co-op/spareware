@@ -29,6 +29,7 @@ use geom_num::grid::{self, COORD_MAX, GridStep, P2, P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::wide::Wide;
+use geom_num::wide32::Wide32;
 use geom_num::{Exactness, NumError, Real, Sign, eft, math, predicate};
 
 const M: i64 = COORD_MAX;
@@ -371,6 +372,111 @@ fn check_wide<const L: usize>() {
     // from_i128 sees both ends of the type.
     let values = w::from_i128::<L>(Typical);
     assert!(values.contains(&i128::MIN) && values.contains(&i128::MAX));
+}
+
+/// The `Wide32` batches (piece G42) are the `Wide` classes at the same bit widths: typical and
+/// extreme operations succeed, overflow ones fail, and `product_i64`'s classes are what they claim.
+fn check_wide32<const L: usize, const M: usize>() {
+    use inputs::wide32 as w;
+    for (x, y) in w::add::<L, M>(Typical)
+        .iter()
+        .chain(&w::add::<L, M>(Extreme))
+    {
+        assert!(x.checked_add(y).is_some(), "add, M = {M}");
+    }
+    assert!(
+        w::add::<L, M>(Overflow)
+            .iter()
+            .all(|(x, y)| x.checked_add(y).is_none())
+    );
+    for (x, y) in w::sub::<L, M>(Typical)
+        .iter()
+        .chain(&w::sub::<L, M>(Extreme))
+    {
+        assert!(x.checked_sub(y).is_some(), "sub, M = {M}");
+    }
+    assert!(
+        w::sub::<L, M>(Overflow)
+            .iter()
+            .all(|(x, y)| x.checked_sub(y).is_none())
+    );
+    let product = |(x, y): &(Wide32<M>, Wide32<M>)| Wide32::<M>::product(x, y);
+    assert!(
+        w::product::<L, M>(Typical)
+            .iter()
+            .all(|p| product(p).is_some())
+    );
+    assert!(
+        w::product::<L, M>(Extreme)
+            .iter()
+            .all(|p| product(p).is_some())
+    );
+    assert!(
+        w::product::<L, M>(Overflow)
+            .iter()
+            .all(|p| product(p).is_none())
+    );
+    assert!(!w::product::<L, M>(Extreme).is_empty());
+    assert!(
+        w::neg::<L, M>(Overflow)
+            .iter()
+            .all(|x| x.checked_neg().is_none())
+    );
+    let signs: BTreeSet<Sign> = w::signum::<L, M>(Typical)
+        .iter()
+        .map(Wide32::signum)
+        .collect();
+    assert_eq!(signs.len(), 3);
+    assert!(
+        w::to_i128::<L, M>(Typical)
+            .iter()
+            .all(|x| x.to_i128().is_some())
+    );
+    assert!(
+        w::to_i128::<L, M>(Overflow)
+            .iter()
+            .all(|x| x.to_i128().is_none())
+    );
+    let values = w::from_i128::<M>(Typical);
+    assert!(values.contains(&i128::MIN) && values.contains(&i128::MAX));
+}
+
+#[test]
+fn wide32_classes() {
+    check_wide32::<4, 8>();
+    check_wide32::<5, 10>();
+    check_wide32::<6, 12>();
+    check_wide32::<8, 16>();
+    use inputs::wide32 as w;
+    assert!(
+        w::resize::<6, 4, 12>(Overflow)
+            .iter()
+            .all(|x| x.resize::<8>().is_none())
+    );
+    assert!(
+        w::resize::<4, 6, 8>(Typical)
+            .iter()
+            .all(|x| x.resize::<12>().is_some())
+    );
+    assert!(
+        w::to_wide::<6, 12>(Typical)
+            .iter()
+            .all(|x| x.to_wide::<6>().is_some())
+    );
+    let product = |&(a, b): &(i64, i64)| Wide32::<3>::product_i64(a, b);
+    assert!(w::product_i64(Typical).iter().all(|p| product(p).is_some()));
+    assert!(w::product_i64(Extreme).iter().all(|p| product(p).is_some()));
+    assert!(
+        w::product_i64(Overflow)
+            .iter()
+            .all(|p| product(p).is_none())
+    );
+    // Typical operands are translations of the grid, of 41 bits.
+    assert!(
+        w::product_i64(Typical)
+            .iter()
+            .all(|&(a, b)| a.unsigned_abs() >> 40 == 1 && b.unsigned_abs() >> 40 == 1)
+    );
 }
 
 #[test]
