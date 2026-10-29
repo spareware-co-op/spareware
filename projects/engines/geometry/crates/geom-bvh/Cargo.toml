@@ -14,6 +14,21 @@ geom-run = { path = "../geom-run", default-features = false }
 
 geom-num = { path = "../geom-num" }
 
+[dev-dependencies]
+# Seeds, the test generator, and the golden store with its one SHA-256 (piece G19): the kernel's
+# development crate, a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
+
+# The build and pair-search benchmarks (piece G54), with the standard library's clock only.
+[[bench]]
+name = "tree"
+harness = false
+
+# The 10M-point build and the welding-like pair search of the cell index (piece G55).
+[[bench]]
+name = "cells"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
