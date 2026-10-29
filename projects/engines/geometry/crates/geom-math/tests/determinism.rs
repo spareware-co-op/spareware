@@ -644,6 +644,14 @@ impl Recorder {
                 self.note("Certified");
                 self.rows(c);
             }
+            // Piece G46's variant; this corpus never makes one, so its digest is unchanged.
+            TypedTransform::Rotation(r) => {
+                self.put_u8(3);
+                self.note("Rotation");
+                for v in r.quaternion() {
+                    self.put_i64(v);
+                }
+            }
         }
     }
 
@@ -1931,7 +1939,7 @@ fn golden_hash_is_the_same_on_every_target() {
 )]
 fn golden_hash_is_the_same_on_every_thread_count() {
     let one = hex(corpus().total.finish());
-    for threads in [1usize, 2, 3, 8] {
+    for threads in geom_test::golden::THREAD_COUNTS {
         let hashes: Vec<String> = std::thread::scope(|sc| {
             let handles: Vec<_> = (0..threads)
                 .map(|_| sc.spawn(|| hex(corpus().total.finish())))

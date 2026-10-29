@@ -88,10 +88,11 @@ pub struct RationalTransform {
 
 /// `num / den` rounded to the nearest integer, ties to even, with whether it was exact (den > 0).
 ///
-/// The callers' budgets keep |num| below 2^86 and 1 ≤ den ≤ 2^40, so the quotient q is below 2^86
-/// in magnitude, 0 ≤ r < den makes 2r at most 2^41, and q + 1 fits: no step fails, and `None`
-/// would report a defect.
-fn round_div(num: i128, den: i128) -> Option<Rounded<i128>> {
+/// The callers' budgets keep |num| below 2^114 and 1 ≤ den < 2^72 (this module's below 2^86 and
+/// 2^40, [`crate::rotation`]'s below 3·2^112 and 2^72), so the quotient q is below 2^114 in
+/// magnitude, 0 ≤ r < den makes 2r below 2^73, and q + 1 fits: no step fails, and `None` would
+/// report a defect.
+pub(crate) fn round_div(num: i128, den: i128) -> Option<Rounded<i128>> {
     let q = num.checked_div_euclid(den)?;
     let r = num.checked_rem_euclid(den)?;
     let value = match r.checked_mul(2)?.cmp(&den) {
