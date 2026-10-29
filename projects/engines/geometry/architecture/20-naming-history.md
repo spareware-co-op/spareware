@@ -11,7 +11,7 @@ The problem: a reference such as "fillet this edge", "dimension to this face" or
 | Identity | What it is | Lives |
 | --- | --- | --- |
 | `OpId` | The permanent ID of one operation, set when the operation is authored and stored in the operation log. An `OpPath` adds sub-step labels | In the log and in files, forever |
-| `NameId` | A persistent name: a 128-bit hash of a canonical encoding of how the entity was made. Names are hash-consed, so a name is a node in a shared graph that refers to its parents by their `NameId` | In files, forever. The hash function and encoding are versioned (`NameScheme v1`) |
+| `NameId` | A persistent name: a 128-bit hash of a canonical encoding of how the entity was made. Names are hash-consed, so a name is a node in a shared graph that refers to its parents by their `NameId` | In files, forever. The hash function and encoding are versioned: `NameScheme v1` is the first 16 bytes of SHA-256 over a domain prefix and the name's deterministic CBOR, with text in NFC under Unicode 18.0.0 (owner action G78, 32.19) |
 | Index | A typed index into a body version's arena | In memory only, never persisted |
 
 **Across documents.** None of these says which document an entity is in, and a copy of a document keeps the same `OpId`s and names. So a reference into another document, such as a consultant's linked model, also holds a `DocRef { id, version }`: the linked document's permanent 128-bit ID from `kit-core`, and the version the reference was made against. That version's header fixes the linked document's kernel edition and `NameScheme` (section 24.4). A foreign file is linked through its import (section 24.8). Imported into a document of its own, it is linked like any other document. Imported into the host, its entities are named by that import's `OpId` and need no `DocRef`.
@@ -23,7 +23,7 @@ enum TopoName {
     Created { op: OpPath, role: Role, from: SortedVec<NameId> },  // made new by this step
     Split   { op: OpPath, of: NameId, piece: PieceKey },           // one input became several
     Merged  { op: OpPath, of: SortedSet<NameId> },                 // several inputs became one
-    Bounded { kind: EdgeOrVertex, by: SortedSet<NameId> },         // named by the faces it bounds
+    Bounded { kind: EdgeOrVertex, by: SortedSet<NameId>, ends: SortedSet<NameId> }, // the faces it lies between, and those that end it
     Weak    { base: NameId, ord: Ordinal },                        // a name that still collides, told apart by order
 }
 enum PieceKey {                                       // an enum, so a later NameScheme can add other keys
@@ -43,7 +43,7 @@ struct Ordinal { n: u32, of: u32 }                    // the n-th, counting from
 - It serves split pieces that share tools and side, section 11.7's unseeded cells, section 11.9's edges between the same two faces, and names that rest only on position: a division set by count (section 16.4), faces inside an imported run (section 19.5) and imported items with no persistent ID (section 24.8).
 - A name is **weak** if it is a `Weak` node or is built on one at any depth, since it changes when that ordinal does. `Weak` is part of the canonical encoding that `NameScheme v1` hashes (section 24.3), so a name's own bytes say whether it is weak.
 - `n` and `of` are `u32`: an imported mesh run can hold millions of faces, and a cut corrugated sheet hundreds of edges. `of` is part of the name, so when the number of colliding entities changes, every old weak name stops matching, and its references report `WeakChanged` (20.4) instead of quietly landing on a neighbour.
-- Whether `Bounded` should also hold the faces that end an edge is section 11's open question 3. Until an owner decides, edges that collide take `Weak`.
+- `Bounded` also holds the faces that end an edge (`ends`; empty for a vertex or a closed edge), which tells apart most edges between the same two faces. Edges that still collide take `Weak` (section 11's open question 3, settled by owner action G78, 32.19).
 
 **Ordinal order.** `NameScheme v1` fixes one order for every ordinal in every operation. No kernel edition may change it, because ordinals are hashed into names that files keep forever.
 

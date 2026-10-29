@@ -35,6 +35,7 @@ use alloc::vec::Vec;
 
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
+use geom_num::real::Real;
 use geom_nurbs::{Basis, BernsteinCurve, Bounds, Changed, Curve, Limit};
 use geom_run::WorkMeter;
 
@@ -69,7 +70,7 @@ fn restrict<const D: usize>(
     (lo, hi): (f64, f64),
 ) -> Result<BernsteinCurve<D>, CurveError> {
     let (a, b) = piece.domain();
-    let sub = (if lo > a { lo } else { a }, if hi < b { hi } else { b });
+    let sub = (lo.clamp(a, b), hi.clamp(a, b));
     if sub == (a, b) {
         return Ok(piece.clone());
     }
@@ -123,23 +124,11 @@ fn hull_of<const D: usize>(v: &[Interval; D]) -> Bounds<D> {
     }
 }
 
-/// The union of two boxes.
-fn union<const D: usize>(a: Option<Bounds<D>>, b: Bounds<D>) -> Bounds<D> {
+/// The union of two boxes, the first absent before any.
+fn union<const D: usize>(a: Option<Bounds<D>>, b: Bounds<D>) -> Result<Bounds<D>, CurveError> {
     match a {
-        None => b,
-        Some(mut a) => {
-            for (x, y) in a.lo.iter_mut().zip(&b.lo) {
-                if *y < *x {
-                    *x = *y;
-                }
-            }
-            for (x, y) in a.hi.iter_mut().zip(&b.hi) {
-                if *y > *x {
-                    *x = *y;
-                }
-            }
-            a
-        }
+        None => Ok(b),
+        Some(a) => Ok(a.union(&b)?),
     }
 }
 
@@ -205,14 +194,20 @@ fn piece_derivative_bound<const D: usize>(
         let [wb] = box_iv(&hw.bound(meter)?)?;
         ws.push(wb);
     }
-    let weights = piece.weights().ok_or(CurveError::Defect)?;
-    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
-    for x in weights {
-        lo = if x.lo() < lo { x.lo() } else { lo };
-        hi = if x.hi() > hi { x.hi() } else { hi };
+    // W itself lies between the least and the largest weight.
+    let mut range = None;
+    for x in piece.weights().ok_or(CurveError::Defect)? {
+        range = Some(union(
+            range,
+            Bounds {
+                lo: [x.lo()],
+                hi: [x.hi()],
+            },
+        )?);
     }
+    let range = range.ok_or(CurveError::Defect)?;
     if let Some(w0) = ws.first_mut() {
-        *w0 = Interval::new(lo, hi)?;
+        *w0 = Interval::new(range.lo[0], range.hi[0])?;
     }
     let c = leibniz(&a, &ws)?;
     Ok(hull_of(c.last().ok_or(CurveError::Defect)?))
@@ -282,7 +277,7 @@ impl<const D: usize> ParamCurve<D> for Curve<D> {
             if b <= lo || a >= hi {
                 continue;
             }
-            out = Some(union(out, restrict(&piece, span)?.bound(meter)?));
+            out = Some(union(out, restrict(&piece, span)?.bound(meter)?)?);
         }
         out.ok_or(CurveError::Defect)
     }
@@ -307,7 +302,7 @@ impl<const D: usize> ParamCurve<D> for Curve<D> {
             } else {
                 piece
             };
-            out = Some(union(out, piece_derivative_bound(&part, order, meter)?));
+            out = Some(union(out, piece_derivative_bound(&part, order, meter)?)?);
         }
         out.map(DerivativeBound::Bounded).ok_or(CurveError::Defect)
     }
@@ -413,9 +408,7 @@ impl<const D: usize> ParamCurve<D> for Curve<D> {
                 *x = *y;
             }
             pts.push(out);
-            if err > deviation {
-                deviation = err;
-            }
+            deviation = Real::new(deviation)?.total_max(Real::new(err)?).get();
         }
         let c = Curve::from_homogeneous(
             self.basis().clone(),
