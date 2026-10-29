@@ -70,6 +70,10 @@ pub enum MathError {
         /// The coordinate that does not fit, in the frame's grid steps.
         value: i128,
     },
+    /// A 2D point, vector or box was given a transform that does not act in the plane: it changes
+    /// some point's z, so it does not map the plane z = 0 of a 2D frame onto itself (chapter
+    /// 14.10's 2D transforms leave z unchanged). It is refused, never projected.
+    NotInPlane,
 }
 
 /// A step of a bit budget, or of a bound stated where the step is taken: its value, or
@@ -106,6 +110,9 @@ impl fmt::Display for MathError {
             MathError::Num(e) => e.fmt(f),
             MathError::Singular => f.write_str("the transform is singular and has no inverse"),
             MathError::FrameMismatch(m) => write!(f, "no exact shift between the frames: {m}"),
+            MathError::NotInPlane => {
+                f.write_str("the transform changes z, so it does not act in the plane")
+            }
             MathError::FrameRangeExceeded { value } => write!(
                 f,
                 "coordinate {value} grid steps does not fit the frame's range of ±(2^40 − 1) steps"

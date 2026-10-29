@@ -3,7 +3,9 @@ name = "geom-nurbs"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+# MPL-2.0 for Spare Kit's code, and Apache-2.0 for the NLib routines ported from NVIDIA's USD BRep
+# (rule 29.20(4); their notices are in projects/engines/geometry/NOTICE).
+license = "MPL-2.0 AND Apache-2.0"
 description = "Spare Kit geometry kernel: NURBS algorithms."
 
 [dependencies]
@@ -15,6 +17,22 @@ geom-run = { path = "../geom-run", default-features = false }
 geom-linalg = { path = "../geom-linalg" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
+
+[dev-dependencies]
+# The exact rational reference of the tests (MIT OR Apache-2.0), as geom-num's tests use it.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+# The golden store and its one SHA-256 (piece G19), which pins the fitting corpus's digest and the
+# operations' replay hash: the kernel's development crate, a development dependency only (28.1).
+geom-test = { path = "../geom-test" }
+
+[[bench]]
+name = "nurbs"
+harness = false
+
+[[bench]]
+name = "fit"
+harness = false
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -803,6 +803,7 @@ dependencies = [
  "geom-math",
  "geom-num",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]
@@ -983,6 +984,8 @@ dependencies = [
 name = "geom-gen"
 version = "0.0.0"
 dependencies = [
+ "dashu-int",
+ "dashu-ratio",
  "geom-num",
  "geom-test",
  "proc-macro2",
@@ -1058,7 +1061,10 @@ dependencies = [
 name = "geom-linalg"
 version = "0.0.0"
 dependencies = [
+ "dashu-int",
+ "dashu-ratio",
  "geom-num",
+ "geom-test",
 ]
 
 [[package]]
@@ -1154,11 +1160,14 @@ dependencies = [
 name = "geom-nurbs"
 version = "0.0.0"
 dependencies = [
+ "dashu-int",
+ "dashu-ratio",
  "geom-linalg",
  "geom-math",
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]
@@ -1378,7 +1387,11 @@ version = "0.0.0"
 dependencies = [
  "cargo_metadata",
  "clap",
+ "dashu-int",
+ "dashu-ratio",
  "geom-num",
+ "geom-nurbs",
+ "geom-run",
  "lcov",
  "num-rational",
  "petgraph",

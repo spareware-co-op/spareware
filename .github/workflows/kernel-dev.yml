@@ -238,5 +238,14 @@ jobs:
           test -n "$verus"
           rustup toolchain install "$VERUS_RUST" --profile minimal
           dirname "$verus" >> "$GITHUB_PATH"
+      # Gate 1 (G43): Verus must first fail on a planted violation, a carry dropped from the wide
+      # integers' twin (geom-test's trip module and binary, built with the kernel's toolchain).
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Verus fails on a planted violation
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- verus --
+          verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
       - name: Verus verifies geom-num's twins (the wide integers and the four explicit-point predicates)
         run: verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs

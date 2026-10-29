@@ -55,6 +55,11 @@ petgraph = { version = "0.8.3", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
 # The LCOV tracefiles cargo-llvm-cov writes, read by the coverage gate (G21). MIT OR Apache-2.0.
 lcov = "0.8.2"
+# The exact rationals of the NURBS reference implementation (G57, `nurbs_reference`): big integers
+# and rationals. MIT OR Apache-2.0, the versions geom-num's and geom-linalg's tests use, without
+# the default num-order and dashu-float features, which the reference does not use.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 # A CommonMark parser, so tests/attack_g17.rs reads the kernel's README.md, AGENTS.md and
@@ -73,6 +78,11 @@ unicode-normalization = "0.1.26"
 num-rational = "0.4.2"
 # The workflow test reads `.github/workflows/kernel-quality.yml` as YAML (G21). MIT OR Apache-2.0.
 yaml-rust2 = { version = "0.13.0", default-features = false }
+# The kernel crates the NURBS reference is compared with on every pull request (G57,
+# tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
+# MPL-2.0; development dependencies, so no kernel crate comes to depend on this one.
+geom-nurbs = { path = "../geom-nurbs" }
+geom-run = { path = "../geom-run" }
 
 [lints.rust]
 unsafe_code = "forbid"
