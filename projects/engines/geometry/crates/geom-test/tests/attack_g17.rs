@@ -511,9 +511,28 @@ fn is_workflow(name: &str) -> bool {
 
 /// English number words, for the counts the files write out.
 fn number_word(n: usize) -> &'static str {
-    const WORDS: [&str; 13] = [
-        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-        "eleven", "twelve",
+    const WORDS: [&str; 21] = [
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+        "twenty",
     ];
     WORDS.get(n).copied().unwrap_or("many")
 }
