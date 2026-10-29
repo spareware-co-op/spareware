@@ -1852,6 +1852,47 @@ fn enclosure_classes_take_every_path() {
     assert!(ln.iter().any(|x| x.lo() == 1.0));
     assert!(ln.iter().any(|x| x.lo().is_subnormal()));
     assert!(ln.iter().any(|x| x.hi() > pow2(1020)));
+    // atan2: typical boxes never meet the branch cut and always have an angle; extreme ones meet
+    // it from both sides, hold the origin at a corner (an exact zero bound), are the origin alone,
+    // subnormal, huge, or have their lower edge on the negative x-axis (an upper bound past π).
+    let pi_up = std::f64::consts::PI.next_up();
+    let wraps = |(y, x): &(Interval, Interval)| x.lo() < 0.0 && y.lo() < 0.0 && y.hi() >= 0.0;
+    let typical = i::atan2(Typical);
+    assert!(typical.iter().all(|b| !wraps(b) && b.0.atan2(b.1).is_ok()));
+    assert!(
+        typical
+            .iter()
+            .any(|(y, x)| y.lo() < 0.0 && y.hi() > 0.0 && x.lo() > 0.0)
+    );
+    assert!(
+        typical
+            .iter()
+            .any(|(y, x)| x.lo() < 0.0 && x.hi() > 0.0 && y.lo() > 0.0)
+    );
+    assert!(typical.iter().any(|(y, x)| x.hi() < 0.0 && y.hi() < 0.0));
+    let atan2 = i::atan2(Extreme);
+    assert!(atan2.iter().any(wraps));
+    assert!(
+        atan2
+            .iter()
+            .any(|(y, x)| y.atan2(*x) == Err(NumError::OutsideDomain))
+    );
+    assert!(
+        atan2
+            .iter()
+            .any(|(y, x)| y.atan2(*x).is_ok_and(|r| r.lo() == 0.0))
+    );
+    assert!(
+        atan2
+            .iter()
+            .any(|(y, _)| y.lo() != 0.0 && y.lo().is_subnormal())
+    );
+    assert!(atan2.iter().any(|(y, _)| y.lo() > pow2(1020)));
+    assert!(
+        atan2
+            .iter()
+            .any(|b| !wraps(b) && b.0.atan2(b.1).is_ok_and(|r| r.hi() == pi_up))
+    );
 }
 
 /// The public predicates' batches take the routes their benchmarks are read as (piece G28): on

@@ -1,6 +1,6 @@
 //! Interval versions of the proven maths functions: [`Interval::sinpi`], [`Interval::cospi`],
-//! [`Interval::exp`] and [`Interval::ln`], certified enclosures for curved computations
-//! (chapters 12.3 and 16.2; piece G47's "interval versions with exact peak tests").
+//! [`Interval::exp`], [`Interval::ln`] and [`Interval::atan2`], certified enclosures for curved
+//! computations (chapters 12.3 and 16.2; piece G47's "interval versions with exact peak tests").
 //!
 //! Method: the interval extension of a standard function by monotonicity and its critical
 //! points, as in Moore, Kearfott and Cloud, *Introduction to Interval Analysis*, SIAM 2009,
@@ -8,11 +8,16 @@
 //! extremes are at the ends, so only the ends are evaluated, and every critical point inside is
 //! added exactly. Each end is evaluated with the correctly rounded point function of
 //! [`crate::math`] and widened by one step outward with `next_down` and `next_up`, as
-//! [`crate::interval`] does after every operation.
+//! [`crate::interval`] does after every operation. `atan2` over a box takes the image of the
+//! box's part inside its domain, the plane without the origin, as IEEE 1788-2015's `atan2` does
+//! (§9.1, table 9.1: domain `R² \ {(0, 0)}`, range `(−π, π]`;
+//! <https://doi.org/10.1109/IEEESTD.2015.7140721>).
 //!
 //! Cost: constant time and no allocation: the point function at each of the two ends (one or two
 //! calls of the correctly rounded `sinpi`, `cospi`, `exp` or `ln`), two widening steps, and for
-//! the periodic two a fixed number of exact integer comparisons for the peak tests.
+//! the periodic two a fixed number of exact integer comparisons for the peak tests; `atan2` at
+//! most four calls of the correctly rounded `atan2`, one per corner of the box, and none when the
+//! box straddles the branch cut.
 //!
 //! Guarantees:
 //!
@@ -27,6 +32,26 @@
 //!   exact (a multiple of ½ for `sinpi` and `cospi`, whose value is then exactly 0 or ±1; `exp(0)`;
 //!   `ln(1)`), it is used without widening. Values of `sinpi` and `cospi` are clamped to `[−1, 1]`,
 //!   and the lower bound of `exp` to `+0`, which the exact functions never leave.
+//! - **Inclusion for `atan2`.** The result contains the angle `θ(y, x) ∈ (−π, π]` of every real
+//!   point `(x, y) ≠ (0, 0)` of the box, a zero `y` being the real 0, so a point on the negative
+//!   x-axis has the angle π. *Proof.* If the box has a point with `x < 0` and points with `y < 0`
+//!   and `y ≥ 0` (`x.lo < 0`, `y.lo < 0 ≤ y.hi`), it holds points of the negative x-axis, angle
+//!   π, and points just below it, whose angles approach −π, so the hull of its image is
+//!   `[−π, π]`, which the result `[−next_up(π̃), next_up(π̃)]` contains (`π̃ = RN(π) < π <
+//!   next_up(π̃)`). Otherwise the box lies in the closed right half-plane (`x ≥ 0`), the closed
+//!   upper one (`y ≥ 0`) or the open lower one (`y < 0`), where `θ` is continuous away from the
+//!   origin: the branch cut, the negative x-axis, is outside the first and the third, and on the
+//!   boundary of the second, where `θ = π` is the limit from above. Each of the three is a
+//!   half-plane whose bounding line passes through the origin, so along a segment inside it that
+//!   misses the origin the direction turns one way only and `θ` is monotone, and along a segment
+//!   through the origin `θ` is constant on each side. So on each edge of the box `θ` takes its
+//!   extremes at the edge's ends that are not the origin, and a point inside has the angle of the
+//!   point where the ray from the origin through it leaves the box. The extremes over the box
+//!   without the origin are therefore at its corners other than the origin. Each corner's angle is
+//!   evaluated faithfully and widened as above; it is exact only at `θ = 0`, a corner on the
+//!   positive x-axis, since every other angle of a point with double coordinates is irrational
+//!   (`tan θ = y/x` is rational, and by Lindemann–Weierstrass a nonzero algebraic `θ` has a
+//!   transcendental tangent, so `θ` is never a nonzero double).
 //! - **Exact peak tests.** Whether the interval contains a maximum or a minimum is decided exactly,
 //!   with no rounding, by [`Arc`]: the peaks of periodic fields fall at exact half-integers of
 //!   their phase (chapter 16.2), and the test never misses one or invents one.
@@ -37,17 +62,19 @@
 //!   21), with the errors of the point functions: `exp` fails with [`NumError::NotFinite`] when
 //!   its upper bound overflows; `ln` fails with [`NumError::OutsideDomain`] when the interval
 //!   holds a negative number, where the logarithm is not a real number, and with
-//!   [`NumError::NotFinite`] when its lower bound is zero, where the logarithm is `−∞`.
+//!   [`NumError::NotFinite`] when its lower bound is zero, where the logarithm is `−∞`; `atan2`
+//!   fails with [`NumError::OutsideDomain`] when the box is the origin alone, which has no angle.
 //! - **Deterministic.** Only the correctly rounded functions of [`crate::math`] (their ports, on
 //!   the finite bounds of an interval, which the public functions would accept unchanged), IEEE
 //!   754 basic operations, comparisons, `rint` (exact), `next_up` and `next_down`.
 //!
-//! These are the four that chapter 16.2 names. An interval `atan2` is not provided here; its point
-//! function's bound is proven (see [`crate::math::atan2()`]), so one can follow the same method: the
-//! extremes over a box that avoids the origin are at its corners, except across the branch cut on
-//! the negative x-axis.
+//! Proven and tested: the inclusions above are proven here, on the proven faithfulness of the
+//! point functions (the module documentation of [`crate::math`]); Kani does not reach them, since
+//! the ports' tables and polynomials are beyond a bounded proof. The tests check every inclusion
+//! against the big-number reference of `tests/math_reference.rs` on seeded boxes and at the
+//! peaks, axes, branch cut and origin (`tests/attack_g47.rs`).
 
-use super::{exp, log, sincospi};
+use super::{atan2, exp, log, sincospi};
 use crate::eft::two_sum;
 use crate::error::NumError;
 use crate::interval::{Interval, max2, min2};
@@ -145,6 +172,20 @@ fn around(r: f64, exact: bool) -> (f64, f64) {
     }
 }
 
+/// `next_up(RN(π))`, the least double above π: the bounds of every angle, as `±PI_UP`.
+const PI_UP: f64 = core::f64::consts::PI.next_up();
+
+/// The enclosure `[low, high]` of the angle of the corner `(x, y)` of a box, or `None` for the
+/// origin, which has no angle. The angle is exactly 0 on the positive x-axis (a zero `y` is +0,
+/// an interval's zero) and irrational everywhere else (the module documentation), so every other
+/// corner's correctly rounded angle is widened by one step.
+fn corner(y: f64, x: f64) -> Option<(f64, f64)> {
+    if y == 0.0 && x >= 0.0 {
+        return (x > 0.0).then_some((0.0, 0.0));
+    }
+    Some(around(atan2::atan2(y, x), false))
+}
+
 /// The enclosure of a periodic function of half-turns, `f(t) = sin(π(t + shift))`, given its
 /// correctly rounded point version (a port, called on the interval's finite bounds) and the
 /// representatives in `[−1, 3)` of its maxima and minima. The bounds are compared with
@@ -158,6 +199,15 @@ fn around(r: f64, exact: bool) -> (f64, f64) {
 /// where sinpi and cospi on extreme inputs then cost 5.4% and 6.2% more instructions (G41's count
 /// gate), and `#[inline]` did not bring it back. (Splitting it so the generic part only called the
 /// point function cost each call about 25 instructions more on x86-64: the count gate again.)
+///
+/// Always inline into its one caller per copy: G47's x86-64 count gate found both copies out of
+/// line, `Interval::sinpi` and `cospi` a 39-instruction call around them, 7% to 9% more
+/// instructions, after `math::fma` became always inline, an edit to neither function.
+#[allow(
+    clippy::inline_always,
+    reason = "measured: left to LLVM it went out of line after an unrelated edit, on x86-64"
+)]
+#[inline(always)]
 fn periodic(
     x: Interval,
     f: impl Fn(f64) -> f64,
@@ -240,6 +290,39 @@ impl Interval {
         }
         let (low, _) = around(log::ln(self.lo()), self.lo() == 1.0);
         let (_, high) = around(log::ln(self.hi()), self.hi() == 1.0);
+        Interval::new(low, high)
+    }
+
+    /// An interval containing the angle of the point `(x, y)`, in radians in `(−π, π]`, for every
+    /// real point of the box with `y` in this interval and `x` in `x`, other than the origin.
+    ///
+    /// The bounds are reals, a zero bound the real 0, so the points of the negative x-axis have
+    /// the angle π, the top of the range (IEEE 1788-2015's `atan2`). A box that holds them and
+    /// points below them (`x.lo < 0` and `y.lo < 0 ≤ y.hi`) has angles from just above −π up to
+    /// π, and its result is `[−π, π]`, rounded outward; so is that of a box with the origin
+    /// inside it. Every other box takes its extremes at its corners other than the origin: each
+    /// corner's angle is the correctly rounded [`crate::math::atan2()`], widened by one step
+    /// outward, or exactly 0 on the positive x-axis. See the module documentation for the proof.
+    ///
+    /// The point function keeps IEEE 754's sign of zero, so [`crate::math::atan2()`] of a point
+    /// with `y = −0` and `x < 0` is −π, the other side of the cut; a box whose lower `y` bound is
+    /// 0 holds the real 0 only, whose angle there is π.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::OutsideDomain`] if both intervals are exactly zero: the box is the origin
+    /// alone, which has no angle (IEEE 1788-2015 gives the empty set there).
+    pub fn atan2(self, x: Interval) -> Result<Interval, NumError> {
+        let (y_lo, y_hi) = (self.lo(), self.hi());
+        let (x_lo, x_hi) = (x.lo(), x.hi());
+        if x_lo < 0.0 && y_lo < 0.0 && y_hi >= 0.0 {
+            return Interval::new(-PI_UP, PI_UP);
+        }
+        let (low, high) = [(y_lo, x_lo), (y_lo, x_hi), (y_hi, x_lo), (y_hi, x_hi)]
+            .into_iter()
+            .filter_map(|(y, x)| corner(y, x))
+            .reduce(|(l, h), (m, k)| (min2(l, m), max2(h, k)))
+            .ok_or(NumError::OutsideDomain)?;
         Interval::new(low, high)
     }
 }

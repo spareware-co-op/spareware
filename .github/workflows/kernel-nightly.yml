@@ -7,8 +7,12 @@ name: Kernel nightly
 # attack_g30.rs), with SPAREKIT_SEED set to the run's number in hexadecimal and printed first, so
 # each night draws new cases and a failure replays exactly: rerun the job, or set SPAREKIT_SEED to
 # the printed value. A failed property prints its shrunk input as a fixture line (`fixture[...]`),
-# to add to geom-num's tests/verification/fixtures.txt once the bug is fixed (28.16). Later pieces
-# add the rest of 28.17's nightly list (hours of fuzzing, slow fixtures, outside oracles).
+# to add to geom-num's tests/verification/fixtures.txt once the bug is fixed (28.16). Piece G47
+# adds the proven maths functions (sinpi, cospi, exp, ln and atan2): every input of CORE-MATH's
+# worst-case lists, fetched at the commit the ports come from and checked by SHA-256, and ten
+# million inputs per function from the night's seed, each against geom-num's big-number reference
+# (tests/math_full_worst_cases.rs and tests/math_oracle.rs). Later pieces add the rest of 28.17's
+# nightly list (hours of fuzzing, slow fixtures, outside oracles).
 #
 # --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
 # guard).
@@ -55,3 +59,52 @@ jobs:
         run: >-
           cargo test --locked --release -p geom-num
           --test verification --test attack_g28 --test attack_g29 --test attack_g30
+
+  maths:
+    name: Proven maths against the oracle
+    runs-on: ubuntu-latest
+    # Measured (G47): about 6.5 hours of one core's work for the ten million inputs per function,
+    # and 7 minutes on five cores for the lists, so about two hours on a hosted runner's four.
+    timeout-minutes: 300
+    env:
+      # The CORE-MATH commit the five functions are ported from (geom-num's src/math/).
+      CORE_MATH_COMMIT: 0ce0cbc15935e24c656280e5a46c34e89f301b7a
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Tonight's seed, printed
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+      - name: CORE-MATH's worst-case lists at the ported commit, checked by SHA-256
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/core-math/src/binary64"
+          for f in sinpi cospi exp log atan2; do
+            mkdir -p "$dir/$f"
+            curl --fail --silent --show-error --location --retry 3 --output "$dir/$f/$f.wc" \
+              "https://gitlab.inria.fr/core-math/core-math/-/raw/$CORE_MATH_COMMIT/src/binary64/$f/$f.wc"
+          done
+          cd "$dir"
+          sha256sum --check --strict <<'SUMS'
+          476d2c6bad1332cc2257a9b73dd95fcc86aa8ec2288d31db30695ed105955c37  sinpi/sinpi.wc
+          ae02bccca8ea664673cf5b1035acb66d8bd3d74ad14d1e6f321ea73a2ae7e34f  cospi/cospi.wc
+          8c62a01572eb5c66d0303f287ca528fffbb69f3d3935ca29f852f656553b128b  exp/exp.wc
+          2d213b6758e257a1dc68dee717af2fc04b2907db19639b80bf196dfbf04ed9fb  log/log.wc
+          9e4fb81a3c4a789ea739203d2db3ef9689c48208d94196726fa7a22886e573db  atan2/atan2.wc
+          SUMS
+          echo "CORE_MATH_DIR=$dir" >> "$GITHUB_ENV"
+      - name: Every input of the worst-case lists
+        run: >-
+          cargo test --locked --release -p geom-num --test math_full_worst_cases
+          -- --ignored --nocapture
+      - name: Ten million inputs per function from tonight's seed
+        run: >-
+          cargo test --locked --release -p geom-num --test math_oracle
+          -- --ignored --nocapture

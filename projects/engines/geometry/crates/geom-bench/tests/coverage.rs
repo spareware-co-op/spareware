@@ -580,16 +580,13 @@ fn every_function_excused_as_a_constant_refusal_still_refuses() {
         .filter(|(_, why)| why.starts_with("a constant: always Err(UnprovenMaths)"))
         .map(|(f, _)| *f)
         .collect();
-    assert_eq!(
-        refusals,
-        ["Interval::sin", "Interval::cos", "Interval::atan2"]
-    );
+    assert_eq!(refusals, ["Interval::sin", "Interval::cos"]);
     for name in refusals {
         for x in &intervals {
-            let got = match name {
-                "Interval::sin" => x.sin(),
-                "Interval::cos" => x.cos(),
-                _ => x.atan2(*x),
+            let got = if name == "Interval::sin" {
+                x.sin()
+            } else {
+                x.cos()
             };
             assert_eq!(
                 got,
