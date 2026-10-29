@@ -15,12 +15,14 @@
     reason = "tests: native arithmetic and indexing, and a failure stops the test"
 )]
 
-use geom_curve::affine::int_interval;
+use geom_curve::affine::{Entries, int_interval};
 use geom_curve::contract::check;
 use geom_curve::{
     ContractError, CurveError, CurveKind, DerivativeBound, Law, NurbsForm, ParamCurve, ParamMap,
 };
-use geom_math::{Axis, GridTransform, MathError, RationalTransform, Rotation, TypedTransform};
+use geom_math::{
+    Axis, GridTransform, MathError, RationalRotation, RationalTransform, Rotation, TypedTransform,
+};
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Curve, Limit, NurbsError};
 use geom_run::{Budget, WorkMeter};
@@ -428,4 +430,36 @@ fn every_error_says_what_it_is() {
         CurveError::NotInPlane
     );
     assert_eq!(CurveError::from(MathError::Singular), CurveError::NotFinite);
+}
+
+/// Claim: an exact rotation too large for a rational transform (|q|² above 2^40) gives entries
+/// enclosing M(q)/|q|², tightly, with no translation.
+#[test]
+fn exact_rotations_give_their_entries() {
+    let r = RationalRotation::new([1 << 21, 3, 5, 7]).unwrap();
+    let t = TypedTransform::from(r);
+    assert!(matches!(t, TypedTransform::Rotation(_)), "{t:?}");
+    let e = Entries::of(&t).unwrap();
+    let (m, n2) = (r.matrix().unwrap(), r.norm2() as f64);
+    let zero = Interval::point(0.0).unwrap();
+    // No translation: the origin stays within a few subnormal steps of itself.
+    for c in e.image_enclosed([zero; 3]).unwrap() {
+        assert!(
+            c.lo() <= 0.0 && 0.0 <= c.hi() && c.hi() - c.lo() < 1e-300,
+            "{c:?}"
+        );
+    }
+    for j in 0..3 {
+        let mut x = [zero; 3];
+        x[j] = Interval::point(1.0).unwrap();
+        let column = e.image_enclosed(x).unwrap();
+        for (i, c) in column.iter().enumerate() {
+            let near = m[i][j] as f64 / n2;
+            assert!(
+                c.lo() <= near + 1e-15 && near - 1e-15 <= c.hi(),
+                "{i}, {j}: {c:?}"
+            );
+            assert!(c.hi() - c.lo() < 1e-14, "{i}, {j}: {c:?}");
+        }
+    }
 }
