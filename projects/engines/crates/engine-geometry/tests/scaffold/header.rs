@@ -73,11 +73,13 @@ pub const PENDING_PREFIX: &str = "Direct dependencies still to add when ";
 /// The prefix of the status line every scaffolded crate carries.
 pub const STATUS_PREFIX: &str = "Status: scaffold only; built by pieces ";
 
-/// The mark of a crate that only chapter 27's proposed amendments define.
-pub const MARK_27: &str = "Proposed in chapter 27, pending the owner's decision G08.";
-
-/// The mark of a crate that only chapter 30.5's amendments define.
-pub const MARK_30: &str = "Proposed in chapter 30, pending the owner's decision G08.";
+/// The marks a crate's header carried while its row waited for owner action G08: one for chapter
+/// 27's amendments, one for chapter 30.5's. G08 accepted both (section 32.13), so a header that
+/// still carries one states something no longer true.
+pub const STALE_MARKS: [&str; 2] = [
+    "Proposed in chapter 27, pending the owner's decision G08.",
+    "Proposed in chapter 30, pending the owner's decision G08.",
+];
 
 /// The pending line a crate's header carries for one dependency under way.
 pub fn pending_line(dep: &str, piece: &str) -> String {

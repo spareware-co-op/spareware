@@ -64,7 +64,7 @@ use geom_num::grid::{
 };
 use geom_num::ladder::{
     ANGULAR, ANGULAR_LOG2, COMMIT_DISTANCE_2D, COMMIT_DISTANCE_3D, COMMIT_PER_AXIS, FIT, HEAL_CAP,
-    HEAL_DEFAULT, HalfSteps, SHORT_EDGE_WARNING,
+    HEAL_DEFAULT, HalfSteps, PER_OPERATION, SHORT_EDGE_WARNING,
 };
 use geom_num::plane::{Plane, Tpi};
 use geom_test::prop;
@@ -452,6 +452,7 @@ fn attack_the_ladder_holds_only_accepted_rungs_each_derived() {
         "FIT",
         "HEAL_CAP",
         "HEAL_DEFAULT",
+        "PER_OPERATION",
         "SHORT_EDGE_WARNING",
     ]);
     assert_eq!(constants, accepted);
@@ -508,6 +509,7 @@ fn a_length_in_steps_is_exact_in_quarter_nanometres() {
     for step in [GridStep::Q0, GridStep::Q1, GridStep::Q2] {
         for steps in [
             FIT,
+            PER_OPERATION,
             HEAL_DEFAULT,
             HEAL_CAP,
             SHORT_EDGE_WARNING,

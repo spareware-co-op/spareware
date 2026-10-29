@@ -145,7 +145,7 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 - Piece "Arena layout and plane memory benchmarks" on the generated 230,000-element building.
 - Piece "Local re-cut": CI equality of local and full re-cuts, and door moves at 3, 50 and 300 openings, natively and in wasm32.
 - The corridor benchmark (proposed: 50 km in 60 s and 4 GB) before ε_fit is confirmed for earthworks.
-- Nightly scenario runs against each kernel share once the reference machine is chosen.
+- Nightly scenario runs against each kernel share on the reference machine (32.16).
 
 ### R6. Error bounds pile up until curved work refuses
 
@@ -537,7 +537,7 @@ A future person or AI who reads one chapter could build the wrong thing, against
 
 ### R26. The test machines cost more than the co-op can pay
 
-**What could go wrong.** The determinism promise needs, on every pull request, macOS runners on both chip types and aarch64 Linux runners. It also needs a dedicated benchmark machine, nightly fuzzing hours, a private oracle registry, and licensed Revit and AutoCAD machines (28). GitHub retired its macOS 13 image on 4 December 2025 and said x86-64 macOS ends when the macOS 15 image retires in fall 2027 (changelog, 2025-09-19); its runner reference, read 2026-10-22, also lists a `macos-26-intel` image, so the date is not settled. When Intel images end, the kernel's x86-64 macOS leg needs a self-hosted machine or the owner's decision to drop the target (32.4). Today every pull-request leg, Windows on Arm included, runs on GitHub's standard hosted runners, free and unlimited for public repositories, and this repository is public (G02's `kernel.yml`), so the per-pull-request matrix costs nothing until then. If the matrix is trimmed to save money, the promise is no longer checked.
+**What could go wrong.** The determinism promise needs, on every pull request, macOS runners on both chip types and aarch64 Linux runners. It also needs a dedicated benchmark machine, nightly fuzzing hours, a private oracle registry, and licensed Revit and AutoCAD machines (28). GitHub retired its macOS 13 image on 4 December 2025 and said x86-64 macOS ends when the macOS 15 image retires in fall 2027 (changelog, 2025-09-19); its runner reference, read 2026-10-22, also lists a `macos-26-intel` image, so the date is not settled. When Intel images end, the kernel's x86-64 macOS leg needs a self-hosted machine or the owner's decision to drop the target (32.4). Today every pull-request leg, Windows on Arm included, runs on GitHub's standard hosted runners, free and unlimited for public repositories, and this repository is public (G02's `kernel.yml`), so the per-pull-request matrix costs nothing until then. What it did cost was waiting: GitHub's free plan runs 20 jobs at once and one kernel push starts about 125, so the organisation moved to GitHub Enterprise on 2026-10-28 (500 at once, US$21 a month for its one seat; 32.4, K06). If the matrix is trimmed to save money, the promise is no longer checked.
 
 **Likelihood:** Medium to High. **Impact:** High.
 
@@ -596,12 +596,42 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | CI cost and hosting; OSS-Fuzz or co-op machines | 28 | 32.4 |
 | The edition guarantee and checker fixes: the guarantee covers valid results only | 28 | 32.4 |
 | Who approves as a kernel owner; who reviews proofs; who accepts spine amendments; who sets the kernel's share of Spare Construct's targets | 23, 26, 28, 29 | 32.5 |
-| GPL and LGPL tools as out-of-process oracles; reading GPL source; Numerical Recipes code in oracle builds; the method-only procedure as the standard; the Unlicense and CC0-1.0 on the code allow-list | 24, 28, 29 | 32.6 |
+| GPL and LGPL tools as out-of-process oracles; reading GPL source; Numerical Recipes code in oracle builds; the method-only procedure as the standard; the Unlicense and CC0-1.0 on the code allow-list | 24, 28, 29 | 32.6; the out-of-process oracles decided yes by owner action G75 |
 | Patent searches, who does them and who pays: EMBER, Lifted Surfacing, Topological Offsets, transfinite patches, developable lofts, sheet-metal unfolding, the section 16 methods, Autodesk US 10,635,088, nTop's filings, IntegrityWare's claim, the sixteen unsearched families, and the trade mark and any patent on "Viennese Bend". The Google Patents status of the Pixar, Stam, T-spline and watertightCAD patents is an assumption until counsel confirms | 11, 13, 16, 17, 29 | 32.7, then piece "Patent register" |
 | NLib's chain of title, the narrowing of option D, how "notices kept" is done, and an issue to NVIDIA | 12, 29 | 32.8, decided 2026-10-24: A, for all of the SMLib release |
 | Writing to EMBER's authors, the csgrs and Hyper author, CADCraft, tangency-labs, McNeel (openNURBS, and so Rhino subdivision exchange) and Pixar (OpenSubdiv's TOST licence); the order of contacts | 11, 14, 16, 24, 29 | 32.9 |
 | Revit exports in a public repository; anonymised real projects; an AutoCAD seat and terms check; the ruling on black-box observation of proprietary programs, and so CADCraft's test scenarios; checking our exports in proprietary programs | 14, 28, 29 | 32.10 |
 | The licence of our own fixtures; ABC, IFC4.x-IF, Thingi10K, NIST STEP files, the CC BY-ND IFC samples, and step-conformance's exported parts | 28, 29 | 32.11 |
+| The crate table, its thirteen layers and rules, `geom-make` and 30.5's three edges in layer 12 | 27, 30 | 32.13 (owner action G08) |
+| Rotations: section 7's rounding or chapter 14's rational rotations; one type for 2D and 3D; rotated planes against 6.2's budget | 7, 14 | 32.14 (owner action G44) |
+| Time budgets: a deadline only through the caller's cancellation, never a replayable outcome | 10, 23, 28 | 32.15 (owner action G71) |
+| The reference machine, and the kernel's shares of Spare Construct's targets | 23, 28 | 32.16 (owner action G72) |
+| Arena indices assigned in persistent-name order in every operation (8.2's amendment) | 8, 23, 24 | 32.17 (owner action G76) |
+| The native format's CBOR tag, its name and its file extension | 24 | 32.18 (owner action G77) |
+| NameScheme v1: the hash and its truncation, the bytes hashed, text rules, and the `TopoName` variants | 11, 20, 24 | 32.19 (owner action G78) |
+| The content hash and the NameId hash, and their implementation | 20, 23, 24 | 32.20 (owner action G79) |
+| Committed planes and points as Exact or Certified; how bounds add up through a history; ε_step | 6, 9, 11, 13 | 32.21 (owner action G120) |
+| The predicate step ladder and rounded-input filters, as an addition to 6.2 | 6, 23 | 32.22 (owner action G121) |
+| SMLib's NLib layers as a CI oracle, with its Numerical Recipes routines stubbed out | 12, 29 | 32.23 (owner action G157) |
+| How our own hatch patterns and linetypes are authored and reviewed | 14, 29 | 32.24 (owner action G184) |
+| The ellipse as a curve kind stored by a bounded axis ratio | 7, 14, 26 | 32.25 (owner action G185) |
+| Integer 2D carriers, depth-one points and rational-centre arcs as an addition to 6.2; and 32.2, exact arcs from the start | 6, 14, 15 | 32.26 (owner action G186) |
+| `geom-thread`, `geom-stair` and `geom-civil` in the kernel now, or in Spare Construct under 26.1 | 17, 26, 27 | 32.27 (owner action G238) |
+| What the Sweep kind stores, and the conical helix | 7, 13, 24 | 32.28 (owner action G239) |
+| Predicates of 576 and 768 bits for skeleton and mitre-offset events; the wide integers already in code | 6, 13 | 32.29 (owner action G240) |
+| The default and the cap of `close_near_contacts` | 6, 11 | 32.30 (owner action G241) |
+| The licence of Wang et al.'s 2021 contact benchmark | 19, 29 | 32.31 (owner action G285) |
+| Which crate owns USD subdivision exchange, and how Chaikin creasing is carried | 16, 24 | 32.32 (owner action G312) |
+| Alignment transitions as kinds or compositions, and their names | 7, 17, 26 | 32.33 (owner action G357) |
+| TIN ties in plan-coordinate order rather than by persistent name | 6, 17, 21 | 32.34 (owner action G358) |
+| How imported edges are marked Smooth | 6, 18 | 32.35 (owner action G384) |
+| Hidden-line predicates of 576 and 640 bits | 6, 18 | 32.36 (owner action G385) |
+| openNURBS: written confirmation from McNeel before porting its reader and writer | 16, 24, 29 | 32.37 (owner action G407): request drafted for the owner to send; open until the reply |
+| The LandXML 1.2 schema's terms, and LINZ's LandXML examples | 17, 24, 29 | 32.38 (owner action G408) |
+| Generating code from IFC and STEP EXPRESS schemas, and ISO 10303-42's current edition | 24, 29 | 32.39 (owner action G409) |
+| Gerber's and IPC-2581's terms, and whether a second program needs board exchange | 24, 26, 29 | 32.40 (owner action G447) |
+| Running AutoCAD for comparison, and its seat | 14, 28, 32 | 32.41 (owner action G448) |
+| A nightly wall-clock miss blocks merges to `main` except the fix or a revert | 23, 28 | 32.42 (owner action G449) |
 
 ### Answered by the pieces built so far
 
@@ -612,31 +642,31 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | G05's CORE-MATH notices sat at the end of each module's documentation, without an SPDX identifier, and `geom-num`'s licence field named MPL-2.0 alone (rule 4, 29.20) | 29 | Answered by G05 (#191): the notices start each ported file under `MPL-2.0 AND MIT`, the crate's licence field says `MPL-2.0 AND MIT`, and `projects/engines/geometry/NOTICE` lists the source |
 | ClusterFuzzLite's build-clusterfuzz path was unverified, so each harness was to get a thin cargo-fuzz wrapper (28.5) | 28 | Answered by G14 (issue #207, pull request #209). cargo-bolero 0.13.5's `build-clusterfuzz` packs the libFuzzer-built bolero tests, ClusterFuzzLite fuzzes them on every pull request that touches the code a target fuzzes, and no wrappers are written. One OSS-Fuzz build check cannot read cargo-bolero's start-up scripts, so `.clusterfuzzlite/build.sh` makes the same checks on the binaries; the layout is in `geom-fuzz`'s README |
 | When GitHub retires its Intel macOS test machines (R26, 32.4) | 28 | In part. macOS 13 retired on 4 December 2025, and GitHub said x86-64 macOS ends when the macOS 15 image retires in fall 2027 (changelog, 2025-09-19). Its runner reference, read 2026-10-22, also lists `macos-26-intel`, so recheck before relying on the date. Dropping or keeping the target stays the owner's (32.4) |
-| What the per-pull-request determinism matrix costs (R26, 32.4, owner action "CI hosting and cost") | 28 | In part. Every target of chapter 21, and Windows on Arm, runs on GitHub's standard hosted runners (G02's `kernel.yml`), which are free and unlimited for public repositories, and this one is public. The benchmark machine, nightly fuzzing, the oracle registry and the licensed Revit and AutoCAD machines are not covered |
+| What the per-pull-request determinism matrix costs (R26, 32.4, owner action "CI hosting and cost") | 28 | Answered by G10 and owner action G07 (32.4, K06). Every target of chapter 21, and Windows on Arm, runs on GitHub's standard hosted runners (G02's `kernel.yml`), free for this public repository, up to 500 jobs at once on the organisation's GitHub Enterprise plan (US$21 a month, from 2026-10-28). Nightly fuzzing runs on the same runners, the oracle images are rebuilt into the oracle repository's Actions cache and never pushed to a registry (29.20, rule 8), and the benchmark and Revit machines are lent by an owner (28.17). The AutoCAD machine waits for owner action G448 |
 
 ### Chapter 6: Numbers
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| Extend 6.2's fixed-width predicates past 384 bits for straight-skeleton events: 576 bits for 2D event order and about 768 bits for 3D mitre offsets (our derivations, to be written out) | 13 | Decision note to 6.2; pieces "Exact weighted straight skeleton" and "3D weighted straight skeleton for mitre offsets" |
-| The same for exact hidden lines: about 547 bits on grid-axis views and 633 bits for any direction or perspective (576- and 640-bit types), or exact visibility on grid-axis views only | 18 | Decision note to 6.2; piece "Exact view predicates" |
+| Extend 6.2's fixed-width predicates past 384 bits for straight-skeleton events: 576 bits for 2D event order and about 768 bits for 3D mitre offsets (our derivations, to be written out) | 13 | 32.29 (owner action G240): accepted with 6.2's conditions; pieces "Exact weighted straight skeleton" and "3D weighted straight skeleton for mitre offsets" write the derivations |
+| The same for exact hidden lines: about 547 bits on grid-axis views and 633 bits for any direction or perspective (576- and 640-bit types), or exact visibility on grid-axis views only | 18 | 32.36 (owner action G385): both widths, every view, on 32.29's conditions; piece "Exact view predicates" |
 | Fixed-width integers of several thousand bits on a cold path for general quadric pairs (Dupont, Lazard, Lazard and Petitjean), rather than arbitrary precision | 12 | Piece "Bit budgets for the exact algebraic decisions in intersections" |
 | The real widths of 2D construction predicates: rational directions of about 44 bits, tangency positions about 70 bits finer than a step, the deepest possibly thousands of bits | 14 | Piece "2D-01", with its width generator and benchmark |
 | Exact incircle on implicit TIN crossings would need about 1,024 bits (an estimate). Not planned; recorded as a limit | 17 | No piece; chapter 17 text |
-| A predicate step ladder: identity, narrow i64 and axis checks before the filter, with a filter switched off on a target where it measures slower | 23 | Decision note to 6.2; piece "Predicate step ladder, rounded-input filters and step statistics" |
-| Integer 2D carriers (n below 2^41, c below 2^82), depth-one 2D points and arcs with rational centres, as an exception to "every stored coordinate is whole grid steps", like 6.3's exception for planes | 14, 15 | After 32.2: pieces "2D carrier, depth-one point and rational-centre arc predicates in geom-num" and "2D-04" |
-| One rotation type for 2D and 3D: rational rotations from Pythagorean triples, as quaternions in 3D. Rotated planes then exceed 6.2's 384-bit assumption, so 6.2 and 11 must agree | 14 | Piece "2D-03 Rational directions and typed transforms", with a note to 6.2 and 11 |
+| A predicate step ladder: identity, narrow i64 and axis checks before the filter, with a filter switched off on a target where it measures slower | 23 | 32.22 (owner action G121): accepted into 6.2 with two conditions; piece "Predicate step ladder, rounded-input filters and step statistics" |
+| Integer 2D carriers (n below 2^41, c below 2^82), depth-one 2D points and arcs with rational centres, as an exception to "every stored coordinate is whole grid steps", like 6.3's exception for planes | 14, 15 | 32.26 (owner action G186), with 32.2 decided A; pieces "2D carrier, depth-one point and rational-centre arc predicates in geom-num" and "2D-04" build them |
+| One rotation type for 2D and 3D: rational rotations from Pythagorean triples, as quaternions in 3D. Rotated planes then exceed 6.2's 384-bit assumption, so 6.2 and 11 must agree | 14 | 32.14 (owner action G44): one type, integer quaternions; rotated planes outside 6.2's budget are committed, so 384 bits stand; piece G46 builds it |
 | Sketch-plane frames: lattice frames only where cells are at most 16 steps, rotated frames elsewhere. Should section 13 build swept bodies on rotated planes from the exact carrier now? | 15 | Piece "Sketch planes and the 2D-3D maps" |
-| A committed plane whose proven deviation over its face is within q/2 counts as Exact, as a committed point does | 13 | Decision note to 6 and 9; piece "Plane commit routine" |
+| A committed plane whose proven deviation over its face is within q/2 counts as Exact, as a committed point does | 13 | 32.21 (owner action G120): no, committed planes and points stay Certified; piece "Plane commit routine" |
 | A designed irrational tie (four roof planes meeting at one apex) keeps the committed sign and reports a short edge, rather than failing | 13 | Piece "Plane commit routine" |
 | Derived values to name on the ladder: a resolution floor of 1q; epsilon_step = epsilon_fit/4; the solver block (tau = q/64, sigma_ind = 2^-12, sigma_dep = 1/(64S) and the rest); h_min = 8q; a default cap for close_near_contacts | 11, 12, 13, 15, 19 | Ladder module in geom-num, after 32.3 |
 | Commit rounding is q/2 per coordinate, about 135 nm as a distance at q0. 6.5 should say so | 19 | Editorial fix to 6.5 |
-| A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | Piece "Line classes, bands and continuity records" |
+| A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | 32.35 (owner action G384): no kernel default, a recorded parameter; piece "Line classes, bands and continuity records" |
 | Designed tangency travels as a recorded intent, and downstream code never compares angles with epsilon_ang. Committed lines tilt by about q/L, and subdivision G1 leaves kinks of about 1e-5 rad | 15, 16, 18 | Decision note to 6.5; pieces "Local-operation driver and topology-change taxonomy" and "Line classes, bands and continuity records" |
-| Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | Decision note to 6.2 and 21; piece "Exact Delaunay core with name-ordered tie-breaks" |
+| Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | 32.34 (owner action G358): yes, for TIN ties only; piece "Exact Delaunay core" |
 | A stricter rule for local operations near tolerant edges of imported STEP models than 6.5's "work within, never raise" | 13 | Note to 6.5; piece "Local-operation driver and topology-change taxonomy" |
 | May a file's declared precision below 640q lower epsilon_heal's default? Today it can only raise it, up to the cap | 24 | Piece "geom-exchange basics: units, numbers to grid, frames, reports" |
-| Wider integers already in code: `geom-num`'s `I512`, the total path of the plane classification and commit (G02), and `geom-math`'s exact stages in `Wide<4>`, `Wide<10>`, `Wide<20>`, `Wide<34>` and `Wide<40>`, up to 2,560 bits (G03). Accept each into 6.2's list, 23's cost model, 28.7's proofs and 29.3, or remove it | G02 and G03 builds | Decision note to 6.2, with piece "Wide integers I128 to I384" and owner action "576- and 768-bit predicates" |
+| Wider integers already in code: `geom-num`'s `I512`, the total path of the plane classification and commit (G02), and `geom-math`'s exact stages in `Wide<4>`, `Wide<10>`, `Wide<20>`, `Wide<34>` and `Wide<40>`, up to 2,560 bits (G03). Accept each into 6.2's list, 23's cost model, 28.7's proofs and 29.3, or remove it | G02 and G03 builds | 32.29 (owner action G240): accepted as built, each with its derivation and extreme tests; 23's cost model adds them when measured |
 | The commit's tie rule: half to even, chosen by G02 after 6.1's rule for angles, so a coordinate at 2^40 − 1/2 leaves the frame (6.3) | G02 build | Decision note to 6.3 and 6.5, with the ladder (32.5) |
 | ε_ang as the relative length bound that classifies floating-point transforms as Rigid or UniformScale (G03), a second meaning of the rung (6.5's proposed rungs) | G03 build | Decision note to 6.5 and 7; piece "Points, vectors, boxes, frames and typed transforms" |
 
@@ -645,14 +675,14 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Question | Raised in | Decided in |
 | --- | --- | --- |
 | Let an arc be stored by three points, or by two end points and a bulge, so IfcArcIndex and DXF bulge arcs with rational centres stay exact | 14, 24 | After 32.2: decision note to 7; piece "2D-04" |
-| Ellipse axis ratio as a bounded fraction (denominator about sqrt(2a/q), at most about 2^21), and the rule for converting DXF's floating-point ratio | 14 | Pieces "2D-04" and "2D-07 DXF import commit and healing" |
+| Ellipse axis ratio as a bounded fraction (denominator about sqrt(2a/q), at most about 2^21), and the rule for converting DXF's floating-point ratio | 14 | 32.25 (owner action G185): the bounded fraction, and the nearest such fraction by continued fractions, Certified unless exact; pieces "2D-04" and "2D-07 DXF import commit and healing" build them |
 | NURBS knot and weight storage: f64, or dyadic knots with bounded denominators and small rational weights, which would make many more curved decisions Exact | 12, 14 | Decision note to 7 before piece "Bernstein toolkit in geom-nurbs" |
 | Where the IntersectionCurve variant lives: geom-curve with opaque pool references (chapter 12's choice), or geom-surface | 12 | Decision note to 7 and 27; piece "Procedural intersection curve with certified cached fit" |
 | Subdivision limit surface: the local rules and evaluator sit in geom-surface, only the net is stored, and the patch tree is a cache (16's choice, against the review's stored hierarchy). geom-intersect and geom-draw reach contours through the surface trait | 12, 16, 18 | Piece "SubD limit surface kind" |
 | The surface trait gains an Unbounded derivative-bound result and a normal-cone query, because Stam's derivatives are unbounded from valence 5 | 16 | Piece "SubD limit surface kind" |
-| Alignment curve kinds: named kinds or compositions for Helmert, Bloss, the Viennese bend, the cubic variant, and IFC's gradient curve and segmented reference curve; the four LandXML-only spirals; our LandXML-to-IFC mapping | 17 | Decision note to 7 before piece "Spiral evaluation with certified bounds" |
-| A conical helix (tapered springs, scrolls) as an exact curve kind | 13 | Decision note to 7; piece "Helical sweeps and geom-thread" |
-| What the Sweep kind stores: the full FrameRule, twist and scale laws, bit-exact station frames and the cylindrical profile morph; draft surfaces as Sweep and Ruled kinds | 13 | Piece "Frame rules and laws"; encoding in "geom-format: body records" |
+| Alignment curve kinds: named kinds or compositions for Helmert, Bloss, the Viennese bend, the cubic variant, and IFC's gradient curve and segmented reference curve; the four LandXML-only spirals; our LandXML-to-IFC mapping | 17 | 32.33 (owner action G357): one transition kind with laws; gradient and segmented reference curves are compositions; the four LandXML-only spirals stay data until published |
+| A conical helix (tapered springs, scrolls) as an exact curve kind | 13 | 32.28 (owner action G239): the helix kind gains a radius rate; piece "Helical sweeps and geom-thread" |
+| What the Sweep kind stores: the full FrameRule, twist and scale laws, bit-exact station frames and the cylindrical profile morph; draft surfaces as Sweep and Ruled kinds | 13 | 32.28 (owner action G239): all of it; piece "Frame rules and laws"; encoding in "geom-format: body records" |
 | A procedural 2D projected-curve kind (a 3D curve plus a view, with a cached certified fit) | 18 | Decision note under 26.1; piece "Projected curve kinds and the canonical drawing form" |
 | The TIN as the carrier of toposolid top faces, rather than a new piecewise-flat surface kind | 17 | Piece "Toposolid" |
 | STEP B-spline volumes and locally refined splines: add them as kinds, leave them unsupported, or convert them with a bound | 24 | Decision note under 26.1 |
@@ -683,7 +713,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | --- | --- | --- |
 | Mass properties: exact rationals for flat solids and polygonal regions (whole numbers only when every vertex is a grid point), certified for arcs and curves. Big-rational totals on request? | 17, 19, 28 | Editorial fix to 10.2; pieces "Cut, fill and volumes" and "Exact mesh data model, RawMesh and the mesh checker group", and the law catalogue |
 | Line patterns use "certified arc length", not "exact arc length" | 14 | Editorial fix to 10.2 |
-| Budgets: time is enforced only by the caller's cancellation, and memory is counted in kernel units, so 32-bit and 64-bit targets agree | 28 | Note to 10.1; piece "Work meter, logical memory and cancellation" |
+| Budgets: time is enforced only by the caller's cancellation, and memory is counted in kernel units, so 32-bit and 64-bit targets agree | 28 | 32.15 (owner action G71), with its note to 10.1; piece "Work meter, logical memory and cancellation" |
 | Budget failures: persistent, deterministic model state (recommended), or never stored, like cancellation | 23 | Piece "Work meter, logical memory and cancellation" |
 | Default for batch cutting: Atomic (chosen) or SkipFailedTools | 11 | Piece "Batch cutting (geom-bool)" |
 | Blend defaults: overflow order; a batch blend all-or-nothing or per cluster; an unprovable G2 corner fails with a G1 offer or falls back with a warning; the default mitre limit; self-contact as an error or a self-union | 13 | Pieces "Blend feasibility analysis and preview query" and "Constant-radius fillets and chamfers with overflows", with Spare Construct's and the mechanical program's owners |
@@ -798,12 +828,12 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| Bounded names become Bounded { kind, by, ends, ord: u16 }, because ord: u8 overflows at 256 edges between the same two faces | 11 | Decision note to 20.2; piece "Boolean names and history" |
+| Bounded names become Bounded { kind, by, ends, ord: u16 }, because ord: u8 overflows at 256 edges between the same two faces | 11 | 32.19 (owner action G78): `ends` taken, `ord` not, remaining collisions are `Weak`; piece "Boolean names and history" |
 | A regenerated step keeps its OpId. Re-importing a revised file is a new version of the same import operation, so Spare Construct's log treats an import as an editable operation with its source file as an input | 17, 24 | Note to 20.1; Spare Construct's operation log |
 | Reword "indices are never persisted" to "never used as a reference outside its body record", because arena positions are record-local in the file | 24 | Editorial fix to 20.1 |
 | A new resolution result, HistoryPruned, distinct from Deleted | 24 | Piece "PruneHistory operation and HistoryPruned resolution" |
-| The name scheme fixes NFC normalisation of hashed text, and its Unicode version | 24 | NameScheme v1 note; piece "geom-format: names, history, recipe envelope, attributes and provenance records" |
-| The 128-bit NameId value and the history record types live in geom-topo, so geom-mesh can use them; geom-name keeps the naming graph and resolution | 19 | Crate-list note (27) |
+| The name scheme fixes NFC normalisation of hashed text, and its Unicode version | 24 | 32.19 (owner action G78): NFC under Unicode 18.0.0 for v1; piece "geom-format: names, history, recipe envelope, attributes and provenance records" |
+| The 128-bit NameId value and the history record types live in geom-topo, so geom-mesh can use them; geom-name keeps the naming graph and resolution | 19 | 32.13: in geom-op, below every crate that names or records history; geom-name keeps the graph and resolution |
 
 ### Chapter 21: Determinism
 
@@ -825,8 +855,8 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| The reference machine for all targets: proposed an 8-core x86-64 desktop with 32 GB and NVMe for gates, plus an aarch64 laptop nightly | 23, 28 | With Spare Construct's owners; piece "Benchmark harness and merge gates (geom-bench)" |
-| Accept the proposed kernel shares of Spare Construct's ten targets, the browser estimates and the 5 µs overhead per trivial operation until scenarios measure them. Who sets the split is settled in 32.5 | 23, 28 | Piece "Spare Construct scenario generator, calibration and target benchmarks" |
+| The reference machine for all targets: proposed an 8-core x86-64 desktop with 32 GB and NVMe for gates, plus an aarch64 laptop nightly | 23, 28 | 32.16 (owner action G72): the owner's spare tower, on its 8 performance cores; no Arm timing reference until one is lent |
+| Accept the proposed kernel shares of Spare Construct's ten targets, the browser estimates and the 5 µs overhead per trivial operation until scenarios measure them. Who sets the split is settled in 32.5 | 23, 28 | 32.16 (owner action G72): accepted; piece "Spare Construct scenario generator, calibration and target benchmarks" measures them |
 | Benchmark targets in other chapters are proposals to replace with first measurements: drawing targets (a full plan, every open view after a door move, a 50 km corridor plan); gridded LiDAR at 40 s per 10 million points; wasm within three times native; a 1 ms live clash re-test; 30 s to tessellate the reference model | 17, 18, 19 | Each chapter's benchmark piece, gathered in the scenario pieces |
 | Instance records: 56 bytes with the box in the tree leaf (19), or up to 88 bytes (23); f64 or integer boxes | 19, 23 | Piece "Placed instances", aligned with "Instance tree for huge and nested assemblies" |
 | I320 and I384 arithmetic on wasm32 is unmeasured; a double-double filter stage is the reserve if the section 23 gates fail | 11 | Piece "Wide-integer variants and WebAssembly benchmark" |
@@ -850,53 +880,54 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| Canonical body encoding: arena order with fixed 4,096-row chunks (24), or name order (23's draft). Name order first needs an "outputs independent of input arena order" invariant, with a shuffle test | 23, 24 | Piece "geom-format: body records" |
-| The content hash: SHA-256 or BLAKE3, in a safe portable implementation or an audited exception crate (both common crates use unsafe SIMD); and whether to adopt the name-ordered bucket-tree hash | 23 | Piece "Content hashes and cache keys", by benchmark |
+| Canonical body encoding: arena order with fixed 4,096-row chunks (24), or name order (23's draft). Name order first needs an "outputs independent of input arena order" invariant, with a shuffle test | 23, 24 | 32.17 (owner action G76): arena order is name order, so both hold; the shuffle test is the builder's (G81); piece "geom-format: body records" writes it |
+| The content hash: SHA-256 or BLAKE3, in a safe portable implementation or an audited exception crate (both common crates use unsafe SIMD); and whether to adopt the name-ordered bucket-tree hash | 23 | Hash: 32.20 (owner action G79), SHA-256 from `sha2`, audited by G86. The bucket tree: piece "Content hashes and cache keys", by benchmark |
 | Sign chunks written by a released kernel edition, or rely on per-chunk checker versions and lazy re-checks | 23 | Piece "Container mapping and trust on open" |
 | Bodies opened with fallbacks stay read-only until an acknowledgement is logged | 24 | Piece "Container mapping and trust on open" |
-| Register CBOR tag 0x534B4746 with IANA, and check the SKG name and the .skg extension for clashes | 24 | Piece "Native format specification: SPEC.md, REGISTRY.md and CDDL"; name check under name-protection |
+| Register CBOR tag 0x534B4746 with IANA, and check the SKG name and the .skg extension for clashes | 24 | 32.18 (owner action G77): the tag is unassigned and the owner sends the request; SKG is clear; the extension becomes `.skgf`, because Skrooge uses `.skg` |
 | Proposed figures to replace with measurements: the 64 MiB payload cap, 4,096-row chunks, 500 MB/s CBOR decoding, 100 MB/s Part 21 parsing | 24 | The geom-format and geom-p21 pieces |
 | One shared hardened XML and zip crate for the kernel and Spare Office would change section 5's "no other Kit crate" rule | 24 | Spare Kit's owners, by decision note |
 | 3D vertex rounding has no open implementation and a steep worst case: apply it only to flagged regions within a budget (chosen), or default imported meshes to q1 frames | 24 | Piece "Rounding imported polyhedra" |
 | LAS and COPC: read a scale stored as f64 as the shortest decimal that produces it | 24 | Piece "Point-cloud exchange rules" |
 | Items to check against primary sources: MBx-IF practices; DXF MESH subdivision rules and HELIX fields; Part 21 third edition; whether AP242 includes Part 42's clothoid; 3dm mesh vertex precision; E57; Pratt's rational Dupin cyclides | 24 | Each format's piece |
 | ARC_DIMENSION has no record in the public DXF reference, so its mapping is open | 14 | Piece "geom-dxf read and write" |
-| USD: which crate owns subdivision exchange, and a convention for carrying Chaikin creasing in custom data | 16 | Piece "Decision notes for formats not yet owned" |
+| USD: which crate owns subdivision exchange, and a convention for carrying Chaikin creasing in custom data | 16 | 32.32 (owner action G312): `geom-meshio`; `spareware:creaseMethod`; the terms check stays with piece "Decision notes for formats not yet owned" |
 | DWG and other reverse-engineered formats | 14, 24, 29 | Stays REJECT. Only an owner can clear it, after legal advice (README); Spare Construct's owners say whether they want it |
 | laz-rs contains unsafe code: allow it in Spare Construct's adapter, or port the codec | 24 | Spare Construct's owners |
 | Whether format crates may use std: answered by chapter 24. Readers use no_std byte sources, and point clouds stay in the program adapter | 29 | Answered |
 
 ### Chapter 27: Crates and folders
 
-Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of these, accepted with G01 before the first kernel code merges.
+Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of these. The owner accepted chapter 27's proposed table, layers and rules as that note on 2026-10-28 (owner action G08, 32.13); a row that names 32.13 is settled by it, and its piece builds to it.
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| A home below the facade for the cross-representation boolean: a new geom-combine, or bool added to geom-convert's dependencies | 11 | Crate-list note; piece "Cross-representation boolean entry point (geom-combine)" |
-| One deterministic box tree below geom-bool, geom-mesh, geom-2d and geom-terrain: in geom-math (11, 23), or in a new geom-bvh (19) | 11, 19, 23 | Crate-list note; piece "Deterministic integer box tree and culling" |
-| geom-run (a no_std parallel helper, budgets and cancellation) and geom-pool (rayon and Web Workers behind a threads feature). The adapter's name, folder and dependency disagree: `engine-geometry-pool` in `projects/engines/crates/`, with a `no_std` facade that re-exports only the `Pool` trait (23.4), or `geom-pool` in layer 13, with `engine-geometry` on it behind a `threads` feature and allowed `std` (27, 29.4, the board, G04's `pool.rs`, G09's crate table) | 23; G04 and G09 builds | Crate-list note; piece "Deterministic parallel helper (geom-run, geom-pool)" |
-| Deterministic linear algebra inside geom-num (15, 29), in a new geom-linalg (16), or in geom-math | 15, 16, 29 | Crate-list note; one of the pieces "Deterministic dense linear algebra in geom-num" and "Deterministic linear algebra (geom-linalg)" is dropped |
+| A home below the facade for the cross-representation boolean: a new geom-combine, or bool added to geom-convert's dependencies | 11 | 32.13: geom-combine; piece "Cross-representation boolean entry point (geom-combine)" |
+| One deterministic box tree below geom-bool, geom-mesh, geom-2d and geom-terrain: in geom-math (11, 23), or in a new geom-bvh (19) | 11, 19, 23 | 32.13: geom-bvh; piece "Deterministic integer box tree and culling" |
+| geom-run (a no_std parallel helper, budgets and cancellation) and geom-pool (rayon and Web Workers behind a threads feature). The adapter's name, folder and dependency disagree: `engine-geometry-pool` in `projects/engines/crates/`, with a `no_std` facade that re-exports only the `Pool` trait (23.4), or `geom-pool` in layer 13, with `engine-geometry` on it behind a `threads` feature and allowed `std` (27, 29.4, the board, G04's `pool.rs`, G09's crate table) | 23; G04 and G09 builds | 32.13: geom-pool in layer 13, as built; piece "Deterministic parallel helper (geom-run, geom-pool)" |
+| Deterministic linear algebra inside geom-num (15, 29), in a new geom-linalg (16), or in geom-math | 15, 16, 29 | 32.13: geom-linalg; nothing of linear algebra is built in geom-num |
 | geom-profile, to carry geometry between sketches and the model | 15 | Piece "geom-profile: references in, profiles out" |
-| geom-panel and geom-analysis, with chapter 16's dependency additions | 16 | Crate-list note; pieces "Panelisation and rationalisation" and "Class-A analysis" |
-| geom-civil in the kernel, so terrain and alignments stay independent, or inside Spare Construct under a strict reading of 26.1; and geom-landxml | 17 | Crate-list note; piece "geom-civil compositions" |
-| geom-exchange, geom-p21, geom-heal and a development-only EXPRESS generator (geom-express); geom-cloudio withdrawn | 24 | Crate-list note |
+| geom-panel and geom-analysis, with chapter 16's dependency additions | 16 | 32.13: accepted; pieces "Panelisation and rationalisation" and "Class-A analysis" |
+| geom-civil in the kernel, so terrain and alignments stay independent, or inside Spare Construct under a strict reading of 26.1; and geom-landxml | 17 | geom-landxml: 32.13. geom-civil: 32.27 (owner action G238), in Spare Construct until a second program needs it; piece "geom-civil compositions" |
+| geom-exchange, geom-p21, geom-heal and a development-only EXPRESS generator (geom-express); geom-cloudio withdrawn | 24 | 32.13: the three crates with 30.5's edges; the EXPRESS generator is a module of geom-gen; geom-cloudio withdrawn |
 | A development-only geom-proof crate for the predicate generator's proofs, or keep them in geom-num and geom-test. The cargo-verus fallback makes vstd a build dependency of geom-num | 28 | After piece "Verus twin spike" |
-| geom-2d also depends on topo, name and intersect; line and arc predicates sit where both crates reach them; conic predicates in geom-num; the 2D R-tree in geom-2d or shared | 12, 14 | Crate-list note; piece "2D-09 Arrangement of lines, arcs and conics" |
-| geom-intersect also depends on geom-nurbs, and an ImplicitBound trait in geom-surface lets fields be traced without upward dependencies | 12 | Crate-list note; piece "Implicit-parametric tracer and level curves" |
-| geom-mesh also depends on curve, surface and intersect | 19 | Crate-list note; piece "Edge-first certified tessellation" |
-| geom-poly's job line names indicators and piece selection (decided in 11). Still open: whether the maximal-face merge, with T-junction insertion, moves out of geom-bool's rebuild into geom-poly so geom-mesh can share it (19), or stays in geom-bool (11) | 11, 19 | Crate-list note; editorial fix to 27 |
-| Chapter 13's placements: frame rules, station frames and surface extension in geom-surface; skinning, Gordon, Coons and N-sided fills in geom-nurbs and geom-surface; plane commit in geom-poly; the local-operation arrangement step and change classification in geom-bool; TopologyChange records in geom-name; isoclines in geom-intersect. Its additions: sweep on poly, intersect, bool and skeleton; offset on skeleton, name and topo; skeleton on poly; blend on name, topo and check. Its reading of section 5: an operation may use another operation's public interface (geom-offset using geom-skeleton's skeleton), never its internals | 13 | Crate-list note |
-| Chapter 17's additions: terrain on poly, bool, skeleton, curve, surface and name; sweep on poly; align on name; cloud on nurbs and surface. The corridor solid goes in geom-sweep and the corridor model in geom-align | 17 | Crate-list note |
-| geom-draw's row adds mesh, and every row lists all its direct dependencies | 18 | Crate-list note |
-| Swept volumes: routes 1 and 2 as a module of geom-sweep, route 3 as a space-time module of geom-field, with no new crate | 13 | Crate-list note; pieces "Swept volumes: exact routes" and "Swept volumes as fields" |
-| Closed-form distances as a geom-intersect module reached through a trait the facade implements, or geom-spatial depending on geom-intersect | 19 | Crate-list note; piece "Analytic closed-form distances" |
+| geom-2d also depends on topo, name and intersect; line and arc predicates sit where both crates reach them; conic predicates in geom-num; the 2D R-tree in geom-2d or shared | 12, 14 | 32.13: geom-2d's edges, and the R-tree becomes geom-bvh; where line, arc and conic predicates sit, piece "2D-09 Arrangement of lines, arcs and conics" |
+| geom-intersect also depends on geom-nurbs, and an ImplicitBound trait in geom-surface lets fields be traced without upward dependencies | 12 | 32.13: accepted; piece "Implicit-parametric tracer and level curves" |
+| geom-mesh also depends on curve, surface and intersect | 19 | 32.13: accepted; piece "Edge-first certified tessellation" |
+| geom-poly's job line names indicators and piece selection (decided in 11). Still open: whether the maximal-face merge, with T-junction insertion, moves out of geom-bool's rebuild into geom-poly so geom-mesh can share it (19), or stays in geom-bool (11) | 11, 19 | 32.13: the merge moves into geom-poly, as 27's job line says |
+| Chapter 13's placements: frame rules, station frames and surface extension in geom-surface; skinning, Gordon, Coons and N-sided fills in geom-nurbs and geom-surface; plane commit in geom-poly; the local-operation arrangement step and change classification in geom-bool; TopologyChange records in geom-name; isoclines in geom-intersect. Its additions: sweep on poly, intersect, bool and skeleton; offset on skeleton, name and topo; skeleton on poly; blend on name, topo and check. Its reading of section 5: an operation may use another operation's public interface (geom-offset using geom-skeleton's skeleton), never its internals | 13 | 32.13: accepted |
+| Chapter 17's additions: terrain on poly, bool, skeleton, curve, surface and name; sweep on poly; align on name; cloud on nurbs and surface. The corridor solid goes in geom-sweep and the corridor model in geom-align | 17 | 32.13: accepted |
+| geom-draw's row adds mesh, and every row lists all its direct dependencies | 18 | 32.13: accepted |
+| Swept volumes: routes 1 and 2 as a module of geom-sweep, route 3 as a space-time module of geom-field, with no new crate | 13 | 32.13: no new crate; pieces "Swept volumes: exact routes" and "Swept volumes as fields" |
+| Closed-form distances as a geom-intersect module reached through a trait the facade implements, or geom-spatial depending on geom-intersect | 19 | 32.13: geom-spatial on geom-intersect; piece "Analytic closed-form distances" |
 | The drawing checker in geom-draw (chosen), or one checker crate moved above geom-draw | 18 | Piece "Drawing checker" |
 | Continuous collision detection lives in geom-spatial | 19 | Piece "Time of first contact (Tight Inclusion method)" |
 | Sheet metal reuses geom-panel's unroll, or unrolling moves to a shared crate; subdivision displacement belongs to a content-creation toolkit | 16 | Decision note under 26.1 when a second program needs it |
 | Add geometry/PROVENANCE.md, NOTICE, methods/ and PATENTS.md to 26.3's file table and 27's folder tree | 29 | Editorial fix; piece "Provenance records" |
 | Chapter 27's table and the scaffold's `table.rs` (G09) are two copies of the crate graph that nothing compares | G09 build | Piece "MAP.json generator and module-header grammar", or the merge gate |
 | The header grammar: G09's interim grammar (job, layer, invariants, sections), its Status and "dependencies still to add" lines, which name board pieces and go stale when a piece splits (30.7), and which chapters a Sections line lists. `geom-num` has no Layer line, which G09's table records as a known gap. G11's development crates state their job but no layer, invariants or sections in that grammar, so the scaffold check fails on them when G09 and G11 have both merged | G09 and G11 builds; 26, 27 | Piece "MAP.json generator and module-header grammar" |
-| One lint posture: which crates carry `geom-num`'s `[lints]` table and `clippy.toml` (G09's check says the crates that ship; G11's test holds the development crates to it word for word); whether `float_cmp = "allow"` and its reason hold everywhere; and which `clippy.toml` bans the binding crates carry | G09 and G11 builds | Crate-list note; piece "Merge gate: licences, lints and builds" |
+| Content hashes for reuse below `geom-format`: 23.8 puts hashing, `CacheKey` and the memo store in `geom-format` (27, accepted in 32.13), but `geom-bool`'s arrangement cache (11.6), `geom-draw`'s per-element caches (18.9) and `geom-spatial`'s instances (19.11, 19.12) key by content hash and sit below it. Either the caller passes the hash in as a key, or the hash of canonical bytes moves into `geom-op`'s canonical encoder, as NameId hashing already does (30.6) | 11, 18, 19, 23; G08 | Piece "Canonical encoder and safe hash" (G86) |
+| One lint posture: which crates carry `geom-num`'s `[lints]` table and `clippy.toml` (G09's check says the crates that ship; G11's test holds the development crates to it word for word); whether `float_cmp = "allow"` and its reason hold everywhere; and which `clippy.toml` bans the binding crates carry | G09 and G11 builds | 32.13: every crate that ships, development crates by G11's test, and the binding crates with `unsafe_code = "deny"`; `float_cmp`, piece "Merge gate: licences, lints and builds" |
 
 ### Chapter 28: Testing
 
@@ -905,7 +936,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Can Kani prove whole 384-bit predicates in reasonable time? If not: per-step proofs, bit-range certificates, extreme values and fuzzing | 23 | Pieces "Wide-integer variants and WebAssembly benchmark" and "Kani harnesses: foundation" |
 | Thresholds: 100% of lines and branches and zero unexplained mutants in the foundation set; 90% elsewhere; the 5% gates; the 1,000-times loose-bound report; the scoreboard rule | 28 | Kernel owners; piece "Mutation and coverage gates" |
 | Wall clock: a nightly target miss blocks further merges until it is fixed (proposed), because per-pull-request wall clock varies by more than 5%; work units stay out of the speed gate | 23 | Pieces "Benchmark harness and merge gates (geom-bench)" and "Wall-clock and scaling gates" |
-| SMLib's limits as an oracle: booleans, fillets and offsets cannot be automated (they are nondeterministic), and the NLib routines solidcore lacks need new FFI shims and their own audit. Under 32.6's recommendation its Numerical Recipes routines are stubbed out | 29 | Piece "Oracles: SMLib NLib and geomdl" |
+| SMLib's limits as an oracle: booleans, fillets and offsets cannot be automated (they are nondeterministic), and the NLib routines solidcore lacks need new FFI shims and their own audit. Its Numerical Recipes routines are stubbed out, as owner action G157 decided (32.23) | 29 | Piece "Oracles: SMLib NLib and geomdl" |
 | Revit's tolerance values (VertexTolerance, ShortCurveTolerance, AngleTolerance), and whether its triangulation states an error bound | 28 | Piece "Revit truth-test harness" |
 | One call's stack budget on WebAssembly, which has no guard page: the predicate tests allow 32 KiB per call, a thirty-second of the default 1 MiB, and `ExactSum` puts 41 KB on the stack for one call (23.4). Set the stack the recursion check tests on, and each call's share | G02 and G25 builds; 19, 23 | Piece "Recursion check" |
 | Whether the full unit and property suites must also run in debug on wasm32, where they take over an hour, and at which tier; `target-cpu=native` has no wasm32 meaning | G02 build | Piece "CI matrix and check tiers" |
@@ -926,11 +957,11 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Check every Clothoids and G1fitting file header for third-party provenance before any port (Fresnel.cc derives from a book) | 17 | Piece "Spiral evaluation with certified bounds" |
 | EPSG's terms of use and the LINZ grid licences (believed to be CC BY 4.0) | 17 | Before PROJ data ships (kit-ops) |
 | Standards and format terms: Gerber section 1.4 (confirm the quotes from the PDF), job files, XNC and Excellon, IPC-2581C, ODB++, IDX, IDF 3.0; IGES 5.3; USD (TOST and AOUSD terms), Alembic, FBX; Parasolid XT, ACIS, JT; OpenCascade .brep (NVIDIA's reader mirrors OpenCascade's LGPL one) | 24, 29 | Each format's piece waits for its check |
-| ISO's EXPRESS schemas: where they may be obtained, what may be generated from them, and which edition of ISO 10303-42 is current | 24, 29 | Piece "EXPRESS code generation and schema validator (development tool)" |
+| ISO's EXPRESS schemas: where they may be obtained, what may be generated from them, and which edition of ISO 10303-42 is current | 24, 29 | 32.39 (owner action G409): the 2025 edition; generation only with a file's own grant or ISO's permission; piece "EXPRESS code generation and schema validator (development tool)" |
 | Thread and gear tables are copyrighted standards, so geom-thread takes them as supplied or licensed data | 13 | Piece "Helical sweeps and geom-thread" |
-| How entries in our own pattern and linetype library are authored | 14 | Piece "2D-22 Our own pattern and linetype library" |
+| How entries in our own pattern and linetype library are authored | 14 | 32.24 (owner action G184); piece "2D-22 Our own pattern and linetype library" builds it |
 | SMLib's .smp and .smb fixtures: the stricter reading applies, so they are not copied and the configurations are rebuilt | 12 | Answered; ledger row |
-| Unverified licence facts: EISPACK, the LAPACK text, ShapeOp, NIST SFA and MBE PMI, BRL-CAD's LGPL version, linesweeper, laz-rs's history, Geogram's other third_party folders, OpenMesh, the 3MF and glTF terms, Lacewell-Burley and Biermann-Levin-Zorin reference code, and the Wang et al. 2021 collision dataset | 16, 19, 29 | Before each source is used; pieces "Licence and dependency gate for the kernel workspace" and "Dependency audit" |
+| Unverified licence facts: EISPACK, the LAPACK text, ShapeOp, NIST SFA and MBE PMI, BRL-CAD's LGPL version, linesweeper, laz-rs's history, Geogram's other third_party folders, OpenMesh, the 3MF and glTF terms, Lacewell-Burley and Biermann-Levin-Zorin reference code, and the Wang et al. 2021 collision dataset (checked: no licence, waits for the authors, 32.31) | 16, 19, 29 | Before each source is used; pieces "Licence and dependency gate for the kernel workspace" and "Dependency audit" |
 | The JTS conformance files are no longer unverified: chapter 14 settles them as EDL-1.0, reusable with their notice | 14, 29 | Editorial fix to chapter 29's list of unverified licence facts |
 | Sample data licences: KiCad boards and Gerber reference files, ezdxf examples, PDAL and las-rs clouds, rhino3dm files, LINZ LandXML examples, the buildingSMART alignment set (fetch only), and the LandXML 1.2 schema (which cannot be pinned) | 17, 28 | Piece "Test-corpus register and fetcher"; fetch-only until checked |
 | Copyright in largely AI-generated code (solidcore, CADCraft, csgrs) matters only if one of them is promoted to PORT | 29 | Risk R20 |

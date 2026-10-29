@@ -446,6 +446,8 @@ jobs:
           case "$status" in
             0) ;;
             1)
+              # The report goes to the log too: a job summary shows only to signed-in readers.
+              cat "$RUNNER_TEMP/callgrind.md"
               echo "::error::Instructions, estimated cycles or a cache-miss count on $TARGET rose by more than $GATE_PERCENT%; see the job summary."
               exit 1
               ;;
