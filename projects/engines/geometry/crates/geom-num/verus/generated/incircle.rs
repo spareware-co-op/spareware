@@ -5,10 +5,10 @@
 //!
 //! A Verus-annotated twin of `incircle`'s exact path, `value` in
 //! `projects/engines/geometry/crates/geom-num/src/generated/incircle.rs` (chapter 28.7 of the
-//! kernel architecture, "Predicates, by generated twins"; pieces G36 and G38). It proves that for
-//! every input whose coordinates are on the grid (|v| ≤ 2^40 − 1), `value` returns `Some` of the
-//! description's value over the mathematical integers: no checked step overflows, and the result is
-//! the value the description defines.
+//! kernel architecture, "Predicates, by generated twins"; pieces G36, G38 and G39). It proves that
+//! for every input whose coordinates are on the grid (|v| ≤ 2^40 − 1), `value` returns `Some` of
+//! the description's value over the mathematical integers: no checked step overflows, and the
+//! result is the value the description defines.
 //!
 //! The twin's `value`, with its `#[verus_spec]` attribute and its `proof!` blocks removed, is token
 //! for token the shipped one: the same emitter code writes both, and geom-gen's
@@ -60,6 +60,151 @@ pub open spec fn spec_value(a: P2, b: P2, c: P2, d: P2) -> int {
     det
 }
 
+/// `ad_x`'s certified bound.
+pub open spec fn bound_of_ad_x() -> int {
+    2199023255550int
+}
+
+/// `ad_y`'s certified bound.
+pub open spec fn bound_of_ad_y() -> int {
+    2199023255550int
+}
+
+/// `bd_x`'s certified bound.
+pub open spec fn bound_of_bd_x() -> int {
+    2199023255550int
+}
+
+/// `bd_y`'s certified bound.
+pub open spec fn bound_of_bd_y() -> int {
+    2199023255550int
+}
+
+/// `cd_x`'s certified bound.
+pub open spec fn bound_of_cd_x() -> int {
+    2199023255550int
+}
+
+/// `cd_y`'s certified bound.
+pub open spec fn bound_of_cd_y() -> int {
+    2199023255550int
+}
+
+/// `a_lift_1`'s certified bound.
+pub open spec fn bound_of_a_lift_1() -> int {
+    4835703278449720605802500int
+}
+
+/// `a_lift_2`'s certified bound.
+pub open spec fn bound_of_a_lift_2() -> int {
+    4835703278449720605802500int
+}
+
+/// `a_lift`'s certified bound.
+pub open spec fn bound_of_a_lift() -> int {
+    9671406556899441211605000int
+}
+
+/// `b_lift_1`'s certified bound.
+pub open spec fn bound_of_b_lift_1() -> int {
+    4835703278449720605802500int
+}
+
+/// `b_lift_2`'s certified bound.
+pub open spec fn bound_of_b_lift_2() -> int {
+    4835703278449720605802500int
+}
+
+/// `b_lift`'s certified bound.
+pub open spec fn bound_of_b_lift() -> int {
+    9671406556899441211605000int
+}
+
+/// `c_lift_1`'s certified bound.
+pub open spec fn bound_of_c_lift_1() -> int {
+    4835703278449720605802500int
+}
+
+/// `c_lift_2`'s certified bound.
+pub open spec fn bound_of_c_lift_2() -> int {
+    4835703278449720605802500int
+}
+
+/// `c_lift`'s certified bound.
+pub open spec fn bound_of_c_lift() -> int {
+    9671406556899441211605000int
+}
+
+/// `bc_1`'s certified bound.
+pub open spec fn bound_of_bc_1() -> int {
+    4835703278449720605802500int
+}
+
+/// `bc_2`'s certified bound.
+pub open spec fn bound_of_bc_2() -> int {
+    4835703278449720605802500int
+}
+
+/// `bc`'s certified bound.
+pub open spec fn bound_of_bc() -> int {
+    9671406556899441211605000int
+}
+
+/// `ca_1`'s certified bound.
+pub open spec fn bound_of_ca_1() -> int {
+    4835703278449720605802500int
+}
+
+/// `ca_2`'s certified bound.
+pub open spec fn bound_of_ca_2() -> int {
+    4835703278449720605802500int
+}
+
+/// `ca`'s certified bound.
+pub open spec fn bound_of_ca() -> int {
+    9671406556899441211605000int
+}
+
+/// `ab_1`'s certified bound.
+pub open spec fn bound_of_ab_1() -> int {
+    4835703278449720605802500int
+}
+
+/// `ab_2`'s certified bound.
+pub open spec fn bound_of_ab_2() -> int {
+    4835703278449720605802500int
+}
+
+/// `ab`'s certified bound.
+pub open spec fn bound_of_ab() -> int {
+    9671406556899441211605000int
+}
+
+/// `det_1`'s certified bound.
+pub open spec fn bound_of_det_1() -> int {
+    93536104788837504398115355057893470386676025000000int
+}
+
+/// `det_2`'s certified bound.
+pub open spec fn bound_of_det_2() -> int {
+    93536104788837504398115355057893470386676025000000int
+}
+
+/// `det_3`'s certified bound.
+pub open spec fn bound_of_det_3() -> int {
+    187072209577675008796230710115786940773352050000000int
+}
+
+/// `det_4`'s certified bound.
+pub open spec fn bound_of_det_4() -> int {
+    93536104788837504398115355057893470386676025000000int
+}
+
+/// `det`'s certified bound.
+pub open spec fn bound_of_det() -> int {
+    280608314366512513194346065173680411160028075000000int
+}
+
 } // verus!
 
 /// `incircle`'s exact value: each step in the type its certificate gives it, with checked
@@ -90,44 +235,67 @@ pub fn value(a: P2, b: P2, c: P2, d: P2) -> Option<I256> {
     let bd_y = b.y.get().checked_sub(d.y.get())?;
     let cd_x = c.x.get().checked_sub(d.x.get())?;
     let cd_y = c.y.get().checked_sub(d.y.get())?;
-    proof! { lemma_product_bound(ad_x as int, ad_x as int, 2199023255550, 2199023255550); }
+    proof! { lemma_product_bound(ad_x as int, ad_x as int, bound_of_ad_x(), bound_of_ad_x()); }
     let a_lift_1 = i128::from(ad_x).checked_mul(i128::from(ad_x))?;
-    proof! { lemma_product_bound(ad_y as int, ad_y as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_a_lift_1() <= a_lift_1 as int <= bound_of_a_lift_1()); }
+    proof! { lemma_product_bound(ad_y as int, ad_y as int, bound_of_ad_y(), bound_of_ad_y()); }
     let a_lift_2 = i128::from(ad_y).checked_mul(i128::from(ad_y))?;
+    proof! { assert(-bound_of_a_lift_2() <= a_lift_2 as int <= bound_of_a_lift_2()); }
     let a_lift = a_lift_1.checked_add(a_lift_2)?;
-    proof! { lemma_product_bound(bd_x as int, bd_x as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_a_lift() <= a_lift as int <= bound_of_a_lift()); }
+    proof! { lemma_product_bound(bd_x as int, bd_x as int, bound_of_bd_x(), bound_of_bd_x()); }
     let b_lift_1 = i128::from(bd_x).checked_mul(i128::from(bd_x))?;
-    proof! { lemma_product_bound(bd_y as int, bd_y as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_b_lift_1() <= b_lift_1 as int <= bound_of_b_lift_1()); }
+    proof! { lemma_product_bound(bd_y as int, bd_y as int, bound_of_bd_y(), bound_of_bd_y()); }
     let b_lift_2 = i128::from(bd_y).checked_mul(i128::from(bd_y))?;
+    proof! { assert(-bound_of_b_lift_2() <= b_lift_2 as int <= bound_of_b_lift_2()); }
     let b_lift = b_lift_1.checked_add(b_lift_2)?;
-    proof! { lemma_product_bound(cd_x as int, cd_x as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_b_lift() <= b_lift as int <= bound_of_b_lift()); }
+    proof! { lemma_product_bound(cd_x as int, cd_x as int, bound_of_cd_x(), bound_of_cd_x()); }
     let c_lift_1 = i128::from(cd_x).checked_mul(i128::from(cd_x))?;
-    proof! { lemma_product_bound(cd_y as int, cd_y as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_c_lift_1() <= c_lift_1 as int <= bound_of_c_lift_1()); }
+    proof! { lemma_product_bound(cd_y as int, cd_y as int, bound_of_cd_y(), bound_of_cd_y()); }
     let c_lift_2 = i128::from(cd_y).checked_mul(i128::from(cd_y))?;
+    proof! { assert(-bound_of_c_lift_2() <= c_lift_2 as int <= bound_of_c_lift_2()); }
     let c_lift = c_lift_1.checked_add(c_lift_2)?;
-    proof! { lemma_product_bound(bd_x as int, cd_y as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_c_lift() <= c_lift as int <= bound_of_c_lift()); }
+    proof! { lemma_product_bound(bd_x as int, cd_y as int, bound_of_bd_x(), bound_of_cd_y()); }
     let bc_1 = i128::from(bd_x).checked_mul(i128::from(cd_y))?;
-    proof! { lemma_product_bound(bd_y as int, cd_x as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_bc_1() <= bc_1 as int <= bound_of_bc_1()); }
+    proof! { lemma_product_bound(bd_y as int, cd_x as int, bound_of_bd_y(), bound_of_cd_x()); }
     let bc_2 = i128::from(bd_y).checked_mul(i128::from(cd_x))?;
+    proof! { assert(-bound_of_bc_2() <= bc_2 as int <= bound_of_bc_2()); }
     let bc = bc_1.checked_sub(bc_2)?;
-    proof! { lemma_product_bound(cd_x as int, ad_y as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_bc() <= bc as int <= bound_of_bc()); }
+    proof! { lemma_product_bound(cd_x as int, ad_y as int, bound_of_cd_x(), bound_of_ad_y()); }
     let ca_1 = i128::from(cd_x).checked_mul(i128::from(ad_y))?;
-    proof! { lemma_product_bound(cd_y as int, ad_x as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_ca_1() <= ca_1 as int <= bound_of_ca_1()); }
+    proof! { lemma_product_bound(cd_y as int, ad_x as int, bound_of_cd_y(), bound_of_ad_x()); }
     let ca_2 = i128::from(cd_y).checked_mul(i128::from(ad_x))?;
+    proof! { assert(-bound_of_ca_2() <= ca_2 as int <= bound_of_ca_2()); }
     let ca = ca_1.checked_sub(ca_2)?;
-    proof! { lemma_product_bound(ad_x as int, bd_y as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_ca() <= ca as int <= bound_of_ca()); }
+    proof! { lemma_product_bound(ad_x as int, bd_y as int, bound_of_ad_x(), bound_of_bd_y()); }
     let ab_1 = i128::from(ad_x).checked_mul(i128::from(bd_y))?;
-    proof! { lemma_product_bound(ad_y as int, bd_x as int, 2199023255550, 2199023255550); }
+    proof! { assert(-bound_of_ab_1() <= ab_1 as int <= bound_of_ab_1()); }
+    proof! { lemma_product_bound(ad_y as int, bd_x as int, bound_of_ad_y(), bound_of_bd_x()); }
     let ab_2 = i128::from(ad_y).checked_mul(i128::from(bd_x))?;
+    proof! { assert(-bound_of_ab_2() <= ab_2 as int <= bound_of_ab_2()); }
     let ab = ab_1.checked_sub(ab_2)?;
+    proof! { assert(-bound_of_ab() <= ab as int <= bound_of_ab()); }
     proof! { lemma_half_base_4(); }
-    proof! { lemma_product_bound(a_lift as int, bc as int, 9671406556899441211605000, 9671406556899441211605000); }
+    proof! { lemma_product_bound(a_lift as int, bc as int, bound_of_a_lift(), bound_of_bc()); }
     let det_1 = I256::product_i128(a_lift, bc)?;
-    proof! { lemma_product_bound(b_lift as int, ca as int, 9671406556899441211605000, 9671406556899441211605000); }
+    proof! { assert(-bound_of_det_1() <= det_1.value() <= bound_of_det_1()); }
+    proof! { lemma_product_bound(b_lift as int, ca as int, bound_of_b_lift(), bound_of_ca()); }
     let det_2 = I256::product_i128(b_lift, ca)?;
+    proof! { assert(-bound_of_det_2() <= det_2.value() <= bound_of_det_2()); }
     let det_3 = det_1.checked_add(&det_2)?;
-    proof! { lemma_product_bound(c_lift as int, ab as int, 9671406556899441211605000, 9671406556899441211605000); }
+    proof! { assert(-bound_of_det_3() <= det_3.value() <= bound_of_det_3()); }
+    proof! { lemma_product_bound(c_lift as int, ab as int, bound_of_c_lift(), bound_of_ab()); }
     let det_4 = I256::product_i128(c_lift, ab)?;
+    proof! { assert(-bound_of_det_4() <= det_4.value() <= bound_of_det_4()); }
     let det = det_3.checked_add(&det_4)?;
+    proof! { assert(-bound_of_det() <= det.value() <= bound_of_det()); }
     Some(det)
 }

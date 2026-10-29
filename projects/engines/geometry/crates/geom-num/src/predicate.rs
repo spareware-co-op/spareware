@@ -18,6 +18,17 @@
 //! - **Deterministic.** The same answer on every target: the integer paths are exact, and the
 //!   filter's `f64` operations are correctly rounded everywhere and give a sign only when it is the
 //!   exact sign.
+//! - **Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here).
+//!   Verus proves that the generated exact paths of [`orient2d`], [`orient3d`], [`incircle`] and
+//!   [`insphere`] compute their determinants exactly and never overflow, for every grid input
+//!   (pieces G36 and G38: the twins in `verus/generated/`, token for token the shipped modules),
+//!   and that the [`crate::wide`] arithmetic they run on is exact (G37). Kani proves that
+//!   [`orient2d`] answers with the exact sign, nothing panicking or overflowing on the way, filter
+//!   and routing included, for every coordinate within one step of 0 or of an edge of the frame
+//!   (piece G14: geom-fuzz's `orient2d_proof`). The filters' error bounds are checked against
+//!   exact arithmetic, not proven, until pieces G35 and G40 certify them; the routing and every
+//!   other input are tested against exact oracles (`tests/attack_predicate.rs`, the verification
+//!   suite).
 //!
 //! Four evaluation steps, each exact; a call returns from the first that answers:
 //!

@@ -10,7 +10,7 @@
 //! depends on this crate (`geom-test`'s dependency rule checks that), so whatever a generator needs,
 //! a multiprecision library or a proof tool, never enters a kernel build.
 //!
-//! Layer: Development, in chapter 27's proposed crate table: a development crate, outside the
+//! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
 //! (chapter 27) within the licence allow-list of 29.2. No kernel crate depends on it, by chapter
 //! 27's rule for `geom-gen` above, which is stricter than the development layer's rule that no
@@ -46,6 +46,11 @@
 //!   exact path and the certificate into `geom-num`'s `src/generated/` ([`predicate_emit`]). An
 //!   independent checker in `tests/predicate_checker.rs` re-derives the certificate and the
 //!   constant and reads every line of the committed code.
+//! - [`predicate_certificates`], the problems that machine-check the filters' error bounds
+//!   (chapter 28.6; piece G35): Gappa's (`generated/gappa-<name>.g`, whose proofs Rocq checks) and
+//!   `FPTaylor`'s (`generated/fptaylor-<name>.fpt`, whose certificates HOL Light checks), for
+//!   orient2d and orient3d. `kernel-certificates.yml` runs the tools with the scripts in
+//!   `certificates/`, and `tests/certificate_problems.rs` holds each problem to the shipped filter.
 //! - [`quadrature`], the Gauss–Legendre and Gauss–Kronrod rules `geom-num` integrates with,
 //!   computed in exact rationals (Golub and Welsch's method for the Gauss rules, Kronrod's
 //!   definition for his extensions) and each node and weight rounded once, correctly, into
@@ -96,6 +101,7 @@ pub mod exact;
 pub mod files;
 pub mod generator;
 pub mod grid_steps;
+pub mod predicate_certificates;
 pub mod predicate_derive;
 pub mod predicate_emit;
 pub mod predicate_lang;

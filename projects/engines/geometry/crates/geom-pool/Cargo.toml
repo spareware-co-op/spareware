@@ -18,7 +18,7 @@ rayon = "1.12.0"
 [dev-dependencies]
 # Seeds and SplitMix64 for the tests' inputs (chapter 28.17): the kernel's development crate.
 geom-test = { path = "../geom-test" }
-# Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
+# Exactly this crate's row of chapter 27's crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
 
 # The only published crates it may name, once its pieces build it: rayon on native targets (G33)
