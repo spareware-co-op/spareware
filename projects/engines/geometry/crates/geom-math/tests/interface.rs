@@ -14,6 +14,12 @@
 //!   the exact value lies just past it (found by search, so the certificate must refuse them), and
 //!   on a point whose value, about 2^−90 m, is far below the double-double value's own error.
 //! - A shift between frames takes a vertical offset of exactly 2^62 steps and refuses one more.
+//! - A grid image rounds to the nearest step, ties to even, with the exact flag right, on rows
+//!   whose plain double sum, or whose double-double sum, lands within its error bound of a whole
+//!   step or a midpoint on the far side from the exact value: each filter must refuse them; and a
+//!   sum of tiny terms that cancel is exactly zero.
+//! - A transform whose determinant is small but certain is classified by its sign, and the
+//!   identity reverses no orientation.
 
 #![allow(
     clippy::float_cmp,
@@ -36,9 +42,14 @@ mod common;
 
 use std::cmp::Ordering;
 
-use common::{exact, int, sign_minus_sqrt, step_down, step_up};
+use common::{
+    exact, int, is_integer, round_half_even, sign_minus_sqrt, step_down, step_up, to_i128,
+};
 use geom_math::frame::steps_per_metre;
-use geom_math::{CrsId, DD, F2, F3, FrameMismatch, FrameRecord, MathError, Rotation, Scale};
+use geom_math::{
+    CrsId, DD, F2, F3, FrameMismatch, FrameRecord, MathError, Rotation, Scale, Transform,
+    TransformKind,
+};
 use geom_num::NumError;
 use geom_num::grid::{GridStep, P3};
 use num_bigint::BigInt;
@@ -362,4 +373,130 @@ fn a_shift_takes_an_offset_of_2_62_steps_and_refuses_one_more() {
             }
         }
     }
+}
+
+/// Applies a transform whose first row is `row` (its other rows copy x and z) to the grid point
+/// `v`, and checks the first coordinate is the exact value rounded to the nearest step, ties to
+/// even, with the exact flag right.
+fn check_row(row: [f64; 4], v: [i64; 3]) {
+    let t = Transform::from_rows([row, [1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]).unwrap();
+    let got = t.apply_grid(P3::new(v[0], v[1], v[2]).unwrap()).unwrap();
+    let value = exact(row[0]) * int(v[0].into())
+        + exact(row[1]) * int(v[1].into())
+        + exact(row[2]) * int(v[2].into())
+        + exact(row[3]);
+    assert_eq!(
+        i128::from(got.value().x.get()),
+        to_i128(&round_half_even(&value)),
+        "{row:?} {v:?}"
+    );
+    assert_eq!(got.is_exact(), is_integer(&value), "{row:?} {v:?}");
+}
+
+#[test]
+fn grid_images_round_rows_whose_sums_mislead() {
+    // Rows (as bits) and points whose plain double sum lands within its error bound of a whole step
+    // or a midpoint, on the far side from the exact value (found by search): the filter must refuse
+    // them, whichever terms of its error bound are large and whichever small.
+    let floats: [([u64; 4], [i64; 3]); 7] = [
+        (
+            [
+                13_800_088_646_199_046_416,
+                4_636_542_898_653_080_414,
+                9_223_372_036_854_775_808,
+                4_605_528_787_574_200_429,
+            ],
+            [3, 3, 302_382_538_118],
+        ),
+        (
+            [
+                13_720_222_882_212_012_787,
+                13_934_628_128_717_704_012,
+                13_723_034_304_949_366_581,
+                4_598_186_683_659_505_602,
+            ],
+            [197_570_708_500, 0, -3],
+        ),
+        (
+            [
+                4_557_835_963_210_325_804,
+                4_557_885_557_627_847_924,
+                0,
+                4_602_677_552_694_165_520,
+            ],
+            [-421_033_947_376, 416_634_566_336, 416_435_347_467],
+        ),
+        (
+            [
+                4_614_321_898_245_484_095,
+                4_610_737_876_854_328_519,
+                4_735_605_145_369_861_786,
+                4_603_844_851_218_494_924,
+            ],
+            [-158_011_625_086, 279_963_438_408, 0],
+        ),
+        (
+            [
+                13_773_948_829_054_700_974,
+                9_223_372_036_854_775_808,
+                4_564_342_554_621_623_720,
+                4_590_073_817_154_733_875,
+            ],
+            [130_995_460_234, -366_509_382_420, 233_450_774_702],
+        ),
+        (
+            [
+                13_875_014_458_290_828_434,
+                4_652_942_106_136_125_965,
+                13_705_976_657_154_790_998,
+                13_671_448_807_979_258_426,
+            ],
+            [327_432_043_241, 264_060_968_293, 0],
+        ),
+        (
+            [
+                4_688_340_221_748_307_508,
+                13_916_703_332_751_642_226,
+                13_734_082_746_051_126_462,
+                4_602_011_288_366_872_593,
+            ],
+            [415_082_916_508, 187_641_870_268, -161_819_145_631],
+        ),
+    ];
+    for (bits, v) in floats {
+        check_row(bits.map(f64::from_bits), v);
+    }
+    // Rows whose double-double sum loses a term of 3·2^−80: l₀x is about 2^39, so the double-double
+    // sum of it and l₁y keeps nothing below about 2^−66, and l₂z then cancels l₀x exactly. The
+    // exact value is then 0 exactly (an exact step the double-double sum puts 3·2^−80 away), and
+    // 1/2 + 3·2^−80 (just above a midpoint the double-double sum lands on).
+    let l = 1.0 + pow2(-52);
+    let x = (1i64 << 39) - 1;
+    for t in [-3.0 * pow2(-80), 0.5] {
+        check_row([l, pow2(-80), -l, t], [x, 3, x]);
+    }
+}
+
+#[test]
+fn a_grid_image_of_tiny_terms_that_cancel_is_exactly_zero() {
+    // Every term is 2^−140 in magnitude, far below a step, and they cancel: both filters see a
+    // zero they cannot certify, and the exact stage finds the value exactly zero.
+    check_row([pow2(-140), -pow2(-140), 0.0, 0.0], [1, 1, 0]);
+    check_row([pow2(-140), pow2(-141), -pow2(-139), pow2(-141)], [3, 2, 1]);
+}
+
+#[test]
+fn a_small_but_certain_determinant_decides_the_orientation() {
+    // det = 2^−52, exactly, after the rows are scaled: small, but its sign is certain.
+    let row_a = [1.0, 1.0, 0.0, 0.0];
+    let row_b = [1.0, 1.0 + pow2(-52), 0.0, 0.0];
+    let z = [0.0, 0.0, 1.0, 0.0];
+    for (rows, mirror) in [([row_a, row_b, z], false), ([row_b, row_a, z], true)] {
+        let c = Transform::from_rows(rows).unwrap().classify().unwrap();
+        assert_eq!(c.kind, TransformKind::NonUniform, "{rows:?}");
+        assert_eq!(c.mirror, mirror, "{rows:?}");
+        assert_eq!(c.reverses_orientation(), mirror, "{rows:?}");
+    }
+    let identity = Transform::IDENTITY.classify().unwrap();
+    assert!(!identity.reverses_orientation());
 }
