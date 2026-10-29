@@ -913,6 +913,14 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "Differs only where the enclosure of det(I - d II) over a piece ends exactly at 0.0 from below, so the fold factor is at most 0 and may reach 0. The mutant then turns the base's normals over instead of taking the cross product of the enclosed partials. Where the factor is negative the offset's normal is a positive multiple of the turned-over base normal; where it is 0 the normal vanishes and its limit from the rest of the piece points the same way, which the trait allows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
+      "mutant": "replace || with && in same_parameter",
+      "line_text": "if done || stuck {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With && the refinement stops only where the target is met (or the densest sampling reached) and the certificate also stops falling. A smooth kind's certificate keeps falling, so its cache is sampled twice as densely without end, each try four times the last's work: the suite never finishes, and cargo-mutants stops it at its time limit."
     }
   ],
   "coverage_off": [],
