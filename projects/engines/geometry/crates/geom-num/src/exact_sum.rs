@@ -163,7 +163,7 @@ const _: () = {
 /// The exact sum of doubles, rounded once at the end (module documentation).
 ///
 /// The value is `Σ chunks[i]·2^(32i − 1075)`, exactly.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ExactSum {
     /// The small superaccumulator's chunks.
     chunks: [i64; CHUNKS],
@@ -177,6 +177,17 @@ pub struct ExactSum {
     nan_payload: u64,
     /// Whether an internal step failed, so the value is lost (cannot happen; module documentation).
     lost: bool,
+}
+
+/// The sum's value, [`ExactSum::round_ieee`], and nothing of its accumulator: the chunks and
+/// the additions left before a carry propagation are internal, and the same terms added in
+/// another order, or through `add_slice` or `add_iter`, leave them different (chapter 28.8).
+impl core::fmt::Debug for ExactSum {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ExactSum")
+            .field("rounded", &self.round_ieee())
+            .finish()
+    }
 }
 
 impl Default for ExactSum {

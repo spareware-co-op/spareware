@@ -38,6 +38,7 @@
 #[path = "math_reference.rs"]
 mod reference;
 
+use geom_num::exact_sum::{ExactSum, LARGE_SLICE};
 use geom_num::{NumError, Real, math};
 use reference::{Owed, assert_owed, owed};
 
@@ -231,6 +232,21 @@ const SINPI_STICKY: [u64; 5] = [
 const COSPI_STICKY: [u64; 5] = [
     0x3e43_0e5c_ded6_7caf, 0xbe99_d9ce_0957_f1c8, 0x3e78_2428_46e3_d0af, 0xbebf_9a45_ce01_134f,
     0x3f65_bbef_584e_580d,
+];
+
+/// Every listed input whose result `refine` takes from its hard-case table (sinpi, then cospi):
+/// the scan must run for them, so each catches a doubt test that misses a low part that is a
+/// power of two (`(t << 12) == 0`). Of the 48 (iq, z) the scan can match, only these 11 are
+/// reached from an input; the fast path decides the rest. Found by replaying `refine` exactly off
+/// CI; on each, the plain double-double sum is one ulp off.
+#[rustfmt::skip]
+const SINPI_REFINE_SCAN: [u64; 3] = [0x3fce_99d7_85d7_05f5, 0x3fdc_3642_2fd2_e52a, 0x3fe1_e4de_e816_8d6b];
+
+/// See [`SINPI_REFINE_SCAN`].
+#[rustfmt::skip]
+const COSPI_REFINE_SCAN: [u64; 5] = [
+    0x3f63_96d4_be3e_ad8c, 0x3f9b_0fde_dbce_51ed, 0x3fae_4dee_8168_d6b0, 0x3fb8_2e06_6772_56d1,
+    0x3fee_1b21_17e9_7295,
 ];
 
 /// cospi.wc inputs on the general path (2^-12 < |x| < 2^41).
@@ -455,6 +471,7 @@ fn sinpi_and_cospi_hard_cases_both_signs() {
         &SINPI_NEAR_ZERO[..],
         &SINPI_NEAR_ZERO_HARDEST[..],
         &SINPI_STICKY[..],
+        &SINPI_REFINE_SCAN[..],
     ] {
         let both: Vec<u64> = list.iter().flat_map(|&b| [b, b ^ (1 << 63)]).collect();
         check_each("sinpi", &both, math::sinpi, sinpi);
@@ -464,6 +481,7 @@ fn sinpi_and_cospi_hard_cases_both_signs() {
         &COSPI_NEAR_ZERO[..],
         &COSPI_NEAR_ZERO_HARDEST[..],
         &COSPI_STICKY[..],
+        &COSPI_REFINE_SCAN[..],
     ] {
         let both: Vec<u64> = list.iter().flat_map(|&b| [b, b ^ (1 << 63)]).collect();
         check_each("cospi", &both, math::cospi, cospi);
@@ -521,4 +539,29 @@ fn libm_gives_the_quarter_turns_exactly() {
     assert_eq!(ok(math::unproven::cospi(1.0)), -1.0);
     assert_eq!(ok(math::unproven::cospi(-1.0)), -1.0);
     assert_eq!(ok(math::unproven::cospi(3.0)), -1.0);
+}
+
+/// `ExactSum`'s `Debug` shows its value only, not its accumulator (chapter 28.8): the same terms
+/// added one by one and through `add_slice` above [`LARGE_SLICE`] terms (Neal's large accumulator,
+/// emptied into the small one) may leave different chunks, and print alike.
+#[test]
+fn exact_sum_debug_shows_only_the_value() {
+    let terms: Vec<f64> = (0..4 * LARGE_SLICE)
+        .map(|i| {
+            let i = f64::from(u32::try_from(i).unwrap());
+            i * 0.1 - 7.0e10 / (i + 1.0)
+        })
+        .collect();
+    let mut one_by_one = ExactSum::new();
+    for &t in &terms {
+        one_by_one.add(t);
+    }
+    let mut sliced = ExactSum::new();
+    sliced.add_slice(&terms);
+    let shown = format!("{one_by_one:?}");
+    assert_eq!(shown, format!("{sliced:?}"));
+    assert_eq!(
+        shown,
+        format!("ExactSum {{ rounded: {:?} }}", one_by_one.round_ieee())
+    );
 }

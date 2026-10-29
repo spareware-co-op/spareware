@@ -2128,7 +2128,7 @@
       "line_text": "let offset = pow2((-1022i64).checked_sub(ie));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With 1022 - ie, ie in -1076..=-1022, the exponent is 2044 to 2098, outside pow2's range, so offset is the canonical NaN, ub and lb are NaN and ub != lb holds: every possibly subnormal argument goes to exp_accurate, which computes the same correctly rounded result. Only the time changes."
+      "reason": "With 1022 - ie, ie in -1076..=-1022, the exponent is 2044 to 2098, outside pow2's range, so offset is the canonical NaN, ub and lb are NaN and ub != lb holds: every possibly subnormal argument goes to exp_accurate, which computes the same correctly rounded result. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2232,7 +2232,7 @@
       "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With h = l = 0, left = -ERR and right = +ERR differ, so every input other than 1 (returned before) goes to log_accurate, which gives the same correctly rounded value: only the time changes."
+      "reason": "With h = l = 0, left = -ERR and right = +ERR differ, so every input other than 1 (returned before) goes to log_accurate, which gives the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2240,7 +2240,7 @@
       "line_text": "let m = (1u64 << 52) | (v.to_bits() & MANTISSA);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "m becomes 0 (bit 52 and the 52 significand bits share no bit), so i = 0 and i - 362 fails: log_fast returns its NaN pair, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+      "reason": "m becomes 0 (bit 52 and the 52 significand bits share no bit), so i = 0 and i - 362 fails: log_fast returns its NaN pair, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2256,7 +2256,7 @@
       "line_text": "let m = (1u64 << 52) | (v.to_bits() & MANTISSA);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "v's exponent field (0x3ff) then reaches m, so m >= 2^61 and i = m >> 44 is far above 724: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+      "reason": "v's exponent field (0x3ff) then reaches m, so m >= 2^61 and i = m >> 44 is far above 724: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2264,7 +2264,7 @@
       "line_text": "let m = (1u64 << 52) | (v.to_bits() & MANTISSA);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "v's exponent field (0x3ff) then reaches m, so m >= 2^61 and i = m >> 44 is far above 724: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+      "reason": "v's exponent field (0x3ff) then reaches m, so m >= 2^61 and i = m >> 44 is far above 724: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2272,7 +2272,7 @@
       "line_text": "(m >> 44, v * 0.5)",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "i = m << 44 (the shift drops m's high bits) is a multiple of 2^44: 0, which i - 362 refuses, or at least 2^44, outside the table: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+      "reason": "i = m << 44 (the shift drops m's high bits) is a multiple of 2^44: 0, which i - 362 refuses, or at least 2^44, outside the table: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2280,7 +2280,7 @@
       "line_text": "(m >> 43, v)",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "i = m << 43 (the shift drops m's high bits) is a multiple of 2^43: 0, which i - 362 refuses, or at least 2^43, outside the table: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+      "reason": "i = m << 43 (the shift drops m's high bits) is a multiple of 2^43: 0, which i - 362 refuses, or at least 2^43, outside the table: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2288,7 +2288,7 @@
       "line_text": "let y_hi = f64::from_bits(y.to_bits() & !0x3ff);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "y.to_bits() | !0x3ff sets the sign and every exponent bit, so y_hi is a NaN, z and h are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+      "reason": "y.to_bits() | !0x3ff sets the sign and every exponent bit, so y_hi is a NaN, z and h are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2544,7 +2544,7 @@
       "line_text": "let ub = fh + (fl + EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Write a = l + e and b = l - e (e = EPS, so a - b = 2^-60.8, below the ulp u of H and the ulp u' under it: H >= 1). The mutant accepts when RN(H - a) = RN(H + b). Both above H needs a < 0 < b, but b < a; both below H needs a and -b each at least u'/2, so a - b >= u'. So both are H: b >= -u'/2 and a <= u'/2, and H + a, between them, rounds to H too (a tie only when u' = u and H is even, as the mirror tie shows). The original then accepts as well and returns the same lb = H; otherwise exp_accurate gives the same correctly rounded value. Only the time changes."
+      "reason": "Write a = l + e and b = l - e (e = EPS, so a - b = 2^-60.8, below the ulp u of H and the ulp u' under it: H >= 1). The mutant accepts when RN(H - a) = RN(H + b). Both above H needs a < 0 < b, but b < a; both below H needs a and -b each at least u'/2, so a - b >= u'. So both are H: b >= -u'/2 and a <= u'/2, and H + a, between them, rounds to H too (a tie only when u' = u and H is even, as the mirror tie shows). The original then accepts as well and returns the same lb = H; otherwise exp_accurate gives the same correctly rounded value. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -2552,7 +2552,7 @@
       "line_text": "let ub = th + (fl + EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Write a = l + e and b = l - e (e = EPS, so a - b = 2^-60.8, below the ulp u of H and the ulp u' under it: H >= 1). The mutant accepts when RN(H - a) = RN(H + b). Both above H needs a < 0 < b, but b < a; both below H needs a and -b each at least u'/2, so a - b >= u'. So both are H: b >= -u'/2 and a <= u'/2, and H + a, between them, rounds to H too (a tie only when u' = u and H is even, as the mirror tie shows). The original then accepts as well and returns the same lb = H; otherwise exp_accurate gives the same correctly rounded value. Only the time changes."
+      "reason": "Write a = l + e and b = l - e (e = EPS, so a - b = 2^-60.8, below the ulp u of H and the ulp u' under it: H >= 1). The mutant accepts when RN(H - a) = RN(H + b). Both above H needs a < 0 < b, but b < a; both below H needs a and -b each at least u'/2, so a - b >= u'. So both are H: b >= -u'/2 and a <= u'/2, and H + a, between them, rounds to H too (a tie only when u' = u and H is even, as the mirror tie shows). The original then accepts as well and returns the same lb = H; otherwise exp_accurate gives the same correctly rounded value. Only the time changes. No worst-case list is needed: an input the fast path decides has at most about 13 identical bits after its round bit, and exp_accurate rounds correctly every input with fewer than 48 (exp.rs, steps F3 and A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2560,7 +2560,7 @@
       "line_text": "let above = m >= 0x16_a09e_667f_3bcd;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Below sqrt 2 the mutant halves v, so i = m >> 44 < 362 and i - 362 fails: the NaN pair sends x to log_accurate. From sqrt 2 up it does not halve, so i = m >> 43 >= 724, in range only at i = 724 (v below 725/512), whose entry INVERSE[362] is the one the original uses for v in [724/512, sqrt 2): the reduction ln x = e ln 2 - ln r + ln(1 + z) holds for any table entry, z stays inside the polynomial's fitted interval (|z| < 0.0008) and e·LOG2_H + l1 stays exact, so the fast path's proof covers it: it returns the correctly rounded value or defers to log_accurate."
+      "reason": "Below sqrt 2 the mutant halves v, so i = m >> 44 < 362 and i - 362 fails: the NaN pair sends x to log_accurate. From sqrt 2 up it does not halve, so i = m >> 43 >= 724, in range only at i = 724 (v below 725/512), whose entry INVERSE[362] is the one the original uses for v in [724/512, sqrt 2): the reduction ln x = e ln 2 - ln r + ln(1 + z) holds for any table entry, z stays inside the polynomial's fitted interval (|z| < 0.0008) and e·LOG2_H + l1 stays exact, so the fast path's proof covers it: it returns the correctly rounded value or defers to log_accurate. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2568,7 +2568,7 @@
       "line_text": "let left = h + (l - ERR);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2576,7 +2576,7 @@
       "line_text": "let left = h + (l - ERR);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2584,7 +2584,7 @@
       "line_text": "let x2 = x * x;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "x2 becomes 1, so eps = x·(2^-47 + 2^-102), and the bounds lie 2|eps| apart, at least 16 ulps of the computed value (which is near x itself): they always differ, and every input goes to sinpi_near_zero, which gives the same correctly rounded value. Only the time changes."
+      "reason": "x2 becomes 1, so eps = x·(2^-47 + 2^-102), and the bounds lie 2|eps| apart, at least 16 ulps of the computed value (which is near x itself): they always differ, and every input goes to sinpi_near_zero, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2592,7 +2592,7 @@
       "line_text": "let eps = x * (x2 * hf!(\"0x1p-47\") + hf!(\"0x1p-102\"));",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Both * on this line made +: x + (x2·2^-47 + 2^-102) is about x, and x·(x2 + 2^-47 + 2^-102) exceeds the original in magnitude. The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+      "reason": "Both * on this line made +: x + (x2·2^-47 + 2^-102) is about x, and x·(x2 + 2^-47 + 2^-102) exceeds the original in magnitude. The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2600,7 +2600,7 @@
       "line_text": "let eps = x * (x2 * hf!(\"0x1p-47\") + hf!(\"0x1p-102\"));",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Both * on this line made /: x/(x2·2^-47 + 2^-102) is at least x·2^100, and x·(x2·2^47 + 2^-102) exceeds the original in magnitude (2^47 > 2^-47). The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+      "reason": "Both * on this line made /: x/(x2·2^-47 + 2^-102) is at least x·2^100, and x·(x2·2^47 + 2^-102) exceeds the original in magnitude (2^47 > 2^-47). The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2608,7 +2608,7 @@
       "line_text": "let lb = (zl - eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2616,7 +2616,7 @@
       "line_text": "let lb = (zl - eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2624,7 +2624,7 @@
       "line_text": "let lb = (zl - eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2632,7 +2632,7 @@
       "line_text": "let ub = (zl + eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2640,7 +2640,7 @@
       "line_text": "let ub = (zl + eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2656,7 +2656,7 @@
       "line_text": "let er = z.abs() * hf!(\"0x1p-123\") + ER0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2664,7 +2664,7 @@
       "line_text": "let er = z.abs() * hf!(\"0x1p-123\") + ER0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2672,7 +2672,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2680,7 +2680,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2688,7 +2688,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(sh + r/er) equals RN(sh + r + er), returning that bound as the original would. Where the original refuses, a midpoint lies within er (at most 2^-77) of sh + r, so |r| is at least half an ulp of sh minus er, over 2^-64 (sh is 0 or at least sin(pi/2048)), or, at sh = 0, |r| >= pi·2^-75 (|z| >= 1, ch = +-1): either way |r/er| > 2^13 ulps of the value, and sh + r/er rounds far from sh + r + er. So the mutant accepts only inputs the original accepts, with the same double."
+      "reason": "The mutant accepts when RN(sh + r/er) equals RN(sh + r + er), returning that bound as the original would. Where the original refuses, a midpoint lies within er (at most 2^-77) of sh + r, so |r| is at least half an ulp of sh minus er, over 2^-64 (sh is 0 or at least sin(pi/2048)), or, at sh = 0, |r| >= pi·2^-75 (|z| >= 1, ch = +-1): either way |r/er| > 2^13 ulps of the value, and sh + r/er rounds far from sh + r + er. So the mutant accepts only inputs the original accepts, with the same double. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2696,7 +2696,7 @@
       "line_text": "let ub = (r + er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2704,7 +2704,7 @@
       "line_text": "let x2 = x * x;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "x2 becomes 1, so eps = 0x1.ap-48 and the bounds lie 2^-46.3 apart, many ulps of a value near 1: they always differ, and every input goes to cospi_near_zero, which gives the same correctly rounded value. Only the time changes."
+      "reason": "x2 becomes 1, so eps = 0x1.ap-48 and the bounds lie 2^-46.3 apart, many ulps of a value near 1: they always differ, and every input goes to cospi_near_zero, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2712,7 +2712,7 @@
       "line_text": "let eps = x2 * hf!(\"0x1.ap-48\");",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2720,7 +2720,7 @@
       "line_text": "let eps = x2 * hf!(\"0x1.ap-48\");",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2728,7 +2728,7 @@
       "line_text": "let lb = (p - eps) + 1.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2736,7 +2736,7 @@
       "line_text": "let lb = (p - eps) + 1.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2744,7 +2744,7 @@
       "line_text": "let lb = (p - eps) + 1.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2752,7 +2752,7 @@
       "line_text": "let ub = (p + eps) + 1.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2760,7 +2760,7 @@
       "line_text": "let ub = (p + eps) + 1.0;",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Both + on this line made *. (p + eps)·1.0 is about p, far below lb (about 1), so they never agree. (p·eps) + 1.0 rounds to 1.0 (|p·eps| < 2^-90): the mutant then accepts exactly when lb = RN(1 + p - eps) is 1.0, and since p + eps < 0 here (p is about -4.93·x^2, eps about 1.6·2^-48·x^2), the original's ub = RN(1 + p + eps) then lies between lb and 1, so it is 1.0 too and the original accepts with the same value. Otherwise both defer to cospi_near_zero."
+      "reason": "Both + on this line made *. (p + eps)·1.0 is about p, far below lb (about 1), so they never agree. (p·eps) + 1.0 rounds to 1.0 (|p·eps| < 2^-90): the mutant then accepts exactly when lb = RN(1 + p - eps) is 1.0, and since p + eps < 0 here (p is about -4.93·x^2, eps about 1.6·2^-48·x^2), the original's ub = RN(1 + p + eps) then lies between lb and 1, so it is 1.0 too and the original accepts with the same value. Otherwise both defer to cospi_near_zero. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2776,7 +2776,7 @@
       "line_text": "let er = z.abs() * hf!(\"0x1p-123\") + ER0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2784,7 +2784,7 @@
       "line_text": "let er = z.abs() * hf!(\"0x1p-123\") + ER0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes."
+      "reason": "The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2792,7 +2792,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2800,7 +2800,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2808,7 +2808,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(sh + r/er) equals RN(sh + r + er), returning that bound as the original would. Where the original refuses, a midpoint lies within er (at most 2^-77) of sh + r, so |r| is at least half an ulp of sh minus er, over 2^-64 (sh is 0 or at least sin(pi/2048)), or, at sh = 0, |r| >= pi·2^-75 (|z| >= 1, ch = +-1): either way |r/er| > 2^13 ulps of the value, and sh + r/er rounds far from sh + r + er. So the mutant accepts only inputs the original accepts, with the same double."
+      "reason": "The mutant accepts when RN(sh + r/er) equals RN(sh + r + er), returning that bound as the original would. Where the original refuses, a midpoint lies within er (at most 2^-77) of sh + r, so |r| is at least half an ulp of sh minus er, over 2^-64 (sh is 0 or at least sin(pi/2048)), or, at sh = 0, |r| >= pi·2^-75 (|z| >= 1, ch = +-1): either way |r/er| > 2^13 ulps of the value, and sh + r/er rounds far from sh + r + er. So the mutant accepts only inputs the original accepts, with the same double. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2816,7 +2816,7 @@
       "line_text": "let ub = (r + er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2984,7 +2984,7 @@
       "line_text": "let r = zh + zl;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "r only seeds rs, the value rounded at the subnormal precision, and rt = rs·2^106. The final fma rounds ((zh - rt) + zl)·2^-106 + rs once, that is (zh + zl + d)·2^-106 with d the rounding of (zh - rt) + zl, whatever rt is. With zh - zl, rs moves by at most one subnormal unit, zh - rt stays exact (Sterbenz) and |d|·2^-106 stays below 2^-1124, a 2^-50 part of the subnormal unit: only an input within that of a midpoint could change, which sinpi.wc lists (set (a)). Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over all 129 160 listed inputs below 2^-960 (sinpi.wc and set (b)'s images, both signs) changes none."
+      "reason": "r only seeds rs, the value rounded at the subnormal precision, and rt = rs·2^106. The final fma rounds ((zh - rt) + zl)·2^-106 + rs once, that is (zh + zl + d)·2^-106 with d the rounding of (zh - rt) + zl, whatever rt is. With zh - zl, rs moves by at most one subnormal unit, zh - rt stays exact (Sterbenz) and |d|·2^-106 stays below 2^-1124, a 2^-50 part of the subnormal unit: only an input within that of a midpoint could change, which sinpi.wc lists (set (a)). Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over all 129 160 listed inputs below 2^-960 (sinpi.wc and set (b)'s images, both signs) changes none. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2992,7 +2992,7 @@
       "line_text": "let eps = x * (x2 * hf!(\"0x1p-47\") + hf!(\"0x1p-102\"));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "|eps| becomes smaller by at most 2^-101·|x|. The fast path can then accept a misrounded value only if the true one lies on the other side of a midpoint, within that difference of it (the proven error is below the original |eps|): about 2^-50 ulp, an input with 43 or more identical bits, which sinpi.wc lists. Only inputs the original's test refuses can change. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none."
+      "reason": "|eps| becomes smaller by at most 2^-101·|x|. The fast path can then accept a misrounded value only if the true one lies on the other side of a midpoint, within that difference of it (the proven error is below the original |eps|): about 2^-50 ulp, an input with 43 or more identical bits, which sinpi.wc lists. Only inputs the original's test refuses can change. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3000,7 +3000,7 @@
       "line_text": "if self.sgn ^ b.sgn != 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (all 2098 checked off CI: the fast path decides each). So this test never runs."
+      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (the fast path decides every one: log.rs's unit test no_power_of_two_reaches_the_accurate_path). So this test never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3008,7 +3008,7 @@
       "line_text": "if self.sgn ^ b.sgn != 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (all 2098 checked off CI: the fast path decides each). So this test never runs."
+      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (the fast path decides every one: log.rs's unit test no_power_of_two_reaches_the_accurate_path). So this test never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3016,7 +3016,7 @@
       "line_text": "if self.sgn ^ b.sgn != 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (all 2098 checked off CI: the fast path decides each). So this test never runs."
+      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (the fast path decides every one: log.rs's unit test no_power_of_two_reaches_the_accurate_path). So this test never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3024,7 +3024,7 @@
       "line_text": "ex: self.ex.checked_add(1)?,",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (all 2098 checked off CI: the fast path decides each). So this doubling never runs."
+      "reason": "Dint::add's equal-magnitude branch is never reached in ln's accurate path. Horner's steps add r·z, below 2^-7.4, to a coefficient of at least 2^-5 (P2) or 1/16 (Taylor). lz + LOG_INV_2[k] approximates ln y (y = x/2^E) within 2^-120, so equal magnitudes there need ln y = 0 or ln(1 + z) = ln(inv), both only at y = 1; r + p approximates ln x (0 only at x = 1, returned before; |E ln 2| >= 0.69 > |p| otherwise). x·inv + M_ONE meets equal magnitudes only at x·inv = 1: inverse 1 and x a power of two, and no power of two reaches the accurate path (the fast path decides every one: log.rs's unit test no_power_of_two_reaches_the_accurate_path). So this doubling never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3032,7 +3032,7 @@
       "line_text": "if a.ex > b.ex {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The forms differ only at a.ex == b.ex, where the mutant shifts by 0 and adds bit 1 of b's significand to it. It changes b's 128-bit significand by at most one unit, 2^-127 relative, against the accurate path's own 2^-109.67, well under the 2^-101 that Lemma 2 needs with log.wc's threshold, so every unlisted input still rounds correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none."
+      "reason": "The forms differ only at a.ex == b.ex, where the mutant shifts by 0 and adds bit 1 of b's significand to it. It changes b's 128-bit significand by at most one unit, 2^-127 relative, against the accurate path's own 2^-109.67, well under the 2^-101 that Lemma 2 needs with log.wc's threshold, so every unlisted input still rounds correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3040,7 +3040,7 @@
       "line_text": "if sh < 128 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The forms differ only at sh = 128, where the mutant leaves b as 0 or 1 unit instead of 0. It changes b's 128-bit significand by at most one unit, 2^-127 relative, against the accurate path's own 2^-109.67, well under the 2^-101 that Lemma 2 needs with log.wc's threshold, so every unlisted input still rounds correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none."
+      "reason": "The forms differ only at sh = 128, where the mutant leaves b as 0 or 1 unit instead of 0. It changes b's 128-bit significand by at most one unit, 2^-127 relative, against the accurate path's own 2^-109.67, well under the 2^-101 that Lemma 2 needs with log.wc's threshold, so every unlisted input still rounds correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3064,7 +3064,7 @@
       "line_text": "t = t.checked_add(t & 1)?;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3072,7 +3072,7 @@
       "line_text": "t = t.checked_add(t & 1)?;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3080,7 +3080,7 @@
       "line_text": "t = (1u128 << 127) | (t >> 1);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3088,7 +3088,7 @@
       "line_text": "t = (1u128 << 127) | (t >> 1);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3096,7 +3096,7 @@
       "line_text": "t = (1u128 << 127) | (t >> 1);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3104,7 +3104,7 @@
       "line_text": "t = (1u128 << 127) | (t >> 1);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (off CI) gives no carry out of 128 bits. So this line never runs."
+      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3112,7 +3112,7 @@
       "line_text": "d(0x8000_0000_0000_0000, 0x0000_0000_0000_0000, -4, 1), // n = 16",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Dropping the minus makes the coefficient 2^8 times too large. Its term changes ln(1 + z) at k = 74 (|z| <= 2^-8) by at most 2^8·|z|^n/n, below 2^-107.9 of |ln x| for n = 15 and 2^-116 for n = 16; with the accurate path's 2^-109.67 that stays under the 2^-101 Lemma 2 needs with log.wc's threshold, so unlisted inputs still round correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none."
+      "reason": "Dropping the minus makes the coefficient 2^8 times too large. Its term changes ln(1 + z) at k = 74 (|z| <= 2^-8) by at most 2^8·|z|^n/n, below 2^-107.9 of |ln x| for n = 15 and 2^-116 for n = 16; with the accurate path's 2^-109.67 that stays under the 2^-101 Lemma 2 needs with log.wc's threshold, so unlisted inputs still round correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -3120,7 +3120,7 @@
       "line_text": "d(0x8888_8888_8888_8888, 0x8888_8888_8888_8889, -4, 0), // n = 15",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Dropping the minus makes the coefficient 2^8 times too large. Its term changes ln(1 + z) at k = 74 (|z| <= 2^-8) by at most 2^8·|z|^n/n, below 2^-107.9 of |ln x| for n = 15 and 2^-116 for n = 16; with the accurate path's 2^-109.67 that stays under the 2^-101 Lemma 2 needs with log.wc's threshold, so unlisted inputs still round correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none."
+      "reason": "Dropping the minus makes the coefficient 2^8 times too large. Its term changes ln(1 + z) at k = 74 (|z| <= 2^-8) by at most 2^8·|z|^n/n, below 2^-107.9 of |ln x| for n = 15 and 2^-116 for n = 16; with the accurate path's 2^-109.67 that stays under the 2^-101 Lemma 2 needs with log.wc's threshold, so unlisted inputs still round correctly. Replaying ln exactly off CI (Python: IEEE binary64 for the fast path, integers for the 128-bit path; unmutated, it gives the correctly rounded ln, from 90-digit decimals, on all of them) over the 69 034 log.wc inputs that reach the accurate path changes none. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3136,7 +3136,7 @@
       "line_text": "let b = from_checked_bits((y0.to_bits() & MANTISSA).checked_add(85u64 << 51));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "b then carries y0's exponent (it is about y0·2^42.5), so (y0 + b) - b keeps only y0's top 10 or so bits; y0l = fma(PI0, x, -y0) is the rest of PI0·x, still exact (PI0 has 8 bits, PI0·x at most 61, and their difference from a 10-bit rounding at most 52), so y0 + y0l = PI0·x as before. The later double-double steps add the same terms grouped differently, each rounding below 2^-104 of the result, so only inputs within about 2^-100 of a midpoint could change: those have 43 or more identical bits and are listed. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none."
+      "reason": "b then carries y0's exponent (it is about y0·2^42.5), so (y0 + b) - b keeps only y0's top 10 or so bits; y0l = fma(PI0, x, -y0) is the rest of PI0·x, still exact (PI0 has 8 bits, PI0·x at most 61, and their difference from a 10-bit rounding at most 52), so y0 + y0l = PI0·x as before. The later double-double steps add the same terms grouped differently, each rounding below 2^-104 of the result, so only inputs within about 2^-100 of a midpoint could change: those have 43 or more identical bits and are listed. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3144,7 +3144,7 @@
       "line_text": "let b = from_checked_bits((y0.to_bits() & MANTISSA).checked_add(85u64 << 51));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "b then carries y0's exponent (it is about y0·2^42.5), so (y0 + b) - b keeps only y0's top 10 or so bits; y0l = fma(PI0, x, -y0) is the rest of PI0·x, still exact (PI0 has 8 bits, PI0·x at most 61, and their difference from a 10-bit rounding at most 52), so y0 + y0l = PI0·x as before. The later double-double steps add the same terms grouped differently, each rounding below 2^-104 of the result, so only inputs within about 2^-100 of a midpoint could change: those have 43 or more identical bits and are listed. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none."
+      "reason": "b then carries y0's exponent (it is about y0·2^42.5), so (y0 + b) - b keeps only y0's top 10 or so bits; y0l = fma(PI0, x, -y0) is the rest of PI0·x, still exact (PI0 has 8 bits, PI0·x at most 61, and their difference from a 10-bit rounding at most 52), so y0 + y0l = PI0·x as before. The later double-double steps add the same terms grouped differently, each rounding below 2^-104 of the result, so only inputs within about 2^-100 of a midpoint could change: those have 43 or more identical bits and are listed. Replaying sinpi's near-zero paths exactly off CI (Python: IEEE binary64 and an exact fma; the unmutated replay matches the exact correctly rounded value on every input checked) over every listed input that reaches the code (sinpi.wc and set (b)'s images, both signs) changes none. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3176,7 +3176,7 @@
       "line_text": "let p = x2 * ((C[0] + x2 * C[1]) + x4 * (C[2] + x2 * C[3]));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "cospi's near-zero fast path is proven with slack: its total error is at most 2^-47.56·x^2 and its test uses eps·(1 - u) = 2^-47.30·x^2, a margin of 2^-49.9·x^2. C[2] - x2·C[3] changes p by 2·C[3]·x^8 (C[3] < 0.24), at most 2^-23 of that margin for |x| <= 2^-12: the mutant's value stays within its test's bound of cos(pi x), so whenever it accepts it returns the correctly rounded value, and otherwise cospi_near_zero does, as the original."
+      "reason": "cospi's near-zero fast path is proven with slack: its total error is at most 2^-47.56·x^2 and its test uses eps·(1 - u) = 2^-47.30·x^2, a margin of 2^-49.9·x^2. C[2] - x2·C[3] changes p by 2·C[3]·x^8 (C[3] < 0.24), at most 2^-23 of that margin for |x| <= 2^-12: the mutant's value stays within its test's bound of cos(pi x), so whenever it accepts it returns the correctly rounded value, and otherwise cospi_near_zero does, as the original. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3184,7 +3184,7 @@
       "line_text": "let p = x2 * ((C[0] + x2 * C[1]) + x4 * (C[2] + x2 * C[3]));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "cospi's near-zero fast path is proven with slack: its total error is at most 2^-47.56·x^2 and its test uses eps·(1 - u) = 2^-47.30·x^2, a margin of 2^-49.9·x^2. C[2] + (x2 + C[3]) changes p by x^6·(x2 + C[3] - x2·C[3]), at most 0.2354·x^6 + x^8, which for |x| <= 2^-12 is below 0.88 of that margin (0.2354·2^-48·x^2 against 2^-49.9·x^2): the mutant's value stays within its test's bound of cos(pi x), so whenever it accepts it returns the correctly rounded value, and otherwise cospi_near_zero does, as the original."
+      "reason": "cospi's near-zero fast path is proven with slack: its total error is at most 2^-47.56·x^2 and its test uses eps·(1 - u) = 2^-47.30·x^2, a margin of 2^-49.9·x^2. C[2] + (x2 + C[3]) changes p by x^6·(x2 + C[3] - x2·C[3]), at most 0.2354·x^6 + x^8, which for |x| <= 2^-12 is below 0.88 of that margin (0.2354·2^-48·x^2 against 2^-49.9·x^2): the mutant's value stays within its test's bound of cos(pi x), so whenever it accepts it returns the correctly rounded value, and otherwise cospi_near_zero does, as the original. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3192,7 +3192,7 @@
       "line_text": "let lb = fh + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Write a = fl + EPS and b = fl - EPS (a - b = 2^-60.8, below the ulp u of fh and the ulp u' under it: fh >= 2 here). The mutant accepts when RN(fh + a) = RN(fh - b). Both above fh needs a and -b each at least u/2, so a - b >= u; both below needs a < 0 < b, but b < a. So both are fh: a >= -u'/2 and b <= u'/2, and b >= -u/2 by the mirror; when u' = u (fh not a power of two) fh + b rounds to fh too (ties alike by evenness) and the original accepts with the same lb. A power of two fh with b < -u'/2 <= a needs fl within EPS of -u'/2 < 0, and in this branch fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) is a power of two only as 2 (s = 0, th = 1, fl ~ dx), 2^53 (th = 1, fl ~ 1) and 2^54 (fl ~ th): only the first has fl < 0, with dx = x + 1022 ln 2, which for every double x there is (247.48 + 1024k)·2^-53, never within 2^-60 of -2^-53 (computed off CI). So the mutant accepts only inputs the original accepts, with the same value; otherwise exp_accurate gives the same correctly rounded value. Only the time changes."
+      "reason": "Write a = fl + EPS and b = fl - EPS (a - b = 2^-60.8, below the ulp u of fh and the ulp u' under it: fh >= 2 here). The mutant accepts when RN(fh + a) = RN(fh - b). Both above fh needs a and -b each at least u/2, so a - b >= u; both below needs a < 0 < b, but b < a. So both are fh: a >= -u'/2 and b <= u'/2, and b >= -u/2 by the mirror; when u' = u (fh not a power of two) fh + b rounds to fh too (ties alike by evenness) and the original accepts with the same lb. A power of two fh with b < -u'/2 <= a needs fl within EPS of -u'/2 < 0, and in this branch fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) is a power of two only as 2 (s = 0, th = 1, fl ~ dx), 2^53 (th = 1, fl ~ 1) and 2^54 (fl ~ th): only the first has fl < 0, with dx = x + 1022 ln 2, which for every double x there is (247.48 + 1024k)·2^-53, never within 2^-60 of -2^-53 (computed off CI). So the mutant accepts only inputs the original accepts, with the same value; otherwise exp_accurate gives the same correctly rounded value. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3200,7 +3200,7 @@
       "line_text": "let lb = fh + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3208,7 +3208,7 @@
       "line_text": "let ub = th + (fl + EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the accurate path, which gives the same correctly rounded value. Only the time changes. No worst-case list is needed: an input the fast path decides has at most about 13 identical bits after its round bit, and exp_accurate rounds correctly every input with fewer than 48 (exp.rs, steps F3 and A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3216,7 +3216,7 @@
       "line_text": "let lb = th + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the accurate path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the accurate path, which gives the same correctly rounded value. Only the time changes. No worst-case list is needed: an input the fast path decides has at most about 13 identical bits after its round bit, and exp_accurate rounds correctly every input with fewer than 48 (exp.rs, steps F3 and A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3224,7 +3224,7 @@
       "line_text": "let lb = th + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. No worst-case list is needed: an input the fast path decides has at most about 13 identical bits after its round bit, and exp_accurate rounds correctly every input with fewer than 48 (exp.rs, steps F3 and A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3232,7 +3232,7 @@
       "line_text": "let lb = fh + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Here fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) and fl is that sum's rounding error, at most half the ulp u of fh, plus terms below 2^-12. RN(fh·(fl - EPS)) can equal ub = RN(fh + (fl + EPS)), a double within an ulp of fh, only if fl - EPS is within 2^-52 of 1, so u/2 must reach about 1: s >= 53, where fh is 2^53, 2^53 + 2 or 2^54 and the products are exact. For 2^53 + 2 (th > 1) fl < 2^-12; for 2^54, ub = 2^54 and only fl - EPS = 1 matches, where the original's lb = RN(2^54 + 1) = 2^54 too; for 2^53, only fl - EPS = 1 + 2^-52 matches (ub = 2^53 + 2), where the original's lb = RN(2^53 + 1 + 2^-52) = 2^53 + 2 too. So the mutant accepts only inputs the original accepts, with the same value, and sends the rest to exp_accurate, which rounds them correctly. Only the time changes."
+      "reason": "Here fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) and fl is that sum's rounding error, at most half the ulp u of fh, plus terms below 2^-12. RN(fh·(fl - EPS)) can equal ub = RN(fh + (fl + EPS)), a double within an ulp of fh, only if fl - EPS is within 2^-52 of 1, so u/2 must reach about 1: s >= 53, where fh is 2^53, 2^53 + 2 or 2^54 and the products are exact. For 2^53 + 2 (th > 1) fl < 2^-12; for 2^54, ub = 2^54 and only fl - EPS = 1 matches, where the original's lb = RN(2^54 + 1) = 2^54 too; for 2^53, only fl - EPS = 1 + 2^-52 matches (ub = 2^53 + 2), where the original's lb = RN(2^53 + 1 + 2^-52) = 2^53 + 2 too. So the mutant accepts only inputs the original accepts, with the same value, and sends the rest to exp_accurate, which rounds them correctly. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3240,7 +3240,7 @@
       "line_text": "let h = ahhh + ahhl;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "mul_dd_d has one call, in refine, for (slh + sll)·x·2^-12, the sine of the remainder. With h = RN(ahhh - ahhl), ahhh - h is exact (Sterbenz) and equals ahhl - d (d that rounding's error), so l = RN(2·ahhl - d) and h + l is the original's exact ahhh + ahhl up to that one rounding, at most 6.2u² of it (u = 2^-53; |ahhl| <= 2.6u·|ahhh|, poly_dd's low part being under 1.6u of its high part). The low part, now up to 6.2u of h instead of u, adds at most 122u² (2^-99.1) to the next product, mul_dd with the table's cosine, whose low parts are within 23.53u of their high parts (all 4097 indices measured off CI). That product is at most |v| (|B| <= pi·2^-12 and |v| >= sin(pi·2^-12) for indices 1 to 2047; v = +-sin B at 0 and 2048), so refine's error stays under 2^-98.64 + 2^-99.1 < 2^-97.8 of |v|, below the 2^-97 the module's Lemma 2 argument needs: unlisted inputs still round correctly. Replaying refine exactly off CI over every listed input reaching it, and at the 48 (iq, z) its hard-case scan can match, changes none."
+      "reason": "mul_dd_d has one call, in refine, for (slh + sll)·x·2^-12, the sine of the remainder. With h = RN(ahhh - ahhl), ahhh - h is exact (Sterbenz) and equals ahhl - d (d that rounding's error), so l = RN(2·ahhl - d) and h + l is the original's exact ahhh + ahhl up to that one rounding, at most 6.2u² of it (u = 2^-53; |ahhl| <= 2.6u·|ahhh|, poly_dd's low part being under 1.6u of its high part). The low part, now up to 6.2u of h instead of u, adds at most 122u² (2^-99.1) to the next product, mul_dd with the table's cosine, whose low parts are within 23.53u of their high parts (all 4097 indices measured off CI). That product is at most |v| (|B| <= pi·2^-12 and |v| >= sin(pi·2^-12) for indices 1 to 2047; v = +-sin B at 0 and 2048), so refine's error stays under 2^-98.64 + 2^-99.1 < 2^-97.8 of |v|, below the 2^-97 the module's Lemma 2 argument needs: unlisted inputs still round correctly. Replaying refine exactly off CI over every listed input reaching it, and at the 48 (iq, z) its hard-case scan can match, changes none. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3248,7 +3248,7 @@
       "line_text": "let mut ch = last[0] + l;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With ch = RN(c - l) (c the leading coefficient's high part) c - ch is exact (Sterbenz: |l| is far below |c|) and equals l - d, so cl = ((l - d) + l) + c_low and ch + cl is still c + l + c_low, up to the rounding of 2l - d, at most 3u·|l| (u = 2^-53) more than before. Horner then multiplies the leading coefficient by x² at least once more: the result moves by at most about 2^-124 of v in refine's sine part, 2^-121 in its cosine part (l = S3L·x² or x²·(C2L + C3L·x²), under 2^-72), 2^-107.5 in sinpi_near_zero (|l| <= 2^-16.8, x² <= 2^-9.6) and 2^-122 in cospi_near_zero (|l| <= 2^-23.6, x² <= 2^-24), against the module's bounds (A2 to A5, 2^-98.64 at most) and the 2^-97 its Lemma 2 argument needs: unlisted inputs still round correctly. Replaying refine and the near-zero paths exactly off CI over every listed input that reaches them, and at the 48 (iq, z) refine's hard-case scan can match, changes none."
+      "reason": "With ch = RN(c - l) (c the leading coefficient's high part) c - ch is exact (Sterbenz: |l| is far below |c|) and equals l - d, so cl = ((l - d) + l) + c_low and ch + cl is still c + l + c_low, up to the rounding of 2l - d, at most 3u·|l| (u = 2^-53) more than before. Horner then multiplies the leading coefficient by x² at least once more: the result moves by at most about 2^-124 of v in refine's sine part, 2^-121 in its cosine part (l = S3L·x² or x²·(C2L + C3L·x²), under 2^-72), 2^-107.5 in sinpi_near_zero (|l| <= 2^-16.8, x² <= 2^-9.6) and 2^-122 in cospi_near_zero (|l| <= 2^-23.6, x² <= 2^-24), against the module's bounds (A2 to A5, 2^-98.64 at most) and the 2^-97 its Lemma 2 argument needs: unlisted inputs still round correctly. Replaying refine and the near-zero paths exactly off CI over every listed input that reaches them, and at the 48 (iq, z) refine's hard-case scan can match, changes none. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3256,7 +3256,7 @@
       "line_text": "if (t | (0xfff << 52)) == u64::MAX || (t << 12) == 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The doubt test only decides whether refine scans its hard cases, and the scan returns only where (x, iq) matches an entry: the entry, its mirror (2048 - iq, -x), or either shifted by 2048, 48 (iq, z) values for the 12 entries. Everywhere else refine returns tsh + tsl with or without the scan. Replaying refine exactly off CI (Python: IEEE binary64 and an exact fma) at all 48 gives the same result under this mutant: every listed case's low part tsl is a power of two, which the unchanged (t << 12) == 0 catches, so the scan still runs. The replay over every listed input reaching refine (sinpi.wc, cospi.wc, both signs) changes none either."
+      "reason": "The doubt test only decides whether refine scans its hard cases, and the scan returns only where (x, iq) matches an entry: the entry, its mirror (2048 - iq, -x), or either moved by 2048, 48 (iq, z) values for the 12 entries. Everywhere else refine returns tsh + tsl with or without the scan. At all 48 refine returns the listed value (sincospi.rs's unit test refine_answers_every_listed_hard_case). Only 11 of them are reached from any input (the fast path decides the rest), by the 16 inputs of tests/gate1_libm.rs's SINPI_REFINE_SCAN and COSPI_REFINE_SCAN (both signs), on each of which tsh + tsl alone is one ulp off. This mutant keeps the scan there: every listed case's low part tsl is a power of two, which the unchanged (t << 12) == 0 catches (exact replay off CI at all 48; the mutation search off CI found no output changed). The other mutant of this kind on this line, in (t << 12), stops the scan, and those 16 inputs catch it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3264,7 +3264,7 @@
       "line_text": "if (t | (0xfff << 52)) == u64::MAX || (t << 12) == 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The doubt test only decides whether refine scans its hard cases, and the scan returns only where (x, iq) matches an entry: the entry, its mirror (2048 - iq, -x), or either shifted by 2048, 48 (iq, z) values for the 12 entries. Everywhere else refine returns tsh + tsl with or without the scan. Replaying refine exactly off CI (Python: IEEE binary64 and an exact fma) at all 48 gives the same result under this mutant: every listed case's low part tsl is a power of two, which the unchanged (t << 12) == 0 catches, so the scan still runs. The replay over every listed input reaching refine (sinpi.wc, cospi.wc, both signs) changes none either."
+      "reason": "The doubt test only decides whether refine scans its hard cases, and the scan returns only where (x, iq) matches an entry: the entry, its mirror (2048 - iq, -x), or either moved by 2048, 48 (iq, z) values for the 12 entries. Everywhere else refine returns tsh + tsl with or without the scan. At all 48 refine returns the listed value (sincospi.rs's unit test refine_answers_every_listed_hard_case). Only 11 of them are reached from any input (the fast path decides the rest), by the 16 inputs of tests/gate1_libm.rs's SINPI_REFINE_SCAN and COSPI_REFINE_SCAN (both signs), on each of which tsh + tsl alone is one ulp off. This mutant keeps the scan there: every listed case's low part tsl is a power of two, which the unchanged (t << 12) == 0 catches (exact replay off CI at all 48; the mutation search off CI found no output changed). The other mutant of this kind on this line, in (t << 12), stops the scan, and those 16 inputs catch it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3272,7 +3272,7 @@
       "line_text": "if (t | (0xfff << 52)) == u64::MAX || (t << 12) == 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The doubt test only decides whether refine scans its hard cases, and the scan returns only where (x, iq) matches an entry: the entry, its mirror (2048 - iq, -x), or either shifted by 2048, 48 (iq, z) values for the 12 entries. Everywhere else refine returns tsh + tsl with or without the scan. Replaying refine exactly off CI (Python: IEEE binary64 and an exact fma) at all 48 gives the same result under this mutant: every listed case's low part tsl is a power of two, which the unchanged (t << 12) == 0 catches, so the scan still runs. The replay over every listed input reaching refine (sinpi.wc, cospi.wc, both signs) changes none either."
+      "reason": "The doubt test only decides whether refine scans its hard cases, and the scan returns only where (x, iq) matches an entry: the entry, its mirror (2048 - iq, -x), or either moved by 2048, 48 (iq, z) values for the 12 entries. Everywhere else refine returns tsh + tsl with or without the scan. At all 48 refine returns the listed value (sincospi.rs's unit test refine_answers_every_listed_hard_case). Only 11 of them are reached from any input (the fast path decides the rest), by the 16 inputs of tests/gate1_libm.rs's SINPI_REFINE_SCAN and COSPI_REFINE_SCAN (both signs), on each of which tsh + tsl alone is one ulp off. This mutant keeps the scan there: every listed case's low part tsl is a power of two, which the unchanged (t << 12) == 0 catches (exact replay off CI at all 48; the mutation search off CI found no output changed). The other mutant of this kind on this line, in (t << 12), stops the scan, and those 16 inputs catch it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3280,7 +3280,7 @@
       "line_text": "if (t | (0xfff << 52)) == u64::MAX || (t << 12) == 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The doubt test only decides whether refine scans its hard cases, and the scan returns only where (x, iq) matches an entry: the entry, its mirror (2048 - iq, -x), or either shifted by 2048, 48 (iq, z) values for the 12 entries. Everywhere else refine returns tsh + tsl with or without the scan. Replaying refine exactly off CI (Python: IEEE binary64 and an exact fma) at all 48 gives the same result under this mutant: every listed case's low part tsl is a power of two, which the unchanged (t << 12) == 0 catches, so the scan still runs. The replay over every listed input reaching refine (sinpi.wc, cospi.wc, both signs) changes none either."
+      "reason": "The doubt test only decides whether refine scans its hard cases, and the scan returns only where (x, iq) matches an entry: the entry, its mirror (2048 - iq, -x), or either moved by 2048, 48 (iq, z) values for the 12 entries. Everywhere else refine returns tsh + tsl with or without the scan. At all 48 refine returns the listed value (sincospi.rs's unit test refine_answers_every_listed_hard_case). Only 11 of them are reached from any input (the fast path decides the rest), by the 16 inputs of tests/gate1_libm.rs's SINPI_REFINE_SCAN and COSPI_REFINE_SCAN (both signs), on each of which tsh + tsl alone is one ulp off. This mutant keeps the scan there: every listed case's low part tsl is a power of two, which the unchanged (t << 12) == 0 catches (exact replay off CI at all 48; the mutation search off CI found no output changed). The other mutant of this kind on this line, in (t << 12), stops the scan, and those 16 inputs catch it."
     }
   ],
   "coverage_off": [],
