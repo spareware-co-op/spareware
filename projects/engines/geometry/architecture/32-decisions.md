@@ -52,6 +52,14 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.32 | G312: USD exchange home | `geom-meshio` owns USD subdivision exchange; Chaikin creasing travels as `uniform token spareware:creaseMethod = "chaikin"` on the Mesh prim, absent meaning uniform | 16, 24 | G354, SubD exchange |
 | 32.33 | G357: alignment curve kinds | One transition kind with a closed set of curvature laws (Helmert, Bloss, cosine, sine, the cant-coupled transition, IFC's polynomial spirals, the cubic spiral); the cubic parabola a polynomial curve; gradient and segmented reference curves compositions in `geom-align`; descriptive names, file enumerators kept as data | 7, 17, 26 | G371, transition kinds |
 | 32.34 | G358: TIN tie order | Plan position, x then y, for a TIN's Delaunay ties, as chapter 17 asks; name order everywhere else | 6, 17, 21 | G362, the exact Delaunay core |
+| 32.35 | G384: smooth-edge marking | An explicit, logged operation marks edges Smooth below an angle θ the caller passes and the log records; no kernel default, no ladder rung | 6, 18 | G398, line classes and continuity records |
+| 32.36 | G385: view predicates beyond 384 bits | `I576` for grid-axis views and `I640` for any direction and perspective, accepted on 32.29's conditions (derivation, certificate, extreme tests, filter, measured) | 6, 18 | G388, exact view predicates |
+| 32.37 | G407: openNURBS licence confirmation | Ask McNeel in writing (request drafted, the owner sends it); nothing ported until the reply; open until then | 16, 24, 29 | G438, Rhino .3dm |
+| 32.38 | G408: LandXML terms | No terms found: the schema is implemented from its definitions, never copied or generated from, and fetched only to validate; LINZ's examples fetch-only until their page states terms | 17, 24, 29 | G437, LandXML 1.2 mapping |
+| 32.39 | G409: generating code from STEP and IFC schemas | Part 42 is the 2025 edition; IFC schemas generated from with attribution; ISO's STEP schemas only with a file's own grant or ISO's permission, requested in a draft the owner sends | 24, 29 | G416, EXPRESS code generation |
+| 32.40 | G447: Gerber and IPC-2581 terms | No second program needs board exchange, so G474 and G475 wait; Gerber implemented exactly as published, no extensions; IPC-2581 only after its own text or IPC's word | 24, 26, 29 | G474 and G475, board exchange |
+| 32.41 | G448: AutoCAD truth tests | 32.10's ruling stands; no seat is bought or borrowed; G464 checks drafting by 28.3's laws, the one-root reference and LibreCAD and ezdxf, and adds AutoCAD when a co-op seat and a cleared terms check exist | 14, 28, 32 | G464, drafting truth tests |
+| 32.42 | G449: the wall-clock merge rule | Accepted: a nightly miss confirmed by a same-night rerun blocks merges to `main` except the fix or a revert; deliberate rises recorded as 32.12 says; no run, no block | 23, 28 | G452, wall-clock and scaling gates |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -659,3 +667,110 @@ Why: one kind with a closed set of laws keeps every transition on one proven eva
 Why: for terrain the point set is the model; a surface that depends on point names makes identical surveys disagree, which the name rule exists to prevent elsewhere.
 
 **Changes:** 6.2 (the exception), 17.3, 31.7 and piece G362.
+
+## 32.35 Smooth-edge marking (owner action G384)
+
+**What it is.** A drawing shows an edge where faces meet tangent but curvature jumps (a fillet's edge) as Smooth, from the continuity record, which says tangent only within ε_ang. Imported fillets are rarely that tangent, and a faceted IFC element's triangle edges are not coplanar, so without more information they draw Sharp, which is what the data says. Chapter 18's fourth question: mark such edges Smooth by an explicit, logged operation whose angle is its own recorded parameter, with no kernel default, or by a named import angle on 6.5's ladder (18.7; 31.7).
+
+**Decided 2026-10-28 (owner action G384): the logged operation, with no kernel default.** Read with 6.5, 18.7, 21, 24.8 and principle 10.
+- **The operation** marks edges Smooth where adjacent faces turn by less than an angle θ the caller passes. θ is recorded in the operation log like any other input, so replay marks the same edges, and the marking is an attribute edit (18.7), never a change to geometry or to its exactness class.
+- **No kernel default and no ladder rung.** The right θ depends on the source (a STEP fillet, a coarse IFC mesh, a scanned surface) and on the drawing's use, which only a program knows. A program that wants a default for its imports sets one and records it in the log, as every default is recorded (21). The kernel's only angle rung, ε_ang, stays what it is, far too tight for this.
+- **Source data first:** where an import carries its own smoothing (shared vertex normals in an IFC triangulated face set), that marks edges Smooth without the operation, as 18.7 says.
+
+Why: a hidden import angle would be a tolerance no one chose and that differs from one program's expectations to the next; a logged parameter is a decision on record, which replays and can be changed.
+
+**Changes:** 6.5's proposed rungs, 18.7, 31.7 and piece G398.
+
+## 32.36 View predicates beyond 384 bits (owner action G385)
+
+**What it is.** Exact hidden lines for flat geometry decide every visibility event by the sign of an integer expression on implicit points made from face planes and derived planes through each outline edge (18.6). The deepest test, ordering two events along one edge, needs about 13B + 27 = 547 bits on a view along a grid axis and 15B + 33 = 633 bits for any direction or a perspective, so `I576` and `I640`: past 6.2's 384 bits. Chapter 18 objects to the limit for these predicates; the alternative is exact visibility on grid-axis views only, certified elsewhere (31.7).
+
+**Decided 2026-10-28 (owner action G385): accepted for every view, on the conditions owner action G240 set (32.29).** Read with 6.2, 18.6, 23.2, 23.3, 32.29, R4 and R7.
+- **`I576` for grid-axis views and `I640` for any direction and for perspective** join 6.2's list, used only by the view predicates. Plans, sections and elevations, the commonest drawings, take the narrower width.
+- **The same conditions as 32.29:** a written derivation of each budget (18.6 gives the estimates; piece G388 writes them out, and a wider result widens the type), generation by `geom-gen` with a checked certificate, a test with every coordinate at ±(2^40 − 1), a generated filter so the wide path runs only near degenerate cases, and instruction counts natively and in WebAssembly under the count gate.
+- **Exact everywhere, not only on axis views.** An axis view is no more important than an axonometric or a perspective a person checks a design by, and certified visibility would let an edge flicker between visible and hidden in exactly the near-degenerate cases a drawing checker must not miss (18.10).
+
+Why: drawings are a contract document; exact visibility makes every view the same on every machine and every replay, and the filter keeps the cost to the rare near-degenerate events.
+
+**Changes:** 6.2's list, 18.6, 31.7 and piece G388.
+
+## 32.37 openNURBS licence confirmation (owner action G407)
+
+**What it is.** Reading and writing Rhino's `.3dm` files (G438) means porting openNURBS, McNeel's toolkit for them. Its terms contradict each other: the repository's [LICENSE](https://github.com/mcneel/opennurbs/blob/eb92af3ba1806b0a34a99aba0d3bda83e3d46083/LICENSE) says "All Rights Reserved" and grants nothing, while McNeel's [developer page](https://developer.rhino3d.com/guides/opennurbs/what-is-opennurbs/) says "There are no restrictions. Neither copyright nor copyleft restrictions apply" and "Commercial use is encouraged" (both read 2026-10-28). 29.20's first rule stops on such a conflict, and 32.9 recommends writing to McNeel now for written confirmation that the grant covers the repository at a named commit, including use inside MPL-2.0 work.
+
+**Decided 2026-10-28 (owner action G407): ask McNeel for written confirmation; port nothing until it arrives.**
+- **The request** is drafted in this piece's pull request. It names the commit, the use (porting the reader and writer into an MPL-2.0 kernel, with McNeel's notice kept) and the two texts that disagree. The owner sends it, since it is a letter to an outside company in the co-op's name; nothing has been sent.
+- **Until the reply,** openNURBS stays as 29 lists it: read for the format only, run out of process as an oracle, never ported. G438 does not start, and it does not gate its phase (30.5).
+- **When the reply comes,** it is recorded here, in 29's openNURBS row and in `geometry/NOTICE`, word for word with its date; a yes lets G438 port with McNeel's notice kept, and a no or a narrower grant is recorded and G438 is re-planned from the published format description alone.
+
+This action stays open until McNeel answers.
+
+**Changes:** 29's openNURBS row, 31.7, and piece G438.
+
+## 32.38 LandXML terms (owner action G408)
+
+**What it is.** `geom-landxml` (G437) reads and writes LandXML 1.2 surfaces, alignments, profiles, COGO points and parcels (17.13). The schema is published at landxml.org with no terms found, and it cannot be pinned to a commit (29). New Zealand's survey authority, LINZ, publishes LandXML reference documents and examples for surveyors and developers; LINZ licenses almost all its published data under CC BY 4.0, but the LandXML example pages state no terms of their own (both checked 2026-10-28; landxml.org did not answer that day).
+
+**Decided 2026-10-28 (owner action G408).** Read with 17.13, 24.11, 29.20's rules 1 and 11, and 32.11's rule (i).
+- **The schema is implemented, never copied.** LandXML 1.2 is a published exchange format; `geom-landxml` maps the elements it needs from the schema's definitions, as 29 already classes it (PORT METHOD), with no code generated from the XSD and no copy of the XSD in the repository. A test that validates our output fetches the schema at test time, records its SHA-256, and fails if it changes.
+- **LINZ's examples are fetch-only** until their own download page states terms. If those terms are CC BY 4.0, as LINZ's other data is, the files may be stored with LINZ's attribution under 32.11's rule (i); until then they are fetched by the corpus register (G114) and never committed. Co-op-authored LandXML files are the stored fixtures meanwhile.
+- **The sixteen spiral names** are file data, mapped as 32.33 says.
+
+Why: implementing a published format from its definitions copies nothing, and data whose terms are unstated stays out of a public repository, as for every outside dataset (32.11).
+
+**Changes:** 29's LandXML and LINZ rows, 31.7, and piece G437.
+
+## 32.39 Generating code from STEP and IFC schemas (owner action G409)
+
+**What it is.** Piece G416 generates Rust types and validators from the EXPRESS schemas of IFC 4.3, IFC4, IFC2x3 and the STEP application protocols, so readers and writers never hand-type thousands of entities. 29 records that ISO's terms for generating code from its EXPRESS files are unverified, and that it is unknown which edition of ISO 10303-42, the geometry and topology resource every STEP geometry entity comes from, is current (29, question 11; 31.7).
+
+**Checked 2026-10-28.** ISO's catalogue lists [ISO 10303-42:2025](https://www.iso.org/standard/91386.html), edition 9, as published; the 2024 edition replaced the 2022 one and the 2025 edition replaces it. ISO's machine-readable EXPRESS listings (the SMRL archives under `standards.iso.org/iso/10303/`) are marked informative, and no blanket licence for them was found: ISO's default terms forbid reproduction without written permission, and only some schema files carry a grant of their own in their headers. buildingSMART's IFC 4.3 [LICENSE.md](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/LICENSE.md) is CC BY-ND 4.0 and adds that its technical documentation may be "used in software development, or translated into another computer language" with full attribution (29.14).
+
+**Decided 2026-10-28 (owner action G409).** Read with 24.6, 24.11, 29.14, 29.20 and evidence report [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md).
+- **Part 42's current edition is ISO 10303-42:2025.** `geom-exchange`'s mapping follows its entity definitions, and still reads files written against earlier editions, whose entities it maps where they agree and reports where they do not.
+- **IFC schemas may be generated from,** under buildingSMART's software-development permission with full attribution in every generated file's header; G416 confirms the same text in IFC4's and IFC2x3's licences at pinned commits before generating from them.
+- **ISO's STEP schemas are not generated from until permission is in hand:** a schema file whose own header grants use for implementation may be used, and G416 records that header per file; otherwise the co-op asks ISO's copyright office, on a request drafted in this piece's pull request that the owner sends. Until then G416 generates the IFC types, and `geom-step`'s geometry entities are written from the standard's normative text, which is implementing a standard, not copying it (29's rule for ISO standards); whether to buy a licensed copy for that is the owner's when `geom-step`'s pieces start.
+
+Why: generated types are the safe way to read thousands of entities, so the permission matters; IFC grants it, ISO's files must be asked for, and nothing waits on ISO that IFC can serve first.
+
+**Changes:** 29's ISO and IFC rows, 31.7, and piece G416.
+
+## 32.40 Gerber and IPC-2581 terms (owner action G447)
+
+**What it is.** Circuit-board exchange (G474, G475) reads and writes Gerber X2 and X3 and IPC-2581. Ucamco publishes the Gerber specification free to download; its section 1.4 grants no licence to the document's intellectual property and asks interface developers not to make "derivative versions, modifications, or extensions" or "alternative interpretations of the data" without Ucamco's approval. IPC-2581 revision C is sold by IPC, and that the format is licence-free comes only from secondary sources (24.11). By 26.1 the crates enter the kernel only when two programs need board exchange; the owner records whether that is so (24's question 12).
+
+**Decided 2026-10-28 (owner action G447).** Read with 24.11, 26.1, 29.19, 29.20 and Spareware's STATUS.md.
+- **No second program needs board exchange today.** No Spareware program designs or draws circuit boards, so `geom-gerber` and `geom-ipc2581` stay deferred, G474 and G475 do not start, and they stay not gating (30.5). The first program that needs boards uses `geom-2d` through the facade in its own adapter, as 24.11 says; a second one brings the crates into the kernel.
+- **Gerber, when built,** is implemented exactly as the published specification defines it, with no extension, private attribute or reinterpretation of the data, which is what section 1.4 asks; our own data travels in the format's standard attributes or not at all. The revision implemented is pinned and its section numbers cited in the reader's header.
+- **IPC-2581, when built,** waits for its terms to be read in the standard itself: the co-op buys a copy then, which is the owner's spending decision at that time, or IPC confirms in writing that implementation needs no licence. Nothing is built from secondary descriptions.
+
+Why: the two-program rule decides the timing, and both formats can be implemented faithfully without taking anything their owners reserve; nothing needs money or a commitment until a program needs boards.
+
+**Changes:** 24.11, 29.19's board row, 31.7, and pieces G474 and G475.
+
+## 32.41 AutoCAD truth tests (owner action G448)
+
+**What it is.** Piece G464 runs at least 20 co-op command sequences in AutoCAD and in Spare Kit and compares the DXF. It needs an owner's ruling that running AutoCAD for comparison is allowed under its terms, and a licensed seat (28.11, 32.10). The first Stable release, G482, needs G464.
+
+**Decided 2026-10-28 (owner action G448).** Read with 14.14, 28.3, 28.9, 28.10, 28.11, 29.20's rule 8 and 32.10.
+- **The ruling stays 32.10's:** watching AutoCAD from outside is allowed only to check our results against our own rules, on co-op command sequences, on a seat the co-op itself is licensed for, and only after AutoCAD's terms are checked for that use (the terms check 32.10 asks Spare Construct to add beside CON-A18-F2-P2). It never sets behaviour, an expected value or a tolerance (28.11).
+- **No seat is bought or borrowed now.** The co-op has no AutoCAD licence of its own, and a seat licensed to anyone else is not the co-op's to use. Buying one is a spending decision for when the terms check clears.
+- **So drafting truth does not wait for AutoCAD.** G464 checks the command sequences by what 28.11 already names as the truth for drafting: 28.3's 2D laws, 28.9's one-root arrangement reference, and LibreCAD and ezdxf out of process (28.10), each difference triaged against our own rules. The AutoCAD comparison joins G464 when a co-op seat and a cleared terms check both exist, and the first Stable release does not wait for it.
+
+Why: a comparison that can never make AutoCAD's behaviour our requirement adds least where the open checks already decide correctness, and it is not worth a licence the co-op does not hold or terms nobody has read.
+
+**Changes:** 28.11, 31.7, and G464's done-when.
+
+## 32.42 The wall-clock merge rule (owner action G449)
+
+**What it is.** Principle 12 blocks any speed regression over 5%, but wall-clock time on shared CI machines varies by more than that, so pull requests are gated on instruction, cache, heap and fuel counts, which do not vary (23.13). Wall-clock time and scaling are measured nightly on the reference machine against 23.1's shares. Spare Construct says a target miss blocks any change that misses it; per pull request that is impossible to measure, so 23.13 proposes that a nightly miss blocks further merges to `main`, except the fix or a revert, until the target is met again.
+
+**Decided 2026-10-28 (owner action G449): accepted, with a confirmation run.** Read with 23.1, 23.13, 28.17, 32.12 and 32.16.
+- **A miss is a confirmed miss:** a nightly result over a share is rerun the same night on the reference machine (32.16); only if the rerun also misses does the block start, so one noisy run never stops the co-op.
+- **While blocked,** only a pull request that fixes the miss, or reverts the change bisection names as its cause, may merge to `main`, and its own nightly run must meet the share again. G452 enforces it with a required status that the nightly job sets and clears.
+- **A deliberate rise is not a miss.** A correctness change that costs time is accepted the way 32.12 accepts a count rise: recorded by a kernel owner with the shares it moves, and the share itself updated by a decision note (32.16), never by lifting the block.
+- **If the reference machine is unavailable** (it is lent, 19:00 to 08:00), no run means no block; the count gates still hold every pull request.
+
+Why: a target that only warns is not a target, and blocking the next merges rather than the guilty one is the only way to enforce a nightly measurement; the confirmation run keeps noise from blocking work.
+
+**Changes:** 23.13, 31.7, and piece G452.
