@@ -125,6 +125,8 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 - The committed report of piece "Wide-integer variants and WebAssembly benchmark", covering x86-64, aarch64, Wasmtime, Node, Chrome, Firefox and Safari.
 - The filter must settle at least 99% of calls on the EMBER case list (piece "Plane type and arrangement predicates").
 - Step statistics: the share of calls that reach the exact path on scenario models (piece "Predicate step ladder, rounded-input filters and step statistics").
+
+**Measured (piece G42; report `projects/kit/notes/G42-variants-report.md`).** The 384-bit exact path, classifying a three-plane point against a plane (`tpi_side`), takes 691 ns natively on x86-64 and 460 ns on aarch64. As shipped, with 64-bit limbs, it takes 1,697 ns in Node 24, 2,835 ns in Wasmtime 50, and 2,088 ns in Wasmtime with wide arithmetic: 2.5 to 4.1 times native x86-64. In the width-aware 32-bit-limb variant, it takes 1,026 ns in Node and 1,305 ns in Wasmtime with or without wide arithmetic: 1.5 to 1.9 times. In browsers it takes 1,045 ns in Chromium 136, 745 ns in WebKit 18.4 and 633 ns in Safari 26.6.2, against 1,749, 910 and 1,062 ns as shipped; Firefox 137, in Playwright's build, ran every variant five to six times slower than the others (5,703 ns with limbs). No browser measured validates the wide-arithmetic build with default settings. The cause is that on `wasm32` every 64-bit-limb product, and every overflow-checked 64-bit product, is a call to `__multi3`, while a 32-bit-limb product is one native multiply. Wide arithmetic makes the 64-bit-limb products single instructions, and halves the smaller predicates' time where an engine has it; V8 (Node, Chrome) does not validate it. The risk stands at Medium in the browser, held there by the limb variant for the deepest predicates; the factor at the 576-bit and wider budgets the chapters propose is still unmeasured.
 - Browser scenario runs against the proposed target of within three times native (17).
 
 ### R5. Exactness costs too much time or memory at building scale
@@ -624,6 +626,14 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Which crate owns USD subdivision exchange, and how Chaikin creasing is carried | 16, 24 | 32.32 (owner action G312) |
 | Alignment transitions as kinds or compositions, and their names | 7, 17, 26 | 32.33 (owner action G357) |
 | TIN ties in plan-coordinate order rather than by persistent name | 6, 17, 21 | 32.34 (owner action G358) |
+| How imported edges are marked Smooth | 6, 18 | 32.35 (owner action G384) |
+| Hidden-line predicates of 576 and 640 bits | 6, 18 | 32.36 (owner action G385) |
+| openNURBS: written confirmation from McNeel before porting its reader and writer | 16, 24, 29 | 32.37 (owner action G407): request drafted for the owner to send; open until the reply |
+| The LandXML 1.2 schema's terms, and LINZ's LandXML examples | 17, 24, 29 | 32.38 (owner action G408) |
+| Generating code from IFC and STEP EXPRESS schemas, and ISO 10303-42's current edition | 24, 29 | 32.39 (owner action G409) |
+| Gerber's and IPC-2581's terms, and whether a second program needs board exchange | 24, 26, 29 | 32.40 (owner action G447) |
+| Running AutoCAD for comparison, and its seat | 14, 28, 32 | 32.41 (owner action G448) |
+| A nightly wall-clock miss blocks merges to `main` except the fix or a revert | 23, 28 | 32.42 (owner action G449) |
 
 ### Answered by the pieces built so far
 
@@ -641,7 +651,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Question | Raised in | Decided in |
 | --- | --- | --- |
 | Extend 6.2's fixed-width predicates past 384 bits for straight-skeleton events: 576 bits for 2D event order and about 768 bits for 3D mitre offsets (our derivations, to be written out) | 13 | 32.29 (owner action G240): accepted with 6.2's conditions; pieces "Exact weighted straight skeleton" and "3D weighted straight skeleton for mitre offsets" write the derivations |
-| The same for exact hidden lines: about 547 bits on grid-axis views and 633 bits for any direction or perspective (576- and 640-bit types), or exact visibility on grid-axis views only | 18 | Decision note to 6.2; piece "Exact view predicates" |
+| The same for exact hidden lines: about 547 bits on grid-axis views and 633 bits for any direction or perspective (576- and 640-bit types), or exact visibility on grid-axis views only | 18 | 32.36 (owner action G385): both widths, every view, on 32.29's conditions; piece "Exact view predicates" |
 | Fixed-width integers of several thousand bits on a cold path for general quadric pairs (Dupont, Lazard, Lazard and Petitjean), rather than arbitrary precision | 12 | Piece "Bit budgets for the exact algebraic decisions in intersections" |
 | The real widths of 2D construction predicates: rational directions of about 44 bits, tangency positions about 70 bits finer than a step, the deepest possibly thousands of bits | 14 | Piece "2D-01", with its width generator and benchmark |
 | Exact incircle on implicit TIN crossings would need about 1,024 bits (an estimate). Not planned; recorded as a limit | 17 | No piece; chapter 17 text |
@@ -653,7 +663,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | A designed irrational tie (four roof planes meeting at one apex) keeps the committed sign and reports a short edge, rather than failing | 13 | Piece "Plane commit routine" |
 | Derived values to name on the ladder: a resolution floor of 1q; epsilon_step = epsilon_fit/4; the solver block (tau = q/64, sigma_ind = 2^-12, sigma_dep = 1/(64S) and the rest); h_min = 8q; a default cap for close_near_contacts | 11, 12, 13, 15, 19 | Ladder module in geom-num, after 32.3 |
 | Commit rounding is q/2 per coordinate, about 135 nm as a distance at q0. 6.5 should say so | 19 | Editorial fix to 6.5 |
-| A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | Piece "Line classes, bands and continuity records" |
+| A named import angle on the ladder for marking imported edges smooth, or no kernel default (chapter 18's choice) | 18 | 32.35 (owner action G384): no kernel default, a recorded parameter; piece "Line classes, bands and continuity records" |
 | Designed tangency travels as a recorded intent, and downstream code never compares angles with epsilon_ang. Committed lines tilt by about q/L, and subdivision G1 leaves kinks of about 1e-5 rad | 15, 16, 18 | Decision note to 6.5; pieces "Local-operation driver and topology-change taxonomy" and "Line classes, bands and continuity records" |
 | Break TIN ties in plan-coordinate order (x, then y) rather than by persistent name, so identical points give identical surfaces whatever they are called | 17 | 32.34 (owner action G358): yes, for TIN ties only; piece "Exact Delaunay core" |
 | A stricter rule for local operations near tolerant edges of imported STEP models than 6.5's "work within, never raise" | 13 | Note to 6.5; piece "Local-operation driver and topology-change taxonomy" |
@@ -851,12 +861,12 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Accept the proposed kernel shares of Spare Construct's ten targets, the browser estimates and the 5 µs overhead per trivial operation until scenarios measure them. Who sets the split is settled in 32.5 | 23, 28 | 32.16 (owner action G72): accepted; piece "Spare Construct scenario generator, calibration and target benchmarks" measures them |
 | Benchmark targets in other chapters are proposals to replace with first measurements: drawing targets (a full plan, every open view after a door move, a 50 km corridor plan); gridded LiDAR at 40 s per 10 million points; wasm within three times native; a 1 ms live clash re-test; 30 s to tessellate the reference model | 17, 18, 19 | Each chapter's benchmark piece, gathered in the scenario pieces |
 | Instance records: 56 bytes with the box in the tree leaf (19), or up to 88 bytes (23); f64 or integer boxes | 19, 23 | Piece "Placed instances", aligned with "Instance tree for huge and nested assemblies" |
-| I320 and I384 arithmetic on wasm32 is unmeasured; a double-double filter stage is the reserve if the section 23 gates fail | 11 | Piece "Wide-integer variants and WebAssembly benchmark" |
+| I320 and I384 arithmetic on wasm32 is unmeasured; a double-double filter stage is the reserve if the section 23 gates fail. Measured by piece G42 (R4): the 384-bit path costs 1.5 to 1.9 times native x86-64 in the limb variant, against 2.5 to 4.1 times as shipped | 11 | Piece "Wide-integer variants and WebAssembly benchmark" |
 | Browser threads need pinned nightly Rust with build-std, and cross-origin isolation: ship a separately built threaded variant, or run serial-in-worker until threads reach stable Rust | 23 | Piece "Browser builds: threads, wide arithmetic, memory ceiling and cancellation" |
 | Two browser builds, with and without wide arithmetic, chosen at load | 23 | The same piece |
 | Plane storage at building scale (estimated at 64 to 96 bytes per plane) and its fallbacks: compact widths, f64 copies made on demand, shared planes | 23 | Piece "Arena layout and plane memory benchmarks" |
 | Remote global edits: replay the operations, or fetch the changed chunks by content hash | 23 | Spare Construct's owners |
-| Generated exact code (the plain-`i128` and width-aware-limb variants of 23.3) needs native or wrapping multiplies, which `geom-num`'s lints deny: a checked step at every site (cost unmeasured), or an allowance with its written bound and Kani certificate | G02 build; 23, 27 | Pieces "Predicate generator" and "Wide-integer variants and WebAssembly benchmark" |
+| Generated exact code (the plain-`i128` and width-aware-limb variants of 23.3) needs native or wrapping multiplies, which `geom-num`'s lints deny: a checked step at every site (cost unmeasured), or an allowance with its written bound and Kani certificate. Piece G42 keeps a checked step at every site. On 32-bit limbs the check costs nothing: the compiler sees both operands below 2^32 and emits one plain multiply. A checked 64-bit product costs a `__multi3` call on wasm32 without wide arithmetic. Each kind of limb step also has a Kani proof that it never fails on its certified operands | G02 build; 23, 27 | Pieces "Predicate generator" and "Wide-integer variants and WebAssembly benchmark" |
 | Whether a three-plane point caches its homogeneous coordinates (152 more bytes per point) or recomputes them at each use (6.3) | G02 build | Piece "Plane type, canonical planes and arrangement predicates" |
 | A phase's work is bounded by its item count times R, not by R (23.10). Do phases need a size limit? | G04 build | Piece "Budgets in the operation contract" |
 | Cancellation within 1 ms: `geom-run` polls every 64 charges, and its one measurement, under full load, had a 3.5 ms worst case. Measure on an idle machine, and choose the interval for costly items | G04 build | Piece "Budgets in the operation contract" |
@@ -925,7 +935,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 
 | Question | Raised in | Decided in |
 | --- | --- | --- |
-| Can Kani prove whole 384-bit predicates in reasonable time? If not: per-step proofs, bit-range certificates, extreme values and fuzzing | 23 | Pieces "Wide-integer variants and WebAssembly benchmark" and "Kani harnesses: foundation" |
+| Can Kani prove whole 384-bit predicates in reasonable time? If not: per-step proofs, bit-range certificates, extreme values and fuzzing. Piece G42 took the per-step route for the limb variant: 43 proofs, one per kind of limb step, each on every operand its certified bits allow, with the checker, extreme values and a differential fuzz target against big integers. A whole 384-bit predicate was not tried (orient2d's total-path proof already takes about 18 minutes) | 23 | Pieces "Wide-integer variants and WebAssembly benchmark" and "Kani harnesses: foundation" |
 | Thresholds: 100% of lines and branches and zero unexplained mutants in the foundation set; 90% elsewhere; the 5% gates; the 1,000-times loose-bound report; the scoreboard rule | 28 | Kernel owners; piece "Mutation and coverage gates" |
 | Wall clock: a nightly target miss blocks further merges until it is fixed (proposed), because per-pull-request wall clock varies by more than 5%; work units stay out of the speed gate | 23 | Pieces "Benchmark harness and merge gates (geom-bench)" and "Wall-clock and scaling gates" |
 | SMLib's limits as an oracle: booleans, fillets and offsets cannot be automated (they are nondeterministic), and the NLib routines solidcore lacks need new FFI shims and their own audit. Its Numerical Recipes routines are stubbed out, as owner action G157 decided (32.23) | 29 | Piece "Oracles: SMLib NLib and geomdl" |
@@ -949,7 +959,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | Check every Clothoids and G1fitting file header for third-party provenance before any port (Fresnel.cc derives from a book) | 17 | Piece "Spiral evaluation with certified bounds" |
 | EPSG's terms of use and the LINZ grid licences (believed to be CC BY 4.0) | 17 | Before PROJ data ships (kit-ops) |
 | Standards and format terms: Gerber section 1.4 (confirm the quotes from the PDF), job files, XNC and Excellon, IPC-2581C, ODB++, IDX, IDF 3.0; IGES 5.3; USD (TOST and AOUSD terms), Alembic, FBX; Parasolid XT, ACIS, JT; OpenCascade .brep (NVIDIA's reader mirrors OpenCascade's LGPL one) | 24, 29 | Each format's piece waits for its check |
-| ISO's EXPRESS schemas: where they may be obtained, what may be generated from them, and which edition of ISO 10303-42 is current | 24, 29 | Piece "EXPRESS code generation and schema validator (development tool)" |
+| ISO's EXPRESS schemas: where they may be obtained, what may be generated from them, and which edition of ISO 10303-42 is current | 24, 29 | 32.39 (owner action G409): the 2025 edition; generation only with a file's own grant or ISO's permission; piece "EXPRESS code generation and schema validator (development tool)" |
 | Thread and gear tables are copyrighted standards, so geom-thread takes them as supplied or licensed data | 13 | Piece "Helical sweeps and geom-thread" |
 | How entries in our own pattern and linetype library are authored | 14 | 32.24 (owner action G184); piece "2D-22 Our own pattern and linetype library" builds it |
 | SMLib's .smp and .smb fixtures: the stricter reading applies, so they are not copied and the configurations are rebuilt | 12 | Answered; ledger row |

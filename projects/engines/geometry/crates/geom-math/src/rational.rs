@@ -57,7 +57,7 @@
 )]
 
 use geom_num::NumError;
-use geom_num::grid::{Coord, P3};
+use geom_num::grid::{Coord, P2, P3};
 use geom_num::sign::Sign;
 use geom_num::wide::Wide;
 
@@ -67,7 +67,7 @@ use crate::frame::{Rotation, Scale};
 use crate::grid_transform::{Axis, GridTransform, TRANSLATION_MAX};
 use crate::rounded::Rounded;
 use crate::transform::{Classification, Transform, TransformKind};
-use crate::vector::V3;
+use crate::vector::{V2, V3};
 
 /// The largest magnitude of an entry of M: 2^40.
 pub const RATIONAL_ENTRY_MAX: i64 = 1 << 40;
@@ -88,10 +88,11 @@ pub struct RationalTransform {
 
 /// `num / den` rounded to the nearest integer, ties to even, with whether it was exact (den > 0).
 ///
-/// The callers' budgets keep |num| below 2^86 and 1 ≤ den ≤ 2^40, so the quotient q is below 2^86
-/// in magnitude, 0 ≤ r < den makes 2r at most 2^41, and q + 1 fits: no step fails, and `None`
-/// would report a defect.
-fn round_div(num: i128, den: i128) -> Option<Rounded<i128>> {
+/// The callers' budgets keep |num| below 2^114 and 1 ≤ den < 2^72 (this module's below 2^86 and
+/// 2^40, [`crate::rotation`]'s below 3·2^112 and 2^72), so the quotient q is below 2^114 in
+/// magnitude, 0 ≤ r < den makes 2r below 2^73, and q + 1 fits: no step fails, and `None` would
+/// report a defect.
+pub(crate) fn round_div(num: i128, den: i128) -> Option<Rounded<i128>> {
     let q = num.checked_div_euclid(den)?;
     let r = num.checked_rem_euclid(den)?;
     let value = match r.checked_mul(2)?.cmp(&den) {
@@ -371,6 +372,53 @@ impl RationalTransform {
             },
             x.is_exact() && y.is_exact() && z.is_exact(),
         ))
+    }
+
+    /// Whether the transform acts in the plane: it leaves every z unchanged (its z row is
+    /// (0, 0, d)/d with no translation), so it maps the plane z = 0 of a 2D frame onto itself; its
+    /// determinant is then that of its 2 × 2 part, so its orientation in the plane is its
+    /// orientation in 3D.
+    #[must_use]
+    pub fn acts_in_plane(&self) -> bool {
+        let ([_, _, z], [_, _, tz]) = (self.m, self.t);
+        z == [0, 0, self.d] && tz == 0
+    }
+
+    /// The image of a 2D grid point: [`RationalTransform::apply`] at z = 0, whose z stays 0 exactly,
+    /// so the result is exact exactly when x and y are.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane; otherwise as
+    /// [`RationalTransform::apply`].
+    pub fn apply_2d(&self, p: P2) -> Result<Rounded<P2>, MathError> {
+        if !self.acts_in_plane() {
+            return Err(MathError::NotInPlane);
+        }
+        let q = self.apply(P3 {
+            x: p.x,
+            y: p.y,
+            z: Coord::ZERO,
+        })?;
+        let exact = q.is_exact();
+        let q = q.value();
+        Ok(Rounded::new(P2 { x: q.x, y: q.y }, exact))
+    }
+
+    /// The image of a 2D grid vector: [`RationalTransform::apply_vector`] at z = 0.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane; otherwise as
+    /// [`RationalTransform::apply_vector`].
+    pub fn apply_vector_2d(&self, v: V2) -> Result<Rounded<V2>, MathError> {
+        if !self.acts_in_plane() {
+            return Err(MathError::NotInPlane);
+        }
+        let w = self.apply_vector(V3::new(v.x(), v.y(), 0)?)?;
+        let exact = w.is_exact();
+        let w = w.value();
+        Ok(Rounded::new(V2::new(w.x(), w.y())?, exact))
     }
 
     /// The image of a grid vector (the linear part only): M·v/d per component, rounded once to the
