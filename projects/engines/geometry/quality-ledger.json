@@ -3973,20 +3973,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let m = (bits & MANTISSA) | if biased != 0 { 1u64 << 52 } else { 0 };",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let shift = if t > 11 { i64::from(t.abs_diff(12)) } else { 0 }; // t − 12",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
       "line_text": "let (Some(&inverse), Some(&log_inverse)) = (",
       "occurrences": 1,
       "piece": "G47",
@@ -4030,41 +4016,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
       "line_text": "if t & MANTISSA == 0 && (t << 1) != 0 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "let w = y2.to_bits();",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "let nudged = if (w ^ t) >> 63 != 0 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "t.checked_sub(1)",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "t.checked_add(1)",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "from_checked_bits(nudged)",
       "occurrences": 1,
       "piece": "G47",
       "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
