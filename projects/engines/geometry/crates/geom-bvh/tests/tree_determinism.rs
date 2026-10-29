@@ -115,7 +115,8 @@ impl Recorder {
             .step_by(3)
             .map(|e| Entry {
                 key: e.key,
-                bbox: b[e.key as usize % b.len()].bbox,
+                // The remainder in u64 first: a usize is 32 bits on wasm32.
+                bbox: b[(e.key % b.len() as u64) as usize].bbox,
             })
             .collect();
         let how = t.refit(&moved, &Exec::serial(), &mut meter()).unwrap();
