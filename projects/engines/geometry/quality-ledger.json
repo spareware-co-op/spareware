@@ -579,30 +579,6 @@
       "reason": "The search runs forward through the pieces. The two differ only from the left at t == a of a piece after the first, and there the piece before, which ends at t and comes earlier, already matched (a' < t and t <= b'), so the same piece is returned."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/nurbs.rs",
-      "mutant": "replace < with <= in holds",
-      "line_text": "(a < t || at_start) && t <= b",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Patches are searched u outer, v inner. The two differ only from the left at t == a of a later patch in that direction, and there the patch before it in that direction (the same index in the other), which ends at t, comes earlier in the search and already matched, so the same patch is found."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/nurbs.rs",
-      "mutant": "replace && with || in holds",
-      "line_text": "let at_start = first && t == a;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "For the first patch a is the domain's start and t >= a, so the test is true for every t <= b either way. For later patches `first || t == a` is `t == a`, making the test a <= t, which finds the same patch: the patch before it in that direction ends at t, comes earlier in the search and already matched."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/terms.rs",
-      "mutant": "delete match arm 2 in shifted",
-      "line_text": "2 => (neg(c), neg(s)),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "shifted takes the order of a derivative, and every caller asks for orders 0 and 1 only (points, partials, normals and first-derivative bounds), so k & 3 is never 2 and the deleted arm is never reached."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
       "mutant": "replace > with >= in Round::radius_sign",
       "line_text": "Ok(if rho.lo() > 0.0 {",
