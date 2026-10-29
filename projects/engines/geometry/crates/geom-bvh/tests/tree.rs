@@ -53,13 +53,19 @@ impl Pool for Threads {
         for (i, t) in tasks.iter_mut().enumerate() {
             groups[i % self.0].push(&mut **t);
         }
+        let run = |group: Vec<&mut (dyn FnMut() + Send)>| {
+            for t in group.into_iter().rev() {
+                t();
+            }
+        };
         std::thread::scope(|s| {
+            // wasm32-wasip1 has no threads: where none can start, every group runs here, in turn.
+            if std::thread::Builder::new().spawn_scoped(s, || {}).is_err() {
+                groups.into_iter().for_each(run);
+                return;
+            }
             for group in groups {
-                s.spawn(move || {
-                    for t in group.into_iter().rev() {
-                        t();
-                    }
-                });
+                s.spawn(move || run(group));
             }
         });
     }
