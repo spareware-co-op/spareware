@@ -209,7 +209,9 @@ fn every_kinds_higher_partials_are_the_derivatives_of_its_lower_ones() {
         .collect();
     assert_eq!(order, vec![0, 1, 2, 3, 4, 5, 6]);
     assert_eq!(partial_index(usize::MAX, 1), Err(CurveError::Defect));
-    assert_eq!(partial_index(1 << 40, 1 << 40), Err(CurveError::Defect));
+    // i + j fits but n(n + 1) does not, on 32- and 64-bit targets alike.
+    let half = usize::MAX / 2;
+    assert_eq!(partial_index(half, half), Err(CurveError::Defect));
     // Orders whose factorials are no longer exact doubles are refused by name.
     let rational = SurfaceKind::Nurbs(patch(
         rng,
