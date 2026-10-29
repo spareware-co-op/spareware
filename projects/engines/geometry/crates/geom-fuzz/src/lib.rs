@@ -12,7 +12,7 @@
 //! operation at every width. The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
-//! Layer: Development, in chapter 27's proposed crate table: a development crate, outside the
+//! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
 //! (chapter 27) within the licence allow-list of 29.2. No kernel crate may have a normal
 //! dependency on it, only a development dependency (chapter 27; 28.1).

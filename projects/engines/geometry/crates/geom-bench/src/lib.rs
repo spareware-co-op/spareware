@@ -3,7 +3,7 @@
 //!
 //! One job: the kernel's benchmarks, and the count gates that block a regression over 5%.
 //!
-//! Layer: Development, in chapter 27's proposed crate table: a development crate, never shipped.
+//! Layer: Development, in chapter 27's crate table: a development crate, never shipped.
 //!
 //! Development only (`publish = false`): no kernel or program crate depends on this one. It
 //! measures every operation of the numbers layer, `geom-num` ([`catalogue::OPS`]): the four exact

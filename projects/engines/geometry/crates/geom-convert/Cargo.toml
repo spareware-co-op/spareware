@@ -8,7 +8,7 @@ description = "Spare Kit geometry kernel: the conversion graph between represent
 
 [dependencies]
 geom-run = { path = "../geom-run", default-features = false }
-# Exactly this crate's row of chapter 27's proposed crate table, checked by the scaffold test
+# Exactly this crate's row of chapter 27's crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
 
 geom-bool = { path = "../geom-bool" }
