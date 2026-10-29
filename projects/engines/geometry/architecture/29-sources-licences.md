@@ -235,7 +235,7 @@ From [01](../../../kit/notes/G01-evidence/01-manifold-mesh-booleans.md), [08](..
 | Gmsh; Netgen; Mmg | GPL-2.0-or-later with a linking exception; LGPL-2.1; LGPL-3.0-or-later | Gmsh papers only; the others PORT METHOD | STUDY | — |
 | PolyFem | MIT | PORT | REJECT for the kernel | A concern for a future analysis program |
 | Instant Meshes; QuadriFlow | BSD-3-Clause; BSD-style. QuadriFlow bundles LEMON (Boost Software License), a MiniSat-derived SAT solver (MapleCOMSPS_LRB, MIT), pcg32 (Apache-2.0) and `pss` (not checked) (checked 2026-10-21 at [`810b7a09`](https://github.com/hjwdzh/QuadriFlow/tree/810b7a0967c35b0dc85b4464e3835e26a756c967/3rd)) | PORT. Bundled files keep their own notices; `pss` only after its licence is checked | PORT if quad remeshing is needed (16); STUDY | Seeds are explicit operation inputs and random numbers come from `geom-num`'s counter-based generator, so pcg32 is replaced, not ported (16.3) |
-| Tight Inclusion | MIT (checked 2026-10-21 at [`6f84001a`](https://github.com/Continuous-Collision-Detection/Tight-Inclusion/tree/6f84001a790a9d3362b7c13d410037140d83fa2c)) | PORT | PORT (10.2; 19 owns it) | Named by the spine's catalogue; no report has vetted more than its licence |
+| Tight Inclusion | MIT (checked 2026-10-21 at [`6f84001a`](https://github.com/Continuous-Collision-Detection/Tight-Inclusion/tree/6f84001a790a9d3362b7c13d410037140d83fa2c)) | PORT | PORT (10.2; 19 owns it) | Named by the spine's catalogue; no report has vetted more than its licence. Its 2021 benchmark has no licence (all rights reserved on NYU's archive) and waits for the authors; the authors' time-of-impact sample is Apache-2.0 (owner action G285, 32.31) |
 | parry | Apache-2.0 | PORT | STUDY | BVH builders, GJK and EPA, and its recipe for determinism |
 | `bvh` crate | MIT | PORT, DEPEND | REJECT | `f32` and nalgebra |
 | FCL; coal | BSD-3-Clause | PORT | STUDY | Distance and clearance queries |
@@ -518,7 +518,7 @@ The ledger covers what the evidence examined. Programs the kernel serves need mo
 | Slicing for 3D printing | Manufacturing | CuraEngine and PrusaSlicer (AGPL-3.0 labels: not read) |
 | Machining (CAM) | Manufacturing | OpenCAMLib (LGPL-2.1 label: method only) |
 | Exchange formats | Every program | glTF (Khronos specification; label NOASSERTION); 3MF (lib3mf BSD-2-Clause label; the specification's terms unknown); OpenUSD (TOST, label NOASSERTION); IGES (an old public specification, status unknown); JT (ISO 14306) |
-| Fonts, line types and hatch patterns for drafting | 2D drafting (section 14) | ISO 128 (implement, never copy); Hershey fonts (believed public domain with a usage notice). CADCraft's library is rejected (29.5), so no clean source is named yet |
+| Fonts, line types and hatch patterns for drafting | 2D drafting (section 14) | ISO 128 (implement, never copy); Hershey fonts (believed public domain with a usage notice). CADCraft's library is rejected (29.5). Line types and hatch patterns are authored by 32.24's process (owner action G184) |
 | Thread, gear and fastener standards | Mechanical design (`geom-thread`) | ISO and ASME thread standards, ISO and AGMA gear standards. Implement from licensed copies; how tabulated values may be used is an owner question |
 
 Rows are added under the approval rules at the end of 29.20.
@@ -600,9 +600,9 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
    - No code recalled from OCCT, CGAL or any other copyleft or proprietary kernel.
    - Output that looks like a known library's code is discarded and rewritten from the paper. The banned-source scanner catches the common markers; review catches the rest.
 8. **Oracles stay outside.**
-   - Copyleft, C++ and other non-Rust oracles run as separate programs, each in its own CI container, and exchange only files with our code. Kernel crates never link them and releases never contain them.
+   - Copyleft, C++ and other non-Rust oracles run as separate programs, each in its own CI container, and exchange only files with our code. Kernel crates never link them and releases never contain them. The owner confirmed this for GPL and LGPL programs (owner action G75, 32.6).
    - Oracle images are built in CI from pinned source and are never published. CI checks that no oracle image is pushed anywhere. If an owner later decides to publish one, the corresponding source of every GPL and LGPL component is published with it, and no image containing Numerical Recipes-derived code is ever distributed.
-   - The SMLib and solidcore oracle builds compile Numerical Recipes-derived routines. They are built and run only after an owner's yes.
+   - The SMLib and solidcore oracle builds contain Numerical Recipes-derived routines. Those routines are stubbed out and never compiled, and the builds run on that condition only (owner action G157, 32.23, which also answers 32.6's third question).
    - An oracle is used only where it is deterministic. For SMLib that means evaluation, knot operations, degree change, and fitting without random sampling. NLib's point-cloud fitting uses a hidden random generator whose sequence differs by platform, so it is excluded.
    - Disagreements are settled by exact or interval ground truth, then triaged.
    - Proprietary programs are never oracles for kernel behaviour. Whether to check that our exported files open in proprietary programs is an owner decision.

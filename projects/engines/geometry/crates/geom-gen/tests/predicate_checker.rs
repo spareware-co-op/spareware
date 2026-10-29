@@ -1181,7 +1181,11 @@ fn expected_parent(names: &[&str], coordinates: bool, rounded: bool) -> Vec<Stri
             // The declared range, |v| ≤ 2^bits − 1, inclusive, within which the bounds hold.
             "fn within(v: i128, bits: u32) -> Option<i128> {",
             "    let limit = 1u128.checked_shl(bits)?.checked_sub(1)?;",
-            "    (v.unsigned_abs() <= limit).then_some(v)",
+            "    if v.unsigned_abs() <= limit {",
+            "        Some(v)",
+            "    } else {",
+            "        None",
+            "    }",
             "}",
             // The nearest f64, ties to even: Rust's integer-to-float conversion, the rounding
             // whose error u · |x̃| the analysis gives a rounded input.
@@ -1776,8 +1780,8 @@ fn parent_edits() -> Vec<(&'static str, &'static str, &'static str)> {
             "zero for a scale that is not zero",
         ),
         (
-            "    (v.unsigned_abs() <= limit).then_some(v)",
-            "    (v.unsigned_abs() <= limit.saturating_mul(2)).then_some(v)",
+            "    if v.unsigned_abs() <= limit {",
+            "    if v.unsigned_abs() <= limit.saturating_mul(2) {",
             "a range twice the declared one",
         ),
     ]

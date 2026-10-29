@@ -20,10 +20,8 @@
 //! Sections: 15.6 and 16.6; open questions OQ-15.7, OQ-16.1 and OQ-29.16; chapter 27 ("Who owns
 //! what"), in the kernel architecture (`projects/engines/geometry/architecture/`).
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
-//!
-//! Proposed in chapter 27, pending the owner's decision G08.
 //!
 //! Modules today (pieces G49 and G50, dense decompositions):
 //!
