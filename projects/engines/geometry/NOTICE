@@ -245,7 +245,7 @@ libmalloc's xzone malloc
   Link:         https://github.com/apple-oss-distributions/libmalloc/blob/c49dafa25f1efe8607701ae6014a663ad2ee437f/src/xzone_malloc/xzone_malloc.c
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
-      for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists and its choice of pool), to explain what CI measured. No code copied.
+      with its `src/malloc_type_internal.h` and `src/xzone_malloc/xzone_malloc.h` at the same commit, for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists, its four pools per size class and its choice of pool from the call site), to explain what CI measured. No code copied.
 
 npm `hosted-git-info` 10.1.1
   Licence:      ISC

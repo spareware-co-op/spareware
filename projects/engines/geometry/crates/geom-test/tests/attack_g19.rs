@@ -827,12 +827,14 @@ fn kernel_golden_yml_runs_the_check_and_the_approval_rule() {
 /// whose case orders by address fails as a repeat.
 ///
 /// What holds on each of CI's allocators is in `golden::perturb`'s last three guarantees, with what
-/// was measured for issue #370: sixteen orders in every sweep of sixteen seeds but 19 of 14,840 on
+/// was measured for issues #370 and #377: sixteen orders in nearly every sweep of sixteen seeds on
 /// every runner, debug and release, alone and among busy tests, and never fewer than 13 (macOS on
-/// x86-64). Eight is a wide margin below that, so the test does not pass or fail by chance. Before
-/// the perturbation boxed the small classes, macOS on arm64 mostly gave the boxes' own two orders
+/// x86-64) or 14 (macOS on arm64). Eight is a wide margin below that, so the test does not pass or
+/// fail by chance. Where the perturbation's boxes did not reach the pool of the 64 boxes (macOS on
+/// arm64 before the perturbation boxed the small classes, and in about one release process in
+/// eight while it boxed each size from one call site), the boxes gave their own two orders
 /// (ascending, then descending, from their own reuse) and once one: the old bound of two passed
-/// that by chance and failed it now and then (issue #370); eight fails it every time.
+/// that by chance and failed it now and then (issues #370 and #377); eight fails it every time.
 #[test]
 fn the_perturbation_changes_what_address_ordered_code_sees() {
     let mut seen = BTreeSet::new();
