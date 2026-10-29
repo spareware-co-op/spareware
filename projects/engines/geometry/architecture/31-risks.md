@@ -627,6 +627,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | How imported edges are marked Smooth | 6, 18 | 32.35 (owner action G384) |
 | Hidden-line predicates of 576 and 640 bits | 6, 18 | 32.36 (owner action G385) |
 | openNURBS: written confirmation from McNeel before porting its reader and writer | 16, 24, 29 | 32.37 (owner action G407): request drafted for the owner to send; open until the reply |
+| The LandXML 1.2 schema's terms, and LINZ's LandXML examples | 17, 24, 29 | 32.38 (owner action G408) |
 
 ### Answered by the pieces built so far
 

@@ -55,6 +55,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.35 | G384: smooth-edge marking | An explicit, logged operation marks edges Smooth below an angle θ the caller passes and the log records; no kernel default, no ladder rung | 6, 18 | G398, line classes and continuity records |
 | 32.36 | G385: view predicates beyond 384 bits | `I576` for grid-axis views and `I640` for any direction and perspective, accepted on 32.29's conditions (derivation, certificate, extreme tests, filter, measured) | 6, 18 | G388, exact view predicates |
 | 32.37 | G407: openNURBS licence confirmation | Ask McNeel in writing (request drafted, the owner sends it); nothing ported until the reply; open until then | 16, 24, 29 | G438, Rhino .3dm |
+| 32.38 | G408: LandXML terms | No terms found: the schema is implemented from its definitions, never copied or generated from, and fetched only to validate; LINZ's examples fetch-only until their page states terms | 17, 24, 29 | G437, LandXML 1.2 mapping |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -701,3 +702,16 @@ Why: drawings are a contract document; exact visibility makes every view the sam
 This action stays open until McNeel answers.
 
 **Changes:** 29's openNURBS row, 31.7, and piece G438.
+
+## 32.38 LandXML terms (owner action G408)
+
+**What it is.** `geom-landxml` (G437) reads and writes LandXML 1.2 surfaces, alignments, profiles, COGO points and parcels (17.13). The schema is published at landxml.org with no terms found, and it cannot be pinned to a commit (29). New Zealand's survey authority, LINZ, publishes LandXML reference documents and examples for surveyors and developers; LINZ licenses almost all its published data under CC BY 4.0, but the LandXML example pages state no terms of their own (both checked 2026-10-28; landxml.org did not answer that day).
+
+**Decided 2026-10-28 (owner action G408).** Read with 17.13, 24.11, 29.20's rules 1 and 11, and 32.11's rule (i).
+- **The schema is implemented, never copied.** LandXML 1.2 is a published exchange format; `geom-landxml` maps the elements it needs from the schema's definitions, as 29 already classes it (PORT METHOD), with no code generated from the XSD and no copy of the XSD in the repository. A test that validates our output fetches the schema at test time, records its SHA-256, and fails if it changes.
+- **LINZ's examples are fetch-only** until their own download page states terms. If those terms are CC BY 4.0, as LINZ's other data is, the files may be stored with LINZ's attribution under 32.11's rule (i); until then they are fetched by the corpus register (G114) and never committed. Co-op-authored LandXML files are the stored fixtures meanwhile.
+- **The sixteen spiral names** are file data, mapped as 32.33 says.
+
+Why: implementing a published format from its definitions copies nothing, and data whose terms are unstated stays out of a public repository, as for every outside dataset (32.11).
+
+**Changes:** 29's LandXML and LINZ rows, 31.7, and piece G437.
