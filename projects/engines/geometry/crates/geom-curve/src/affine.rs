@@ -106,6 +106,18 @@ impl Entries {
         let exact = match t {
             TypedTransform::Exact(g) => rational(&RationalTransform::from_grid(g))?,
             TypedTransform::Rational(r) => rational(r)?,
+            TypedTransform::Rotation(r) => {
+                // M(q)/|q|², with no translation (decision 32.14).
+                let d =
+                    int_interval(i128::try_from(r.norm2()).map_err(|_| CurveError::NotFinite)?)?;
+                let mut out = [[Interval::point(0.0)?; 4]; 3];
+                for (row, mrow) in out.iter_mut().zip(&r.matrix()?) {
+                    for (slot, &mij) in row.iter_mut().zip(mrow) {
+                        *slot = int_interval(mij)?.div(d)?;
+                    }
+                }
+                out
+            }
             TypedTransform::Certified(c) => {
                 let mut out = [[Interval::point(0.0)?; 4]; 3];
                 for (row, r) in out.iter_mut().zip(c.rows()) {
