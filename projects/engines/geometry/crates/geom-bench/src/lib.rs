@@ -3,7 +3,7 @@
 //!
 //! One job: the kernel's benchmarks, and the count gates that block a regression over 5%.
 //!
-//! Layer: Development, in chapter 27's proposed crate table: a development crate, never shipped.
+//! Layer: Development, in chapter 27's crate table: a development crate, never shipped.
 //!
 //! Development only (`publish = false`): no kernel or program crate depends on this one. It
 //! measures every operation of the numbers layer, `geom-num` ([`catalogue::OPS`]): the four exact
@@ -13,7 +13,11 @@
 //! arithmetic, with the certified enclosures of the proven maths functions; grid coordinates and
 //! grid steps; total order on doubles; exactness classes; the deterministic maths functions, those
 //! with proven error bounds and those without; the counter-based random numbers (the Philox4x32-10 block, a
-//! stream's draws, and stream ranges); double-double arithmetic; and the exact sum of doubles.
+//! stream's draws, and stream ranges); double-double arithmetic; the exact sum of doubles; and
+//! chapter 23.3's comparison of exact-path variants (piece G42): every generated exact path in
+//! plain `i128` and in width-aware 32-bit limbs beside the shipped one, and the 32-bit-limb
+//! integers `Wide32` at the bit widths `Wide` is measured at; with them, [`avnaim`], the reference
+//! chapter 23.3 names (Avnaim et al.'s signs), which lives here because no kernel crate ships it.
 //! Public functions of `geom-num` without a benchmark of their own
 //! are listed with the reason in [`catalogue::UNMEASURED`], and a test keeps that list complete.
 //!
@@ -262,6 +266,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod avnaim;
 // Unix and Windows only, with the `judge` feature (on by default): Gungraun's summary model does not
 // build for WebAssembly, and the gate's measured runs leave it out (Cargo.toml).
 #[cfg(all(feature = "judge", any(unix, windows)))]

@@ -81,7 +81,7 @@ Two licences in the ledger have no identifier of their own. SPDX files the EDL-1
 | Numerical Recipes code and anything derived from it | No | Never: not from any source, and not from memory | Only inside a third-party build that contains it, run in CI after an owner's yes and never distributed (rule 8) |
 | Proprietary documentation (Autodesk DXF Reference, Revit API, Parasolid, ACIS, Onshape) | Vendor-hosted public pages only, to learn a format or a concept. Third-party copies have unknown authorisation: stop and ask | No text, tables or figures. Brief quotes with links only | — |
 | CC BY-ND documentation (IFC 4.3) | Yes | Link and quote briefly with credit. Never adapt the text; our docs are written fresh. IFC's own notice also allows its documentation to be used in software development with full attribution (29.14) | — |
-| ISO standards (ISO 10303, ISO 16739) | Yes, from licensed copies | Implement the standard. Never copy its text. Whether code may be generated from ISO's EXPRESS schema files is unverified | — |
+| ISO standards (ISO 10303, ISO 16739) | Yes, from licensed copies | Implement the standard. Never copy its text. Code is generated from ISO's EXPRESS schema files only with a file's own grant or ISO's permission (32.39) | — |
 | Papers and books | Yes | Methods are free to use. Never transcribe text, figures or pseudocode (The NURBS Book is Springer copyright). Papers under CC BY-NC-ND are cited, never adapted | — |
 | Reverse-engineered format knowledge (DWG, SKP, ACIS internals, Revit files) | No, unless an owner clears it after legal advice (README) | Never | No |
 
@@ -235,7 +235,7 @@ From [01](../../../kit/notes/G01-evidence/01-manifold-mesh-booleans.md), [08](..
 | Gmsh; Netgen; Mmg | GPL-2.0-or-later with a linking exception; LGPL-2.1; LGPL-3.0-or-later | Gmsh papers only; the others PORT METHOD | STUDY | — |
 | PolyFem | MIT | PORT | REJECT for the kernel | A concern for a future analysis program |
 | Instant Meshes; QuadriFlow | BSD-3-Clause; BSD-style. QuadriFlow bundles LEMON (Boost Software License), a MiniSat-derived SAT solver (MapleCOMSPS_LRB, MIT), pcg32 (Apache-2.0) and `pss` (not checked) (checked 2026-10-21 at [`810b7a09`](https://github.com/hjwdzh/QuadriFlow/tree/810b7a0967c35b0dc85b4464e3835e26a756c967/3rd)) | PORT. Bundled files keep their own notices; `pss` only after its licence is checked | PORT if quad remeshing is needed (16); STUDY | Seeds are explicit operation inputs and random numbers come from `geom-num`'s counter-based generator, so pcg32 is replaced, not ported (16.3) |
-| Tight Inclusion | MIT (checked 2026-10-21 at [`6f84001a`](https://github.com/Continuous-Collision-Detection/Tight-Inclusion/tree/6f84001a790a9d3362b7c13d410037140d83fa2c)) | PORT | PORT (10.2; 19 owns it) | Named by the spine's catalogue; no report has vetted more than its licence |
+| Tight Inclusion | MIT (checked 2026-10-21 at [`6f84001a`](https://github.com/Continuous-Collision-Detection/Tight-Inclusion/tree/6f84001a790a9d3362b7c13d410037140d83fa2c)) | PORT | PORT (10.2; 19 owns it) | Named by the spine's catalogue; no report has vetted more than its licence. Its 2021 benchmark has no licence (all rights reserved on NYU's archive) and waits for the authors; the authors' time-of-impact sample is Apache-2.0 (owner action G285, 32.31) |
 | parry | Apache-2.0 | PORT | STUDY | BVH builders, GJK and EPA, and its recipe for determinism |
 | `bvh` crate | MIT | PORT, DEPEND | REJECT | `f32` and nalgebra |
 | FCL; coal | BSD-3-Clause | PORT | STUDY | Distance and clearance queries |
@@ -385,7 +385,7 @@ From [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), [04
 | Source | Licence | Allowed | Planned | What, why and conditions |
 | --- | --- | --- | --- | --- |
 | IFC 4.3 documentation and schema (buildingSMART), [`7256780b`](https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/LICENSE.md) | CC BY-ND 4.0. The same LICENSE.md says its technical documentation "may be photocopied, used in software development, or translated into another computer language" provided "full attribution is given", and that changes to the specification need written consent. IFC and ifcXML are buildingSMART trademarks. Material based on other standards is excluded from its copyright (checked 2026-10-21) | PORT METHOD | PORT METHOD (24) | Implement the schema in `geom-ifc`. Rust types may be generated from its EXPRESS schema, with full attribution. Link and quote briefly with credit; kernel docs are written fresh. "IFC" is used only to name the format |
-| ISO 16739-1:2024; ISO 10303-42 and AP242 | ISO copyright | PORT METHOD | PORT METHOD (24) | Implement from licensed copies; copy no text. Whether code may be generated from ISO's EXPRESS schema files, and which edition of Part 42 is current, are unverified |
+| ISO 16739-1:2024; ISO 10303-42 and AP242 | ISO copyright | PORT METHOD | PORT METHOD (24) | Implement from licensed copies; copy no text. Part 42's current edition is ISO 10303-42:2025; code is generated from ISO's EXPRESS files only where a file's header grants it or ISO permits it (owner action G409, 32.39) |
 | IfcOpenShell | LGPL-3.0 | PORT METHOD | STUDY under the method-only procedure; ORACLE (IfcConvert out of process) | Its separate recipe layer ("taxonomy") and one mapping per entity. Its issues are a failure list rebuilt with our own inputs |
 | web-ifc | MPL-2.0 | PORT | STUDY, ORACLE | Its fixed segment counts and absolute epsilons are what we avoid |
 | That Open engine_components and fragments | MIT | PORT | STUDY | — |
@@ -402,7 +402,7 @@ From [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), [04
 | SketchUp SKP (through OpenSKP) | Reverse-engineered | REJECT | REJECT | — |
 | OpenUSD AOUSD proposals | OpenUSD Technical Proposal Supplemental Terms | STUDY | STUDY | Read where they are published upstream; nothing copied |
 | miniz_oxide | MIT OR Zlib OR Apache-2.0 in its crate manifest (checked 2026-10-21 at [`cdd7ddd5`](https://github.com/Frommi/miniz_oxide/blob/cdd7ddd56cf57a6255203bb9f5c6a92bf1144bbf/miniz_oxide/Cargo.toml)) | PORT, DEPEND | PORT into `geom-exchange` (24.7): inflate and deflate, notice kept, run inside our size and ratio budgets | It is `no_std` and forbids `unsafe` code (24.7) |
-| LandXML 1.2 schema ([landxml.org](http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd)) | Terms not found; it cannot be pinned to a commit (17.13) | PORT METHOD, once an owner checks its terms (rule 11) | PORT METHOD (17.13): `geom-landxml` reads surfaces, alignments, profiles, COGO points and parcels | It names sixteen spiral types without formulas; each mapping to a curve kind waits for the curve-kind decision note (17.13) |
+| LandXML 1.2 schema ([landxml.org](http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd)) | Terms not found (checked again 2026-10-28); it cannot be pinned to a commit (17.13) | PORT METHOD: implemented from its definitions, never copied or generated from, fetched only to validate (owner action G408, 32.38) | PORT METHOD (17.13): `geom-landxml` reads surfaces, alignments, profiles, COGO points and parcels | It names sixteen spiral types without formulas; each mapping to a curve kind waits for the curve-kind decision note (17.13) |
 | The "Viennese Bend" transition curve, in IFC 4.3's alignment documentation | IFC's documentation writes "Viennese Bend (R)", a registered trademark; its owner and any patent are unverified (17, open questions) | Stop and ask | PORT METHOD of IFC's published definition (17.8), after an owner checks the trademark and patent status (29.17) | The name is used only to identify the IFC and LandXML type, never as the name of our own feature |
 
 ## 29.15 Test corpora (`geom-test`)
@@ -514,11 +514,11 @@ The ledger covers what the evidence examined. Programs the kernel serves need mo
 
 | Area | Who needs it | Candidate sources and likely terms (unverified) |
 | --- | --- | --- |
-| Circuit-board exchange and tools | Spare Electronics | Gerber (Ucamco's published specification), IPC-2581 (IPC standard), ODB++ (Siemens); KiCad (GPL-3.0 label: papers and documentation only) |
+| Circuit-board exchange and tools | Spare Electronics | Gerber (Ucamco's published specification: implemented exactly, no extensions), IPC-2581 (IPC standard: its own text or IPC's word first), ODB++ (Siemens); KiCad (GPL-3.0 label: papers and documentation only). Built when two programs need boards (owner action G447, 32.40) |
 | Slicing for 3D printing | Manufacturing | CuraEngine and PrusaSlicer (AGPL-3.0 labels: not read) |
 | Machining (CAM) | Manufacturing | OpenCAMLib (LGPL-2.1 label: method only) |
 | Exchange formats | Every program | glTF (Khronos specification; label NOASSERTION); 3MF (lib3mf BSD-2-Clause label; the specification's terms unknown); OpenUSD (TOST, label NOASSERTION); IGES (an old public specification, status unknown); JT (ISO 14306) |
-| Fonts, line types and hatch patterns for drafting | 2D drafting (section 14) | ISO 128 (implement, never copy); Hershey fonts (believed public domain with a usage notice). CADCraft's library is rejected (29.5), so no clean source is named yet |
+| Fonts, line types and hatch patterns for drafting | 2D drafting (section 14) | ISO 128 (implement, never copy); Hershey fonts (believed public domain with a usage notice). CADCraft's library is rejected (29.5). Line types and hatch patterns are authored by 32.24's process (owner action G184) |
 | Thread, gear and fastener standards | Mechanical design (`geom-thread`) | ISO and ASME thread standards, ISO and AGMA gear standards. Implement from licensed copies; how tabulated values may be used is an owner question |
 
 Rows are added under the approval rules at the end of 29.20.
@@ -600,9 +600,9 @@ These rules apply to people and AI agents alike. They add detail to AGENTS.md se
    - No code recalled from OCCT, CGAL or any other copyleft or proprietary kernel.
    - Output that looks like a known library's code is discarded and rewritten from the paper. The banned-source scanner catches the common markers; review catches the rest.
 8. **Oracles stay outside.**
-   - Copyleft, C++ and other non-Rust oracles run as separate programs, each in its own CI container, and exchange only files with our code. Kernel crates never link them and releases never contain them.
+   - Copyleft, C++ and other non-Rust oracles run as separate programs, each in its own CI container, and exchange only files with our code. Kernel crates never link them and releases never contain them. The owner confirmed this for GPL and LGPL programs (owner action G75, 32.6).
    - Oracle images are built in CI from pinned source and are never published. CI checks that no oracle image is pushed anywhere. If an owner later decides to publish one, the corresponding source of every GPL and LGPL component is published with it, and no image containing Numerical Recipes-derived code is ever distributed.
-   - The SMLib and solidcore oracle builds compile Numerical Recipes-derived routines. They are built and run only after an owner's yes.
+   - The SMLib and solidcore oracle builds contain Numerical Recipes-derived routines. Those routines are stubbed out and never compiled, and the builds run on that condition only (owner action G157, 32.23, which also answers 32.6's third question).
    - An oracle is used only where it is deterministic. For SMLib that means evaluation, knot operations, degree change, and fitting without random sampling. NLib's point-cloud fitting uses a hidden random generator whose sequence differs by platform, so it is excluded.
    - Disagreements are settled by exact or interval ground truth, then triaged.
    - Proprietary programs are never oracles for kernel behaviour. Whether to check that our exported files open in proprietary programs is an owner decision.

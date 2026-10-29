@@ -70,6 +70,16 @@
 //!   on the integers of [`DD::from_i128`] and [`DD::round_shifted`], all with checked methods; a
 //!   `None` from one is reported as `BudgetExceeded` (exponents, a defect) or `None` (the
 //!   documented range of those two functions). No cast loses a value.
+//! - **Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) the integer
+//!   steps: that `exponent` gives ⌊log₂ |x|⌋ for every finite nonzero double, from −1074 to 1023;
+//!   that `pow2(k)` is 2^k exactly for every k in that range and refuses every other `i32`; that
+//!   `scale_pow2` never reports a defect for any finite `v` and `|m| ≤ 2400`; that `whole` reads
+//!   every value it accepts exactly; and that [`DD::from_i128`] accepts exactly the magnitudes
+//!   below 2^106, with `hi` the value rounded to nearest. The error bounds of the operations are
+//!   the published ones, machine-checked in Coq by their authors (the table above), and this
+//!   module follows each algorithm step for step; a bit-level solver cannot reach products of two
+//!   symbolic doubles in useful time (`eft`'s header gives the measurements), so those bounds are
+//!   tested against exact rationals here, not re-proven.
 //!
 //! Method: the algorithms are those whose bounds are proven and machine-checked (Joldes, Muller and
 //! Popescu 2017, <https://doi.org/10.1145/3121432>, and the other references below):
@@ -1091,5 +1101,97 @@ mod tests {
         assert!(scale_pow2(1.0, i32::MAX).is_err() && scale_pow2(1.0, i32::MIN).is_err());
         assert_eq!(scale_pow2(1.0, 2400).unwrap(), f64::INFINITY);
         assert_eq!(scale_pow2(1.0, -2400).unwrap(), 0.0);
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G41): the integer steps the module header names.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// A symbolic finite double.
+    fn finite() -> f64 {
+        let x = f64::from_bits(kani::any());
+        kani::assume(x.is_finite());
+        x
+    }
+
+    /// `exponent` gives ⌊log₂ |x|⌋, from −1074 to 1023, for every finite nonzero double.
+    #[kani::proof]
+    fn exponent_reads_the_leading_bit() {
+        let x = finite();
+        kani::assume(x != 0.0);
+        let e = exponent(x).unwrap();
+        assert!((-1074..=1023).contains(&e));
+        let p = pow2(e).unwrap();
+        let m = magnitude(x);
+        assert!(p <= m && (e == 1023 || m < p * 2.0));
+    }
+
+    /// `pow2(k)` is 2^k exactly for −1074 ≤ k ≤ 1023, read back from its bits, and refuses every
+    /// other `i32`.
+    #[kani::proof]
+    fn pow2_is_exact_over_its_range() {
+        let k: i32 = kani::any();
+        match pow2(k) {
+            Ok(p) => {
+                assert!((-1074..=1023).contains(&k));
+                let bits = p.to_bits();
+                if k >= -1022 {
+                    assert!(bits >> 52 == u64::try_from(k + 1023).unwrap() && bits << 12 == 0);
+                } else {
+                    assert!(bits == 1 << (k + 1074));
+                }
+            }
+            Err(e) => assert!(e == NumError::BudgetExceeded && !(-1074..=1023).contains(&k)),
+        }
+    }
+
+    /// `scale_pow2` never reports a defect for a finite `v` and `|m| ≤ 2400`: its loops run at
+    /// most three times and every checked step succeeds.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn scale_pow2_never_reports_a_defect() {
+        let v = finite();
+        let m: i32 = kani::any();
+        kani::assume((-2400..=2400).contains(&m));
+        assert!(scale_pow2(v, m).is_ok());
+    }
+
+    /// `whole` reads every double it accepts exactly: its `i128` converts back to the same double,
+    /// and it accepts zero.
+    #[kani::proof]
+    fn whole_reads_what_it_accepts_exactly() {
+        let v = finite();
+        if let Some(n) = whole(v) {
+            assert!(n.unsigned_abs() <= 1 << 101);
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "a value whole accepted is a double"
+            )]
+            let back = n as f64;
+            assert!(back == v);
+        }
+        assert!(whole(0.0) == Some(0) && whole(-0.0) == Some(0));
+    }
+
+    /// [`DD::from_i128`] accepts exactly the magnitudes below 2^106, and its leading part is the
+    /// value rounded to nearest (Rust's `as f64`, ties to even).
+    #[kani::proof]
+    fn from_i128_accepts_exactly_below_2_106() {
+        let v: i128 = kani::any();
+        match DD::from_i128(v) {
+            Some(d) => {
+                assert!(v.unsigned_abs() < 1 << 106);
+                #[allow(clippy::cast_precision_loss, reason = "the rounding is the claim")]
+                let rounded = v as f64;
+                assert!(d.hi().to_bits() == zero_to_plus(rounded).to_bits());
+            }
+            None => assert!(v.unsigned_abs() >= 1 << 106),
+        }
     }
 }

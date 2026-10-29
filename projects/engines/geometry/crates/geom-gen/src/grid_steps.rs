@@ -222,7 +222,7 @@ const UNITS: [Unit; 14] = [
 
 /// The ladder's whole-step tolerances, with how the table names them, in the table's order. The
 /// one rung that is not whole steps, `ladder::COMMIT_PER_AXIS`, has its own row before these.
-pub const LADDER: [(&str, Steps); 6] = [
+pub const LADDER: [(&str, Steps); 7] = [
     (
         "Commit distance in 2D, certified ceiling (`ladder::COMMIT_DISTANCE_2D`)",
         ladder::COMMIT_DISTANCE_2D,
@@ -232,6 +232,10 @@ pub const LADDER: [(&str, Steps); 6] = [
         ladder::COMMIT_DISTANCE_3D,
     ),
     ("Fit bound (`ladder::FIT`)", ladder::FIT),
+    (
+        "Per-operation bound (`ladder::PER_OPERATION`)",
+        ladder::PER_OPERATION,
+    ),
     (
         "Import healing, default (`ladder::HEAL_DEFAULT`)",
         ladder::HEAL_DEFAULT,
@@ -725,6 +729,7 @@ mod tests {
             "| 1 US survey ft | 1200000/3937 | not whole: 7680000000/3937 | not whole: 192000000000/3937 | not whole: 4800000000000/3937 |",
             // ladder.rs: the fit bound is 0.01 mm at Q0 and 0.4 µm at Q1; healing 0.1 mm, cap 1 mm.
             "| Fit bound (`ladder::FIT`) | 64 | 0.01 | 0.0004 | 0.000016 |",
+            "| Per-operation bound (`ladder::PER_OPERATION`) | 16 | 0.0025 | 0.0001 | 0.000004 |",
             "| Import healing, default (`ladder::HEAL_DEFAULT`) | 640 | 0.1 | 0.004 | 0.00016 |",
             "| Import healing, cap (`ladder::HEAL_CAP`) | 6400 | 1 | 0.04 | 0.0016 |",
             "| Short-edge warning (`ladder::SHORT_EDGE_WARNING`) | 3200 | 0.5 | 0.02 | 0.0008 |",

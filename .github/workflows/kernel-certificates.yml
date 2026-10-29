@@ -1,0 +1,104 @@
+name: Kernel certificates
+
+# Machine-checked proofs of the geometry kernel's f64 filter bounds (chapter 28.6 of the kernel
+# architecture, projects/engines/geometry/architecture/28-testing.md; pieces G35 and G40). A filter
+# claims that a computed value beyond its bound has the exact value's sign. geom-gen writes each
+# filter's claim as a problem for two independent tools
+# (projects/engines/geometry/crates/geom-gen/generated/gappa-*.g and fptaylor-*.fpt), and each
+# tool runs here in a container pinned by digest, out of process:
+#
+# - Gappa proves the claim for binary64 rounding on whole-number inputs scaled by their axis
+#   maxima, so one proof covers every scale, and Rocq checks Gappa's proof (with Gappa's support
+#   library over Flocq), listing every axiom it rests on.
+# - FPTaylor bounds each filter's normalised problem (each step divided by its scale, with a ratio
+#   parameter where a sum's operand has a smaller scale) with a proof certificate, HOL Light checks
+#   the certificate, one job per problem, and each job reports whether its bound is within the K
+#   Gappa's goal uses; the error model is homogeneous, so the bound holds at every scale.
+#
+# The method note, projects/kit/notes/G35-filter-certificates.md, says what each proof covers and
+# what the written argument covers. Nothing here is a dependency: the tools run as separate
+# programs and never touch the kernel's code.
+
+on:
+  pull_request:
+    paths:
+      - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-num/src/generated/**"
+      - ".github/workflows/kernel-certificates.yml"
+  # Every night on main, so a proof that stops checking (a tool's image, a dependency) is seen
+  # even when no pull request touches the filters (piece G40).
+  schedule:
+    - cron: "17 14 * * *"
+  workflow_dispatch:
+  # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-certificates-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # rocq/rocq-prover:9.1.1 (OCaml 4.14.2), pinned by digest.
+  ROCQ_IMAGE: rocq/rocq-prover:9.1@sha256:9a1e969649a3cc3c6f310d5be5a842e2187384560337c6c0807aba9f8565efba
+  # ocaml/opam:ubuntu-24.04-ocaml-4.11, pinned by digest (fptaylor.sh says why 4.11).
+  OCAML_IMAGE: ocaml/opam:ubuntu-24.04-ocaml-4.11@sha256:b1a078473ec36987790399dc62e9f5147400000045d475652c4d4cc88dfc8530
+  SCRIPTS: projects/engines/geometry/crates/geom-gen/certificates
+  PROBLEMS: projects/engines/geometry/crates/geom-gen/generated
+
+jobs:
+  gappa:
+    name: Gappa, checked by Rocq
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prove the filter bounds
+        run: |
+          mkdir -m 777 "$RUNNER_TEMP/proofs"
+          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/proofs:/out" -e OUT=/out -w /work \
+            "$ROCQ_IMAGE" bash "$SCRIPTS/gappa.sh" "$PROBLEMS"/gappa-*.g
+      - name: Keep the Rocq proofs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gappa-rocq-proofs
+          path: ${{ runner.temp }}/proofs
+
+  fptaylor-problems:
+    name: The FPTaylor problems
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      problems: ${{ steps.list.outputs.problems }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: List them
+        id: list
+        run: |
+          problems=$(cd "$PROBLEMS" && ls fptaylor-*.fpt | jq -R . | jq -sc .)
+          echo "$problems"
+          echo "problems=$problems" >> "$GITHUB_OUTPUT"
+
+  # One job per problem: each sizes HOL Light's Taylor tables to its own problem's variables, and
+  # has a runner's whole budget to itself.
+  fptaylor:
+    name: FPTaylor, checked by HOL Light (${{ matrix.problem }})
+    needs: fptaylor-problems
+    runs-on: ubuntu-24.04
+    # HOL Light loads its multivariate analysis (about 40 minutes) and its Taylor tables before it
+    # checks anything; GitHub stops a hosted runner's job at six hours.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        problem: ${{ fromJSON(needs.fptaylor-problems.outputs.problems) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Bound the filter and check the certificate
+        env:
+          PROBLEM: ${{ matrix.problem }}
+        run: |
+          docker run --rm -v "$PWD:/work:ro" -w /work "$OCAML_IMAGE"             bash "$SCRIPTS/fptaylor.sh" "$PROBLEMS/$PROBLEM"

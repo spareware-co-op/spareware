@@ -24,7 +24,7 @@
 //! and placements, terrain networks and point-cloud references. Generated EXPRESS tables (G416) are
 //! committed here by `geom-gen`.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G421, G422, G423, G424, G426.

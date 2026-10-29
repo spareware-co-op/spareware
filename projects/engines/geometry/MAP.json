@@ -166,6 +166,28 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "[`sign_of_det2`], at most [`ITERATIONS`] passes of a few comparisons, subtractions and one Euclidean division each. [`sign_of_det3`], at most [`DET3_PASSES`] passes, each at most about 480 calls of [`sign_of_det2`]; its search keeps up to 119 lattice points in a fixed array of 2,856 bytes. No allocation, no recursion.",
+          "does": "[`sign_of_det2`] finds the sign of x1·y2 − y1·x2 from the four entries without ever forming a product: it compares, subtracts and divides, keeping every value within the entries' own magnitude, and [`orient2d`] applies it to the three points' translations, as the generated `orient2d` does. [`sign_of_det3`] finds the sign of a 3 × 3 determinant the same way, by a walk in the lattice its first two rows span whose every test is a [`sign_of_det2`], and [`orient3d`] applies it to the four points' translations, as the generated `orient3d` does. A product is never computed, so no value needs more bits than a few entries: the method answers in 64-bit arithmetic where the exact paths need 128 bits.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/avnaim.rs",
+          "guarantees": [
+            "**The exact sign.** For every four entries of magnitude at most [`ENTRY_MAX`], the result is the sign of x1·y2 − y1·x2 (tested against 128-bit products and against the generated `orient2d` in this crate's `tests/avnaim.rs`, and against big integers by geom-fuzz's `variants` target). For every nine entries of magnitude at most [`DET3_ENTRY_MAX`], the result of [`sign_of_det3`] is the determinant's sign (tested against big integers here, and against the generated `orient3d` in this crate's `tests/avnaim.rs` and geom-fuzz's `variants` target). An entry past its bound is refused with `None`, never answered.",
+            "**Checked and bounded.** Every step is a checked method. [`sign_of_det2`]'s loop runs at most [`ITERATIONS`] times: each pass either answers or replaces the second row by one whose entries are below half the first row's, so the entries halve at least every two passes. [`sign_of_det3`] runs at most [`DET3_PASSES`] passes, each with a lattice search of at most 119 doublings and 118 halvings, kept in a fixed array."
+          ],
+          "job": "The signs of 2 × 2 and 3 × 3 integer determinants in single-precision arithmetic, by Avnaim, Boissonnat, Devillers, Preparata and Yvinec's method: chapter 23.3's reference for the exact paths of orientation (piece G42). It lives here, in a development crate, because it is a reference to measure against, not a path the kernel ships: G42's report measured it and did not adopt it, so it is outside the foundation set's coverage and mutation gates (28.8), which its pass limits, never reached, could not meet by test.",
+          "method": {
+            "links": [
+              "doi:10.1007/BF02522822",
+              "https://inria.hal.science/inria-00090613"
+            ],
+            "text": "Avnaim, Boissonnat, Devillers, Preparata and Yvinec, \"Evaluating signs of determinants using single-precision arithmetic\", Algorithmica 17 (1997), sections 2 and 3, doi:10.1007/BF02522822 (the authors' report: <https://inria.hal.science/inria-00090613>). Signs first: an entry of zero leaves one product, and entries of mixed signs settle the sign or are made positive by negating rows and columns. Then, with the rows ordered so that x2 ≥ x1 and y2 ≥ y1, the Euclidean step x2 = k·x1 + xr, yr = y2 − k·y1 keeps the determinant (|x1 y1; xr yr|), and the halves of the first row settle it or give a smaller second row: (xr, yr) when both lie in the lower halves, (x1 − xr, y1 − yr) when both lie in the upper, which negates the determinant. The paper writes that last determinant without the change of sign; it is −|x1 y1; xr yr|, as expanding both shows, and this module follows the expansion."
+          },
+          "path": "geom_bench::avnaim",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "reading and parsing the files, then O(n log n) for n benchmarks.",
           "does": null,
           "family": [],
@@ -198,19 +220,20 @@
           "target": "bin"
         },
         {
-          "cost": "that of the command it runs (`geom_bench::guest`).",
-          "does": null,
+          "cost": "that of the command it runs (`geom_bench::guest`); `time` runs for about six times its duration.",
+          "does": "besides `geom_bench::guest`'s commands,",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs",
           "guarantees": [
-            "those of `geom_bench::guest`, unchanged: the exit status and output are exactly the ones it returns."
+            "for every other command, those of `geom_bench::guest`, unchanged: the exit status and output are exactly the ones it returns. `time` exits 0 with its line, or 2 for an unknown benchmark or a duration that is not a number from 1 to 60,000."
           ],
-          "job": "`geom-bench-guest`: the program the WebAssembly fuel gate runs inside Wasmtime, built for `wasm32-wasip1`. It also runs natively. Everything it does is in `geom_bench::guest`, whose documentation gives its commands, its exit status and how the fuel gate uses them; this program only passes on its arguments, output and status.",
+          "job": "`geom-bench-guest`: the program the WebAssembly fuel gate runs inside Wasmtime, built for `wasm32-wasip1`. It also runs natively. Everything it does is in `geom_bench::guest`, whose documentation gives its commands, its exit status and how the fuel gate uses them; this program only passes on its arguments, output and status, except for one command of its own, `time`.",
           "method": {
             "links": [
-              "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646"
+              "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646",
+              "https://docs.rs/divan/0.1.21/divan/"
             ],
-            "text": "fuel metering (`Config::consume_fuel`, <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>) by differencing two runs (see `geom_bench::guest`)."
+            "text": "fuel metering (`Config::consume_fuel`, <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>) by differencing two runs (see `geom_bench::guest`); for `time`, the median of repeated fixed-duration rounds after a warm-up round, as wall-clock benchmark harnesses take it (divan's sample-and-median design, <https://docs.rs/divan/0.1.21/divan/>)."
           },
           "path": "geom-bench-guest",
           "provenance": [
@@ -773,6 +796,26 @@
             "text": "the operand classes that take each path of schoolbook multiple-precision arithmetic (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>): short operands, full-width operands, carries out of the top limb."
           },
           "path": "geom_bench::inputs::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the `Wide` batch's draws and one pass to split it, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/wide32.rs",
+          "guarantees": [
+            "every batch is full where its class exists, and the same on every target; each value is the value of the `Wide` input it was split from, so its class is that input's (`tests/inputs.rs`); every result is checked by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for the fixed-width integers in 32-bit limbs, `Wide32<M>` (piece G42): for each operation, the batch of the `Wide` operation of the same bit width ([`super::wide`]), drawn from the `Wide32` benchmark's own seed, each value split into twice as many 32-bit limbs; and pairs of `i64` for [`Wide32::product_i64`].",
+          "method": {
+            "links": [
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "the operand classes of schoolbook multiple-precision arithmetic, as [`super::wide`] (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>); a value's 64-bit limb k is its 32-bit limbs 2k and 2k + 1."
+          },
+          "path": "geom_bench::inputs::wide32",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1421,6 +1464,29 @@
           "target": "lib"
         },
         {
+          "cost": "per input, the registered descriptions parsed and evaluated once each in big integers, and three exact-path calls per predicate; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into the inputs the predicates take: six 2D and five 3D grid points from `geom-test`'s [`GridSampler`], and twelve plane-normal coordinates of 83 bits and four plane offsets of 125 bits, each an extreme, zero, a small value or a value of a random bit length. [`check`] evaluates each registered predicate's description (geom-gen's `PREDICATES`, read by its `predicate_lang::parse`) on those inputs in big integers, and compares the shipped `value`, the plain-`i128` variant (`geom_num::generated::plain`) and the width-aware limb variant (`geom_num::generated::limbs`) with that exact value, and Avnaim et al.'s signs of orient2d and orient3d (`geom_bench::avnaim`) with its sign. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/variants.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to inputs inside every predicate's domain: grid points (magnitude at most 2^40 − 1), aimed at the frame's extremes and at degenerate configurations, and rounded inputs within their declared bits.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; longer inputs only add bytes nobody reads.",
+            "**An independent oracle.** The exact value is the description's own arithmetic in `num-bigint`'s arbitrary-precision integers, read from the description's text, not from the generated code or the fixed-width integers it uses.",
+            "**A wrong or missing value is a [`Finding`]** naming the predicate, the variant, the inputs, what the variant returned and the exact value. Every input is in the domain, so a `None` is a finding too."
+          ],
+          "job": "Fuzz target: every variant of every generated exact path returns the exact value (chapter 23.3; piece G42).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "differential testing against an exact oracle, as chapter 23.3 asks of every variant (\"the differential fuzzer checks every variant against a rational oracle\"), `projects/engines/geometry/architecture/23-performance.md`, with `num-bigint`'s integers; the descriptions' integer values need no rational."
+          },
+          "path": "geom_fuzz::variants",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one operation on `Wide` and one on `BigInt` per input, at most O(L²) for a product of L ≤ 12 limbs, plus up to seven `resize` targets; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a width, an operation and two operands of that width (and, for `resize`, a second width). [`check`] runs the operation on `geom_num::wide::Wide` and on `num-bigint`'s `BigInt`, an arbitrary-precision oracle that shares no code with it, and compares: the exact result when it fits the width and `None` exactly when it does not, for `checked_add`, `checked_sub`, `checked_neg` and `checked_mul`; the order (`Ord`, `==`); the sign (`signum`, `is_negative`, `is_zero`); `resize` to every other width; and the `i128` conversions both ways. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
@@ -1516,13 +1582,13 @@
       "modules": [
         {
           "cost": "linear in the number of limbs for addition and shifts, quadratic for multiplication; the generator's numbers have at most a few dozen limbs.",
-          "does": "[`Nat`] is a natural number of any size (little-endian 64-bit limbs) with exact addition, multiplication, shifts, comparison and a decimal form; the predicate generator's bit-range certificate holds every bound as one. [`UPoly`] is a polynomial in u with non-negative whole coefficients: every bound of the filter's error analysis is one, because the analysis only adds, multiplies, and multiplies by u or by 1 + u. [`UPoly::round_up_to_f64`] gives the smallest `f64` at least the polynomial's exact value at u = 2^-53, as its bits.",
+          "does": "[`Nat`] is a natural number of any size (little-endian 64-bit limbs) with exact addition, multiplication, shifts, comparison and a decimal form; the predicate generator's bit-range certificate holds every bound as one. [`UPoly`] is a polynomial in u with non-negative whole coefficients: every bound of the filter's error analysis is one, because the analysis only adds, multiplies, and multiplies by u or by 1 + u. [`UPoly::round_up_to_f64`] gives the smallest `f64` at least the polynomial's exact value at u = 2^-53, as its bits, and [`Nat::nearest_f64`] the `f64` nearest a natural number, as the number it is: the largest a rounded input's `f64` copy can be.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/bignum.rs",
           "guarantees": [
             "**Exact or nothing.** Every operation is exact. One whose result would not fit (a coefficient beyond `u128`, a shift beyond `u32` bits, a value beyond the largest `f64`) returns `None`, never a rounded or wrapped value; nothing panics.",
             "**Canonical.** A [`Nat`] has no zero top limb and a [`UPoly`] no zero top coefficient, so equal values compare equal and print the same.",
-            "**Rounded up, once, on purpose.** [`UPoly::round_up_to_f64`] is the only rounding here, and it rounds towards +∞: the `f64` it gives is never below the exact value."
+            "**Rounded only on purpose.** [`UPoly::round_up_to_f64`] rounds towards +∞, so the `f64` it gives is never below the exact value; [`Nat::nearest_f64`] rounds to nearest with ties to even, exactly as the filters convert a rounded input. Nothing else here rounds."
           ],
           "job": "Exact numbers for the predicate generator: natural numbers of any size, and polynomials in the unit roundoff u = 2^-53 with whole coefficients.",
           "method": {
@@ -1647,6 +1713,31 @@
           "provenance": [],
           "spdx": null,
           "target": "bin"
+        },
+        {
+          "cost": "linear in the description's steps times the ways its scale's larger-ofs resolve (one per case); no allocation beyond the text.",
+          "does": "a generated filter computes the description's steps in `f64` on its inputs (coordinates, their differences, and the `f64` copies of wider integers), the scale S from the groups' maxima, and the bound `fl(C · scale)`, and answers when the computed value is beyond the bound. [`gappa_problem`] states exactly that computation in Gappa's binary64 with rounding to nearest, beside the same steps evaluated exactly, on whole-number inputs bounded by their groups' maxima, and asks Gappa to prove that the error is within K · S and the computed bound within a relative error R of C · S, with K = C · (1 − R): together, |error| ≤ K · S ≤ bound, so an answer has the exact sign. Where the result's scale has several monomials (the larger of `m_x^3 m_y` and `m_x m_y^3`, say), one problem cannot state it: [`gappa_case_problem`] states one problem per case ([`gappa_cases`]), the case where one group's maximum is the largest when the monomials share one degree, and otherwise where one monomial is the largest of the result's, each with S that monomial and the hypotheses the case implies. [`fptaylor_problem`] states the normalised problem for `FPTaylor`, each step divided by its scale S(v), the largest of its monomials at the group maxima, so every input is in [−1, 1] and the result's scale is 1, with a ratio parameter in [0, 1] where a sum's operand has a smaller scale set; one problem covers every input, with the same K, which HOL Light compares the certificate's bound with. [`proof_sentence`] is the label: proven, naming the problems, when the Gappa problems state the filter in every case, and otherwise \"checked, not proven\" with the open issue [`UNPROVEN`] gives it. Every problem carries Gappa's hints and HOL Light's bound in its text, so the tools' runs need nothing else.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-gen/src/predicate_certificates.rs",
+          "guarantees": [
+            "**The shipped steps.** Each problem holds one rounded definition per operation of the filter, in the generated code's order, with its operands and operation, and the constant and the scale's product order as the code has them; `tests/certificate_problems.rs` holds the committed problems to the committed filters statement by statement.",
+            "**Every input covered, nothing assumed that fails.** A filter's cases together cover every input, one problem for each way its scale's larger-ofs resolve, and each hypothesis holds for every input of its case; `tests/certificate_problems.rs` justifies each one independently.",
+            "**Exact numbers.** R = (k + 1)u, for the k roundings between the maxima and the bound, bounds the bound's relative error ((1 + u)^k − 1 < (k + 1)u for u = 2^−53), and K = C · (1 − R) is computed exactly from the constant's bits: both are dyadic, written exactly. A rounded input's largest copy is its bound rounded to the nearest `f64`, exactly ([`crate::bignum::Nat`]).",
+            "**Refused, never approximated.** A filter the Gappa problems cannot state (a scale term formed from more than two inputs, say) is refused with the reason, and its label says \"checked, not proven\" with its issue; with no issue in [`UNPROVEN`] its module cannot be generated.",
+            "**Ratios, never more.** Each ratio parameter of an `FPTaylor` problem is S(operand) / S(sum) for the pairs of scale sets named in the problem's header, each the same ratio once their common factor is cancelled, and every use of it is one of those pairs: the problem's box holds every input's normalised values, never fewer."
+          ],
+          "job": "The problems that machine-check a predicate filter's error bound (chapter 28.6 of the kernel architecture; pieces G35 and G40): the filter's claim stated for Gappa, whose proof Rocq checks, and for `FPTaylor`, whose certificate HOL Light checks; and the label each generated module carries, proven or \"checked, not proven\".",
+          "method": {
+            "links": [
+              "https://doi.org/10.1051/ita:2007005",
+              "https://doi.org/10.1145/3230733"
+            ],
+            "text": "Melquiond and Pion's certified semi-static filters, Gappa proofs of a homogeneous predicate's error as a multiple of the product of its inputs' maxima (*Formally certified floating-point filters for homogeneous geometric predicates*, RAIRO Theoretical Informatics and Applications 41 (2007), <https://doi.org/10.1051/ita:2007005>), with Gappa's `LIN` predicate (`a // b`) in place of their special rounding operators, which current Gappa no longer has, and a case split for a scale that takes a larger-of; and `FPTaylor`'s symbolic Taylor forms on the normalised problem (Solovyev et al., *Rigorous Estimation of Floating-Point Round-off Errors with Symbolic Taylor Expansions*, ACM TOPLAS 41 (2018), <https://doi.org/10.1145/3230733>)."
+          },
+          "path": "geom_gen::predicate_certificates",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         },
         {
           "cost": "linear in the number of steps, times the size of the numbers (a few limbs, a few dozen coefficients) and of the scale sets (a few monomials).",
@@ -1774,15 +1865,15 @@
           "target": "lib"
         },
         {
-          "cost": "each generator derives one predicate, or all eleven for the parent module: a few hundred exact operations each.",
-          "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them. `geom-num`'s `predicate.rs` calls the four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane ones, and `crossing.rs` the 2D crossing ones.",
+          "cost": "each generator derives one predicate, or all eleven for the parent module and each variant: a few hundred exact operations each.",
+          "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] and [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane ones, and `crossing.rs` the 2D crossing ones.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicates.rs",
           "guarantees": [
             "**The same formulas as `predicate.rs`, `plane.rs` and `crossing.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term; `tpi_weight` and `tpi_side` evaluate the three-plane point's weight and its classification as `Tpi::homogeneous` and `Plane::side_of_tpi` do, except that the classification subtracts n · (−X) where `plane.rs` adds n · X, the same value; and the line-plane and crossing descriptions evaluate what `plane.rs` and `crossing.rs` document for them, step for step.",
             "**Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every target."
           ],
-          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight` and `predicate-ssi-side`: the kernel's predicates, from their descriptions.",
+          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`, `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`, `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`, `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`, `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that machine-check the filters' error bounds ([`crate::predicate_certificates`]).",
           "method": {
             "links": [
               "https://doi.org/10.1016/j.cad.2015.10.004",
@@ -2610,7 +2701,7 @@
         "Every predicate returns a [`sign::Sign`], never a number, and is exact: no rounding decides a sign. A computation that cannot complete is reported as [`NumError::BudgetExceeded`], never answered; no input can cause one, only a defect in this crate.",
         "A [`plane::Plane`] and a [`plane::Tpi`] check their bit budgets when they are made, so every computation on them fits its type.",
         "Committing a three-plane point to the grid ([`plane::Tpi::to_grid`]) rounds each coordinate to the nearest step, ties to even, moving it by at most half a step ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.",
-        "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
+        "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] and [`wide32`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
         "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1). Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
         "Every interval operation encloses the exact result of its operation on any reals in its operands, and an enclosure that needs a maths function without a proven error is refused ([`NumError::UnprovenMaths`]).",
         "A bound carries its grid step, and bounds add exactly in the finer step ([`exactness::Exactness`]).",
@@ -2630,7 +2721,8 @@
           "guarantees": [
             "Every result is exact, or an error. A [`Sign`] is decided by integer arithmetic alone, never by a rounded crossing point, so an arrangement built on these answers is consistent.",
             "Nothing overflows silently. Every step is a checked operation in `i128` or a fixed-width [`Wide`] integer, and a step that did not fit would be reported as [`NumError::BudgetExceeded`], never answered; for grid points no step can fail (the budgets on [`Ssi::homogeneous`] and [`Ssi::orient2d`]).",
-            "Deterministic: integers only, except the generated `f64` filters, whose answers are proven to be the exact sign or no answer (chapter 6.2); no platform maths and no allocation."
+            "Deterministic: integers only, except the generated `f64` filters, whose answers are proven to be the exact sign or no answer (chapter 6.2); no platform maths and no allocation.",
+            "**Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here). Verus proves that the generated exact paths of `ssi_weight` and `ssi_side`, which every answer here rests on, compute their values exactly and never overflow for every input in their declared ranges (piece G39: the twins in `verus/generated/`, token for token the shipped modules), on [`Wide`] arithmetic that is itself proven exact (G37). The routing between filter and exact path, the homogeneous coordinates' budgets and the rounding to the grid are tested against exact oracles, not proven (`tests/attack_g29.rs`, `tests/verification.rs` and this module's tests), and the filters' error bounds are checked against exact arithmetic until G40 certifies them."
           ],
           "job": "Where two lines cross in the plane, exact: the implicit point where the line through two grid points crosses the line through two others, which side of a third line it lies on, and committing it to the grid.",
           "method": {
@@ -2676,7 +2768,8 @@
             "**The rounded part is the IEEE 754 result.** `s` is `a + b` and `p` is `a * b` as Rust computes them (round to nearest, ties to even). An exact error is at most half a unit in the last place of that result, so the pair does not overlap: `s + e` rounds back to `s`.",
             "**One zero.** A second part that is zero is +0, never −0: the exact error of a sum or a product, and the low half of a split, whatever the signs of the inputs and however Veltkamp's split falls. So the second part depends on the exact pair alone, as an exact zero does in IEEE arithmetic (a zero sum of operands of opposite signs is +0 under round to nearest, IEEE 754-2019, section 6.3) and as it does for a two-product by fused multiply-add. Hence [`fast_two_sum`] and [`two_sum`] agree bit for bit (a NaN aside, whose bits Rust does not fix), and `two_prod(−a, b)` is `(−p, −e)` for a nonzero `e` and `(−p, +0)` for a zero one. Where the last step of an algorithm can give −0, the function adds +0, which turns −0 into +0 and leaves every other value as it is (the proof is on the crate's one helper for it, `zero_to_plus` in `real.rs`, which [`crate::interval`] uses too); each function's documentation shows where that is needed and why it is needed nowhere else.",
             "**Deterministic.** Only `+`, `−`, `×` and `÷` on `f64` (`÷` only by a power of two), comparisons, and reads and writes of a double's bits. Rust computes these to IEEE 754 binary64, each rounded once, on every target the kernel builds for (RFC 3514). The RFC names the exception itself: on 32-bit x86 without SSE2 (the i586 targets) the x87 unit computes with a different precision and so can round twice, which would break these algorithms; the kernel does not support those targets. The RFC also rules out fusing `a * b + c` into one fused multiply-add, which would break them too, and none is used on purpose either: `two_prod` follows Dekker's splitting instead of `mul_add`, which `core` lacks and which is a slow software call on wasm32 (evidence note 05, section 1).",
-            "**No integer overflow.** The only integer steps that run are on the 11-bit exponent fields: bit masks, shifts by 52 places that keep the field inside 64 bits, `abs_diff`, which is exact for every input, and `checked_sub`, whose `None` ends a loop. There is no other integer arithmetic at run time (the compiler alone evaluates the checks on the constants, where an overflow would stop the build) and no cast, so nothing here depends on overflow checks being on."
+            "**No integer overflow.** The only integer steps that run are on the 11-bit exponent fields: bit masks, shifts by 52 places that keep the field inside 64 bits, `abs_diff`, which is exact for every input, and `checked_sub`, whose `None` ends a loop. There is no other integer arithmetic at run time (the compiler alone evaluates the checks on the constants, where an overflow would stop the build) and no cast, so nothing here depends on overflow checks being on.",
+            "**Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that `split` adds back exactly or reports, for every finite double; that `two_sum` and `fast_two_sum` agree and give the rounded sum and its error for every finite operand against five others, in either order (against the largest double, for operands below 2^969, where no step overflows; the overflow fallback is only tested, because its NaN intermediate trips Kani's NaN check; over every pair of operands at once the solver ran past CI's hour); and that `two_prod` gives the rounded product and its error for every finite first factor against 3, the splitter, 2^996 and the smallest subnormal, and for every first factor whose significand has at most 14 bits (every sign and exponent) against −0.1 and the largest double: one factor for each of its paths. The proofs module has one harness per value, with kissat as the SAT solver; the `two_prod` harnesses unwind `scale`'s loop at most three times (its callers pass at most 1074, so it steps at most twice), and Kani checks that bound is enough. In WSL (2026-10-28, sharing the machine) the full-width harnesses took 4 to 54 minutes and the 14-bit ones up to 26; with all 53 bits free, −0.1 and the largest double ran past four hours. Every other pair, and everything through the fused multiply-add, is tested against exact rationals."
           ],
           "job": "Error-free transformations: a rounded sum or product of two doubles and its exact error.",
           "method": {
@@ -2699,7 +2792,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/error.rs",
           "guarantees": [
-            "each variant says what was wrong in plain words, and carries the value that caused it where one value does, so an operation higher up can turn it into a structured error with remedies (chapter 22)."
+            "each variant says what was wrong in plain words, and carries the value that caused it where one value does, so an operation higher up can turn it into a structured error with remedies (chapter 22). What is proven and what is only tested (chapter 28.7; piece G41): there is no arithmetic here to prove; the messages, including the saturated coordinates', are tested."
           ],
           "job": "Errors from the numbers layer.",
           "method": {
@@ -2719,7 +2812,8 @@
             "**Exact, then correctly rounded.** [`ExactSum::round`] returns the exact sum of every finite term added (directly, by [`ExactSum::add_slice`] or [`ExactSum::add_iter`], or through merges) rounded to the nearest double, ties to even, as a [`Real`]. An exact zero is +0, whatever the signs of the zero terms (as in Neal's code). The tests hold it bit for bit to an exact oracle (`dashu`).",
             "**Order-free.** The result depends on the multiset of terms only: not on their order, on how they were split into slices or accumulators, on the order or shape of the merges, or on which of the two internal paths (below) took them. The state's value is the exact sum, the special flags are an OR and a maximum, and the rounding is a function of the value.",
             "**Special values as Neal specifies.** A NaN or an infinity among the terms does not disturb the finite sum; [`ExactSum::round_ieee`] then returns, in this order of precedence: a NaN, the one with the largest payload (its 52 fraction bits read as an integer) with its sign cleared, if any term was a NaN; a NaN if both +∞ and −∞ were added; the infinity if only one sign was; otherwise the rounded finite sum, which is ±∞ when its magnitude is at least 2^1024 − 2^970 (an overflow, possible even when every term is finite). [`ExactSum::round`] reports all of these as [`NumError::NotFinite`], so the kernel never sees a NaN or an infinity from it.",
-            "**No silent overflow.** Integer arithmetic is checked, except the one addition Neal's method defines modulo 2^64 (the large accumulator's chunks, below), where wrapping is the specification. The accumulator holds magnitudes below 2^1100, so it cannot overflow before 2^64 terms have been added (a term at most Ω < 2^1024, counted once for every accumulator it reaches through merges); should an internal step ever fail, the sum is marked lost and [`ExactSum::round_ieee`] gives Neal's report for it, a NaN with every payload bit set."
+            "**No silent overflow.** Integer arithmetic is checked, except the one addition Neal's method defines modulo 2^64 (the large accumulator's chunks, below), where wrapping is the specification. The accumulator holds magnitudes below 2^1100, so it cannot overflow before 2^64 terms have been added (a term at most Ω < 2^1024, counted once for every accumulator it reaches through merges); should an internal step ever fail, the sum is marked lost and [`ExactSum::round_ieee`] gives Neal's report for it, a NaN with every payload bit set.",
+            "**Bounded proofs, and what is only tested.** Kani proves (piece G41, chapter 28.7) that adding one term never panics, that a finite term rounds back to itself and a non-finite one is reported, and that a finite term and its negation cancel to +0, for every sign and every fraction at the exponent fields 0, 1, 31, 32, 1023 and 2046 (and 2047, the non-finite terms): the subnormals, the smallest binade, the two binades either side of the first chunk boundary, one's binade and the largest, one harness per field with kissat as the SAT solver. Each unwinds every loop at most 68 times (the 67 chunks, and one more for the loop's exit), and Kani checks that bound is enough; without it the slices whose length depends on the term unwind without end. Every other exponent field, and every sum of more than one term, is tested bit for bit against the exact oracle."
           ],
           "job": "`ExactSum`: the exact sum of any number of doubles, rounded once, to nearest, at the end.",
           "method": {
@@ -2760,7 +2854,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/incircle.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-incircle-x.g`, `gappa-incircle-y.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-incircle.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-incircle` (seed: none, it uses no randomness), from the description `INCIRCLE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2780,7 +2874,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/insphere.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-insphere-x.g`, `gappa-insphere-y.g`, `gappa-insphere-z.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-insphere.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-insphere` (seed: none, it uses no randomness), from the description `INSPHERE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2795,12 +2889,32 @@
           "target": "lib"
         },
         {
+          "cost": "the predicate module's steps; a product of operands of A and B limbs is A · B 32 × 32 → 64-bit limb multiplies, and the result's conversion back is linear in its limbs.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/limbs.rs",
+          "guarantees": [
+            "as each predicate module's `value`. Every step is a checked method, the certificate in the predicate module's header bounds every step within the type it is held in here (a type at least as wide as the one the certificate names), so a step never returns `None` for an input in the domain; nothing depends on overflow checks being on. geom-gen's independent checker re-derives every line from its own derivation, and the bounded proofs at the end of the module show, for every kind of limb step, that it never returns `None` on any operand its certified bits allow."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-variant-limbs` (seed: none, it uses no randomness), from the descriptions in `projects/engines/geometry/crates/geom-gen/src/predicates.rs` and `projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs`. Do not edit: change the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "each predicate's steps as its module's certificate derives them, each held in as many 32-bit limbs as its operands' certified bits need, chapter 23.3's width-aware limbs, `projects/engines/geometry/architecture/23-performance.md`, with the schoolbook limb arithmetic of `crate::wide32`."
+          },
+          "path": "geom_num::generated::limbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the filter is 28 `f64` operations, after 8 rounded input(s) converted to `f64`, then 14 magnitudes and their maxima and the bound's 31 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-lpi-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-lpi-side` (seed: none, it uses no randomness), from the description `LPI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2820,7 +2934,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/lpi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-lpi-weight-z-n.g`, `gappa-lpi-weight-y-n.g`, `gappa-lpi-weight-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-lpi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-lpi-weight` (seed: none, it uses no randomness), from the description `LPI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2842,7 +2956,7 @@
           "guarantees": [
             "**A filter never gives a wrong sign.** When `filter` returns `Some(sign)`, `sign` is the sign of the exact value, for every input in the domain (the proof below). It returns `None` when it cannot tell, never a guess.",
             "**The exact path is exact.** `value` returns the exact value for every input in the domain: the certificate bounds every intermediate within its type, and a step that did not fit would give `None`, never a wrapped value, since every step is a checked method. Nothing depends on overflow checks being on.",
-            "**Checked, not proven** (chapter 28.6). The bounds are derived exactly by the written proof below and re-derived by an independent checker in geom-gen's tests (its own parser, big integers and analysis), which also reads this committed code, this module's helpers included; the filters are tested against the exact paths on millions of random and near-degenerate inputs at the grid's extremes and on inputs placed just inside and just outside each bound. They are not yet machine-checked by `FPTaylor` or Gappa, which chapter 28.6 asks before a filter is called proven.",
+            "**Proven, or checked and labelled so** (chapter 28.6). The bounds are derived exactly by the written proof below and re-derived by an independent checker in geom-gen's tests (its own parser, big integers and analysis), which also reads this committed code, this module's helpers included; the filters are tested against the exact paths on millions of random and near-degenerate inputs at the grid's extremes and on inputs placed just inside and just outside each bound. On top of that, each module's guarantees say whether its filter's bound is machine-checked: proven where Gappa's proofs, checked by Rocq, cover every input (`kernel-certificates.yml`, pieces G35 and G40), and \"checked, not proven\" with its open issue otherwise.",
             "**Deterministic.** `f64` addition, subtraction and multiplication are correctly rounded on every target and Rust never fuses them (RFC 3514); the conversion of a rounded input rounds to nearest, ties to even, on every target; the maxima use comparisons only. The same inputs give the same answer on every target, and the answer is the exact sign whenever it is given, so the filter can never change a result.",
             "**No overflow, no underflow, no NaN, no panic, no allocation.** Every value the filter computes is a whole number below 2^1000 in magnitude (checked by the generator), so none is subnormal or infinite."
           ],
@@ -2866,7 +2980,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/orient2d.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-orient2d.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-orient2d.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-orient2d` (seed: none, it uses no randomness), from the description `ORIENT2D` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2886,7 +3000,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/orient3d.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-orient3d.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-orient3d.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-orient3d` (seed: none, it uses no randomness), from the description `ORIENT3D` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2901,12 +3015,32 @@
           "target": "lib"
         },
         {
+          "cost": "the predicate module's `value`, with each product at the width of its result.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/plain.rs",
+          "guarantees": [
+            "as each predicate module's `value`. Every step is a checked method, the certificate in the predicate module's header bounds every step within the type it is held in here (a type at least as wide as the one the certificate names), so a step never returns `None` for an input in the domain; nothing depends on overflow checks being on. geom-gen's independent checker re-derives every line from its own derivation."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-variant-plain` (seed: none, it uses no randomness), from the descriptions in `projects/engines/geometry/crates/geom-gen/src/predicates.rs` and `projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs`. Do not edit: change the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "each predicate's steps as its module's certificate derives them, held as chapter 23.3 describes the baseline of its comparison of exact-path variants, `projects/engines/geometry/architecture/23-performance.md`."
+          },
+          "path": "geom_num::generated::plain",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the filter is 6 `f64` operations, after 4 rounded input(s) converted to `f64`, then 7 magnitudes and their maxima and the bound's 4 multiplication(s); the exact path, run only when the filter cannot decide, is 6 checked integer operations.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/plane_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every input (`gappa-plane-side-d.g`, `gappa-plane-side-z-n.g`, `gappa-plane-side-y-n.g`, `gappa-plane-side-x-n.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-plane-side.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-plane-side` (seed: none, it uses no randomness), from the description `PLANE_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2926,7 +3060,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/ssi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-ssi-side.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-ssi-side.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-ssi-side` (seed: none, it uses no randomness), from the description `SSI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2946,7 +3080,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/ssi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-ssi-weight.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-ssi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-ssi-weight` (seed: none, it uses no randomness), from the description `SSI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2966,7 +3100,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-tpi-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-tpi-side` (seed: none, it uses no randomness), from the description `TPI_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -2986,7 +3120,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/generated/tpi_weight.rs",
           "guarantees": [
-            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign."
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven (chapter 28.6): Gappa proves it for binary64 (`gappa-tpi-weight.g`, in `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks the proof; `FPTaylor` bounds it independently, and HOL Light checks its certificate (`fptaylor-tpi-weight.fpt`); `kernel-certificates.yml` runs them on every change and every night."
           ],
           "job": "Generated by geom-gen, generator `predicate-tpi-weight` (seed: none, it uses no randomness), from the description `TPI_WEIGHT` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
           "method": {
@@ -3106,7 +3240,8 @@
           "guarantees": [
             "**A finite result or an error, never NaN or an infinity.** Each function returns a [`Real`], or: - [`NumError::NotFinite`] when an argument is NaN or infinite (checked first), or the result would be infinite: an overflow, such as `exp(1000)`, or a pole, such as `ln(0)`; - [`NumError::OutsideDomain`] when the function has no real value there: the square root or a logarithm of a negative number, the arcsine or arccosine of a number beyond ±1, or a negative number to a power that is not a whole number. The domain is checked before the function is evaluated, so no function is evaluated where its value would be NaN.",
             "**Accuracy**, as the table below says: proven for the functions here, documented but not proven for those in [`unproven`].",
-            "**Deterministic.** The same bits on every target, thread count and build: the correctly rounded results by their specification, the others because they are the same pure-Rust code everywhere."
+            "**Deterministic.** The same bits on every target, thread count and build: the correctly rounded results by their specification, the others because they are the same pure-Rust code everywhere.",
+            "**Bounded proofs, and what is only tested.** Every function here returns its value through [`Real::new`], which Kani proves refuses exactly NaN and the infinities (`real`'s proofs), so none returns a NaN or an infinity, whatever its argument. Kani also proves (piece G41, chapter 28.7) that [`abs`], [`floor`], [`ceil`] and [`round_ties_even`] are exact for every finite double: a whole number (or the magnitude) at the right place, ties to even, and `NotFinite` for exactly the non-finite arguments. The correctly rounded functions rest on CORE-MATH's proofs and on IEEE 754 (for [`sqrt`] and [`fma`]), and are tested bit for bit against a big-number oracle (`tests/math_reference.rs`); their code (argument reduction, tables, polynomials) is beyond a bounded proof."
           ],
           "job": "The only place maths functions come from, with proven error bounds.",
           "method": {
@@ -3360,7 +3495,8 @@
             "The exact sign wins: where [`crate::predicate`]'s predicate is not zero, the perturbed one returns its sign unchanged.",
             "Consistent: the answers are the signs of one perturbed configuration of points, so every predicate agrees with every other on the same keyed points; swapping two arguments flips the sign, and every permutation multiplies it by its parity, as for the exact predicates.",
             "Keys, never addresses: the order is the keys' order alone, so the answers are the same on every run and every target, whatever the points' places in memory (Geogram's default, ordering by address, is exactly what chapter 6.2 rules out).",
-            "Deterministic: integers only, no floating point, no allocation, no recursion."
+            "Deterministic: integers only, no floating point, no allocation, no recursion.",
+            "Bounded proofs, and what is only tested: Kani proves (piece G41, chapter 28.7) that `distinct` refuses exactly the keys that repeat, for every two to five `u64` keys; that the lift |p|² of every frame point, in 2D and 3D, fits an `i128` (no step overflows); and that `bit_of` gives the bit for every index below 32 and refuses the rest. The cascade over the masks (up to 2^20 of them, each an exact determinant in [`I256`]) is beyond a bounded proof: its steps are [`I256`]'s, whose arithmetic Kani and Verus prove (`wide`), its bit budget is derived below, and it is tested against exact rationals on every tie class."
           ],
           "job": "Symbolic perturbation, ordered by persistent keys: orient2d, orient3d, incircle and insphere with no zero answer, for the algorithms that need every sign to be non-zero (Delaunay and constrained triangulations, ray parity; chapter 6.2).",
           "method": {
@@ -3394,7 +3530,8 @@
           "guarantees": [
             "Every result is exact, or an error. A [`Sign`] is decided by integer arithmetic alone; no rounding ever decides it. Only [`Tpi::to_grid`] rounds: it rounds the exact rational point to the nearest grid point (ties to even) and says whether it rounded, moving each coordinate by at most [`COMMIT_PER_AXIS`](crate::ladder::COMMIT_PER_AXIS), half a step.",
             "Nothing overflows, and nothing could wrap silently if it did. A [`Plane`] can only be made by [`Plane::through`] from grid points (within 2^40 − 1 steps of the origin), which checks the plane's budget below at construction (chapter 6.2); a [`Tpi`] can only be made by [`Tpi::new`], which checks that its homogeneous coordinates fit their types. Every intermediate fits its type by the derivation written on each function; the arithmetic of every derivation, and every figure in the table below, is asserted when the crate compiles (the budget exponents in the source, from `GRID_DIFFERENCE_BITS` on); and every operation, on `i128` and on wide integers alike, is checked, so none of this depends on a build with overflow checks. In summary, with B = 40 and every coordinate below 2^B in magnitude: | Quantity | Bound | Type | | --- | --- | --- | | Plane normal n | 2^(2B+3) = 2^83 | `i128` | | Plane offset d | 2^(3B+5) = 2^125 | `i128` | | Grid point against a plane, n · p + d | 2^126 | `i128` | | Three-plane denominator w | 2^(6B+12) = 2^252 | [`I256`] | | Three-plane numerators X | 2^(7B+14) = 2^294 | [`I320`] | | Three-plane point against a plane, n · X + d · w | 2^(9B+19) = 2^379 | [`I384`] | At B = 26 the same formulas give 9B + 19 = 253 bits, within the 256 bits EMBER uses for its 26-bit inputs (evidence note 05, section 4). The bounds are safe rather than tight: they bound every factor separately, and a triangle inside the frame cannot make every product maximal at once. With M = 2^40 − 1, what grid points can reach is |`n_i`| ≤ 4M² and |d| ≤ 4M³ (82 and 122 bits; derivations on [`Plane::through`]), |n · p + d| ≤ 16M³ (124 bits, on [`Plane::side`]), and from the plane bounds, because each of w, `X_i` and n · X + d · w is a determinant whose largest magnitude over a box of entries lies at a corner of the box, |w| ≤ 256M^6, |`X_i`| ≤ 256M^7 and |n · X + d · w| ≤ 4096M^9 (248, 288 and 372 bits; derivations on [`Tpi::homogeneous`] and [`Plane::side_of_tpi`]). Planes and three-plane points built from the corners of the frame's cube reach every one of these exactly (tested).",
-            "Deterministic: integers only, no floating point, no platform maths, no allocation."
+            "Deterministic: integers only, no floating point, no platform maths, no allocation.",
+            "**Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here). Verus proves that the generated exact paths of `plane_side`, `tpi_weight`, `tpi_side`, `lpi_weight` and `lpi_side`, which every answer here rests on, compute their values exactly and never overflow for every input in their declared ranges (piece G39: the twins in `verus/generated/`, token for token the shipped modules), on [`crate::wide`] arithmetic that is itself proven exact (G37). The budgets in the table above are asserted when the crate compiles; the constructors' checks, the routing between filter and exact path and the rounding to the grid are tested against exact oracles, not proven (`tests/plane.rs`, `tests/attack_plane.rs`), and the filters' error bounds are checked until G40 certifies them."
           ],
           "job": "Plane-based geometry, exact: integer planes, the implicit point where three planes meet, which side of a plane such a point lies on, and committing it to the grid.",
           "method": {
@@ -3423,7 +3560,8 @@
           "guarantees": [
             "**Exact for every input.** No rounding ever decides a sign, and `Zero` means exactly degenerate. Each predicate documents its degenerate cases, including which sign a degenerate but non-zero answer has.",
             "**The same answer in every build profile; no overflow, no panic.** Outside its tests this module uses no native `+`, `-` or `*` on a fixed-width integer, and no cast: every operation is a checked method (`checked_sub`, `checked_mul`, `checked_add`, `checked_neg`) that returns `None` instead of wrapping. So nothing here depends on overflow checks being on, which they are not in a default release build. `tests/attack_predicate.rs` scans this file's code to keep it that way.",
-            "**Deterministic.** The same answer on every target: the integer paths are exact, and the filter's `f64` operations are correctly rounded everywhere and give a sign only when it is the exact sign."
+            "**Deterministic.** The same answer on every target: the integer paths are exact, and the filter's `f64` operations are correctly rounded everywhere and give a sign only when it is the exact sign.",
+            "**Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here). Verus proves that the generated exact paths of [`orient2d`], [`orient3d`], [`incircle`] and [`insphere`] compute their determinants exactly and never overflow, for every grid input (pieces G36 and G38: the twins in `verus/generated/`, token for token the shipped modules), and that the [`crate::wide`] arithmetic they run on is exact (G37). Kani proves that [`orient2d`] answers with the exact sign, nothing panicking or overflowing on the way, filter and routing included, for every coordinate within one step of 0 or of an edge of the frame (piece G14: geom-fuzz's `orient2d_proof`). The filters' error bounds are checked against exact arithmetic, not proven, until pieces G35 and G40 certify them; the routing and every other input are tested against exact oracles (`tests/attack_predicate.rs`, the verification suite)."
           ],
           "job": "Exact geometric predicates on grid points: orientation in 2D and 3D, in-circle and in-sphere.",
           "method": {
@@ -3549,6 +3687,28 @@
             "text": "schoolbook addition, subtraction and multiplication on magnitudes with 128-bit intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>). There is no division: predicates never need it."
           },
           "path": "geom_num::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for `L` limbs, addition, subtraction, negation, comparison and conversion are O(L) limb operations; a product of an `A`-limb and a `B`-limb value is A · B limb products, each one 32 × 32 → 64-bit multiply, on the stack with no allocation.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
+          "guarantees": [
+            "**Checked.** Every arithmetic operation and conversion returns `None` when the true result does not fit, and never wraps silently: a certificate that was wrong shows as `None`, never as a wrong sign.",
+            "**Checked inside too.** A limb sum or difference uses `overflowing_add` or `overflowing_sub`, which return the full result as the low 32 bits and the carry or borrow; only the carry out of the top limb is dropped, as two's complement defines, before the sign test that decides overflow. A limb product uses `checked_mul` and `checked_add` on `u64`, which cannot fail ((2^32 − 1)² + 2 (2^32 − 1) = 2^64 − 1, written beside each), split into its 32-bit halves through its bytes, with no cast and no shift. Nothing depends on overflow checks being on.",
+            "**The same values as `Wide`.** Each operation gives the value [`crate::wide::Wide`]'s gives on the same integers (tested against it and against big integers below and in `tests/attack_g42.rs`)."
+          ],
+          "job": "Fixed-width signed integers in 32-bit limbs, for the width-aware limb variant of the exact paths.",
+          "method": {
+            "links": [
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "schoolbook addition, subtraction and multiplication on magnitudes with 64-bit intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>), as [`crate::wide::Wide`] with 32-bit limbs; the products of operands of different widths follow the same algorithm with the operands' own limb counts. There is no division: predicates never need it."
+          },
+          "path": "geom_num::wide32",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4552,7 +4712,7 @@
           "target": "bin"
         },
         {
-          "cost": "one `cargo metadata`, a copy of `libm`'s crate, and one build and run of `geom-num`'s determinism test against the changed copy.",
+          "cost": "one `cargo metadata`, a copy of `libm`'s crate, and one build and run of `geom-num`'s determinism test against the changed copy; with `--golden-run`, a build of `golden`, a second `cargo metadata`, and one build and run of every golden's test target instead.",
           "does": "`prove` finds the `libm` the workspace resolves (`cargo metadata --locked`), copies its crate into `<dir>/guard/libm-<version>`, applies [`geom_test::guard::perturb_sin`] (`sin`'s last bit flipped), and runs `cargo test --release -p geom-num --test determinism` with that copy patched in for `libm` (`--config patch.crates-io.libm.path=...`), building in `<dir>/guard/target` so the workspace's own build is untouched. It prints the run's output and then [`geom_test::guard::verdict`]'s answer: the golden `geom-num/determinism` must report a digest that differs from the store's. `<dir>` defaults to the workspace's `target` folder.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/guard.rs",
@@ -4650,6 +4810,23 @@
             "none": "it parses its arguments and calls [`geom_test::scan::repo`], whose module headers carry the method."
           },
           "path": "source-scan",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "one read and two writes of the file, and one run of the command.",
+          "does": "finds the violation `<violation>` in [`geom_test::trip::VIOLATIONS`], plants it in the working tree ([`geom_test::trip::apply`]: one line of one kernel file changed), runs the gate's command from the repository root, prints its output, restores the file, and prints [`geom_test::trip::verdict`]'s answer: the command must fail, printing the tool's own report of the violation.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/trip.rs",
+          "guarantees": [
+            "the file is restored byte for byte after the run, whether the run passed, failed or could not start; `RUSTUP_TOOLCHAIN`, which a `cargo run` passes down, is removed from the command's environment, so the command picks its toolchain as the job would (Verus names its own). Exit codes: 0 when the gate tripped as it must; 1 when it did not (the run passed, or failed for another reason); 2 for a usage error or a step that cannot be done."
+          ],
+          "job": "`trip`: proves a gate that runs an outside tool fails on a planted violation (gate 1, piece G43).",
+          "method": {
+            "none": "it runs the command and calls [`geom_test::trip`], whose module header carries the method."
+          },
+          "path": "trip",
           "provenance": [],
           "spdx": null,
           "target": "bin"
@@ -5992,9 +6169,10 @@
           "guarantees": [
             "**The language's own grammar.** Comments, strings, raw strings, character literals and nested block comments are told apart by `proc-macro2`'s lexer, and items by `syn`'s parser, so a brace or a word inside a string or a comment is never read as code.",
             "**An error, never a partial answer.** A file that does not parse as Rust is a [`ScanError`] naming the line, because a gate must not pass on a file it could not read.",
+            "**What a test reaches is read from its tokens.** [`references`] walks token trees, not expressions, so code inside any macro's arguments is read as the compiler will expand it in the common case; it follows only the file's own items, by name, and when two items in different modules share a name it follows both, which can only find more.",
             "**A comment is a comment.** A citation is read only from a line that starts with `//` and is not inside a string literal that spans lines; the walk up from a mark passes only over such lines and over the lines of other attributes, and stops at anything else."
           ],
-          "job": "Rust source, read for the quality gates: which lines are test code, whether a file has code that runs, where its branches are, every `coverage(off)` mark with the proof it cites, and whether a file defines a cited proof.",
+          "job": "Rust source, read for the quality gates: which lines are test code, whether a file has code that runs, where its branches are, every `coverage(off)` mark with the proof it cites, whether a file defines a cited proof, and what a test reaches in its own file.",
           "method": {
             "links": [
               "https://docs.rs/syn/3.0.9/syn/",
@@ -6105,6 +6283,30 @@
             "text": "the replay discipline of sections 28.5 and 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`): \"Every generator prints its seed, so any failure replays exactly\", and \"Seeds belong to test generators only, and every one is printed\". The environment variable mirrors the seed variables of proptest (`PROPTEST_RNG_SEED`, <https://github.com/proptest-rs/proptest>) and bolero (`BOLERO_RANDOM_SEED`, <https://github.com/camshaft/bolero>), with one name for every Spare Kit test, so one value replays any of them."
           },
           "path": "geom_test::seed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the file's length and the run's output.",
+          "does": "gate 1 (chapter 30.3) asks that every merge gate fail on a seeded violation, the pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]). Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun's Callgrind comparison and Wasmtime's fuel. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool prints when it catches it. The binary `trip` writes the changed line into the working tree, runs the gate's own command, restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason. Each workflow job runs it with its real check, so a job that could no longer fail (a tool that stopped checking, a command that checks nothing) fails instead. The two count gates run it last, comparing the planted run with the pull request's own run measured just before; the `ClusterFuzzLite` gate runs it in a job of its own, `clusterfuzzlite-seeded`, because its actions build a fresh clone of the pull request, which a planted line never reaches.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/trip.rs",
+          "guarantees": [
+            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own build and fuzzing must report through whichever target meets it first (each target's law names its own break, \"broken law: \"; its address sanitizer reports the abort that follows); and `Sign::of_i128` reading its argument through an opaque copy (`core::hint::black_box`), the same answer for more work, which both count gates must report as a rise of more than 5% on its benchmark.",
+            "**An anchor found once, or no run.** [`apply`] refuses a file that holds the anchor line other than exactly once, so a refactor that moves it fails `tests/attack_g43.rs` (which checks every anchor in the repository) and the job, loudly, instead of planting nothing.",
+            "**A trip counts only for the right reason.** [`verdict`] accepts a run only when the command failed and printed every line [`Violation::caught`] names: the tool's own words for a found violation. A build error, a missing tool or any other failure proves nothing and is refused.",
+            "**Line ends kept.** The anchor is matched on a line with its line end set aside, so a Windows checkout's CRLF files work the same, and the line end is kept."
+          ],
+          "job": "Seeded violations for the gates that run an outside tool on the kernel's own code (gate 1, piece G43): each such gate is shown to fail when a violation is planted on purpose.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/30-build-order.md"
+            ],
+            "text": "the seeded-violation pattern of the kernel's merge gate (chapter 28.8, `projects/engines/geometry/architecture/28-testing.md`; pieces G12 and G20, `guard`): plant one violation, run the real tool as the gate runs it, and require the tool's own report of that violation. Gate 1's condition is chapter 30.3's (`projects/engines/geometry/architecture/30-build-order.md`)."
+          },
+          "path": "geom_test::trip",
           "provenance": [],
           "spdx": null,
           "target": "lib"
