@@ -1160,11 +1160,14 @@ dependencies = [
 name = "geom-nurbs"
 version = "0.0.0"
 dependencies = [
+ "dashu-int",
+ "dashu-ratio",
  "geom-linalg",
  "geom-math",
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]

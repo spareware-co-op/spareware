@@ -272,7 +272,7 @@ const ROWS: &[Row<'static>] = &[
     // 2. Geometry.
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
     kernel("geom-bvh",       2, Amended27, Elsewhere("G54"), "run num math"),
-    kernel("geom-nurbs",     2, Accepted,   Here, "base math linalg"),
+    kernel("geom-nurbs",     2, Accepted,   Elsewhere("G56"), "base math linalg"),
     kernel("geom-curve",     2, Accepted,   Here, "base math nurbs"),
     kernel("geom-surface",   2, Accepted,   Here, "base math nurbs curve"),
     // 3. Topology.
