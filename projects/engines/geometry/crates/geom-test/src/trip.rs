@@ -24,8 +24,10 @@
 //!   assert; orient2d's exact path answering `Positive` whatever its points, which breaks the
 //!   antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz
 //!   target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target
-//!   compares with big integers, under cargo-bolero's libFuzzer and under `ClusterFuzzLite`'s own
-//!   build and fuzzing; and `Sign::of_i128` reading its argument through an opaque copy
+//!   compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own
+//!   build and fuzzing must report through whichever target meets it first (each target's law
+//!   names its own break, "broken law: "; its address sanitizer reports the abort that follows);
+//!   and `Sign::of_i128` reading its argument through an opaque copy
 //!   (`core::hint::black_box`), the same answer for more work, which both count gates must report
 //!   as a rise of more than 5% on its benchmark.
 //! - **An anchor found once, or no run.** [`apply`] refuses a file that holds the anchor line
@@ -119,7 +121,7 @@ pub const VIOLATIONS: [Violation; 9] = [
         file: "projects/engines/geometry/crates/geom-num/src/wide.rs",
         anchor: "        let (s2, c2) = s1.overflowing_add(u64::from(carry));",
         planted: "        let (s2, c2) = s1.overflowing_sub(u64::from(carry));",
-        caught: &["Detected bug.", "libFuzzer: deadly signal"],
+        caught: &["Detected bug.", "Crash is reproducible.", "broken law: "],
     },
     Violation {
         name: "gungraun",

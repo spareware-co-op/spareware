@@ -761,6 +761,10 @@ fn guard_problems(workflows: &BTreeMap<String, String>) -> Vec<String> {
     }
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
 #[test]
 fn the_record_states_every_condition_of_the_board() {
     let (record, board) = (read(RECORD), read(BOARD));
@@ -783,6 +787,10 @@ fn the_record_states_every_condition_of_the_board() {
     );
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
 #[test]
 fn every_pull_request_job_has_its_seeded_violation() {
     let (record, workflows) = (read(RECORD), kernel_workflows());
@@ -822,6 +830,10 @@ fn every_pull_request_job_has_its_seeded_violation() {
     );
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
 #[test]
 fn every_planted_violation_runs_in_its_own_job() {
     let workflows = kernel_workflows();
@@ -921,6 +933,10 @@ fn every_planted_violation_runs_in_its_own_job() {
     );
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
 #[test]
 fn the_wasm_legs_prove_the_guard_through_golden_run() {
     let workflows = kernel_workflows();
@@ -949,6 +965,10 @@ fn the_wasm_legs_prove_the_guard_through_golden_run() {
     );
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
 #[test]
 fn a_passed_gate_has_nothing_open() {
     let record = read(RECORD);
@@ -967,6 +987,10 @@ fn a_passed_gate_has_nothing_open() {
     assert!(found.iter().any(|p| p.contains("is open")), "{found:#?}");
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
 #[test]
 fn the_thread_counts_are_the_boards() {
     let (record, board) = (read(RECORD), read(BOARD));
