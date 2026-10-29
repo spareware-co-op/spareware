@@ -2,7 +2,8 @@
 //!
 //! Guarantees: each variant says what was wrong in plain words, and carries the value that caused
 //! it where one value does, so an operation higher up can turn it into a structured error with
-//! remedies (chapter 22).
+//! remedies (chapter 22). What is proven and what is only tested (chapter 28.7; piece G41): there
+//! is no arithmetic here to prove; the messages, including the saturated coordinates', are tested.
 //!
 //! Method: none; a closed enum of the numbers layer's failures, each defined once, for chapter 22's
 //! error model (`projects/engines/geometry/architecture/22-errors-queries-ai.md`) to wrap.

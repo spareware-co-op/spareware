@@ -19,7 +19,7 @@
 //!
 //! The kinds it maps, from section 24.11: exact meshes, placements and OBJ's subdivision cages.
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G354, G434, G435.

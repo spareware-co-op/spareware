@@ -38,10 +38,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use crate::header::{FIELDS, Field, Header, MARK_27, MARK_30, STATUS_PREFIX, pending_line};
+use crate::header::{FIELDS, Field, Header, STALE_MARKS, STATUS_PREFIX, pending_line};
 use crate::lints::{self, Lints};
 use crate::source::Attributes;
-use crate::table::{Deps, Kind, Layer, Origin, Row, State, Table, expand, full_name};
+use crate::table::{Deps, Kind, Layer, Row, State, Table, expand, full_name};
 
 /// Which rule a violation breaks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -100,7 +100,7 @@ pub enum Rule {
     PendingLineMissing,
     /// A header names a pending dependency the table does not list.
     PendingLineStale,
-    /// A proposed crate lacks its mark, or an accepted crate carries one.
+    /// A crate's header still says its row waits for owner action G08, which accepted it.
     OriginMark,
     /// A kernel crate is not `no_std`.
     NotNoStd,
@@ -1063,18 +1063,12 @@ fn check_header(
             );
         }
     }
-    let marks = (header.contains(MARK_27), header.contains(MARK_30));
-    let expected = match row.origin {
-        Origin::Accepted => (false, false),
-        Origin::Proposed27 => (true, false),
-        Origin::Proposed30 => (false, true),
-    };
-    if marks != expected {
+    if let Some(mark) = STALE_MARKS.into_iter().find(|mark| header.contains(mark)) {
         add(
             row.name,
             Rule::OriginMark,
             format!(
-                "its row is {:?}: the header's proposal mark must say so",
+                "its row is {:?}, accepted by owner action G08 (section 32.13): delete \"{mark}\"",
                 row.origin
             ),
         );

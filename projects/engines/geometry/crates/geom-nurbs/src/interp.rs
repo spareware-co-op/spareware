@@ -64,6 +64,7 @@ use crate::fit::{
     check_increasing, curve_parameters, data, end_derivative_knots, surface_parameters,
 };
 use crate::index::{add, get, mul, real, sub};
+use crate::ops::larger;
 use crate::point::Point;
 use crate::surface::Surface;
 
@@ -133,12 +134,9 @@ fn solve_rows(
         if last >= n {
             return Err(NurbsError::Defect);
         }
-        if i > row.first {
-            lower = lower.max(sub(i, row.first)?);
-        }
-        if last > i {
-            upper = upper.max(sub(last, i)?);
-        }
+        // How far the row reaches left and right of the diagonal, 0 where it does not.
+        lower = lower.max(i.saturating_sub(row.first));
+        upper = upper.max(last.saturating_sub(i));
     }
     let mut band = Band::zeros(meter, n, lower, upper)?;
     for (i, row) in rows.iter().enumerate() {
@@ -281,7 +279,7 @@ impl<const D: usize> Curve<D> {
                 needed: q.len(),
             });
         }
-        check_increasing(parameters, true)?;
+        check_increasing(parameters)?;
         let mut u = vec_for(meter, parameters.len())?;
         u.extend_from_slice(parameters);
         let pts = interpolate_points(meter, &q, &u, &basis)?;
@@ -337,10 +335,10 @@ impl<const D: usize> Curve<D> {
         let curve = Curve::from_homogeneous(basis, pts, None)?;
         let mut constraint_error = 0.0_f64;
         for (t, d) in [(get(&u, 0)?, d0), (get(&u, sub(u.len(), 1)?)?, dm)] {
-            let e = distance_bound(d, curve_derivative(&curve, t, 1)?)?;
-            if e > constraint_error {
-                constraint_error = e;
-            }
+            constraint_error = larger(
+                constraint_error,
+                distance_bound(d, curve_derivative(&curve, t, 1)?)?,
+            );
         }
         finish(meter, curve, &q, u, constraint_error)
     }
