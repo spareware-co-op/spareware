@@ -646,9 +646,10 @@ fn decimals_have_one_form_and_read_back() {
         assert_eq!(dec_value(v), int(m) * pow10(e));
         assert_eq!(Decimal::parse(&v.to_string()), Ok(v), "{m}e{e}");
         // The same value written with extra zeros is the same decimal.
-        if v.exponent() > -330 {
-            let more = Decimal::new(v.significand() * 1000, v.exponent() - 3).unwrap();
-            assert_eq!(more, v);
+        if let Some(m) = v.significand().checked_mul(1000)
+            && v.exponent() > -330
+        {
+            assert_eq!(Decimal::new(m, v.exponent() - 3), Ok(v));
         }
     }
 }
@@ -1317,16 +1318,18 @@ fn round_trips_at_nztm_extremes_and_the_frame_range() {
 
 #[test]
 fn shifts_decide_the_lattice_before_the_range_and_report_exact_offsets() {
-    let ground = |origin: [i64; 3], dir: (i32, i32), k: (u64, u64)| {
+    let ground_at = |step: GridStep, origin: [i64; 3], dir: (i32, i32), k: (u64, u64)| {
         FrameRecord::new(
             NZTM,
-            GridStep::Q0,
+            step,
             origin,
             Rotation::direction(dir.0, dir.1).unwrap(),
             Scale::new(k.0, k.1).unwrap(),
         )
         .unwrap()
     };
+    let ground =
+        |origin: [i64; 3], dir: (i32, i32), k: (u64, u64)| ground_at(GridStep::Q0, origin, dir, k);
     // Far apart and off the lattice (c·ΔE + s·ΔN = 3·(2^59 + 1) + 4·0, not a multiple of 5): the
     // frames are refused as off the lattice, though the offset would be beyond 2^62.
     let a = ground([0; 3], (3, 4), (1, 1 << 40));
@@ -1342,15 +1345,27 @@ fn shifts_decide_the_lattice_before_the_range_and_report_exact_offsets() {
         a.shift_to(&c),
         Err(MathError::Num(NumError::OutOfRange { value: want }))
     );
-    // Beyond i128: saturated.
+    // Exact within i128: (2^64 − 1)·2^60.
     let d = ground([0; 3], (1, 0), (1, u64::MAX));
     let e = ground([-(1 << 60), 0, 0], (1, 0), (1, u64::MAX));
+    let want = i128::from(u64::MAX) << 60;
     assert_eq!(
         d.shift_to(&e),
-        Err(MathError::Num(NumError::OutOfRange { value: i128::MAX }))
+        Err(MathError::Num(NumError::OutOfRange { value: want }))
     );
     assert_eq!(
         e.shift_to(&d),
+        Err(MathError::Num(NumError::OutOfRange { value: -want }))
+    );
+    // Beyond i128, refining two rungs (625·2^60 + 2^60 steps, times 2^64 − 1): saturated.
+    let far = |o: i64, step| ground_at(step, [o, 0, 0], (1, 0), (1, u64::MAX));
+    let (up, down) = (1i64 << 60, -(1i64 << 60));
+    assert_eq!(
+        far(up, GridStep::Q0).shift_to(&far(down, GridStep::Q2)),
+        Err(MathError::Num(NumError::OutOfRange { value: i128::MAX }))
+    );
+    assert_eq!(
+        far(down, GridStep::Q0).shift_to(&far(up, GridStep::Q2)),
         Err(MathError::Num(NumError::OutOfRange { value: i128::MIN }))
     );
     // 64-bit scales on a shared lattice: the shift moves points exactly, as the model says.
