@@ -269,12 +269,28 @@ fn spin(rounds: u64) -> u64 {
     std::hint::black_box(x)
 }
 
+/// The first item index a run over [`HUGE`] never reaches. Every such run stops within its first
+/// wave of chunks (`geom_run::WAVE_FIRST`, 64 items, on a pool; item 10 or before serially), by its
+/// budget, its cancellation or an item's failure. A helper that misses the stop would otherwise run
+/// `usize::MAX` items; [`runaway`] stops it here, as out of memory, so the test fails instead of
+/// hanging.
+const RUNAWAY: usize = 10_000;
+
+/// Stops the item's meter as out of memory at item [`RUNAWAY`] (see there).
+fn runaway(i: usize, meter: &mut WorkMeter<'_>) -> Result<(), Stopped> {
+    if i >= RUNAWAY {
+        return Err(meter.out_of_memory());
+    }
+    Ok(())
+}
+
 /// Item 10 costs 11 units, every other item 1: with R = 10, item 10 is over R on its own.
 #[allow(
     clippy::trivially_copy_pass_by_ref,
     reason = "the helper hands every function its item by reference"
 )]
 fn eleventh_over(i: usize, _: &(), meter: &mut WorkMeter<'_>) -> Result<usize, Stopped> {
+    runaway(i, meter)?;
     meter.charge(if i == 10 { 11 } else { 1 })?;
     Ok(i)
 }
@@ -353,7 +369,9 @@ fn threaded_many_chunks_with_early_stop_does_not_panic() {
         }
         let cancelled = no_panic(|| {
             let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&token);
-            exec.map(&mut meter, PHASE, plan(1), &HUGE[..], |_, (), _| Ok(()))
+            exec.map(&mut meter, PHASE, plan(1), &HUGE[..], |i, (), meter| {
+                runaway(i, meter)
+            })
         });
         if cancelled != Ok(Err(RunError::Cancelled)) {
             wrong.push(format!("cancel, Threads({threads}): {cancelled:?}"));
@@ -382,7 +400,9 @@ fn serial_many_chunks_with_early_stop_is_fine() {
     let failed = Exec::serial().try_map(&mut meter, PHASE, plan(1), &HUGE[..], fail_at_three);
     assert_eq!(failed, Err(RunError::Failed(3)));
     let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&token);
-    let cancelled = Exec::serial().map(&mut meter, PHASE, plan(1), &HUGE[..], |_, (), _| Ok(()));
+    let cancelled = Exec::serial().map(&mut meter, PHASE, plan(1), &HUGE[..], |i, (), meter| {
+        runaway(i, meter)
+    });
     assert_eq!(cancelled, Err(RunError::Cancelled));
 }
 
