@@ -1420,7 +1420,7 @@ fn shifts_decide_the_lattice_before_the_range_and_report_exact_offsets() {
                 assert!(!ox.is_integer() || !oy.is_integer());
             }
             Err(MathError::Num(NumError::OutOfRange { value })) => {
-                assert!(value.unsigned_abs() > 1 << 62)
+                assert!(value.unsigned_abs() > 1 << 62);
             }
             Err(e) => panic!("{e:?}"),
         }
@@ -1479,13 +1479,13 @@ fn workload(seed: u64) -> String {
         h.rounded(f.to_frame_decimal(d));
         let text = d.easting.to_string();
         h.0.write(text.as_bytes());
-        if let Ok(p) = f.to_frame(m).map(|r| r.value()) {
-            if let Ok(back) = f.to_map(p) {
-                h.eat(back.value().easting.to_bits());
-                h.eat(back.value().northing.to_bits());
-                h.eat(back.value().height.to_bits());
-                h.eat(u64::from(back.is_exact()));
-            }
+        if let Ok(p) = f.to_frame(m).map(|r| r.value())
+            && let Ok(back) = f.to_map(p)
+        {
+            h.eat(back.value().easting.to_bits());
+            h.eat(back.value().northing.to_bits());
+            h.eat(back.value().height.to_bits());
+            h.eat(u64::from(back.is_exact()));
         }
         let g = frame(&mut rng);
         match f
