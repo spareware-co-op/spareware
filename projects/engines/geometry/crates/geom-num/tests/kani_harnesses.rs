@@ -4,7 +4,8 @@
 //! `kernel-fuzz.yml`'s `kani-num` job, one harness per matrix entry. A harness missing from the
 //! matrix would never run; an entry naming no harness would fail in CI only. This test holds the
 //! two to each other: the harnesses in the source, as `<module>::proofs::<name>`, are exactly the
-//! job's `proof` list.
+//! job's `proof` list, except the generated limb variant's (piece G42), which the `kani-limbs` job
+//! proves all at once by their module's prefix.
 
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken check must stop the test loudly.
@@ -96,12 +97,31 @@ fn every_harness_is_in_the_kani_job_and_every_entry_is_a_harness() {
         .flat_map(|(module, text)| harnesses(module, text))
         .collect();
     assert!(found.len() >= 15, "{found:?}");
+    let (limbs, rest): (BTreeSet<String>, BTreeSet<String>) =
+        found.into_iter().partition(|h| h.starts_with(LIMB_PROOFS));
     assert_eq!(
-        found,
+        rest,
         matrix(WORKFLOW),
         "the harnesses and kernel-fuzz.yml's kani-num matrix differ"
     );
+    // The limb variant's proofs run in their own job, which names their module's prefix.
+    assert!(limbs.len() >= 20, "{limbs:?}");
+    let workflow = WORKFLOW.replace("\r\n", "\n");
+    let after = workflow
+        .split("\n  kani-limbs:\n")
+        .nth(1)
+        .expect("the kani-limbs job");
+    // The job ends where the next job, a line indented two spaces, begins.
+    let job: Vec<&str> = after
+        .lines()
+        .take_while(|l| !l.starts_with("  ") || l.starts_with("   "))
+        .collect();
+    let command = format!("cargo kani -p geom-num --harness {LIMB_PROOFS}");
+    assert!(job.iter().any(|l| l.trim() == command), "{job:?}");
 }
+
+/// The module of the generated limb variant's proofs (piece G42).
+const LIMB_PROOFS: &str = "generated::limbs::proofs::";
 
 /// The check finds a harness however many attributes follow its mark, and only a marked function.
 #[test]

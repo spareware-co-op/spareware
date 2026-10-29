@@ -166,6 +166,28 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "[`sign_of_det2`], at most [`ITERATIONS`] passes of a few comparisons, subtractions and one Euclidean division each. [`sign_of_det3`], at most [`DET3_PASSES`] passes, each at most about 480 calls of [`sign_of_det2`]; its search keeps up to 119 lattice points in a fixed array of 2,856 bytes. No allocation, no recursion.",
+          "does": "[`sign_of_det2`] finds the sign of x1·y2 − y1·x2 from the four entries without ever forming a product: it compares, subtracts and divides, keeping every value within the entries' own magnitude, and [`orient2d`] applies it to the three points' translations, as the generated `orient2d` does. [`sign_of_det3`] finds the sign of a 3 × 3 determinant the same way, by a walk in the lattice its first two rows span whose every test is a [`sign_of_det2`], and [`orient3d`] applies it to the four points' translations, as the generated `orient3d` does. A product is never computed, so no value needs more bits than a few entries: the method answers in 64-bit arithmetic where the exact paths need 128 bits.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/avnaim.rs",
+          "guarantees": [
+            "**The exact sign.** For every four entries of magnitude at most [`ENTRY_MAX`], the result is the sign of x1·y2 − y1·x2 (tested against 128-bit products and against the generated `orient2d` in this crate's `tests/avnaim.rs`, and against big integers by geom-fuzz's `variants` target). For every nine entries of magnitude at most [`DET3_ENTRY_MAX`], the result of [`sign_of_det3`] is the determinant's sign (tested against big integers here, and against the generated `orient3d` in this crate's `tests/avnaim.rs` and geom-fuzz's `variants` target). An entry past its bound is refused with `None`, never answered.",
+            "**Checked and bounded.** Every step is a checked method. [`sign_of_det2`]'s loop runs at most [`ITERATIONS`] times: each pass either answers or replaces the second row by one whose entries are below half the first row's, so the entries halve at least every two passes. [`sign_of_det3`] runs at most [`DET3_PASSES`] passes, each with a lattice search of at most 119 doublings and 118 halvings, kept in a fixed array."
+          ],
+          "job": "The signs of 2 × 2 and 3 × 3 integer determinants in single-precision arithmetic, by Avnaim, Boissonnat, Devillers, Preparata and Yvinec's method: chapter 23.3's reference for the exact paths of orientation (piece G42). It lives here, in a development crate, because it is a reference to measure against, not a path the kernel ships: G42's report measured it and did not adopt it, so it is outside the foundation set's coverage and mutation gates (28.8), which its pass limits, never reached, could not meet by test.",
+          "method": {
+            "links": [
+              "doi:10.1007/BF02522822",
+              "https://inria.hal.science/inria-00090613"
+            ],
+            "text": "Avnaim, Boissonnat, Devillers, Preparata and Yvinec, \"Evaluating signs of determinants using single-precision arithmetic\", Algorithmica 17 (1997), sections 2 and 3, doi:10.1007/BF02522822 (the authors' report: <https://inria.hal.science/inria-00090613>). Signs first: an entry of zero leaves one product, and entries of mixed signs settle the sign or are made positive by negating rows and columns. Then, with the rows ordered so that x2 ≥ x1 and y2 ≥ y1, the Euclidean step x2 = k·x1 + xr, yr = y2 − k·y1 keeps the determinant (|x1 y1; xr yr|), and the halves of the first row settle it or give a smaller second row: (xr, yr) when both lie in the lower halves, (x1 − xr, y1 − yr) when both lie in the upper, which negates the determinant. The paper writes that last determinant without the change of sign; it is −|x1 y1; xr yr|, as expanding both shows, and this module follows the expansion."
+          },
+          "path": "geom_bench::avnaim",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "reading and parsing the files, then O(n log n) for n benchmarks.",
           "does": null,
           "family": [],
@@ -198,19 +220,20 @@
           "target": "bin"
         },
         {
-          "cost": "that of the command it runs (`geom_bench::guest`).",
-          "does": null,
+          "cost": "that of the command it runs (`geom_bench::guest`); `time` runs for about six times its duration.",
+          "does": "besides `geom_bench::guest`'s commands,",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs",
           "guarantees": [
-            "those of `geom_bench::guest`, unchanged: the exit status and output are exactly the ones it returns."
+            "for every other command, those of `geom_bench::guest`, unchanged: the exit status and output are exactly the ones it returns. `time` exits 0 with its line, or 2 for an unknown benchmark or a duration that is not a number from 1 to 60,000."
           ],
-          "job": "`geom-bench-guest`: the program the WebAssembly fuel gate runs inside Wasmtime, built for `wasm32-wasip1`. It also runs natively. Everything it does is in `geom_bench::guest`, whose documentation gives its commands, its exit status and how the fuel gate uses them; this program only passes on its arguments, output and status.",
+          "job": "`geom-bench-guest`: the program the WebAssembly fuel gate runs inside Wasmtime, built for `wasm32-wasip1`. It also runs natively. Everything it does is in `geom_bench::guest`, whose documentation gives its commands, its exit status and how the fuel gate uses them; this program only passes on its arguments, output and status, except for one command of its own, `time`.",
           "method": {
             "links": [
-              "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646"
+              "https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646",
+              "https://docs.rs/divan/0.1.21/divan/"
             ],
-            "text": "fuel metering (`Config::consume_fuel`, <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>) by differencing two runs (see `geom_bench::guest`)."
+            "text": "fuel metering (`Config::consume_fuel`, <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs#L627-L646>) by differencing two runs (see `geom_bench::guest`); for `time`, the median of repeated fixed-duration rounds after a warm-up round, as wall-clock benchmark harnesses take it (divan's sample-and-median design, <https://docs.rs/divan/0.1.21/divan/>)."
           },
           "path": "geom-bench-guest",
           "provenance": [
@@ -773,6 +796,26 @@
             "text": "the operand classes that take each path of schoolbook multiple-precision arithmetic (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>): short operands, full-width operands, carries out of the top limb."
           },
           "path": "geom_bench::inputs::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the `Wide` batch's draws and one pass to split it, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/wide32.rs",
+          "guarantees": [
+            "every batch is full where its class exists, and the same on every target; each value is the value of the `Wide` input it was split from, so its class is that input's (`tests/inputs.rs`); every result is checked by `tests/attack_g06.rs`."
+          ],
+          "job": "Inputs for the fixed-width integers in 32-bit limbs, `Wide32<M>` (piece G42): for each operation, the batch of the `Wide` operation of the same bit width ([`super::wide`]), drawn from the `Wide32` benchmark's own seed, each value split into twice as many 32-bit limbs; and pairs of `i64` for [`Wide32::product_i64`].",
+          "method": {
+            "links": [
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "the operand classes of schoolbook multiple-precision arithmetic, as [`super::wide`] (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>); a value's 64-bit limb k is its 32-bit limbs 2k and 2k + 1."
+          },
+          "path": "geom_bench::inputs::wide32",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1421,6 +1464,29 @@
           "target": "lib"
         },
         {
+          "cost": "per input, the registered descriptions parsed and evaluated once each in big integers, and three exact-path calls per predicate; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into the inputs the predicates take: six 2D and five 3D grid points from `geom-test`'s [`GridSampler`], and twelve plane-normal coordinates of 83 bits and four plane offsets of 125 bits, each an extreme, zero, a small value or a value of a random bit length. [`check`] evaluates each registered predicate's description (geom-gen's `PREDICATES`, read by its `predicate_lang::parse`) on those inputs in big integers, and compares the shipped `value`, the plain-`i128` variant (`geom_num::generated::plain`) and the width-aware limb variant (`geom_num::generated::limbs`) with that exact value, and Avnaim et al.'s signs of orient2d and orient3d (`geom_bench::avnaim`) with its sign. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/variants.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to inputs inside every predicate's domain: grid points (magnitude at most 2^40 − 1), aimed at the frame's extremes and at degenerate configurations, and rounded inputs within their declared bits.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; longer inputs only add bytes nobody reads.",
+            "**An independent oracle.** The exact value is the description's own arithmetic in `num-bigint`'s arbitrary-precision integers, read from the description's text, not from the generated code or the fixed-width integers it uses.",
+            "**A wrong or missing value is a [`Finding`]** naming the predicate, the variant, the inputs, what the variant returned and the exact value. Every input is in the domain, so a `None` is a finding too."
+          ],
+          "job": "Fuzz target: every variant of every generated exact path returns the exact value (chapter 23.3; piece G42).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "differential testing against an exact oracle, as chapter 23.3 asks of every variant (\"the differential fuzzer checks every variant against a rational oracle\"), `projects/engines/geometry/architecture/23-performance.md`, with `num-bigint`'s integers; the descriptions' integer values need no rational."
+          },
+          "path": "geom_fuzz::variants",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one operation on `Wide` and one on `BigInt` per input, at most O(L²) for a product of L ≤ 12 limbs, plus up to seven `resize` targets; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a width, an operation and two operands of that width (and, for `resize`, a second width). [`check`] runs the operation on `geom_num::wide::Wide` and on `num-bigint`'s `BigInt`, an arbitrary-precision oracle that shares no code with it, and compares: the exact result when it fits the width and `None` exactly when it does not, for `checked_add`, `checked_sub`, `checked_neg` and `checked_mul`; the order (`Ord`, `==`); the sign (`signum`, `is_negative`, `is_zero`); `resize` to every other width; and the `i128` conversions both ways. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
@@ -1797,15 +1863,15 @@
           "target": "lib"
         },
         {
-          "cost": "each generator derives one predicate, or all eleven for the parent module: a few hundred exact operations each.",
-          "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them. `geom-num`'s `predicate.rs` calls the four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane ones, and `crossing.rs` the 2D crossing ones.",
+          "cost": "each generator derives one predicate, or all eleven for the parent module and each variant: a few hundred exact operations each.",
+          "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] and [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane ones, and `crossing.rs` the 2D crossing ones.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicates.rs",
           "guarantees": [
             "**The same formulas as `predicate.rs`, `plane.rs` and `crossing.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term; `tpi_weight` and `tpi_side` evaluate the three-plane point's weight and its classification as `Tpi::homogeneous` and `Plane::side_of_tpi` do, except that the classification subtracts n · (−X) where `plane.rs` adds n · X, the same value; and the line-plane and crossing descriptions evaluate what `plane.rs` and `crossing.rs` document for them, step for step.",
             "**Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every target."
           ],
-          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight` and `predicate-ssi-side`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of those exact paths; and `gappa-orient2d`, `gappa-orient3d`, `fptaylor-orient2d` and `fptaylor-orient3d`, the problems that machine-check those filters' error bounds ([`crate::predicate_certificates`]).",
+          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `fptaylor-orient2d` and `fptaylor-orient3d`, the problems that machine-check those filters' error bounds ([`crate::predicate_certificates`]).",
           "method": {
             "links": [
               "https://doi.org/10.1016/j.cad.2015.10.004",
@@ -2626,7 +2692,7 @@
         "Every predicate returns a [`sign::Sign`], never a number, and is exact: no rounding decides a sign. A computation that cannot complete is reported as [`NumError::BudgetExceeded`], never answered; no input can cause one, only a defect in this crate.",
         "A [`plane::Plane`] and a [`plane::Tpi`] check their bit budgets when they are made, so every computation on them fits its type.",
         "Committing a three-plane point to the grid ([`plane::Tpi::to_grid`]) rounds each coordinate to the nearest step, ties to even, moving it by at most half a step ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.",
-        "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
+        "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] and [`wide32`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
         "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1). Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
         "Every interval operation encloses the exact result of its operation on any reals in its operands, and an enclosure that needs a maths function without a proven error is refused ([`NumError::UnprovenMaths`]).",
         "A bound carries its grid step, and bounds add exactly in the finer step ([`exactness::Exactness`]).",
@@ -2814,6 +2880,26 @@
           "target": "lib"
         },
         {
+          "cost": "the predicate module's steps; a product of operands of A and B limbs is A · B 32 × 32 → 64-bit limb multiplies, and the result's conversion back is linear in its limbs.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/limbs.rs",
+          "guarantees": [
+            "as each predicate module's `value`. Every step is a checked method, the certificate in the predicate module's header bounds every step within the type it is held in here (a type at least as wide as the one the certificate names), so a step never returns `None` for an input in the domain; nothing depends on overflow checks being on. geom-gen's independent checker re-derives every line from its own derivation, and the bounded proofs at the end of the module show, for every kind of limb step, that it never returns `None` on any operand its certified bits allow."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-variant-limbs` (seed: none, it uses no randomness), from the descriptions in `projects/engines/geometry/crates/geom-gen/src/predicates.rs` and `projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs`. Do not edit: change the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "each predicate's steps as its module's certificate derives them, each held in as many 32-bit limbs as its operands' certified bits need, chapter 23.3's width-aware limbs, `projects/engines/geometry/architecture/23-performance.md`, with the schoolbook limb arithmetic of `crate::wide32`."
+          },
+          "path": "geom_num::generated::limbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the filter is 28 `f64` operations, after 8 rounded input(s) converted to `f64`, then 14 magnitudes and their maxima and the bound's 31 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
           "does": null,
           "family": [],
@@ -2915,6 +3001,26 @@
             "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
           },
           "path": "geom_num::generated::orient3d",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the predicate module's `value`, with each product at the width of its result.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/plain.rs",
+          "guarantees": [
+            "as each predicate module's `value`. Every step is a checked method, the certificate in the predicate module's header bounds every step within the type it is held in here (a type at least as wide as the one the certificate names), so a step never returns `None` for an input in the domain; nothing depends on overflow checks being on. geom-gen's independent checker re-derives every line from its own derivation."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-variant-plain` (seed: none, it uses no randomness), from the descriptions in `projects/engines/geometry/crates/geom-gen/src/predicates.rs` and `projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs`. Do not edit: change the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "each predicate's steps as its module's certificate derives them, held as chapter 23.3 describes the baseline of its comparison of exact-path variants, `projects/engines/geometry/architecture/23-performance.md`."
+          },
+          "path": "geom_num::generated::plain",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3572,6 +3678,28 @@
             "text": "schoolbook addition, subtraction and multiplication on magnitudes with 128-bit intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>). There is no division: predicates never need it."
           },
           "path": "geom_num::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for `L` limbs, addition, subtraction, negation, comparison and conversion are O(L) limb operations; a product of an `A`-limb and a `B`-limb value is A · B limb products, each one 32 × 32 → 64-bit multiply, on the stack with no allocation.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
+          "guarantees": [
+            "**Checked.** Every arithmetic operation and conversion returns `None` when the true result does not fit, and never wraps silently: a certificate that was wrong shows as `None`, never as a wrong sign.",
+            "**Checked inside too.** A limb sum or difference uses `overflowing_add` or `overflowing_sub`, which return the full result as the low 32 bits and the carry or borrow; only the carry out of the top limb is dropped, as two's complement defines, before the sign test that decides overflow. A limb product uses `checked_mul` and `checked_add` on `u64`, which cannot fail ((2^32 − 1)² + 2 (2^32 − 1) = 2^64 − 1, written beside each), split into its 32-bit halves through its bytes, with no cast and no shift. Nothing depends on overflow checks being on.",
+            "**The same values as `Wide`.** Each operation gives the value [`crate::wide::Wide`]'s gives on the same integers (tested against it and against big integers below and in `tests/attack_g42.rs`)."
+          ],
+          "job": "Fixed-width signed integers in 32-bit limbs, for the width-aware limb variant of the exact paths.",
+          "method": {
+            "links": [
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "schoolbook addition, subtraction and multiplication on magnitudes with 64-bit intermediates (Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>), as [`crate::wide::Wide`] with 32-bit limbs; the products of operands of different widths follow the same algorithm with the operands' own limb counts. There is no division: predicates never need it."
+          },
+          "path": "geom_num::wide32",
           "provenance": [],
           "spdx": null,
           "target": "lib"
