@@ -1059,6 +1059,14 @@
       "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/dual.rs",
+      "mutant": "replace <impl Sealed for Dual<T, N>>::atan2_smooth -> Result<(), NumError> with Ok(())",
+      "line_text": "T::atan2_smooth(y.value, x.value)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This check runs only for a dual over a dual, from Dual<Dual<U, N>, M>::atan2, which next computes its value with Dual<U, N>::atan2 on the same values, and that runs U's check on the same pair first. So when this check would refuse, the next line refuses with the same OutsideDomain before anything else is computed, and when it passes nothing changes: every result and error is the same."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
       "mutant": "replace < with <= in midpoint",
       "line_text": "if m < x.lo() {",
