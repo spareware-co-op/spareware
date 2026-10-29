@@ -2137,6 +2137,11 @@
               "doc": "Geometry does not fit the frame it belongs to: a coordinate would lie beyond ±(2^40 − 1) steps of that frame's origin (chapters 17.1 and 22).",
               "name": "FrameRangeExceeded",
               "shape": "struct"
+            },
+            {
+              "doc": "A 2D point, vector or box was given a transform that does not act in the plane: it changes some point's z, so it does not map the plane z = 0 of a 2D frame onto itself (chapter 14.10's 2D transforms leave z unchanged). It is refused, never projected.",
+              "name": "NotInPlane",
+              "shape": "unit"
             }
           ],
           "module": "geom_math::error",
@@ -2160,14 +2165,15 @@
       "layer": "2",
       "modules": [
         {
-          "cost": "constant time and no allocation for every operation except `from_points`, which is one union per point. Grid boxes compare integers (at most six comparisons for a union, an intersection or a containment test); moving one by a [`GridTransform`] moves its two corners. [`FBox3::transformed`] is 18 interval operations, a product and a sum for each entry of the linear part (an interval sum is two IEEE additions, a product four multiplications and six comparisons, each followed by a one-step widening of both bounds); [`FBox3::to_grid_outward`] is six roundings and six range checks.",
+          "cost": "constant time and no allocation for every operation except `from_points`, which is one union per point. Grid boxes compare integers (at most six comparisons for a union, an intersection or a containment test); moving one by a [`GridTransform`] moves its two corners. [`FBox3::transformed`] is 18 interval operations, a product and a sum for each entry of the linear part (an interval sum is two IEEE additions, a product four multiplications and six comparisons, each followed by a one-step widening of both bounds); [`FBox3::to_grid_outward`] is six roundings and six range checks; [`FBox2`]'s operations are the same on two axes (its transform, eight interval operations).",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-math/src/bbox.rs",
           "guarantees": [
             "**Never empty, always ordered.** Every box has `min ≤ max` (`lo ≤ hi`) on every axis; constructors refuse anything else with [`NumError::EmptyInterval`], and an intersection that would be empty is `None`.",
             "**Closed.** Boxes contain their boundary: two boxes that share only a face, an edge or a corner overlap.",
-            "**Finite.** `FBox3` bounds are finite, with zero stored as +0; operations that would overflow return [`NumError::NotFinite`]."
+            "**Finite.** `FBox2` and `FBox3` bounds are finite, with zero stored as +0; operations that would overflow return [`NumError::NotFinite`].",
+            "**2D in the plane only.** A 2D box is moved only by a transform that leaves z unchanged; any other is refused with [`MathError::NotInPlane`], never projected."
           ],
           "job": "Axis-aligned boxes: exact boxes on the grid, and floating-point boxes that round outward.",
           "method": {
@@ -2324,6 +2330,7 @@
             "**Exact.** Applying, composing and inverting use integer arithmetic only. Composition and inversion of signed permutations are again signed permutations, so nothing ever rounds.",
             "**Range-checked.** Applying to a point checks that the result stays within the frame's ±(2^40 − 1) steps and returns [`NumError::OutOfRange`] otherwise. Translations are kept within [`TRANSLATION_MAX`] = 2(2^40 − 1) steps per axis, the largest that can map some grid point to another; a composition whose translation would exceed it returns `OutOfRange` too.",
             "**Orientation known exactly.** The determinant is ±1, computed from the permutation's parity and the signs; [`GridTransform::reverses_orientation`] says whether a mirror is involved, which reverses arcs, face normals and winding numbers.",
+            "**2D is the plane z = 0, with the same transforms.** The kernel has one family of transforms for 2D and 3D (principle 8). A transform that leaves every z unchanged ([`GridTransform::acts_in_plane`]) maps a 2D frame's plane onto itself, and [`GridTransform::apply_2d`] and [`GridTransform::apply_vector_2d`] give exactly what [`GridTransform::apply`] gives at z = 0; its orientation in the plane is its orientation in 3D. Any other transform is refused for 2D input ([`MathError::NotInPlane`]), never projected. Chapter 14.10's exact 2D transforms are all of this kind: translations in x and y, quarter turns about z, and mirrors about axis-aligned and 45-degree lines ([`GridTransform::mirror_diagonal`]), each composed with a translation for a line off the origin.",
             "**The same result in every build profile.** Every integer step (a negation, a sum) is a checked method, never a native operator, so nothing depends on overflow checks being on. The bit budget below proves each fits; one that did not would be reported as [`NumError::BudgetExceeded`], never answered."
           ],
           "job": "Exact transforms of the grid: whole-step translations, quarter turns about the axes, mirrors.",

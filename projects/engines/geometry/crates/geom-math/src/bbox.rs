@@ -2,10 +2,11 @@
 //!
 //! [`Box2`] and [`Box3`] are closed boxes of grid points, `min ≤ max` on every axis: union,
 //! intersection, containment and overlap are comparisons of integers, so they are exact. A box
-//! moved by a [`GridTransform`] is again a grid box, exactly.
+//! moved by a [`GridTransform`] is again a grid box, exactly; a 2D box takes a transform that acts
+//! in the plane (chapter 14.10; [`GridTransform::acts_in_plane`]).
 //!
-//! [`FBox3`] is a closed box of finite doubles, in grid units, that is certain to contain what it
-//! bounds. Building one from points or grid boxes is exact (no arithmetic); transforming one by a
+//! [`FBox2`] and [`FBox3`] are closed boxes of finite doubles, in grid units, certain to contain what they
+//! bound. Building one from points or grid boxes is exact (no arithmetic); transforming one by a
 //! [`Transform`] uses interval arithmetic with outward rounding (`geom_num::interval`, each bound
 //! moved one floating-point step outward after rounding to nearest), so the result contains the
 //! exact image of every point of the box; converting one to the grid rounds its lower bounds down
@@ -18,8 +19,10 @@
 //!   would be empty is `None`.
 //! - **Closed.** Boxes contain their boundary: two boxes that share only a face, an edge or a
 //!   corner overlap.
-//! - **Finite.** `FBox3` bounds are finite, with zero stored as +0; operations that would overflow
-//!   return [`NumError::NotFinite`].
+//! - **Finite.** `FBox2` and `FBox3` bounds are finite, with zero stored as +0; operations that
+//!   would overflow return [`NumError::NotFinite`].
+//! - **2D in the plane only.** A 2D box is moved only by a transform that leaves z unchanged; any
+//!   other is refused with [`MathError::NotInPlane`], never projected.
 //!
 //! Method: closed intervals per axis, so a box is the product of three intervals and every
 //! operation is per-axis interval logic; outward-rounded interval arithmetic as in R. E. Moore,
@@ -32,13 +35,15 @@
 //! [`FBox3::transformed`] is 18 interval operations, a product and a sum for each entry of the
 //! linear part (an interval sum is two IEEE additions, a product four multiplications and six
 //! comparisons, each followed by a one-step widening of both bounds);
-//! [`FBox3::to_grid_outward`] is six roundings and six range checks.
+//! [`FBox3::to_grid_outward`] is six roundings and six range checks; [`FBox2`]'s operations are the
+//! same on two axes (its transform, eight interval operations).
 
 use geom_num::grid::{Coord, P2, P3};
 use geom_num::interval::Interval;
 use geom_num::{NumError, Real, math};
 
-use crate::float::F3;
+use crate::error::MathError;
+use crate::float::{F2, F3};
 use crate::grid_transform::GridTransform;
 use crate::transform::Transform;
 use crate::vector::{V2, V3};
@@ -147,6 +152,27 @@ impl Box2 {
     /// rules out ([`V2::between`]): for every box the result is `Ok`.
     pub fn extent(&self) -> Result<V2, NumError> {
         V2::between(self.min, self.max)
+    }
+
+    /// The box moved by a grid transform that acts in the plane, exactly: as for
+    /// [`Box3::transformed`], the images of `min` and `max`, sorted per axis, are its corners.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane;
+    /// [`NumError::OutOfRange`] if a corner of the image leaves the frame's range.
+    pub fn transformed(&self, t: &GridTransform) -> Result<Box2, MathError> {
+        let (a, b) = (t.apply_2d(self.min)?, t.apply_2d(self.max)?);
+        Ok(Box2 {
+            min: P2 {
+                x: a.x.min(b.x),
+                y: a.y.min(b.y),
+            },
+            max: P2 {
+                x: a.x.max(b.x),
+                y: a.y.max(b.y),
+            },
+        })
     }
 }
 
@@ -466,6 +492,183 @@ impl FBox3 {
                 x: coord(up(h0)?)?,
                 y: coord(up(h1)?)?,
                 z: coord(up(h2)?)?,
+            },
+        )
+    }
+}
+
+/// A closed axis-aligned box of finite doubles in the plane, in grid units: `lo ≤ hi` on both
+/// axes. The 2D counterpart of [`FBox3`], with the same guarantees.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FBox2 {
+    lo: [f64; 2],
+    hi: [f64; 2],
+}
+
+/// Applies `f` to matching components of two pairs.
+fn zip2(a: [f64; 2], b: [f64; 2], f: impl Fn(f64, f64) -> f64) -> [f64; 2] {
+    let ([a0, a1], [b0, b1]) = (a, b);
+    [f(a0, b0), f(a1, b1)]
+}
+
+impl FBox2 {
+    /// The box with corners `lo` and `hi`.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::EmptyInterval`] if `lo` exceeds `hi` on an axis.
+    pub fn new(lo: F2, hi: F2) -> Result<FBox2, NumError> {
+        let (lo, hi) = (lo.to_array(), hi.to_array());
+        if lo.iter().zip(hi.iter()).any(|(l, h)| l > h) {
+            return Err(NumError::EmptyInterval);
+        }
+        Ok(FBox2 {
+            lo: lo.map(canon),
+            hi: hi.map(canon),
+        })
+    }
+
+    /// The box holding one point.
+    #[must_use]
+    pub fn from_point(p: F2) -> FBox2 {
+        let a = p.to_array().map(canon);
+        FBox2 { lo: a, hi: a }
+    }
+
+    /// The box whose axes are the two intervals.
+    #[must_use]
+    pub fn from_intervals(axes: [Interval; 2]) -> FBox2 {
+        FBox2 {
+            lo: axes.map(Interval::lo),
+            hi: axes.map(Interval::hi),
+        }
+    }
+
+    /// A grid box as doubles, exactly (coordinates below 2^40 in magnitude).
+    #[must_use]
+    pub fn from_box2(b: &Box2) -> FBox2 {
+        let (lo, hi) = (F2::from(b.min).to_array(), F2::from(b.max).to_array());
+        FBox2 {
+            lo: lo.map(canon),
+            hi: hi.map(canon),
+        }
+    }
+
+    /// The lower corner.
+    #[must_use]
+    pub const fn lo(&self) -> F2 {
+        // Finite by the type's invariant, as for FBox3::lo: every constructor takes the bounds from
+        // an F2, a grid point or an interval, or as the smaller or larger of two such bounds.
+        F2::from_finite(self.lo)
+    }
+
+    /// The upper corner.
+    #[must_use]
+    pub const fn hi(&self) -> F2 {
+        // Finite by the type's invariant, as for `lo`.
+        F2::from_finite(self.hi)
+    }
+
+    /// The axes as intervals, x and y.
+    ///
+    /// # Errors
+    ///
+    /// Never in practice: the bounds are finite and ordered by the invariant.
+    pub fn axes(&self) -> Result<[Interval; 2], NumError> {
+        let ([l0, l1], [h0, h1]) = (self.lo, self.hi);
+        Ok([Interval::new(l0, h0)?, Interval::new(l1, h1)?])
+    }
+
+    /// The smallest box holding both boxes. Exact: no arithmetic.
+    #[must_use]
+    pub fn union(&self, other: &FBox2) -> FBox2 {
+        FBox2 {
+            lo: zip2(self.lo, other.lo, |a, b| canon(min2(a, b))),
+            hi: zip2(self.hi, other.hi, |a, b| canon(max2(a, b))),
+        }
+    }
+
+    /// The points both boxes hold, or `None` if they do not overlap. Exact: no arithmetic.
+    #[must_use]
+    pub fn intersection(&self, other: &FBox2) -> Option<FBox2> {
+        let lo = zip2(self.lo, other.lo, |a, b| canon(max2(a, b)));
+        let hi = zip2(self.hi, other.hi, |a, b| canon(min2(a, b)));
+        if lo.iter().zip(hi.iter()).any(|(l, h)| l > h) {
+            None
+        } else {
+            Some(FBox2 { lo, hi })
+        }
+    }
+
+    /// Whether the box holds the point (boundary included).
+    #[must_use]
+    pub fn contains(&self, p: F2) -> bool {
+        let p = p.to_array();
+        p.iter()
+            .zip(self.lo.iter().zip(self.hi.iter()))
+            .all(|(v, (l, h))| (*l..=*h).contains(v))
+    }
+
+    /// Whether the boxes share at least one point (touching counts).
+    #[must_use]
+    pub fn overlaps(&self, other: &FBox2) -> bool {
+        self.intersection(other).is_some()
+    }
+
+    /// A box certain to contain the image of every point of this box under `t`, which acts in the
+    /// plane.
+    ///
+    /// Each output coordinate is enclosed as t + l₀·X + l₁·Y in interval arithmetic, X and Y being
+    /// this box's axes: the points are at z = 0, so the z column takes no part. Interval arithmetic
+    /// contains the exact real result for every point of its operands, so the box holds the exact
+    /// image (of the transform with these exact `f64` entries), whatever rounding happens on the
+    /// way.
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if `t` does not act in the plane; [`NumError::NotFinite`] if a
+    /// bound overflows.
+    pub fn transformed(&self, t: &Transform) -> Result<FBox2, MathError> {
+        if !t.acts_in_plane() {
+            return Err(MathError::NotInPlane);
+        }
+        let [ax, ay] = self.axes()?;
+        let row = |r: [f64; 4]| -> Result<Interval, NumError> {
+            let [l0, l1, _, tr] = r;
+            Interval::point(tr)?
+                .add(Interval::point(l0)?.mul(ax)?)?
+                .add(Interval::point(l1)?.mul(ay)?)
+        };
+        let [r0, r1, _] = t.rows();
+        Ok(FBox2::from_intervals([row(r0)?, row(r1)?]))
+    }
+
+    /// The smallest grid box holding this box: lower bounds rounded down, upper bounds up.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::OutOfRange`] if a rounded bound lies outside the frame's ±(2^40 − 1) range, as
+    /// for [`FBox3::to_grid_outward`].
+    pub fn to_grid_outward(self) -> Result<Box2, NumError> {
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "v is a whole number (a floor or a ceiling): below 2^127 in magnitude it \
+                      converts exactly, and beyond that the conversion saturates at the ends of \
+                      i128, which is how NumError::OutOfRange reports a coordinate beyond i128; \
+                      Coord::from_i128 refuses every value outside the frame with that value"
+        )]
+        let coord = |v: f64| Coord::from_i128(v as i128);
+        let down = |v: f64| math::floor(v).map(Real::get);
+        let up = |v: f64| math::ceil(v).map(Real::get);
+        let ([l0, l1], [h0, h1]) = (self.lo, self.hi);
+        Box2::new(
+            P2 {
+                x: coord(down(l0)?)?,
+                y: coord(down(l1)?)?,
+            },
+            P2 {
+                x: coord(up(h0)?)?,
+                y: coord(up(h1)?)?,
             },
         )
     }

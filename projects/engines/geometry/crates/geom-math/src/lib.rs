@@ -14,7 +14,9 @@
 //!   arithmetic in a fixed order and square roots from `geom_num::math` only.
 //! - [`typed`]: [`TypedTransform`], the typed transform enum (chapter 7): every transform is
 //!   [`GridTransform`] (exact), [`RationalTransform`] (rational) or [`Transform`] (certified), and
-//!   applying one to a grid point rounds once and says whether it was exact.
+//!   applying one to a grid point rounds once and says whether it was exact. 2D points, vectors
+//!   and boxes take the same transforms, those that act in the plane z = 0 (leave z unchanged), so
+//!   2D has no parallel family of types (principle 8; chapter 14.10).
 //! - [`grid_transform`]: [`GridTransform`], the exact transforms of the grid (whole-step
 //!   translations, quarter turns about the axes, mirrors) as a signed permutation plus an integer
 //!   translation.
@@ -23,8 +25,8 @@
 //! - [`transform`]: [`Transform`], a general affine transform in `f64`, classified so a caller
 //!   knows when a kind changes (a circle becomes an ellipse under a non-uniform scale; a mirror
 //!   reverses arcs).
-//! - [`bbox`]: exact grid boxes [`Box2`] and [`Box3`], and [`FBox3`] in `f64` with outward
-//!   rounding.
+//! - [`bbox`]: exact grid boxes [`Box2`] and [`Box3`], and [`FBox2`] and [`FBox3`] in `f64` with
+//!   outward rounding.
 //! - [`dd`]: double-double arithmetic [`DD`] on the error-free transformations of `geom_num::eft`.
 //! - [`frame`]: [`FrameRecord`], the link between a frame and a map projection, with conversion of
 //!   map coordinates into frame grid coordinates and back (each rounded once, correctly), exact
@@ -92,7 +94,7 @@ pub mod transform;
 pub mod typed;
 pub mod vector;
 
-pub use bbox::{Box2, Box3, FBox3};
+pub use bbox::{Box2, Box3, FBox2, FBox3};
 pub use dd::DD;
 pub use error::{FrameMismatch, MathError};
 pub use float::{F2, F3};
