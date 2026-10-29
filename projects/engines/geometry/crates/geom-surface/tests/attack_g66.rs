@@ -552,6 +552,22 @@ fn profile() -> Trimmed<3> {
     Trimmed::whole(Leaf::Nurbs(geom_nurbs::Curve::new(b, &pts).unwrap())).unwrap()
 }
 
+/// The creased patch of `creased` with u and v swapped: the crease along v = 1/2.
+fn creased_in_v() -> SurfaceKind {
+    let kv = vec![0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0];
+    let bu = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let bv = Basis::new(3, kv).unwrap();
+    let mut pts = Vec::new();
+    for i in 0..4 {
+        for j in 0..7 {
+            let y = f64::from(j) / 6.0 * 2.0;
+            let z = if j <= 3 { 0.0 } else { (y - 1.0) * 0.8 };
+            pts.push([f64::from(i), y, z]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(bu, bv, &pts).unwrap())
+}
+
 /// A creased bicubic patch: the knot at u = 1/2 three times, flat on one side and sloped on the
 /// other, scaled by `size`.
 fn creased(size: f64) -> SurfaceKind {
@@ -742,6 +758,24 @@ fn a_box_across_a_tear_holds_both_sides() {
                 .partials_over(((u, u), (0.35, 0.35)), sides, 1, m)
                 .unwrap();
             assert!(meet_all(&p, &over), "({u0}, {u1}) at {u}");
+        }
+    }
+    // The same across a tear in v.
+    let off = Offset::new(creased_in_v(), 0.6).unwrap();
+    for (v0, v1) in [(0.49, 0.51), (0.4, 0.5001)] {
+        let over = off
+            .partials_over(((0.3, 0.4), (v0, v1)), SIDES, 1, m)
+            .unwrap();
+        for (v, sides) in [
+            (v0, SIDES),
+            (0.5, (Limit::FromRight, Limit::FromLeft)),
+            (0.5, SIDES),
+            (v1, SIDES),
+        ] {
+            let p = off
+                .partials_over(((0.35, 0.35), (v, v)), sides, 1, m)
+                .unwrap();
+            assert!(meet_all(&p, &over), "({v0}, {v1}) at {v}");
         }
     }
     // Refining a cache whose certificate cannot fall stops at once: a tear wider than the fit

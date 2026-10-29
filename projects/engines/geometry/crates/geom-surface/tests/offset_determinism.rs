@@ -3,7 +3,7 @@
 //! piece G19).
 //!
 //! The corpus, from a fixed linear congruential sequence: 3 rounds of offsets of a bicubic NURBS
-//! patch with an interior knot (rational in the second round), of a cylinder and of a torus on
+//! patch with an interior knot each way (rational in the second round), of a cylinder and of a torus on
 //! random frames, and in the first an offset of an offset, each enclosed at nine parameter pairs, with its
 //! partials to order 3 at three, bounded (with both derivative bounds and the normal bound) over a
 //! box, converted to NURBS by default and the first patch's offset within 10⁻¹ (knots, net,
@@ -233,14 +233,14 @@ fn frame(rng: &mut Lcg) -> Frame<3> {
     }
 }
 
-/// A bicubic patch over [0, 1]² with a knot at u = 1/2, rational when asked.
+/// A bicubic patch over [0, 1]² with a knot at 1/2 in u and in v, rational when asked.
 fn patch(rng: &mut Lcg, rational: bool) -> Surface<3> {
     let bu = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0]).unwrap();
-    let bv = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let bv = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0]).unwrap();
     let mut pts = Vec::new();
     let mut ws = Vec::new();
     for i in 0..5 {
-        for j in 0..4 {
+        for j in 0..5 {
             pts.push([f64::from(i) * 0.75, f64::from(j), rng.range(-0.3, 0.3)]);
             ws.push(rng.range(0.95, 1.05));
         }
