@@ -20,7 +20,7 @@
 //! Sections: 16.6, 17.10, 23.12 and 24.11; open questions OQ-16.1 and OQ-17.3, in the kernel
 //! architecture (`projects/engines/geometry/architecture/`).
 //!
-//! Its direct dependencies are its row of chapter 27's proposed crate table, checked by the
+//! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: scaffold only; built by pieces G350, G379, G380, G436.
