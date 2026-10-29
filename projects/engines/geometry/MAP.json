@@ -2073,6 +2073,30 @@
           "target": "lib"
         },
         {
+          "cost": "a few seconds natively: for every node, a few hundred halvings, each an exact evaluation of a polynomial of degree at most 2n + 1 ≤ 61 at a dyadic point.",
+          "does": "writes `geom-num`'s `src/quadrature_rules/mod.rs`, the tables `geom_num::quadrature` integrates with: the Gauss–Legendre rules of 1 to [`GAUSS_MAX`] points, and the Gauss–Kronrod rules of 2n + 1 points that extend the n-point Gauss rule for each n of [`KRONROD_N`] (QUADPACK's six). Every number is computed in exact rational arithmetic and rounded to the nearest `f64`, ties to even, only once an exact enclosure of it lies inside one rounding cell, so each entry is the correctly rounded value of the true node or weight.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-gen/src/quadrature.rs",
+          "guarantees": [
+            "**Correctly rounded.** Every node and weight is the `f64` nearest to the exact value, ties to even (dashu-ratio's `to_f64`, which its documentation guarantees correctly rounded, and the unit tests check against both neighbours), decided from an exact enclosure, never from an approximation.",
+            "**Exact or nothing.** Every step is exact rational arithmetic; a bracket that does not round to one value within [`MAX_HALVINGS`] halvings, or an isolation that fails, is an error, never an approximate table.",
+            "**Pure.** No input but the constants here; the same bytes on every target."
+          ],
+          "job": "Generator `quadrature-rules`: the Gauss–Legendre and Gauss–Kronrod rules on [−1, 1], computed exactly and each node and weight rounded once to the nearest `f64` (piece G51; chapters 12 and 29.4).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1090/S0025-5718-69-99647-1",
+              "https://doi.org/10.1007/BF01448041",
+              "https://doi.org/10.1007/978-3-642-61786-7"
+            ],
+            "text": "G. H. Golub and J. H. Welsch, *Calculation of Gauss quadrature rules*, Mathematics of Computation 23 (1969), <https://doi.org/10.1090/S0025-5718-69-99647-1>; G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 8.4.1 (bisection by Sturm count); A. S. Kronrod, *Nodes and Weights of Quadrature Formulas*, Consultants Bureau (1965); G. Szegő, *Über gewisse orthogonale Polynome, die zu einer oszillierenden Belegungsfunktion gehören*, Mathematische Annalen 110 (1935), <https://doi.org/10.1007/BF01448041> (the interlacing); the rule set is QUADPACK's (R. Piessens et al., *QUADPACK*, Springer (1983), <https://doi.org/10.1007/978-3-642-61786-7>)."
+          },
+          "path": "geom_gen::quadrature",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time beyond the generators themselves.",
           "does": "[`REGISTRY`] lists every generator ([`GENERATORS`]) and every generated folder ([`FOLDERS`]). Adding a generator means adding its module and one entry here, with the one file it owns, inside a generated folder, and, if it uses randomness, its fixed seed; CI then checks its output on every pull request. Removing or renaming one leaves its old output an orphan, which `check` reports until it is deleted. [`workspace_root`] finds the workspace this crate was built in, the default root for writing and checking.",
           "family": [],
@@ -2225,7 +2249,62 @@
         29
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a factorisation or solve could not give its result.",
+          "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+          "kinds": [
+            {
+              "doc": "The shapes do not fit: a non-square matrix where a square one is needed, or a right-hand side of the wrong length.",
+              "name": "Shape",
+              "shape": "unit"
+            },
+            {
+              "doc": "An entry, or a result of the arithmetic, is NaN or infinite.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "The matrix is singular: a zero pivot (LU, triangular, tridiagonal).",
+              "name": "Singular",
+              "shape": "unit"
+            },
+            {
+              "doc": "The matrix is not symmetric positive definite (Cholesky).",
+              "name": "NotPositiveDefinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "The work budget cannot cover the factorisation's cost.",
+              "name": "OutOfWork",
+              "shape": "unit"
+            },
+            {
+              "doc": "An allocation could not be made.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "An iteration did not converge within its cap (the SVDs and the eigensolver).",
+              "name": "NoConvergence",
+              "shape": "unit"
+            },
+            {
+              "doc": "The matrix is not symmetric where a symmetric one is needed (the eigensolver).",
+              "name": "NotSymmetric",
+              "shape": "unit"
+            },
+            {
+              "doc": "A step its own bounds rule out failed: a defect, reported, never answered.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_linalg::matrix",
+          "name": "LinalgError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-linalg/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-linalg",
@@ -2239,12 +2318,172 @@
       "job": "Deterministic dense and sparse linear algebra: QR, the complete orthogonal decomposition, triangular solves, column ordering.",
       "kind": "kernel",
       "layer": "1",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "one allocation of len · count doubles; access is constant time, copies linear.",
+          "does": "[`Cols`] holds `count` columns of `len` doubles each, one after another, so a column is one contiguous slice and two columns can be borrowed together for a rotation. [`Cols::to_matrix`] copies chosen columns, in a chosen order, into a row-major [`Matrix`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
+          "guarantees": [
+            "**No panic, no abort.** Every index is checked and every index sum and product too; a bad one is [`LinalgError::Defect`]. The storage is allocated fallibly.",
+            "**Exact copies.** Moving values between [`Cols`] and [`Matrix`] copies them unchanged."
+          ],
+          "job": "Matrices stored by columns, for the factorisations that work column by column (the SVDs and the symmetric eigensolver), and checked index arithmetic for them.",
+          "method": {
+            "links": [
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "column-major storage as LAPACK uses it (E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>)."
+          },
+          "path": "geom_linalg::cols",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "(4/3)·n³ for the reduction and 2·n³ for its accumulation, charged first as 4·n³; each QR step then charges (block + 1)·(4n + 12). One working copy, the tridiagonal and Q.",
+          "does": "[`SymmetricEigen::factor`] reduces a symmetric n × n matrix to tridiagonal form T by n − 2 Householder similarity transformations (Golub and Van Loan's algorithm 8.3.1), then applies implicit QR steps with Wilkinson's shift (algorithm 8.3.2), chasing the bulge down T with Givens rotations, until every subdiagonal entry is negligible (|`b_i`| ≤ 2^−52·(|`a_i`| + |`a_(i+1)`|)); the diagonal is then Λ, and the accumulated transformations Q. Eigenvalues come smallest first, each with its unit eigenvector as a column of Q.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/eigen.rs",
+          "guarantees": [
+            "**Symmetric or refused.** A matrix that is not square is [`LinalgError::Shape`]; one whose entries are not exactly symmetric, `a_ij` ≠ `a_ji` for some pair, is [`LinalgError::NotSymmetric`]. Only the lower triangle is read after that check.",
+            "**Deterministic.** Fixed order of reflections, rotations and deflation tests; the shift from the trailing 2 × 2 block, computed on the block scaled to magnitude 1; IEEE 754 operations in the order written and the correctly rounded square root; a stable sort of the eigenvalues with ties broken by position.",
+            "**Accuracy, checked against exact rationals.** The method is backward stable: Q·Λ·Qᵀ is a symmetric matrix within a small multiple of u·‖A‖ of A, so each eigenvalue is within that of an exact one (Golub and Van Loan, section 8.3.6). The tests check the residual and Q's orthogonality exactly and bracket each eigenvalue by exact inertia counts of A − x·I.",
+            "**Bounded.** At most 30·n QR steps, then [`LinalgError::NoConvergence`]; each step charges its work before it runs, the reduction its own first."
+          ],
+          "job": "The symmetric eigenproblem: A = Q·Λ·Qᵀ for a symmetric matrix, by Householder tridiagonalisation and the implicit symmetric QR algorithm with Wilkinson's shift.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9781611971163"
+            ],
+            "text": "G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), algorithms 8.3.1 (Householder tridiagonalisation), 8.3.2 (the implicit symmetric QR step with Wilkinson shift) and 8.3.3 (the symmetric QR algorithm), and section 8.3.6 (accuracy); J. H. Wilkinson, *The Algebraic Eigenvalue Problem*, Clarendon Press (1965), chapter 8, for the shift; B. N. Parlett, *The Symmetric Eigenvalue Problem*, SIAM (1998), chapter 8, <https://doi.org/10.1137/1.9781611971163>, for the shift's convergence. Written in our own words from the books (chapter 29.4)."
+          },
+          "path": "geom_linalg::eigen",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a matrix of r × c entries is one allocation of r · c doubles; access is constant time.",
+          "does": "[`Matrix`] is a dense matrix stored by rows, every entry a finite `f64`, made only by fallible constructors (an allocation that cannot be made is [`LinalgError::OutOfMemory`], never an abort). [`Work`] is a budget in units of one multiply-add: each factorisation knows its cost from its shape, charges it in full before touching a number, and refuses with [`LinalgError::OutOfWork`] when the budget cannot cover it, so a factorisation either finishes or never starts (chapter 15.6: \"budgets in work, not time\").",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
+          "guarantees": [
+            "**Finite.** Every entry of every [`Matrix`] is finite; a constructor refuses NaN and infinities with [`LinalgError::NotFinite`], and a factorisation whose arithmetic overflows reports it the same way instead of returning infinities.",
+            "**Charged before it starts.** A factorisation's cost is a function of its shape alone, stated on each function, and is charged before any arithmetic: the same budget gives the same answer, or the same refusal, on every target.",
+            "**No panic, no abort.** Indices are checked; allocations are fallible."
+          ],
+          "job": "Dense matrices of finite doubles, the errors of every factorisation, and the work budget each one charges before it starts.",
+          "method": {
+            "links": [
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "row-major dense storage, as LAPACK's column-major storage transposed (E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>), with the work model of G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 1.1.15 (flop counts)."
+          },
+          "path": "geom_linalg::matrix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as charged above; one copy of A and a few vectors of length n.",
+          "does": "[`PivotedQr::factor`] factors an m × n matrix as A·Π = Q·R, Q a product of Householder reflections, R upper triangular with diagonal magnitudes that never increase, Π the column order chosen by largest remaining norm. [`Cod::factor`] decides the rank r from R's diagonal and a relative tolerance, then removes R's trailing columns by reflections from the right, giving A·Π = Q·[T 0; 0 0]·Zᵀ with T r × r upper triangular: the complete orthogonal decomposition. From it, [`Cod::least_squares`] gives the least-squares solution of A·x = b of least norm (chapter 15.6's full step: the limit of the damped steps, never a pivot-order basic solution), and [`Cod::null_space`] an orthonormal basis of the null space. [`canonical_null_space`] turns that basis into chapter 15.8's canonical one: reduced echelon form over the variable order, each vector 1 at its own leading variable and 0 at the others', so the basis is unique.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
+          "guarantees": [
+            "**Deterministic.** Plain scalar loops in a fixed order (chapter 15.6). A pivot column is the one of largest remaining norm, the first on a tie; norms are scaled by the column's largest magnitude, so they never overflow for finite entries.",
+            "**Least change, never basic.** In a rank-deficient or under-determined system the solution has the least Euclidean norm among all least-squares solutions; no free variable is set to zero in pivot order.",
+            "**Rank decided once, by the caller's tolerance.** A diagonal entry of R at most `tol` times the first ends the rank; the tolerance is the caller's (chapter 15 derives it from the tolerance ladder). Like every column-pivoted QR, it can miss a near rank deficiency that no column norm shows: Kahan's matrix is the classic case (tested).",
+            "**Charged first.** A factorisation charges 2·m·n·min(m, n) multiply-adds before it starts, the decomposition r²·n more, a solve 2·m·n, a null space n²·(n − r)."
+          ],
+          "job": "Householder QR with column pivoting, the complete orthogonal decomposition, the minimum-norm least-squares solution, and the canonical null space.",
+          "method": {
+            "links": [
+              "doi:10.1145/1377612.1377616",
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013): algorithm 5.1.1 (the Householder vector), 5.4.1 (QR with column pivoting), section 5.4.2 (the complete orthogonal decomposition) and 5.5 (least squares in the rank-deficient case); the column norms downdated as LAPACK's `xLAQP2` does, recomputed when the downdate loses more than √u of its relative accuracy (Z. Drmač and Z. Bujanović, *On the failure of rank-revealing QR factorization software*, ACM TOMS 35 (2008), doi:10.1145/1377612.1377616); the trailing columns removed as LAPACK's `xTZRZF` does (E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>). Written in our own words from the books and papers (chapter 29.4)."
+          },
+          "path": "geom_linalg::qr",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per call; [`rotate_slices`] is linear in the vectors' length.",
+          "does": "[`hypot`] gives √(a² + b²) without overflow or underflow; [`givens`] gives the rotation (c, s) and r with c·y + s·z = r and −s·y + c·z = 0, which zeroes z against y; [`rotate`] applies a rotation to a pair of numbers, and [`rotate_slices`] to two vectors element by element.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/rotation.rs",
+          "guarantees": [
+            "**No spurious overflow or underflow.** [`hypot`] divides both numbers by the larger magnitude before squaring, so the squares lie in [0, 1] and the sum in [1, 2].",
+            "**Deterministic.** IEEE 754 operations in the order written and the correctly rounded square root of `geom_num::math`; no fused multiply-add.",
+            "**Exact identity when nothing is to be zeroed.** A zero z gives c = 1, s = 0 and r = y, so a rotation that has nothing to do changes no bit."
+          ],
+          "job": "Plane rotations and the norm of two numbers, for the iterative factorisations.",
+          "method": {
+            "links": [
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "Givens rotations as Golub and Van Loan compute them (G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 5.1.8 and algorithm 5.1.3), with the norm scaled as LAPACK's `xLAPY2` does (E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>); written in our own words (chapter 29.4)."
+          },
+          "path": "geom_linalg::rotation",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as charged above; one allocation of n² doubles for LU or Cholesky, n doubles per solve.",
+          "does": "[`Lu::factor`] factors a square matrix as P·A = L·U by Gaussian elimination with partial pivoting, and [`Lu::solve`] solves A·x = b with it. [`Cholesky::factor`] factors a symmetric positive definite matrix as A = G·Gᵀ, and [`Cholesky::solve`] solves with it. [`solve_lower`] and [`solve_upper`] are forward and back substitution on a triangle, and [`solve_tridiagonal`] solves a tridiagonal system by Gaussian elimination with partial pivoting.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/solve.rs",
+          "guarantees": [
+            "**Deterministic.** Plain scalar loops in a fixed order: no SIMD, no fused multiply-add, no threads (chapter 15.6). A pivot is the largest magnitude in its column, the first such row on a tie, so the same matrix gives the same factors, bit for bit, on every target.",
+            "**Refused, never guessed.** A zero pivot is [`LinalgError::Singular`], a non-positive Cholesky pivot or an asymmetric matrix [`LinalgError::NotPositiveDefinite`], an overflow [`LinalgError::NotFinite`]: no result holds an infinity or a NaN. Tiny pivots are allowed: conditioning is the caller's to judge (the complete orthogonal decomposition in [`crate::qr`] decides rank).",
+            "**Charged first.** Each factorisation charges its cost to the [`Work`] budget before any arithmetic: n³ multiply-adds for LU and Cholesky (an upper bound: n³/3 and n³/6 are the leading terms), n² for a solve with factors, n for a tridiagonal solve."
+          ],
+          "job": "Square systems: LU with partial pivoting, Cholesky, triangular and tridiagonal solves.",
+          "method": {
+            "links": [
+              "https://www.netlib.org/lapack/lug/"
+            ],
+            "text": "G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013): algorithm 3.4.1 (Gaussian elimination with partial pivoting, outer-product form), 3.1.1 and 3.1.2 (row-oriented forward and back substitution), 4.2.2 (Cholesky, gaxpy form) and section 4.3.6 with LAPACK's `dgtsv` (tridiagonal elimination with partial pivoting, which fills one extra superdiagonal; E. Anderson et al., *LAPACK Users' Guide*, 3rd ed., SIAM (1999), <https://www.netlib.org/lapack/lug/>), written in our own words from the books (chapter 29.4's row for LAPACK, Golub and Van Loan and the Thomas algorithm)."
+          },
+          "path": "geom_linalg::solve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "Jacobi charges n²·(5m + 2n) per sweep and converges in a handful of sweeps; Golub–Kahan charges 8·m·n² + 4·n³ for the reduction and the accumulation, then (k + 1)·(4(m + n) + 12) per QR step. Each allocates its working copy, U and V.",
+          "does": "[`Svd::jacobi`] and [`Svd::golub_kahan`] factor an m × n matrix as A = U·Σ·Vᵀ, with k = min(m, n) singular values in Σ, largest first, U m × k and V n × k with orthonormal columns. A wide matrix is factored through its transpose.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+          "guarantees": [
+            "**Deterministic.** Fixed sweep order (pairs (p, q), p < q, row by row), fixed deflation and shift rules, IEEE 754 operations in the order written, the correctly rounded square root of `geom_num::math`, no fused multiply-add, and a stable sort with ties broken by column index. The same input gives the same bits on every target.",
+            "**Accuracy, checked against exact rationals.** Both are backward stable: the computed factors are those of a matrix A + E with ‖E‖ a small multiple of u·‖A‖ (Golub and Van Loan, 8.6.3), so each singular value is within that of the exact one. Jacobi does better on graded matrices A = B·D with B well conditioned: each singular value to a small multiple of u·κ(B) in relative terms, however small (Demmel and Veselić, theorem 4.4). The tests check both claims with exact rational arithmetic: the residual and the orthogonality of U and V, and each singular value bracketed by exact inertia counts of Aᵀ·A.",
+            "**Bounded.** Jacobi stops after [`MAX_SWEEPS`] sweeps and Golub–Kahan after 6·k² QR steps with [`LinalgError::NoConvergence`]; neither has ever needed it in the tests. Each sweep or step charges its work before it runs; the reductions charge theirs first.",
+            "**Typed failures.** Columns whose norms differ by more than the doubles can hold (a rotation angle that is not finite) are [`LinalgError::NotFinite`], never a silently wrong factor."
+          ],
+          "job": "The singular value decomposition, two ways: one-sided Jacobi, accurate to the last bits of tiny singular values of graded matrices, and Golub–Kahan, the fast general method.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/0106005",
+              "https://doi.org/10.1137/0613074",
+              "https://doi.org/10.1137/0702016"
+            ],
+            "text": "M. R. Hestenes, \"Inversion of matrices by biorthogonalization and related results\", *Journal of the SIAM* 6(1) (1958), 51–90, <https://doi.org/10.1137/0106005>. J. Demmel and K. Veselić, \"Jacobi's method is more accurate than QR\", *SIAM Journal on Matrix Analysis and Applications* 13(4) (1992), 1204–1245, <https://doi.org/10.1137/0613074>. G. Golub and W. Kahan, \"Calculating the singular values and pseudo-inverse of a matrix\", *Journal of the SIAM, Series B* 2(2) (1965), 205–224, <https://doi.org/10.1137/0702016>. G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), algorithms 5.4.2 (bidiagonalisation), 8.6.1 and 8.6.2 (the Golub–Kahan SVD step and algorithm) and section 8.6.3 (accuracy)."
+          },
+          "path": "geom_linalg::svd",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-linalg",
       "provenance": [],
       "sections": "15.6 and 16.6; open questions OQ-15.7, OQ-16.1 and OQ-29.16; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G49, G50, G215.",
+      "status": "dense decompositions built (G49, G50); the sparse parts (G215) to come.",
       "summary": "Spare Kit geometry kernel: deterministic linear algebra."
     },
     {
@@ -2542,6 +2781,27 @@
           "target": "lib"
         },
         {
+          "cost": "constant time, no allocation. Applying is ten `i128` products for M(q) and nine for the image, and three Euclidean divisions; composing is sixteen products and a reduction (four greatest common divisors); a 2D search is about twenty interval operations, at most 200 steps of the simplest-rational loop and one certificate (about 60 interval operations); a 3D search is at most 36 roundings and certificates.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/rotation.rs",
+          "guarantees": [
+            "a [`RationalRotation`] is exact and canonical, its image of a grid point is the exact image rounded once, ties to even, with whether it was exact; composition is exact while the product fits the budget and otherwise re-approximated once, saying by how much; every [`WithinAngle`] bound is a certified upper bound on the true angle and at most the bound asked for; and a step the budget proves fits that fails all the same is reported as [`NumError::BudgetExceeded`], never answered."
+          ],
+          "job": "Rational rotations: one exact rotation type for 2D and 3D, held as an integer quaternion, and the closest such rotation, or Pythagorean direction, within a requested angle (decision 32.14).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/142675.142726",
+              "https://global.oup.com/academic/product/9780199219865"
+            ],
+            "text": "J. Canny, B. Donald and E. K. Ressler, \"A rational rotation method for robust geometric algorithms\", Proceedings of the 8th Symposium on Computational Geometry (1992), 251–260, <https://doi.org/10.1145/142675.142726>, for the 2D directions; the Euler–Rodrigues parametrisation of rotations by quaternions for the 3D type (decision 32.14); the simplest rational in an interval from the continued fractions of its ends (G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press (2008), chapter 10, <https://global.oup.com/academic/product/9780199219865>); interval arithmetic as in [`geom_num::interval`]. The quaternion of a rational rotation matrix ([`RationalRotation::from_rational`]) is read from the identity d·(1 + tr R) = 4w²·d/|q|² and its companions, derived in that function's comment."
+          },
+          "path": "geom_math::rotation",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a value and one flag; reading either is a copy.",
           "does": null,
           "family": [],
@@ -2764,6 +3024,35 @@
       ],
       "errors": [
         {
+          "doc": "Why a search could not give its result.",
+          "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+          "kinds": [
+            {
+              "doc": "`f(a)` and `f(b)` have the same sign and neither is zero: `[a, b]` is not a bracket.",
+              "name": "SameSign",
+              "shape": "unit"
+            },
+            {
+              "doc": "`a` is not below `b`, or the tolerance is negative.",
+              "name": "BadInterval",
+              "shape": "unit"
+            },
+            {
+              "doc": "`f` was evaluated `cap` times without meeting the tolerance.",
+              "name": "CapReached",
+              "shape": "unit"
+            },
+            {
+              "doc": "The function, or a value it returned, failed.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_num::brent",
+          "name": "BrentError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a number could not be made or an exact computation could not proceed.",
           "file": "projects/engines/geometry/crates/geom-num/src/error.rs",
           "kinds": [
@@ -2828,6 +3117,40 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why an integral could not be given.",
+          "file": "projects/engines/geometry/crates/geom-num/src/quadrature.rs",
+          "kinds": [
+            {
+              "doc": "`a` is not below `b`, or a tolerance is negative.",
+              "name": "BadInterval",
+              "shape": "unit"
+            },
+            {
+              "doc": "No rule of that size: Gauss–Legendre has 1 to 20 points, and there are six Kronrod rules.",
+              "name": "NoSuchRule",
+              "shape": "unit"
+            },
+            {
+              "doc": "The tolerance was not met within `cap` bisections or [`MAX_PANELS`] panels.",
+              "name": "CapReached",
+              "shape": "unit"
+            },
+            {
+              "doc": "A panel became too narrow to split in `f64`.",
+              "name": "TooNarrow",
+              "shape": "unit"
+            },
+            {
+              "doc": "The function, or a sum, failed.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_num::quadrature",
+          "name": "QuadError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a draw or a stream range could not be made. A failed draw leaves its stream exactly as it was.",
           "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
           "kinds": [
@@ -2876,7 +3199,7 @@
         "A [`plane::Plane`] and a [`plane::Tpi`] check their bit budgets when they are made, so every computation on them fits its type.",
         "Committing a three-plane point to the grid ([`plane::Tpi::to_grid`]) rounds each coordinate to the nearest step, ties to even, moving it by at most half a step ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.",
         "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] and [`wide32`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
-        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1). Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
+        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1); [`brent`]'s searches and [`quadrature`]'s integrals return `Real`s, and stop at a caller's cap with an error, never a best guess. Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
         "Every interval operation encloses the exact result of its operation on any reals in its operands, and an enclosure that needs a maths function without a proven error is refused ([`NumError::UnprovenMaths`]).",
         "A bound carries its grid step, and bounds add exactly in the finer step ([`exactness::Exactness`]).",
         "Every double-double operation ([`dd::DD`]) is within its stated error bound of the exact result: the published, machine-checked bound of its algorithm (the theorem is named on each operation), plus, from the range of binary64, 2^−398 relative for products, quotients and roots and 2^−1074 absolute for products and quotients. A `DD` is never NaN or infinite: an overflow is [`NumError::NotFinite`].",
@@ -2887,6 +3210,29 @@
       "kind": "kernel",
       "layer": "1",
       "modules": [
+        {
+          "cost": "each step is a few dozen floating-point operations and one evaluation of `f`; the number of steps is at most about (log₂((b − a)/δ))² for [`zero`] and of the order of log((b − a)/δ)/log(1/0.618) golden-section steps for [`minimum`] (δ the tolerance), and in any case at most `cap`. No allocation, no recursion.",
+          "does": "[`zero`] narrows a bracket `[a, b]` across which `f` changes sign, by bisection, the secant step and inverse quadratic interpolation, taking an interpolated step only while it stays well inside the bracket and keeps shrinking it fast enough, so it converges as surely as bisection and usually much faster. [`minimum`] narrows an interval holding a minimum of `f` by golden-section steps and successive parabolic interpolation, under the same safeguards. Chapter 12.4 asks for exactly this in one unknown (\"bracketing in the manner of Brent (1973)\"); a caller that has a derivative takes a Newton step only inside the bracket this returns.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
+          "guarantees": [
+            "**The bracket is kept.** [`zero`] returns `x` with `f(x) = 0` exactly, or `x` and `other` with `f(x)` and `f(other)` of opposite signs and |x − other| at most 4u|x| + `tol` (u = 2^−53): a sign change of `f` as computed lies between them, whatever the rounding inside `f`.",
+            "**The interval is kept.** [`minimum`] evaluates `f` only inside `(a, b)`, never closer than its tolerance to either end, and returns the point with the least value it evaluated; on a function unimodal on `[a, b]` that point is within 2(√u|x| + `tol`/3) of the minimum.",
+            "**A cap, never a guess.** Each call evaluates `f` at most `cap` times; reaching the cap is [`BrentError::CapReached`], never the best point so far. A function error is returned as it is ([`BrentError::Num`]).",
+            "**Never NaN, deterministic.** Every value is a finite [`Real`]; the steps use only IEEE 754 basic operations in a fixed order, so every target computes the same points. An interpolation whose arithmetic would overflow is replaced by the bisection or golden-section step, as an unacceptable interpolation is."
+          ],
+          "job": "Brent's methods for one unknown: a zero of a function in a bracket, and a minimum of a function on an interval, with function values only.",
+          "method": {
+            "links": [
+              "https://maths-people.anu.edu.au/~brent/pub/pub011.html"
+            ],
+            "text": "R. P. Brent, *Algorithms for Minimization without Derivatives*, Prentice-Hall (1973), chapter 4 (procedure `zero`) and chapter 5 (procedure `localmin`), <https://maths-people.anu.edu.au/~brent/pub/pub011.html>, written in our own words from the algorithms as G. E. Forsythe, M. A. Malcolm and C. B. Moler give them in *Computer Methods for Mathematical Computations*, Prentice-Hall (1977), routines `zeroin` and `fmin`. Netlib's copies of those two routines carry no licence file, so they were read only as a description of the method, as chapter 29.4's \"Brent 1973\" row allows for such sources, for the order of Brent's tests and his stopping rules; no code was taken."
+          },
+          "path": "geom_num::brent",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant time and no allocation: a few `i128` products for the weight and the numerators, two products in [`I256`] for a side, and one restoring long division per coordinate to commit, as in [`crate::plane`].",
           "does": null,
@@ -3758,6 +4104,50 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`gauss_legendre`] is n evaluations of f and an exact sum; [`integrate`] is 2n + 1 evaluations per panel, at most `cap` + 1 panels, and a search of at most [`MAX_PANELS`] panels per bisection. No allocation (the panels live in a fixed array on the stack, 40 bytes each), no recursion.",
+          "does": "[`gauss_legendre`] applies an n-point Gauss–Legendre rule (n from 1 to 20) on `[a, b]`. [`integrate`] estimates ∫ₐᵇ f by one of the six Gauss–Kronrod rules ([`crate::quadrature_rules::GAUSS_KRONROD`]), splitting the panel with the largest error estimate in two until the summed estimate meets the tolerance: QUADPACK's QAG strategy. The rules are generated by geom-gen, every node and weight correctly rounded (`quadrature_rules`'s header). Chapter 12's transcendental enclosures (the Fresnel integrals of clothoids) integrate with the Gauss–Legendre rules and bound the remainder themselves; [`integrate`]'s estimate is for measures that need no proof (an arc length to report, a mass property).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/quadrature.rs",
+          "guarantees": [
+            "**Exact to the rules' degrees.** The n-point Gauss rule integrates every polynomial of degree at most 2n − 1, and a Kronrod rule of 2n + 1 points every one of degree at most 3n + 1, up to the rounding of the rule's entries and of the sum (`tests/quadrature.rs` checks every rule against exact rational integrals).",
+            "**An estimate, labelled as one.** [`Integral::error`] is the sum over panels of |Kronrod − Gauss|, Kronrod's classic estimate of the Gauss result's error, which for smooth functions far exceeds the Kronrod result's. It is not a bound: a caller that needs a proven bound encloses the remainder from a derivative bound instead (chapter 12.10).",
+            "**A cap, never a guess.** At most `cap` bisections, and at most [`MAX_PANELS`] panels; reaching either without meeting the tolerance is [`QuadError::CapReached`], never the best value so far.",
+            "**Deterministic and order-free.** Panels are evaluated and split in a fixed order (the first panel with the largest estimate is split, left half in its place, right half last), every sum is taken exactly with [`ExactSum`] and rounded once, and the result is a finite [`Real`]; the same bits on every target."
+          ],
+          "job": "Numerical integration in one variable: fixed Gauss–Legendre rules, and an adaptive integrator on Gauss–Kronrod rules with an error estimate.",
+          "method": {
+            "links": [
+              "doi:10.1007/978-3-642-61786-7"
+            ],
+            "text": "the Gauss–Kronrod pair and the adaptive bisection of R. Piessens, E. de Doncker-Kapenga, C. W. Überhuber and D. K. Kahaner, *QUADPACK: A Subroutine Package for Automatic Integration*, Springer (1983), doi:10.1007/978-3-642-61786-7, routines QK and QAG; the error estimate |K − G| is Kronrod's (A. S. Kronrod, *Nodes and Weights of Quadrature Formulas*, Consultants Bureau (1965)), without QUADPACK's empirical rescaling."
+          },
+          "path": "geom_num::quadrature",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time: constant tables.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/quadrature_rules/mod.rs",
+          "guarantees": [
+            "every node and weight is the `f64` nearest to its exact value, ties to even, decided by geom-gen from an exact rational enclosure; nodes are ascending and symmetric about 0; in a Kronrod rule the Gauss nodes are the odd positions, the same bits as the Gauss rule's own. The n-point Gauss rule integrates every polynomial of degree at most 2n − 1 exactly, and a Kronrod rule every one of degree at most 3n + 1 (n even) or 3n + 2 (n odd), up to the rounding of its entries (`tests/quadrature.rs`)."
+          ],
+          "job": "Generated by geom-gen, generator `quadrature-rules` (seed: none, it uses no randomness), by `projects/engines/geometry/crates/geom-gen/src/quadrature.rs`. Do not edit: change the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "doi:10.1090/S0025-5718-69-99647-1",
+              "doi:10.1007/BF01448041"
+            ],
+            "text": "Golub and Welsch's eigenvalue method for the Gauss rules, with Sturm-count bisection (G. H. Golub and J. H. Welsch, Mathematics of Computation 23 (1969), doi:10.1090/S0025-5718-69-99647-1), and Kronrod's extension from its definition, the zeros of the Stieltjes polynomial with interpolatory weights (A. S. Kronrod 1965; G. Szegő 1935, doi:10.1007/BF01448041); the generator's header gives the details."
+          },
+          "path": "geom_num::quadrature_rules",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
