@@ -58,9 +58,10 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 23] = [
+const GEOM_NUM: [(&str, &str); 26] = [
     ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
+    ("dual", include_str!("../../geom-num/src/dual.rs")),
     ("eft", include_str!("../../geom-num/src/eft.rs")),
     ("error", include_str!("../../geom-num/src/error.rs")),
     ("exact_sum", include_str!("../../geom-num/src/exact_sum.rs")),
@@ -74,6 +75,7 @@ const GEOM_NUM: [(&str, &str); 23] = [
     ("ladder", include_str!("../../geom-num/src/ladder.rs")),
     ("lib", include_str!("../../geom-num/src/lib.rs")),
     ("math", include_str!("../../geom-num/src/math.rs")),
+    ("newton", include_str!("../../geom-num/src/newton.rs")),
     ("perturb", include_str!("../../geom-num/src/perturb.rs")),
     ("plane", include_str!("../../geom-num/src/plane.rs")),
     ("crossing", include_str!("../../geom-num/src/crossing.rs")),
@@ -88,6 +90,7 @@ const GEOM_NUM: [(&str, &str); 23] = [
     ),
     ("real", include_str!("../../geom-num/src/real.rs")),
     ("rng", include_str!("../../geom-num/src/rng.rs")),
+    ("scalar", include_str!("../../geom-num/src/scalar.rs")),
     ("sign", include_str!("../../geom-num/src/sign.rs")),
     ("wide", include_str!("../../geom-num/src/wide.rs")),
     ("wide32", include_str!("../../geom-num/src/wide32.rs")),

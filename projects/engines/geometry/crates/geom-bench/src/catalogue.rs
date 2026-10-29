@@ -367,10 +367,17 @@ pub static OPS: &[Op] = &[
     Op { group: "perturb", name: "orient3d", measures: "perturb::orient3d", classes: TD, prepare: |c| bind(inputs::perturb::orient3d(c), kernels::perturb::orient3d) },
     Op { group: "perturb", name: "incircle", measures: "perturb::incircle", classes: TD, prepare: |c| bind(inputs::perturb::incircle(c), kernels::perturb::incircle) },
     Op { group: "perturb", name: "insphere", measures: "perturb::insphere", classes: TD, prepare: |c| bind(inputs::perturb::insphere(c), kernels::perturb::insphere) },
+    // The interval Newton operators, one step each, and the Jacobians they rest on (G52).
+    Op { group: "newton", name: "krawczyk_2", measures: "newton::krawczyk", classes: TE, prepare: |c| bind(inputs::newton::krawczyk_2(c), kernels::newton::krawczyk_2) },
+    Op { group: "newton", name: "hansen_sengupta_2", measures: "newton::hansen_sengupta", classes: TE, prepare: |c| bind(inputs::newton::hansen_sengupta_2(c), kernels::newton::hansen_sengupta_2) },
+    Op { group: "newton", name: "krawczyk_4", measures: "newton::krawczyk", classes: TE, prepare: |c| bind(inputs::newton::krawczyk_4(c), kernels::newton::krawczyk_4) },
+    Op { group: "newton", name: "hansen_sengupta_4", measures: "newton::hansen_sengupta", classes: TE, prepare: |c| bind(inputs::newton::hansen_sengupta_4(c), kernels::newton::hansen_sengupta_4) },
+    Op { group: "dual", name: "jacobian_real", measures: "dual::jacobian", classes: TE, prepare: |c| bind(inputs::newton::jacobian_real(c), kernels::dual::jacobian_real) },
+    Op { group: "dual", name: "jacobian_interval", measures: "dual::jacobian", classes: TE, prepare: |c| bind(inputs::newton::jacobian_interval(c), kernels::dual::jacobian_interval) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 18] = [
+pub const GROUPS: [&str; 20] = [
     "predicate",
     "sign",
     "wide",
@@ -389,6 +396,8 @@ pub const GROUPS: [&str; 18] = [
     "exact_sum",
     "generated",
     "perturb",
+    "newton",
+    "dual",
 ];
 
 /// The group of the growth checks.
@@ -587,6 +596,10 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("brent::minimum", "a search: its cost is its count of the caller's function's evaluations, at most the cap, which the result reports and tests/brent.rs checks, plus a few dozen f64 operations per evaluation"),
     ("quadrature::gauss_legendre", "n evaluations of the caller's function and one exact sum of n terms: the cost is the function's"),
     ("quadrature::integrate", "2n + 1 evaluations of the caller's function per panel, counted in the result, and exact sums: the cost is the function's"),
+    ("Dual::new", "a constructor: stores its two arguments"),
+    ("Dual::value", "field accessor"),
+    ("Dual::partials", "field accessor"),
+    ("Dual::variables", "N stores per unknown, measured inside dual::jacobian, which calls it once per evaluation"),
     ("ladder::quarter_nm", "one checked multiplication by GridStep::quarter_nm, for reports; never on a kernel path"),
     ("Philox::new", "raw constructor"),
     ("Philox::seed", "field accessor"),
