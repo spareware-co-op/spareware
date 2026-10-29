@@ -759,6 +759,60 @@ fn a_point_past_the_doubles_is_refused() {
 }
 
 #[test]
+fn a_station_just_before_a_panel_start_stays_in_the_panel_before() {
+    // L = 1 + 2⁻⁵², so L·¾ = ¾ + 1.5·2⁻⁵³ is not a double. The station ¾ + 2⁻⁵³ lies before it and
+    // ¾ + 2⁻⁵² past it, yet both quotients by L round to ¾, a panel start: only an exact
+    // comparison tells them apart.
+    let length = 1.0 + f64::EPSILON;
+    let law = CurvatureLaw::Clothoid {
+        start: 0.0,
+        end: 60.0,
+    };
+    let t = Transition::new([0.0, 0.0], [1.0, 0.0], length, law, &mut meter()).unwrap();
+    let n = t.panels();
+    assert!(n >= 4, "{n}");
+    let (before, after) = (0.75 + f64::EPSILON / 2.0, 0.75 + f64::EPSILON);
+    assert_eq!((before / length, after / length), (0.75, 0.75));
+    assert_eq!(t.panel_at(before), Ok(3 * n / 4 - 1));
+    assert_eq!(t.panel_at(after), Ok(3 * n / 4));
+    assert_eq!(t.panel_at(0.0), Ok(0));
+    assert_eq!(t.panel_at(length), Ok(n - 1));
+    assert_eq!(t.panel_at(-1.0), Err(CurveError::ParameterOutside));
+    let truth = truth(&law, length, [0.0, 0.0], [(1, 1), (0, 1)]);
+    for s in [before, after] {
+        let e = t.enclose(s, 1, &mut meter()).unwrap();
+        let jet = truth.jet(&fx(s));
+        for k in 0..2 {
+            for d in 0..2 {
+                assert!(
+                    holds(e[k][d], &jet[k][d]),
+                    "at {s}: derivative {k}, axis {d}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_cap_is_the_last_count_built() {
+    // Curvature 10⁴ over a unit length needs exactly the cap, 2¹² panels; twice that needs more.
+    let constant = |k: f64| {
+        Transition::new(
+            [0.0, 0.0],
+            [1.0, 0.0],
+            1.0,
+            CurvatureLaw::Clothoid { start: k, end: k },
+            &mut meter(),
+        )
+    };
+    assert_eq!(
+        constant(1e4).unwrap().panels(),
+        geom_curve::transition::MAX_PANELS
+    );
+    assert_eq!(constant(2e4).map(|_| ()), Err(CurveError::TooManyPanels));
+}
+
+#[test]
 fn stations_outside_are_refused() {
     let t = build(&cases()[0]);
     for s in [-1e-300, 120.0f64.next_up(), f64::NAN, f64::INFINITY] {

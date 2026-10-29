@@ -74,8 +74,9 @@ use crate::tight::{self, point};
 /// The Gauss–Legendre points per panel.
 pub const NODES: usize = 8;
 
-/// The most panels a transition is given: 2¹⁶.
-pub const MAX_PANELS: usize = 65_536;
+/// The most panels a transition is given: 2¹², enough for about three thousand half-turns of
+/// heading change at constant curvature, far past any alignment's transition.
+pub const MAX_PANELS: usize = 4096;
 
 /// The rule of [`NODES`] points (entry n − 1 has n points).
 const RULE: GaussRule = GAUSS_LEGENDRE[7];
@@ -387,10 +388,7 @@ impl Transition {
         let a = ratio(index, self.panels.len())?;
         let half = xi.sub(point(a)?)?.mul(point(0.5)?)?;
         let [x, y] = integral(h, point(a)?, half)?;
-        let (l, r) = (
-            point(self.length)?,
-            Interval::new(-panel.remainder, panel.remainder)?,
-        );
+        let (l, r) = (point(self.length)?, spread(panel.remainder)?);
         let local = [
             panel.x.add(l.mul(x)?)?.add(r)?,
             panel.y.add(l.mul(y)?)?.add(r)?,
@@ -409,6 +407,17 @@ impl Transition {
             out.push(self.turned(g)?);
         }
         Ok(out)
+    }
+
+    /// The panel holding station `t`, decided exactly: panel k covers ξ = t/L from k/P up to
+    /// (k + 1)/P for P = [`Transition::panels`], the last one to ξ = 1 included.
+    ///
+    /// # Errors
+    ///
+    /// As [`Transition::point`].
+    pub fn panel_at(&self, t: f64) -> Result<usize, CurveError> {
+        form::check_parameter(self.domain(), t)?;
+        Ok(self.locate(t)?.0)
     }
 
     /// The heading's turn from the start at station `t`, in half-turns, enclosed: the closed form,
@@ -612,6 +621,11 @@ impl Num for Interval {
     }
 }
 
+/// [−r, r]: a remainder bound as the interval an enclosure is widened by.
+fn spread(r: f64) -> Result<Interval, CurveError> {
+    Ok(Interval::new(-r, r)?)
+}
+
 /// A point that must be finite.
 fn finite(p: [f64; 2]) -> Result<[f64; 2], CurveError> {
     if p.iter().all(|v| v.is_finite()) {
@@ -795,7 +809,7 @@ fn integrate(
             second: second.is_some() && a >= 0.5,
         });
         let [qx, qy] = integral(h, point(a)?, half)?;
-        let e = Interval::new(-r, r)?;
+        let e = spread(r)?;
         x = x.add(l.mul(qx)?)?.add(e)?;
         y = y.add(l.mul(qy)?)?.add(e)?;
     }
