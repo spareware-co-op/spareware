@@ -625,6 +625,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Alignment transitions as kinds or compositions, and their names | 7, 17, 26 | 32.33 (owner action G357) |
 | TIN ties in plan-coordinate order rather than by persistent name | 6, 17, 21 | 32.34 (owner action G358) |
 | How imported edges are marked Smooth | 6, 18 | 32.35 (owner action G384) |
+| Hidden-line predicates of 576 and 640 bits | 6, 18 | 32.36 (owner action G385) |
 
 ### Answered by the pieces built so far
 
@@ -642,7 +643,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Question | Raised in | Decided in |
 | --- | --- | --- |
 | Extend 6.2's fixed-width predicates past 384 bits for straight-skeleton events: 576 bits for 2D event order and about 768 bits for 3D mitre offsets (our derivations, to be written out) | 13 | 32.29 (owner action G240): accepted with 6.2's conditions; pieces "Exact weighted straight skeleton" and "3D weighted straight skeleton for mitre offsets" write the derivations |
-| The same for exact hidden lines: about 547 bits on grid-axis views and 633 bits for any direction or perspective (576- and 640-bit types), or exact visibility on grid-axis views only | 18 | Decision note to 6.2; piece "Exact view predicates" |
+| The same for exact hidden lines: about 547 bits on grid-axis views and 633 bits for any direction or perspective (576- and 640-bit types), or exact visibility on grid-axis views only | 18 | 32.36 (owner action G385): both widths, every view, on 32.29's conditions; piece "Exact view predicates" |
 | Fixed-width integers of several thousand bits on a cold path for general quadric pairs (Dupont, Lazard, Lazard and Petitjean), rather than arbitrary precision | 12 | Piece "Bit budgets for the exact algebraic decisions in intersections" |
 | The real widths of 2D construction predicates: rational directions of about 44 bits, tangency positions about 70 bits finer than a step, the deepest possibly thousands of bits | 14 | Piece "2D-01", with its width generator and benchmark |
 | Exact incircle on implicit TIN crossings would need about 1,024 bits (an estimate). Not planned; recorded as a limit | 17 | No piece; chapter 17 text |

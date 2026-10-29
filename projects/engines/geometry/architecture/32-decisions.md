@@ -53,6 +53,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.33 | G357: alignment curve kinds | One transition kind with a closed set of curvature laws (Helmert, Bloss, cosine, sine, the cant-coupled transition, IFC's polynomial spirals, the cubic spiral); the cubic parabola a polynomial curve; gradient and segmented reference curves compositions in `geom-align`; descriptive names, file enumerators kept as data | 7, 17, 26 | G371, transition kinds |
 | 32.34 | G358: TIN tie order | Plan position, x then y, for a TIN's Delaunay ties, as chapter 17 asks; name order everywhere else | 6, 17, 21 | G362, the exact Delaunay core |
 | 32.35 | G384: smooth-edge marking | An explicit, logged operation marks edges Smooth below an angle θ the caller passes and the log records; no kernel default, no ladder rung | 6, 18 | G398, line classes and continuity records |
+| 32.36 | G385: view predicates beyond 384 bits | `I576` for grid-axis views and `I640` for any direction and perspective, accepted on 32.29's conditions (derivation, certificate, extreme tests, filter, measured) | 6, 18 | G388, exact view predicates |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -673,3 +674,16 @@ Why: for terrain the point set is the model; a surface that depends on point nam
 Why: a hidden import angle would be a tolerance no one chose and that differs from one program's expectations to the next; a logged parameter is a decision on record, which replays and can be changed.
 
 **Changes:** 6.5's proposed rungs, 18.7, 31.7 and piece G398.
+
+## 32.36 View predicates beyond 384 bits (owner action G385)
+
+**What it is.** Exact hidden lines for flat geometry decide every visibility event by the sign of an integer expression on implicit points made from face planes and derived planes through each outline edge (18.6). The deepest test, ordering two events along one edge, needs about 13B + 27 = 547 bits on a view along a grid axis and 15B + 33 = 633 bits for any direction or a perspective, so `I576` and `I640`: past 6.2's 384 bits. Chapter 18 objects to the limit for these predicates; the alternative is exact visibility on grid-axis views only, certified elsewhere (31.7).
+
+**Decided 2026-10-28 (owner action G385): accepted for every view, on the conditions owner action G240 set (32.29).** Read with 6.2, 18.6, 23.2, 23.3, 32.29, R4 and R7.
+- **`I576` for grid-axis views and `I640` for any direction and for perspective** join 6.2's list, used only by the view predicates. Plans, sections and elevations, the commonest drawings, take the narrower width.
+- **The same conditions as 32.29:** a written derivation of each budget (18.6 gives the estimates; piece G388 writes them out, and a wider result widens the type), generation by `geom-gen` with a checked certificate, a test with every coordinate at ±(2^40 − 1), a generated filter so the wide path runs only near degenerate cases, and instruction counts natively and in WebAssembly under the count gate.
+- **Exact everywhere, not only on axis views.** An axis view is no more important than an axonometric or a perspective a person checks a design by, and certified visibility would let an edge flicker between visible and hidden in exactly the near-degenerate cases a drawing checker must not miss (18.10).
+
+Why: drawings are a contract document; exact visibility makes every view the same on every machine and every replay, and the filter keeps the cost to the rare near-degenerate events.
+
+**Changes:** 6.2's list, 18.6, 31.7 and piece G388.
