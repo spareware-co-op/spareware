@@ -150,9 +150,6 @@ const FILTER: f64 = const_pow2!(-40);
 /// documentation).
 const INPUT_BITS: u32 = 200;
 
-/// The integer below `i128::MAX`: X > MAX − 1/2 = (MAX − 1) + 1/2 saturates.
-const BELOW_MAX: i128 = i128::MAX - 1;
-
 /// The smallest magnitude an irrational map coordinate can have, 2^−300 units (see
 /// [`FrameRecord::to_map`]): every bisection stays above it.
 const IRRATIONAL_MIN: f64 = const_pow2!(-300);
@@ -515,20 +512,19 @@ impl Axis {
         })
     }
 
-    /// The exact rounding of an X whose estimate is beyond 2^41: `i128::MAX` if X > MAX − 1/2 and
-    /// `i128::MIN` if X ≤ MIN + 1/2 (the numbers layer's saturated values; MAX − 1/2 itself rounds
-    /// to the even MAX − 1), otherwise by bisection for ⌊X⌋ over the whole of `i128`, which then
-    /// holds X strictly, each step one exact sign: at most 128 halvings. This path serves only
-    /// out-of-range coordinates, so it spends signs rather than trust the estimate's bracket.
+    /// The exact rounding of an X whose estimate is beyond 2^41: `i128::MIN` if X ≤ MIN + 1/2 (the
+    /// numbers layer's saturated value), otherwise by bisection for ⌊X⌋ over the whole of `i128`,
+    /// each step one exact sign: at most 128 halvings. An X at or above `i128::MAX` ends it with
+    /// ⌊X⌋ taken as MAX − 1 and rounds up to MAX, the saturated value, as every X > MAX − 1/2 does
+    /// (MAX − 1/2 itself rounds to the even MAX − 1). This path serves only out-of-range
+    /// coordinates, so it spends signs rather than trust the estimate's bracket.
     fn far(&self) -> Result<Rounded<i128>, NumError> {
-        if self.sign_at(BELOW_MAX, true)? == Sign::Positive {
-            return Ok(Rounded::new(i128::MAX, false));
-        }
         if self.sign_at(i128::MIN, true)? != Sign::Positive {
             return Ok(Rounded::new(i128::MIN, false));
         }
         let (mut lo, mut hi) = (i128::MIN, i128::MAX);
-        // X ≥ lo and X < hi throughout; the gap is below 2^128 and halves every step.
+        // X ≥ lo throughout, and X < hi unless hi is still MAX; the gap is below 2^128 and halves
+        // every step.
         for _ in 0..130 {
             let gap = hi.abs_diff(lo);
             if gap <= 1 {
@@ -547,7 +543,7 @@ impl Axis {
         if self.sign_at(lo, false)? == Sign::Zero {
             return Ok(Rounded::new(lo, true));
         }
-        // lo = ⌊X⌋ < MAX here, so lo + 1 fits.
+        // lo < MAX here (⌊X⌋, or MAX − 1 for an X at or above MAX), so lo + 1 fits.
         let up = budget(lo.checked_add(1))?;
         Ok(Rounded::new(
             match self.sign_at(lo, true)? {
@@ -1139,6 +1135,9 @@ mod tests {
         // Just above it: saturated.
         let over = max.checked_add(&max).unwrap();
         assert_eq!(axis(over).round().unwrap().value(), i128::MAX);
+        // Far above MAX (X = 2^130), saturated too.
+        let above = axis(pow2_big(131).unwrap()).round().unwrap();
+        assert_eq!((above.value(), above.is_exact()), (i128::MAX, false));
         // X = MIN + 1/2 rounds to the even MIN, the saturated value.
         let min = Big::from_i128(i128::MIN);
         let low = min

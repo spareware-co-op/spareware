@@ -1393,6 +1393,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Without the arm a quarter turn at scale one takes the rational arm: its exact norm is 1 and its scale 1/1, so k_d*r = 1 and the quotient is (O + a)*q over S*p, the one the deleted arm forms; quotient_to_f64 rounds it to the nearest double, ties to even, and says whether it is exact, as rational_to_f64 does. The same doubles and exactness."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "delete - in Axis::round",
+      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant sends every estimate but exactly 2^41 to far() instead of settling it. far() decides any X by exact signs alone, never the estimate: the bisection over i128 finds floor(X), whether X is whole, and its rounding half to even, the rounded value and exactness settling gives; its signs' budgets (|t| <= 2^128, the module documentation) do not depend on X. Only the time differs: about 130 exact signs for a coordinate instead of at most two."
     }
   ],
   "coverage_off": [],
