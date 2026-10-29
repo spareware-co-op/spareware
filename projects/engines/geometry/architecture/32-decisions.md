@@ -832,6 +832,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-quality.yml` | `miri` | Not a gate: Miri runs weekly (28.17), and its pull-request leg only checks its own set-up when that changes |
 | `kernel-certificates.yml` | `gappa` | Open: #368, after G40 |
 | `kernel-certificates.yml` | `fptaylor` | Open: #368, after G40 |
+| `kernel-certificates.yml` | `fptaylor-problems` | Not a gate: it lists the FPTaylor problems, one `fptaylor` job each |
 | `kernel-fuzz-campaign.yml` | `campaign` | Not a gate: nightly, or on a pull request only when it is labelled `fuzz-campaign` |
 | `kernel-variants.yml` | `native` | Not a gate: timings for the variant report, on a pull request only when it is labelled `variant-bench` (its header: never a gate) |
 | `kernel-variants.yml` | `wasm` | Not a gate: as `native` |
