@@ -229,3 +229,171 @@ pub fn ssi_side_filter(class: Class) -> Vec<([P2; 4], P2, P2)> {
 pub fn ssi_side_value(class: Class) -> Vec<([P2; 4], P2, P2)> {
     ssi_three("generated::ssi_side::value", class)
 }
+
+/// Inputs for `generated::plain::orient2d_value` (piece G42): the same class and generator as
+/// `generated::orient2d::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn orient2d_value_plain(class: Class) -> Vec<[P2; 3]> {
+    predicate::orient2d_from("generated::plain::orient2d_value", class)
+}
+
+/// Inputs for `generated::plain::orient3d_value` (piece G42): the same class and generator as
+/// `generated::orient3d::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn orient3d_value_plain(class: Class) -> Vec<[P3; 4]> {
+    predicate::orient3d_from("generated::plain::orient3d_value", class)
+}
+
+/// Inputs for `generated::plain::incircle_value` (piece G42): the same class and generator as
+/// `generated::incircle::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn incircle_value_plain(class: Class) -> Vec<[P2; 4]> {
+    predicate::incircle_from("generated::plain::incircle_value", class)
+}
+
+/// Inputs for `generated::plain::insphere_value` (piece G42): the same class and generator as
+/// `generated::insphere::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn insphere_value_plain(class: Class) -> Vec<[P3; 5]> {
+    predicate::insphere_from("generated::plain::insphere_value", class)
+}
+
+/// Inputs for `generated::plain::plane_side_value` (piece G42): the same class and generator as
+/// `generated::plane_side::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn plane_side_value_plain(class: Class) -> Vec<([i128; 3], i128, P3)> {
+    plane_side("generated::plain::plane_side_value", class)
+}
+
+/// Inputs for `generated::plain::tpi_weight_value` (piece G42): the same class and generator as
+/// `generated::tpi_weight::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn tpi_weight_value_plain(class: Class) -> Vec<[[i128; 3]; 3]> {
+    tpi_normals("generated::plain::tpi_weight_value", class)
+}
+
+/// Inputs for `generated::plain::tpi_side_value` (piece G42): the same class and generator as
+/// `generated::tpi_side::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn tpi_side_value_plain(class: Class) -> Vec<[Coefficients; 4]> {
+    tpi_four("generated::plain::tpi_side_value", class)
+}
+
+/// Inputs for `generated::plain::lpi_weight_value` (piece G42): the same class and generator as
+/// `generated::lpi_weight::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn lpi_weight_value_plain(class: Class) -> Vec<([i128; 3], P3, P3)> {
+    lpi_line("generated::plain::lpi_weight_value", class)
+}
+
+/// Inputs for `generated::plain::lpi_side_value` (piece G42): the same class and generator as
+/// `generated::lpi_side::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn lpi_side_value_plain(class: Class) -> Vec<(Coefficients, Coefficients, P3, P3)> {
+    lpi_two("generated::plain::lpi_side_value", class)
+}
+
+/// Inputs for `generated::plain::ssi_weight_value` (piece G42): the same class and generator as
+/// `generated::ssi_weight::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn ssi_weight_value_plain(class: Class) -> Vec<[P2; 4]> {
+    ssi_lines("generated::plain::ssi_weight_value", class)
+}
+
+/// Inputs for `generated::plain::ssi_side_value` (piece G42): the same class and generator as
+/// `generated::ssi_side::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn ssi_side_value_plain(class: Class) -> Vec<([P2; 4], P2, P2)> {
+    ssi_three("generated::plain::ssi_side_value", class)
+}
+
+/// Inputs for `generated::limbs::orient2d_value` (piece G42): the same class and generator as
+/// `generated::orient2d::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn orient2d_value_limbs(class: Class) -> Vec<[P2; 3]> {
+    predicate::orient2d_from("generated::limbs::orient2d_value", class)
+}
+
+/// Inputs for `generated::limbs::orient3d_value` (piece G42): the same class and generator as
+/// `generated::orient3d::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn orient3d_value_limbs(class: Class) -> Vec<[P3; 4]> {
+    predicate::orient3d_from("generated::limbs::orient3d_value", class)
+}
+
+/// Inputs for `generated::limbs::incircle_value` (piece G42): the same class and generator as
+/// `generated::incircle::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn incircle_value_limbs(class: Class) -> Vec<[P2; 4]> {
+    predicate::incircle_from("generated::limbs::incircle_value", class)
+}
+
+/// Inputs for `generated::limbs::insphere_value` (piece G42): the same class and generator as
+/// `generated::insphere::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn insphere_value_limbs(class: Class) -> Vec<[P3; 5]> {
+    predicate::insphere_from("generated::limbs::insphere_value", class)
+}
+
+/// Inputs for `generated::limbs::plane_side_value` (piece G42): the same class and generator as
+/// `generated::plane_side::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn plane_side_value_limbs(class: Class) -> Vec<([i128; 3], i128, P3)> {
+    plane_side("generated::limbs::plane_side_value", class)
+}
+
+/// Inputs for `generated::limbs::tpi_weight_value` (piece G42): the same class and generator as
+/// `generated::tpi_weight::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn tpi_weight_value_limbs(class: Class) -> Vec<[[i128; 3]; 3]> {
+    tpi_normals("generated::limbs::tpi_weight_value", class)
+}
+
+/// Inputs for `generated::limbs::tpi_side_value` (piece G42): the same class and generator as
+/// `generated::tpi_side::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn tpi_side_value_limbs(class: Class) -> Vec<[Coefficients; 4]> {
+    tpi_four("generated::limbs::tpi_side_value", class)
+}
+
+/// Inputs for `generated::limbs::lpi_weight_value` (piece G42): the same class and generator as
+/// `generated::lpi_weight::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn lpi_weight_value_limbs(class: Class) -> Vec<([i128; 3], P3, P3)> {
+    lpi_line("generated::limbs::lpi_weight_value", class)
+}
+
+/// Inputs for `generated::limbs::lpi_side_value` (piece G42): the same class and generator as
+/// `generated::lpi_side::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn lpi_side_value_limbs(class: Class) -> Vec<(Coefficients, Coefficients, P3, P3)> {
+    lpi_two("generated::limbs::lpi_side_value", class)
+}
+
+/// Inputs for `generated::limbs::ssi_weight_value` (piece G42): the same class and generator as
+/// `generated::ssi_weight::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn ssi_weight_value_limbs(class: Class) -> Vec<[P2; 4]> {
+    ssi_lines("generated::limbs::ssi_weight_value", class)
+}
+
+/// Inputs for `generated::limbs::ssi_side_value` (piece G42): the same class and generator as
+/// `generated::ssi_side::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn ssi_side_value_limbs(class: Class) -> Vec<([P2; 4], P2, P2)> {
+    ssi_three("generated::limbs::ssi_side_value", class)
+}
+
+/// Inputs for `avnaim::orient2d` (piece G42): the class and generator of
+/// `generated::orient2d::value`'s, drawn under the method's own name.
+#[must_use]
+pub fn orient2d_avnaim(class: Class) -> Vec<[P2; 3]> {
+    predicate::orient2d_from("avnaim::orient2d", class)
+}
+
+/// Inputs for `avnaim::orient3d` (piece G42): the class and generator of
+/// `generated::orient3d::value`'s, drawn under the method's own name.
+#[must_use]
+pub fn orient3d_avnaim(class: Class) -> Vec<[P3; 4]> {
+    predicate::orient3d_from("avnaim::orient3d", class)
+}
