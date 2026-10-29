@@ -21,6 +21,10 @@
     reason = "expected values and oracles; the rules are for kernel code"
 )]
 #![allow(
+    clippy::many_single_char_names,
+    reason = "points are a to d, p and q, as in the predicates' descriptions"
+)]
+#![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
@@ -119,14 +123,141 @@ impl LpiSide {
     }
 }
 
+/// The inputs of [`lpi_side_filter_and_exact_path_at_their_scale`], each with what the filter
+/// gives.
+const LPI_SIDE_CASES: [(LpiSide, Option<Sign>); 10] = [
+    // Plane 2 is all zeros: scale zero.
+    (
+        LpiSide {
+            n1: [2, 2, -233_358_824_076_487_245],
+            d1: 0,
+            n2: [0, 0, 0],
+            d2: 0,
+            p: [3, -2, 752],
+            q: [248_080, -1, 52_492],
+        },
+        Some(Sign::Zero),
+    ),
+    // Plane 1 is all zeros, the points in the plane z = 0: scale zero.
+    (
+        LpiSide {
+            n1: [0, 0, 0],
+            d1: 0,
+            n2: [
+                -2_689_667_172_233_838_271_317,
+                -58_954_760_066_987_107_952,
+                5643,
+            ],
+            d2: 2,
+            p: [39_306_663_134, 204, 0],
+            q: [42_216_305_481, 166_491, 0],
+        },
+        Some(Sign::Zero),
+    ),
+    (
+        LpiSide {
+            n1: [0, 0, 0],
+            d1: 0,
+            n2: [-652_694_365, 1_468_077_915_979_003_307_525, 2],
+            d2: 1_299_493_247_340_153_136_774_922_002_001,
+            p: [-144_097_967, 0, -2],
+            q: [0, 0, -12],
+        },
+        Some(Sign::Zero),
+    ),
+    // Certified, the points in the plane z = 0.
+    (
+        LpiSide {
+            n1: [-1_055_861_940, 0, -1],
+            d1: -1_570_340_023_094,
+            n2: [0, 62, -425_903_796],
+            d2: -16_101_468_959_502_096_688_931_107_975_088,
+            p: [11, -1_750_436_742, 0],
+            q: [-1, 21_672_351_529, 0],
+        },
+        Some(Sign::Negative),
+    ),
+    // Certified, plane 2's normal zero.
+    (
+        LpiSide {
+            n1: [502, 2, 6164],
+            d1: -177_786_309_129_201_510_643_547_416_314_221_774,
+            n2: [0, 0, 0],
+            d2: -6_995_754_689_131_887_120_663_941_320_872_684,
+            p: [234, 2, 0],
+            q: [-2, 470_188, -4],
+        },
+        Some(Sign::Negative),
+    ),
+    // Certified, the points in the plane y = 0.
+    (
+        LpiSide {
+            n1: [-184_152, 10, -2],
+            d1: 1_163_955_065_274_096_146_820_146_576_913_056_283,
+            n2: [306_527_896_834_831_526, 0, 521_664_790_050_985],
+            d2: 0,
+            p: [3, 0, -739_753_728],
+            q: [72, 0, 241_501],
+        },
+        Some(Sign::Negative),
+    ),
+    // Certified, plane 1's normal zero.
+    (
+        LpiSide {
+            n1: [0, 0, 0],
+            d1: 3,
+            n2: [0, 0, 956_903_552_190_510],
+            d2: 0,
+            p: [-1, -241_890, -1],
+            q: [0, 0, 58_658_160_066],
+        },
+        Some(Sign::Negative),
+    ),
+    // Not certified: points on the x axis (exact value zero), on the z axis (zero), and on the
+    // y axis (negative).
+    (
+        LpiSide {
+            n1: [-6_416_039_800, 0, 2086],
+            d1: 0,
+            n2: [-6_034_406_507_175_050_600, 0, 12_916_506],
+            d2: 0,
+            p: [-5_604_624, 0, 0],
+            q: [1, 0, 0],
+        },
+        None,
+    ),
+    (
+        LpiSide {
+            n1: [-1, 0, -2],
+            d1: 0,
+            n2: [1, 2, -18_630_418_146_364],
+            d2: 0,
+            p: [0, 0, 25_392],
+            q: [0, 0, -3_017_306],
+        },
+        None,
+    ),
+    (
+        LpiSide {
+            n1: [0, -75_782_325_630_070_485_624_642, 0],
+            d1: -222_696_737,
+            n2: [-414_947, -4, 0],
+            d2: 0,
+            p: [0, -5863, 0],
+            q: [0, 1_137_554, 0],
+        },
+        None,
+    ),
+];
+
 /// `lpi_side`'s filter over inputs where a mutant of its scale line answers differently, each
 /// checked against the exact sign: where the filter certifies, it must give that sign (a mutant
 /// whose scale is larger, or not a number, gives up); where it gives up, a mutant whose scale is
 /// smaller certifies a wrong sign. And its exact path gives the exact sign on every one.
 ///
-/// Kills, in `lpi_side::filter`'s scale lines (generated/lpi_side.rs:252 to 262), every
+/// Kills, in `lpi_side::filter`'s scale lines (`generated/lpi_side.rs:252 to 262`), every
 /// `replace * with +` and `replace * with /` that survived (60), and
-/// `replace exact -> Option<Sign> with None` (generated/lpi_side.rs:349).
+/// `replace exact -> Option<Sign> with None` (`generated/lpi_side.rs:349`).
 ///
 /// The first three inputs have a scale of zero: plane 2's normal and offset are zero, or plane 1's,
 /// so every term of the scale has a zero factor and the filter decides Zero, exactly (the module
@@ -136,135 +267,11 @@ impl LpiSide {
 /// number), so the filter gives up where it certified; the next four inputs certify with one group
 /// zero, a coordinate axis or a plane's normal. The last three have every point on one or two
 /// coordinate axes, where a term of the form `m_a · m_a · m_n1 · m_n2` leads the scale: turned into
-/// `m_a / m_a · m_n1 · m_n2` it shrinks by m_a² and the filter certifies a sign the exact value
+/// `m_a / m_a · m_n1 · m_n2` it shrinks by `m_a`² and the filter certifies a sign the exact value
 /// does not have (two of them are exactly zero).
 #[test]
 fn lpi_side_filter_and_exact_path_at_their_scale() {
-    let cases = [
-        // Plane 2 is all zeros: scale zero.
-        (
-            LpiSide {
-                n1: [2, 2, -233_358_824_076_487_245],
-                d1: 0,
-                n2: [0, 0, 0],
-                d2: 0,
-                p: [3, -2, 752],
-                q: [248_080, -1, 52_492],
-            },
-            Some(Sign::Zero),
-        ),
-        // Plane 1 is all zeros, the points in the plane z = 0: scale zero.
-        (
-            LpiSide {
-                n1: [0, 0, 0],
-                d1: 0,
-                n2: [
-                    -2_689_667_172_233_838_271_317,
-                    -58_954_760_066_987_107_952,
-                    5643,
-                ],
-                d2: 2,
-                p: [39_306_663_134, 204, 0],
-                q: [42_216_305_481, 166_491, 0],
-            },
-            Some(Sign::Zero),
-        ),
-        (
-            LpiSide {
-                n1: [0, 0, 0],
-                d1: 0,
-                n2: [-652_694_365, 1_468_077_915_979_003_307_525, 2],
-                d2: 1_299_493_247_340_153_136_774_922_002_001,
-                p: [-144_097_967, 0, -2],
-                q: [0, 0, -12],
-            },
-            Some(Sign::Zero),
-        ),
-        // Certified, the points in the plane z = 0.
-        (
-            LpiSide {
-                n1: [-1_055_861_940, 0, -1],
-                d1: -1_570_340_023_094,
-                n2: [0, 62, -425_903_796],
-                d2: -16_101_468_959_502_096_688_931_107_975_088,
-                p: [11, -1_750_436_742, 0],
-                q: [-1, 21_672_351_529, 0],
-            },
-            Some(Sign::Negative),
-        ),
-        // Certified, plane 2's normal zero.
-        (
-            LpiSide {
-                n1: [502, 2, 6164],
-                d1: -177_786_309_129_201_510_643_547_416_314_221_774,
-                n2: [0, 0, 0],
-                d2: -6_995_754_689_131_887_120_663_941_320_872_684,
-                p: [234, 2, 0],
-                q: [-2, 470_188, -4],
-            },
-            Some(Sign::Negative),
-        ),
-        // Certified, the points in the plane y = 0.
-        (
-            LpiSide {
-                n1: [-184_152, 10, -2],
-                d1: 1_163_955_065_274_096_146_820_146_576_913_056_283,
-                n2: [306_527_896_834_831_526, 0, 521_664_790_050_985],
-                d2: 0,
-                p: [3, 0, -739_753_728],
-                q: [72, 0, 241_501],
-            },
-            Some(Sign::Negative),
-        ),
-        // Certified, plane 1's normal zero.
-        (
-            LpiSide {
-                n1: [0, 0, 0],
-                d1: 3,
-                n2: [0, 0, 956_903_552_190_510],
-                d2: 0,
-                p: [-1, -241_890, -1],
-                q: [0, 0, 58_658_160_066],
-            },
-            Some(Sign::Negative),
-        ),
-        // Not certified: points on the x axis (exact value zero), on the z axis (zero), and on the
-        // y axis (negative).
-        (
-            LpiSide {
-                n1: [-6_416_039_800, 0, 2086],
-                d1: 0,
-                n2: [-6_034_406_507_175_050_600, 0, 12_916_506],
-                d2: 0,
-                p: [-5_604_624, 0, 0],
-                q: [1, 0, 0],
-            },
-            None,
-        ),
-        (
-            LpiSide {
-                n1: [-1, 0, -2],
-                d1: 0,
-                n2: [1, 2, -18_630_418_146_364],
-                d2: 0,
-                p: [0, 0, 25_392],
-                q: [0, 0, -3_017_306],
-            },
-            None,
-        ),
-        (
-            LpiSide {
-                n1: [0, -75_782_325_630_070_485_624_642, 0],
-                d1: -222_696_737,
-                n2: [-414_947, -4, 0],
-                d2: 0,
-                p: [0, -5863, 0],
-                q: [0, 1_137_554, 0],
-            },
-            None,
-        ),
-    ];
-    for (i, (case, filtered)) in cases.iter().enumerate() {
+    for (i, (case, filtered)) in LPI_SIDE_CASES.iter().enumerate() {
         let exact = case.exact_sign();
         assert_eq!(case.exact(), Some(exact), "case {i}: the exact path");
         assert_eq!(case.filter(), *filtered, "case {i}: the filter");
@@ -277,9 +284,9 @@ fn lpi_side_filter_and_exact_path_at_their_scale() {
 /// `lpi_weight`'s filter decides n · (q − p): Zero when q = p (its scale, |n| times the largest
 /// |q − p|, is zero), and the sign of a clear case.
 ///
-/// Kills `replace filter -> Option<Sign> with None` (generated/lpi_weight.rs:128), and
+/// Kills `replace filter -> Option<Sign> with None` (`generated/lpi_weight.rs:128`), and
 /// `replace * with +` and `replace * with /` in its scale, `m_n * larger(...)`
-/// (generated/lpi_weight.rs:143): |n| + 0 is not zero, and |n| / 0 is infinite.
+/// (`generated/lpi_weight.rs:143`): |n| + 0 is not zero, and |n| / 0 is infinite.
 #[test]
 fn lpi_weight_filter_decides_zero_scales_and_clear_cases() {
     let at = p3([10, 20, 30]);
@@ -294,9 +301,9 @@ fn lpi_weight_filter_decides_zero_scales_and_clear_cases() {
 /// scale, the largest |x| difference times the largest |y| difference, is zero), and the sign of a
 /// clear case.
 ///
-/// Kills `replace filter -> Option<Sign> with None` (generated/ssi_weight.rs:117), and
+/// Kills `replace filter -> Option<Sign> with None` (`generated/ssi_weight.rs:117`), and
 /// `replace * with +` and `replace * with /` in its scale, `m_x * m_y`
-/// (generated/ssi_weight.rs:126).
+/// (`generated/ssi_weight.rs:126`).
 #[test]
 fn ssi_weight_filter_decides_zero_scales_and_clear_cases() {
     let (a, b, c, d) = (p2(0, 0), p2(5, 0), p2(1, 0), p2(3, 0));
@@ -310,7 +317,7 @@ fn ssi_weight_filter_decides_zero_scales_and_clear_cases() {
 /// `tpi_weight`'s filter decides the determinant of three normals: the coordinate axes, either
 /// order.
 ///
-/// Kills `replace filter -> Option<Sign> with None` (generated/tpi_weight.rs:163).
+/// Kills `replace filter -> Option<Sign> with None` (`generated/tpi_weight.rs:163`).
 #[test]
 fn tpi_weight_filter_decides_the_axes() {
     assert_eq!(
@@ -327,7 +334,7 @@ fn tpi_weight_filter_decides_the_axes() {
 /// (1, 1). Against the line from p to q, `ssi_side` is oa · ob₂ − ob · oa₂ (its description), whose
 /// sign times the weight's is the side: (1, 1) lies left of the x axis run left to right.
 ///
-/// Kills `replace exact -> Option<Sign> with None` (generated/ssi_side.rs:250).
+/// Kills `replace exact -> Option<Sign> with None` (`generated/ssi_side.rs:250`).
 #[test]
 fn ssi_side_exact_path_gives_the_side() {
     let (a, b, c, d) = (p2(0, 0), p2(2, 2), p2(0, 2), p2(2, 0));
@@ -346,7 +353,7 @@ fn ssi_side_exact_path_gives_the_side() {
 /// `tpi_side`'s exact path: the planes x = 1, y = 2 and z = 3 meet at (1, 2, 3), with weight 1;
 /// against x + y + z + d4 = 0 the side is the sign of 6 + d4.
 ///
-/// Kills `replace exact -> Option<Sign> with None` (generated/tpi_side.rs:494).
+/// Kills `replace exact -> Option<Sign> with None` (`generated/tpi_side.rs:494`).
 #[test]
 fn tpi_side_exact_path_gives_the_side() {
     let side = |n4: [i128; 3], d4: i128| {
@@ -370,7 +377,7 @@ fn tpi_side_exact_path_gives_the_side() {
 /// every operation to them and checks that each is at least its theorem's, and a looser constant
 /// would pass both while weakening every caller that budgets with it.
 ///
-/// Kills `replace * with +` and `replace * with /` in `DIV_BOUND = 9.8 * U2` (dd.rs:229).
+/// Kills `replace * with +` and `replace * with /` in `DIV_BOUND = 9.8 * U2` (`dd.rs:229`).
 #[test]
 fn the_published_bounds_are_the_documented_values() {
     let u2 = pow2(-106);
@@ -389,8 +396,9 @@ fn the_published_bounds_are_the_documented_values() {
 /// whether the value was already an integer.
 ///
 /// Kills `replace > with >=` and `replace > with ==` in `magnitude(self.hi) > ROUND_LIMIT`
-/// (dd.rs:937), and `replace || with &&` in
-/// `te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0)` (dd.rs:963), which made every result inexact.
+/// (`dd.rs:937`), and `replace || with &&` in
+/// `te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0)` (`dd.rs:963`), which made every result
+/// inexact.
 #[test]
 fn round_shifted_at_its_limit_and_its_exactness() {
     let limit = pow2(100);
@@ -438,7 +446,7 @@ fn round_shifted_at_its_limit_and_its_exactness() {
 /// the second to one.
 ///
 /// Kills `replace < with <=` and `replace < with ==` in
-/// `if magnitude(lo) < TRAIL_FLOOR { 0.0 } else { lo }` (dd.rs:659).
+/// `if magnitude(lo) < TRAIL_FLOOR { 0.0 } else { lo }` (`dd.rs:659`).
 #[test]
 fn a_trailing_part_is_dropped_only_below_two_to_the_minus_400() {
     let kept = DD::from_sum(1.0, pow2(-400)).unwrap();
@@ -457,7 +465,7 @@ fn a_trailing_part_is_dropped_only_below_two_to_the_minus_400() {
 /// 2^−2075, and scaling back goes through `scale_pow2`'s loop of 2^−1000 steps (an exponent below
 /// −2074), whose every step must multiply.
 ///
-/// Kills `replace *= with +=` in `v *= TWO_POW_NEG_1000` (dd.rs:354), which gave 2^−1074.
+/// Kills `replace *= with +=` in `v *= TWO_POW_NEG_1000` (`dd.rs:354`), which gave 2^−1074.
 #[test]
 fn a_product_far_below_the_subnormals_rounds_to_zero() {
     let x = DD::from_f64(3.0 * f64::from_bits(1)).unwrap();
@@ -477,7 +485,7 @@ fn a_product_far_below_the_subnormals_rounds_to_zero() {
 /// exactly, and the root of 4·2^−1074 = 2^−1072 is 2^−536.
 ///
 /// Aimed at `replace & with |` and `replace & with ^` in `exponent`'s subnormal branch
-/// (dd.rs:294), which give such an operand a wrong exponent; these survive (the quality ledger
+/// (`dd.rs:294`), which give such an operand a wrong exponent; these survive (the quality ledger
 /// says why), and the test records the behaviour they cannot change.
 #[test]
 fn subnormal_operands_give_exact_results() {
@@ -519,7 +527,7 @@ fn subnormal_operands_give_exact_results() {
 /// Hashing feeds the value: distinct values (leading parts alike, trailing parts different, and
 /// the other way) hash apart, and equal values alike.
 ///
-/// Kills `replace <impl Hash for DD>::hash with ()` (dd.rs:1023), under which every value hashes
+/// Kills `replace <impl Hash for DD>::hash with ()` (`dd.rs:1023`), under which every value hashes
 /// the same.
 #[test]
 fn distinct_values_hash_apart() {
@@ -548,10 +556,10 @@ fn distinct_values_hash_apart() {
 /// Random123's first known-answer vector (counter and key zero) through each layer: the bare
 /// Philox4x32-10, `Philox::block`, and the first four words of the stream.
 ///
-/// Kills `replace round -> [u32; 4] with [1; 4]` (rng.rs:322),
-/// `replace philox4x32_10 -> [u32; 4] with [1; 4]` (rng.rs:347),
-/// `replace Philox::block -> [u32; 4] with [1; 4]` (rng.rs:404) and
-/// `replace Stream::next_u32 -> Result<u32, RngError> with Ok(1)` (rng.rs:587), which
+/// Kills `replace round -> [u32; 4] with [1; 4]` (`rng.rs:322`),
+/// `replace philox4x32_10 -> [u32; 4] with [1; 4]` (`rng.rs:347`),
+/// `replace Philox::block -> [u32; 4] with [1; 4]` (`rng.rs:404`) and
+/// `replace Stream::next_u32 -> Result<u32, RngError> with Ok(1)` (`rng.rs:587`), which
 /// time out elsewhere: a constant generator makes rejection sampling loop for ever.
 #[test]
 fn the_generator_gives_the_known_answer_at_every_layer() {
