@@ -50,7 +50,10 @@
 //!
 //! Cost: for `L` limbs, addition, subtraction, negation, comparison and resizing are O(L) limb
 //! operations and multiplication O(L²), on the stack with no allocation; the kernel's widths are
-//! 4 to 8 limbs.
+//! 4 to 8 limbs. Every limb loop runs over a fixed-length array (`[u64; L]`), never a slice, so its
+//! trip count is a constant for each width and the compiler unrolls it; a loop over a slice whose
+//! length is known only at run time can stop that unrolling on x86-64, which the count gates
+//! (chapter 28.14) show as a rise.
 
 use core::cmp::Ordering;
 use core::fmt;
