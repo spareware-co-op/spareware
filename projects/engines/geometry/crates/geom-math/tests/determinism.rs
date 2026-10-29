@@ -473,6 +473,10 @@ impl Recorder {
                 self.put_i128(value);
                 self.note("FrameRangeExceeded");
             }
+            MathError::NotInPlane => {
+                self.put_u8(14);
+                self.note("NotInPlane");
+            }
         }
     }
 

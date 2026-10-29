@@ -1,5 +1,6 @@
 //! The 1M-point transform benchmark of piece G45 (chapter 30), with the frame conversions beside
-//! it: wall-clock time per point for every transform variant and every kind of frame.
+//! it: wall-clock time per point for every transform variant, in 3D and in the plane (2D points,
+//! through the same transforms at z = 0), and every kind of frame.
 //!
 //! Run with `cargo bench -p geom-math`. It uses the standard library's clock only, so it builds
 //! with no extra dependency; when the benchmark harness of chapter 28 (`geom-bench`, piece G06)
@@ -27,7 +28,7 @@ use geom_math::{
     Axis, CrsId, FrameRecord, GridTransform, MapPoint, RationalTransform, Rotation, Scale,
     Transform, TypedTransform,
 };
-use geom_num::grid::{GridStep, P3};
+use geom_num::grid::{GridStep, P2, P3};
 use geom_num::rng::{Philox, Seed, Stream, StreamId};
 
 const POINTS: usize = 1_000_000;
@@ -75,6 +76,53 @@ fn run(name: &str, pts: &[P3], t: &TypedTransform) {
         check = check.wrapping_add(r.value().x.get() as u64 ^ u64::from(r.is_exact()));
     }
     report(name, pts.len(), start, check);
+}
+
+#[allow(
+    clippy::unwrap_used,
+    reason = "a benchmark is development code, like a test: a failure should stop it loudly"
+)]
+fn run_2d(name: &str, pts: &[P2], t: &TypedTransform) {
+    let start = Instant::now();
+    let mut check = 0u64;
+    for &p in pts {
+        let r = t.apply_2d(black_box(p)).unwrap();
+        check = check.wrapping_add(r.value().x.get() as u64 ^ u64::from(r.is_exact()));
+    }
+    report(name, pts.len(), start, check);
+}
+
+/// The 2D cases: the same kinds of transform, acting in the plane, on the points' x and y.
+#[allow(
+    clippy::unwrap_used,
+    reason = "a benchmark is development code, like a test: a failure should stop it loudly"
+)]
+fn plane(pts: &[P3]) {
+    let pts: Vec<P2> = pts.iter().map(|p| P2 { x: p.x, y: p.y }).collect();
+    let grid = GridTransform::mirror_diagonal(false)
+        .compose(&GridTransform::translation([12_345, -678, 0]).unwrap())
+        .unwrap();
+    run_2d(
+        "2D exact: mirror about y = x and translation",
+        &pts,
+        &TypedTransform::Exact(grid),
+    );
+    let r34 = RationalTransform::rotation(Axis::Z, Rotation::direction(3, 4).unwrap()).unwrap();
+    let r34 = r34
+        .compose(&RationalTransform::translation([1, 2, 0], 2).unwrap())
+        .unwrap();
+    run_2d(
+        "2D rational: Pythagorean rotation, half steps",
+        &pts,
+        &TypedTransform::Rational(r34),
+    );
+    let turn = Transform::rotation(Axis::Z, 1.0 / 3.0).unwrap();
+    let shift = Transform::translation(geom_math::F3::new(0.25, -1.0, 0.0).unwrap());
+    run_2d(
+        "2D certified: rotation by 60 degrees, rounded once",
+        &pts,
+        &TypedTransform::Certified(shift.compose(&turn).unwrap()),
+    );
 }
 
 #[allow(
@@ -133,6 +181,7 @@ fn main() {
         start,
         check,
     );
+    plane(&pts);
 
     // Frames: a site near Auckland, map to frame and back.
     let s = 6_400_000i64;

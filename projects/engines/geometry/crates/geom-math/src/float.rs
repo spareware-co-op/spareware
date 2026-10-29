@@ -141,6 +141,19 @@ impl F2 {
         self.y
     }
 
+    /// The components as an array `[x, y]`.
+    #[must_use]
+    pub const fn to_array(self) -> [f64; 2] {
+        [self.x, self.y]
+    }
+
+    /// The point from components that are finite by the invariant of the type they come from (an
+    /// [`FBox2`](crate::FBox2)'s bounds), so no check is made and there is no error path that could
+    /// never be taken. Crate-private: each caller states why its components are finite.
+    pub(crate) const fn from_finite([x, y]: [f64; 2]) -> F2 {
+        F2 { x, y }
+    }
+
     /// The sum `self + other`, componentwise.
     ///
     /// # Errors

@@ -41,7 +41,7 @@
     reason = "variable names follow the formulas of the method each function cites"
 )]
 
-use geom_num::grid::P3;
+use geom_num::grid::{P2, P3};
 use geom_num::{NumError, math};
 
 use crate::dd::DD;
@@ -207,6 +207,33 @@ impl TypedTransform {
             TypedTransform::Exact(g) => Ok(Rounded::new(g.apply(p)?, true)),
             TypedTransform::Rational(r) => r.apply(p),
             TypedTransform::Certified(t) => t.apply_grid(p),
+        }
+    }
+
+    /// Whether the transform acts in the plane, leaving every z unchanged, so it applies to a 2D
+    /// frame's points ([`GridTransform::acts_in_plane`] and its rational and certified
+    /// counterparts).
+    #[must_use]
+    pub fn acts_in_plane(&self) -> bool {
+        match self {
+            TypedTransform::Exact(g) => g.acts_in_plane(),
+            TypedTransform::Rational(r) => r.acts_in_plane(),
+            TypedTransform::Certified(t) => t.acts_in_plane(),
+        }
+    }
+
+    /// The image of a 2D grid point: [`TypedTransform::apply`] at z = 0, rounded once to the grid,
+    /// ties to even, with whether it was exact (always exact for the exact variant).
+    ///
+    /// # Errors
+    ///
+    /// [`MathError::NotInPlane`] if the transform does not act in the plane; otherwise as
+    /// [`TypedTransform::apply`].
+    pub fn apply_2d(&self, p: P2) -> Result<Rounded<P2>, MathError> {
+        match self {
+            TypedTransform::Exact(g) => Ok(Rounded::new(g.apply_2d(p)?, true)),
+            TypedTransform::Rational(r) => r.apply_2d(p),
+            TypedTransform::Certified(t) => t.apply_grid_2d(p),
         }
     }
 
