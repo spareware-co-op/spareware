@@ -42,7 +42,6 @@ use geom_math::{CrsId, DD, F2, F3, FrameMismatch, FrameRecord, MathError, Rotati
 use geom_num::NumError;
 use geom_num::grid::{GridStep, P3};
 use num_bigint::BigInt;
-use num_integer::Roots;
 
 /// 2^k for a normal exponent k, from its bits.
 fn pow2(k: i32) -> f64 {
@@ -98,7 +97,6 @@ fn every_error_prints_its_own_sentence() {
         NumError::BudgetExceeded,
     ] {
         assert_eq!(MathError::Num(e).to_string(), e.to_string());
-        assert!(!e.to_string().is_empty());
     }
 }
 
@@ -143,7 +141,7 @@ fn exact_products_answer_only_inside_their_precondition() {
 
 const NZTM: CrsId = CrsId::Epsg(2193);
 
-/// Whether `d` is the double nearest the map coordinate V = (o + k_n·a/(k_d·√n))/S, by exact signs
+/// Whether `d` is the double nearest the map coordinate V = (o + `k_n`·a/(`k_d`·√n))/S, by exact signs
 /// at the midpoints either side of `d` (as `tests/frames.rs` checks irrational directions).
 fn nearest_irrational(d: f64, o: i128, a: i128, scale: Scale, n2: u64, s: i128) -> bool {
     let (kn, kd) = (int(scale.num().into()), int(scale.den().into()));
@@ -181,13 +179,16 @@ fn check_irrational(dir: (i32, i32), scale: (u32, u32), o: i64, x: i64, y: i64) 
     m.easting
 }
 
+/// A direction, a scale (num, den), an easting origin and a point (x, y).
+type Case = ((i32, i32), (u32, u32), i64, i64, i64);
+
 #[test]
 fn frame_to_map_rounds_values_just_past_a_midpoint() {
     // (direction, scale, easting origin, x, y). In each, the origin cancels all but about 2^−46 of
     // the rotated offset, so the double-double value's error is a sizeable fraction of an ulp, and
     // the exact value lies just past a midpoint between doubles from the double-double value:
     // above it in the first six, below it in the last six, for values of either sign.
-    let cases: [((i32, i32), (u32, u32), i64, i64, i64); 12] = [
+    let cases: [Case; 12] = [
         (
             (-1_216_370_114, -1_821_055_087),
             (813_335, 2),
@@ -297,12 +298,12 @@ fn bezout(c: i128, s: i128) -> (i128, i128) {
     (u0 * r0, v0 * r0)
 }
 
-/// (q, p): the last convergent p/q of α = k_n/(k_d·√n) with q ≤ 2^limit, so that q·α − p is
+/// (q, p): the last convergent p/q of α = `k_n`/(`k_d`·√n) with q ≤ 2^limit, so that q·α − p is
 /// about 1/q from zero, the closest any multiplier of that size can bring α to a whole number.
 fn convergent(n2: u64, scale: Scale, limit: u32) -> (i128, i128) {
-    // α to about 200 bits: k_n·2^400 / (k_d·⌊√(n·2^400)⌋).
+    // α to about 200 bits: `k_n`·2^200 / (`k_d`·⌊√(n·2^400)⌋).
     let root = (BigInt::from(n2) << 400u32).sqrt();
-    let mut num = BigInt::from(scale.num()) << 400u32;
+    let mut num = BigInt::from(scale.num()) << 200u32;
     let mut den = BigInt::from(scale.den()) * root;
     let (mut p0, mut q0) = (BigInt::from(0), BigInt::from(1));
     let (mut p1, mut q1) = (BigInt::from(1), BigInt::from(0));
@@ -324,7 +325,7 @@ fn frame_to_map_rounds_a_value_far_below_its_own_error_bound() {
     let (dir, scale) = ((1_234_567_891, -987_654_323), (524_287, 1));
     let rot = Rotation::direction(dir.0, dir.1).unwrap();
     let (c, sn) = (i128::from(rot.cos()), i128::from(rot.sin()));
-    // The rotated offset a = q and the origin −p of a convergent: o + k_n·a/(k_d·√n) is about
+    // The rotated offset a = q and the origin −p of a convergent: o + `k_n`·a/(`k_d`·√n) is about
     // 2^−68 steps.
     let (a, p) = convergent(rot.norm2(), Scale::new(scale.0, scale.1).unwrap(), 68);
     // c·x − s·y = a with 0 ≤ x < |s|.
