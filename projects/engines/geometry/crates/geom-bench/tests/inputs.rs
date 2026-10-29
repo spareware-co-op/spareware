@@ -2017,3 +2017,105 @@ fn generated_classes_take_their_paths() {
             .all(|&([x, y, z], d, p)| gp::plane_side::value(x, y, z, d, p) == Some(0))
     );
 }
+
+/// inputs/newton.rs: typical boxes are proven in one step with the zero inside; extreme ones end
+/// every other way the documentation lists, never with a proof; typical Jacobians succeed and
+/// extreme ones are refused.
+#[test]
+fn newton_and_dual_classes_are_what_they_claim() {
+    use geom_bench::inputs::newton::{self as n, CircleLine, Four};
+    use geom_num::dual::jacobian;
+    use geom_num::newton::{NewtonError, Residuals, Verdict, hansen_sengupta, krawczyk};
+
+    fn ending<const N: usize>(v: &Result<Verdict<N>, NewtonError>) -> &'static str {
+        match v {
+            Ok(Verdict::Unique { .. }) => "unique",
+            Ok(Verdict::Narrowed { .. }) => "narrowed",
+            Ok(Verdict::NoZero) => "no zero",
+            Err(NewtonError::Singular) => "singular",
+            Err(NewtonError::Num(NumError::NotFinite)) => "not finite",
+            Err(NewtonError::Num(NumError::OutsideDomain)) => "outside domain",
+            Err(NewtonError::Num(_)) => "other",
+        }
+    }
+    let holds = |v: &Result<Verdict<2>, NewtonError>, zeros: &[[f64; 2]]| match v {
+        Ok(Verdict::Unique { enclosure, .. }) => zeros
+            .iter()
+            .any(|z| enclosure[0].contains(z[0]) && enclosure[1].contains(z[1])),
+        _ => false,
+    };
+    for (build, op) in [
+        (
+            n::krawczyk_2 as fn(Class) -> Vec<[Interval; 2]>,
+            krawczyk::<CircleLine, 2> as fn(&CircleLine, [Interval; 2]) -> _,
+        ),
+        (n::hansen_sengupta_2, hansen_sengupta::<CircleLine, 2>),
+    ] {
+        let typical = build(Typical);
+        assert!(
+            typical
+                .iter()
+                .all(|b| holds(&op(&CircleLine, *b), &[[4.0, 3.0], [-3.0, -4.0]]))
+        );
+        let endings: BTreeSet<&str> = build(Extreme)
+            .iter()
+            .map(|b| ending(&op(&CircleLine, *b)))
+            .collect();
+        assert_eq!(
+            endings,
+            BTreeSet::from(["narrowed", "no zero", "not finite", "singular"]),
+            "circle and line"
+        );
+    }
+    for (build, op) in [
+        (
+            n::krawczyk_4 as fn(Class) -> Vec<[Interval; 4]>,
+            krawczyk::<Four, 4> as fn(&Four, [Interval; 4]) -> _,
+        ),
+        (n::hansen_sengupta_4, hansen_sengupta::<Four, 4>),
+    ] {
+        for b in build(Typical) {
+            let Ok(Verdict::Unique { enclosure, .. }) = op(&Four, b) else {
+                panic!("{b:?} not proven")
+            };
+            assert!(
+                enclosure
+                    .iter()
+                    .zip([0.0, 1.0, 1.0, 1.0])
+                    .all(|(i, z)| i.contains(z))
+            );
+        }
+        let endings: BTreeSet<&str> = build(Extreme)
+            .iter()
+            .map(|b| ending(&op(&Four, *b)))
+            .collect();
+        assert_eq!(
+            endings,
+            BTreeSet::from(["narrowed", "no zero", "not finite", "outside domain"]),
+            "four"
+        );
+    }
+    assert!(
+        n::jacobian_real(Typical)
+            .into_iter()
+            .all(|x| jacobian(|v| Four.residuals(v), x).is_ok())
+    );
+    assert!(
+        n::jacobian_real(Extreme)
+            .into_iter()
+            .all(|x| jacobian(|v| Four.residuals(v), x) == Err(NumError::NotFinite))
+    );
+    assert!(
+        n::jacobian_interval(Typical)
+            .into_iter()
+            .all(|x| jacobian(|v| Four.residuals(v), x).is_ok())
+    );
+    let refused: BTreeSet<String> = n::jacobian_interval(Extreme)
+        .into_iter()
+        .map(|x| format!("{:?}", jacobian(|v| Four.residuals(v), x).unwrap_err()))
+        .collect();
+    assert_eq!(
+        refused,
+        BTreeSet::from(["NegativeSqrt", "NotFinite", "OutsideDomain"].map(String::from))
+    );
+}

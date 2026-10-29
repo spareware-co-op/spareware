@@ -143,7 +143,7 @@
 
 use crate::error::NumError;
 use crate::math;
-use crate::real::zero_to_plus;
+use crate::real::{Real, zero_to_plus};
 use crate::sign::Sign;
 
 /// A closed interval `[lo, hi]` of finite doubles, `lo ≤ hi`, that contains an unknown real number.
@@ -195,6 +195,15 @@ const fn widened(lo: f64, hi: f64) -> Result<Interval, NumError> {
     reason = "fallible arithmetic returns Result, not Self"
 )]
 impl Interval {
+    /// An enclosure of π: `[PI, next_up(PI)]`, the two doubles either side of it. `core::f64::consts::PI`
+    /// is π rounded to nearest, 884279719003555 · 2^−48, which is below π by about 1.2 · 10^−16, and
+    /// the next double is 2^−51 ≈ 4.4 · 10^−16 above it, so above π (`tests/attack_g52.rs` checks
+    /// both against π's digits).
+    pub const PI: Interval = Interval {
+        lo: core::f64::consts::PI,
+        hi: core::f64::consts::PI.next_up(),
+    };
+
     /// The interval holding exactly `x`.
     ///
     /// It encloses the double `x` itself, nothing more. If `x` was computed, for example by a
@@ -558,6 +567,15 @@ impl Interval {
             sum = sum.add(component.square()?)?;
         }
         sum.sqrt_nonneg()
+    }
+}
+
+/// The interval holding exactly the finite double `x`, as [`Interval::point`] makes it; a `Real`
+/// is finite, so this cannot fail. A zero is stored as +0.
+impl From<Real> for Interval {
+    fn from(x: Real) -> Interval {
+        let v = zero_to_plus(x.get());
+        Interval { lo: v, hi: v }
     }
 }
 

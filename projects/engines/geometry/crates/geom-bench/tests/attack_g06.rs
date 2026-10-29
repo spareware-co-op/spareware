@@ -1074,6 +1074,44 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[x, y, z, w, v]| geom_num::perturb::insphere(x, y, z, w, v)),
         ),
+        ("newton", "krawczyk_2") => fold(
+            inputs::newton::krawczyk_2(class)
+                .into_iter()
+                .map(|b| geom_num::newton::krawczyk(&inputs::newton::CircleLine, b)),
+        ),
+        ("newton", "hansen_sengupta_2") => fold(
+            inputs::newton::hansen_sengupta_2(class)
+                .into_iter()
+                .map(|b| geom_num::newton::hansen_sengupta(&inputs::newton::CircleLine, b)),
+        ),
+        ("newton", "krawczyk_4") => fold(
+            inputs::newton::krawczyk_4(class)
+                .into_iter()
+                .map(|b| geom_num::newton::krawczyk(&inputs::newton::Four, b)),
+        ),
+        ("newton", "hansen_sengupta_4") => fold(
+            inputs::newton::hansen_sengupta_4(class)
+                .into_iter()
+                .map(|b| geom_num::newton::hansen_sengupta(&inputs::newton::Four, b)),
+        ),
+        ("dual", "jacobian_real") => {
+            fold(inputs::newton::jacobian_real(class).into_iter().map(|x| {
+                geom_num::dual::jacobian(
+                    |v| geom_num::newton::Residuals::residuals(&inputs::newton::Four, v),
+                    x,
+                )
+            }))
+        }
+        ("dual", "jacobian_interval") => fold(
+            inputs::newton::jacobian_interval(class)
+                .into_iter()
+                .map(|x| {
+                    geom_num::dual::jacobian(
+                        |v| geom_num::newton::Residuals::residuals(&inputs::newton::Four, v),
+                        x,
+                    )
+                }),
+        ),
         ("eft", "two_sum") => fold(
             ie::two_sum(class)
                 .into_iter()
