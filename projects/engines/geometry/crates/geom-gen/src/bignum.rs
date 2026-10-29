@@ -6,7 +6,9 @@
 //! bit-range certificate holds every bound as one. [`UPoly`] is a polynomial in u with
 //! non-negative whole coefficients: every bound of the filter's error analysis is one, because
 //! the analysis only adds, multiplies, and multiplies by u or by 1 + u. [`UPoly::round_up_to_f64`]
-//! gives the smallest `f64` at least the polynomial's exact value at u = 2^-53, as its bits.
+//! gives the smallest `f64` at least the polynomial's exact value at u = 2^-53, as its bits, and
+//! [`Nat::nearest_f64`] the `f64` nearest a natural number, as the number it is: the largest a
+//! rounded input's `f64` copy can be.
 //!
 //! Guarantees:
 //!
@@ -15,8 +17,9 @@
 //!   returns `None`, never a rounded or wrapped value; nothing panics.
 //! - **Canonical.** A [`Nat`] has no zero top limb and a [`UPoly`] no zero top coefficient, so
 //!   equal values compare equal and print the same.
-//! - **Rounded up, once, on purpose.** [`UPoly::round_up_to_f64`] is the only rounding here, and
-//!   it rounds towards +∞: the `f64` it gives is never below the exact value.
+//! - **Rounded only on purpose.** [`UPoly::round_up_to_f64`] rounds towards +∞, so the `f64` it
+//!   gives is never below the exact value; [`Nat::nearest_f64`] rounds to nearest with ties to
+//!   even, exactly as the filters convert a rounded input. Nothing else here rounds.
 //!
 //! Method: schoolbook addition and multiplication on limbs with 128-bit intermediates (Knuth,
 //! *The Art of Computer Programming*, volume 2, section 4.3.1,
@@ -183,6 +186,27 @@ impl Nat {
         }
         out.push(carry);
         Some(Nat::from_limbs(out))
+    }
+
+    /// The `f64` nearest to self, ties to even, as the number it is: IEEE 754's rounding to
+    /// nearest, which Rust's integer-to-`f64` conversion performs. `None` if the nearest is 2^1024
+    /// or more, beyond every finite `f64`.
+    #[must_use]
+    pub fn nearest_f64(&self) -> Option<Nat> {
+        let bits = self.bit_len()?;
+        if bits <= 53 {
+            return Some(self.clone());
+        }
+        // The top 54 bits: the 53 an f64 keeps and the one below them; and whether any lower bit
+        // is set.
+        let below = bits.checked_sub(54)?;
+        let (top, sticky) = self.shr(below)?;
+        let top = top.to_u64()?;
+        let kept = top.checked_shr(1)?;
+        let up = top & 1 == 1 && (sticky || kept & 1 == 1);
+        let kept = if up { kept.checked_add(1)? } else { kept };
+        let nearest = Nat::from_u128(u128::from(kept)).shl(below.checked_add(1)?)?;
+        (nearest.bit_len()? <= 1024).then_some(nearest)
     }
 
     /// ⌊self / 2^`bits`⌋, and whether any bit shifted out was set.
@@ -581,5 +605,34 @@ mod tests {
             Some(18_014_398_509_481_984.0_f64.to_bits())
         );
         assert_eq!(UPoly::zero().round_up_to_f64(), None);
+    }
+
+    #[test]
+    fn nearest_f64_rounds_as_the_conversion_does() {
+        // Every value is checked against Rust's conversion, which rounds to nearest, ties to even.
+        let cases: [u128; 8] = [
+            0,
+            1,
+            (1 << 53) - 1,
+            1 << 53,
+            (1 << 53) + 1, // a tie: down to the even 2^53
+            (1 << 53) + 3, // a tie: up to the even 2^53 + 4
+            (1 << 83) - 1, // a rounded normal's bound: up to 2^83
+            (1 << 125) - 1,
+        ];
+        for v in cases {
+            let want = Nat::from_u128(v as f64 as u128);
+            assert_eq!(Nat::from_u128(v).nearest_f64(), Some(want), "{v}");
+        }
+        // u128::MAX rounds to 2^128, which no u128 holds: checked by its bits.
+        assert_eq!(
+            Nat::from_u128(u128::MAX)
+                .nearest_f64()
+                .and_then(|n| n.bit_len()),
+            Some(129)
+        );
+        // 2^1024 − 1 rounds to 2^1024, beyond every finite f64.
+        assert_eq!(Nat::ones(1024).and_then(|n| n.nearest_f64()), None);
+        assert!(Nat::ones(1023).and_then(|n| n.nearest_f64()).is_some());
     }
 }

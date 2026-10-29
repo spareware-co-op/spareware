@@ -454,10 +454,12 @@ fn the_cube_and_square_diagonals_reach_the_budgets_without_failing() {
 }
 
 /// Points built to lie exactly on the classifying plane or line, then one grid step off it: the
-/// exact sign is zero, then the sign of the step, which the filters cannot decide by margin.
+/// exact sign is zero, then the sign of the step, which the filters cannot decide by margin. Each
+/// implicit point is built on a grid point: a crossing, a line-plane point and a three-plane point.
 #[test]
 fn one_step_from_degenerate_is_decided_exactly() {
     let mut rng = Rng::for_test("one_step_from_degenerate_is_decided_exactly");
+    let mut tpi_decided = 0u32;
     for _ in 0..cases(2000) {
         // A crossing at a grid point x: two lines through x, classified against a line through x
         // and a point one step off it.
@@ -500,6 +502,17 @@ fn one_step_from_degenerate_is_decided_exactly() {
             let tri2 = [add(y, off), add(y, f), sub(y, e)];
             check_lpi(tri1, tri2, p, q);
         }
+        // Three planes meeting at y, classified against a plane through y and planes through its
+        // neighbours (gate 1, piece G43: this class had only the crossing and the line-plane
+        // point).
+        let (h, k) = (s3(&mut rng), s3(&mut rng));
+        let meeting = [tri1, [y, add(y, g), add(y, h)], [y, sub(y, f), add(y, k)]];
+        for off in [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1]] {
+            let fourth = [add(y, off), add(y, h), sub(y, g)];
+            if check_tpi(meeting, fourth) {
+                tpi_decided += 1;
+            }
+        }
         if let Some((plane1, _)) = planes(tri1[0], tri1[1], tri1[2]) {
             if let Ok(l) = Lpi::new(p3(p), p3(q), plane1) {
                 let grid = l.to_grid().unwrap();
@@ -511,6 +524,10 @@ fn one_step_from_degenerate_is_decided_exactly() {
             }
         }
     }
+    assert!(
+        tpi_decided > 0,
+        "no three-plane point was decided one step from degenerate"
+    );
 }
 
 #[test]

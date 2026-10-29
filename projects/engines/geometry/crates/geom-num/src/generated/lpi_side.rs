@@ -13,7 +13,12 @@
 //! input in the domain below, and it returns `None` when it cannot tell, never a guess; `value`
 //! returns the exact value for every input in the domain, each step in the type the certificate
 //! below shows holds it and every step a checked method, so a step that did not fit would give
-//! `None`, never a wrapped value; and `exact` is that value's sign.
+//! `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked,
+//! not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and
+//! tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-lpi-side.fpt`, in
+//! `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about
+//! `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter
+//! yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night.
 //!
 //! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
 //! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.

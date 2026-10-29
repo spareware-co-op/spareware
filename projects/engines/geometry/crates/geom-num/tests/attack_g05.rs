@@ -2416,7 +2416,7 @@ fn fnv(words: impl Iterator<Item = u64>) -> u64 {
 fn identical_bits_on_every_thread_count() {
     let inputs = determinism_inputs(scale(200_000));
     let serial: Vec<[u64; 5]> = inputs.iter().map(|&(a, b)| outputs(a, b)).collect();
-    for threads in [2usize, 3, 8, 16] {
+    for threads in geom_test::golden::THREAD_COUNTS.into_iter().chain([16]) {
         let chunk = inputs.len().div_ceil(threads);
         let parallel: Vec<[u64; 5]> = std::thread::scope(|s| {
             let handles: Vec<_> = inputs
