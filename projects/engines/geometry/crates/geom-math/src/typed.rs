@@ -6,6 +6,7 @@
 //! | --- | --- | --- |
 //! | `Exact` | [`GridTransform`]: whole steps, quarter turns, mirrors | exact |
 //! | `Rational` | [`RationalTransform`]: Pythagorean turns, rational scales | rounded once |
+//! | `Rotation` | [`RationalRotation`]: a rational rotation with \|q\|² above 2^40 | rounded once |
 //! | `Certified` | [`Transform`] of doubles: any other affine map | rounded once |
 //!
 //! "Rounded once" means the exact image (under the rational entries, or under the exact values of
@@ -14,9 +15,12 @@
 //! Every [`TypedTransform::apply`] returns a [`Rounded`] point: chapter 7's "other rotations round
 //! to the grid and the result says so". Composition keeps the most exact variant both operands
 //! allow: exact with exact stays exact, exact or rational with rational stays rational (and is
-//! simplified back to exact when it is a grid transform), and anything with a certified transform
-//! becomes certified, rounding the rational entries to doubles: a change of variant the result
-//! records. Classification is exact for the exact and rational variants and certified for the
+//! simplified back to exact when it is a grid transform, and refused when it outgrows the rational
+//! budget), rotations compose as rotations, exactly, while the product fits the rotation budget
+//! (decision 32.14), two rational rotations included where their product outgrows the rational
+//! budget, and anything else, a certified transform or a rotation that outgrows its budget or
+//! meets a translation, scale or mirror, becomes certified, rounding the exact entries to doubles:
+//! a change of variant the result records. A rotation re-approximated within an angle instead is [`RationalRotation::compose`]. Classification is exact for the exact and rational variants and certified for the
 //! certified one (see [`crate::transform`]).
 //!
 //! Guarantees: every [`TypedTransform::apply`] returns a [`Rounded`] point, the exact image rounded
@@ -50,6 +54,7 @@ use crate::exact::const_pow2;
 use crate::frame::Rotation;
 use crate::grid_transform::{Axis, GridTransform};
 use crate::rational::RationalTransform;
+use crate::rotation::RationalRotation;
 use crate::rounded::Rounded;
 use crate::transform::{Classification, Transform, TransformKind};
 
@@ -64,6 +69,9 @@ pub enum TypedTransform {
     Exact(GridTransform),
     /// An exact rational transform: images are rounded once and say whether they were exact.
     Rational(RationalTransform),
+    /// An exact rational rotation too large for a [`RationalTransform`] (|q|² above 2^40, decision
+    /// 32.14): images are rounded once and say whether they were exact.
+    Rotation(RationalRotation),
     /// A floating-point transform, exact in its own `f64` entries, which approximate the intended
     /// one: images are rounded once and say whether they were exact.
     Certified(Transform),
@@ -78,6 +86,12 @@ impl From<GridTransform> for TypedTransform {
 impl From<RationalTransform> for TypedTransform {
     fn from(r: RationalTransform) -> Self {
         TypedTransform::Rational(r).simplified()
+    }
+}
+
+impl From<RationalRotation> for TypedTransform {
+    fn from(r: RationalRotation) -> Self {
+        TypedTransform::Rotation(r).simplified()
     }
 }
 
@@ -127,12 +141,19 @@ impl TypedTransform {
     /// The identity.
     pub const IDENTITY: TypedTransform = TypedTransform::Exact(GridTransform::IDENTITY);
 
-    /// The same transform in the most exact variant that holds it: a rational transform that is a
-    /// grid transform becomes exact, and so does a certified transform whose entries are exactly
-    /// 0 and ±1 in a signed permutation with a whole-step translation.
+    /// The same transform in the most exact variant that holds it: a rotation with |q|² ≤ 2^40
+    /// becomes rational, a rational transform that is a grid transform becomes exact, and so does
+    /// a certified transform whose entries are exactly 0 and ±1 in a signed permutation with a
+    /// whole-step translation.
     #[must_use]
     pub fn simplified(self) -> TypedTransform {
         match self {
+            // A rotation's rational form, then that form's own simplification (below), in place:
+            // no recursive call.
+            TypedTransform::Rotation(r) => r.to_rational().map_or(self, |t| {
+                t.to_grid()
+                    .map_or(TypedTransform::Rational(t), TypedTransform::Exact)
+            }),
             TypedTransform::Rational(r) => r.to_grid().map_or(self, TypedTransform::Exact),
             TypedTransform::Certified(t) => {
                 certified_as_grid(&t).map_or(self, TypedTransform::Exact)
@@ -182,16 +203,18 @@ impl TypedTransform {
     }
 
     /// The floating-point form, for evaluating curves: exact for the exact variant, the nearest
-    /// doubles for the rational one, the transform itself for the certified one.
+    /// doubles for the rational and rotation ones, the transform itself for the certified one.
     ///
     /// # Errors
     ///
-    /// [`NumError::BudgetExceeded`] only as [`RationalTransform::to_transform`] reports it, which
-    /// cannot happen: for every typed transform the result is `Ok`.
+    /// [`NumError::BudgetExceeded`] only as [`RationalTransform::to_transform`] and
+    /// [`RationalRotation::to_transform`] report it, which cannot happen: for every typed
+    /// transform the result is `Ok`.
     pub fn to_transform(&self) -> Result<Transform, NumError> {
         match self {
             TypedTransform::Exact(g) => Ok(Transform::from_grid(g)),
             TypedTransform::Rational(r) => r.to_transform(),
+            TypedTransform::Rotation(r) => r.to_transform(),
             TypedTransform::Certified(t) => Ok(*t),
         }
     }
@@ -206,6 +229,7 @@ impl TypedTransform {
         match self {
             TypedTransform::Exact(g) => Ok(Rounded::new(g.apply(p)?, true)),
             TypedTransform::Rational(r) => r.apply(p),
+            TypedTransform::Rotation(r) => r.apply(p),
             TypedTransform::Certified(t) => t.apply_grid(p),
         }
     }
@@ -218,6 +242,7 @@ impl TypedTransform {
         match self {
             TypedTransform::Exact(g) => g.acts_in_plane(),
             TypedTransform::Rational(r) => r.acts_in_plane(),
+            TypedTransform::Rotation(r) => r.acts_in_plane(),
             TypedTransform::Certified(t) => t.acts_in_plane(),
         }
     }
@@ -233,12 +258,13 @@ impl TypedTransform {
         match self {
             TypedTransform::Exact(g) => Ok(Rounded::new(g.apply_2d(p)?, true)),
             TypedTransform::Rational(r) => r.apply_2d(p),
+            TypedTransform::Rotation(r) => r.apply_2d(p),
             TypedTransform::Certified(t) => t.apply_grid_2d(p),
         }
     }
 
-    /// The classification: exact for the exact and rational variants, certified for the certified
-    /// one.
+    /// The classification: exact for the exact, rational and rotation variants, certified for the
+    /// certified one.
     ///
     /// # Errors
     ///
@@ -258,6 +284,7 @@ impl TypedTransform {
                 Ok(Classification { kind, mirror })
             }
             TypedTransform::Rational(r) => r.classify(),
+            TypedTransform::Rotation(r) => Ok(r.classify()),
             TypedTransform::Certified(t) => t.classify(),
         }
     }
@@ -270,23 +297,49 @@ impl TypedTransform {
     /// [`MathError::Num`] with [`NumError::OutOfRange`] if an exact or rational result exceeds its
     /// bounds, or [`NumError::NotFinite`] if a certified entry overflows.
     pub fn compose(&self, first: &TypedTransform) -> Result<TypedTransform, MathError> {
-        use TypedTransform::{Certified, Exact, Rational};
+        use TypedTransform::{Certified, Exact, Rational, Rotation};
         let rational = |t: &TypedTransform| match t {
             Exact(g) => Some(RationalTransform::from_grid(g)),
             Rational(r) => Some(*r),
-            Certified(_) => None,
+            Rotation(_) | Certified(_) => None,
+        };
+        let rotation = |t: &TypedTransform| match t {
+            Rotation(r) => Some(*r),
+            _ => rational(t).and_then(|r| RationalRotation::from_rational(&r)),
+        };
+        let certified = || -> Result<TypedTransform, MathError> {
+            Ok(TypedTransform::from(
+                self.to_transform()?.compose(&first.to_transform()?)?,
+            ))
         };
         match (self, first) {
             (Exact(a), Exact(b)) => Ok(Exact(a.compose(b)?)),
-            (Certified(_), _) | (_, Certified(_)) => Ok(TypedTransform::from(
-                self.to_transform()?.compose(&first.to_transform()?)?,
-            )),
+            (Certified(_), _) | (_, Certified(_)) => certified(),
+            (Rotation(_), _) | (_, Rotation(_)) => match (rotation(self), rotation(first)) {
+                (Some(a), Some(b)) => match a.compose_exact(&b)? {
+                    Some(r) => Ok(TypedTransform::from(r)),
+                    None => certified(),
+                },
+                _ => certified(),
+            },
             _ => match (rational(self), rational(first)) {
-                (Some(a), Some(b)) => Ok(TypedTransform::from(a.compose(&b)?)),
+                (Some(a), Some(b)) => match a.compose(&b) {
+                    Ok(r) => Ok(TypedTransform::from(r)),
+                    // Two rotations past the rational budget compose as rotations (32.14);
+                    // anything else past it is refused, as before.
+                    Err(e @ NumError::OutOfRange { .. }) => {
+                        match (rotation(self), rotation(first)) {
+                            (Some(a), Some(b)) => match a.compose_exact(&b)? {
+                                Some(r) => Ok(TypedTransform::from(r)),
+                                None => certified(),
+                            },
+                            _ => Err(e.into()),
+                        }
+                    }
+                    Err(e) => Err(e.into()),
+                },
                 // Unreachable: both are exact or rational here.
-                _ => Ok(TypedTransform::from(
-                    self.to_transform()?.compose(&first.to_transform()?)?,
-                )),
+                _ => certified(),
             },
         }
     }
@@ -302,6 +355,7 @@ impl TypedTransform {
         match self {
             TypedTransform::Exact(g) => Ok(TypedTransform::Exact(g.inverse()?)),
             TypedTransform::Rational(r) => Ok(TypedTransform::from(r.inverse()?)),
+            TypedTransform::Rotation(r) => Ok(TypedTransform::from(r.inverse())),
             TypedTransform::Certified(t) => Ok(TypedTransform::from(t.inverse()?)),
         }
     }
