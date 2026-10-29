@@ -595,6 +595,46 @@
       "reason": "For the first patch a is the domain's start and t >= a, so the test is true for every t <= b either way. For later patches `first || t == a` is `t == a`, making the test a <= t, which finds the same patch: the patch before it in that direction ends at t, comes earlier in the search and already matched."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-surface/src/terms.rs",
+      "mutant": "delete match arm 2 in shifted",
+      "line_text": "2 => (neg(c), neg(s)),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "shifted takes the order of a derivative, and every caller asks for orders 0 and 1 only (points, partials, normals and first-derivative bounds), so k & 3 is never 2 and the deleted arm is never reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
+      "mutant": "replace > with >= in Round::radius_sign",
+      "line_text": "Ok(if rho.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when the radius's enclosure ends exactly at 0: the radius is then of one sign over the span and 0 at most at that end, where the normal vanishes, so the definite sign bounds every normal direction as the undecided one does, only tighter; a torus's form is then the part that reaches the axis at its domain's edge."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
+      "mutant": "replace < with <= in Round::radius_sign",
+      "line_text": "} else if rho.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when the radius's enclosure ends exactly at 0: the radius is then of one sign over the span and 0 at most at that end, where the normal vanishes, so the definite sign bounds every normal direction as the undecided one does, only tighter; a torus's form is then the part that reaches the axis at its domain's edge."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/terms.rs",
+      "mutant": "replace || with && in Terms::to_nurbs",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace || with && in net",
+      "line_text": "if eps.is_nan() || eps >= 0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-curve/src/affine.rs",
       "mutant": "replace && with || in Entries::of",
       "line_text": ".all(|(&d, e)| e.lo() == d && e.hi() == d);",

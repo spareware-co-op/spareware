@@ -196,7 +196,8 @@ impl Terms {
         let mut out = if i == 0 && j == 0 { self.ce } else { [zero; 3] };
         for t in &self.terms {
             let f = tight::mul(enclosed(t.u, u, i)?, enclosed(t.v, v, j)?)?;
-            if f.lo() == 0.0 && f.hi() == 0.0 {
+            // An exactly 0 factor adds nothing.
+            if f == zero {
                 continue;
             }
             for (o, &w) in out.iter_mut().zip(&t.we) {
