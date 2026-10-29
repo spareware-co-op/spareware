@@ -1313,6 +1313,1046 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "Without this arm two exact transforms reach the last arm, which composes them as rational transforms and simplifies the product back to the same exact transform; past the bound both refuse with OutOfRange (the rational form's reported value may differ), since a translation is no rotation to fall back on."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace | with ^ in sinpi",
+      "line_text": "let m0 = (ix & MANTISSA) | (1 << 52); // |x| = m0·2^(e−1075)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace | with ^ in cospi",
+      "line_text": "let m = (ix & MANTISSA) | (1 << 52); // |x| = m·2^(e−1075)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace - with + in cospi",
+      "line_text": "return 1.0 - hf!(\"0x1p-55\"); // rounds to 1",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "1 - 2^-55 and 1 + 2^-55 are both constants that round to 1.0: the first lies above the midpoint 1 - 2^-54 below 1, the second below the midpoint 1 + 2^-53 above it. The function returns 1.0 either way (C writes the difference to raise the inexact flag, which Rust does not expose)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in sincosn",
+      "line_text": "let tcl = (ch - tch) + cl;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sincosn's fourth result, the cosine's low part cs * tcl, is discarded by every kernel caller: sinpi and cospi take (sh, sl, ch, _) or (sh, sl, _, _) (only the unit tests read it). So what tcl is computed as never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in sincosn",
+      "line_text": "let tcl = (ch - tch) + cl;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sincosn's fourth result, the cosine's low part cs * tcl, is discarded by every kernel caller: sinpi and cospi take (sh, sl, ch, _) or (sh, sl, _, _) (only the unit tests read it). So what tcl is computed as never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace - with + in sincosn",
+      "line_text": "let tcl = (ch - tch) + cl;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sincosn's fourth result, the cosine's low part cs * tcl, is discarded by every kernel caller: sinpi and cospi take (sh, sl, ch, _) or (sh, sl, _, _) (only the unit tests read it). So what tcl is computed as never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace - with / in sincosn",
+      "line_text": "let tcl = (ch - tch) + cl;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sincosn's fourth result, the cosine's low part cs * tcl, is discarded by every kernel caller: sinpi and cospi take (sh, sl, ch, _) or (sh, sl, _, _) (only the unit tests read it). So what tcl is computed as never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with + in sincosn",
+      "line_text": "(ss * tsh, ss * tsl, cs * tch, cs * tcl)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sincosn's fourth result, the cosine's low part cs * tcl, is discarded by every kernel caller: sinpi and cospi take (sh, sl, ch, _) or (sh, sl, _, _) (only the unit tests read it). So what tcl is computed as never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace * with / in sincosn",
+      "line_text": "(ss * tsh, ss * tsl, cs * tch, cs * tcl)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sincosn's fourth result, the cosine's low part cs * tcl, is discarded by every kernel caller: sinpi and cospi take (sh, sl, ch, _) or (sh, sl, _, _) (only the unit tests read it). So what tcl is computed as never reaches a result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/support.rs",
+      "mutant": "replace < with <= in shl",
+      "line_text": "if n < 64 { x << n } else { 0 }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every caller passes a shift below 64: sincospi's s <= 11, si <= 52, si - 1 and e - 1000 <= 63; atan2's trailing and leading zero counts of a non-zero word (<= 63) and the subnormal shifts sh in 1..=52 and 64 - sh in 12..=63; log's leading zeros of a non-zero significand. So n == 64, the one value where < and <= differ, is never passed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/support.rs",
+      "mutant": "replace < with <= in shr",
+      "line_text": "if n < 64 { x >> n } else { 0 }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every caller passes a shift below 64: sincospi's s <= 11, si <= 52, si - 1 and e - 1000 <= 63; atan2's trailing and leading zero counts of a non-zero word (<= 63) and the subnormal shifts sh in 1..=52 and 64 - sh in 12..=63; log's leading zeros of a non-zero significand. So n == 64, the one value where < and <= differ, is never passed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/support.rs",
+      "mutant": "replace < with <= in sar",
+      "line_text": "if n < 64 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sar's one caller is sinpi's reduction, sar(signed(m), s) with s = 1063 - e and 1018 <= e <= 1063 there, so s <= 45 < 64 and the branch for n >= 64 never runs; n == 64, the one value where < and <= differ, is never passed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/support.rs",
+      "mutant": "replace < with == in sar",
+      "line_text": "} else if x < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sar's one caller is sinpi's reduction, sar(signed(m), s) with s = 1063 - e and 1018 <= e <= 1063 there, so s <= 45 < 64 and the branch for n >= 64 never runs; this test is never reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/support.rs",
+      "mutant": "replace < with > in sar",
+      "line_text": "} else if x < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sar's one caller is sinpi's reduction, sar(signed(m), s) with s = 1063 - e and 1018 <= e <= 1063 there, so s <= 45 < 64 and the branch for n >= 64 never runs; this test is never reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/support.rs",
+      "mutant": "replace < with <= in sar",
+      "line_text": "} else if x < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sar's one caller is sinpi's reduction, sar(signed(m), s) with s = 1063 - e and 1018 <= e <= 1063 there, so s <= 45 < 64 and the branch for n >= 64 never runs; this test is never reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/support.rs",
+      "mutant": "delete - in sar",
+      "line_text": "-1",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sar's one caller is sinpi's reduction, sar(signed(m), s) with s = 1063 - e and 1018 <= e <= 1063 there, so s <= 45 < 64 and the branch for n >= 64 never runs; this value is never returned."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/unproven.rs",
+      "mutant": "delete - in sinpi",
+      "line_text": "} else if r == -0.5 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "r == -0.5 is then tested as r == 0.5, already handled above, so r = -0.5 falls to libm::sin(PI * -0.5) = sin(-RN(pi)/2) = -cos(1.2e-16), which rounds to exactly -1.0 (libm 0.2.16 returns -1.0 there; tests/gate1_libm.rs checks it): the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/unproven.rs",
+      "mutant": "replace || with && in cospi",
+      "line_text": "} else if r == 1.0 || r == -1.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "r = +-1 then falls to libm::cos(PI * r) = cos(+-RN(pi)), which is -cos(1.2e-16) and rounds to exactly -1.0 (libm 0.2.16 returns -1.0 for both; tests/gate1_libm.rs checks it): the same value as the special case."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/unproven.rs",
+      "mutant": "delete - in cospi",
+      "line_text": "} else if r == 1.0 || r == -1.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "r = -1 then falls to libm::cos(PI * -1.0) = cos(-RN(pi)), which rounds to exactly -1.0 (libm 0.2.16 returns -1.0; tests/gate1_libm.rs checks it): the same value as the special case."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace fast_sum -> (f64, f64) with (0.0, 0.0)",
+      "line_text": "let (sh, sl) = fast_two_sum(xh, yh);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fast_sum is used only by the second fast path; with (0, 0) its test compares -eps and +eps (eps > 0 always), which differ, so every pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace || with && in special",
+      "line_text": "if aiy >= inf || aix >= inf {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special is reached only with a zero argument and the other finite: the public atan2 refuses infinite and NaN arguments and Interval::atan2 passes finite bounds. So aiy >= inf and aix >= inf are both false, and the block is skipped under || and && alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace || with && in special",
+      "line_text": "if aiy > inf || aix > inf {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with == in special",
+      "line_text": "if aiy > inf || aix > inf {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with < in special",
+      "line_text": "if aiy > inf || aix > inf {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in special",
+      "line_text": "if aiy > inf || aix > inf {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace && with || in special",
+      "line_text": "if aiy == inf && aix == inf {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace == with != in special",
+      "line_text": "if aiy == inf && aix == inf {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace >> with << in special",
+      "line_text": "let [lo, hi] = entry(&FINF, ix >> 63);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with - in special",
+      "line_text": "return hi.copysign(y0) + lo.copysign(y0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in special",
+      "line_text": "return hi.copysign(y0) + lo.copysign(y0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace == with != in special",
+      "line_text": "if aix == inf {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with == in special",
+      "line_text": "if x0 < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with > in special",
+      "line_text": "if x0 < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in special",
+      "line_text": "if x0 < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with - in special",
+      "line_text": "return PI_H.copysign(y0) + PI_L.copysign(y0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in special",
+      "line_text": "return PI_H.copysign(y0) + PI_L.copysign(y0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with - in special",
+      "line_text": "return PI_OVER2_H.copysign(y0) + PI_OVER2_L.copysign(y0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in special",
+      "line_text": "return PI_OVER2_H.copysign(y0) + PI_OVER2_L.copysign(y0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "special's first block runs only when an argument is infinite or NaN (|bits| >= inf). The public atan2 (math::atan2) refuses those (math::finite) and Interval::atan2 passes only its finite bounds, so special is reached only with a zero argument and this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with - in special",
+      "line_text": "return if iy == 0 { PI_H + PI_L } else { -PI_H - PI_L }; // atan2(±0, −0) = ±π",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "PI_L = 0x1.1a62633145c07p-53 is below half an ulp of PI_H (2^-52) and PI_OVER2_L = 0x1.1a62633145c07p-54 below half an ulp of PI_OVER2_H (2^-53), so the high part plus or minus the low part rounds to the high part either way (C writes the sum to raise the inexact flag, which Rust does not expose): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with + in special",
+      "line_text": "return if iy == 0 { PI_H + PI_L } else { -PI_H - PI_L }; // atan2(±0, −0) = ±π",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "PI_L = 0x1.1a62633145c07p-53 is below half an ulp of PI_H (2^-52) and PI_OVER2_L = 0x1.1a62633145c07p-54 below half an ulp of PI_OVER2_H (2^-53), so the high part plus or minus the low part rounds to the high part either way (C writes the sum to raise the inexact flag, which Rust does not expose): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in special",
+      "line_text": "if x0 > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This branch is y = +-0 with x not zero (both zero returned just above), so x0 == 0, the one value where > and >= differ, never reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace / with % in special",
+      "line_text": "return y0 / x0; // ±0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Here y0 is +-0 and x0 > 0 is finite, so y0 / x0 and y0 % x0 are both the zero with y0's sign: the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace / with * in special",
+      "line_text": "return y0 / x0; // ±0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Here y0 is +-0 and x0 > 0 is finite, so y0 / x0 and y0 * x0 are both the zero with y0's sign: the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with - in special",
+      "line_text": "PI_H + PI_L",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "PI_L = 0x1.1a62633145c07p-53 is below half an ulp of PI_H (2^-52) and PI_OVER2_L = 0x1.1a62633145c07p-54 below half an ulp of PI_OVER2_H (2^-53), so the high part plus or minus the low part rounds to the high part either way (C writes the sum to raise the inexact flag, which Rust does not expose): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with + in special",
+      "line_text": "-PI_H - PI_L",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "PI_L = 0x1.1a62633145c07p-53 is below half an ulp of PI_H (2^-52) and PI_OVER2_L = 0x1.1a62633145c07p-54 below half an ulp of PI_OVER2_H (2^-53), so the high part plus or minus the low part rounds to the high part either way (C writes the sum to raise the inexact flag, which Rust does not expose): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in special",
+      "line_text": "if y0 > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Only x is zero here (y = 0 returned above), so y0 == 0, the one value where > and >= differ, never reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with - in special",
+      "line_text": "PI_OVER2_H + PI_OVER2_L",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "PI_L = 0x1.1a62633145c07p-53 is below half an ulp of PI_H (2^-52) and PI_OVER2_L = 0x1.1a62633145c07p-54 below half an ulp of PI_OVER2_H (2^-53), so the high part plus or minus the low part rounds to the high part either way (C writes the sum to raise the inexact flag, which Rust does not expose): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with + in special",
+      "line_text": "-PI_OVER2_H - PI_OVER2_L",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "PI_L = 0x1.1a62633145c07p-53 is below half an ulp of PI_H (2^-52) and PI_OVER2_L = 0x1.1a62633145c07p-54 below half an ulp of PI_OVER2_H (2^-53), so the high part plus or minus the low part rounds to the high part either way (C writes the sum to raise the inexact flag, which Rust does not expose): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with == in atan2",
+      "line_text": "let gt = u64::from(aix < aiy);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With gt = (aix == aiy): for |x| < |y| gt is 0 and aix - aiy wraps to at least 2^63; for |x| == |y| gt is 1 and dxy is all ones; either way dxy >= 53 << 52 sends the pair to atan2_accurate before gt is used again, and |x| > |y| is unchanged. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with > in atan2",
+      "line_text": "let gt = u64::from(aix < aiy);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With gt = (aix > aiy): for |x| > |y| dxy = !(aix - aiy) and for |x| < |y| the wrapped aix - aiy, both at least 2^63, so the pair goes to atan2_accurate before gt is used again; |x| == |y| keeps gt = 0 as before. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in atan2",
+      "line_text": "let gt = u64::from(aix < aiy);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at |x| == |y|, where the mutant's gt = 1 makes dxy = 0 ^ !0, all ones, so the pair goes to atan2_accurate before gt is used again. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace ^ with | in atan2",
+      "line_text": "let dxy = aix.wrapping_sub(aiy) ^ gt.wrapping_neg();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "For gt = 0 the mask is 0 and | and ^ agree; for gt = 1 the mask is all ones and | gives all ones, so every pair with |x| < |y| goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in atan2",
+      "line_text": "let kw = (sx << 2) | (sy << 1) | gt; // 0 ≤ kw < 8: the octant",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "sx << 2, sy << 1 and gt are single bits in different places (sx, sy and gt are 0 or 1), so | and ^ give the same octant for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace & with | in atan2",
+      "line_text": "let jt = (jj >> (52 - 7)) & 127;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "jj >> 45 includes the exponent field of y/x + 2 + 1/128 (0x400 << 7), so jt is at least 0x2_0000, outside F2 and T2 (65 entries): both reads give the NaN poison, both fast tests fail on NaN, and the pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace & with ^ in atan2",
+      "line_text": "let jt = (jj >> (52 - 7)) & 127;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "jj >> 45 includes the exponent field of y/x + 2 + 1/128 (0x400 << 7), so jt is at least 0x2_0000, outside F2 and T2 (65 entries): both reads give the NaN poison, both fast tests fail on NaN, and the pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in atan2",
+      "line_text": "let fh = f2h * sgn + oh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sgn is +1.0 or -1.0, and dividing by +-1 is exact and equals multiplying by it (IEEE 754), so the same bits for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in atan2",
+      "line_text": "let fl = f2l * sgn + ol;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sgn is +1.0 or -1.0, and dividing by +-1 is exact and equals multiplying by it (IEEE 754), so the same bits for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with + in atan2",
+      "line_text": "let z = z * sgn;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "z + sgn has |z + sgn| > 1 - 2^-7 (|z| <= 2^-7), so the first test's eps is at least 2^-51.1 and lb and ub are rounded from values 2·eps apart, at least one ulp of any result below 8: they differ, the first path never returns, and the second path recomputes the reduced quotient itself (zh), not from z. So the mutant returns what the original's second path or atan2_accurate returns, the same correctly rounded angle."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in atan2",
+      "line_text": "let z = z * sgn;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sgn is +1.0 or -1.0, and dividing by +-1 is exact and equals multiplying by it (IEEE 754), so the same bits for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in atan2",
+      "line_text": "let zh = zh * sgn;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sgn is +1.0 or -1.0, and dividing by +-1 is exact and equals multiplying by it (IEEE 754), so the same bits for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in atan2",
+      "line_text": "let zl = zl * sgn;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sgn is +1.0 or -1.0, and dividing by +-1 is exact and equals multiplying by it (IEEE 754), so the same bits for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in accurate",
+      "line_text": "if x > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "accurate is called only with x and y finite and non-zero (special takes every zero), so x == 0, the one value where > and >= differ, never reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in accurate",
+      "line_text": "return Some(if y > 0.0 { PI_H + PI_L } else { -PI_H - PI_L });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "accurate is called only with x and y finite and non-zero (special takes every zero), so y == 0, the one value where > and >= differ, never reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with - in accurate",
+      "line_text": "return Some(if y > 0.0 { PI_H + PI_L } else { -PI_H - PI_L });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "PI_L = 0x1.1a62633145c07p-53 is below half an ulp of PI_H (2^-52) and PI_OVER2_L = 0x1.1a62633145c07p-54 below half an ulp of PI_OVER2_H (2^-53), so the high part plus or minus the low part rounds to the high part either way (C writes the sum to raise the inexact flag, which Rust does not expose): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with + in accurate",
+      "line_text": "return Some(if y > 0.0 { PI_H + PI_L } else { -PI_H - PI_L });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "PI_L = 0x1.1a62633145c07p-53 is below half an ulp of PI_H (2^-52) and PI_OVER2_L = 0x1.1a62633145c07p-54 below half an ulp of PI_OVER2_H (2^-53), so the high part plus or minus the low part rounds to the high part either way (C writes the sum to raise the inexact flag, which Rust does not expose): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with == in accurate",
+      "line_text": "if corr == 0.0 && x > 0.0 && t.abs() <= hf!(\"0x1.d12ed0af1a27fp-27\") {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x is never 0 in accurate, so x == 0 is false and the exact-quotient shortcut is never taken: those pairs go through the 192-bit evaluation instead, which rounds them correctly too (the shortcut only saves time), so the same result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in accurate",
+      "line_text": "if corr == 0.0 && x > 0.0 && t.abs() <= hf!(\"0x1.d12ed0af1a27fp-27\") {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x is never 0 in accurate (special takes every zero), so x > 0 and x >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in accurate",
+      "line_text": "if !inv && x > 0.0 && z.ex <= -96 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x is never 0 in accurate (special takes every zero), so x > 0 and x >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in accurate",
+      "line_text": "if x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x is never 0 in accurate (special takes every zero), so x < 0 and x <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in tiny_quotient",
+      "line_text": "((bits & MANTISSA) | (1u64 << 52), biased.checked_sub(1075)?)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with + in Tint::to_f64",
+      "line_text": "return Some(s * f64::INFINITY); // |a| ≥ 2^1024",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex >= 1025, so this return never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in Tint::to_f64",
+      "line_text": "return Some(s * f64::INFINITY); // |a| ≥ 2^1024",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex >= 1025, so this return never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with == in Tint::to_f64",
+      "line_text": "if self.ex < -1074 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with > in Tint::to_f64",
+      "line_text": "if self.ex < -1074 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in Tint::to_f64",
+      "line_text": "if self.ex < -1074 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "delete - in Tint::to_f64",
+      "line_text": "if self.ex < -1074 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with + in Tint::to_f64",
+      "line_text": "return Some(s * 0.0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in Tint::to_f64",
+      "line_text": "return Some(s * 0.0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace && with || in Tint::to_f64",
+      "line_text": "let mid = self.h == 1 << 63 && self.m == 0 && self.l == 0;",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace == with != in Tint::to_f64",
+      "line_text": "let mid = self.h == 1 << 63 && self.m == 0 && self.l == 0;",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace << with >> in Tint::to_f64",
+      "line_text": "let mid = self.h == 1 << 63 && self.m == 0 && self.l == 0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with + in Tint::to_f64",
+      "line_text": "return Some(if mid { s * 0.0 } else { s * f64::from_bits(1) });",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace * with / in Tint::to_f64",
+      "line_text": "return Some(if mid { s * 0.0 } else { s * f64::from_bits(1) });",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with & in Tint::to_f64",
+      "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Tint::to_f64",
+      "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with == in Tint::to_f64",
+      "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with < in Tint::to_f64",
+      "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in Tint::to_f64",
+      "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with & in Tint::to_f64",
+      "line_text": "mm = shl(hh, back) | shr(mm, sh);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace | with ^ in Tint::to_f64",
+      "line_text": "mm = shl(hh, back) | shr(mm, sh);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace & with | in Tint::to_f64",
+      "line_text": "low = hh & 0x7ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace & with ^ in Tint::to_f64",
+      "line_text": "low = hh & 0x7ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/enclose.rs",
+      "mutant": "replace > with >= in at_least",
+      "line_text": "s > p || (s == p && e >= 0.0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "at_least decides whether an arc reaches a peak (contains_any) or a whole turn (Arc::new); the mutant changes its answer only when s == p, s + e being hi - 2k or hi - lo exactly. In contains_any that puts hi within half an ulp (at most 2^-52) of a peak, where sin(pi t) is within 2^-100 of +-1: the end's correctly rounded value is +-1, and the bound, widened and clamped to [-1, 1], is +-1 whether or not the peak is counted. In the whole-turn test (p = 2): with hi - lo >= 2, an arc not called whole still finds every peak's representative in [r, r + 2] (one at the end hi only as above); with 2 - 2^-53 < hi - lo < 2, a peak in the gap (hi, lo + 2) would need doubles within 2^-53 below one peak and above the one two before it, and no double is that close to both a peak in [-1, 1) and one in [1, 3). So no interval tells them apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/enclose.rs",
+      "mutant": "replace >= with < in at_least",
+      "line_text": "s > p || (s == p && e >= 0.0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "at_least decides whether an arc reaches a peak (contains_any) or a whole turn (Arc::new); the mutant changes its answer only when s == p, s + e being hi - 2k or hi - lo exactly. In contains_any that puts hi within half an ulp (at most 2^-52) of a peak, where sin(pi t) is within 2^-100 of +-1: the end's correctly rounded value is +-1, and the bound, widened and clamped to [-1, 1], is +-1 whether or not the peak is counted. In the whole-turn test (p = 2): with hi - lo >= 2, an arc not called whole still finds every peak's representative in [r, r + 2] (one at the end hi only as above); with 2 - 2^-53 < hi - lo < 2, a peak in the gap (hi, lo + 2) would need doubles within 2^-53 below one peak and above the one two before it, and no double is that close to both a peak in [-1, 1) and one in [1, 3). So no interval tells them apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/enclose.rs",
+      "mutant": "delete - in Interval::cospi",
+      "line_text": "periodic(self, sincospi::cospi, &[0.0, 2.0], &[-1.0, 1.0])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "-1 and 1 are the same point modulo 2. The arc [r, r + d] with r in [-1, 1] and d < 2 contains -1 but not 1 only when r = -1, that is when lo is an odd integer; then cospi(lo) = -1 exactly (a quarter turn, not widened) and the lower bound is max2(min2(-1, b_low), -1) = -1 anyway. So listing 1 twice finds the same minima."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace + with - in hard_case",
+      "line_text": "if x == hx { hr + hd } else { f }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every HARD entry's offset d is below half an ulp of its r: 0x1.ffffffffffffep-54 to 0x1.fffffffffffffp-54 against r in [1, 2) (half an ulp 2^-53), 0x1.fffffffffffffp-55 against r in [1/2, 1) (2^-54), and 2^-105 or less for the rest. So r + d and r - d both round to r (C writes the sum to raise the inexact flag): the same double for every key."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace + with - in exp",
+      "line_text": "return 1.0 + x;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Here |x| <= 2^-54, so 1 + x and 1 - x both lie in [1 - 2^-54, 1 + 2^-54]: above 1 that is below the midpoint 1 + 2^-53, and 1 - 2^-54 is the midpoint below 1, which rounds to even, 1.0. Both round to 1.0 for every such x."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace > with == in exp",
+      "line_text": "if aix > 0x7ff0_0000_0000_0000 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The public exp (math::exp and Interval::exp) passes only finite arguments to the port (math::finite, and an Interval's bounds are finite), so this NaN and infinity test never sees an argument with |x| bits >= 0x7ff0_0000_0000_0000; for every finite x both forms are false, and the overflow and underflow tests below decide."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace > with >= in exp",
+      "line_text": "if aix > 0x7ff0_0000_0000_0000 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The public exp (math::exp and Interval::exp) passes only finite arguments to the port (math::finite, and an Interval's bounds are finite), so this NaN and infinity test never sees an argument with |x| bits >= 0x7ff0_0000_0000_0000; for every finite x both forms are false, and the overflow and underflow tests below decide."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace != with == in exp",
+      "line_text": "return if ix >> 63 != 0 { 0.0 } else { x };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This is exp(+-inf), reached only for |x| bits == 0x7ff0_0000_0000_0000; the public exp (math::exp and Interval::exp) passes only finite arguments to the port, so it never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace >> with << in exp",
+      "line_text": "return if ix >> 63 != 0 { 0.0 } else { x };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This is exp(+-inf), reached only for |x| bits == 0x7ff0_0000_0000_0000; the public exp (math::exp and Interval::exp) passes only finite arguments to the port, so it never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "delete - in exp",
+      "line_text": "let offset = pow2((-1022i64).checked_sub(ie));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With 1022 - ie, ie in -1076..=-1022, the exponent is 2044 to 2098, outside pow2's range, so offset is the canonical NaN, ub and lb are NaN and ub != lb holds: every possibly subnormal argument goes to exp_accurate, which computes the same correctly rounded result. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "delete match arm b'A'..= b'F' in digit_value",
+      "line_text": "b'A'..=b'F' => c.abs_diff(b'A' - 10) as u32,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): none has an upper-case digit, so this arm never runs and every constant is the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace - with + in digit_value",
+      "line_text": "b'A'..=b'F' => c.abs_diff(b'A' - 10) as u32,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): none has an upper-case digit, so this arm never runs and every constant is the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace - with / in digit_value",
+      "line_text": "b'A'..=b'F' => c.abs_diff(b'A' - 10) as u32,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): none has an upper-case digit, so this arm never runs and every constant is the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace | with ^ in parse",
+      "line_text": "magnitude | (1u64 << 63)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): magnitude returns the bits of a finite value without its sign, so bit 63 is always 0 and setting it by | or by ^ gives the same bits for all 634 negative ones."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace > with == in magnitude",
+      "line_text": "let kept = if drop > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so > and == both take the else arm, except drop == 0, where the first arm's mask removes nothing and >> 0 equals the else arm's << 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace > with >= in magnitude",
+      "line_text": "let kept = if drop > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0, and at drop == 0, the one value where > and >= differ, the first arm's lost bits are significand & 0 = 0 and significand >> 0 equals the else arm's significand << 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace & with | in magnitude",
+      "line_text": "let lost = significand & !(u128::MAX << drop);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace & with ^ in magnitude",
+      "line_text": "let lost = significand & !(u128::MAX << drop);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "delete ! in magnitude",
+      "line_text": "let lost = significand & !(u128::MAX << drop);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace << with >> in magnitude",
+      "line_text": "let lost = significand & !(u128::MAX << drop);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace >> with << in magnitude",
+      "line_text": "significand >> drop",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "mutant": "replace | with ^ in magnitude",
+      "line_text": "(unbiased.abs_diff(-1023) << 52) | (kept & ((1u64 << 52) - 1))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): the exponent field (shifted to bits 52 to 62) and the masked significand (bits 0 to 51) share no bit, so | and ^ give the same bits for every one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace log_fast -> (f64, f64) with (0.0, 0.0)",
+      "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With h = l = 0, left = -ERR and right = +ERR differ, so every input other than 1 (returned before) goes to log_accurate, which gives the same correctly rounded value: only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with & in log_fast",
+      "line_text": "let m = (1u64 << 52) | (v.to_bits() & MANTISSA);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "m becomes 0 (bit 52 and the 52 significand bits share no bit), so i = 0 and i - 362 fails: log_fast returns its NaN pair, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in log_fast",
+      "line_text": "let m = (1u64 << 52) | (v.to_bits() & MANTISSA);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace & with | in log_fast",
+      "line_text": "let m = (1u64 << 52) | (v.to_bits() & MANTISSA);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "v's exponent field (0x3ff) then reaches m, so m >= 2^61 and i = m >> 44 is far above 724: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace & with ^ in log_fast",
+      "line_text": "let m = (1u64 << 52) | (v.to_bits() & MANTISSA);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "v's exponent field (0x3ff) then reaches m, so m >= 2^61 and i = m >> 44 is far above 724: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace >> with << in log_fast",
+      "line_text": "(m >> 44, v * 0.5)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "i = m << 44 (the shift drops m's high bits) is a multiple of 2^44: 0, which i - 362 refuses, or at least 2^44, outside the table: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace >> with << in log_fast",
+      "line_text": "(m >> 43, v)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "i = m << 43 (the shift drops m's high bits) is a multiple of 2^43: 0, which i - 362 refuses, or at least 2^43, outside the table: log_fast then reads a table out of range (support::entry gives the NaN poison) or builds a NaN, so h and l are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace & with | in log_fast",
+      "line_text": "let y_hi = f64::from_bits(y.to_bits() & !0x3ff);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "y.to_bits() | !0x3ff sets the sign and every exponent bit, so y_hi is a NaN, z and h are NaN, left == right fails, and log_accurate, which starts again from x itself, returns the same correctly rounded value: only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace || with && in ln",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The public ln (math::ln, Interval::ln) passes only finite x >= 0 (or -0) to the port, so x.is_nan() and x < 0.0 are both false here and || and && agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace < with == in ln",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The port sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace < with <= in ln",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The port sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in ln",
+      "line_text": "let v = f64::from_bits((0x3ff << 52) | (bits & MANTISSA));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in Dint::from_f64",
+      "line_text": "let m = (bits & MANTISSA) | if biased != 0 { 1u64 << 52 } else { 0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in Dint::to_f64",
+      "line_text": "let r = f64::from_bits((self.hi >> 11) | (0x3ff << 52) | (self.sgn << 63)); // 1 ≤ |r| < 2",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The last | joins the sign at bit 63 to (hi >> 11) | (0x3ff << 52), whose bit 63 is 0 (hi >> 11 < 2^53, 0x3ff << 52 < 2^62): | and ^ give the same word."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace > with >= in Dint::log",
+      "line_text": "if x.hi > 0xb504_f333_f9de_6484 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Dint::log is called only on Dint::from_f64(x), whose hi is a 53-bit significand shifted left by at least 11, so its low 11 bits are 0; the constant's are 0x484. No such hi equals it, so > and >= agree on every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace > with >= in refine",
+      "line_text": "let sgn = if iq > 2048 { -1.0 } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sgn is used only when a listed hard case matches. At iq == 2048, the one value where > and >= differ, the folded index iq & 0x7ff is 0, and no listed case has index 0 or 2048 (they are 76 to 1235), so no case matches and sgn is never read."
     }
   ],
   "coverage_off": [],
