@@ -460,15 +460,12 @@ impl Transition {
         let xi = t / self.length;
         let last = count.checked_sub(1).ok_or(CurveError::Defect)?;
         let mut index = form::floor_index(xi * form::count(count)?)?.min(last);
-        // ξ was rounded, so it may lie past a panel end that t/L does not: at most one, since a
-        // panel is at least 2⁻¹⁶ wide. Every t reaches the first panel's start, 0.
+        // ξ was rounded, so it may have reached a panel's start that t/L lies just before: at most
+        // one, since a panel is at least 2⁻¹⁶ wide. Never the other way: a panel's end is a double,
+        // so a quotient at or past it rounds to it or past it. Every t reaches the first panel's
+        // start, 0.
         if !reaches(t, self.length, ratio(index, count)?) {
             index = index.checked_sub(1).ok_or(CurveError::Defect)?;
-        } else if index < last {
-            let next = index.checked_add(1).ok_or(CurveError::Defect)?;
-            if reaches(t, self.length, ratio(next, count)?) {
-                index = next;
-            }
         }
         let a = ratio(index, count)?;
         let b = ratio(index.checked_add(1).ok_or(CurveError::Defect)?, count)?;
@@ -707,19 +704,18 @@ fn unit_derivatives<N: Num>(turn: N, rates: &[N]) -> Result<Vec<[N; 2]>, CurveEr
     let mut row = vec![N::exact(1.0)?];
     for _ in rates {
         let mut next = [zero, zero];
-        for ((c, &rate), gk) in row.iter().zip(rates).zip(g.iter().rev()) {
+        for ((&c, &rate), &[x, y]) in row.iter().zip(rates).zip(g.iter().rev()) {
             let a = c.mul(rate)?;
             // i·a·(x + iy) = −a·y + i·a·x.
-            next = [next[0].sub(a.mul(gk[1])?)?, next[1].add(a.mul(gk[0])?)?];
+            let [re, im] = next;
+            next = [re.sub(a.mul(y)?)?, im.add(a.mul(x)?)?];
         }
         g.push(next);
         // Pascal's next row.
         let mut wider = Vec::with_capacity(row.len().saturating_add(1));
         wider.push(N::exact(1.0)?);
-        for pair in row.windows(2) {
-            if let [p, q] = pair {
-                wider.push(p.add(*q)?);
-            }
+        for (&p, &q) in row.iter().zip(row.iter().skip(1)) {
+            wider.push(p.add(q)?);
         }
         wider.push(N::exact(1.0)?);
         row = wider;

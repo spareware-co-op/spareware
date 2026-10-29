@@ -732,6 +732,30 @@ fn bad_data_is_refused() {
         new([0.0, 0.0], [1.0, 0.0], 1.0, wild, m),
         Err(CurveError::TooManyPanels)
     );
+    assert_eq!(
+        CurveError::TooManyPanels.to_string(),
+        "the transition's heading turns too far for its certified quadrature's panels"
+    );
+}
+
+#[test]
+fn a_point_past_the_doubles_is_refused() {
+    // Built, but its end lies past the largest double.
+    let law = CurvatureLaw::Clothoid {
+        start: 0.0,
+        end: 0.0,
+    };
+    let t = Transition::new([f64::MAX, 0.0], [1.0, 0.0], 1e300, law, &mut meter()).unwrap();
+    assert_eq!(t.point(1e300), Err(CurveError::NotFinite));
+    assert_eq!(
+        t.derivatives(1e300, &mut [[0.0; 2]; 2]),
+        Err(CurveError::NotFinite)
+    );
+    assert_eq!(
+        t.enclose(1e300, 0, &mut meter()).map(|_| ()),
+        Err(CurveError::NotFinite)
+    );
+    assert_eq!(t.point(0.0), Ok([f64::MAX, 0.0]));
 }
 
 #[test]
