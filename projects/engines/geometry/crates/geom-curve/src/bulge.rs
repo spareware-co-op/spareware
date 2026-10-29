@@ -359,7 +359,8 @@ pub(crate) fn rational_derivatives<const D: usize>(
                 )?
                 / count(i)?;
             let wi = wk(i);
-            if wi.lo() == 0.0 && wi.hi() == 0.0 {
+            // An exactly 0 derivative of the weight (a straight segment) adds nothing.
+            if wi == zero {
                 continue;
             }
             let prev = out

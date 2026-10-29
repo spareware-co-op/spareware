@@ -502,6 +502,22 @@ fn composite_derivatives_near_a_ratio_of_one_hold_the_exact_value() {
     }
 }
 
+/// Claim: a composite's derivative enclosure holds the exact ratio where its enclosure has 1 at one
+/// end (found by search: the ratio's enclosure is [1 − 7 ulps, 1]).
+#[test]
+fn composite_derivatives_with_a_ratio_just_off_one_hold_the_exact_value() {
+    let m = &mut meter();
+    let (s0, len) = (2.799_548_034_182_434_4, 1.503_298_364_911_399_3);
+    let c = Composite::starting_at(vec![axis(0.0, len)], s0).unwrap();
+    let s1 = c.starts()[1];
+    let r = q(len) / (q(s1) - q(s0));
+    let e = c
+        .enclose(f64::midpoint(s0, s1), Limit::FromRight, 1, m)
+        .unwrap();
+    assert_eq!(e[1][0].hi(), 1.0);
+    assert!(inside(e[1][0], &r), "{:?}", e[1][0]);
+}
+
 /// Claim: a composite refuses the splits it cannot make: at its end, and where the cut rounds onto
 /// a segment's end (a segment at 10¹⁶, whose parameters step by 2).
 #[test]

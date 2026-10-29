@@ -724,19 +724,19 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
-      "mutant": "replace > with >= in join",
-      "line_text": "if eps > 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only at eps == 0, where the added term is 2*0/(1 - 0) times the reach: zero. The mutant adds that zero through outward-rounded operations, so the deviation grows by at most a few subnormal steps and stays an upper bound; it never gets smaller."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
       "mutant": "replace > with >= in Composite<D>::assemble",
       "line_text": "if !meet && gap > allow {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "assemble is called with allow 0 (a new composite), where a joint whose enclosures do not meet has a gap above 0, or with allow infinite (a split, reversal or transform), where every gap is finite: gap > allow and gap >= allow agree in both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/jet.rs",
+      "mutant": "replace >= with < in Jet::div",
+      "line_text": "if g0.lo() <= 0.0 && g0.hi() >= 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Jet::div is called only with the jet of a normal's length from Jet::sqrt, which refuses a value whose enclosure reaches 0 or below: g0.lo() is above 0, so the test is false with g0.hi() >= 0 or g0.hi() < 0 alike."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
