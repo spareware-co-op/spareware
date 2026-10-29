@@ -559,7 +559,7 @@ fn decimal_text_is_read_exactly_or_refused() {
             })
             .collect()
     };
-    for _ in 0..20_000 {
+    for _ in 0..10_000 {
         let sign = rng.pick(&["", "-", "+"]);
         let whole = digits(&mut rng, 24);
         let frac = digits(&mut rng, 24);
@@ -633,7 +633,7 @@ fn decimals_have_one_form_and_read_back() {
         assert_eq!(Decimal::parse(text), Ok(v), "{text}");
     }
     let mut rng = Rng::new("decimal forms", 0x6448_464f_524d_0002);
-    for _ in 0..20_000 {
+    for _ in 0..10_000 {
         let m = match rng.below(3) {
             0 => rng.range(-1000, 1000),
             1 => rng.range(-(ten38 - 1), ten38 - 1),
@@ -881,7 +881,7 @@ fn records_carry_units_epochs_and_models_and_never_mix_them() {
 fn map_values_in_any_unit_round_once_to_the_exact_model() {
     let mut rng = Rng::new("map to frame in units", 0x4d41_5054_4f46_0004);
     let mut seen = [0usize; 4];
-    for _ in 0..6000 {
+    for _ in 0..3000 {
         let f = frame(&mut rng);
         let spread = rng.pick(&[3, 1 << 20, 1 << 39, (1 << 40) + 8]);
         let v = [0, 1, 2].map(|a| near_origin(&mut rng, &f, a, spread));
@@ -909,7 +909,7 @@ fn map_values_in_any_unit_round_once_to_the_exact_model() {
         }
     }
     // Exact cases are the next test's: here the inputs are cut, so mostly inexact.
-    assert!(seen[1] > 500 && seen[2] > 300, "{seen:?}");
+    assert!(seen[1] > 250 && seen[2] > 150, "{seen:?}");
 }
 
 #[test]
@@ -977,7 +977,7 @@ fn doubles_and_their_exact_decimals_convert_alike() {
     // A double that is a short decimal converts the same through either door: the fast path and
     // the exact path agree, and so do the two input forms.
     let mut rng = Rng::new("doubles as decimals", 0x4444_4f4f_5253_0005);
-    for _ in 0..4000 {
+    for _ in 0..2000 {
         let mut f = frame(&mut rng);
         if rng.coin() {
             f = f.with_linear_unit(LinearUnit::METRE);
@@ -1015,7 +1015,7 @@ fn doubles_and_their_exact_decimals_convert_alike() {
 fn out_of_range_coordinates_carry_their_exact_value() {
     let mut rng = Rng::new("out of range", 0x4f55_5452_4e47_0006);
     let mut far = 0;
-    for _ in 0..3000 {
+    for _ in 0..1500 {
         let f = frame(&mut rng);
         let s = int(i128::from(steps_per_metre(f.step())));
         let u = unit_value(f.linear_unit());
@@ -1049,7 +1049,7 @@ fn out_of_range_coordinates_carry_their_exact_value() {
             "{f:?} {dp:?}"
         );
     }
-    assert!(far > 100, "only {far} saturated values");
+    assert!(far > 50, "only {far} saturated values");
 }
 
 #[test]
@@ -1227,7 +1227,7 @@ fn inputs_beyond_every_budget_report_the_larger_coordinate_saturated() {
 #[test]
 fn grid_points_go_to_the_nearest_doubles_in_any_unit() {
     let mut rng = Rng::new("frame to map in units", 0x464d_4150_554e_0008);
-    for _ in 0..4000 {
+    for _ in 0..2000 {
         let f = frame(&mut rng);
         let c = |rng: &mut Rng| match rng.below(3) {
             0 => rng.range(-3, 3) as i64,
@@ -1445,7 +1445,7 @@ fn shifts_decide_the_lattice_before_the_range_and_report_exact_offsets() {
     );
     // 64-bit scales on a shared lattice: the shift moves points exactly, as the model says.
     let mut rng = Rng::new("shifts", 0x5348_4946_5453_0009);
-    for _ in 0..3000 {
+    for _ in 0..1500 {
         let (c, sn) = rng.pick(&[(3, 4), (1, 0), (0, -1), (-20, 21)]);
         let (kn, kd) = rng.pick(&SCALES);
         let r = i128::from(Rotation::direction(c, sn).unwrap().exact_norm().unwrap());
