@@ -169,6 +169,11 @@ pub enum NurbsError {
     /// A least-squares fit's constraints cannot all be met: there are more of them than control
     /// points, or one contradicts the others.
     Constraints,
+    /// Two Bernstein forms to be combined are on different domains.
+    Domains,
+    /// A shape gives no direction where one is needed: a fat line of a curve whose control points
+    /// coincide, or a fat plane of a patch whose corners do.
+    Degenerate,
     /// The work meter stopped the operation: over its budget, cancelled, or a large allocation was
     /// refused (chapter 23.10).
     Stopped(Stopped),
@@ -179,6 +184,10 @@ pub enum NurbsError {
 }
 
 impl fmt::Display for NurbsError {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per variant, each a short message"
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NurbsError::Degree { degree } => {
@@ -272,6 +281,10 @@ impl fmt::Display for NurbsError {
                 f.write_str("the data do not determine the control points of the fit")
             }
             NurbsError::Constraints => f.write_str("the fit's constraints cannot all be met"),
+            NurbsError::Domains => f.write_str("the two forms are on different domains"),
+            NurbsError::Degenerate => {
+                f.write_str("the shape gives no direction: its points coincide")
+            }
             NurbsError::Stopped(stopped) => write!(f, "{stopped}"),
             NurbsError::Defect => {
                 f.write_str("an internal index fell outside its array (a defect in geom-nurbs)")

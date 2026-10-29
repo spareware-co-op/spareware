@@ -174,6 +174,11 @@ copies them:
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfTool.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
+  projects/engines/geometry/crates/geom-nurbs/src/product.rs
+    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp
+      SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
   projects/engines/geometry/crates/geom-nurbs/src/reduce.rs
     SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp

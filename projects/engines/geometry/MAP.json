@@ -1371,7 +1371,77 @@
         26
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a curve operation returned no result.",
+          "file": "projects/engines/geometry/crates/geom-curve/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The NURBS algorithms refused.",
+              "name": "Nurbs",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A parameter is NaN, infinite or outside the curve's domain, or a split is at an end.",
+              "name": "ParameterOutside",
+              "shape": "unit"
+            },
+            {
+              "doc": "A span is not ordered, not finite, or not inside the curve's domain.",
+              "name": "SpanOutside",
+              "shape": "unit"
+            },
+            {
+              "doc": "A transform that moves z, applied to a curve in the plane.",
+              "name": "NotInPlane",
+              "shape": "unit"
+            },
+            {
+              "doc": "The curve's dimension is not 2 or 3, where an operation needs one of them.",
+              "name": "Dimension",
+              "shape": "struct"
+            },
+            {
+              "doc": "A result is not finite.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "The operation needs a finite domain, and the curve is a ray or an infinite line; or its result would drift without bound along one (an inexact transform of its direction).",
+              "name": "Unbounded",
+              "shape": "unit"
+            },
+            {
+              "doc": "The segments of a composite curve do not meet: a segment's end and the next one's start have certified enclosures that do not overlap.",
+              "name": "Disjoint",
+              "shape": "unit"
+            },
+            {
+              "doc": "The data or a transform collapses the kind: parallel vectors where independent ones are needed, a zero length or direction, or a singular transform.",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
+              "doc": "The work meter stopped the operation (chapter 23.10).",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A procedural kind built on itself deeper than its stated bound (an offset of an offset of …): every operation recurses once per level, and the bound keeps that within the stack (chapter 28.8).",
+              "name": "TooDeep",
+              "shape": "struct"
+            },
+            {
+              "doc": "A step its own bounds rule out failed: a defect in this crate, reported, never a panic.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_curve::error",
+          "name": "CurveError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-curve/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-curve",
@@ -1386,12 +1456,563 @@
       "job": "Every curve kind in 2D and 3D, spirals included: evaluation, bounds, projection, conversion.",
       "kind": "kernel",
       "layer": "2",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "twelve products and sums per point in doubles and in intervals; nothing allocates.",
+          "does": "[`Entries::of`] reads a [`TypedTransform`]: an exact grid transform and a rational one through their exact integer entries (m / d), a certified one through its own doubles. [`Entries::image`] maps a homogeneous point w·P (weight w) to M·(w·P) + w·t, once in doubles in a fixed order and once in intervals, and returns the doubles with the distance between them, an upper bound on how far the double image lies from the exact image under the exact transform.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/affine.rs",
+          "guarantees": [
+            "**Exact entries enclosed.** An integer entry whose double is not exact (beyond 2^53) is widened by its rounding; each quotient m / d is an outward-rounded interval division; a certified transform is exact in its own doubles (`geom-math`'s `transform` header).",
+            "**The image's error bounded.** The interval image holds the exact image of the exact point, and the double image is computed from the doubles of the same entries, so the returned distance bounds their difference.",
+            "**Exact images report 0.** When every entry is exactly its double (grid and certified transforms), each coordinate is also summed exactly, as exact products in `geom-num`'s superaccumulator, and an image equal to its double reports an error of 0: interval arithmetic widens every result and could never say so."
+          ],
+          "job": "Typed transforms applied to control points, with a certified bound on the rounding: the entries of each `geom-math` transform variant as doubles and as interval enclosures of their exact values, and the image of a homogeneous point in both.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "affine invariance of B-splines and NURBS under affine maps of their control points (The NURBS Book, 2nd ed., properties P3.10 and P4.10, <https://doi.org/10.1007/978-3-642-59223-2>), with the weights unchanged, and interval arithmetic for the bound."
+          },
+          "path": "geom_curve::affine",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant.",
+          "does": "[`Axes`] holds the two vectors u and v of an ellipse, hyperbola, parabola or involute, and [`HelixAxes`] the three of a helix. The `Frame` form gives lengths along an exact [`Frame`]: u = a·x̂, v = b·ŷ (and w = (pitch/2)·n̂ for a helix), so the semi-axes, the focal length or the radius are exact numbers of the data. The `Vectors` form stores u, v (and w) directly: it is what a transform that is not a similarity makes of the `Frame` form, with the same parameter, because principal axes found again would shift the parameter by an angle no double holds (chapter 7: \"a non-uniform scale turns a circle into an ellipse\", explicitly).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/axes.rs",
+          "guarantees": [
+            "**Checked.** Lengths are finite and positive; `Vectors` are finite and u and v independent, decided exactly.",
+            "**Exact reversal.** Reversing negates v (and w): on a frame, by negating its normal, which negates ŷ and n̂ exactly.",
+            "**Transforms keep the form when they can.** A similarity maps a `Frame` form to a `Frame` form (lengths times the scale, a helix's pitch negated by a mirror); any other transform gives `Vectors`."
+          ],
+          "job": "How an analytic kind stores its vectors: lengths on an exact orthonormal frame, or the vectors themselves when the kind is the affine image of one.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the conjugate-diameter form of an ellipse, c + cos θ·u + sin θ·v, the image of the unit circle under the affine map taking the axes to u and v, of which the principal-axis form is the case u ⟂ v; and its analogues for the other kinds. Chapter 7 asks for the kind change to be explicit (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::axes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one match per call.",
+          "does": "[`Basis`] is a closed enum with one variant per leaf kind (NURBS, the analytic kinds, the bulge polyline), dispatching the kind contract to each, with the conversions to and from [`CurveKind`]. The kinds that hold curves hold a `Basis`, never a `CurveKind`, so no kind contains itself: no recursive type, no recursive call, nothing for WebAssembly's stack to bound (chapter 28.8).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/basis.rs",
+          "guarantees": [
+            "**The same behaviour as the kind.** Every method is the leaf kind's own.",
+            "**Leaves stay leaves.** Every leaf's reversal and transform is a leaf (a circle may become an ellipse, a bulge polyline its NURBS form); a split of a bulge polyline is a trimmed one, so the trimmed kind splits by its interval instead."
+          ],
+          "job": "The leaf curve kinds: the kinds that hold no other curve, which the trimmed, composite and offset kinds and curves on surfaces are built on.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the storage-and-behaviour split chapter 7 decides, closed enums for storage and traits for behaviour (`projects/engines/geometry/architecture/07-geometry-types.md`); a leaf's breaks are a NURBS curve's knots (where its smoothness may drop, The NURBS Book, 2nd ed., P2.5, <https://doi.org/10.1007/978-3-642-59223-2>) and a polyline's vertices."
+          },
+          "path": "geom_curve::basis",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(k) per evaluation of order k; a bound O(1) per segment the span meets; conversion O(n) for n segments.",
+          "does": "[`BulgePolyline`] stores 2D vertices, one bulge per segment (b = tan(θ/4) for an arc of sweep θ, positive turning anticlockwise; 0 for a straight segment) and optionally a start and end width per segment. Segment i runs over parameters [s + i, s + i + 1] (s, the start, is 0 for a new polyline). Each segment is exactly the rational quadratic its bulge defines, in homogeneous form with p₀ and p₂ its ends and w = (1 − b²)/(1 + b²): h₁ = ((1 − b²)·m + b·(d.y, −d.x))/(1 + b²), with m the chord's middle and d = p₂ − p₀, so C(v) = (B₀p₀ + B₁h₁ + B₂p₂)/(B₀ + B₁w + B₂) with v the parameter within the segment. Every value is a rational function of the stored doubles: a bulge arc is stored exactly, a semicircle (w = 0) and a major arc (w < 0) included, whose denominator stays at least (1 + w)/2 > 0.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/bulge.rs",
+          "guarantees": [
+            "**Exact definition, certified evaluation.** Points, derivatives of every order (Leibniz's rule on W·C = A) and bounds over spans are interval evaluations of those rational functions.",
+            "**An exact NURBS form.** The segments are rational quadratic Bezier pieces on the same parameter; an arc whose middle weight is low (a semicircle or more) is first halved, or quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight positive. The deviation bounds only the rounding of the pieces' points and weights.",
+            "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form.",
+            "**Splits are trimmed polylines.** A split leaves the polyline untouched and trims it (`crate::trimmed`); a reversal reverses the vertices and negates the bulges, exactly."
+          ],
+          "job": "The bulge polyline kind: lines and arcs through vertices, each arc given by its bulge, with optional widths, as DXF's LWPOLYLINE stores them.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the bulge of DXF's LWPOLYLINE (chapter 14's polyline row, `projects/engines/geometry/architecture/14-2d-drafting.md`), written as the rational quadratic form of a circular arc (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., section 7.3, <https://doi.org/10.1007/978-3-642-59223-2>) with the middle point carried homogeneously, so the semicircle's point at infinity is a finite h₁."
+          },
+          "path": "geom_curve::bulge",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "evaluation is a binary search over the starts plus the segment's; a bound is the bounds of the segments it meets; the conversion is linear in the Bezier pieces, each O(p²·D).",
+          "does": "[`Composite`] stores segments (trimmed curves, so a segment is any leaf kind on any interval) and starts s₀ < s₁ < … < sₙ: segment k runs over [sₖ, sₖ₊₁] of the composite's parameter, mapped affinely onto its own interval [aₖ, bₖ], so the joints sit at the starts exactly. A new composite starts at 0 and gives each segment its own length, sₖ₊₁ = sₖ + (bₖ − aₖ), rounded, which the affine map absorbs. Consecutive segments must meet: the end of one and the start of the next must have certified enclosures that overlap (chapter 14: \"ends must be the same exact point\"; there is no join fuzz), and each joint keeps a certified bound on its gap, 0 when both ends are the same exact point.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/composite.rs",
+          "guarantees": [
+            "**Exact definition.** Evaluation at a parameter whose segment parameter is exact is the segment's; otherwise the segment parameter is enclosed and the segment bounded over it, so enclosures stay certified; derivatives carry the affine map's factor.",
+            "**Certified conversion.** The deviation adds, per segment, the segment's conversion, elevation and Bezier extraction, the joint's gap and weight rescaling (the rational bound of `crate::rational`), and the rounding of shifted knots (a Bezier piece reparametrised by e at its ends moves by at most |N′|·e).",
+            "**Exact operations where they can be.** A split at a joint, a reversal and a split whose segment parameter is exact change no point; a transform moves each segment with its own deviation, the joints' gaps recomputed within it."
+          ],
+          "job": "The composite curve kind: trimmed curves joined end to end into one curve, and its conversion to one NURBS curve.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "STEP's `composite_curve` (ISO 10303-42) with segments on parameter trims, joined as chapter 14 asks (`projects/engines/geometry/architecture/14-2d-drafting.md`); conversion by degree elevation (A5.9) and Bezier decomposition (A5.6) of L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed. (<https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_curve::composite",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per evaluation; conversion O(n) in its pieces (at most 5 for a circle or ellipse, 1024 for a hyperbola).",
+          "does": "[`Circle`] is c + r·cos πt·x̂ + r·sin πt·ŷ on an exact [`Frame`], t in half-turns over at most one turn (a full circle is [0, 2]). [`Ellipse`] is c + cos πt·u + sin πt·v, by its parameter (the eccentric angle), not by polar angle (chapter 7), with u and v principal semi-axes on a frame or any conjugate pair ([`Axes`]). [`Hyperbola`] is c + cosh t·u + sinh t·v, one branch. [`Parabola`] is c + t²·u + t·v; on a frame with u = f·x̂ and v = 2f·ŷ it is the parabola of focal length f with its vertex at c, as ISO 10303-42 defines it. Each implements the kind contract through the shared analytic form (`crate::form`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/conic.rs",
+          "guarantees": [
+            "**Stored as themselves.** An arc stays an arc: its center, radius and frame are the stored doubles, exactly (chapter 7).",
+            "**Exact NURBS forms.** Circles, ellipses and hyperbolas convert to rational quadratics on the tangent half-angle parameter (`crate::rational`), parabolas to a quadratic on the same parameter; each with a certified deviation, 0 when the doubles hold the conversion exactly.",
+            "**Transforms change kinds explicitly.** A similarity keeps a circle a circle (radius times its scale, frame carried); any other transform makes it an [`Ellipse`] with conjugate axes, on the same parameter; principal axes on a frame stay principal under a similarity.",
+            "**Exact split and reversal.** A split changes only the domain; a reversal negates the domain and v (a frame's normal), exactly."
+          ],
+          "job": "The conic kinds: circle and arc, ellipse and elliptical arc, hyperbola and parabola, each stored as itself.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the parametric conics of ISO 10303-42 (`circle`, `ellipse`, `hyperbola`, `parabola`), with angles in half-turns, the kernel's proven angle form (chapter 6); their conversion from L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., chapter 7 (<https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_curve::conic",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times.",
+          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within a relative 2^−30, which catches a wrong formula, not rounding.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+          "guarantees": [
+            "**Sound.** A law reported broken is broken: two certified enclosures of one exact value that do not overlap (after widening by the stated deviations) prove that one of them is false, and a refusal the law requires that did not come is a broken refusal.",
+            "**Deterministic.** The checks run in the order of the parameters given, each law in the order of [`Law`]; the same kind and parameters give the same verdict."
+          ],
+          "job": "The kind contract: the laws every curve kind must keep, as a check any kind's tests run (`projects/engines/geometry/AGENTS.md`, \"How to add a geometry kind\").",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "property checks of the trait's contract (chapter 28.2's contract laws, applied to the behaviour chapter 7 lists): consistency of certified enclosures, as interval methods check inclusion (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the inclusion property of chapter 5)."
+          },
+          "path": "geom_curve::contract",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words; nothing allocates.",
+          "does": "[`CurveError`] names the failure of an operation of a curve or surface kind (the surface kinds of `geom-surface` share it, a span there being a box): a parameter or span outside the domain, a transform a 2D curve cannot take, a refusal from the NURBS algorithms underneath, a result that is not finite, or a budget that stopped the work. [`ContractError`] names the law of the kind contract (`crate::contract`) a kind broke, and where.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/error.rs",
+          "guarantees": [
+            "**Typed, never silent.** No operation clamps a parameter into the domain or returns a best-so-far result beside an error (chapter 29.7).",
+            "**Comparable and stable.** Every variant holds plain values, so errors compare with `==` and print the same on every target."
+          ],
+          "job": "The one error type of the curve kinds: what a kind refuses, and why.",
+          "method": {
+            "none": "error enums and their `Display` and `Error` implementations."
+          },
+          "path": "geom_curve::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few dozen floating-point operations per evaluation and derivative order; a bound evaluates one interval extension per piece, at most 64 pieces.",
+          "does": "[`Shape`] names the scalar functions (f₁, f₂, f₃) of each kind, with angles in half-turns, the kernel's proven angle form (chapter 6):",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/form.rs",
+          "guarantees": [
+            "**Certified.** An enclosure holds the exact value of C⁽ᵏ⁾ at every parameter of the interval: `geom-num`'s proven `sinpi`, `cospi` and `exp` enclosures, π between its two neighbouring doubles, and interval arithmetic that is exact where it can be (`tight`).",
+            "**Derivatives in closed form.** The k-th derivative of each scalar function is its formula, never a finite difference (chapter 7): cos and sin of πt shift by a quarter turn per derivative and gain a factor π, cosh and sinh trade places, and the involute's terms follow d^k(θ·cos θ) = θ·cos⁽ᵏ⁾θ + k·cos⁽ᵏ⁻¹⁾θ.",
+            "**Refused outside.** A parameter or span outside the domain, or not finite, is an error."
+          ],
+          "job": "The certified evaluation the analytic kinds share: every one of them is C(t) = c + f₁(t)·u + f₂(t)·v + f₃(t)·w, fixed vectors times scalar functions of the parameter.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "direct evaluation of the closed forms, in interval arithmetic for the enclosures (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the natural interval extension); a span is cut into eighths of a turn for the periodic shapes, so the box follows the curve."
+          },
+          "path": "geom_curve::form",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two cross products and three norms; constant, nothing allocates.",
+          "does": "a [`Frame`] stores a reference vector x and a normal n, any two finite vectors that are not parallel. They define, exactly, the orthonormal frame x̂ = ((n × x) × n) / |(n × x) × n|, ŷ = (n × x) / |n × x|, n̂ = n / |n|: x̂ is the unit vector along the part of x across n, and ŷ = n̂ × x̂ completes a right-handed frame. Because the stored doubles define the frame, rather than approximate one, a circle on it is exactly a circle of exactly its radius, whatever rounding made x and n. A 2D frame has x in the plane and n = (0, 0, k) with k ≠ 0: ŷ is x̂ turned a quarter turn anticlockwise when k > 0 and clockwise when k < 0. [`Frame::reversed`] negates n, which negates ŷ and n̂ exactly and keeps x̂, as reversing a kind needs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/frame.rs",
+          "guarantees": [
+            "**An exact definition, certified enclosures.** The unit vectors come in doubles and as enclosures of their exact values, exact points wherever the arithmetic is exact (an axis-aligned frame, or one whose lengths are whole, such as 3-4-5).",
+            "**Refused when degenerate.** Parallel x and n (decided exactly), a 2D normal with x or y components, and entries that are not finite are errors."
+          ],
+          "job": "Orthonormal frames defined exactly by two stored vectors: where a kind starts and which way it turns.",
+          "method": {
+            "links": [
+              "https://downloads.steptools.com/docs/stp_aim/html/t_build_axes.html"
+            ],
+            "text": "the derived axes of an axis placement, as ISO 10303-42 builds them for `axis2_placement_3d` (its `build_axes` function, <https://downloads.steptools.com/docs/stp_aim/html/t_build_axes.html>: the axis normalised, the reference direction's projection across it, then their cross product), with the projection taken exactly as (n × x) × n so that no stored vector needs to be of unit length or perpendicular."
+          },
+          "path": "geom_curve::frame",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per evaluation; conversion O(n·p²) for n eighths of a turn.",
+          "does": "[`Helix`] stores a center on its axis, a frame whose normal is the axis, a radius and a pitch (the rise per full turn, positive for a right-handed helix), or, as the affine image of one, the vectors u, v and w themselves ([`HelixAxes`]). It is a 3D kind; any length of domain, many turns included. Neither STEP nor IFC has a helix (chapter 7), so it is stored as itself here and exchanged as a NURBS approximation with its certified error.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/helix.rs",
+          "guarantees": [
+            "**Exact.** The stored doubles define the helix; evaluation is certified through the shared analytic form (`crate::form`, shape `Helical`).",
+            "**A certified NURBS form.** A helix is not a rational curve, so it converts by Taylor pieces of degree 9, each an eighth of a turn, on the same parameter, with the remainder bounded by its tenth derivative (`crate::taylor`): about 2.4·10⁻¹⁴ times (|u| + |v|) per piece, plus rounding.",
+            "**Transforms change it explicitly.** A similarity keeps it a circular helix (radius and pitch times the scale, the pitch negated by a mirror, which turns a right-handed helix into a left-handed one); any other transform gives the `Vectors` form on the same parameter.",
+            "**Exact split and reversal.** Reversal negates v and w (the frame's normal) and the domain, and keeps the pitch: a helix traversed backwards keeps its hand."
+          ],
+          "job": "The helix kind, exactly: c + r·cos πt·x̂ + r·sin πt·ŷ + t·(pitch/2)·n̂, t in half-turns.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the circular helix in its standard parametrisation, with angles in half-turns, stored exactly as chapter 7 asks (`projects/engines/geometry/architecture/07-geometry-types.md`: \"Helix (exact; neither STEP nor IFC has one)\")."
+          },
+          "path": "geom_curve::helix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per evaluation; conversion O(n·p²) for n eighths of a turn.",
+          "does": "[`Involute`] stores the base circle's center, radius and frame (the involute leaves the circle at x̂ when t = 0 and unwinds towards ŷ for t > 0, the other way for t < 0), or, as the affine image of one, the vectors u and v themselves ([`Axes`]). The point t = 0 is a cusp: the derivative vanishes there, and the bounds say so. Gear teeth flanks are its common use.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/involute.rs",
+          "guarantees": [
+            "**Exact.** The stored doubles define the involute; evaluation is certified through the shared analytic form (`crate::form`, shape `Involute`), whose derivatives of every order are closed forms.",
+            "**A certified NURBS form.** The involute is not a rational curve; it converts as the helix does, by Taylor pieces of degree 9 an eighth of a turn wide on the same parameter (`crate::taylor`), the remainder bounded by its tenth derivative.",
+            "**Transforms change it explicitly.** A similarity keeps it the involute of a circle (radius times the scale); any other transform gives the `Vectors` form on the same parameter.",
+            "**Exact split and reversal.**"
+          ],
+          "job": "The circular involute kind: the path of the end of a taut string unwound from a circle, c + r·(cos θ + θ·sin θ)·x̂ + r·(sin θ − θ·cos θ)·ŷ with θ = πt, t in half-turns.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1017/CBO9780511547126"
+            ],
+            "text": "the involute of a circle in its standard parametrisation by the unwinding angle (for gears, F. L. Litvin and A. Fuentes, *Gear Geometry and Applied Theory*, 2nd ed., Cambridge (2004), <https://doi.org/10.1017/CBO9780511547126>), with angles in half-turns."
+          },
+          "path": "geom_curve::involute",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(K) for a sum, O(K²) for a product, quotient or root.",
+          "does": "a [`Jet`] of order K holds enclosures of f(t), f′(t)/1!, …, f⁽ᴷ⁾(t)/K! at every parameter t of an interval (a point, for an enclosure; a span, for a bound). Sums, products, quotients and square roots of jets are the jets of the sums, products, quotients and roots, by the recurrences of automatic differentiation, so a jet of an offset curve's formula gives its derivatives to order K from the basis curve's derivatives to order K + 1.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/jet.rs",
+          "guarantees": [
+            "**Certified.** If each input coefficient encloses its function's coefficient at every t of the interval, so does each output coefficient: every recurrence is a polynomial or a quotient in the inputs, evaluated in interval arithmetic (inclusion isotonicity).",
+            "**Refused where undefined.** A quotient by, or a root of, a jet whose value may be zero (or, for the root, negative) is an error, never a guess."
+          ],
+          "job": "Truncated Taylor series in interval arithmetic: the derivatives of a formula built from curves' derivatives, enclosed, without differentiating the formula by hand.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717761",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "the Taylor-coefficient recurrences of automatic differentiation (A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), <https://doi.org/10.1137/1.9780898717761>, on univariate Taylor propagation), evaluated in intervals as in Taylor-model and interval AD methods (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_curve::jet",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per evaluation; conversion and transforms constant.",
+          "does": "[`Line`] stores an origin o, a direction d (any nonzero vector) and a domain whose ends may be infinite: finite for a segment, one infinite end for a ray, both for an infinite line ([`Extent`]). It implements the kind contract through the shared analytic form (`crate::form`, shape `Linear`). A ray or infinite line has no finite NURBS form and no bound over an infinite span; both are refused, never clamped.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/line.rs",
+          "guarantees": [
+            "**Exact storage.** The doubles o and d define the line; [`Line::segment`] from two points says how far its stored direction is from the exact difference (0 when it is exact, as it is for grid points).",
+            "**Exact operations.** Split and reversal (o kept, d negated, the domain negated) change no bit; conversion of a segment is the degree-1 NURBS curve through its ends.",
+            "**Bounded or refused.** A transform of a ray or infinite line whose direction's image is not exact would drift without bound along it, so it is refused with [`CurveError::Unbounded`]; trim the line to a segment first."
+          ],
+          "job": "The line kind: a segment, a ray or an infinite line, P(t) = o + t·d.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the parametric line of ISO 10303-42 (`line`: a point and a vector), with the segment, ray and infinite line distinguished by the domain, as DXF's LINE, RAY and XLINE are; the kinds chapter 7 lists (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::line",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a binary search over the breaks and a few interval operations.",
+          "does": "[`NurbsForm`] is what [`crate::ParamCurve::to_nurbs`] returns: the NURBS curve and the [`ParamMap`] taking a parameter t of the kind to the parameter u of the NURBS curve at the same point. Most kinds convert with the same parameter. The conics cannot: a circle traced uniformly in angle is not a rational curve in its angle, so its exact NURBS form, the rational quadratic, runs on the tangent half-angle substitution instead. [`ParamMap::enclose`] encloses u for any t, so a caller (and the kind contract) can compare the kind and its NURBS form at the same point.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/map.rs",
+          "guarantees": [
+            "**Certified.** The enclosure holds the exact u: τ is enclosed with `geom-num`'s proven `sinpi`, `cospi` and `exp` enclosures, and the result is cut to the piece's span, which holds the exact u because τ is increasing.",
+            "**Refused outside.** A parameter outside the breaks is an error."
+          ],
+          "job": "A kind converted to NURBS, and the map from the kind's parameter to the NURBS curve's.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the rational quadratic form of a conic and its parametrisation (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., sections 7.2 and 7.3, <https://doi.org/10.1007/978-3-642-59223-2>), where u is the stereographic (tangent half-angle) parameter of the circle and, for the hyperbola, of the unit hyperbola."
+          },
+          "path": "geom_curve::map",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the classification (a few dozen interval operations), then twelve products per image.",
+          "does": "[`Motion::of`] reads a [`TypedTransform`] for a kind of dimension D: its entries (`crate::affine`), its certified classification (`geom-math`), which decides whether circles stay circles (a similarity) and whether it mirrors, and the scale factor a similarity applies to lengths (exactly 1 when it keeps lengths). Its images of stored data are doubles; its image of a kind's form encloses the exact image, so a kind compares the curve it builds with the exact image of the curve it had.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/moved.rs",
+          "guarantees": [
+            "**Planar kinds see the plane.** For a 2D kind the classification is of the transform's 2×2 block, so a uniform scale of the plane keeps a circle a circle.",
+            "**Typed.** A degenerate transform (singular, or too close to it to decide) is refused for the analytic kinds, whose definitions need independent vectors; a 2D kind takes only a transform acting in the plane.",
+            "**Normals carried, not reflected.** A normal maps by n ↦ sign(det M)·M·n, so the frame built from the images, x̂′ along M·x and ŷ′ = n̂′ × x̂′, is exactly the image of x̂ and ŷ under a similarity M = s·R: (R·a) × (R·b) = det R · R·(a × b) for an orthogonal R.",
+            "**Exact where the arithmetic is.** The enclosed images use `tight`, so an exact transform of exact data gives exact points."
+          ],
+          "job": "A typed transform as the analytic kinds apply it: its entries, its classification, the images of stored points, vectors and normals, and the exact image of a kind's vectors for the deviation.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "affine images of points and vectors, and the cross-product identity above for orthogonal matrices; the classification is `geom-math`'s (G03), and the rule that a transform changes a kind explicitly is chapter 7's (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::moved",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an enclosure or bound runs Bezier extraction in intervals, O(s·p²·D) for s spans, plus O(p²·D) per piece and derivative order; a split O(n·D); a reversal or transform O(n·D).",
+          "does": "implements [`ParamCurve`] for [`Curve`]. Points and derivatives are A3.1, A3.2 and A4.2 (`geom-nurbs`). Enclosures, bounds and derivative bounds come from the curve's Bernstein forms in interval arithmetic (piece G59): the piece holding the parameter, or each piece meeting the span cut down to it by de Casteljau subdivision at interval parameters, its box from the convex hull; derivatives from hodographs, and for a rational curve by Leibniz's rule on W·C = A, C^(k) = (A^(k) − Σ C(k, i)·W^(i)·C^(k−i)) / W, in interval boxes. Conversion to NURBS is the curve itself, exactly. A split inserts the parameter until its multiplicity is the degree (A5.1) and parts the control points there. Reversal negates and reverses the knots, which is exact. A transform maps the control points (affine invariance) with the weights kept.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
+          "guarantees": [
+            "**Certified.** Every enclosure and bound holds the exact value; a split's deviation is the certified rounding of the knot insertion; a transform's is the largest certified error of a control point's image, which bounds the curve's because a NURBS point is a weighted average of its control points with weights `N_i`·`w_i` ≥ 0 (The NURBS Book, P4.3 and P4.4).",
+            "**Exact where the operation is.** Conversion and reversal change no bit (deviation 0).",
+            "**Refused outside the domain.** A parameter or span outside it is an error, never clamped."
+          ],
+          "job": "The NURBS curve kind: `geom-nurbs`'s [`Curve`] under the kind contract.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "The NURBS Book, 2nd ed. (<https://doi.org/10.1007/978-3-642-59223-2>): A3.1, A3.2, A4.2, A5.1, de Casteljau subdivision (section 1.3), hodographs (section 3.3) and affine invariance (P4.10), on `geom-nurbs` (pieces G56 and G59)."
+          },
+          "path": "geom_curve::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis.",
+          "does": "[`Offset`] stores a trimmed basis curve C and an [`OffsetLaw`]:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
+          "guarantees": [
+            "**Certified, or refused.** Where the normal may vanish (a cusp of the basis, or a span too wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused, never guessed; a bound on the points still holds there, from the basis's bound widened by the offset's largest size.",
+            "**Exact split and reversal.** A split trims the basis; a reversal reverses the basis and negates the distances (the left normal of the reversed curve is the right normal).",
+            "**Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves exactly gives an offset (a mirror negating the side); any other transform gives the moved NURBS cache, with both deviations."
+          ],
+          "job": "The offset curve kind: a basis curve moved along its normal, in 2D, in 3D against a reference direction, or by distances that vary along it, with a certified NURBS cache.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0167-8396(90"
+            ],
+            "text": "offset curves as defined in ISO 10303-42 (`offset_curve_2d`, `offset_curve_3d`) and IFC 4.3 (`IfcOffsetCurveByDistances`), evaluated with automatic differentiation in interval arithmetic; offsets of conics and splines are neither conics nor splines (R. T. Farouki and C. A. Neff, \"Analytic properties of plane offset curves\", Computer Aided Geometric Design 7 (1990), <https://doi.org/10.1016/0167-8396(90)90023-K>), hence the certified cache."
+          },
+          "path": "geom_curve::offset",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the NURBS kind's costs on the cache.",
+          "does": "[`OnSurface`] stores the pcurve (a trimmed 2D curve in the surface's (u, v) space), an opaque [`SurfaceRef`] into the geometry pool that holds the surface (chapter 8.1: geometry attaches by index into a body's pools), and the 3D curve as a NURBS cache on the pcurve's parameter with a certified bound on its distance from S(pcurve(t)). `geom-curve` sits below `geom-surface` and cannot see surfaces (chapter 27), so, as chapter 12 lays out for the intersection curve, it evaluates, bounds, splits and converts the kind through its cache alone: the kind's curve is the cache, and [`OnSurface::error`] says how far the surface's own curve may be from it. The surface crates build the cache and its bound, and evaluate S on the pcurve when they need the exact curve.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/on_surface.rs",
+          "guarantees": [
+            "**The contract on the cache.** Every evaluation, bound, split and transform is the NURBS kind's on the cache, certified for the cache; the error carries over: a split adds its deviation to each half's error, and a transform scales the error by an upper bound on the transform's stretch (its linear part's Frobenius norm) and adds its deviation.",
+            "**Exact pcurve.** The pcurve is never approximated here: a split trims it, a reversal reverses it, a transform leaves it (the surface moves with the pool, its parameters do not)."
+          ],
+          "job": "The curve-on-surface kind: a curve in a surface's parameter space (a pcurve), the surface held by reference, and its 3D curve as a certified NURBS cache.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the pcurve and its 3D cache of chapter 8 (`projects/engines/geometry/architecture/08-topology.md`, fins and their pcurves) and the cache-only evaluation chapter 12 gives the intersection curve (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_curve::on_surface",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none here; each kind's implementation states its own.",
+          "does": "[`ParamCurve`] is the trait chapter 12.1 names for this behaviour, implemented by each kind and by [`CurveKind`], the storage enum with one variant per kind, which dispatches to it. Operations that make a new curve (split, reverse, transform) return a [`CurveKind`], because a transform may change a kind (a non-uniform scale turns a circle into an ellipse, chapter 7), wrapped in `geom-nurbs`'s [`Changed`]: the result and a certified bound on how far it lies from the exact result of the operation on the exact input, 0 when it is exact.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/param.rs",
+          "guarantees": [
+            "**Certified, or refused.** Every bound and enclosure holds the exact value for the curve the stored data define; every [`Changed`] deviation bounds the distance between the returned curve and the exact result. A kind that cannot bound a derivative over a span says [`DerivativeBound::Unbounded`] rather than guess.",
+            "**One family for 2D and 3D.** The trait is generic over the dimension D, so planar and spatial curves share every kind and every rule (chapter 7, principle 8).",
+            "**Closed and exhaustive.** [`CurveKind`] lists every kind built; matching on it is exhaustive, and adding a kind is a new variant (the playbook in `projects/engines/geometry/AGENTS.md`).",
+            "**Typed transforms.** A transform is a `geom-math` [`TypedTransform`]: exact, rational or certified, and the result's deviation accounts for its entries as the variant holds them."
+          ],
+          "job": "The behaviour every curve kind has (chapter 7): evaluation, derivatives, certified enclosures, conservative bounds on the value and its derivatives over any span, conversion to NURBS with an error, split, reverse and transform; and the closed enum that stores every kind.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the operations of chapter 7 and the trait names proposed in chapter 12.1 (`projects/engines/geometry/architecture/12-intersections.md`); the storage-enum-and-behaviour- trait split chapter 7 decides (\"Storage uses closed enums ... Behaviour uses traits\")."
+          },
+          "path": "geom_curve::param",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n·D) per evaluation and derivative order; O(n²·D) per bound.",
+          "does": "[`Polynomial`] stores the coefficients a₀ … aₙ (degree 1 to `geom-nurbs`'s `MAX_DEGREE`) and a finite domain, as IFC 4.3's `IfcPolynomialCurve` stores one per coordinate. It evaluates by Horner's rule, bounds a span by the centred form about its middle, converts to a single Bezier piece of its own degree on the same parameter, and transforms by mapping a₀ as a point and the others as vectors, which is exact for every affine map.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/polynomial.rs",
+          "guarantees": [
+            "**Certified.** Enclosures and bounds hold the exact values, in interval arithmetic that is exact where it can be (`tight`); a derivative of order above the degree is exactly zero.",
+            "**Exact NURBS form up to rounding.** The Bezier form of the same polynomial, with only the rounding of its control points in the deviation (`crate::taylor`, whose remainder is zero for a polynomial).",
+            "**Exact split and reversal.** A split changes the domain only; reversal negates the odd coefficients and the domain."
+          ],
+          "job": "The polynomial curve kind: P(t) = Σⱼ aⱼ·t^j, a vector coefficient per power.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "Horner's rule and its derivatives (D. E. Knuth, *The Art of Computer Programming*, vol. 2, 3rd ed., section 4.6.4), and the centred form of a polynomial over an interval (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the centred or Taylor form)."
+          },
+          "path": "geom_curve::polynomial",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n) for n pieces (at most 5 for an ellipse, 1024 for a hyperbola), a few dozen interval operations each.",
+          "does": "[`conic`] cuts the domain into pieces of at most a quarter turn (an ellipse, t in half-turns) or a parameter width of 1 (a hyperbola), and writes piece [t₀, t₁] as the rational quadratic with control points C(t₀), the meeting point of the end tangents, C(t₁), and weights 1, 1, λ, where, with h = (t₁ − t₀)/2 and σ = tan πh (ellipse) or tanh h (hyperbola), λ = 1 + σ² (ellipse) or 1 − σ² (hyperbola) and the middle control point is C(t₀) + σ·C′(t₀)/π (ellipse) or C(t₀) + σ·C′(t₀) (hyperbola). That is the conic exactly, on the tangent half-angle parameter of [`ParamMap`]. Odd pieces run the other way (weights λ, 1, 1, the middle point from the far end), and each piece's weights are scaled so neighbours share their joint's weight: the weights then alternate and stay bounded. A whole quarter turn has σ = 1 and λ = 2, so a circle on an axis-aligned frame with an exact center and radius converts with weights 1, 1, 2, 1, 1, 1, 2, 1, 1 and every control point exact: deviation 0.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/rational.rs",
+          "guarantees": [
+            "**Certified.** Every control point and weight is first enclosed exactly, then stored as a double. The stored piece differs from the exact one by at most max |Pᵢ − Qᵢ| + 2ε/(1 − ε)·max |Qᵢ − Q₀| (stored points P, exact points Q, weights within a relative ε): a rational Bezier point is Σ Rᵢ·Pᵢ with Rᵢ ≥ 0 summing to 1, and a relative change ε in the weights changes each Rᵢ by at most 2ε/(1 − ε) of itself.",
+            "**Exact where the doubles are.** With the enclosures exact points, the deviation is 0."
+          ],
+          "job": "The exact NURBS form of a conic: an ellipse (circles and arcs included) or a hyperbola as rational quadratic pieces, with a certified bound on the rounding of its control points and weights.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the conic as a rational quadratic Bezier (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., sections 7.2 and 7.3, <https://doi.org/10.1007/978-3-642-59223-2>), with the weights in the non-symmetric standard form (1, 1, λ) reached from the symmetric (1, cos α, 1) by a rational reparametrisation (section 7.2's weight invariant w₀w₂/w₁² = λ = 1/cos² α), so a quarter circle's weights are exact doubles."
+          },
+          "path": "geom_curve::rational",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per piece, one enclosure of p derivatives, one derivative bound of order p + 1 and O(p²·D) interval operations; n pieces.",
+          "does": "[`same_parameter`] cuts a kind's domain into n equal pieces and, on each piece [a, b] with middle m, takes the Taylor polynomial of degree p at m from the kind's certified derivative enclosures, rewrites it in Bernstein form on [a, b] in interval arithmetic, and replaces its two end coefficients by the kind's enclosed points at a and b, so neighbouring pieces share their joint. The pieces become one NURBS curve of degree p with each interior knot repeated p times (a C⁰ join at the exact curve points).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/taylor.rs",
+          "guarantees": [
+            "**Certified.** On each piece the distance from the curve to the stored NURBS is at most R + E + Z: R = M·ρ^{p+1}/(p+1)!, Taylor's remainder, with M the norm of the kind's bound on its (p + 1)-th derivative over the piece and ρ the farthest the piece reaches from m; E the change from replacing the end coefficients (a Bernstein end basis function is at most 1, and the two together at most 1); Z the rounding of the stored coefficients. A kind whose (p + 1)-th derivative bound is exactly zero is a polynomial of degree p at most, and then R and E are 0: the Taylor polynomial is the curve.",
+            "**Same parameter.** The NURBS curve at t is within the deviation of the kind at t."
+          ],
+          "job": "NURBS forms on the same parameter by Taylor polynomials with a certified remainder: the conversion of the kinds that have no exact rational form (helix, involute), and of the polynomial kinds, for which it is exact up to rounding.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/j.cagd.2012.03.001",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "Taylor's theorem with the Lagrange remainder in its vector form (the integral form, whose norm is bounded by the derivative's), the power-to-Bernstein change of basis (R. T. Farouki, \"The Bernstein polynomial basis: a centennial retrospective\", Computer Aided Geometric Design 29 (2012), section 3, <https://doi.org/10.1016/j.cagd.2012.03.001>), and Bezier pieces as a NURBS curve with p-fold knots (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., section 2.3, <https://doi.org/10.1007/978-3-642-59223-2>), all in interval arithmetic."
+          },
+          "path": "geom_curve::taylor",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few floating-point operations per call more than the interval operation.",
+          "does": "each function is the `geom-num` interval operation of the same name, except that when both operands are single doubles and the exact result is a double too, it returns that double as a point interval instead of widening it. So a circle of integer radius on a grid center, evaluated at a quarter turn, is enclosed by its exact point, and two constructions of one exact value compare equal: a conversion or transform that is exact reports a deviation of 0, which widened intervals never could.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/tight.rs",
+          "guarantees": [
+            "**Certified.** A point result is the exact value, decided by an error-free transformation (`geom-num`'s `two_sum` and `two_prod`, whose error is finite and zero exactly when the operation was exact); every other result is the widened interval of `geom-num`, which encloses the exact range.",
+            "**Deterministic.** The same operands give the same bits on every target."
+          ],
+          "job": "Interval operations that stay exact when they can: the analytic kinds' arithmetic.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/BF01397083",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "error-free transformations (T. J. Dekker, \"A floating-point technique for extending the available precision\", Numerische Mathematik 18 (1971), <https://doi.org/10.1007/BF01397083>; J. R. Shewchuk, \"Adaptive precision floating-point arithmetic and fast robust geometric predicates\", Discrete & Computational Geometry 18 (1997), <https://doi.org/10.1007/PL00009321>) as exactness tests, with `geom-num`'s interval arithmetic otherwise."
+          },
+          "path": "geom_curve::tight",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the basis's costs; a conversion adds at most two splits.",
+          "does": "[`Trimmed`] stores a [`Basis`] (any leaf kind: NURBS, analytic or bulge polyline) and an interval [a, b] inside its domain, and is the basis on that interval, on the basis's own parameter. Trimming keeps the basis exactly as stored: a NURBS curve trimmed at a crossing keeps its knots and control points, where cutting it would insert knots and round (chapter 14: \"a trimmed spline is section 7's trimmed curve, the original curve on an implicit parameter interval\"). Composite and offset curves and curves on surfaces are built on trimmed curves, so the kinds that hold curves hold only leaves: no kind contains itself.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/trimmed.rs",
+          "guarantees": [
+            "**Exact.** Evaluation, enclosures and bounds are the basis's, inside the interval; a split changes only the interval; a reversal or transform is the basis's, with its deviation.",
+            "**Refused outside.** A parameter or span outside the interval is an error, though the basis would take it.",
+            "**Converted by cutting.** The NURBS form is the basis cut at the interval's ends (exact for the analytic kinds, by knot insertion for NURBS), then converted; the deviations add."
+          ],
+          "job": "The trimmed curve kind: a basis curve on a parameter interval inside its domain, the basis itself left untouched.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "STEP's `trimmed_curve` with parameter trims (ISO 10303-42), on the kinds of chapter 7 (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::trimmed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-curve",
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G60, G61, G62, G63, G64, G67, G68, G175, G361, G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61) and the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) built; the other kinds to come in G63, G64, G67, G68, G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {
@@ -4476,6 +5097,16 @@
               "shape": "unit"
             },
             {
+              "doc": "Two Bernstein forms to be combined are on different domains.",
+              "name": "Domains",
+              "shape": "unit"
+            },
+            {
+              "doc": "A shape gives no direction where one is needed: a fat line of a curve whose control points coincide, or a fat plane of a patch whose corners do.",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
               "doc": "The work meter stopped the operation: over its budget, cancelled, or a large allocation was refused (chapter 23.10).",
               "name": "Stopped",
               "shape": "tuple"
@@ -4625,6 +5256,31 @@
             }
           ],
           "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "extraction O(s·p²·D) in intervals for s spans (O(`s_u`·`s_v`·(p + q)·p·q·D) for a surface); a box, slab or hodograph is linear in the coefficients; a clip O(p²); each result one allocation, charged first.",
+          "does": "[`Curve::bernstein`] and [`Surface::bernstein`] run Bezier extraction (A5.6, A5.7) in `geom-num`'s interval arithmetic, so each piece's coefficients enclose the exact Bernstein coefficients of the exact curve or surface the stored doubles define. On a piece, [`BernsteinCurve::bound`] and [`BernsteinPatch::bound`] give a box holding every point of it; [`BernsteinCurve::hodograph`] and [`BernsteinPatch::partial`] give the derivative as a Bernstein form of one degree less (nonrational); [`BernsteinCurve::derivative_bound`] and [`BernsteinPatch::derivative_bound`] bound the derivative of a rational piece too, through the quotient rule's numerator and the weights' range. [`BernsteinCurve::slab`] and [`BernsteinPatch::slab`] bound the signed distance n·(x − o) over a piece, for any direction n; [`BernsteinCurve::fat_line`] (in the plane) and [`BernsteinPatch::fat_plane`] choose n from the piece's end points or corners, as Sederberg and Nishita's fat line does. [`BernsteinCurve::clip`] is a Bezier clipping step: the part of a curve's domain where it can meet a slab.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+          "guarantees": [
+            "**Enclosures of the exact.** Every coefficient is an interval holding the exact Bernstein coefficient: extraction makes the same operations as in doubles, each rounded outward (`crate::arith`). Every bound below is computed from these intervals with outward rounding, so it holds for the exact curve or surface, not only for its doubles.",
+            "**The convex hull property.** A Bezier piece lies in the convex hull of its control points (for a rational piece, of its Euclidean points, since the weights are positive), so a box, a slab or any linear function's range over the coefficients bounds the piece (The NURBS Book, properties P3.4 and P4.4; Farouki and Rajan, *Computer Aided Geometric Design* 5(1) (1988), 1–26). A derivative is bounded from the hodograph, the derivative's own Bernstein form; a rational derivative C′ = (A′·W − A·W′)/W² from its numerator's coefficients and the smallest and largest weights, W lying between them.",
+            "**Clipping keeps every meeting.** [`BernsteinCurve::clip`] returns a parameter range outside which the exact curve is outside the slab, or `None` when the whole curve is: the hull of the control polygon of the distance to each side of the slab, computed with each coefficient at its upper bound and every crossing rounded outward.",
+            "**Typed refusals.** A piece needs a domain of more than one value, coefficients that are finite, and positive weights ([`NurbsError::Weight`]); hodographs and products of rational pieces are [`NurbsError::Rational`] (bound their numerators instead); a fat line or plane of a piece whose end points or corners give no direction is [`NurbsError::Degenerate`].",
+            "**Deterministic.** Fixed loops in index order; no fused multiply-add."
+          ],
+          "job": "Bernstein forms: the Bezier pieces of curves and surfaces as interval enclosures of their exact Bernstein coefficients, and the bounds the convex hull property gives them: boxes, derivative boxes from hodographs, slabs, fat lines and fat planes, and the parameter range a Bezier clipping step keeps.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0010-4485(90"
+            ],
+            "text": "Bezier extraction (The NURBS Book, 2nd ed., algorithms A5.6 and A5.7, <https://doi.org/10.1007/978-3-642-59223-2>) in interval arithmetic, the convex hull property and hodographs (sections 1.4 and 3.3), and Bezier clipping with fat lines (T. W. Sederberg and T. Nishita, \"Curve intersection using Bézier clipping\", *Computer-Aided Design* 22(9) (1990), 538–549, <https://doi.org/10.1016/0010-4485(90)90039-F>), its hull taken over every pair of control points so it needs no convex hull routine."
+          },
+          "path": "geom_nurbs::bernstein",
+          "provenance": [],
+          "spdx": null,
           "target": "lib"
         },
         {
@@ -4823,6 +5479,29 @@
             "none": "an error enum and its `Display` and `Error` implementations."
           },
           "path": "geom_nurbs::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the control points for a plane; O(p²·q²) wide multiplications for a normal patch; one allocation per result, charged first.",
+          "does": "a Bezier piece whose control points are grid points (chapter 6.1) has integer Bernstein coefficients. [`plane_coefficients`] gives the coefficients of n·x + d over it, for a plane of `geom-num`'s exact [`Plane`] type: they are n·`P_k` + d, by affine invariance, so the signs of [`Signs`] decide exactly whether the piece can meet the plane (chapter 12.3's exact path: \"all of its signs, zeros included, are then exact\"). [`normal_patch`] gives the normal patch of a nonrational grid Bezier patch in scaled form, its coefficient (a, b) being C(2p − 1, a)·C(2q − 1, b)·`n_ab` times a positive constant, so each has the direction and sign of the Bernstein coefficient `n_ab` of `S_u` × `S_v`; a boundary edge whose control points are one grid point is divided out exactly.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/exact.rs",
+          "guarantees": [
+            "**Plane coefficients within 2^126.** [`Plane`] holds |`n_i`| < 2^83 and |d| < 2^125 (checked at construction). Each |`n_i`·`x_i`| < 2^83·2^40 = 2^123, the sum of three below 3·2^123 < 2^125, and with d below 2^126: in `i128` (limit 2^127), every step checked.",
+            "**Normal coefficients within 2^193.** In scaled form the partial derivatives' coefficients are C(p − 1, i)·C(q, j)·(`P_(i+1,j)` − `P_ij`) and C(p, i)·C(q − 1, j)·(`P_(i,j+1)` − `P_ij`), differences of at most 2M < 2^41. Products of scaled forms are plain convolutions (the binomials are already inside), and a cross product's component is a difference of two products, so coefficient (a, b) is at most 2·(2M)²·Σ C(p − 1, i1)·C(p, i2)·C(q, j1)·C(q − 1, j2) = 2·(2M)²·C(2p − 1, a)·C(2q − 1, b) < 2^83·2^(2p−1)·2^(2q−1) = 2^(81+2p+2q) ≤ 2^193 for p, q ≤ 28 ([`crate::MAX_DEGREE`]), and every partial sum below the same bound: in `geom-num`'s [`I256`] (limit 2^255), every step checked. A check that fails would be a defect in this derivation, reported as [`NurbsError::Defect`], never a wrong sign.",
+            "**Collapsed edges, exactly.** An edge counts only when its grid points are equal; then the normal patch's row along it is zero (checked), and in scaled form dividing by the factor that vanishes there is dropping that row: f = Σ `c_k`·t^k·(1 − t)^(n−k) with `c_0` = 0 is t·Σ `c_(k+1)`·t^k·(1 − t)^(n−1−k), and with `c_n` = 0 it is (1 − t)·Σ `c_k`·t^k·(1 − t)^(n−1−k).",
+            "**Deterministic.** Integer arithmetic only."
+          ],
+          "job": "Exact integer paths for Bernstein forms on the grid: the Bernstein coefficients of a plane's equation over a grid Bezier piece, and the normal patch of a grid Bezier patch, with every sign (zeros included) exact, each within a written bit budget.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0167-8396(88"
+            ],
+            "text": "exact integer evaluation with bit budgets derived before the code, as chapter 6.2 requires, on the Bernstein form's affine invariance and products in the scaled basis t^k·(1 − t)^(n−k) (R. T. Farouki and V. T. Rajan, *Computer Aided Geometric Design* 5(1) (1988), 1–26; the normal patch as in `crate::product`, after Sederberg and Meyers 1988, <https://doi.org/10.1016/0167-8396(88)90029-5>)."
+          },
+          "path": "geom_nurbs::exact",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5078,6 +5757,44 @@
           "target": "lib"
         },
         {
+          "cost": "a product of degrees (p1, q1) and (p2, q2) takes O((p1 + 1)(p2 + 1)(q1 + 1)(q2 + 1)·D) interval operations; a rational normal patch three products of degree (3p − 1, 3q − 1); one allocation per result, charged first.",
+          "does": "the product of two polynomials in Bernstein form is a polynomial of the summed degree in Bernstein form, coefficient k being Σ C(p, i)·C(q, k − i)/C(p + q, k) · `a_i`·`b_(k−i)` (and the same in each direction of a patch). On that rule, [`BernsteinCurve::scaled_by`], [`BernsteinCurve::dot`] and [`BernsteinCurve::cross`] multiply curves exactly, as polynomials, and [`BernsteinPatch::scaled_by`], [`BernsteinPatch::dot`] and [`BernsteinPatch::cross`] patches. [`BernsteinPatch::normal`] builds the normal patch: `S_u` × `S_v` for a nonrational patch, and for a rational one S = A / W the polynomial N = W·(`A_u` × `A_v`) − `W_v`·(`A_u` × A) − `W_u`·(A × `A_v`) = W³·(`S_u` × `S_v`), a positive multiple of the normal. [`Surface::normal_patches`] gives the normal patch of every Bezier patch of a surface, and where a boundary edge of the surface is collapsed to one point (a pole, an apex) divides the factor that vanishes along it out of the patches on that edge, so the bound keeps the normals' directions instead of containing zero.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/product.rs",
+          "guarantees": [
+            "**Exact products, enclosed.** Each coefficient of a product is computed in interval arithmetic from enclosures of its factors' exact coefficients and of the binomial ratios, so it encloses the exact coefficient of the exact product. The binomials come from Pascal's rule in intervals, exact while they stay below 2^53.",
+            "**The normal patch's sign and direction.** For a nonrational patch the normal patch's value at (u, v) is `S_u` × `S_v`; for a rational one W³ times it, W > 0. Either way the hull of its coefficients bounds the normals' directions (the Gauss map).",
+            "**Collapsed edges divided exactly.** An edge counts as collapsed only when the surface's stored control points along it are one point exactly: identical doubles, or for a rational surface identical quotients w·P / w, compared through exact products (`geom-num`'s `two_prod`). Then S along the edge is a constant, the partial derivative along it vanishes there, and so does N, exactly: N = v·T (edge v = v0), and T's coefficients are N's with the vanishing row dropped and row j scaled by q/(j + 1) (q/(q − j) for v = v1; likewise in u). Chapter 12.9 names this derivation as ours, to be proven in its build piece: the proof is these lines and `tests/bernstein.rs`.",
+            "**Typed refusals.** Products of rational forms are [`NurbsError::Rational`] (multiply their numerators and weight functions); factors on different domains are [`NurbsError::Domains`].",
+            "**Deterministic.** Sums in index order; no fused multiply-add."
+          ],
+          "job": "Symbolic products of Bernstein forms, and the normal patch of a surface with its collapsed edges divided out: the Gauss-map bound of chapter 12.6.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0010-4485(96",
+              "https://doi.org/10.1016/0167-8396(88"
+            ],
+            "text": "products of polynomials in Bernstein form (R. T. Farouki and V. T. Rajan, \"Algorithms for polynomials in Bernstein form\", *Computer Aided Geometric Design* 5(1) (1988), 1–26) as Piegl and Tiller use them for symbolic operators on NURBS (L. Piegl and W. Tiller, \"Symbolic operators for NURBS\", *Computer-Aided Design* 29(5) (1997), 361–368, <https://doi.org/10.1016/S0010-4485(96)00074-7>) and `NLib` implements them; the normal patch for Gauss-map bounds (T. W. Sederberg and R. J. Meyers, \"Loop detection in surface patch intersections\", *Computer Aided Geometric Design* 5(2) (1988), 161–171, <https://doi.org/10.1016/0167-8396(88)90029-5>)."
+          },
+          "path": "geom_nurbs::product",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `N_BezFuncMultiplyBezCrvMatrix`, `N_BezFuncMultiplyBezFunc`, `N_BezSrfFuncMultiply`, `N_BezCrossProduct`, `N_BezSrfCrossProduct` and `N_BezSrfDotProduct`, in interval arithmetic so every coefficient is certified; the binomial ratios from Pascal's rule in intervals instead of `NLib`'s table of 18 rows; the normal patch of rational patches and the division of collapsed edges are ours.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0 AND Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "O(s·p²) operations for s spans to reduce, and an elevation and a refinement of the result in intervals to certify, O(s·p²) more; the candidate and the enclosures are allocated once each.",
           "does": "[`Curve::reduce_degree`] walks the knot vector as Bezier extraction does (A5.6), reduces each Bezier piece from degree p to p − 1 (the book's equations 5.41 to 5.44: points solved from both ends, the middle one averaged for odd degree), and removes one copy of each knot again, averaging the two estimates where the removal sweeps cross with `NLib`'s weight λ = α / (α + β) (`NLib`'s `N_CrvReduceDegreeOnce`). Every distinct knot loses one copy, so knots of multiplicity 1 disappear. Whether the result is kept is not decided by `NLib`'s error estimate but certified: the candidate is raised back to degree p (A5.9) and the knots it lost are inserted (A5.4), both exact operations run in interval arithmetic, which gives the input's knots and an enclosure of the control points the candidate has on the input's basis; their largest distance from the input's points bounds the distance between the curves (`crate::remove`'s difference bound, with the rational form of `crate::ops`).",
           "family": [],
@@ -5152,6 +5869,28 @@
           "target": "lib"
         },
         {
+          "cost": "O(p²·D) interval operations per subdivision; a patch O(p·q·(p + q)·D); one allocation per row of coefficients.",
+          "does": "[`BernsteinCurve::restrict`] gives the Bernstein form of a piece over a sub-span [lo, hi] of its domain, and [`BernsteinPatch::restrict`] of a patch over a sub-box, by de Casteljau subdivision at the sub-span's ends, each a local parameter (t − a)/(b − a) enclosed in an interval. [`BernsteinCurve::value_at`] and [`BernsteinPatch::value_at`] give the homogeneous value and the weight at a parameter, the last point of a subdivision there.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/restrict.rs",
+          "guarantees": [
+            "**Enclosures of the exact.** Subdivision is linear in the coefficients with weights 1 − s and s; computed with s an interval holding the exact local parameter, and every operation rounded outward, each new coefficient holds the exact coefficient of the exact sub-piece (inclusion monotonicity), so the convex hull bounds of `crate::bernstein` hold for the sub-span.",
+            "**Homogeneous.** Rational forms are cut with their weights as a last coordinate, so the weights of the result are the exact weights of the sub-piece's homogeneous form.",
+            "**Typed refusals.** A sub-span outside the domain, unordered, or a single value, is [`NurbsError::KnotOutside`]; a parameter outside it [`NurbsError::ParameterOutside`]."
+          ],
+          "job": "Bernstein forms cut down to a sub-span and evaluated at a parameter, in interval arithmetic: the de Casteljau steps the kind contract's bounds and enclosures need (piece G60).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "de Casteljau's algorithm and subdivision (The NURBS Book, 2nd ed., section 1.3 and algorithm A1.5, <https://doi.org/10.1007/978-3-642-59223-2>), in interval arithmetic."
+          },
+          "path": "geom_nurbs::restrict",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "construction is linear in the control points and makes one allocation (two if rational). [`Surface::point`] takes O(p² + q² + p·q·D) operations; [`Surface::derivs`] O(p² + q² + du·dv·(p·q·D + du·dv·D)); neither allocates.",
           "does": "a [`Surface`] holds two bases, one per parameter direction, and a net of (n + 1) × (m + 1) control points stored row by row (row i follows u, column j follows v), with weights if it is rational, in homogeneous form w·P as for curves. [`Surface::point`] sums, for each row of the p + 1 rows that matter, the q + 1 points against the v basis, then the rows against the u basis (A3.5, as `NLib` does it), and divides by the weights summed the same way for a rational surface (A4.3). [`Surface::derivs`] does the same with basis derivatives (A3.6) and applies Leibniz's rule to w·S = A for a rational surface (A4.4), for every order k ≤ du in u and l ≤ dv in v.",
           "family": [],
@@ -5194,7 +5933,7 @@
       "provenance": [],
       "sections": "7, 12.3, 12.12, 13 (introduction), 14.1 and 15.6; 29.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "basis, evaluation and knot operations (G56) and fitting (G58) built; the Bernstein toolkit (G59) and the rest (G259) to come.",
+      "status": "basis, evaluation and knot operations (G56), fitting (G58) and the Bernstein toolkit (G59) built; the rest (G259) to come.",
       "summary": "Spare Kit geometry kernel: NURBS algorithms."
     },
     {
@@ -6043,12 +6782,241 @@
       "job": "Every surface kind, the subdivision limit surface included (the net, its local rules, Stam evaluation and tables): evaluation, bounds, projection, conversion, extension, frame rules, flat maps of developable kinds, Class-A maths, the `ImplicitBound` trait.",
       "kind": "kernel",
       "layer": "2",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant per evaluation; a bound O(1) per piece (at most 64 pieces); a conversion O(m·n) for its control net.",
+          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a sign s = ±1 on its axial term so that reversing either parameter is exact:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
+          "guarantees": [
+            "**Stored as themselves.** Centres, radii, slopes and frames are the stored doubles, exactly.",
+            "**Certified, or refused.** Enclosures and bounds are the terms' closed forms in interval arithmetic; the normal bound is the closed-form direction, which survives the poles of a sphere and the apex of a cone (where its sign may be either: then both).",
+            "**Exact NURBS forms.** Each converts to a tensor-product rational surface (a circle in each angular direction, a line in each linear one) with a parameter map per direction, its deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).",
+            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, the frame carried, a mirror flipping the axial sign); any other transform gives the moved NURBS form. A plane takes every affine map.",
+            "**Exact split and reversal.**"
+          ],
+          "job": "The analytic surface kinds: plane, cylinder, cone, sphere and torus, each stored as itself.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the elementary surfaces of ISO 10303-42 (`plane`, `cylindrical_surface`, `conical_surface`, `spherical_surface`, `toroidal_surface`), parametrised in half-turns, with the kinds and the lemon and apple forms of chapter 7 (`projects/engines/geometry/architecture/07-geometry-types.md`); their normals by the cross product of the closed-form partials."
+          },
+          "path": "geom_surface::analytic",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per try, (cells·n + 1)² samples and as many interpolation solves' worth of O(n) work, plus one certificate per span (the kind's partials to order 6 at a point, 7 along a line and 4 over a box, and O(p²) interval operations to sum them); at most four tries (n = 4 to 32); knot removal O(knots · rows · n).",
+          "does": "[`same_parameter`] cuts the kind's domain at its breaks into smooth cells, samples the kind on an n × n grid of equally spaced parameters in each cell, and interpolates the samples with a bicubic B-spline surface on those parameters (A9.4, through `geom-nurbs`'s `Curve::interpolate_at` along u and then along v), each cell's knots those averaging (9.8) gives its equally spaced parameters, joined C⁰ at the breaks, so the surface's spans never straddle a break. It then certifies the surface against the kind span by span, and samples twice as densely while the certified error is above half the target and still falls by at least a quarter with each doubling (the error itself falls about sixteen times for a smooth kind; where the certificate stops falling, rounding or a jump of the kind is what is left). Last, it removes knots (A5.8 on every row of the net at once, `geom-nurbs`'s certified `Curve::remove_knot`) while the removals' certified changes fit in what the target leaves, and returns the surface with its deviation: the certified error plus the removals' changes.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/cache.rs",
+          "guarantees": [
+            "**Certified.** |O(u, v) − N(u, v)| is at most the deviation returned at every (u, v) of the domain: on each span the remainder form holds because both are smooth inside it (no span meets a break of the kind inside), every term is an outward-rounded enclosure, and knot removal adds no more than its own certified change (the triangle inequality; a row's change bounds the net's, since the other direction's basis functions are a partition of unity).",
+            "**Within the tolerance, or refused.** Asked for a tolerance, the result is within it or the call fails with [`NurbsError::OutsideTolerance`]; without one, the target is the fit bound `ε_fit` (`geom_num::ladder::FIT`, 64 grid steps: chapter 13 certifies a procedural kind's cache within it), and the deviation returned is what the densest sampling certified when the target is not reached: honest, never assumed.",
+            "**Same parameter.** The surface at (u, v) is within the deviation of the kind at (u, v), so both maps are `ParamMap::Same`.",
+            "**Deterministic.** Fixed sampling, fixed orders."
+          ],
+          "job": "A NURBS cache of a surface kind on its own parameters, by Piegl and Tiller's sample, interpolate and remove-knots method, certified by interval bounds.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0010-4485(98",
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "L. Piegl and W. Tiller, \"Computing offsets of NURBS curves and surfaces\", Computer-Aided Design 31(2) (1999), 147–156, <https://doi.org/10.1016/S0010-4485(98)00066-9> (sample, interpolate, remove knots), with The NURBS Book's A9.4 and A5.8 (2nd ed., <https://doi.org/10.1007/978-3-642-59223-2>) as `geom-nurbs` implements them; the error certified instead of estimated from samples, by Taylor's theorem in several variables with the Lagrange remainder in interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, on Taylor forms)."
+          },
+          "path": "geom_surface::cache",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform.",
+          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
+          "guarantees": [
+            "**Sound.** A law reported broken is broken (two certified enclosures of one value that miss each other, a sign the normal bound decides that the exact normal contradicts, or a refusal that did not come).",
+            "**Deterministic.** Parameters in the order given, laws in a fixed order."
+          ],
+          "job": "The kind contract for surfaces: the laws every surface kind must keep, as a check any kind's tests run (`projects/engines/geometry/AGENTS.md`, \"How to add a geometry kind\").",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "as `geom-curve`'s contract (chapter 28.2's contract laws, applied to the behaviour of chapter 7), on the inclusion property of interval arithmetic (Moore, Kearfott and Cloud, <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_surface::contract",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant for a plane: nine interval operations.",
+          "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields with `geom-field`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/implicit.rs",
+          "guarantees": [
+            "**Enclosures.** For every point x of the box, F(x) lies in `value` and ∇F(x) in `gradient`; computed in interval arithmetic rounded outward. A plane's coefficients are integers below 2^126, each held exactly (an integer whose double is not exact is widened by its rounding).",
+            "**Smoothness stated.** `smooth` is true only where F is continuously differentiable over the whole box; a kind that cannot tell says false."
+          ],
+          "job": "Implicit surfaces F(x) = 0 seen through one trait: the interval value and gradient of F over a 3D box (chapter 12.1), so planes, quadrics, tori and fields take part in intersection without `geom-intersect` depending on them.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "interval extensions of F and ∇F (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>), the operand form chapter 12.1 gives implicit surfaces."
+          },
+          "path": "geom_surface::implicit",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(K²) for a sum; O(K⁴) for a product, quotient or root (each coefficient sums over the coefficients below it); K is at most a few in the kernel's uses.",
+          "does": "a [`Jet`] of total order K holds enclosures of the Taylor coefficients f^(i, j)/(i!·j!), where f^(i, j) = ∂^{i+j}f/∂u^i∂v^j and i + j ≤ K, at every point of a box (a point, for an enclosure; a box, for a bound), listed as [`crate::param::partial_index`] lists partials. Sums, products, quotients and square roots of jets are the jets of the sums, products, quotients and roots, by the two-variable recurrences of automatic differentiation; [`Jet::du`] and [`Jet::dv`] differentiate. So the jet of an offset surface's formula, S + d·(`S_u` × `S_v`)/|`S_u` × `S_v`|, gives all of its partials to order K from the base's partials to order K + 1: its higher derivatives come from the formula's exact rules (Leibniz's rule and the quotient and root recurrences), never from a finite difference.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/jet.rs",
+          "guarantees": [
+            "**Certified.** If each input coefficient encloses its function's coefficient at every point of the box, so does each output coefficient: every recurrence is a polynomial or a quotient in the inputs, evaluated in outward-rounded interval arithmetic (inclusion isotonicity).",
+            "**Refused where undefined.** A quotient by, or a root of, a jet whose value may be zero (or, for the root, not positive) is [`CurveError::Unbounded`], never a guess; an order above 18, where the factorials stop being exact doubles, is [`NurbsError::DerivativeOrder`]."
+          ],
+          "job": "Truncated two-variable Taylor series in interval arithmetic: every partial derivative of a formula built from surfaces' partials, enclosed, without differentiating the formula by hand.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717761",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "the Taylor-coefficient recurrences of automatic differentiation in several variables (A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), chapter 13, <https://doi.org/10.1137/1.9780898717761>: the Cauchy product of multivariate Taylor series and the division and square-root recurrences it gives), evaluated in intervals as in interval automatic differentiation (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>); the one-variable form is `geom-curve`'s jet, which this extends to two parameters."
+          },
+          "path": "geom_surface::jet",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a bound or enclosure runs Bezier extraction in intervals, O(`s_u`·`s_v`·(p + q)·p·q) for s spans, plus O(p·q·(p + q)) per patch cut; the normal bound three products per patch; a split O(n·m); a reversal or transform O(n·m).",
+          "does": "implements [`ParamSurface`] for [`Surface`]. Points and partials are A3.5, A3.6 and A4.4 (`geom-nurbs`). Enclosures and bounds come from the surface's Bernstein patches in interval arithmetic (piece G59): the patch holding (u, v), or each patch meeting the box cut down to it, its box from the convex hull; partials from the patch's partial forms, and for a rational surface `S_d` = (`A_d`·W − A·`W_d`) / W². The normal bound is the hull of the normal patches (`Surface::normal_patches`, collapsed edges divided out) cut down to the box. Partials of any order are the patch's repeated partial forms, at the point or bounded by their hulls, and for a rational surface the jet quotient A/W (`crate::jet`). Conversion to NURBS is the surface itself. A split inserts the parameter until its multiplicity is the degree in that direction and parts the net; a reversal negates and reverses one knot vector; a transform maps the control points with the weights kept.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/nurbs.rs",
+          "guarantees": [
+            "**Certified.** Every enclosure and bound holds the exact value; a split's deviation is the certified rounding of the knot insertion; a transform's the largest certified error of a control point's image (a surface point is a weighted average of its control points).",
+            "**Exact where the operation is.** Conversion and reversal change no bit; a grid transform of control points whose images are exact reports 0.",
+            "**Refused outside the domain.** Never clamped."
+          ],
+          "job": "The NURBS surface kind: `geom-nurbs`'s [`Surface`] under the kind contract.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0167-8396(88"
+            ],
+            "text": "The NURBS Book, 2nd ed. (<https://doi.org/10.1007/978-3-642-59223-2>): A3.5, A3.6, A4.4, A5.3, de Casteljau subdivision and affine invariance, on `geom-nurbs` (G56, G59) and the normal patch of Sederberg and Meyers (<https://doi.org/10.1016/0167-8396(88)90029-5>)."
+          },
+          "path": "geom_surface::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an evaluation of order k is the base's of order k + 1 plus O(k⁴) interval operations (a box's twice, for its centred form); a bound O(1) evaluations per piece (each smooth part of the box cut into four by four), a normal bound up to 64 more per piece where the fold factor's sign needs smaller boxes (an explicit stack, three halvings deep: no recursion) and two of the base's normal bounds; the cache as `crate::cache` states.",
+          "does": "[`Offset`] stores its base, any [`SurfaceKind`] (an offset too), the part of the base's domain it covers, and the distance d; a positive distance moves along `S_u` × `S_v`. It is procedural (chapter 7): its points and its partials of every order come from the base's partials one order higher through two-variable interval Taylor jets (`crate::jet`), so its second and third derivatives, which Class-A blends need (chapter 13.10), are the formula's exact derivatives, never finite differences. Its NURBS form is a cache on the same parameters, built by Piegl and Tiller's sample, interpolate and remove-knots method and certified box by box in interval arithmetic (`crate::cache`), computed on demand or kept with [`Offset::cached`]; [`Offset::to_nurbs_within`] asks for a stated error.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
+          "guarantees": [
+            "**Certified, or refused.** Every enclosure holds the exact offset of the stored base. Where the base's normal may vanish (a pole, a cusp, or a box too wide to separate it from zero) an enclosure is refused and a derivative bound is `Unbounded`; a bound on the points still holds there, from the base's bound widened by |d|, and the normal bound is then the whole space, which decides no sign. Elsewhere the normal bound is the base's, turned over where the offset folds, wherever the sign of 1 − 2Hd + Kd² is certified (Maekawa's identity below), and the cross product of the enclosed partials where it is not.",
+            "**Offset by d, then by −d, is the base.** Where the offset is regular (d·κ < 1 for both principal curvatures κ on the side it moves to), the offset's normal is the base's, so the offset by −d of the offset by d is the base itself, and its enclosures hold the base's points.",
+            "**Exact split and reversal.** A split narrows the domain on the same base (deviation 0); a reversal reverses the base and negates the distance (`S_u` × `S_v` turns over).",
+            "**Transforms keep the kind only when exact.** A grid transform (a signed permutation and a whole-step translation, so lengths are kept) of an offset whose base moves exactly gives an offset, a mirror negating the distance; any other transform gives the moved NURBS cache, with both deviations."
+          ],
+          "job": "The offset surface kind: a base kind moved along its unit normal, O = S + d·n with n = (`S_u` × `S_v`)/|`S_u` × `S_v`|, with symbolic higher derivatives and a certified NURBS cache.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717761",
+              "https://doi.org/10.1016/S0010-4485(99",
+              "https://doi.org/10.1016/S0010-4485(98"
+            ],
+            "text": "the offset surface as ISO 10303-42 defines it (`offset_surface`, the base moved along its normal by a distance), its derivatives by automatic differentiation in interval arithmetic (Griewank and Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), <https://doi.org/10.1137/1.9780898717761>), which re-derives what `SMLib`'s offset surface gets wrong in its third derivatives (chapter 13.11); the identity `O_u` × `O_v` = (1 − 2Hd + Kd²)·(`S_u` × `S_v`) for the regular offset (T. Maekawa, \"An overview of offset curves and surfaces\", Computer-Aided Design 31(3) (1999), <https://doi.org/10.1016/S0010-4485(99)00013-5>); the cache by L. Piegl and W. Tiller, \"Computing offsets of NURBS curves and surfaces\", Computer-Aided Design 31(2) (1999), <https://doi.org/10.1016/S0010-4485(98)00066-9>."
+          },
+          "path": "geom_surface::offset",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none here; each kind's implementation states its own.",
+          "does": "[`ParamSurface`] is the trait chapter 12.1 names: evaluation, first partial derivatives, certified enclosures, conservative bounds on the value and the partials over any parameter box, a bound on the normals' directions (the Gauss map), conversion to NURBS with an error, split, reverse and transform; with every partial derivative of any order enclosed at a point or over a box ([`ParamSurface::partials_over`], listed by [`partial_index`]) and the parameters where a kind may not be smooth ([`ParamSurface::breaks`]), which chapter 13's offsets and Class-A blends need (piece G66). [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s [`Changed`], with a certified bound on their distance from the exact result. Errors are `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/param.rs",
+          "guarantees": [
+            "**Certified, or refused.** Every bound and enclosure holds the exact value for the surface the stored data define; a derivative that cannot be bounded over a box is [`DerivativeBound::Unbounded`], and the normal bound then still bounds the directions.",
+            "**Closed and exhaustive.** Matching on [`SurfaceKind`] is exhaustive; a new kind is a new variant (the playbook in `projects/engines/geometry/AGENTS.md`).",
+            "**Trimming is not here.** A surface kind is a carrier; trimming belongs to the topology's loops (chapter 7)."
+          ],
+          "job": "The behaviour every surface kind has (chapter 7), and the closed enum that stores every kind.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the operations of chapter 7 and the trait names of chapter 12.1 (`projects/engines/geometry/architecture/12-intersections.md`), with the normal bound in place of an unbounded derivative as chapter 12.1 asks."
+          },
+          "path": "geom_surface::param",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an evaluation is the profiles' plus O(1); a bound O(1) profile bounds per piece; a conversion O(m·n) for its control net, plus the profiles' conversions.",
+          "does": "each kind is a placement c + L·X(u, v) of an unplaced shape X, with L a stored 3 × 3 matrix (the identity when built), so every affine transform keeps the kind on the same parameters (c′ = M·c + t, L′ = M·L):",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+          "guarantees": [
+            "**Certified.** Every enclosure and bound holds the exact value of the surface the stored profiles and placement define.",
+            "**Transforms keep the kind, on the same parameters**, with the rounding of c′ and L′ as the deviation: |Δc| + ‖ΔL‖·sup|X|.",
+            "**Exact split and reversal**: a split trims a profile or cuts the linear direction; a reversal flips the axis (revolution, in u), reverses the profiles, or negates d or σ (in v)."
+          ],
+          "job": "The swept surface kinds: surface of revolution, linear extrusion and ruled surface, each built on `geom-curve`'s trimmed curves and stored as itself.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the surfaces of ISO 10303-42 (`surface_of_revolution`, `surface_of_linear_extrusion`) and the ruled surface; their NURBS construction from L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., sections 8.3 to 8.5 (<https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_surface::swept",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(T) interval operations per evaluation of T terms; a conversion O(m·n·T) for an m × n control net.",
+          "does": "[`Fun`] names the scalar functions (1, t, cos πt, sin πt; angles in half-turns, the kernel's proven angle form), and [`Terms`] holds a kind's c and terms in doubles and as enclosures of the exact values its stored data define. It evaluates every partial derivative ∂^{i+j}S/∂u^i∂v^j in closed form: in doubles at a point, and in intervals over any box, which is both the certified evaluation and the bound. [`Terms::distance`] bounds how far two surfaces of the same terms lie apart over a box, and [`Terms::to_nurbs`] writes them as one tensor-product NURBS surface: each direction's functions are the coordinates of a unit circle (cos, sin and 1, the exact rational quadratic of `geom-curve`) or of a line (t and 1), and a product of two such curves is a tensor product (The NURBS Book, section 8.2, on surfaces of revolution, the same construction).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/terms.rs",
+          "guarantees": [
+            "**Certified.** An enclosure holds the exact value at every point of its box: `geom-num`'s proven `sinpi` and `cospi` enclosures, π between its neighbouring doubles, and `geom-curve`'s exact-where-it-can interval arithmetic.",
+            "**Derivatives in closed form.** A derivative of cos πt or sin πt shifts it a quarter turn and gains π; never a finite difference (chapter 7).",
+            "**Conversion with its error.** The NURBS surface differs from the terms by at most the direction curves' own deviations, multiplied out over the terms, plus the rounding of its control points and weights (the rational bound of `geom-curve`'s conics)."
+          ],
+          "job": "The certified evaluation the analytic surface kinds share: each is S(u, v) = c + Σ f(u)·g(v)·W, fixed vectors W times products of scalar functions of one parameter each.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "direct evaluation of the closed forms in interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>); tensor-product rational surfaces from rational curves (L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., chapter 8, <https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_surface::terms",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-surface",
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G60, G65, G66, G67, G68, G253, G254, G260, G264, G315, G316, G317, G318, G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the other kinds to come in G67, G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
@@ -7859,6 +8827,17 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-nurbs/src/basis.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/product.rs"
       ]
     },
     {

@@ -16,6 +16,25 @@ geom-num = { path = "../geom-num" }
 geom-nurbs = { path = "../geom-nurbs" }
 geom-op = { path = "../geom-op" }
 
+[dev-dependencies]
+# The exact references of the tests (MIT OR Apache-2.0), as geom-nurbs's tests use them.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+# The golden store, which pins the analytic kinds' digest (piece G19).
+geom-test = { path = "../geom-test" }
+
+[[bench]]
+name = "kind"
+harness = false
+
+[[bench]]
+name = "analytic"
+harness = false
+
+[[bench]]
+name = "compound"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

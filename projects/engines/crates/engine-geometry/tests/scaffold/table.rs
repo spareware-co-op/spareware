@@ -273,8 +273,8 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
     kernel("geom-bvh",       2, Amended27, Elsewhere("G54"), "run num math"),
     kernel("geom-nurbs",     2, Accepted,   Elsewhere("G56"), "base math linalg"),
-    kernel("geom-curve",     2, Accepted,   Here, "base math nurbs"),
-    kernel("geom-surface",   2, Accepted,   Here, "base math nurbs curve"),
+    kernel("geom-curve",     2, Accepted,   Elsewhere("G60"), "base math nurbs"),
+    kernel("geom-surface",   2, Accepted,   Elsewhere("G60"), "base math nurbs curve"),
     // 3. Topology.
     kernel("geom-topo",      3, Accepted,   Here, "base math curve surface"),
     kernel("geom-name",      3, Accepted,   Here, "base topo"),

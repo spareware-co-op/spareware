@@ -1223,7 +1223,6 @@ mod repository {
             "geom-convert",
             "G322 G323 G333 G334 G335 G340 G350 G351 G425",
         ),
-        ("geom-curve", "G60 G61 G62 G63 G64 G67 G68 G175 G361 G371"),
         (
             "geom-draw",
             "G387 G389 G390 G391 G394 G395 G396 G397 G398 G399 G400 G401 G402 G403 G404 G405",
@@ -1268,10 +1267,6 @@ mod repository {
         ("geom-spatial", "G293 G294 G295 G296 G297"),
         ("geom-step", "G427 G428 G429 G476"),
         ("geom-subd", "G315 G316 G319 G323 G325"),
-        (
-            "geom-surface",
-            "G60 G65 G66 G67 G68 G253 G254 G260 G264 G315 G316 G317 G318 G470",
-        ),
         ("geom-sweep", "G255 G256 G257 G259 G260 G261 G280 G375"),
         (
             "geom-terrain",

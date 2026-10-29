@@ -17,6 +17,18 @@ geom-num = { path = "../geom-num" }
 geom-nurbs = { path = "../geom-nurbs" }
 geom-op = { path = "../geom-op" }
 
+[dev-dependencies]
+# The golden store, which pins the analytic and swept kinds' digest (piece G19).
+geom-test = { path = "../geom-test" }
+
+[[bench]]
+name = "surfaces"
+harness = false
+
+[[bench]]
+name = "offsets"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
