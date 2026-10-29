@@ -46,9 +46,11 @@
 //! Their interval versions, for certified enclosures, are
 //! [`Interval::sinpi`](crate::interval::Interval::sinpi),
 //! [`Interval::cospi`](crate::interval::Interval::cospi),
-//! [`Interval::exp`](crate::interval::Interval::exp) and
-//! [`Interval::ln`](crate::interval::Interval::ln): the peaks of `sinpi` and `cospi` are found by
-//! exact comparisons, never missed or invented.
+//! [`Interval::exp`](crate::interval::Interval::exp),
+//! [`Interval::ln`](crate::interval::Interval::ln) and
+//! [`Interval::atan2`](crate::interval::Interval::atan2): the peaks of `sinpi` and `cospi` are
+//! found by exact comparisons, never missed or invented, and `atan2`'s branch cut and the origin
+//! are decided exactly.
 //!
 //! "Correctly rounded" means the result is the binary64 number nearest the exact mathematical
 //! value, ties to even: an error of at most half an ulp, and a result fixed bit for bit by the
