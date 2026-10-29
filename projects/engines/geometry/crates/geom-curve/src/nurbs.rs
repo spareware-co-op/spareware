@@ -41,6 +41,7 @@ use geom_run::WorkMeter;
 
 use crate::affine::Entries;
 use crate::error::CurveError;
+use crate::map::{NurbsForm, ParamMap};
 use crate::param::{CurveKind, DerivativeBound, ParamCurve};
 
 /// `x` as a point interval.
@@ -306,9 +307,12 @@ impl<const D: usize> ParamCurve<D> for Curve<D> {
         out.map(DerivativeBound::Bounded).ok_or(CurveError::Defect)
     }
 
-    fn to_nurbs(&self, _meter: &mut WorkMeter<'_>) -> Result<Changed<Curve<D>>, CurveError> {
+    fn to_nurbs(&self, _meter: &mut WorkMeter<'_>) -> Result<Changed<NurbsForm<D>>, CurveError> {
         Ok(Changed {
-            value: self.clone(),
+            value: NurbsForm {
+                curve: self.clone(),
+                map: ParamMap::Same,
+            },
             deviation: 0.0,
         })
     }

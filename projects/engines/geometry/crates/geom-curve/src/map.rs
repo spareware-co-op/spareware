@@ -1,0 +1,125 @@
+//! A kind converted to NURBS, and the map from the kind's parameter to the NURBS curve's.
+//!
+//! What it does: [`NurbsForm`] is what [`crate::ParamCurve::to_nurbs`] returns: the NURBS curve and
+//! the [`ParamMap`] taking a parameter t of the kind to the parameter u of the NURBS curve at the
+//! same point. Most kinds convert with the same parameter. The conics cannot: a circle traced
+//! uniformly in angle is not a rational curve in its angle, so its exact NURBS form, the rational
+//! quadratic, runs on the tangent half-angle substitution instead. [`ParamMap::enclose`] encloses
+//! u for any t, so a caller (and the kind contract) can compare the kind and its NURBS form at the
+//! same point.
+//!
+//! The conic maps: the domain is cut at breaks t₀ < t₁ < … < tₙ, and piece k is the NURBS curve's
+//! span [k, k + 1]. With h = (tₖ₊₁ − tₖ)/2 and τ the tangent of half the angle, τ(x) = tan πx for
+//! an ellipse (t in half-turns) and tanh x for a hyperbola, u = k + τ((t − tₖ)/2)/τ(h) on an even
+//! piece and u = k + 1 − τ((tₖ₊₁ − t)/2)/τ(h) on an odd one (whose weights run the other way, so
+//! that the weights stay bounded along the curve).
+//!
+//! Guarantees:
+//!
+//! - **Certified.** The enclosure holds the exact u: τ is enclosed with `geom-num`'s proven `sinpi`,
+//!   `cospi` and `exp` enclosures, and the result is cut to the piece's span, which holds the exact
+//!   u because τ is increasing.
+//! - **Refused outside.** A parameter outside the breaks is an error.
+//!
+//! Method: the rational quadratic form of a conic and its parametrisation (L. Piegl and W. Tiller,
+//! *The NURBS Book*, 2nd ed., sections 7.2 and 7.3, <https://doi.org/10.1007/978-3-642-59223-2>),
+//! where u is the stereographic (tangent half-angle) parameter of the circle and, for the
+//! hyperbola, of the unit hyperbola.
+//!
+//! Cost: a binary search over the breaks and a few interval operations.
+
+use alloc::vec::Vec;
+
+use geom_num::interval::Interval;
+use geom_nurbs::Curve;
+
+use crate::error::CurveError;
+use crate::form::count;
+use crate::tight::{self, point};
+
+/// A kind as NURBS: the curve, and the map from the kind's parameter to the curve's.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NurbsForm<const D: usize> {
+    /// The NURBS curve.
+    pub curve: Curve<D>,
+    /// The parameter map.
+    pub map: ParamMap,
+}
+
+/// The map from a kind's parameter t to its NURBS form's parameter u (module documentation).
+#[derive(Clone, Debug, PartialEq)]
+pub enum ParamMap {
+    /// u = t.
+    Same,
+    /// An ellipse's tangent half-angle map, with t in half-turns, over these breaks.
+    Circular(Vec<f64>),
+    /// A hyperbola's tangent half-angle map over these breaks.
+    Hyperbolic(Vec<f64>),
+}
+
+/// tan(πx), enclosed: exact at 0 and at a quarter of a half-turn.
+pub(crate) fn tan_pi(x: Interval) -> Result<Interval, CurveError> {
+    if x.lo() == x.hi() {
+        if x.lo() == 0.0 {
+            return point(0.0);
+        }
+        if x.lo() == 0.25 {
+            return point(1.0);
+        }
+    }
+    tight::div(x.sinpi()?, x.cospi()?)
+}
+
+/// tanh x, enclosed: increasing, so from its ends; tanh x = (e^{2x} − 1)/(e^{2x} + 1).
+pub(crate) fn tanh(x: Interval) -> Result<Interval, CurveError> {
+    let at = |y: f64| -> Result<Interval, CurveError> {
+        if y == 0.0 {
+            return point(0.0);
+        }
+        let e = point(2.0 * y)?.exp()?;
+        let one = point(1.0)?;
+        tight::div(tight::sub(e, one)?, tight::add(e, one)?)
+    };
+    Ok(Interval::new(at(x.lo())?.lo(), at(x.hi())?.hi())?)
+}
+
+impl ParamMap {
+    /// An enclosure of u for the kind's parameter `t`.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::ParameterOutside`] if `t` is not within the breaks.
+    pub fn enclose(&self, t: f64) -> Result<Interval, CurveError> {
+        let (breaks, circular) = match self {
+            ParamMap::Same => return point(t),
+            ParamMap::Circular(b) => (b, true),
+            ParamMap::Hyperbolic(b) => (b, false),
+        };
+        let (Some(&first), Some(&last)) = (breaks.first(), breaks.last()) else {
+            return Err(CurveError::Defect);
+        };
+        if !(t.is_finite() && first <= t && t <= last) {
+            return Err(CurveError::ParameterOutside);
+        }
+        // The first piece whose end is at or beyond t.
+        let k = breaks.partition_point(|&b| b < t).saturating_sub(1);
+        let (Some(&t0), Some(&t1)) = (breaks.get(k), breaks.get(k.saturating_add(1))) else {
+            return Err(CurveError::Defect);
+        };
+        let half = point(0.5)?;
+        let tau = |x: Interval| if circular { tan_pi(x) } else { tanh(x) };
+        let sigma = tau(tight::mul(tight::sub(point(t1)?, point(t0)?)?, half)?)?;
+        let kf = count(k)?;
+        let u = if k & 1 == 0 {
+            let s = tau(tight::mul(tight::sub(point(t)?, point(t0)?)?, half)?)?;
+            tight::add(point(kf)?, tight::div(s, sigma)?)?
+        } else {
+            let s = tau(tight::mul(tight::sub(point(t1)?, point(t)?)?, half)?)?;
+            tight::sub(point(kf + 1.0)?, tight::div(s, sigma)?)?
+        };
+        // The exact u lies in the piece's span [k, k + 1].
+        let lo = tight::larger(u.lo(), kf);
+        let hi = tight::smaller(u.hi(), kf + 1.0);
+        Ok(Interval::new(lo, tight::larger(hi, lo))?)
+    }
+}

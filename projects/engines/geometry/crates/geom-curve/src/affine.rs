@@ -143,6 +143,16 @@ impl Entries {
         })
     }
 
+    /// The rows (m0, m1, m2, t) as doubles.
+    pub(crate) fn rows(&self) -> &[[f64; 4]; 3] {
+        &self.doubles
+    }
+
+    /// The rows (m0, m1, m2, t) as enclosures of the exact entries.
+    pub(crate) fn exact_rows(&self) -> &[[Interval; 4]; 3] {
+        &self.exact
+    }
+
     /// Whether the transform leaves z alone, so it applies to planar points.
     #[must_use]
     pub fn acts_in_plane(&self) -> bool {

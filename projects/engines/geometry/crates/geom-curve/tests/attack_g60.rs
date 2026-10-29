@@ -17,7 +17,9 @@
 
 use geom_curve::affine::{Entries, int_interval};
 use geom_curve::contract::check;
-use geom_curve::{ContractError, CurveError, CurveKind, DerivativeBound, Law, ParamCurve};
+use geom_curve::{
+    ContractError, CurveError, CurveKind, DerivativeBound, Law, NurbsForm, ParamCurve, ParamMap,
+};
 use geom_math::{
     Axis, GridTransform, MathError, RationalRotation, RationalTransform, Rotation, TypedTransform,
 };
@@ -159,10 +161,13 @@ impl ParamCurve<3> for Faulty {
         }
         Ok(b)
     }
-    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<Curve<3>>, CurveError> {
+    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<NurbsForm<3>>, CurveError> {
         if let Fault::Nurbs(dx, deviation) = self.fault {
             return Ok(Changed {
-                value: shifted(&self.inner, dx),
+                value: NurbsForm {
+                    curve: shifted(&self.inner, dx),
+                    map: ParamMap::Same,
+                },
                 deviation,
             });
         }

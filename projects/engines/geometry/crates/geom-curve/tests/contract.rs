@@ -15,7 +15,7 @@
 )]
 
 use geom_curve::contract::check;
-use geom_curve::{CurveError, CurveKind, DerivativeBound, Law, ParamCurve};
+use geom_curve::{CurveError, CurveKind, DerivativeBound, Law, NurbsForm, ParamCurve};
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Curve, Limit};
@@ -108,16 +108,9 @@ fn every_nurbs_curve_keeps_the_contract() {
         let c3 = curve::<3>(&mut rng);
         check(&c3, &params(&c3), t, &mut meter())
             .unwrap_or_else(|e| panic!("trial {trial} (3D): {e}"));
+        let ps = params(&c3);
         let kind = CurveKind::Nurbs(c3);
-        check(
-            &kind,
-            &params(match &kind {
-                CurveKind::Nurbs(c) => c,
-            }),
-            t,
-            &mut meter(),
-        )
-        .unwrap_or_else(|e| panic!("trial {trial} (enum): {e}"));
+        check(&kind, &ps, t, &mut meter()).unwrap_or_else(|e| panic!("trial {trial} (enum): {e}"));
     }
 }
 
@@ -218,7 +211,7 @@ impl ParamCurve<3> for Broken {
     ) -> Result<DerivativeBound<3>, CurveError> {
         self.inner.derivative_bound(span, order, meter)
     }
-    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<Curve<3>>, CurveError> {
+    fn to_nurbs(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<NurbsForm<3>>, CurveError> {
         self.inner.to_nurbs(meter)
     }
     fn split(
@@ -235,7 +228,9 @@ impl ParamCurve<3> for Broken {
                 &TypedTransform::Exact(GridTransform::translation([0, 0, 0]).unwrap()),
                 meter,
             )?;
-            let CurveKind::Nurbs(n) = c.value;
+            let CurveKind::Nurbs(n) = c.value else {
+                return Err(CurveError::Defect);
+            };
             let knots: Vec<f64> = n.basis().knots().iter().rev().map(|k| -k).collect();
             let shifted = Curve::from_homogeneous(
                 Basis::new(n.degree(), knots).unwrap(),

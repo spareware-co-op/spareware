@@ -42,6 +42,12 @@ pub enum CurveError {
     },
     /// A result is not finite.
     NotFinite,
+    /// The operation needs a finite domain, and the curve is a ray or an infinite line; or its
+    /// result would drift without bound along one (an inexact transform of its direction).
+    Unbounded,
+    /// The data or a transform collapses the kind: parallel vectors where independent ones are
+    /// needed, a zero length or direction, or a singular transform.
+    Degenerate,
     /// The work meter stopped the operation (chapter 23.10).
     Stopped(Stopped),
     /// A step its own bounds rule out failed: a defect in this crate, reported, never a panic.
@@ -66,6 +72,12 @@ impl fmt::Display for CurveError {
                 )
             }
             CurveError::NotFinite => f.write_str("a result is not finite"),
+            CurveError::Unbounded => f.write_str(
+                "the curve is a ray or an infinite line, and the operation needs a finite domain",
+            ),
+            CurveError::Degenerate => f.write_str(
+                "the curve's data or the transform is degenerate (parallel or zero vectors, or a                  singular transform)",
+            ),
             CurveError::Stopped(s) => write!(f, "{s}"),
             CurveError::Defect => f.write_str("an internal step failed (a defect in geom-curve)"),
         }

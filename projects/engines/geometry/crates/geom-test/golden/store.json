@@ -207,6 +207,16 @@
           "sha256": "e036ec6fc907153e3ff1960bfac8b52a646e091e9c2e23f4a364efd0ea9e2c12"
         },
         {
+          "id": "geom-curve/analytic",
+          "what": "The analytic curve kinds of geom-curve (piece G61): 40 rounds of a line, circle, ellipse, hyperbola, parabola, polynomial and involute in 2D and the same with a helix in 3D, each evaluated in doubles and enclosed at five parameters, bounded with three derivative bounds over a span, converted to NURBS (knots, control points, weights, parameter map and deviation), split, reversed and transformed (each evaluated, with its deviation); and 6 refusals: 30606 results in the canonical encoding of tests/analytic_determinism.rs.",
+          "check": {
+            "crate": "geom-curve",
+            "test": "analytic_determinism",
+            "function": "analytic_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342"
+        },
+        {
           "id": "geom-bvh/tree",
           "what": "The box tree of geom-bvh (piece G54): 2D and 3D trees over 22 fixed sets of 1 to 9,000 boxes (sparse, dense, nested and all equal, the largest built with the parallel subtree phase), each tree's canonical bytes, the keys meeting eight query boxes, its pairs and its pairs with another tree both ways, the work each of those walks charged, and one refit of each, 3,970,021 bytes in the encoding of tests/tree_determinism.rs.",
           "check": {

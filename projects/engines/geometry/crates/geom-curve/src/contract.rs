@@ -36,7 +36,9 @@ use geom_run::WorkMeter;
 
 use crate::affine::Entries;
 use crate::error::{ContractError, CurveError, Law};
+use crate::map::{NurbsForm, ParamMap};
 use crate::param::{DerivativeBound, ParamCurve};
+use crate::tight;
 
 /// The relative slack between a double evaluation and the certified enclosure: 2^−30.
 const SLACK: f64 = f64::from_bits(0x3E10_0000_0000_0000);
@@ -69,7 +71,9 @@ fn near<const D: usize>(v: &[f64; D], a: &[Interval; D]) -> bool {
 }
 
 /// Runs `kind` through every law of the contract at the parameters `params` (each inside its
-/// domain), with `transform` for the transform law (one acting in the plane for a 2D kind).
+/// domain), with `transform` for the transform law (one acting in the plane for a 2D kind). The
+/// NURBS law compares the kind at t with its NURBS form at the parameter its map gives; a kind
+/// whose domain is not finite must refuse the conversion with [`CurveError::Unbounded`].
 ///
 /// # Errors
 ///
@@ -87,21 +91,42 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
 ) -> Result<(), ContractError> {
     let (a, b) = kind.domain();
     let call = |law: Law, at: f64| move |e: CurveError| broken(law, at, Some(e));
+    // A ray's or infinite line's domain has an infinite end; the laws use finite stand-ins 1024
+    // beyond the parameters given (or the finite end).
+    let (first, last) = params.iter().fold((0.0_f64, 0.0_f64), |(lo, hi), &t| {
+        (tight::smaller(lo, t), tight::larger(hi, t))
+    });
+    let lo = if a.is_finite() { a } else { first - 1024.0 };
+    let hi = if b.is_finite() { b } else { last + 1024.0 };
     // Refusals.
-    // One domain length and one unit past the end.
-    let beyond = b + (b - a);
-    let outside = beyond + 1.0;
+    let outside = if b.is_finite() {
+        // One length of the domain and one unit past the end.
+        let past_end = b + (b - lo);
+        past_end + 1.0
+    } else if a.is_finite() {
+        let before_start = a - (hi - a);
+        before_start - 1.0
+    } else {
+        f64::NAN
+    };
+    let beyond = if a.is_finite() {
+        (a - 1.0, hi)
+    } else if b.is_finite() {
+        (lo, b + 1.0)
+    } else {
+        (lo, f64::INFINITY)
+    };
     if kind.point(outside, Limit::FromRight) != Err(CurveError::ParameterOutside)
-        || kind.bound((a - 1.0, b), meter) != Err(CurveError::SpanOutside)
+        || kind.bound(beyond, meter) != Err(CurveError::SpanOutside)
         || kind.split(a, meter).err() != Some(CurveError::ParameterOutside)
     {
         return Err(broken(Law::RefusesOutside, outside, None));
     }
     let whole = kind
-        .bound((a, b), meter)
-        .map_err(call(Law::BoundHoldsPoints, a))?;
-    let entries = Entries::of(transform).map_err(call(Law::TransformMovesTheCurve, a))?;
-    let mid = a + (b - a) * 0.5;
+        .bound((lo, hi), meter)
+        .map_err(call(Law::BoundHoldsPoints, lo))?;
+    let entries = Entries::of(transform).map_err(call(Law::TransformMovesTheCurve, lo))?;
+    let mid = lo + (hi - lo) * 0.5;
     let (left, right) = kind
         .split(mid, meter)
         .map_err(call(Law::SplitKeepsTheCurve, mid))?;
@@ -111,9 +136,12 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
     let moved = kind
         .transformed(transform, meter)
         .map_err(call(Law::TransformMovesTheCurve, a))?;
-    let nurbs = kind
-        .to_nurbs(meter)
-        .map_err(call(Law::NurbsWithinItsError, a))?;
+    // A ray or infinite line has no NURBS form, and must say so.
+    let nurbs = match kind.to_nurbs(meter) {
+        Ok(n) => Some(n),
+        Err(CurveError::Unbounded) if !(a.is_finite() && b.is_finite()) => None,
+        Err(e) => return Err(broken(Law::NurbsWithinItsError, lo, Some(e))),
+    };
     for &t in params {
         let e = kind
             .enclose(t, Limit::FromRight, 2, meter)
@@ -132,7 +160,7 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
             .copied()
             .ok_or(broken(Law::EvaluationIsEnclosed, t, None))?;
         // Bounds over the whole domain and over a span around t.
-        let span = (f64::midpoint(a, t), f64::midpoint(t, b));
+        let span = (f64::midpoint(lo, t), f64::midpoint(t, hi));
         let local = kind
             .bound(span, meter)
             .map_err(call(Law::BoundHoldsPoints, t))?;
@@ -150,11 +178,12 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
                 _ => {}
             }
         }
-        // The NURBS conversion, at the same parameter.
-        let n = ParamCurve::enclose(&nurbs.value, t, Limit::FromRight, 0, meter)
-            .map_err(call(Law::NurbsWithinItsError, t))?;
-        if !n.first().is_some_and(|x| overlap(x, &p, nurbs.deviation)) {
-            return Err(broken(Law::NurbsWithinItsError, t, None));
+        // The NURBS conversion, at the point its parameter map gives.
+        if let Some(nurbs) = &nurbs {
+            let n = nurbs_at(&nurbs.value, t, meter).map_err(call(Law::NurbsWithinItsError, t))?;
+            if !overlap(&n, &p, nurbs.deviation) {
+                return Err(broken(Law::NurbsWithinItsError, t, None));
+            }
         }
         // The split's halves, on their sides of the middle.
         let half = if t <= mid { &left } else { &right };
@@ -208,10 +237,35 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
             return Err(broken(Law::Deterministic, t, None));
         }
     }
-    if kind.bound((a, b), meter) != Ok(whole) {
-        return Err(broken(Law::Deterministic, a, None));
+    if kind.bound((lo, hi), meter) != Ok(whole) {
+        return Err(broken(Law::Deterministic, lo, None));
     }
     Ok(())
+}
+
+/// The NURBS form's point at the kind's parameter `t`, enclosed: at u itself when the map is the
+/// identity, else the curve's bound over the enclosure of u.
+fn nurbs_at<const D: usize>(
+    form: &NurbsForm<D>,
+    t: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; D], CurveError> {
+    if form.map == ParamMap::Same {
+        return ParamCurve::enclose(&form.curve, t, Limit::FromRight, 0, meter)?
+            .first()
+            .copied()
+            .ok_or(CurveError::Defect);
+    }
+    let u = form.map.enclose(t)?;
+    let (c0, c1) = ParamCurve::domain(&form.curve);
+    let lo = tight::larger(u.lo(), c0);
+    let hi = tight::smaller(u.hi(), c1);
+    let b = ParamCurve::bound(&form.curve, (lo, tight::larger(hi, lo)), meter)?;
+    let mut out = [Interval::point(0.0)?; D];
+    for (o, (&l, &h)) in out.iter_mut().zip(b.lo.iter().zip(&b.hi)) {
+        *o = Interval::new(l, h)?;
+    }
+    Ok(out)
 }
 
 /// The image of an enclosed point under the transform's exact entries, in intervals.
