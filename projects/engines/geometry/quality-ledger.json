@@ -2947,14 +2947,6 @@
       "reason": "Only the scan's start moves, and it still meets the same member. last_within is private; members, its one caller, passes it only periodic families from Scalar::critical, whose lower ends c lie in [−1.5, 2.5] up to a rounding (φ = atan2/π in [−1, 1], plus ψ in [−½, ½], 1 − ψ or 1, or the involute's ½ and 3/2), and extent sends spans past 2⁵⁰ to the pieces' route first. With X = (t₁ − c)/2, the answer is ⌊X⌋, or ⌊X⌋ + 1 when rounding a member down lets it meet t₁ (only for X within ¼ below a whole number). The mutant starts at ⌊(t₁ + c)/2⌋ + 2 = ⌊X + c + e⌋ + 2 with |e| ≤ 1/16 (the roundings of t₁ + c, below 2⁵¹, and of its half), which lies at or above the answer and at most ⌊X⌋ + 5: inside the scan's six steps down. The scan returns the first m from the top whose member's lower end is at most t₁, so both return the same m."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-curve/src/transition/fresnel.rs",
-      "mutant": "replace >= with < in at",
-      "line_text": "} else if x >= EXPANSION_START {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Sends 1 < x < 5 to the asymptotic expansion and x ≥ 5 to the quadrature's panels. The tests catch it, but only after cargo-mutants' timeout. fresnel_enclosures_hold_the_truth and fresnel_over_intervals_and_huge_arguments fail at once on the expansion's width below 5 (0.31 just above 1, against the 5·10⁻¹⁴ allowed). far_fresnel_arguments_hold_the_truth sends x = 1000.5 to the panels, which step up from 1, each narrower as the integrand turns faster, for about 100 s on a development machine before no width meets the tolerance and it fails with Defect. That test, not a wrong answer, is what outlasts the timeout."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-num/src/ball.rs",
       "mutant": "replace > with >= in <impl Scalar for Ball>::sqrt",
       "line_text": "let spread = if root_floor > 0.0 {",
