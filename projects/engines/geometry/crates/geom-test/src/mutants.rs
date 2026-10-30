@@ -20,8 +20,8 @@
 //! Two modes:
 //!
 //! - [`Mode::Diff`], on a pull request (`cargo mutants --in-diff`): only the mutants in the diff
-//!   ran. A ledger entry those mutants match must not match more of them than it counts, and must
-//!   not match a mutant that is now caught (the entry is stale: remove it). A survivor may be kept
+//!   ran. A ledger entry those mutants match must not match more survivors than it counts, and if
+//!   every mutant it matches is now caught or unviable, it is stale: remove it. A survivor may be kept
 //!   as `known` only by an entry the base branch's ledger already holds (`base`): a `known` entry
 //!   is an old gap the weekly run found, so a pull request that adds one for a survivor it made
 //!   would merge a new unexplained survivor, which 28.8 forbids. A ledger-only pull request may
@@ -35,6 +35,14 @@
 //!
 //! In both modes every entry's file must exist and hold its `line_text` on some line, and every
 //! entry's kind must be allowed where its file is.
+//!
+//! A key (file, mutant, line text) cannot tell apart two places on one line where cargo-mutants
+//! makes the same change. In sincospi.rs's
+//! `let p = x2 * ((C[0] + x2 * C[1]) + x4 * (C[2] + x2 * C[3]));` all four `*` become
+//! `replace * with / in cospi`, one key: two of those mutants are caught and two are equivalent.
+//! So a caught or unviable mutant beside surviving key-mates is not a sign of a stale entry: the
+//! entry explains the survivors, and `occurrences` counts exactly those. An entry is stale only
+//! when no mutant of its key survives (owner decision of 2026-10-31, 28.8).
 //!
 //! What makes a run whole ([`read_run`]): `mutants.json` lists the mutants the run was given;
 //! `outcomes.json` must then exist (cargo-mutants writes none when it was given no mutants), hold
@@ -51,8 +59,8 @@
 //!   error at a source location; any other failed build fails the gate.
 //! - **28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`;
 //!   elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a
-//!   timeout only as `hangs`. A ledger entry that matches more mutants than it counts, or a caught
-//!   or unviable one, or (in the full run) fewer, fails as stale.
+//!   timeout only as `hangs`. A ledger entry that matches more survivors than it counts, or (in the
+//!   full run) fewer, fails; one whose matched mutants are all caught or unviable fails as stale.
 //! - **Reasons follow the code.** Entries are keyed by the mutated line's text, so editing that
 //!   line puts the mutant before the gate again.
 //!
@@ -677,10 +685,13 @@ struct Rules<'l> {
 }
 
 /// Judges one mutant: updates its tally, records a failure, and counts the ledger entry it uses.
+/// A caught or unviable mutant that an entry's key matches goes to `stale`, which [`judge`] fails
+/// only when no mutant of that key survives (see the module documentation).
 fn judge_one(
     j: &Judged,
     rules: &Rules<'_>,
     matched: &mut BTreeMap<Key, u64>,
+    stale: &mut Vec<(Key, String)>,
     verdict: &mut Verdict,
 ) {
     let Place::Kernel { krate, set } = &j.place else {
@@ -766,10 +777,14 @@ fn judge_one(
         }
     };
     if let Some((s, now)) = failure {
-        verdict.failures.push(format!(
-            "{}: the ledger keeps it as {}, but it is now {now}: remove the stale entry",
-            j.mutant.name,
-            s.kind.name()
+        stale.push((
+            j.key.clone(),
+            format!(
+                "{}: the ledger keeps it as {}, but it is now {now} and no mutant of its key \
+                 survives: remove the stale entry",
+                j.mutant.name,
+                s.kind.name()
+            ),
         ));
     }
 }
@@ -811,8 +826,15 @@ pub fn judge(
             .unwrap_or_default(),
     };
     let mut matched: BTreeMap<Key, u64> = BTreeMap::new();
+    let mut stale = Vec::new();
     for j in &judged {
-        judge_one(j, &rules, &mut matched, &mut verdict);
+        judge_one(j, &rules, &mut matched, &mut stale, &mut verdict);
+    }
+    // A caught key-mate beside a survivor the entry explains is not stale.
+    for (key, why) in stale {
+        if matched.get(&key).copied().unwrap_or(0) == 0 {
+            verdict.failures.push(why);
+        }
     }
     for s in &ledger.survivors {
         let n = matched.get(&s.key()).copied().unwrap_or(0);

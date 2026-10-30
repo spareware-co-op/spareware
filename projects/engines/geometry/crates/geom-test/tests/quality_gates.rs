@@ -736,6 +736,97 @@ fn stale_entries_fail() {
     ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
 )]
 #[test]
+fn a_caught_key_mate_beside_a_survivor_is_not_stale() {
+    // Two places on one line, one key: the entry explains the survivor, whatever its key-mate does.
+    let repo = mutation_repo("key-mates");
+    let mates = [
+        (mutant(NUM, 3, 5, "replace < with <= in f"), Summary::Caught),
+        (mutant(NUM, 3, 9, "replace < with <= in f"), Summary::Missed),
+    ];
+    let dir = write_run(&repo, "a", &mates);
+    let all: Vec<Value> = mates.iter().map(|(m, _)| m.clone()).collect();
+    let one = vec![entry(NUM, 3, "replace < with <= in f", 1, "equivalent")];
+    assert!(verdict(&repo, &[dir.clone()], one.clone(), Mode::Diff, None).passes());
+    assert!(verdict(&repo, &[dir], one, Mode::Full, Some(&all)).passes());
+    // Unviable beside a survivor: not stale either.
+    let mates = [
+        (
+            mutant(NUM, 3, 5, "replace < with <= in f"),
+            Summary::Unviable,
+        ),
+        (mutant(NUM, 3, 9, "replace < with <= in f"), Summary::Missed),
+    ];
+    let dir = write_run(&repo, "b", &mates);
+    let one = vec![entry(NUM, 3, "replace < with <= in f", 1, "equivalent")];
+    assert!(verdict(&repo, &[dir], one, Mode::Diff, None).passes());
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn an_entry_whose_key_mates_are_all_caught_is_stale() {
+    let repo = mutation_repo("key-mates-caught");
+    let mates = [
+        (mutant(NUM, 3, 5, "replace < with <= in f"), Summary::Caught),
+        (mutant(NUM, 3, 9, "replace < with <= in f"), Summary::Caught),
+    ];
+    let dir = write_run(&repo, "a", &mates);
+    let all: Vec<Value> = mates.iter().map(|(m, _)| m.clone()).collect();
+    let one = vec![entry(NUM, 3, "replace < with <= in f", 1, "equivalent")];
+    fails_with(
+        &verdict(&repo, &[dir.clone()], one.clone(), Mode::Diff, None),
+        "remove the stale entry",
+    );
+    fails_with(
+        &verdict(&repo, &[dir], one, Mode::Full, Some(&all)),
+        "the entry is stale",
+    );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn key_mates_beside_a_caught_one_must_match_the_count() {
+    let repo = mutation_repo("key-mates-count");
+    let mates = [
+        (mutant(NUM, 3, 5, "replace < with <= in f"), Summary::Caught),
+        (mutant(NUM, 3, 9, "replace < with <= in f"), Summary::Missed),
+        (
+            mutant(NUM, 3, 13, "replace < with <= in f"),
+            Summary::Missed,
+        ),
+    ];
+    let dir = write_run(&repo, "a", &mates);
+    let all: Vec<Value> = mates.iter().map(|(m, _)| m.clone()).collect();
+    // Two survivors, counted as one: fails in both modes.
+    let one = vec![entry(NUM, 3, "replace < with <= in f", 1, "equivalent")];
+    fails_with(
+        &verdict(&repo, &[dir.clone()], one.clone(), Mode::Diff, None),
+        "counts 1 occurrence",
+    );
+    fails_with(
+        &verdict(&repo, &[dir.clone()], one, Mode::Full, Some(&all)),
+        "counts 1 occurrence",
+    );
+    // Counted as three, the caught one included: fails in the full run.
+    let three = vec![entry(NUM, 3, "replace < with <= in f", 3, "equivalent")];
+    fails_with(
+        &verdict(&repo, &[dir.clone()], three, Mode::Full, Some(&all)),
+        "counts 3 occurrence",
+    );
+    let two = vec![entry(NUM, 3, "replace < with <= in f", 2, "equivalent")];
+    assert!(verdict(&repo, &[dir], two, Mode::Full, Some(&all)).passes());
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
 fn occurrences_must_match() {
     let repo = mutation_repo("occurrences");
     let two = [
