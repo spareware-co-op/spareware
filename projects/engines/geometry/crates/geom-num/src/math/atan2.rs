@@ -1823,6 +1823,11 @@ mod tests {
             assert_eq!(got(1 << 63, -1075), (s * 0.0).to_bits());
             assert_eq!(got(1 << 63, -1074), (s * 0.0).to_bits());
             assert_eq!(got((1 << 63) | 1, -1074), (s * f64::from_bits(1)).to_bits());
+            // Just above 2^−1075 by a bit in a lower word: the smallest subnormal too.
+            for (m, l) in [(1, 0), (0, 1)] {
+                let above = t(1 << 63, m, l, -1074, sgn).to_f64(1).unwrap().to_bits();
+                assert_eq!(above, (s * f64::from_bits(1)).to_bits());
+            }
         }
         // 1 + 2^−53 is exactly the midpoint between 1 and its successor: ties to even, to 1. A
         // bit in either lower word puts it above the midpoint, to 1 + 2^−52.

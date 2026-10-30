@@ -261,6 +261,8 @@ jobs:
           - math::atan2::proofs::shl_moves_every_bit_up
           - math::atan2::proofs::to_f64_rounds_to_nearest
           - math::log::proofs::is_zero_reads_both_words
+          - math::hexf::proofs::step_never_returns_none
+          - math::hexf::proofs::step_u128_never_returns_none
           - math::proofs::abs_is_exact
           - math::proofs::ceil_is_exact
           - math::proofs::floor_is_exact

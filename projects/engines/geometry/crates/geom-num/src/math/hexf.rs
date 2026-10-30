@@ -64,7 +64,10 @@ const fn digit_value(c: u8) -> u32 {
 /// step keep it in range, so `None` never comes; if it did, the assertion here fails, and since
 /// [`parse`] runs only inside `const { }` (the macro), that is a build error, never a run-time
 /// panic. (`?` and `Option::expect` are not available or allowed here: the first is not `const`,
-/// and the crate denies the second.)
+/// and the crate denies the second.) So the `None` arm can never run: `None` fails the assertion
+/// first, as Kani proves for it, and the function is marked for the coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/src/math/hexf.rs::step_never_returns_none
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn step(v: Option<i64>) -> i64 {
     assert!(v.is_some(), "hex float out of range");
     match v {
@@ -73,7 +76,9 @@ const fn step(v: Option<i64>) -> i64 {
     }
 }
 
-/// [`step`] for the 128-bit significand.
+/// [`step`] for the 128-bit significand; its `None` arm can never run either.
+// proof: projects/engines/geometry/crates/geom-num/src/math/hexf.rs::step_u128_never_returns_none
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn step_u128(v: Option<u128>) -> u128 {
     assert!(v.is_some(), "hex float significand out of range");
     match v {
@@ -291,5 +296,30 @@ mod tests {
         ] {
             assert_eq!(parse(text).to_bits(), value.to_bits(), "{text}");
         }
+    }
+}
+
+/// Bounded proofs (chapter 28.7): [`step`] and [`step_u128`] never return for `None`, so their
+/// `None` arms cannot run; the `coverage(off)` marks on both cite these (28.8).
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::{step, step_u128};
+
+    /// `step(None)` panics at its assertion: its `None` arm never runs.
+    #[kani::proof]
+    #[kani::should_panic]
+    fn step_never_returns_none() {
+        let _ = step(None);
+    }
+
+    /// `step_u128(None)` panics at its assertion: its `None` arm never runs.
+    #[kani::proof]
+    #[kani::should_panic]
+    fn step_u128_never_returns_none() {
+        let _ = step_u128(None);
     }
 }
