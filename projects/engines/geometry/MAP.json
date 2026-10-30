@@ -8227,7 +8227,7 @@
           "guarantees": [
             "**A gate that cannot see everything fails.** A run that did not finish, a failed or missing baseline, a mutant with no outcome or two, totals that disagree with the outcomes, a shard missing from the full run or two shards that overlap are each a failure or a [`RunError`], never a smaller set of mutants judged.",
             "**Untested is never caught.** An unviable mutant counts only when its log shows a compiler error at a source location; any other failed build fails the gate.",
-            "**28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`; elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a timeout only as `hangs`. A ledger entry that matches more mutants than it counts, or a caught or unviable one, or (in the full run) fewer, fails as stale.",
+            "**28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`; elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a timeout only as `hangs`. A ledger entry that matches more survivors than it counts, or (in the full run) fewer, fails; one whose matched mutants are all caught or unviable fails as stale.",
             "**Reasons follow the code.** Entries are keyed by the mutated line's text, so editing that line puts the mutant before the gate again."
           ],
           "job": "The mutation gate: judges cargo-mutants' results against the quality ledger.",
