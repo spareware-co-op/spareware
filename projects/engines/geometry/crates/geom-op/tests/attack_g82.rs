@@ -135,7 +135,10 @@ fn no_clock_or_random_source_is_reachable_from_the_crates_code() {
     let Some(dir) = crate_dir() else {
         return;
     };
-    // Chapter 27's row: geom-run and geom-num, nothing else, and no published crate.
+    // Chapter 27's row, geom-run and geom-num, and the two vetted crates the allow-list lets geom-op
+    // name (deny-no-std.toml's registry): sha2 for content IDs and names (G86, 32.20) and
+    // unicode-normalization for the NFC check of names (G87, 32.19). Their audits find no clock and
+    // no random source (projects/kit/notes/G86-sha2-audit.md, G87-unicode-normalization-audit.md).
     let manifest = std::fs::read_to_string(dir.join("Cargo.toml"))
         .unwrap()
         .replace("\r\n", "\n");
@@ -152,7 +155,10 @@ fn no_clock_or_random_source_is_reachable_from_the_crates_code() {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(|l| l.split([' ', '=']).next().unwrap())
         .collect();
-    assert_eq!(deps, ["geom-run", "geom-num"]);
+    assert_eq!(
+        deps,
+        ["geom-run", "geom-num", "sha2", "unicode-normalization"]
+    );
     // No code token of the crate's source names a clock or a random source.
     let banned = [
         "rng",
