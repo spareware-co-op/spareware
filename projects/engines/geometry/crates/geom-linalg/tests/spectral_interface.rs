@@ -18,8 +18,7 @@
     clippy::float_cmp,
     clippy::many_single_char_names,
     clippy::needless_range_loop,
-    clippy::disallowed_methods,
-    reason = "oracles and generators, indexed as the formulas are; the rules, chapter 21's bans included, are for kernel code"
+    reason = "oracles and generators, indexed as the formulas are; the rules are for kernel code"
 )]
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
@@ -50,6 +49,13 @@ impl Lcg {
         (self.next() % (2 * k as u64 + 1)) as i64 - k
     }
 }
+
+/// The scales the commuting test applies, 2^40 and 2^−40, written exactly. Not `2f64.powi(k)`:
+/// IEEE 754 does not make `powi` correctly rounded, so Rust does not promise its result, and Miri
+/// perturbs it on purpose; a scale one step off 2^−40 rounds the scaled entries, which then differ
+/// from the unscaled run's by a step. Chapter 21's ban on `f64::powi` holds in this file for that
+/// reason.
+const SCALES: [f64; 2] = [1_099_511_627_776.0, 1.0 / 1_099_511_627_776.0];
 
 fn entries(m: &Matrix) -> Vec<f64> {
     (0..m.rows())
@@ -127,7 +133,7 @@ fn every_factorisation_commutes_with_scaling_by_a_power_of_two() {
         for _ in 0..4 {
             let e: Vec<f64> = (0..m * n).map(|_| rng.int(9) as f64).collect();
             let a = Matrix::from_rows(m, n, &e).unwrap();
-            for f in [2f64.powi(40), 2f64.powi(-40)] {
+            for f in SCALES {
                 let b = scaled(&a, f);
                 for (name, svd) in [
                     ("Jacobi", Svd::jacobi as fn(&Matrix, &mut Work) -> _),
@@ -148,7 +154,7 @@ fn every_factorisation_commutes_with_scaling_by_a_power_of_two() {
                         s.set(i, j, e[i * n + j] + e[j * n + i]).unwrap();
                     }
                 }
-                for f in [2f64.powi(40), 2f64.powi(-40)] {
+                for f in SCALES {
                     let x = SymmetricEigen::factor(&s, &mut plenty()).unwrap();
                     let y = SymmetricEigen::factor(&scaled(&s, f), &mut plenty()).unwrap();
                     let xs: Vec<f64> = x.values().iter().map(|v| v * f).collect();

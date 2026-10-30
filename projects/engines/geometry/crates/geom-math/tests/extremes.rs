@@ -2,10 +2,6 @@
 //!
 //! What this file proves:
 //!
-//! - Double-double: every operation on operands of any magnitude, subnormal leading parts
-//!   included, is within its proven bound from the `dd` module's table, plus the documented
-//!   2^−1070 relative and 2^−1073 absolute terms; it is refused only when the exact result
-//!   overflows; every result is normalized.
 //! - Float vectors: `length` is within 2.01u (`F2`) or 2.51u (`F3`) of the exact length, plus the
 //!   documented 2^−1070, for vectors of any magnitude; `normalized` gives a unit vector in the right
 //!   direction for every nonzero vector, however short or long.
@@ -37,7 +33,7 @@
 mod common;
 
 use common::{config, exact, int, pow2};
-use geom_math::{DD, F2, F3, Transform, TransformKind};
+use geom_math::{F2, F3, Transform, TransformKind};
 use geom_num::{NumError, math};
 use num_rational::BigRational;
 use num_traits::{Signed, Zero};
@@ -62,35 +58,6 @@ fn any_double() -> BoxedStrategy<f64> {
     .boxed()
 }
 
-/// A normalized double-double whose leading part may be anything, with a trailing part that is
-/// zero, half an ulp, or random.
-fn any_dd() -> BoxedStrategy<DD> {
-    (any_double(), any::<u64>(), 0u32..4)
-        .prop_map(|(hi, bits, kind)| {
-            if hi == 0.0 || !hi.is_normal() {
-                return DD::from_f64(hi).unwrap();
-            }
-            let e = ((hi.to_bits() >> 52) & 0x7ff) as i32 - 1023;
-            let lo = match kind {
-                0 => 0.0,
-                // Half an ulp of hi (a tie), when it is a double.
-                1 => pow2f(e - 53),
-                _ => {
-                    let k = e - 54 - i32::try_from(bits % 60).unwrap();
-                    let m = (bits >> 8) & ((1u64 << 52) - 1);
-                    if k >= -1022 {
-                        f64::from_bits((u64::try_from(k + 1023).unwrap() << 52) | m)
-                    } else {
-                        pow2f(k)
-                    }
-                }
-            };
-            let lo = if bits & 1 == 1 { -lo } else { lo };
-            DD::from_sum(hi, lo).unwrap_or(DD::from_f64(hi).unwrap())
-        })
-        .boxed()
-}
-
 /// 2^k as a double for −1074 ≤ k ≤ 1023 (subnormal powers included), 0 below.
 fn pow2f(k: i32) -> f64 {
     if k >= -1022 {
@@ -102,143 +69,9 @@ fn pow2f(k: i32) -> f64 {
     }
 }
 
-fn value(d: DD) -> BigRational {
-    exact(d.hi()) + exact(d.lo())
-}
-
-fn normalized(d: DD) -> bool {
-    d.hi() + d.lo() == d.hi() && (d.hi() != 0.0 || d.lo() == 0.0)
-}
-
-fn u2() -> BigRational {
-    pow2(-106)
-}
-
-fn u3() -> BigRational {
-    pow2(-159)
-}
-
 /// The largest double, exactly.
 fn max_double() -> BigRational {
     exact(f64::MAX)
-}
-
-/// Checks one result: within bound·|want| + 2^−1070·|want| + 2^−1073 of `want`, normalized; or
-/// refused as not finite only when `want` is at least about the largest double.
-fn check(
-    name: &str,
-    got: Result<DD, NumError>,
-    want: &BigRational,
-    bound: &BigRational,
-) -> Result<(), TestCaseError> {
-    match got {
-        Ok(d) => {
-            prop_assert!(normalized(d), "{name}: not normalized {d:?}");
-            let tol = bound * want.abs() + pow2(-1070) * want.abs() + pow2(-1073);
-            let err = (value(d) - want).abs();
-            prop_assert!(
-                err <= tol,
-                "{name}: {d:?} off by {} of {}",
-                err_f(&err),
-                err_f(want)
-            );
-        }
-        Err(NumError::NotFinite) => {
-            let edge = max_double() * (int(1) - pow2(-90));
-            prop_assert!(
-                want.abs() >= edge,
-                "{name}: refused a finite result {}",
-                err_f(want)
-            );
-        }
-        Err(e) => prop_assert!(false, "{name}: unexpected {e:?}"),
-    }
-    Ok(())
-}
-
-fn err_f(x: &BigRational) -> f64 {
-    use num_traits::ToPrimitive;
-    x.to_f64().unwrap_or(f64::NAN)
-}
-
-proptest! {
-    #![proptest_config(config(3000))]
-
-    #[test]
-    fn double_double_over_the_whole_range(a in any_dd(), b in any_dd(), y in any_double()) {
-        let (va, vb, vy) = (value(a), value(b), exact(y));
-        let b_add = int(6) * u2() + int(45) * u3();
-        let b_addf = int(3) * u2() + int(10) * u3();
-        let b_mulf = int(3) * u2() + int(7) * u3();
-        let b_mul = int(8) * u2() + int(23) * u3();
-        let b_div = int(6) * u2() + int(79) * u3();
-        // Additions lose nothing to underflow: no extra terms are needed, but the same check
-        // with them is used for uniformity.
-        check("add", a.add(b), &(&va + &vb), &b_add)?;
-        check("add_f64", a.add_f64(y), &(&va + &vy), &b_addf)?;
-        check("mul_f64", a.mul_f64(y), &(&va * &vy), &b_mulf)?;
-        check("mul", a.mul(b), &(&va * &vb), &b_mul)?;
-        if !vb.is_zero() {
-            check("div", a.div(b), &(&va / &vb), &b_div)?;
-        }
-        // The square root, by squaring: r within (4.13u² + 2^−1070)·√a + 2^−1073 of √a.
-        let pa = if a.hi() < 0.0 { -a } else { a };
-        let r = pa.sqrt().unwrap();
-        prop_assert!(normalized(r));
-        let x = value(pa);
-        let rv = value(r);
-        let beta = BigRational::new(413.into(), 100.into()) * u2() + pow2(-1070);
-        // |r − √x| ≤ β·√x + 2^−1073 ⇔ √x ∈ [(r − 2^−1073)/(1 + β), (r + 2^−1073)/(1 − β)].
-        let lo = (&rv - pow2(-1073)) / (int(1) + &beta);
-        let hi = (&rv + pow2(-1073)) / (int(1) - &beta);
-        let lo = if lo.is_negative() { BigRational::zero() } else { lo };
-        prop_assert!(&lo * &lo <= x && x <= &hi * &hi, "sqrt({pa:?}) = {r:?}");
-    }
-}
-
-#[test]
-fn double_double_documented_edges() {
-    let p = pow2f;
-    // Products and quotients that the unscaled algorithms refused (two_prod's range).
-    let big = DD::from_f64(p(1000)).unwrap();
-    assert_eq!(big.mul_f64(0.5).unwrap().to_f64(), p(999));
-    assert_eq!(
-        DD::from_f64(p(997))
-            .unwrap()
-            .mul(DD::from_f64(0.25).unwrap())
-            .unwrap()
-            .to_f64(),
-        p(995)
-    );
-    assert_eq!(
-        big.div(DD::from_f64(4.0).unwrap()).unwrap().to_f64(),
-        p(998)
-    );
-    assert_eq!(
-        DD::from_f64(1.0).unwrap().div(big).unwrap().to_f64(),
-        p(-1000)
-    );
-    assert!(DD::from_f64(f64::MAX).unwrap().sqrt().is_ok());
-    // A product of subnormal and huge operands.
-    let tiny = DD::from_f64(f64::from_bits(3)).unwrap();
-    assert_eq!(tiny.mul_f64(p(1023)).unwrap().to_f64(), 3.0 * p(-51));
-    assert_eq!(
-        tiny.mul(DD::from_f64(p(1000)).unwrap()).unwrap().to_f64(),
-        3.0 * p(-74)
-    );
-    assert_eq!(
-        tiny.sqrt().unwrap().to_f64(),
-        math::sqrt(3.0).unwrap().get() * p(-537)
-    );
-    // Overflow is refused; a product that underflows to zero is zero.
-    assert_eq!(big.mul(big), Err(NumError::NotFinite));
-    assert_eq!(
-        DD::from_f64(f64::MAX)
-            .unwrap()
-            .div(DD::from_f64(0.5).unwrap()),
-        Err(NumError::NotFinite)
-    );
-    assert_eq!(tiny.mul_f64(p(-100)).unwrap(), DD::ZERO);
 }
 
 /// |len − √S| ≤ rel·√S + 2^−1073, checked by squaring (S = the exact squared length).

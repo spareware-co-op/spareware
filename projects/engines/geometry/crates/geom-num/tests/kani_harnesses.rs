@@ -6,6 +6,12 @@
 //! two to each other: the harnesses in the source, as `<module>::proofs::<name>`, are exactly the
 //! job's `proof` list, except the generated limb variant's (piece G42), which the `kani-limbs` job
 //! proves all at once by their module's prefix.
+//!
+//! A harness that reaches a loop whose trip count depends on a symbolic input needs
+//! `#[kani::unwind(N)]`, with N above the longest trip a passing case runs: without it Kani unwinds
+//! that loop for ever, and the harness runs past its job's budget or out of memory, its log showing
+//! `Unwinding loop ... iteration N` with N still climbing. Kani's unwinding assertions then also
+//! prove that N is enough.
 
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken check must stop the test loudly.

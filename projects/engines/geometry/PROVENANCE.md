@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 33 | 31 |
+| PORT METHOD | 34 | 32 |
 | DEPEND | 2 | 2 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -66,6 +66,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | npm `hosted-git-info` 10.1.1 | ISC | allowed | <https://github.com/npm/hosted-git-info/blob/8c3bebb5e42142b7bce06b085b4c1bd1adba7371/lib/hosts.js> | none | `projects/engines/geometry/crates/geom-test/src/map/links.rs`: for the address layouts of GitHub, Bitbucket, GitLab, gists and sourcehut and where each puts its revision. No code copied. |
 | NURBS-Python (geomdl) | MIT | allowed | <https://github.com/orbingol/NURBS-Python/blob/9d2555ae8217b5480ee83afb526a835ac3cc3c27/geomdl/fitting.py> | none | `projects/engines/geometry/crates/geom-nurbs/src/fit.rs`: for the book's equation numbers of the parameter rules and the least-squares knot placement. |
 | PROJ (its copy of the EPSG dataset, whose own terms of use cover the data) | MIT | allowed | <https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql> | none | `projects/engines/geometry/crates/geom-math/src/frame.rs`: for the defining parameters of EPSG:2193, NZTM2000. No code copied. |
+| PROJ (its copy of the EPSG dataset, whose own terms of use cover the data) | MIT | allowed | <https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql> | none | `projects/engines/geometry/crates/geom-math/src/unit.rs`: for the factors of the US survey foot (EPSG:9003), the international foot (EPSG:9002) and Clarke's foot (EPSG:9005). No code copied. |
 | rand | MIT OR Apache-2.0 | allowed | <https://github.com/rust-random/rand/blob/9e7d328f60d6372ae22927f37d1a816fc980f25e/src/seq/slice.rs> | none | `projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs`: to confirm that its shuffle draws 32-bit indices below 2^32 elements, which makes it portable. No code copied. |
 | Random123 | BSD-3-Clause | allowed | <https://github.com/DEShawResearch/random123/blob/9545ff6413f258be2f04c1d319d99aaef7521150/include/Random123/philox.h> | none | `projects/engines/geometry/crates/geom-num/src/rng.rs`: for the word order, the multiplier for each word and the order of key steps and rounds of Philox4x32-10, as the authors' reference implementation fixes them. No code copied. |
 | Rapier | Apache-2.0 | allowed | <https://github.com/dimforge/rapier/blob/475caa3ff4646fd9a796b67d14116256f4962bc7/crates/rapier3d/tests/thread_count_determinism.rs> | none | `projects/engines/geometry/crates/geom-run/src/exec.rs`: for how it tests that results do not depend on the thread count. No code copied. |

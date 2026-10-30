@@ -27,12 +27,12 @@
 //! below and from `LARGE_SLICE`, where `add_slice` switches to the large accumulator.
 
 #![allow(
+    clippy::disallowed_methods,
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     reason = "a benchmark harness; the rules are for kernel code"
 )]
 #![allow(
@@ -46,6 +46,26 @@ use geom_num::ExactSum;
 use geom_num::exact_sum::LARGE_SLICE;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
+
+/// The larger of two doubles by comparison, the first on a tie: not `f64::max`, which may return
+/// either zero for −0 and +0 (chapter 21's ban), and Miri may pick either on purpose.
+trait Pick {
+    fn larger(self, other: f64) -> f64;
+}
+
+impl Pick for f64 {
+    fn larger(self, other: f64) -> f64 {
+        if other > self { other } else { self }
+    }
+}
+
+/// 2^k for a normal exponent k (−1022 ≤ k ≤ 1023), built from its bits: exact everywhere.
+/// Not `2f64.powi(k)`: IEEE 754 does not make `powi` correctly rounded, so Rust promises no
+/// exact result, and Miri perturbs it on purpose.
+fn p2(k: i32) -> f64 {
+    assert!((-1022..=1023).contains(&k), "2^{k} is not a normal double");
+    f64::from_bits(((k + 1023) as u64) << 52)
+}
 
 /// The number of terms the board names.
 const TERMS: usize = 1_000_000;
@@ -136,7 +156,7 @@ fn cases() -> Vec<(&'static str, Vec<f64>)> {
             let m = 1.0 + rng.unit();
             let e = (rng.next() % 121) as i32 - 60;
             let s = if rng.next() & 1 == 0 { 1.0 } else { -1.0 };
-            s * m * 2.0f64.powi(e)
+            s * m * p2(e)
         })
         .collect();
     // Coordinates in metres on a 50 km site, as a survey sum would see them.
@@ -207,8 +227,8 @@ fn exact_sum_of_a_million_terms_within_twice_a_plain_sum() {
             ratio(stream),
             ratio(one)
         );
-        worst = worst.max(ratio(slice)).max(ratio(stream));
-        worst_one = worst_one.max(ratio(one));
+        worst = worst.larger(ratio(slice)).larger(ratio(stream));
+        worst_one = worst_one.larger(ratio(one));
     }
     println!(
         "worst ratio {worst:.2} (the board's limit is 2); one by one, not asserted: {worst_one:.2}"

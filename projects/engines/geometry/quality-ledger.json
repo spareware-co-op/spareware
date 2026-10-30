@@ -1059,30 +1059,6 @@
       "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/dual.rs",
-      "mutant": "replace <impl Sealed for Dual<T, N>>::atan2_smooth -> Result<(), NumError> with Ok(())",
-      "line_text": "T::atan2_smooth(y.value, x.value)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "This check runs only for a dual over a dual, from Dual<Dual<U, N>, M>::atan2, which next computes its value with Dual<U, N>::atan2 on the same values, and that runs U's check on the same pair first. So when this check would refuse, the next line refuses with the same OutsideDomain before anything else is computed, and when it passes nothing changes: every result and error is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
-      "mutant": "replace < with <= in midpoint",
-      "line_text": "if m < x.lo() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only when m == lo, where the mutant returns lo and the original m. These are the same bits: a nonzero lo equal to m is the same double, and a zero lo is +0 (a box stores a zero bound as +0) with hi >= 0, so m = +0 + 0.5*hi is +0 too. Every step's midpoint, and so every result, is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
-      "mutant": "replace > with >= in midpoint",
-      "line_text": "} else if m > x.hi() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only when m == hi, where the mutant returns hi and the original m. These are the same bits: a nonzero hi equal to m is the same double, and a zero hi is +0 with lo <= 0, so m = 0.5*lo + +0 equals zero only as -0 + +0 or +0 + +0, both +0. Every step's midpoint, and so every result, is the same."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
       "mutant": "replace sub -> Result<usize, LinalgError> with Ok(1)",
       "line_text": "a.checked_sub(b).ok_or(LinalgError::Defect)",
@@ -1337,6 +1313,118 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "Without this arm two exact transforms reach the last arm, which composes them as rational transforms and simplifies the product back to the same exact transform; past the bound both refuse with OutOfRange (the rational form's reported value may differ), since a translation is no rotation to fall back on."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace + with - in settle",
+      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The filter's answer, x inexactly, is wrong only for a value within 2^-59 of a whole step or a midpoint (the estimate's error). For such a value the estimate lies within 2^-58 of that step or midpoint, a double, so hi is it (or the estimate itself near 0) and lo is at most 2^-58 in magnitude. So |hi - x - lo| differs from the original's |hi - x + lo| by at most 2^-57 there, and both stay within 2^-40 of 0 or 1/2: the filter refuses such values either way, and the exact signs decide. Wherever the mutant's filter accepts, the value rounds to x inexactly, its answer."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace + with * in settle",
+      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The filter's answer, x inexactly, is wrong only for a value within 2^-59 of a whole step or a midpoint (the estimate's error). For such a value the estimate lies within 2^-58 of that step or midpoint, a double, so hi is it (or the estimate itself near 0) and lo is at most 2^-58 in magnitude. So |(hi - x)*lo| is at most 2^-59 there: the filter refuses and the exact signs decide. Wherever it accepts, the value is farther than 2^-59 from both, and rounds to x inexactly, its answer."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace - with + in settle",
+      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "|hi + x + lo| is the original for x = 0, and for x != 0 is at least 2|x| - 1/2 - 2^-58 > 1/2 (the estimate lies within 1/2 + 2^-59 of x), so the filter refuses and the exact signs decide, as they would: the same rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace > with == in settle",
+      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It accepts only frac == 2^-40, where the value rounds to x inexactly (2^-40 from x, its error 2^-59), the filter's answer; every other value goes to the exact signs, which decide it as before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace > with >= in settle",
+      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It also accepts frac == 2^-40: the value is then 2^-40 from x, so (within 2^-59 of it) not a whole step and not past a midpoint, and rounds to x inexactly, the filter's answer."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace < with == in settle",
+      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It accepts only frac == 1/2 - 2^-40, where the value rounds to x inexactly (2^-40 inside x's half-step, its error 2^-59); every other value goes to the exact signs, which decide it as before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace < with <= in settle",
+      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It also accepts frac == 1/2 - 2^-40: the value is then 2^-40 inside x's half-step (its error is 2^-59), so it rounds to x inexactly, the filter's answer."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace > with >= in Axis::round",
+      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only when the estimate's leading part is exactly 2^41. The value then lies within 2^-59 of 2^41 and rounds to it: the original settles it to 2^41 and the mutant's bisection over i128 finds the same exact rounding, which to_coord refuses alike, with OutOfRange carrying 2^41."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace < with <= in Axis::round",
+      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only when the estimate's leading part is exactly -2^41. The value then lies within 2^-59 of -2^41 and rounds to it: the original settles it to -2^41 and the mutant's bisection over i128 finds the same exact rounding, which to_coord refuses alike, with OutOfRange carrying -2^41."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "delete match arm (Some(_), true) in FrameRecord::to_map",
+      "line_text": "(Some(_), true) => (linear(oe, ae)?, linear(on, an)?),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without the arm a quarter turn at scale one takes the rational arm: its exact norm is 1 and its scale 1/1, so k_d*r = 1 and the quotient is (O + a)*q over S*p, the one the deleted arm forms; quotient_to_f64 rounds it to the nearest double, ties to even, and says whether it is exact, as rational_to_f64 does. The same doubles and exactness."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "delete - in Axis::round",
+      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant sends every estimate but exactly 2^41 to far() instead of settling it. far() decides any X by exact signs alone, never the estimate: the bisection over i128 finds floor(X), whether X is whole, and its rounding half to even, the rounded value and exactness settling gives; its signs' budgets (|t| <= 2^128, the module documentation) do not depend on X. Only the time differs: about 130 exact signs for a coordinate instead of at most two."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dual.rs",
+      "mutant": "replace <impl Sealed for Dual<T, N>>::atan2_smooth -> Result<(), NumError> with Ok(())",
+      "line_text": "T::atan2_smooth(y.value, x.value)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This check runs only for a dual over a dual, from Dual<Dual<U, N>, M>::atan2, which next computes its value with Dual<U, N>::atan2 on the same values, and that runs U's check on the same pair first. So when this check would refuse, the next line refuses with the same OutsideDomain before anything else is computed, and when it passes nothing changes: every result and error is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+      "mutant": "replace < with <= in midpoint",
+      "line_text": "if m < x.lo() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when m == lo, where the mutant returns lo and the original m. These are the same bits: a nonzero lo equal to m is the same double, and a zero lo is +0 (a box stores a zero bound as +0) with hi >= 0, so m = +0 + 0.5*hi is +0 too. Every step's midpoint, and so every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+      "mutant": "replace > with >= in midpoint",
+      "line_text": "} else if m > x.hi() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when m == hi, where the mutant returns hi and the original m. These are the same bits: a nonzero hi equal to m is the same double, and a zero hi is +0 with lo <= 0, so m = 0.5*lo + +0 equals zero only as -0 + +0 or +0 + +0, both +0. Every step's midpoint, and so every result, is the same."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
@@ -2099,78 +2187,6 @@
       "reason": "The two differ only when a == b: the same value, or -0 and +0, which canon (x + 0.0) makes +0 at every call (max2's results all pass through canon)."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "replace && with || in DD::normalized",
-      "line_text": "if hi.is_finite() && lo.is_finite() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "two_sum's error term is computed from its rounded sum, so an infinite rounded sum makes the error term NaN (inf - inf), and a finite sum of finite parts has a finite error term: hi and lo are finite together or not at all, and || answers as && does. (scaled passes two scale_b results, and lo overflows only if hi does.)"
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "replace || with && in DD::from_sum",
-      "line_text": "if !a.is_finite() || !b.is_finite() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "With && a single infinity or NaN goes on to normalized, where two_sum's rounded sum is infinite or NaN, which normalized refuses with NotFinite: the same error."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "replace || with && in DD::round_shifted",
-      "line_text": "let exact = te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "t == +-1 with t_e == 0 needs the fractions d_h and d_l both +-1/2 with the same sign, and d_h = +-1/2 needs hi with a fraction of exactly 1/2, so an ulp of hi of at most 1/2 and |lo| at most 1/4: no normalized pair, which is every DD the interface makes, reaches it. The mutant only drops those two cases."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "delete - in DD::round_shifted",
-      "line_text": "let exact = te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "t == +-1 with t_e == 0 needs the fractions d_h and d_l both +-1/2 with the same sign, and d_h = +-1/2 needs hi with a fraction of exactly 1/2, so an ulp of hi of at most 1/2 and |lo| at most 1/4: no normalized pair, which is every DD the interface makes, reaches it. The mutant only tests 1 twice in place of -1."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "replace > with == in whole",
-      "line_text": "if r > -TWO_POW_62 && r < TWO_POW_62 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The test only chooses the conversion: through i64 for |r| below 2^62, or straight to i128. Both are exact for every whole r of magnitude at most 2^100 that reaches it, including +-2^62 (within i64), so either path gives the same integer."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "replace > with >= in whole",
-      "line_text": "if r > -TWO_POW_62 && r < TWO_POW_62 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The test only chooses the conversion: through i64 for |r| below 2^62, or straight to i128. Both are exact for every whole r of magnitude at most 2^100 that reaches it, including +-2^62 (within i64), so either path gives the same integer."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "delete - in whole",
-      "line_text": "if r > -TWO_POW_62 && r < TWO_POW_62 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The test only chooses the conversion: through i64 for |r| below 2^62, or straight to i128. Both are exact for every whole r of magnitude at most 2^100 that reaches it, including +-2^62 (within i64), so either path gives the same integer."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "replace < with == in whole",
-      "line_text": "if r > -TWO_POW_62 && r < TWO_POW_62 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The test only chooses the conversion: through i64 for |r| below 2^62, or straight to i128. Both are exact for every whole r of magnitude at most 2^100 that reaches it, including +-2^62 (within i64), so either path gives the same integer."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
-      "mutant": "replace < with <= in whole",
-      "line_text": "if r > -TWO_POW_62 && r < TWO_POW_62 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The test only chooses the conversion: through i64 for |r| below 2^62, or straight to i128. Both are exact for every whole r of magnitude at most 2^100 that reaches it, including +-2^62 (within i64), so either path gives the same integer."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-math/src/exact.rs",
       "mutant": "replace || with && in pow2",
       "line_text": "if k < -1022 || k > 1023 {",
@@ -2233,22 +2249,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "mf is a nonzero double, so 0/mf and 0*mf are both zero with mf's sign."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/exact.rs",
-      "mutant": "replace - with + in pow2_big",
-      "line_text": "if k >= 64 * 20 - 1 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutants admit k = 1279 or 1280. Its callers pass at most 1074 + 1074 (ExactInputs::parts' shifts k + B and B, inside its 2^1234 budget), far below, so the test is false either way."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/exact.rs",
-      "mutant": "replace - with / in pow2_big",
-      "line_text": "if k >= 64 * 20 - 1 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutants admit k = 1279 or 1280. Its callers pass at most 1074 + 1074 (ExactInputs::parts' shifts k + B and B, inside its 2^1234 budget), far below, so the test is false either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-math/src/exact.rs",
@@ -2345,334 +2345,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when a magnitude equals the largest so far: the same double, so the largest and its exponent are unchanged."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace || with && in ExactInputs::parts",
-      "line_text": "if a == 0 || m == 0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "With && a term with alpha = 0 or m = 0, but not both, is computed rather than returned as zero: the product alpha*m*S is 0, and 0 times a power of two is zero, the same term. Its shift k + B is within the budget (B is at least -k for every nonzero m, and k = 0 for m = 0), so nothing fails."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace > with >= in candidate",
-      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "They differ only when the leading part is exactly +-2^41. The value then lies within 2^-59 of +-2^41 and rounds to it; the original goes on and to_coord refuses +-2^41 with OutOfRange carrying +-2^41, and the mutant refuses at once with OutOfRange carrying the leading part, +-2^41: the same error."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with <= in candidate",
-      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "They differ only when the leading part is exactly +-2^41. The value then lies within 2^-59 of +-2^41 and rounds to it; the original goes on and to_coord refuses +-2^41 with OutOfRange carrying +-2^41, and the mutant refuses at once with OutOfRange carrying the leading part, +-2^41: the same error."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace + with - in settle",
-      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The filter's answer, x inexactly, is wrong only for a value within 2^-59 of a whole step or a midpoint (the double-double's error). For such a value lo is at most 2^-59 in magnitude (hi is the nearest double to the value, and the step or midpoint is a double no nearer), so |hi - x - lo| differs from the original's |hi - x + lo| by at most 2^-58 there, and both stay within 2^-40 of 0 or 1/2: the filter refuses such values either way, and the exact signs decide. Elsewhere either answer is x inexactly."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace + with * in settle",
-      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The filter's answer, x inexactly, is wrong only for a value within 2^-59 of a whole step or a midpoint (the double-double's error). For such a value lo is at most 2^-59 in magnitude (hi is the nearest double to the value, and the step or midpoint is a double no nearer), so |(hi - x)*lo| is at most 2^-60 there: the filter refuses and the exact signs decide. Wherever it accepts, the value is farther than 2^-59 from both, and rounds to x inexactly, the filter's answer."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace - with + in settle",
-      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "|hi + x + lo| is the original for x = 0, and for x != 0 is at least 2|x| - 1/2 - 2^-59 > 1/2 (hi lies within 1/2 + 2^-59 of x), so the filter refuses and the exact signs decide, as they would: the same rounding."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace > with == in settle",
-      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It accepts only frac == 2^-40, where the value rounds to x inexactly (2^-40 from x, its error 2^-59), the filter's answer; every other value goes to the exact signs, which decide it as before."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace > with >= in settle",
-      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It also accepts frac == 2^-40: the value is then 2^-40 from x, so (within 2^-59 of it) not a whole step and not past a midpoint, and rounds to x inexactly, the filter's answer."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with == in settle",
-      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It accepts only frac == 1/2 - 2^-40, where the value rounds to x inexactly (2^-40 inside x's half-step, its error 2^-59); every other value goes to the exact signs, which decide it as before."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with <= in settle",
-      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It also accepts frac == 1/2 - 2^-40: the value is then 2^-40 inside x's half-step (its error is 2^-59), so it rounds to x inexactly, the filter's answer."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with <= in IrrationalMap::sign_minus",
-      "line_text": "let (a, b) = if f < 0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "At f = 0 the first branch shifts by 0: A = k_n*a and B = (p*S - O)*k_d, what the second branch forms for f = 0. The same sign."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace == with != in IrrationalMap::nearest",
-      "line_text": "Some(self.abs_minus(negative, i128::from(m), e)? == want)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "holds checks the bracket's ends; with != an end is replaced by the proven bound exactly when it was right. The computed ends are always right (the double-double's error bound, widened by 2^-50, puts |V| inside), so the mutant always bisects over the proven bounds [2^-220, 2^84]: at most 61 halvings, under the loop's 70, to the same double."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "delete match arm (Some(_), true) in FrameRecord::to_map",
-      "line_text": "(Some(_), true) => (",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Without the arm a quarter turn at scale one takes the rational arm: its exact norm is 1 and its scale 1/1, so k_d*r = 1, the denominator is S, and O*1 + 1*a over S is the quotient the deleted arm forms, rounded by the same rational_to_f64. The same doubles and exactness."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with + in FrameRecord::irrational_to_map",
-      "line_text": "let err = (h_size + q_size / sf) * CERTIFICATE_MARGIN;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "(h_size + q_size/S) + 2^-98 is larger than (h_size + q_size/S)*2^-98 for every positive sum, so the certificate refuses more values, and each refused one goes to the exact bisection, which finds the same nearest double: only the time taken changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with / in FrameRecord::irrational_to_map",
-      "line_text": "let err = (h_size + q_size / sf) * CERTIFICATE_MARGIN;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "(h_size + q_size/S)/2^-98 is 2^196 times the error, so the certificate refuses more values, and each refused one goes to the exact bisection, which finds the same nearest double: only the time taken changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace / with * in FrameRecord::irrational_to_map",
-      "line_text": "let err = (h_size + q_size / sf) * CERTIFICATE_MARGIN;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "q_size*S in place of q_size/S makes the certificate's error S^2 times larger or more (S is at least 10,240), so the certificate refuses more values, and each refused one goes to the exact bisection, which finds the same nearest double: only the time taken changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace != with == in FrameRecord::irrational_to_map",
-      "line_text": "if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant could accept only h == 0, where up is 2^-1074 while err is at least 2^-98 times q_size/S >= 2^-96 (|k_n*a| >= 1, k_d*sqrt(n) < 2^64, S < 2^32), so l + 2*err < up/2 fails: the certificate accepts nothing, and the exact bisection finds the same nearest double for every value."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with == in FrameRecord::irrational_to_map",
-      "line_text": "if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It accepts only where l + 2*err == up/2 and the other test holds, where h is the nearest double (V is at most err from h + l, so below the midpoint above h); every other value goes to the exact bisection, which finds the same nearest double."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with <= in FrameRecord::irrational_to_map",
-      "line_text": "if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It also accepts l + 2*err == up/2 exactly. V lies within err of h + l, so then V is at most h + up/2 - err, below the midpoint above h: h is the nearest double, as the original finds by bisection."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with + in FrameRecord::irrational_to_map",
-      "line_text": "if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "The two survivors put 2 + err in place of 2*err in either test (l + (2 + err) < up/2, l - (2 + err) > -down/2). err is below 1 for every value (|V| <= 2^84 m), so the margin 2 + err exceeds 2*err: so the certificate refuses more values, and each refused one goes to the exact bisection, which finds the same nearest double: only the time taken changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with / in FrameRecord::irrational_to_map",
-      "line_text": "if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "The two survivors put 2/err in place of 2*err in either test. err is below 1 for every value (|V| <= 2^84 m), so 2/err exceeds 2*err: so the certificate refuses more values, and each refused one goes to the exact bisection, which finds the same nearest double: only the time taken changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace > with == in FrameRecord::irrational_to_map",
-      "line_text": "if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It accepts only where l - 2*err == -down/2 and the other test holds, where h is the nearest double (V is at most err from h + l, so above the midpoint below h); every other value goes to the exact bisection, which finds the same nearest double."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace > with >= in FrameRecord::irrational_to_map",
-      "line_text": "if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It also accepts l - 2*err == -down/2 exactly. V lies within err of h + l, so then V is at least h - down/2 + err, above the midpoint below h: h is the nearest double, as the original finds by bisection."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "delete - in FrameRecord::irrational_to_map",
-      "line_text": "if h != 0.0 && l + 2.0 * err < 0.5 * up && l - 2.0 * err > -0.5 * down {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant asks l - 2*err > down/2, which no normalized pair meets (|l| is at most half an ulp of h, and down is at least that ulp), so the certificate accepts nothing and the exact bisection finds the same nearest double for every value."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace + with - in FrameRecord::irrational_to_map",
-      "line_text": "let spread = l_size + 2.0 * err;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The spread only sizes the bisection's starting bracket. IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace + with * in FrameRecord::irrational_to_map",
-      "line_text": "let spread = l_size + 2.0 * err;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The spread only sizes the bisection's starting bracket. IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with + in FrameRecord::irrational_to_map",
-      "line_text": "let spread = l_size + 2.0 * err;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The spread only sizes the bisection's starting bracket. IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with / in FrameRecord::irrational_to_map",
-      "line_text": "let spread = l_size + 2.0 * err;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The spread only sizes the bisection's starting bracket. IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with + in FrameRecord::irrational_to_map",
-      "line_text": "let lo = (h_size - spread) * (1.0 - BRACKET_WIDENING);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The line only computes an end of the bisection's starting bracket (a negative, infinite or wrong end is replaced or refused there). IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with / in FrameRecord::irrational_to_map",
-      "line_text": "let lo = (h_size - spread) * (1.0 - BRACKET_WIDENING);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The line only computes an end of the bisection's starting bracket (a negative, infinite or wrong end is replaced or refused there). IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace - with + in FrameRecord::irrational_to_map",
-      "line_text": "let lo = (h_size - spread) * (1.0 - BRACKET_WIDENING);",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "The line only computes an end of the bisection's starting bracket (a negative, infinite or wrong end is replaced or refused there). IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace - with / in FrameRecord::irrational_to_map",
-      "line_text": "let lo = (h_size - spread) * (1.0 - BRACKET_WIDENING);",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "The line only computes an end of the bisection's starting bracket (a negative, infinite or wrong end is replaced or refused there). IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace > with == in FrameRecord::irrational_to_map",
-      "line_text": "let lo = if lo > IRRATIONAL_MIN {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It takes the proven lower bound 2^-220 in place of the computed end (unless they are equal), a valid lower end. IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace > with >= in FrameRecord::irrational_to_map",
-      "line_text": "let lo = if lo > IRRATIONAL_MIN {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only when the computed end equals 2^-220, where both arms give 2^-220."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with + in FrameRecord::irrational_to_map",
-      "line_text": "let hi = (h_size + spread) * (1.0 + BRACKET_WIDENING);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The line only computes an end of the bisection's starting bracket (a negative, infinite or wrong end is replaced or refused there). IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace * with / in FrameRecord::irrational_to_map",
-      "line_text": "let hi = (h_size + spread) * (1.0 + BRACKET_WIDENING);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The line only computes an end of the bisection's starting bracket (a negative, infinite or wrong end is replaced or refused there). IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace + with - in FrameRecord::irrational_to_map",
-      "line_text": "let hi = (h_size + spread) * (1.0 + BRACKET_WIDENING);",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "The line only computes an end of the bisection's starting bracket (a negative, infinite or wrong end is replaced or refused there). IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace + with * in FrameRecord::irrational_to_map",
-      "line_text": "let hi = (h_size + spread) * (1.0 + BRACKET_WIDENING);",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "The line only computes an end of the bisection's starting bracket (a negative, infinite or wrong end is replaced or refused there). IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with == in FrameRecord::irrational_to_map",
-      "line_text": "let hi = if hi < MAP_RESULT_MAX {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It takes the proven upper bound 2^84 in place of the computed end (unless they are equal), a valid upper end. IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with > in FrameRecord::irrational_to_map",
-      "line_text": "let hi = if hi < MAP_RESULT_MAX {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "It keeps the computed end only when it is above 2^84, and takes 2^84 otherwise: either way an end above |V|, which is at most 2^84. IrrationalMap::nearest checks each end of the bracket with an exact sign and replaces an end on the wrong side of |V| by the proven bound (2^-220 below, 2^84 above), and a bisection over the proven bounds takes at most 61 halvings, under its 70. So any bracket gives the same double; only the number of halvings changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
-      "mutant": "replace < with <= in FrameRecord::irrational_to_map",
-      "line_text": "let hi = if hi < MAP_RESULT_MAX {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only when the computed end equals 2^84, where both arms give 2^84."
     },
     {
       "file": "projects/engines/geometry/crates/geom-math/src/grid_transform.rs",
