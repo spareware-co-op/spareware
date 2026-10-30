@@ -847,3 +847,50 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 - **The full mutation run** is the evidence for geom-num, not the sum of the diffs: a pull request that only weakens a test mutates nothing in its diff, so only the full run shows that no unexplained mutant survives.
 
 **Changes:** this record; `geom-num`'s verification suite and `tests/attack_g29.rs`; the thread-count tests of `geom-run`, `geom-pool`, `geom-math` and `geom-num`; `geom-test`'s `rust_source::references`, `golden::THREAD_COUNTS`, `trip`, `guard prove --golden-run` and `tests/attack_g43.rs`; the `trip` steps of `kernel.yml`, `kernel-dev.yml`, `kernel-fuzz.yml`, `kernel-bench.yml` and `kernel-certificates.yml`, the wasm legs' guard step, and `kernel-fuzz.yml`'s job `clusterfuzzlite-seeded` with `.clusterfuzzlite/seeded.sh`; `geom-bench/tests/attack_g18a.rs`'s count of the instruction job's measured runs, which the seed raises to seven; issues #367 and #368.
+
+## 32.44 Gate 2: math types and kinds proven (G70)
+
+**What it is.** Gate 2 closes phase 2 (30.3): before phase 3's topology leans on the math types, the curve and surface kinds, NURBS, the root engine and the box tree, every condition of G70's done-when holds, and a kernel owner records the result here with the CI runs that show it (30.1). The record takes 32.43's form: one row per condition of the done-when, in its words, with the evidence and the CI run; then the merge gates; then 30.1's standard bar for the phase's pieces; then the readings the gate took.
+
+**Result: not yet passed (drafted 2026-10-31).** What is left, in order:
+
+1. The phase's last pieces on main: G68 (#412) and G69 (`piece/G69`), and the fixes of the dry run (#410): G49's golden (#417), G47's `awaiting_proof` lines in `quality-ledger.json`, and #392's libm survivors.
+2. A full `kernel-quality.yml` run on the gate's commit with nothing unexplained.
+3. Seven consecutive green nights of the kind laws, counted from G69's merge.
+4. The owner's answer to the two readings marked "proposed" below.
+5. The owner's record.
+
+Off CI, on a development machine, on `piece/G69` at 8ed3fe32 (G68 and G69 on main as of 4ee15994): every kernel crate's tests in release with overflow checks; `geom-curve`, `geom-surface`, `geom-test` and `engine-geometry` in debug; fmt, clippy, the map, provenance, golden and recursion checks. G69's law catalogue found four kernel defects there, each fixed with a permanent test (28.3's as-built note): a surface of revolution about an axis off the origin placed as if the axis passed through it; circles, bulge polylines, cylinders, cones, spheres and tori stating a rounding under grid transforms that move them exactly; and offset curves whose conversion failed as a defect.
+
+| Condition | Evidence | CI run |
+| --- | --- | --- |
+| Every curve and surface kind passes the kind contract kit | `geom_curve::contract::check` and `geom_surface::contract::check` (the laws of `geom_curve::Law`, under exact, rational and certified transforms) on all 15 `CurveKind`s and all 11 `SurfaceKind`s: `geom-curve/tests/analytic.rs` (the nine analytic kinds), `compound.rs` (bulge, trimmed, composite, offset, on-surface), `attack_g64.rs` (transitions, and their trimmed, joined and offset forms) and `contract.rs` (NURBS); `geom-surface/tests/contract.rs` (NURBS), `analytic.rs` (plane, cylinder, cone, sphere, torus), `attack_g65.rs` (affine images), `swept.rs` (revolution, extrusion, ruled), `offset.rs`; G68 adds the second-derivative and normal-derivative laws to `geom_surface::contract::check` | pending (on #412: `kernel.yml` run 41105812275) |
+| NURBS agrees with the exact rational reference | `geom-test/tests/nurbs_reference.rs` (G57): points, derivatives, insertion, refinement and elevation of seeded curves against `geom_test::nurbs_reference`; `geom-test/tests/laws_nurbs.rs` (G69): curve and surface points within `geom-nurbs`'s stated bounds of the exact points, insertion, refinement and elevation of curves and surfaces within their stated deviation, knot removal within its reported error and its tolerance, against `nurbs_reference::Spline` and `nurbs_reference::Patch` | pending |
+| The root engine misses no root on 10,000 systems per dimension | `geom-num/tests/attack_g53.rs::no_zero_is_lost_in_one_unknown`, `no_zero_is_lost_in_two_unknowns`, `no_zero_is_lost_in_three_unknowns`, `no_zero_is_lost_in_four_unknowns`: 10,000 seeded polynomial systems per dimension in release, against exact rationals; no zero lost, and every enclosure holds exactly one | pending |
+| The box tree equals brute force | `geom-bvh/tests/tree.rs::queries_equal_brute_force_in_2d_and_3d` (with `nested_and_identical_boxes_stay_within_the_depth_limit` and `a_refit_keeps_answers_right_and_rebuilds_past_its_limit`), and `geom-bvh/tests/cells.rs::searches_equal_brute_force` for the cell index | pending |
+| The kind laws stay green on fresh nightly seeds for seven consecutive nights | `kernel-nightly.yml` job `laws` (G69): `geom-test`'s `tests/laws_nurbs.rs`, `laws_curves.rs` and `laws_surfaces.rs` with `SPAREKIT_SEED` set to the run's number | pending: 0 of 7 nights (G69 not on main) |
+| A kernel owner records the result, with the CI runs that show it, in the decision log | This section | pending |
+
+**The merge gates.** Every job that runs on a pull request is in 32.43's table, with the violation seeded to make it fail. Since Gate 1's commit (6b99afe0) no such job was added. `kernel-quality.yml` gained `mutants-2`, which is in that table. `kernel-nightly.yml` gained `maths` (G47), `clothoids` (G63) and `laws` (G69), which run nightly and are not merge gates (28.17's tiers).
+
+**30.1's standard bar for the phase's pieces (G44 to G69), from the dry run (#410):**
+
+| Requirement | State | CI run |
+| --- | --- | --- |
+| Every piece of the phase on main | G44 to G67 merged; G68 is #412; G69 is `piece/G69`, its pull request opening once #412 merges | pending |
+| No unexplained mutant in a full run | Train 4's run had 328 problems: 323 in G47's libm port (#392, 5 of its last 7 settled), 4 fixed in #411, and 1 (`geom-surface/src/analytic.rs` `angular`) killed in G68. G68's and G69's own lines had none left off CI (G69: run on its kernel lines) | pending: a full run on the gate's commit (train 4's was 41021101591) |
+| Coverage of the foundation set without a waiver | The elsewhere-set crates meet 28.8's 90% of lines (geom-bvh 95.4%, geom-curve 95.2%, geom-linalg 97.0%, geom-math 98.2%, geom-nurbs 96.3%, geom-surface 97.7% on train 4); geom-num passes only through 74 `awaiting_proof` lines that name G47 | pending (#410, row B of the work queue) |
+| Every piece's cases in the replay corpus | Every phase-2 crate has a golden; G49's dense decompositions get `geom-linalg/dense` in #417 | pending: #417, and the owner's approval of the new and moved goldens |
+| A fuzz target per code piece | None for the phase-2 crates; geom-math has a no-panic property harness over arbitrary bits (`tests/fuzz.rs`) | proposed reading below |
+| A benchmark under the 5% count gate | Wall-clock benchmarks only, outside geom-num | proposed reading below |
+| Attack tests | Every code piece of the phase is attacked: G45, G47, G48, G51 to G53, G56, G58 to G69 by their own `attack_g<n>.rs`, G46, G49, G50, G54 and G55 through `rotation.rs`, `dense.rs`, `spectral.rs`, `tree.rs` and `cells.rs`; G57 is itself the comparison | met |
+
+**Readings the gate took:**
+- **"Every curve and surface kind"** is every variant of `CurveKind` (15) and of `SurfaceKind` (11), in 2D and 3D for the curves that take both; a kind that only another kind makes (an affine surface, from a non-similarity) passes through the kind that makes it.
+- **"The kind laws"** are 28.3's rows for curve and surface kinds and for NURBS, as G69 built them (28.3's as-built note): conversion to NURBS within its stated error, transforms that change a kind only as chapter 7 and each kind's rule say, grid transforms exact, and the NURBS row. Each law fails on any broken case, a refusal included.
+- **"Seven consecutive nights"** are seven consecutive scheduled runs of `kernel-nightly.yml`'s `laws` job on main, each green with its own seed, the first after G69's merge. A red night is triaged (the work queue's row G), its case kept as a permanent test once fixed (28.16), and the count starts again.
+- **"10,000 systems per dimension"** is per dimension of G53's root engine, one to four unknowns.
+- **Proposed: a fuzz target per code piece.** 28.5 asks for "one target per operation", and operations begin in phase 3 with the operation contract (G82): the math types and kinds are data and queries, not operations. Their randomised inputs are their seeded property tests and the law catalogue, fresh every night, and geom-math's no-panic harness. Proposed: 30.1's fuzz target applies from phase 3's operations on; phase 2 is held to its seeded tests. For the owner to accept or to ask for targets before the gate.
+- **Proposed: a benchmark under the 5% count gate.** The count gate measures `geom-bench`, the numbers layer; the phase-2 crates outside geom-num have wall-clock benchmarks (geom-math `transform`, geom-linalg `qr`, geom-bvh `cells` and `tree`, geom-nurbs `bernstein`, `fit` and `nurbs`, geom-curve `analytic`, `compound`, `enclosure`, `kind` and `transition`, geom-surface `offsets` and `surfaces`). Proposed: before the gate, `geom-bench` gains one count benchmark per phase-2 crate on its hot path (a transform's image, a dense solve, a box-tree query, a NURBS point, a curve kind's enclosure, a surface kind's enclosure), so the 5% gate guards each crate as principle 12 asks, rather than the bar being amended. For the owner to accept or to amend the bar.
+
+**Changes:** this record; issue #418. The evidence it cites is the pieces' own (G44 to G69), and G69's law catalogue with its nightly job.
