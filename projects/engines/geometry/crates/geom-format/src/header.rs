@@ -393,7 +393,7 @@ impl<'a> Fields<'a> {
 }
 
 /// The length of the head at the start of `bytes`: 1, 2, 3, 5 or 9 bytes (RFC 8949 section 3).
-fn head_len(bytes: &[u8]) -> usize {
+pub(crate) fn head_len(bytes: &[u8]) -> usize {
     match bytes.first().map(|b| b & 0x1f) {
         Some(24) => 2,
         Some(25) => 3,

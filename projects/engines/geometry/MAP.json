@@ -2517,6 +2517,98 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a history record cannot be read or written.",
+          "file": "projects/engines/geometry/crates/geom-format/src/history.rs",
+          "kinds": [
+            {
+              "doc": "A part read as names are (the path, a role, a piece key, a set) is wrong.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The records break `History`'s own forms.",
+              "name": "History",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The payload is not the history's one canonical encoding.",
+              "name": "NotCanonical",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_format::history",
+          "name": "HistoryRecordError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a names record, or a name in it, cannot be read or written.",
+          "file": "projects/engines/geometry/crates/geom-format/src/names.rs",
+          "kinds": [
+            {
+              "doc": "The payload's shape or encoding is wrong.",
+              "name": "Payload",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The file's header names a `NameScheme` this reader does not know.",
+              "name": "Scheme",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A node out of `NameId` order, or a second node with one id, at this offset.",
+              "name": "Order",
+              "shape": "struct"
+            },
+            {
+              "doc": "A name stored in an encoding other than its one canonical encoding, at this offset.",
+              "name": "NotCanonical",
+              "shape": "struct"
+            },
+            {
+              "doc": "A node whose id is not the hash of its bytes under the recorded scheme.",
+              "name": "WrongId",
+              "shape": "struct"
+            },
+            {
+              "doc": "A name the name types refuse: an empty or non-NFC role, a repeated member of a set, an ordinal out of range.",
+              "name": "Name",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The name graph refused a node.",
+              "name": "Graph",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The encoder failed; only a defect can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::names",
+          "name": "NamesError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a payload does not have the shape its record needs.",
+          "file": "projects/engines/geometry/crates/geom-format/src/payload.rs",
+          "kinds": [
+            {
+              "doc": "The bytes break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Not the record's shape: what was expected, at which byte of the payload.",
+              "name": "Shape",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_format::payload",
+          "name": "PayloadError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a stored number cannot be used.",
           "file": "projects/engines/geometry/crates/geom-format/src/range.rs",
           "kinds": [
@@ -2915,6 +3007,74 @@
             "text": "chapter 24.3 and 24.4 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; the ladder of chapter 6.5, `projects/engines/geometry/architecture/06-numbers.md`; CDDL by RFC 8610, <https://www.rfc-editor.org/rfc/rfc8610>."
           },
           "path": "geom_format::header",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the record; the history is decoded and encoded once.",
+          "does": "[`history_record`] writes an operation's history as one required record (tag [`HISTORY_TAG`]) whose payload is `geom-op`'s canonical encoding of it ([`History::encode`]): the operation's path, its records in output-name order, its deleted inputs and its topology changes. [`read_history`] reads one back.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/history.rs",
+          "guarantees": [
+            "**What is read is what was written**: a payload is read into an `OpPath` and a `History`, which is encoded again; the bytes must be the stored ones, so a record out of order, a set out of order, an unknown origin or change, or any second spelling is refused.",
+            "**The history's own forms hold**: two records of one output, a modification from nothing or a merge of one are refused, as `History::new` refuses them."
+          ],
+          "job": "The history record: one operation's origins, deletions and topology changes (chapter 20.3), stored so that a reloaded model resolves its references through exactly the history it had.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 20.3's records and 24.4's names and history record (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/architecture/24-file-format-exchange.md`), read by decoding and encoding again, as the names record is."
+          },
+          "path": "geom_format::history",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the record; each node is decoded, encoded and hashed once.",
+          "does": "[`names_record`] writes a name graph's nodes as one required record (tag [`NAMES_TAG`]): an array of `[id, name]` pairs in `NameId` order, each name in its canonical encoding (32.19). [`read_names`] reads one back into a fresh name graph. [`read_topo_name`] reads one canonical `TopoName` item.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/names.rs",
+          "guarantees": [
+            "**Every `NameId` is verified under the recorded scheme** (24.4; piece G95): a file whose header names a scheme other than `NameScheme v1` is refused, and every node's id must be the hash of its own stored bytes, or the record is refused with the node's offset. A name is never trusted because a file says so.",
+            "**One encoding per name**: a node is read into a `TopoName` and encoded again, and the bytes must be the stored ones, so a set out of order, a repeated name, a non-NFC role or any other second spelling of a name is refused; the graph refuses a second node under one id.",
+            "**Order is name order**: nodes are in strictly increasing `NameId` order, or the record is refused."
+          ],
+          "job": "The names record: every name node a file keeps, each `NameId` checked against its bytes under the file's `NameScheme` as it is read.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "https://www.rfc-editor.org/rfc/rfc8949#section-4.2"
+            ],
+            "text": "chapter 24.4's names record and decision 32.19's canonical encoding and hash (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/32-decisions.md`), read by re-encoding, the way RFC 8949 section 4.2's deterministic encoding is checked: decode, encode, compare (<https://www.rfc-editor.org/rfc/rfc8949#section-4.2>)."
+          },
+          "path": "geom_format::names",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the payload; nothing is copied but the names it returns.",
+          "does": "a [`Reader`] steps through a payload that is already known to be canonical CBOR (the record layer checks it), one head or one whole item at a time, and turns a wrong shape into [`PayloadError::Shape`] with the byte offset and what was expected. The name, history, recipe and attribute records (piece G95) read their payloads with it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/payload.rs",
+          "guarantees": [
+            "**Every failure names its byte**: the offset in the payload of the item that did not fit, and what the record needs there.",
+            "**Containers are read head by head**, so a reader never holds more than one item at a time, and every whole item it returns is exactly the bytes the decoder measured."
+          ],
+          "job": "Reading a record's payload field by field: the next head, a whole item's bytes, names, and the end of the payload, each failure naming its byte.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/format/SPEC.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "SKG's canonical CBOR (`projects/engines/geometry/format/SPEC.md`, section 3) read with this crate's decoder, as the header record's reader reads its payload (chapter 24.3, `projects/engines/geometry/architecture/24-file-format-exchange.md`)."
+          },
+          "path": "geom_format::payload",
           "provenance": [],
           "spdx": null,
           "target": "lib"
