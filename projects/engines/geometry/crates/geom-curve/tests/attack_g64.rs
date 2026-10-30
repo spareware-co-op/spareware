@@ -754,8 +754,21 @@ fn helmerts_middle_takes_its_side() {
                 );
             }
         }
+        // Its middle is a break of the leaf, at −L/2 reversed, so the kinds that hold it cut there.
+        assert_eq!(
+            Trimmed::whole(Basis::Transition(t.clone()))
+                .unwrap()
+                .breaks(),
+            vec![middle]
+        );
         // Reversed, the sides swap.
         let r = the_transition(t.reversed(m).unwrap().value);
+        assert_eq!(
+            Trimmed::whole(Basis::Transition(r.clone()))
+                .unwrap()
+                .breaks(),
+            vec![-middle]
+        );
         let back = r.enclose(-middle, Limit::FromRight, 4, m).unwrap();
         assert_eq!(back[4].map(iv_bits), left[4].map(iv_bits));
     }
@@ -770,6 +783,15 @@ fn a_transition_joins_the_kinds_that_hold_curves() {
     for c in cases().iter().filter(|c| c.length >= 60.0) {
         let t = build(c);
         let l = c.length;
+        // Only Helmert's transition has a break.
+        if !matches!(c.law, CurvatureLaw::Helmert { .. }) {
+            assert_eq!(
+                Trimmed::whole(Basis::Transition(t.clone()))
+                    .unwrap()
+                    .breaks(),
+                Vec::<f64>::new()
+            );
+        }
         let trimmed = Trimmed::new(Basis::Transition(t.clone()), (l / 5.0, 0.9 * l)).unwrap();
         let ps: Vec<f64> = (0..=6)
             .map(|i| l / 5.0 + 0.7 * l * f64::from(i) / 6.0)
@@ -821,7 +843,9 @@ fn bad_parts_are_refused() {
             "{w:?}"
         );
     }
+    assert_eq!((t.window(), t.is_reversed()), ((0.0, 10.0), false));
     let part = t.segment((2.0, 6.0), true).unwrap();
+    assert_eq!((part.window(), part.is_reversed()), ((2.0, 6.0), true));
     assert_eq!(part.domain(), (-6.0, -2.0));
     assert_eq!(part.station(-5.0), Ok(5.0));
     for s in [-6.5, -1.0, 3.0, f64::NAN] {
