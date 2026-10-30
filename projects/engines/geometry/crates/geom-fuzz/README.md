@@ -13,7 +13,9 @@ flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-b
 every operation at every width, `I128` to the reserved 768 bits; and, for Gate 2 (decision 32.44:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
-(`geom_curve::contract`, `geom_surface::contract`) under any typed transform.
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; and `batch`
+(`src/batch.rs`, G104), `geom-op`'s batch driver gives each item its own result, and the many-point
+calls give the single calls' bits.
 
 ## One law, four engines
 
