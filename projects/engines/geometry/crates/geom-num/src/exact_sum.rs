@@ -179,14 +179,23 @@ pub struct ExactSum {
     lost: bool,
 }
 
-/// The sum's value, [`ExactSum::round_ieee`], and nothing of its accumulator: the chunks and
-/// the additions left before a carry propagation are internal, and the same terms added in
-/// another order, or through `add_slice` or `add_iter`, leave them different (chapter 28.8).
+/// The sum's value and nothing of how the accumulator holds it: the exact sum of the finite terms
+/// as its digits (the chunks after a carry propagation, every one but the top in [0, 2^32), which
+/// equal sums share), the special values added, and whether the sum was lost. The chunks as they
+/// stand and the additions left before a propagation are internal, shown only as `..`: the same
+/// terms added in another order, or through `add_slice` or `add_iter`, leave them different
+/// (chapter 28.8).
 impl core::fmt::Debug for ExactSum {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut digits = self.chunks;
+        let lost = propagate(&mut digits).is_none_or(|()| self.lost);
         f.debug_struct("ExactSum")
-            .field("rounded", &self.round_ieee())
-            .finish()
+            .field("digits", &digits)
+            .field("positive_infinity", &self.positive_infinity)
+            .field("negative_infinity", &self.negative_infinity)
+            .field("nan_payload", &self.nan_payload)
+            .field("lost", &lost)
+            .finish_non_exhaustive()
     }
 }
 

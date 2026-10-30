@@ -541,9 +541,11 @@ fn libm_gives_the_quarter_turns_exactly() {
     assert_eq!(ok(math::unproven::cospi(3.0)), -1.0);
 }
 
-/// `ExactSum`'s `Debug` shows its value only, not its accumulator (chapter 28.8): the same terms
-/// added one by one and through `add_slice` above [`LARGE_SLICE`] terms (Neal's large accumulator,
-/// emptied into the small one) may leave different chunks, and print alike.
+/// `ExactSum`'s `Debug` shows its value, all of it, and nothing of its accumulator (chapter
+/// 28.8): the same terms added one by one and through `add_slice` above [`LARGE_SLICE`] terms
+/// (Neal's large accumulator, emptied into the small one) may leave different chunks, and print
+/// alike; the digits are the propagated ones; and a term too small to move the rounding still
+/// shows.
 #[test]
 fn exact_sum_debug_shows_only_the_value() {
     let terms: Vec<f64> = (0..4 * LARGE_SLICE)
@@ -558,10 +560,23 @@ fn exact_sum_debug_shows_only_the_value() {
     }
     let mut sliced = ExactSum::new();
     sliced.add_slice(&terms);
-    let shown = format!("{one_by_one:?}");
-    assert_eq!(shown, format!("{sliced:?}"));
+    assert_eq!(format!("{one_by_one:?}"), format!("{sliced:?}"));
+
+    // 1 is 2^19 in chunk 33 (weight 2^(32·33 − 1075) = 2^−19); `add` puts it in chunk 32 as 2^51,
+    // and only a carry propagation moves it up.
+    let mut one = ExactSum::new();
+    one.add(1.0);
+    let mut digits = [0_i64; 67];
+    digits[33] = 1 << 19;
     assert_eq!(
-        shown,
-        format!("ExactSum {{ rounded: {:?} }}", one_by_one.round_ieee())
+        format!("{one:?}"),
+        format!(
+            "ExactSum {{ digits: {digits:?}, positive_infinity: false, negative_infinity: false, \
+             nan_payload: 0, lost: false, .. }}"
+        )
     );
+    let mut more = one.clone();
+    more.add(f64::from_bits((1023 - 80) << 52)); // 2^−80
+    assert_eq!(more.round_ieee(), one.round_ieee());
+    assert_ne!(format!("{more:?}"), format!("{one:?}"));
 }
