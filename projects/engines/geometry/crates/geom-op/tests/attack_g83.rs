@@ -60,7 +60,10 @@ fn stepping(ctx: &OpContext<'_>, units: u64, count: u64) -> Result<u128, OpError
 
 #[cfg(not(target_family = "wasm"))]
 #[test]
-#[cfg_attr(miri, ignore = "a wall-clock bound; Miri interprets, so it measures the interpreter")]
+#[cfg_attr(
+    miri,
+    ignore = "a wall-clock bound; Miri interprets, so it measures the interpreter"
+)]
 #[allow(
     clippy::disallowed_methods,
     clippy::disallowed_types,
@@ -76,7 +79,9 @@ fn a_cancelled_operation_stops_within_1_ms() {
     for _ in 0..51 {
         let token = CancelToken::new();
         let started = AtomicBool::new(false);
-        let ctx = OpContext::new(path(), Budget::UNLIMITED).with_cancel(&token);
+        // A finite budget, far beyond what 200 µs of charging uses: if the cancellation never
+        // reached the run, the loop ends on the budget, and the test fails fast instead of hanging.
+        let ctx = OpContext::new(path(), Budget::of_work(1 << 28)).with_cancel(&token);
         let (result, cancelled_at, returned_at) = std::thread::scope(|scope| {
             let runner = scope.spawn(|| {
                 let result = ctx.run(|meter| {
