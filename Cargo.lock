@@ -1009,6 +1009,7 @@ dependencies = [
  "geom-surface",
  "geom-test",
  "geom-topo",
+ "proptest",
  "serde_json",
 ]
 
