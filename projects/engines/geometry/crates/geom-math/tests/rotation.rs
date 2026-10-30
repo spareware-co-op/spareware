@@ -10,9 +10,9 @@
 //! the transforms it stands beside.
 
 #![allow(
+    clippy::disallowed_methods,
     clippy::many_single_char_names,
     clippy::similar_names,
-    clippy::disallowed_methods,
     clippy::too_many_lines,
     clippy::unreadable_literal,
     clippy::needless_range_loop,
@@ -45,6 +45,14 @@ use geom_num::{NumError, Real, ladder};
 use num_rational::BigRational;
 use num_traits::{Signed, Zero};
 use proptest::prelude::*;
+
+/// 2^k for a normal exponent k (−1022 ≤ k ≤ 1023), built from its bits: exact everywhere.
+/// Not `2f64.powi(k)`: IEEE 754 does not make `powi` correctly rounded, so Rust promises no
+/// exact result, and Miri perturbs it on purpose.
+fn p2(k: i32) -> f64 {
+    assert!((-1022..=1023).contains(&k), "2^{k} is not a normal double");
+    f64::from_bits(((k + 1023) as u64) << 52)
+}
 
 /// The angular bound 2^−34, the tightest bound a search accepts.
 fn eps() -> f64 {
@@ -662,13 +670,13 @@ fn directions(mix: &mut Mix) -> Vec<[f64; 2]> {
         [1e-310, 3e-310],
         [1.0, 1.0 + f64::EPSILON],
         [f64::MAX, -f64::MAX],
-        [1.0, 2f64.powi(-35)],
-        [1.0, 1.5 * 2f64.powi(-35)],
-        [1.0, 2f64.powi(-33)],
+        [1.0, p2(-35)],
+        [1.0, 1.5 * p2(-35)],
+        [1.0, p2(-33)],
     ];
     for _ in 0..150 {
         let (x, y) = (mix.signed(), mix.signed());
-        let scale = 2f64.powi(mix.below(200) as i32 - 100);
+        let scale = p2(mix.below(200) as i32 - 100);
         out.push([x * scale, y * scale]);
     }
     for _ in 0..50 {
@@ -685,16 +693,7 @@ fn directions(mix: &mut Mix) -> Vec<[f64; 2]> {
 fn plane_rotations_are_certified_and_the_simplest() {
     let mut mix = Mix(0x6460_0005);
     let dirs = directions(&mut mix);
-    let bounds = [
-        eps(),
-        2f64.powi(-30),
-        2f64.powi(-20),
-        2f64.powi(-12),
-        0.01,
-        0.1,
-        0.3,
-        BOUND_MAX,
-    ];
+    let bounds = [eps(), p2(-30), p2(-20), p2(-12), 0.01, 0.1, 0.3, BOUND_MAX];
     let mut simplest = 0;
     let mut largest = 0;
     for d in &dirs {
@@ -709,7 +708,7 @@ fn plane_rotations_are_certified_and_the_simplest() {
             check_direction(*d, &p, got.angle().get());
             let pw = Pythagorean::within(F2::new(d[0], d[1]).unwrap(), real(bound)).unwrap();
             assert_eq!((pw.value(), pw.angle()), (p, got.angle()));
-            if bound >= 2f64.powi(-12) {
+            if bound >= p2(-12) {
                 simplest += usize::from(check_simplest(*d, &r, bound, 40));
             }
             if bound == eps() {
@@ -731,7 +730,7 @@ fn plane_rotations_are_certified_and_the_simplest() {
     ] {
         let got = Pythagorean::within(F2::new(a as f64, b as f64).unwrap(), real(eps())).unwrap();
         assert_eq!(got.value(), Pythagorean::new(a, b, c).unwrap());
-        assert!(got.angle().get() < 2f64.powi(-40));
+        assert!(got.angle().get() < p2(-40));
     }
     // At a coarse bound, a small direction: within 0.3 rad of (1, 0.2), (1, 0) itself.
     let got = Pythagorean::within(F2::new(1.0, 0.2).unwrap(), real(0.3)).unwrap();
@@ -759,13 +758,13 @@ fn targets(mix: &mut Mix) -> Vec<[f64; 4]> {
         [0.6, 0.0, 0.8, 0.0],
     ];
     for _ in 0..300 {
-        let scale = 2f64.powi(mix.below(400) as i32 - 200);
+        let scale = p2(mix.below(400) as i32 - 200);
         let mut t = [mix.signed(), mix.signed(), mix.signed(), mix.signed()];
         if mix.below(5) == 0 {
             t[mix.below(4) as usize] = 0.0;
         }
         if mix.below(7) == 0 {
-            t[mix.below(4) as usize] *= 2f64.powi(-60);
+            t[mix.below(4) as usize] *= p2(-60);
         }
         out.push(t.map(|v| v * scale));
     }
@@ -775,7 +774,7 @@ fn targets(mix: &mut Mix) -> Vec<[f64; 4]> {
 #[test]
 fn space_rotations_are_certified() {
     let mut mix = Mix(0x6460_0006);
-    let bounds = [eps(), 2f64.powi(-25), 2f64.powi(-10), 0.1, BOUND_MAX];
+    let bounds = [eps(), p2(-25), p2(-10), 0.1, BOUND_MAX];
     let mut largest = 0;
     for t in targets(&mut mix) {
         if t.iter().all(|&v| v == 0.0) {
@@ -848,7 +847,7 @@ fn composition_outgrowing_the_budget_is_reapproximated_once() {
             continue;
         };
         let (a, b) = (a.value(), b.value());
-        for &bound in &[eps(), 2f64.powi(-20), 0.25] {
+        for &bound in &[eps(), p2(-20), 0.25] {
             let got = a.compose(&b, real(bound)).unwrap();
             let r = got.value();
             check_budget(&r);
@@ -1013,9 +1012,9 @@ proptest! {
         let t = bits.map(|b| {
             let v = f64::from_bits(b & !(0x7ff << 52) | (0x3ff << 52)) - 1.5;
             let k = expo.clamp(-1022, 1023);
-            v * 2f64.powi(k)
+            v * p2(k)
         });
-        let bound = (f64::from_bits((0x3ff << 52) | bound_bits) * 2f64.powi(log2)).clamp(eps(), BOUND_MAX);
+        let bound = (f64::from_bits((0x3ff << 52) | bound_bits) * p2(log2)).clamp(eps(), BOUND_MAX);
         match RationalRotation::within(t, real(bound)) {
             Ok(got) => {
                 check_budget(&got.value());

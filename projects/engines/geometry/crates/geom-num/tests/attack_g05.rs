@@ -23,6 +23,7 @@
 //! - determinism across thread counts, and a golden hash to compare across targets;
 //! - the crate's written rules and the chapters' requirements, read from the source.
 #![allow(
+    clippy::disallowed_methods,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
@@ -41,7 +42,6 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     reason = "tests may use native arithmetic, casts and std reductions"
 )]
 
@@ -600,7 +600,7 @@ impl Rng {
         let frac = self.next() & ((1 << 52) - 1);
         if e < -1022 {
             let shift = (-1022 - e).min(52) as u32;
-            f64::from_bits((frac | (1 << 52)) >> shift).max(f64::from_bits(1))
+            f64::from_bits((frac | (1 << 52)) >> shift).larger(f64::from_bits(1))
         } else {
             f64::from_bits((((e + 1023) as u64) << 52) | frac)
         }
@@ -920,9 +920,10 @@ fn sinpi_and_cospi_dense_on_the_near_zero_paths() {
     let (c_lo, c_hi) = (hf("0x1.ccf6429be6621p-29"), p2(-12));
     for _ in 0..scale(100_000) {
         let t = rng.unit();
-        let x = s_lo * (s_hi / s_lo).powf(t); // log-uniform
+        // Log-uniform, through the correctly rounded exp and ln: the same draws everywhere.
+        let x = s_lo * log_uniform(s_hi / s_lo, t);
         r.sinpi(rng.sign() * x);
-        let y = c_lo * (c_hi / c_lo).powf(rng.unit());
+        let y = c_lo * log_uniform(c_hi / c_lo, rng.unit());
         r.cospi(rng.sign() * y);
     }
     r.finish();
@@ -1136,7 +1137,7 @@ fn ln_random_over_every_binade() {
         }
     }
     for _ in 0..scale(20_000) {
-        r.ln(rng.finite().abs().max(f64::from_bits(1)));
+        r.ln(rng.finite().abs().larger(f64::from_bits(1)));
     }
     r.finish();
 }
@@ -1990,7 +1991,7 @@ fn chapter_21_the_kernel_never_produces_nan() {
         }
         let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
         let x = Interval::new(lo, hi).unwrap();
-        let narrow = Interval::new(lo, lo.next_up().min(f64::MAX)).unwrap();
+        let narrow = Interval::new(lo, lo.next_up().smaller(f64::MAX)).unwrap();
         for i in [x, narrow] {
             for (what, r) in [
                 ("sinpi", i.sinpi()),
@@ -2399,6 +2400,30 @@ fn outputs(a: f64, b: f64) -> [u64; 5] {
 
 use geom_test::golden;
 
+/// The larger and the smaller of two doubles by comparison, the first on a tie: not `f64::max` and
+/// `f64::min`, which may return either zero for −0 and +0 (chapter 21's ban), and Miri may pick
+/// either on purpose.
+trait Pick {
+    fn larger(self, other: f64) -> f64;
+    fn smaller(self, other: f64) -> f64;
+}
+
+impl Pick for f64 {
+    fn larger(self, other: f64) -> f64 {
+        if other > self { other } else { self }
+    }
+    fn smaller(self, other: f64) -> f64 {
+        if other < self { other } else { self }
+    }
+}
+
+/// ratio^t for a ratio above 1 and t in [0, 1), as exp(t·ln ratio) with the crate's correctly
+/// rounded exp and ln: not `powf`, which IEEE 754 does not make correctly rounded.
+fn log_uniform(ratio: f64, t: f64) -> f64 {
+    let ln = math::ln(ratio).unwrap().get();
+    math::exp(t * ln).unwrap().get()
+}
+
 /// FNV-1a over a stream of 64-bit words.
 fn fnv(words: impl Iterator<Item = u64>) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325u64;
@@ -2709,7 +2734,7 @@ fn chapter_16_interval_versions_of_the_proven_functions_exist() {
     for _ in 0..scale(3000) {
         let lo = rng.sign() * rng.binade_in(-60, 60);
         let width = [0.0, 1e-9, 0.3, 1.0, 1.9, 2.5][rng.range(0, 5) as usize];
-        let hi = lo + width * lo.abs().max(1.0) * rng.unit();
+        let hi = lo + width * lo.abs().larger(1.0) * rng.unit();
         let hi = if hi < lo { lo } else { hi };
         let x = iv(lo, hi);
         let s = x.sinpi().unwrap();
@@ -2745,7 +2770,7 @@ fn chapter_16_interval_versions_of_the_proven_functions_exist() {
             }
         }
         let ll = rng.binade_in(-1074, 1023);
-        let lh = (ll * (1.0 + 4.0 * rng.unit())).min(f64::MAX);
+        let lh = (ll * (1.0 + 4.0 * rng.unit())).smaller(f64::MAX);
         let l = iv(ll, lh).ln().unwrap();
         for t in [ll, lh] {
             if !l.contains(oracle::ln(t)) {

@@ -52,7 +52,6 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     reason = "tests may use native arithmetic, casts and std reductions"
 )]
 
@@ -1508,8 +1507,19 @@ pub(crate) fn log2_approx(d: &Dy) -> f64 {
         return f64::NEG_INFINITY;
     }
     let e = d.exponent();
-    let m = d.scale(-e).to_f64();
-    e as f64 + m.log2()
+    let mut m = d.scale(-e).to_f64();
+    // log2 m for m in [1, 2), one bit per squaring: only multiplications, which IEEE 754 rounds
+    // correctly, so the same report everywhere (not `log2`, which it does not).
+    let (mut l, mut bit) = (0.0, 0.5);
+    for _ in 0..30 {
+        m *= m;
+        if m >= 2.0 {
+            m *= 0.5;
+            l += bit;
+        }
+        bit *= 0.5;
+    }
+    e as f64 + l
 }
 
 /// An upper bound on `max |Σ q_j·y^j|` over `0 ≤ y ≤ y_max`: the interval `[0, y_max]` is cut
