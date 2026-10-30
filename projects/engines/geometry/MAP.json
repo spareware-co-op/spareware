@@ -6694,7 +6694,7 @@
           "target": "lib"
         },
         {
-          "cost": "an error owns its path, its message and three short vectors; making one allocates them, once. Errors are made only on failure.",
+          "cost": "an error is one box holding its path, its message and three short vectors; making one allocates them, once. Errors are made only on failure, and the box keeps every operation's `Result` one pointer wide on the error side.",
           "does": "an [`OpError`] is chapter 22's structured error, the same for people and for AI agents: `kind`, `detail`, `op`, `entities`, `at` (evidence), `message` and `remedies`. It is built from its detail ([`OpError::new`]), which fixes its kind, its first message and the remedies the detail knows; the operation then adds the entities it names, the values that explain it, a fuller message and the remedies only it knows.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-op/src/error.rs",

@@ -737,6 +737,10 @@ fn remedies_print_as_instructions() {
 
 // Outputs.
 
+/// The longest diagnostic code, and one byte more.
+const LONG: &str = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+const TOO_LONG: &str = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+
 #[test]
 fn a_diagnostic_code_is_lowercase_ascii_digits_dots_and_underscores() {
     for good in [
@@ -755,9 +759,9 @@ fn a_diagnostic_code_is_lowercase_ascii_digits_dots_and_underscores() {
         assert_eq!(d.entities, []);
         assert_eq!(d.at, []);
     }
-    let long: &'static str = "x".repeat(64).leak();
-    assert!(Diagnostic::new(long, "m").is_some());
-    let too_long: &'static str = "x".repeat(65).leak();
+    assert_eq!((LONG.len(), TOO_LONG.len()), (64, 65));
+    assert!(Diagnostic::new(LONG, "m").is_some());
+    let too_long = TOO_LONG;
     for bad in [
         "",
         "A",
