@@ -27,6 +27,11 @@
 //! sets each box's iteration cap. The small solves are written here for fixed sizes; block
 //! versions on `geom-linalg` belong to the chained certificates of sketches (G227).
 //!
+//! The root-isolation engine ([`crate::isolate`]) also runs both operators with the residuals and
+//! the Jacobian evaluated in double-double balls ([`crate::ball`], [`Precision::DoubleDouble`]),
+//! each result enclosed in an interval before steps 3 to 5, which are the same in either precision.
+//! Every guarantee below holds in both: it rests only on the enclosures of steps 1 and 2.
+//!
 //! Guarantees:
 //!
 //! - **A unique zero is proven (Krawczyk).** Let `x ∈ X` and let `J̃` be the matrix whose row `i`
@@ -96,7 +101,8 @@
 //! products, with `N` at most 4: a few hundred interval operations at most. No allocation, no
 //! recursion.
 
-use crate::dual::jacobian;
+use crate::ball::Ball;
+use crate::dual::{Dual, jacobian};
 use crate::error::NumError;
 use crate::interval::{Interval, max2, min2};
 use crate::real::Real;
@@ -165,6 +171,114 @@ impl core::fmt::Display for NewtonError {
     }
 }
 
+/// Which interval Newton operator a step applies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Operator {
+    /// Krawczyk's operator ([`krawczyk`]).
+    Krawczyk,
+    /// Hansen and Sengupta's operator ([`hansen_sengupta`]).
+    HansenSengupta,
+}
+
+/// The arithmetic the residuals and their Jacobian are enclosed in before the operator's linear
+/// algebra, which is in intervals of doubles either way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Precision {
+    /// Intervals of doubles, rounded outward.
+    Double,
+    /// Double-double balls ([`crate::ball::Ball`]), each result then enclosed in an interval.
+    DoubleDouble,
+}
+
+/// How a function written over [`Scalar`] is enclosed over a box: its arithmetic, and the
+/// conversions between that arithmetic and intervals. Each enclosure it gives holds the exact
+/// function over the box, because each conversion encloses its operand.
+pub(crate) trait Arithmetic {
+    /// The scalar the function runs on.
+    type S: Scalar;
+
+    /// The scalars holding the box `x`.
+    fn lift<const N: usize>(x: [Interval; N]) -> Result<[Self::S; N], NumError>;
+
+    /// An interval holding the scalar `s`.
+    fn lower(s: Self::S) -> Result<Interval, NumError>;
+
+    /// Enclosures of the residuals of `system` over `x`, and of their Jacobian.
+    #[allow(
+        clippy::type_complexity,
+        reason = "the values and the Jacobian of N residuals, as dual::jacobian returns them"
+    )]
+    fn jacobian<R: Residuals<N>, const N: usize>(
+        system: &R,
+        x: [Interval; N],
+    ) -> Result<([Interval; N], [[Interval; N]; N]), NumError>;
+
+    /// Intervals holding the scalars `s`.
+    fn lower_all<const N: usize>(s: [Self::S; N]) -> Result<[Interval; N], NumError> {
+        let mut out = [Interval::from(Real::ZERO); N];
+        for (o, v) in out.iter_mut().zip(s) {
+            *o = Self::lower(v)?;
+        }
+        Ok(out)
+    }
+}
+
+/// Intervals of doubles: the scalar is the interval itself.
+pub(crate) struct InDoubles;
+
+impl Arithmetic for InDoubles {
+    type S = Interval;
+
+    fn lift<const N: usize>(x: [Interval; N]) -> Result<[Interval; N], NumError> {
+        Ok(x)
+    }
+
+    fn lower(s: Interval) -> Result<Interval, NumError> {
+        Ok(s)
+    }
+
+    fn jacobian<R: Residuals<N>, const N: usize>(
+        system: &R,
+        x: [Interval; N],
+    ) -> Result<([Interval; N], [[Interval; N]; N]), NumError> {
+        jacobian(|v| system.residuals(v), x)
+    }
+}
+
+/// Double-double balls ([`Ball`]).
+pub(crate) struct InBalls;
+
+impl Arithmetic for InBalls {
+    type S = Ball;
+
+    fn lift<const N: usize>(x: [Interval; N]) -> Result<[Ball; N], NumError> {
+        let mut out = [Ball::constant(Real::ZERO); N];
+        for (o, v) in out.iter_mut().zip(x) {
+            *o = Ball::from_interval(v)?;
+        }
+        Ok(out)
+    }
+
+    fn lower(s: Ball) -> Result<Interval, NumError> {
+        s.to_interval()
+    }
+
+    fn jacobian<R: Residuals<N>, const N: usize>(
+        system: &R,
+        x: [Interval; N],
+    ) -> Result<([Interval; N], [[Interval; N]; N]), NumError> {
+        let (values, rows) = jacobian(
+            |v: [Dual<Ball, N>; N]| system.residuals(v),
+            InBalls::lift(x)?,
+        )?;
+        let mut jac = [[Interval::from(Real::ZERO); N]; N];
+        for (out, row) in jac.iter_mut().zip(rows) {
+            *out = InBalls::lower_all(row)?;
+        }
+        Ok((InBalls::lower_all(values)?, jac))
+    }
+}
+
 /// One step of Krawczyk's operator on the box `x` (module documentation).
 ///
 /// # Errors
@@ -175,7 +289,47 @@ pub fn krawczyk<R: Residuals<N>, const N: usize>(
     f: &R,
     x: [Interval; N],
 ) -> Result<Verdict<N>, NewtonError> {
-    let Some(lin) = Linear::of(f, x)? else {
+    krawczyk_in::<InDoubles, R, N>(f, x)
+}
+
+/// One step of Hansen and Sengupta's operator on the box `x` (module documentation).
+///
+/// # Errors
+///
+/// [`NewtonError::Singular`] when the midpoint Jacobian cannot be inverted;
+/// [`NewtonError::Num`] when the residuals fail or an enclosure overflows.
+pub fn hansen_sengupta<R: Residuals<N>, const N: usize>(
+    f: &R,
+    x: [Interval; N],
+) -> Result<Verdict<N>, NewtonError> {
+    hansen_sengupta_in::<InDoubles, R, N>(f, x)
+}
+
+/// One step of `operator` on the box `x`, with the residuals enclosed in `precision`.
+pub(crate) fn step<R: Residuals<N>, const N: usize>(
+    operator: Operator,
+    precision: Precision,
+    f: &R,
+    x: [Interval; N],
+) -> Result<Verdict<N>, NewtonError> {
+    match (operator, precision) {
+        (Operator::Krawczyk, Precision::Double) => krawczyk_in::<InDoubles, R, N>(f, x),
+        (Operator::Krawczyk, Precision::DoubleDouble) => krawczyk_in::<InBalls, R, N>(f, x),
+        (Operator::HansenSengupta, Precision::Double) => {
+            hansen_sengupta_in::<InDoubles, R, N>(f, x)
+        }
+        (Operator::HansenSengupta, Precision::DoubleDouble) => {
+            hansen_sengupta_in::<InBalls, R, N>(f, x)
+        }
+    }
+}
+
+/// [`krawczyk`] with the residuals enclosed in the arithmetic `A`.
+fn krawczyk_in<A: Arithmetic, R: Residuals<N>, const N: usize>(
+    f: &R,
+    x: [Interval; N],
+) -> Result<Verdict<N>, NewtonError> {
+    let Some(lin) = Linear::of::<A, R>(f, x)? else {
         return Ok(Verdict::NoZero);
     };
     let mut image = lin.mid;
@@ -196,17 +350,12 @@ pub fn krawczyk<R: Residuals<N>, const N: usize>(
     Ok(narrowed(image, x, lin.contraction))
 }
 
-/// One step of Hansen and Sengupta's operator on the box `x` (module documentation).
-///
-/// # Errors
-///
-/// [`NewtonError::Singular`] when the midpoint Jacobian cannot be inverted;
-/// [`NewtonError::Num`] when the residuals fail or an enclosure overflows.
-pub fn hansen_sengupta<R: Residuals<N>, const N: usize>(
+/// [`hansen_sengupta`] with the residuals enclosed in the arithmetic `A`.
+fn hansen_sengupta_in<A: Arithmetic, R: Residuals<N>, const N: usize>(
     f: &R,
     x: [Interval; N],
 ) -> Result<Verdict<N>, NewtonError> {
-    let Some(lin) = Linear::of(f, x)? else {
+    let Some(lin) = Linear::of::<A, R>(f, x)? else {
         return Ok(Verdict::NoZero);
     };
     let mut d = lin.offsets;
@@ -295,15 +444,19 @@ struct Linear<const N: usize> {
 }
 
 impl<const N: usize> Linear<N> {
-    /// The linearisation of `f` over `x`, or `None` when `F(X)` excludes zero in some row.
-    fn of<R: Residuals<N>>(system: &R, x: [Interval; N]) -> Result<Option<Linear<N>>, NewtonError> {
+    /// The linearisation of `f` over `x`, its residuals enclosed in the arithmetic `A`, or `None`
+    /// when `F(X)` excludes zero in some row.
+    fn of<A: Arithmetic, R: Residuals<N>>(
+        system: &R,
+        x: [Interval; N],
+    ) -> Result<Option<Linear<N>>, NewtonError> {
         const {
             assert!(
                 1 <= N && N <= 4,
                 "the fixed-size operators take 1 to 4 unknowns"
             );
         };
-        let (values, jac) = jacobian(|v| system.residuals(v), x)?;
+        let (values, jac) = A::jacobian(system, x)?;
         let excluded = values
             .iter()
             .any(|v| matches!(v.certain_sign(), Some(Sign::Positive | Sign::Negative)));
@@ -314,7 +467,7 @@ impl<const N: usize> Linear<N> {
         for m in &mut mid {
             *m = Interval::from(Real::new(midpoint(*m))?);
         }
-        let at_mid = system.residuals(mid)?;
+        let at_mid = A::lower_all(system.residuals(A::lift(mid)?)?)?;
         let mut centre = [[0.0; N]; N];
         for (crow, jrow) in centre.iter_mut().zip(jac) {
             for (c, j) in crow.iter_mut().zip(jrow) {
@@ -364,7 +517,7 @@ impl<const N: usize> Linear<N> {
 
 /// A double inside `x`, at or next to its centre: `lo/2 + hi/2`, which cannot overflow, moved into
 /// `x` when halving a subnormal bound rounded it out (for `x = [2^−1074, 2^−1074]` the sum is 0).
-fn midpoint(x: Interval) -> f64 {
+pub(crate) fn midpoint(x: Interval) -> f64 {
     let m = 0.5 * x.lo() + 0.5 * x.hi();
     if m < x.lo() {
         x.lo()
