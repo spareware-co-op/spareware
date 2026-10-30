@@ -208,7 +208,7 @@ const ERR: f64 = hf!("0x1.b6p-69");
     clippy::many_single_char_names,
     reason = "the names of the C source's variables, so the two can be read side by side"
 )]
-fn log_fast(e: i64, v: f64) -> (f64, f64) {
+fn log_fast(e: i64, v: f64) -> Option<(f64, f64)> {
     /// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on
     /// `[−0.00202941894531250, 0.00212097167968735]` with absolute error below 2^−70.278.
     const P: [f64; 6] = [
@@ -229,22 +229,18 @@ fn log_fast(e: i64, v: f64) -> (f64, f64) {
     let m = (1u64 << 52) | (v.to_bits() & MANTISSA);
     // Above √2, halve v to avoid cancellation.
     let above = m >= 0x16_a09e_667f_3bcd;
-    // C: `e += above`; |e| ≤ 1074, so the checked sum cannot overflow. Were it to, the NaN pair
-    // fails the rounding test and the accurate path, which starts from x, gives the result.
-    let Some(e) = e.checked_add(i64::from(above)) else {
-        return (super::NAN, super::NAN);
-    };
+    // C: `e += above`; |e| ≤ 1074, so the checked sum cannot overflow. Were it to, the caller's
+    // NaN pair fails the rounding test and the accurate path, which starts from x, gives the result.
+    let e = e.checked_add(i64::from(above))?;
     let (i, y) = if above {
         (m >> 44, v * 0.5)
     } else {
         (m >> 43, v)
     };
     // 362 ≤ i ≤ 724: i·2^−9 ≤ y < (i + 1)·2^−9. C: `INVERSE[i − 362]`. The checked difference
-    // cannot fail (i ≥ 362); were it to, the NaN pair fails the rounding test and the accurate
-    // path, which starts from x, gives the result, as for `e` above.
-    let Some(k) = i.checked_sub(362) else {
-        return (super::NAN, super::NAN);
-    };
+    // cannot fail (i ≥ 362); were it to, the caller's NaN pair fails the rounding test and the
+    // accurate path, which starts from x, gives the result, as for `e` above.
+    let k = i.checked_sub(362)?;
     let r = entry(&INVERSE, k);
     let [l1, l2] = entry(&LOG_INV, k);
     // z = r·y − 1 exactly, the C source's fma(r, y, −1) without a fused operation: r has at
@@ -270,7 +266,7 @@ fn log_fast(e: i64, v: f64) -> (f64, f64) {
     let (h, l) = fast_two_sum(ee * LOG2_H + l1, z);
     let l = ph + (l + l2);
     let l = ee * LOG2_L + l; // C: fma(e, LOG2_L, l)
-    (h, l)
+    Some((h, l))
 }
 
 /// Natural logarithm, correctly rounded.
@@ -280,48 +276,50 @@ fn log_fast(e: i64, v: f64) -> (f64, f64) {
 /// rounding rests on. `ln(1) = +0`, `ln(±0) = −∞`, `ln(+∞) = +∞`; negative inputs and NaN give
 /// the canonical NaN.
 #[must_use]
+pub fn ln(x: f64) -> f64 {
+    ln_checked(x).unwrap_or(super::NAN)
+}
+
+/// [`ln`], `None` only if one of its integer steps failed, which no double makes (each is noted
+/// below): [`ln`] then returns NaN, never a plausible wrong value.
 #[allow(
     clippy::many_single_char_names,
     reason = "the names of the C source's variables, so the two can be read side by side"
 )]
-pub fn ln(x: f64) -> f64 {
+fn ln_checked(x: f64) -> Option<f64> {
     let mut bits = x.to_bits();
     // The exponent field with the sign bit above it, below 2^12, so `signed` reads its value, and
     // the checked subtraction cannot overflow (C: `(int64_t)(bits >> 52) − 0x3ff`).
-    let Some(mut e) = signed(bits >> 52).checked_sub(0x3ff) else {
-        return super::NAN;
-    };
+    let mut e = signed(bits >> 52).checked_sub(0x3ff)?;
     if e >= 0x400 || e == -0x3ff {
         // x ≤ 0, NaN, ±∞, or subnormal
         if x.is_nan() || x < 0.0 {
-            return super::NAN; // includes −∞
+            return Some(super::NAN); // includes −∞
         }
         if x == f64::INFINITY {
-            return x;
+            return Some(x);
         }
         if x == 0.0 {
-            return f64::NEG_INFINITY; // pole
+            return Some(f64::NEG_INFINITY); // pole
         }
         // subnormal: scale into the normal range
         bits = (x * hf!("0x1p52")).to_bits();
-        let Some(scaled) = signed(bits >> 52).checked_sub(0x3ff + 52) else {
-            return super::NAN;
-        };
-        e = scaled;
+        e = signed(bits >> 52).checked_sub(0x3ff + 52)?;
     }
     // x = 2^e·v with 1 ≤ v < 2 and −1074 ≤ e ≤ 1023
     let v = f64::from_bits((0x3ff << 52) | (bits & MANTISSA));
     if v == 1.0 && e == 0 {
-        return 0.0;
+        return Some(0.0);
     }
-    let (h, l) = log_fast(e, v);
+    // A failed step in the fast path gives the NaN pair, which fails the rounding test below.
+    let (h, l) = log_fast(e, v).unwrap_or((super::NAN, super::NAN));
     let left = h + (l - ERR);
     let right = h + (l + ERR);
     if left == right {
-        return left;
+        return Some(left);
     }
     // CORE-MATH measures the fast path's failure rate at about 2^−11.5.
-    log_accurate(x)
+    Some(log_accurate(x))
 }
 
 /// The accurate path (C: `cr_log_accurate`): `ln x` in 128-bit floating point, then rounded.
@@ -1928,7 +1926,7 @@ mod tests {
     #[test]
     fn no_power_of_two_reaches_the_accurate_path() {
         for k in (-1074i64..=1023).filter(|&k| k != 0) {
-            let (h, l) = log_fast(k, 1.0);
+            let (h, l) = log_fast(k, 1.0).unwrap();
             assert_eq!(
                 (h + (l - ERR)).to_bits(),
                 (h + (l + ERR)).to_bits(),
