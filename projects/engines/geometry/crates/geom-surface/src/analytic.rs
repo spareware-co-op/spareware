@@ -55,6 +55,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
 
+use crate::extent::{self, Factored};
 use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
 use crate::terms::{Fun, Term, Terms};
 
@@ -319,32 +320,29 @@ fn hull(
     Ok(out)
 }
 
-/// Every partial of `t` to `order` over the region, each the hull of its pieces (`hull`), listed
-/// by `partial_index`.
-fn terms_partials(
-    t: &Terms,
-    domain: ParamBox,
-    region: ParamBox,
-    angular: (bool, bool),
+/// Every partial to `order` over a region, each from `partial` (its closed-form extent), listed by
+/// `partial_index`.
+fn partials_upto(
     order: usize,
     meter: &mut WorkMeter<'_>,
+    mut partial: impl FnMut((usize, usize), &mut WorkMeter<'_>) -> Result<[Interval; 3], CurveError>,
 ) -> Result<Vec<[Interval; 3]>, CurveError> {
-    check_box(region, domain)?;
     let mut out = Vec::with_capacity(partial_index(order.saturating_add(1), 0)?);
     for n in 0..=order {
         for j in 0..=n {
             let i = n.checked_sub(j).ok_or(CurveError::Defect)?;
-            let b = hull(region, angular, meter, |u, v| t.enclose(u, v, (i, j)))?;
-            let [l0, l1, l2] = b.lo;
-            let [h0, h1, h2] = b.hi;
-            out.push([
-                Interval::new(l0, h0)?,
-                Interval::new(l1, h1)?,
-                Interval::new(l2, h2)?,
-            ]);
+            out.push(partial((i, j), meter)?);
         }
     }
     Ok(out)
+}
+
+/// The box of three enclosures.
+fn boxed([x, y, z]: [Interval; 3]) -> Bounds<3> {
+    Bounds {
+        lo: [x.lo(), y.lo(), z.lo()],
+        hi: [x.hi(), y.hi(), z.hi()],
+    }
 }
 
 /// Whether a kind's directions are angular.
@@ -408,6 +406,41 @@ impl Round {
         } else {
             None
         })
+    }
+
+    /// ∂^{i+j}S/∂u^i∂v^j over the region in closed form (`crate::extent`): a torus by its
+    /// factored form c + (R + r·cos πv)·(cos πu·x̂ + sin πu·ŷ) + s·r·sin πv·n̂, every other kind
+    /// by its terms.
+    fn closed(
+        &self,
+        which: Which,
+        terms: &Terms,
+        region: ParamBox,
+        order: (usize, usize),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<[Interval; 3], CurveError> {
+        let ((u0, u1), (v0, v1)) = region;
+        if which != Which::Torus || (u0 == u1 && v0 == v1) {
+            return extent::terms(terms, region, order, meter);
+        }
+        let (_, [xe, ye, ne]) = self.frame.unit_vectors()?;
+        let [l0, l1] = self.lengths;
+        let zero = point(0.0)?;
+        let sr = point(self.sign * l1)?;
+        let mut g = [(zero, zero); 3];
+        let mut q = [[zero; 4]; 3];
+        for ((gk, qk), ((&x, &y), &n)) in g.iter_mut().zip(&mut q).zip(xe.iter().zip(&ye).zip(&ne))
+        {
+            *gk = (x, y);
+            *qk = [zero, zero, zero, tight::mul(sr, n)?];
+        }
+        let f = Factored {
+            center: terms.ce,
+            g,
+            p: [point(l0)?, zero, point(l1)?, zero],
+            q,
+        };
+        extent::factored(&f, region, order, meter)
     }
 
     /// This round's data under a similarity: centre and frame carried, lengths scaled, the axial
@@ -725,9 +758,13 @@ macro_rules! round_surface {
                 meter: &mut WorkMeter<'_>,
             ) -> Result<Bounds<3>, CurveError> {
                 check_box(region, self.round.domain)?;
-                hull(region, angular($which), meter, |u, v| {
-                    self.terms.enclose(u, v, (0, 0))
-                })
+                Ok(boxed(self.round.closed(
+                    $which,
+                    &self.terms,
+                    region,
+                    (0, 0),
+                    meter,
+                )?))
             }
 
             fn derivative_bound(
@@ -741,12 +778,13 @@ macro_rules! round_surface {
                     Direction::U => (1, 0),
                     Direction::V => (0, 1),
                 };
-                Ok(DerivativeBound::Bounded(hull(
+                Ok(DerivativeBound::Bounded(boxed(self.round.closed(
+                    $which,
+                    &self.terms,
                     region,
-                    angular($which),
+                    order,
                     meter,
-                    |u, v| self.terms.enclose(u, v, order),
-                )?))
+                )?)))
             }
 
             fn partials_over(
@@ -756,14 +794,10 @@ macro_rules! round_surface {
                 order: usize,
                 meter: &mut WorkMeter<'_>,
             ) -> Result<Vec<[Interval; 3]>, CurveError> {
-                terms_partials(
-                    &self.terms,
-                    self.round.domain,
-                    region,
-                    angular($which),
-                    order,
-                    meter,
-                )
+                check_box(region, self.round.domain)?;
+                partials_upto(order, meter, |o, m| {
+                    self.round.closed($which, &self.terms, region, o, m)
+                })
             }
 
             fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
@@ -953,9 +987,7 @@ impl ParamSurface for Plane {
 
     fn bound(&self, region: ParamBox, meter: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
         check_box(region, self.domain)?;
-        hull(region, (false, false), meter, |u, v| {
-            self.terms.enclose(u, v, (0, 0))
-        })
+        Ok(boxed(extent::terms(&self.terms, region, (0, 0), meter)?))
     }
 
     fn derivative_bound(
@@ -969,12 +1001,12 @@ impl ParamSurface for Plane {
             Direction::U => (1, 0),
             Direction::V => (0, 1),
         };
-        Ok(DerivativeBound::Bounded(hull(
+        Ok(DerivativeBound::Bounded(boxed(extent::terms(
+            &self.terms,
             region,
-            (false, false),
+            order,
             meter,
-            |u, v| self.terms.enclose(u, v, order),
-        )?))
+        )?)))
     }
 
     fn partials_over(
@@ -984,14 +1016,10 @@ impl ParamSurface for Plane {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; 3]>, CurveError> {
-        terms_partials(
-            &self.terms,
-            self.domain,
-            region,
-            (false, false),
-            order,
-            meter,
-        )
+        check_box(region, self.domain)?;
+        partials_upto(order, meter, |o, m| {
+            extent::terms(&self.terms, region, o, m)
+        })
     }
 
     fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
@@ -1198,9 +1226,7 @@ impl ParamSurface for AffineSurface {
 
     fn bound(&self, region: ParamBox, meter: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
         check_box(region, self.domain)?;
-        hull(region, self.angular, meter, |u, v| {
-            self.terms.enclose(u, v, (0, 0))
-        })
+        Ok(boxed(extent::terms(&self.terms, region, (0, 0), meter)?))
     }
 
     fn derivative_bound(
@@ -1214,12 +1240,12 @@ impl ParamSurface for AffineSurface {
             Direction::U => (1, 0),
             Direction::V => (0, 1),
         };
-        Ok(DerivativeBound::Bounded(hull(
+        Ok(DerivativeBound::Bounded(boxed(extent::terms(
+            &self.terms,
             region,
-            self.angular,
+            order,
             meter,
-            |u, v| self.terms.enclose(u, v, order),
-        )?))
+        )?)))
     }
 
     fn partials_over(
@@ -1229,7 +1255,10 @@ impl ParamSurface for AffineSurface {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; 3]>, CurveError> {
-        terms_partials(&self.terms, self.domain, region, self.angular, order, meter)
+        check_box(region, self.domain)?;
+        partials_upto(order, meter, |o, m| {
+            extent::terms(&self.terms, region, o, m)
+        })
     }
 
     fn breaks(&self) -> (Vec<f64>, Vec<f64>) {

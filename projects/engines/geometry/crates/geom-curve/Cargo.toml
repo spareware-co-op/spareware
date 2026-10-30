@@ -39,6 +39,10 @@ harness = false
 name = "transition"
 harness = false
 
+[[bench]]
+name = "enclosure"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

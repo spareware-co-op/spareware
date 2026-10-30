@@ -15,9 +15,11 @@
 //!
 //! [`Form`] holds a kind's vectors c, u, v, w in doubles and as enclosures of the exact vectors its
 //! stored data define, and evaluates C and its derivatives of any order: in doubles at a
-//! parameter, and in intervals over any interval of parameters, which is both the certified
-//! evaluation (a point interval) and the bound over a span (a wide one). The free functions are
-//! the parts of the kind contract every analytic kind implements the same way.
+//! parameter, and in intervals at a parameter, the certified evaluation. Its bound over a span, and
+//! the bound on each derivative, is the closed-form extent of each coordinate (piece G67): each
+//! coordinate of C⁽ᵏ⁾ is written as one of `crate::extent`'s scalars, whose critical points have a
+//! closed form, so the box is the curve's own extent up to rounding. The free functions are the
+//! parts of the kind contract every analytic kind implements the same way.
 //!
 //! Guarantees:
 //!
@@ -28,15 +30,19 @@
 //!   never a finite difference (chapter 7): cos and sin of πt shift by a quarter turn per
 //!   derivative and gain a factor π, cosh and sinh trade places, and the involute's terms follow
 //!   d^k(θ·cos θ) = θ·cos⁽ᵏ⁾θ + k·cos⁽ᵏ⁻¹⁾θ.
+//! - **Closed-form extents.** A bound holds every value of C⁽ᵏ⁾ over the span, and is the hull of
+//!   its values at the span's ends and at the critical points of each coordinate inside it
+//!   (`crate::extent`'s guarantees).
 //! - **Refused outside.** A parameter or span outside the domain, or not finite, is an error.
 //!
 //! Method: direct evaluation of the closed forms, in interval arithmetic for the enclosures
 //! (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009),
-//! <https://doi.org/10.1137/1.9780898717716>, the natural interval extension); a span is cut into
-//! eighths of a turn for the periodic shapes, so the box follows the curve.
+//! <https://doi.org/10.1137/1.9780898717716>, the natural interval extension); the extents of
+//! chapter 12.3's analytic row, from the ends and the closed-form critical points
+//! (`crate::extent`).
 //!
-//! Cost: a few dozen floating-point operations per evaluation and derivative order; a bound
-//! evaluates one interval extension per piece, at most 64 pieces.
+//! Cost: a few dozen floating-point operations per evaluation and derivative order; a bound one
+//! closed-form extent per coordinate, a few evaluations each.
 
 #![allow(
     clippy::many_single_char_names,
@@ -51,6 +57,7 @@ use geom_nurbs::Bounds;
 use geom_run::WorkMeter;
 
 use crate::error::CurveError;
+use crate::extent::{Scalar, extent};
 use crate::param::DerivativeBound;
 use crate::tight::{self, point};
 
@@ -58,9 +65,6 @@ use crate::tight::{self, point};
 pub(crate) const PI_LO: f64 = f64::from_bits(0x4009_21FB_5444_2D18);
 /// π rounded up: the double just above π.
 pub(crate) const PI_HI: f64 = f64::from_bits(0x4009_21FB_5444_2D19);
-
-/// The most pieces a bound cuts a span into.
-const MAX_PIECES: u32 = 64;
 
 /// The scalar functions of a kind (module documentation).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -414,58 +418,124 @@ pub(crate) fn enclose_at<const D: usize>(
     Ok(out)
 }
 
-/// The hull of C⁽ᵏ⁾ over `span`, cut into pieces for the periodic shapes.
-fn hull<const D: usize>(
+/// cos(x + k·π/2) and sin(x + k·π/2) as their coefficients on (cos x, sin x).
+fn turned(k: usize) -> ([f64; 2], [f64; 2]) {
+    shifted([1.0, 0.0], [0.0, 1.0], k, |[x, y]: [f64; 2]| [-x, -y])
+}
+
+/// u·x + v·y for x and y each −1, 0 or 1: exact.
+fn combine(u: Interval, v: Interval, x: f64, y: f64) -> Result<Interval, CurveError> {
+    tight::add(tight::mul(point(x)?, u)?, tight::mul(point(y)?, v)?)
+}
+
+/// p·x, exactly zero when x is: a coordinate the curve does not move in stays exactly zero, so the
+/// closed form sees it (an interval product with zero would round outward past it).
+fn scaled(p: Interval, x: Interval) -> Result<Interval, CurveError> {
+    if x.lo() == 0.0 && x.hi() == 0.0 {
+        point(0.0)
+    } else {
+        tight::mul(p, x)
+    }
+}
+
+/// One coordinate of C⁽ᵏ⁾, from that coordinate of c, u, v and w, as a closed-form scalar
+/// (`crate::extent`): each shape's k-th derivative written on cos πt and sin πt, on t and t², or on
+/// cosh t and sinh t.
+pub(crate) fn scalar(
+    shape: Shape,
+    k: usize,
+    [c, u, v, w]: [Interval; 4],
+) -> Result<Scalar, CurveError> {
+    let zero = point(0.0)?;
+    let two = point(2.0)?;
+    let base = if k == 0 { c } else { zero };
+    Ok(match shape {
+        Shape::Linear => match k {
+            0 => Scalar::Wave {
+                p: c,
+                q: u,
+                a: zero,
+                b: zero,
+            },
+            1 => Scalar::constant(u)?,
+            _ => Scalar::constant(zero)?,
+        },
+        Shape::Parabolic => match k {
+            0 => Scalar::Quadratic { p: c, q: v, r: u },
+            1 => Scalar::Quadratic {
+                p: v,
+                q: tight::mul(two, u)?,
+                r: zero,
+            },
+            2 => Scalar::constant(tight::mul(two, u)?)?,
+            _ => Scalar::constant(zero)?,
+        },
+        Shape::Trig | Shape::Helical => {
+            // π^k·(u·cos(πt + kπ/2) + v·sin(πt + kπ/2)), plus the helix's lift.
+            let ([cc, cs], [sc, ss]) = turned(k);
+            let p_k = pi_power_enclosed(k)?;
+            let (p, q) = match (shape, k) {
+                (Shape::Helical, 0) => (c, w),
+                (Shape::Helical, 1) => (w, zero),
+                _ => (base, zero),
+            };
+            Scalar::Wave {
+                p,
+                q,
+                a: scaled(p_k, combine(u, v, cc, sc)?)?,
+                b: scaled(p_k, combine(u, v, cs, ss)?)?,
+            }
+        }
+        Shape::Hyperbolic => {
+            let (a, b) = if k & 1 == 0 { (u, v) } else { (v, u) };
+            Scalar::Hyperbolic { p: base, a, b }
+        }
+        Shape::Involute => match k.checked_sub(1) {
+            None => Scalar::Involute { p: c, a: u, b: v },
+            Some(j) => {
+                // π^k·(πt·(u·cos(πt + jπ/2) + v·sin(πt + jπ/2))
+                //      + j·(u·cos(πt + (j − 1)π/2) + v·sin(πt + (j − 1)π/2))).
+                let ([c1c, c1s], [s1c, s1s]) = turned(j);
+                let ([c2c, c2s], [s2c, s2s]) = match j.checked_sub(1) {
+                    Some(i) => turned(i),
+                    None => ([0.0; 2], [0.0; 2]),
+                };
+                let p_k = pi_power_enclosed(k)?;
+                let slope = tight::mul(p_k, pi()?)?;
+                let m = tight::mul(p_k, point(count(j)?)?)?;
+                Scalar::Modulated {
+                    p: zero,
+                    a: scaled(m, combine(u, v, c2c, s2c)?)?,
+                    b: scaled(m, combine(u, v, c2s, s2s)?)?,
+                    c: scaled(slope, combine(u, v, c1c, s1c)?)?,
+                    d: scaled(slope, combine(u, v, c1s, s1s)?)?,
+                }
+            }
+        },
+    })
+}
+
+/// The extent of C⁽ᵏ⁾ over `span`, coordinate by coordinate, in closed form (`crate::extent`).
+fn extents<const D: usize>(
     form: &Form<D>,
     domain: (f64, f64),
-    (lo, hi): (f64, f64),
+    span: (f64, f64),
     k: usize,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Bounds<D>, CurveError> {
-    crate::nurbs::check_span((lo, hi), domain)?;
-    let pieces = match form.shape {
-        Shape::Trig | Shape::Helical | Shape::Involute => {
-            // Eighths of a turn: a quarter of a half-turn each.
-            let n = math::ceil((hi - lo) * 4.0)?.get();
-            if n >= f64::from(MAX_PIECES) {
-                MAX_PIECES
-            } else if n >= 1.0 {
-                // Below MAX_PIECES and whole, so exact in u32.
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    clippy::cast_sign_loss,
-                    reason = "n is a whole number in [1, 64)"
-                )]
-                let m = n as u32;
-                m
-            } else {
-                1
-            }
-        }
-        _ => 1,
-    };
-    meter.charge(u64::from(pieces))?;
-    let width = hi - lo;
-    let n = f64::from(pieces);
+    crate::nurbs::check_span(span, domain)?;
     let mut out = Bounds {
-        lo: [f64::INFINITY; D],
-        hi: [f64::NEG_INFINITY; D],
+        lo: [0.0; D],
+        hi: [0.0; D],
     };
-    let mut start = lo;
-    for i in 1..=pieces {
-        let end = if i == pieces {
-            hi
-        } else {
-            lo + width * (f64::from(i) / n)
-        };
-        // Rounding may step past either end; the piece stays in [start, hi].
-        let end = tight::larger(tight::smaller(end, hi), start);
-        let e = form.enclose(Interval::new(start, end)?, k)?;
-        for ((l, h), x) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(&e) {
-            *l = tight::smaller(*l, x.lo());
-            *h = tight::larger(*h, x.hi());
-        }
-        start = end;
+    let [c, u, v, w] = &form.exact;
+    let coefficients = c.iter().zip(u).zip(v.iter().zip(w));
+    for ((l, h), ((&ci, &ui), (&vi, &wi))) in
+        out.lo.iter_mut().zip(out.hi.iter_mut()).zip(coefficients)
+    {
+        let e = extent(&scalar(form.shape, k, [ci, ui, vi, wi])?, span, meter)?;
+        *l = e.lo();
+        *h = e.hi();
     }
     Ok(out)
 }
@@ -477,7 +547,7 @@ pub(crate) fn bound<const D: usize>(
     span: (f64, f64),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Bounds<D>, CurveError> {
-    hull(form, domain, span, 0, meter)
+    extents(form, domain, span, 0, meter)
 }
 
 /// A bound on the derivative of `order` over `span`.
@@ -488,7 +558,7 @@ pub(crate) fn derivative_bound<const D: usize>(
     order: usize,
     meter: &mut WorkMeter<'_>,
 ) -> Result<DerivativeBound<D>, CurveError> {
-    Ok(DerivativeBound::Bounded(hull(
+    Ok(DerivativeBound::Bounded(extents(
         form, domain, span, order, meter,
     )?))
 }
