@@ -627,7 +627,12 @@ name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
  "cargo_metadata",
+ "geom-curve",
+ "geom-num",
+ "geom-op",
  "geom-pool",
+ "geom-surface",
+ "geom-topo",
  "kit-core",
  "proc-macro2",
  "serde_json",

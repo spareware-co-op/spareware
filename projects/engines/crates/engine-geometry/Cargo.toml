@@ -6,9 +6,14 @@ publish.workspace = true
 
 [dependencies]
 # kit-core for permanent IDs and units at the boundary (section 5), every kernel crate this
-# facade re-exports (none yet: G100 adds them), and geom-pool behind the `threads` feature. Checked
-# by tests/scaffold, which holds the kernel's crate table (chapter 27).
+# facade re-exports (src/value.rs and src/schema.rs, piece G100), and geom-pool behind the
+# `threads` feature. Checked by tests/scaffold, which holds the kernel's crate table (chapter 27).
 kit-core = { path = "../../../kit/crates/kit-core" }
+geom-curve = { path = "../../geometry/crates/geom-curve" }
+geom-num = { path = "../../geometry/crates/geom-num" }
+geom-op = { path = "../../geometry/crates/geom-op" }
+geom-surface = { path = "../../geometry/crates/geom-surface" }
+geom-topo = { path = "../../geometry/crates/geom-topo" }
 geom-pool = { path = "../../geometry/crates/geom-pool", optional = true }
 
 [dev-dependencies]

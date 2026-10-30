@@ -348,11 +348,13 @@ const ROWS: &[Row<'static>] = &[
     // Board exchange follows the two-program rule too (24.11), so it waits with the toolkits.
     kernel("geom-gerber",   12, Amended27, Deferred("G474"), "base format exchange 2d"),
     kernel("geom-ipc2581",  12, Amended27, Deferred("G475"), "base format exchange 2d"),
-    // 13. Facade. engine-geometry's row: every kernel crate it re-exports (none yet: G100 adds
-    // them), and geom-pool behind its `threads` feature. geom-pool was scaffolded here: G04 built
-    // only geom-run; G33 wrote its native pool (rayon), and G456 adds Web Workers.
+    // 13. Facade. engine-geometry's row: every kernel crate it re-exports (G100: the value types
+    // and the schema vocabulary), and geom-pool behind its `threads` feature. geom-pool was
+    // scaffolded here: G04 built only geom-run; G33 wrote its native pool (rayon), and G456 adds
+    // Web Workers.
     Row { name: "engine-geometry", layer: Layer::N(13), kind: Kind::Facade, origin: Accepted,
-          state: Here, deps: Deps::Exact("pool"), external: "kit-core" },
+          state: Elsewhere("G100"), deps: Deps::Exact("pool num curve surface topo op"),
+          external: "kit-core" },
     Row { name: "geom-pool", layer: Layer::N(13), kind: Kind::KernelStd, origin: Amended27,
           state: Elsewhere("G33"), deps: Deps::Exact("run"), external: "" },
     binding("engine-geometry-c",    "G453"),
