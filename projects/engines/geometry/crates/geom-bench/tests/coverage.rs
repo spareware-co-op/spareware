@@ -668,6 +668,11 @@ fn the_workflow_passes_the_documented_limits_and_build() {
     assert!(WORKFLOW.contains(&format!("LIST_PERCENT: \"{LIST_PERCENT}\"").replace(".0\"", "\"")));
     // The steady-state measurement depends on cache-line-aligned functions.
     assert!(WORKFLOW.contains("-C llvm-args=-align-all-functions=6"));
+    // Both trees' measured builds are one codegen unit per crate, so inlining does not move with
+    // how rustc splits geom-bench into units: the instructions job's benchmark binaries (the bench
+    // profile) and the fuel job's guests (the release profile, on their build step only).
+    assert!(WORKFLOW.contains("CARGO_PROFILE_BENCH_CODEGEN_UNITS: \"1\""));
+    assert!(WORKFLOW.contains("CARGO_PROFILE_RELEASE_CODEGEN_UNITS: \"1\""));
     // The toolchain comes from toolchain.txt; nothing installs a floating one.
     assert!(WORKFLOW.contains("toolchain.txt"));
     assert!(!WORKFLOW.contains("@stable") && !WORKFLOW.contains("toolchain: stable"));
