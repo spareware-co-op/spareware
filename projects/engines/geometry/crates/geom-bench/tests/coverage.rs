@@ -483,6 +483,122 @@ fn the_parser_finds_every_public_function_however_it_is_written() {
     assert_eq!(modules(&file, false), BTreeSet::from(["inner".to_owned()]));
 }
 
+/// The other kernel crates whose hot paths the catalogue measures (decision 32.44: a count
+/// benchmark for every phase-2 code piece), each with the source files that define the functions
+/// it measures there, by module name.
+const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
+    (
+        "geom_math",
+        &[
+            ("typed", include_str!("../../geom-math/src/typed.rs")),
+            ("rotation", include_str!("../../geom-math/src/rotation.rs")),
+            ("convert", include_str!("../../geom-math/src/convert.rs")),
+            ("decimal", include_str!("../../geom-math/src/decimal.rs")),
+        ],
+    ),
+    (
+        "geom_linalg",
+        &[
+            ("qr", include_str!("../../geom-linalg/src/qr.rs")),
+            ("svd", include_str!("../../geom-linalg/src/svd.rs")),
+        ],
+    ),
+    (
+        "geom_bvh",
+        &[
+            ("tree", include_str!("../../geom-bvh/src/tree.rs")),
+            ("cells", include_str!("../../geom-bvh/src/cells.rs")),
+        ],
+    ),
+    (
+        "geom_nurbs",
+        &[
+            ("curve", include_str!("../../geom-nurbs/src/curve.rs")),
+            ("interp", include_str!("../../geom-nurbs/src/interp.rs")),
+            (
+                "bernstein",
+                include_str!("../../geom-nurbs/src/bernstein.rs"),
+            ),
+        ],
+    ),
+    (
+        "geom_curve",
+        &[
+            ("param", include_str!("../../geom-curve/src/param.rs")),
+            (
+                "transition",
+                include_str!("../../geom-curve/src/transition.rs"),
+            ),
+        ],
+    ),
+    (
+        "geom_surface",
+        &[("param", include_str!("../../geom-surface/src/param.rs"))],
+    ),
+];
+
+/// [`public_functions`], with the methods of every trait implementation in the file too: a kind's
+/// evaluation is its trait's (`impl ParamCurve<D> for CurveKind<D>`), and a trait's methods are as
+/// public as the trait.
+fn crate_functions(module: &str, source: &str) -> Vec<String> {
+    let mut out = public_functions(module, source);
+    for item in &parse(module, source).items {
+        let syn::Item::Impl(block) = item else {
+            continue;
+        };
+        if block.trait_.is_none() || is_test(&block.attrs) {
+            continue;
+        }
+        let Some(ty) = type_name(&block.self_ty) else {
+            continue;
+        };
+        for inner in &block.items {
+            if let syn::ImplItem::Fn(f) = inner {
+                out.push(format!("{ty}::{}", f.sig.ident));
+            }
+        }
+    }
+    out
+}
+
+/// The crate path and the rest of a measured name that names another kernel crate's function
+/// (`geom_math::TypedTransform::apply`), or `None` for a `geom-num` one.
+fn other_crate(measured: &str) -> Option<(&'static str, &str)> {
+    OTHER_CRATES.iter().find_map(|(krate, _)| {
+        measured
+            .strip_prefix(krate)
+            .and_then(|rest| rest.strip_prefix("::"))
+            .map(|rest| (*krate, rest))
+    })
+}
+
+/// Every function the catalogue measures in another kernel crate is a public function of that
+/// crate, read from its source as `Type::method` or `module::function`, so a renamed or removed
+/// function fails here, as a stale `geom-num` entry fails the test below.
+#[test]
+fn every_function_measured_in_another_crate_is_public_there() {
+    let mut seen = 0;
+    for op in OPS {
+        let Some((krate, name)) = other_crate(op.measures) else {
+            continue;
+        };
+        seen += 1;
+        let (_, files) = OTHER_CRATES.iter().find(|(k, _)| *k == krate).unwrap();
+        let public: BTreeSet<String> = files
+            .iter()
+            .flat_map(|(m, src)| crate_functions(m, src))
+            .collect();
+        assert!(
+            public.contains(name),
+            "{}/{}: {} is not a public function of {krate}",
+            op.group,
+            op.name,
+            op.measures
+        );
+    }
+    assert!(seen > 0, "no benchmark measures another kernel crate");
+}
+
 #[test]
 fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
     // Principle 12: every operation ships with a benchmark.
@@ -528,10 +644,13 @@ fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
         .flat_map(|(m, src)| public_functions(m, src))
         .collect();
     assert!(public.len() > 60, "the parser found only {public:?}");
+    // Another kernel crate's functions (decision 32.44) are named with their crate's path and
+    // checked by `every_function_measured_in_another_crate_is_public_there`.
     let measured: BTreeSet<String> = OPS
         .iter()
         .map(|op| op.measures.to_owned())
         .chain(GROWTH.iter().map(|g| g.measures.to_owned()))
+        .filter(|m| other_crate(m).is_none())
         .collect();
     let unmeasured: BTreeSet<String> = UNMEASURED.iter().map(|(f, _)| (*f).to_owned()).collect();
     assert!(

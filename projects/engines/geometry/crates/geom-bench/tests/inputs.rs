@@ -2202,3 +2202,149 @@ fn isolate_and_ball_classes_are_what_they_claim() {
             .any(|x| cubic(x) == Err(NumError::NotFinite))
     );
 }
+
+/// Runs `kernel` on `batch` and requires a full batch of `Ok` results, naming the first error.
+fn all_ok<T, R, E: core::fmt::Debug>(
+    name: &str,
+    kernel: fn(&[T], &mut Vec<Result<R, E>>),
+    batch: &[T],
+) {
+    let mut out = Vec::with_capacity(batch.len());
+    kernel(batch, &mut out);
+    assert_eq!(
+        out.len(),
+        BATCH,
+        "{name}: a kernel that could not build its transform or frame"
+    );
+    for r in &out {
+        assert!(r.is_ok(), "{name}: {:?}", r.as_ref().err());
+    }
+}
+
+/// Every typical batch of `geom-math`'s benchmarks (decision 32.44) is what its module says: full,
+/// and every transform image, rotation, map point and decimal in it is `Ok`, so each benchmark
+/// measures the path that succeeds.
+#[test]
+fn math_types_typical_batches_all_succeed() {
+    use geom_bench::inputs::math_types as m;
+    use geom_bench::kernels::math_types as k;
+    all_ok("apply_exact", k::apply_exact, &m::apply_exact(Typical));
+    all_ok(
+        "apply_rational",
+        k::apply_rational,
+        &m::apply_rational(Typical),
+    );
+    all_ok(
+        "apply_certified",
+        k::apply_certified,
+        &m::apply_certified(Typical),
+    );
+    all_ok(
+        "rotation_apply",
+        k::rotation_apply,
+        &m::rotation_apply(Typical),
+    );
+    all_ok("plane_within", k::plane_within, &m::plane_within(Typical));
+    all_ok("to_map", k::to_map, &m::to_map(Typical));
+    all_ok(
+        "decimal_parse",
+        k::decimal_parse,
+        &m::decimal_parse(Typical),
+    );
+}
+
+/// Every typical batch of `geom-linalg`'s benchmarks (decision 32.44) factorises every matrix.
+#[test]
+fn linalg_typical_batches_all_succeed() {
+    use geom_bench::inputs::linalg as m;
+    use geom_bench::kernels::linalg as k;
+    all_ok("pivoted_qr", k::pivoted_qr, &m::pivoted_qr(Typical));
+    all_ok("svd_jacobi", k::svd_jacobi, &m::svd_jacobi(Typical));
+}
+
+/// Every typical batch of `geom-bvh`'s benchmarks (decision 32.44) builds every scene and answers
+/// every query.
+#[test]
+fn bvh_typical_batches_all_succeed() {
+    use geom_bench::inputs::bvh as m;
+    use geom_bench::kernels::bvh as k;
+    all_ok(
+        "tree_build_query",
+        k::tree_build_query,
+        &m::tree_build_query(Typical),
+    );
+    all_ok("cells_within", k::cells_within, &m::cells_within(Typical));
+}
+
+/// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
+/// bounds every input.
+#[test]
+fn nurbs_typical_batches_all_succeed() {
+    use geom_bench::inputs::nurbs as m;
+    use geom_bench::kernels::nurbs as k;
+    all_ok("curve_point", k::curve_point, &m::curve_point(Typical));
+    all_ok("interpolate", k::interpolate, &m::interpolate(Typical));
+    all_ok(
+        "bernstein_bound",
+        k::bernstein_bound,
+        &m::bernstein_bound(Typical),
+    );
+}
+
+/// Every typical batch of `geom-curve`'s benchmarks (decision 32.44) evaluates, encloses and
+/// converts every input.
+#[test]
+fn curve_typical_batches_all_succeed() {
+    use geom_bench::inputs::curve as m;
+    use geom_bench::kernels::curve as k;
+    all_ok("helix_point", k::helix_point, &m::helix_point(Typical));
+    all_ok(
+        "helix_enclose",
+        k::helix_enclose,
+        &m::helix_enclose(Typical),
+    );
+    all_ok(
+        "bulge_to_nurbs",
+        k::bulge_to_nurbs,
+        &m::bulge_to_nurbs(Typical),
+    );
+    all_ok(
+        "transition_point",
+        k::transition_point,
+        &m::transition_point(Typical),
+    );
+    all_ok(
+        "transition_to_nurbs",
+        k::transition_to_nurbs,
+        &m::transition_to_nurbs(Typical),
+    );
+}
+
+/// Every typical batch of `geom-surface`'s benchmarks (decision 32.44) evaluates and encloses
+/// every pair.
+#[test]
+fn surface_typical_batches_all_succeed() {
+    use geom_bench::inputs::surface as m;
+    use geom_bench::kernels::surface as k;
+    all_ok("torus_point", k::torus_point, &m::torus_point(Typical));
+    all_ok(
+        "torus_enclose",
+        k::torus_enclose,
+        &m::torus_enclose(Typical),
+    );
+    all_ok("offset_point", k::offset_point, &m::offset_point(Typical));
+}
+
+/// Every typical batch of the root-finding and quadrature benchmarks (decision 32.44) finds every
+/// zero and integrates every interval.
+#[test]
+fn roots_typical_batches_all_succeed() {
+    use geom_bench::inputs::roots as m;
+    use geom_bench::kernels::roots as k;
+    all_ok("zero", k::zero, &m::zero(Typical));
+    all_ok(
+        "gauss_legendre",
+        k::gauss_legendre,
+        &m::gauss_legendre(Typical),
+    );
+}
