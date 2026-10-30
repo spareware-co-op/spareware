@@ -95,6 +95,8 @@ impl fmt::Display for BatchDetail {
     }
 }
 
+impl core::error::Error for BatchDetail {}
+
 impl From<BatchDetail> for OpErrorDetail {
     fn from(detail: BatchDetail) -> Self {
         OpErrorDetail::Batch(detail)
