@@ -1425,6 +1425,7 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "proptest",
 ]
 
