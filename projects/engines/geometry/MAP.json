@@ -1480,6 +1480,11 @@
               "doc": "A step its own bounds rule out failed: a defect in this crate, reported, never a panic.",
               "name": "Defect",
               "shape": "unit"
+            },
+            {
+              "doc": "A flat array of a many-point call holds the wrong number of values (chapter 23.6).",
+              "name": "ArrayLength",
+              "shape": "struct"
             }
           ],
           "module": "geom_curve::error",
@@ -1696,6 +1701,28 @@
             "text": "the extreme value theorem with the critical points in closed form, the amplitude and phase form R·cos(π(t − φ)) of a·cos πt + b·sin πt, and interval arithmetic for every closed form (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>: the natural interval extension, and the monotonicity test and the mean-value form of chapter 6 for the pieces)."
           },
           "path": "geom_curve::extent",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one evaluation per point and D stores; no allocation; nothing recurses.",
+          "does": "[`fill`] writes N points of dimension D into one flat array in structure-of-arrays order, all x values, then all y values, then all z values, with one result per point beside it. [`crate::ParamCurve::points`] (N parameters of a curve) and `geom-surface`'s `ParamSurface::points` (N parameter pairs of a surface, all u values then all v values) are built on it, so every curve and surface kind evaluates N parameters per call.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/flat.rs",
+          "guarantees": [
+            "**The same bits as one call at a time.** Each point is the value its own evaluation gives, copied unchanged; nothing is computed here, so no result depends on N, on its neighbours or on the array layout.",
+            "**One failure fails only itself.** A point whose evaluation fails gets that failure in its result and zeros in every coordinate (never a NaN); every other point is written as it would be alone.",
+            "**Shapes are checked first.** Unless the results hold N entries and the flat array D·N values, nothing is written and the call returns [`CurveError::ArrayLength`]."
+          ],
+          "job": "Many evaluations in one call, into flat arrays (chapter 23.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "structure-of-arrays evaluation as chapter 23.6 asks (`projects/engines/geometry/architecture/23-performance.md`): each lane is the scalar evaluation, so the layout can never change a value."
+          },
+          "path": "geom_curve::flat",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -2143,7 +2170,7 @@
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), and the analytic and transcendental enclosures (G67) built; the other kinds to come in G68, G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic and transcendental enclosures (G67) and many points per call (G104) built; the other kinds to come in G68, G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {
@@ -6436,6 +6463,12 @@
               "doc": "A failure of the numbers layer, wrapped by meaning.",
               "name": "Num",
               "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A batch that could not run its items (piece G104).",
+              "name": "Batch",
+              "shape": "tuple"
             }
           ],
           "module": "geom_op::detail",
@@ -6647,6 +6680,31 @@
       "layer": "1",
       "modules": [
         {
+          "cost": "the repeated-key check sorts the keys once, O(n log n) comparisons of sixteen bytes and one allocation of n entries; each item then costs its own operation plus one child path (one allocation); the results are one vector of n. Nothing recurses.",
+          "does": "[`Batch`] is the driver every operation schema's batch entry uses (chapters 10.1 and 23.6). It takes the batch's [`OpContext`] (its path, cancellation and precision), a [`BatchBudget`], the items and the caller's stable key for each, and runs the operation once per item through `geom-run`'s `map_each` under chapter 23.10's batch rule. Item i runs as its own operation: its [`OpPath`] is the batch's path plus its key ([`OpPath::item`]), its budget is the batch's `per_item`, and its precision and cancellation are the batch's. Each item's outcome is a `Result<U, OpError>`, in the order the items were given. [`Batch::single`] runs one item the same way on its own, which is what a call made one by one gives.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/batch.rs",
+          "guarantees": [
+            "**One result per item, in the items' order.** The batch returns exactly one result per item, or one error for the whole batch when it could not run: a repeated key ([`BatchDetail::RepeatedKey`], checked before any item runs), the caller's cancellation, or a refused allocation.",
+            "**One failure fails only itself.** An item's own error, or its own budget running out, is that item's result alone; the other items keep theirs.",
+            "**Batch equals single calls, names included.** An item's path, budget, precision and meter do not depend on the other items, so with no batch total each item's result is bit for bit the result [`Batch::single`] gives it: the same value, or the same error at the same path. Any name an operation derives from its path is therefore the same too.",
+            "**Keyed, never positioned.** Paths use the caller's keys, so inserting, removing or reordering items changes no other item's path or result; only a batch total, summed in key order, can reach past an item (23.10), and then as [`RunDetail::BatchTotal`], which belongs to the batch and is never cached as the item's result.",
+            "**Repeated keys are refused.** Two items with one key would share a path, and would make the batch total's cut depend on their order; the driver refuses them as `InvalidInput` before any item runs. This settles section 31.7's question of which layer rejects them."
+          ],
+          "job": "The batch driver: one call, many items, one result per item, every item its own operation.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "chapter 10.1's batch-first rule and chapter 23.10's batch rule (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/23-performance.md`), on `geom-run`'s `map_each` (piece G23 and G33), which already holds the batch rule on every thread count."
+          },
+          "path": "geom_op::batch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a context is a path (one vector of labels) and a few machine words; making one and reading it never allocates beyond the path it is given.",
           "does": "every operation has chapter 10.1's shape, `fn operation(ctx: &OpContext, input: &OpInput) -> Result<OpOutput, OpError>`. An [`OpContext`] carries the operation's [`OpPath`] (its permanent ID from the operation log, and the step or batch item it is), its [`Budget`] of work units and logical bytes (chapter 23.10), the caller's [`Cancel`], and its [`Precision`]: final, or a coarser preview the caller asked for (chapter 23.6).",
           "family": [],
@@ -6854,7 +6912,7 @@
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract to come in G83, the canonical encoder in G86, names in G87, history in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
+      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82), and the batch driver (G104); budgets in the contract to come in G83, the canonical encoder in G86, names in G87, history in G88, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {
@@ -7895,7 +7953,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); the other kinds to come in G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); many points per call, every kind evaluating n parameter pairs into flat arrays through `ParamSurface::points` (G104); the other kinds to come in G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
