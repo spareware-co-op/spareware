@@ -249,6 +249,16 @@
           "sha256": "3cb00aed8da0c554da8bfda0423b62ed46559d7d794394056018577c17f0c7db"
         },
         {
+          "id": "geom-curve/transition-operations",
+          "what": "The transition kind's operations in geom-curve (piece G64): 6 rounds of one transition per curvature law (clothoid, Helmert, Bloss, cosine, sine, cant-coupled, and IFC's polynomial, cosine and sine spirals), each with its NURBS form (every knot, control point and the deviation), its split at 0.37 of its length (both parts' domains and enclosures there), its reversal, a reversed part with its bound, its bound and three derivative bounds over a span, and its images under a certified rotation and a uniform scale of the plane (kind, deviation and an enclosure); and 6 refusals: 978 results in the canonical encoding of tests/transition_ops_determinism.rs.",
+          "check": {
+            "crate": "geom-curve",
+            "test": "transition_ops_determinism",
+            "function": "transition_operations_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "32a3d23ee2e28474af4405e94e197229c774ce904ddf8fc13999a2837dedabec"
+        },
+        {
           "id": "geom-surface/analytic",
           "what": "The analytic and swept surface kinds of geom-surface (piece G65): 12 rounds of a plane, cylinder, cone, sphere and torus on random frames and a surface of revolution, an extrusion and a ruled surface on fixed profiles, each enclosed at nine parameter pairs, bounded with both derivative bounds and the normal bound over a box, converted to NURBS (knots, net, weights, both parameter maps and deviation), split and reversed in each direction and transformed (each enclosed, with its deviation); and 5 refusals: 2693 results in the canonical encoding of tests/surface_determinism.rs.",
           "check": {

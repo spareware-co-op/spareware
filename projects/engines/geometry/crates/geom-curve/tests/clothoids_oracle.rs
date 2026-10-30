@@ -43,7 +43,8 @@ mod series;
 use std::fmt::Write as _;
 
 use dashu_int::IBig;
-use geom_curve::{CurvatureLaw, Transition};
+use geom_curve::{CurvatureLaw, ParamCurve, Transition};
+use geom_nurbs::Limit;
 use geom_run::{Budget, WorkMeter};
 use geom_test::rng::SplitMix64;
 use geom_test::seed::{Seed, resolve};
@@ -115,7 +116,7 @@ fn written(cases: &[Case]) -> String {
 }
 
 /// The kernel's transition for a case: a clothoid from κ to κ + κ′·L, which is exact.
-fn transition(c: &Case) -> Transition {
+fn transition(c: &Case) -> Transition<2> {
     let end = c.k + c.dk * c.length;
     assert_eq!(end - c.k, c.dk * c.length, "the end curvature is exact");
     Transition::new(
@@ -155,7 +156,7 @@ fn compare(cases: &[Case], answers: &str) -> Outcome {
     let lines: Vec<&str> = answers.lines().collect();
     assert_eq!(lines.len(), cases.len(), "one answer per case");
     let mut out = Outcome::default();
-    let mut built: Option<(Case, Transition)> = None;
+    let mut built: Option<(Case, Transition<2>)> = None;
     for (c, line) in cases.iter().zip(lines) {
         let theirs: Vec<f64> = line
             .split_whitespace()
@@ -170,7 +171,12 @@ fn compare(cases: &[Case], answers: &str) -> Outcome {
         }
         let t = &built.as_ref().unwrap().1;
         let e = t
-            .enclose(c.s, 0, &mut WorkMeter::new(Budget::UNLIMITED))
+            .enclose(
+                c.s,
+                Limit::FromRight,
+                0,
+                &mut WorkMeter::new(Budget::UNLIMITED),
+            )
             .unwrap()[0];
         let allowance = 1e-12 * (1.0 + c.length);
         let beyond = e
@@ -256,14 +262,16 @@ fn the_comparison_runs_on_the_kernels_own_points() {
     }
     let mut answers = String::new();
     for c in &cases {
-        let p = transition(c).point(c.s).unwrap();
+        let p = transition(c).point(c.s, Limit::FromRight).unwrap();
         writeln!(answers, "{} {}", p[0], p[1]).unwrap();
     }
     let out = compare(&cases, &answers);
     assert_eq!(out.agree, cases.len());
     // An answer moved by a millimetre is a difference, and the truth says whose.
     let mut moved: Vec<String> = answers.lines().map(str::to_owned).collect();
-    let p = transition(&cases[5]).point(cases[5].s).unwrap();
+    let p = transition(&cases[5])
+        .point(cases[5].s, Limit::FromRight)
+        .unwrap();
     moved[5] = format!("{} {}", p[0] + 1e-3, p[1]);
     let out = compare(&cases, &(moved.join("\n") + "\n"));
     assert_eq!(out.agree, cases.len() - 1);

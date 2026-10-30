@@ -42,14 +42,15 @@
 //! jets (`jet`); [`OnSurface`] in [`on_surface`]; all built on the leaves of [`Basis`] in
 //! [`basis`], so no kind contains itself.
 //!
-//! The transition curves of road and rail alignments (piece G63): [`Transition`] in
+//! The transition curves of road and rail alignments (pieces G63 and G64): [`Transition`] in
 //! [`transition`], one kind with the closed set of [`CurvatureLaw`]s, its heading exact and its
-//! positions by certified Gauss–Legendre quadrature.
+//! positions by certified Gauss–Legendre quadrature, a part of its parent run either way, with a
+//! certified NURBS form and typed transforms.
 //!
 //! Status: the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61),
-//! the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) and the transition kind's
-//! evaluation (G63) built; the transition's conversion and transforms (G64) and the other kinds to
-//! come in G67, G68, G175, G361 and G371.
+//! the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) and the transition kind,
+//! its evaluation (G63) and its conversion, split, reversal and transforms (G64), built; the other
+//! kinds to come in G67, G68, G175, G361 and G371.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 

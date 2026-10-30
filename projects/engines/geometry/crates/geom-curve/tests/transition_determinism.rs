@@ -21,8 +21,9 @@
     reason = "the corpus generator; the rules are for kernel code"
 )]
 
-use geom_curve::{CurvatureLaw, CurveError, Transition};
+use geom_curve::{CurvatureLaw, CurveError, ParamCurve, Transition};
 use geom_num::interval::Interval;
+use geom_nurbs::Limit;
 use geom_run::{Budget, WorkMeter};
 use geom_test::golden::{self, hex, sha256};
 
@@ -95,11 +96,14 @@ impl Recorder {
             for q in [0.0, 0.1, 0.37, 0.5, 0.83, 1.0] {
                 let station = length * q;
                 let mut d = [[0.0; 2]; 4];
-                let r = t.derivatives(station, &mut d).map(|()| d);
+                let r = t.derivatives(station, Limit::FromRight, &mut d).map(|()| d);
                 s.result(r, |s, d| d.iter().flatten().for_each(|&x| s.f64(x)));
-                s.result(t.enclose(station, 3, &mut meter()), |s, e| {
-                    e.iter().flatten().for_each(|&x| s.iv(x));
-                });
+                s.result(
+                    t.enclose(station, Limit::FromRight, 3, &mut meter()),
+                    |s, e| {
+                        e.iter().flatten().for_each(|&x| s.iv(x));
+                    },
+                );
                 s.result(t.turn(station), Recorder::iv);
                 s.result(t.curvature(station), Recorder::iv);
             }
@@ -236,7 +240,7 @@ fn corpus() -> Recorder {
         );
     }
     let t = Transition::new([0.0, 0.0], [1.0, 0.0], 1.0, law, &mut meter()).unwrap();
-    rec.result(t.point(2.0), |_, _| {});
+    rec.result(t.point(2.0, Limit::FromRight), |_, _| {});
     rec
 }
 
