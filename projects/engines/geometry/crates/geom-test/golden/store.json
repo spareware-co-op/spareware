@@ -441,6 +441,16 @@
             "function": "arenas_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
+        },
+        {
+          "id": "geom-name/attributes",
+          "what": "The shared attribute step of geom-name (piece G90): 200 operations, each a history of up to 24 outputs (unchanged, changed, split, merged, modified from several, generated in a copy role or another, from nothing) with deleted inputs, three attributes with random behaviours (one of an unknown owner, one a point a transform moves in a third of them) holding values on up to 32 names; every output value and note of the step, as tests/attributes_determinism.rs records them.",
+          "check": {
+            "crate": "geom-name",
+            "test": "attributes_determinism",
+            "function": "attributes_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "47b93b32a27411ae3fe176d5fc19248cf2be0d553d1bcdc8aab1b62f9ad8357b"
         }
       ]
     }
