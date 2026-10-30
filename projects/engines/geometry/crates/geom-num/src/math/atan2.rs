@@ -447,10 +447,8 @@ fn accurate(y: f64, x: f64) -> Option<f64> {
     let sz = z.sgn;
     z.sgn = 0;
     // Horner's rule from the leading coefficients down, by iteration: no index to go wrong. The
-    // tables are fixed arrays of 30, so `split_last` always succeeds.
-    let (Some((p_top, p_rest)), Some((q_top, q_rest))) = (P.split_last(), Q.split_last()) else {
-        return None;
-    };
+    // tables are fixed arrays of 30, so the patterns below cannot fail.
+    let ([p_rest @ .., p_top], [q_rest @ .., q_top]) = (&P, &Q);
     let mut p = *p_top;
     let mut q = *q_top;
     for (pc, qc) in p_rest.iter().zip(q_rest.iter()).rev() {

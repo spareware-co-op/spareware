@@ -594,9 +594,7 @@ impl Dint {
 
 /// `z·P(z)`, the degree-13 approximation of `ln(1 + z)` of the accurate path (C: `p_2`).
 fn poly2(z: Dint) -> Option<Dint> {
-    let Some((first, rest)) = P2_COEFFS.split_first() else {
-        return Some(ZERO);
-    };
+    let [first, rest @ ..] = &P2_COEFFS;
     let mut r = *first;
     for c in rest {
         r = r.mul(z)?.add(*c)?;
@@ -610,9 +608,7 @@ const NEAR_ONE_BELOW: u64 = 255 - 181;
 /// `ln(1 + z)` for `−2^−8 ≤ z ≤ 0` by its Taylor series to degree 16 (a change from the C
 /// source; see the module documentation). The remainder is below `|z|^17/17/(1 − |z|) ≤ 2^−140`.
 fn log1p_taylor(z: Dint) -> Option<Dint> {
-    let Some((first, rest)) = LOG1P_TAYLOR.split_first() else {
-        return Some(ZERO);
-    };
+    let [first, rest @ ..] = &LOG1P_TAYLOR;
     let mut r = *first;
     for c in rest {
         r = r.mul(z)?.add(*c)?;

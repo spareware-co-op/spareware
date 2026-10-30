@@ -243,12 +243,9 @@ fn mul_dd_d(xh: f64, xl: f64, ch: f64) -> (f64, f64) {
 }
 
 /// Horner evaluation in double-double of `Σ c[i]·x^i` at `x = xh + xl`, with `l` added to the
-/// leading coefficient's low part (C: `polydd`). The coefficient list is never empty; an empty
-/// one is treated as the zero polynomial.
-fn poly_dd(xh: f64, xl: f64, c: &[[f64; 2]], l: f64) -> (f64, f64) {
-    let Some((last, rest)) = c.split_last() else {
-        return (l, 0.0);
-    };
+/// leading coefficient's low part (C: `polydd`): `last` is the leading coefficient and `rest` the
+/// others, lowest first, as the caller splits a fixed table (so no list is ever empty).
+fn poly_dd(xh: f64, xl: f64, last: &[f64; 2], rest: &[[f64; 2]], l: f64) -> (f64, f64) {
     let mut ch = last[0] + l;
     let mut cl = ((last[0] - ch) + l) + last[1];
     for ci in rest.iter().rev() {
@@ -308,7 +305,8 @@ fn sinpi_near_zero(x: f64) -> f64 {
     let x3 = x2 * x;
     let dx3 = fma(x2, x, -x3) + dx2 * x;
     let fl = x2 * (CL[0] + x2 * (CL[1] + x2 * CL[2]));
-    let (fh, fl) = poly_dd(x2, dx2, &CH, fl);
+    let [ch_rest @ .., ch_last] = &CH;
+    let (fh, fl) = poly_dd(x2, dx2, ch_last, ch_rest, fl);
     let (fh, fl) = mul_dd(fh, fl, x3, dx3);
 
     let mut y0 = PI0 * x;
@@ -344,7 +342,8 @@ fn cospi_near_zero(x: f64) -> f64 {
     let x2 = x * x;
     let dx2 = fma(x, x, -x2);
     let fl = x2 * (CL[0] + x2 * CL[1]);
-    let (fh, fl) = poly_dd(x2, dx2, &CH, fl);
+    let [ch_rest @ .., ch_last] = &CH;
+    let (fh, fl) = poly_dd(x2, dx2, ch_last, ch_rest, fl);
     let (fh, fl) = mul_dd(x2, dx2, fh, fl);
     let (y0, y1) = fast_two_sum(1.0, fh);
     let (y1, y2) = fast_two_sum(y1, fl);
@@ -389,10 +388,12 @@ fn refine(iq: u64, z: f64, hard: &[HardCase]) -> f64 {
     let x2 = x * x;
     let dx2 = fma(x, x, -x2);
     let sll = S3L * x2;
-    let (slh, sll) = poly_dd(x2, dx2, &SH, sll);
+    let [sh_rest @ .., sh_last] = &SH;
+    let (slh, sll) = poly_dd(x2, dx2, sh_last, sh_rest, sll);
     let (slh, sll) = mul_dd_d(slh, sll, x * hf!("0x1p-12"));
     let cll = x2 * (C2L + C3L * x2);
-    let (clh, cll) = poly_dd(x2, dx2, &CH, cll);
+    let [ch_rest @ .., ch_last] = &CH;
+    let (clh, cll) = poly_dd(x2, dx2, ch_last, ch_rest, cll);
     let (clh, cll) = mul_dd(clh, cll, x2, dx2);
     let (sbh, sbl, cbh, cbl) = sincosn2(iq);
     let (csh, csl) = mul_dd(clh, cll, sbh, sbl);
