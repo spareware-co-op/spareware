@@ -10114,7 +10114,96 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an arena could not change, or arenas could not be published as a body.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The arena already holds `u32::MAX` rows, the most a 32-bit index addresses.",
+              "name": "Full",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The arena has no row at this index.",
+              "name": "NoSuchRow",
+              "shape": "struct"
+            },
+            {
+              "doc": "The columns of one arena hold different numbers of rows.",
+              "name": "Ragged",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A link column holds an index past the end of the arena it points into.",
+              "name": "Dangling",
+              "shape": "struct"
+            },
+            {
+              "doc": "The body's outside region is not a void region of its region arena.",
+              "name": "Outside",
+              "shape": "unit"
+            },
+            {
+              "doc": "The meter stopped: its budget ran out, the caller cancelled, or memory was refused.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A large allocation (a chunk of rows, or a column's list of chunks) was refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "The names given for a named arena are not one per row.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two rows of a named arena have the same name: the first such pair in name order.",
+              "name": "DuplicateName",
+              "shape": "struct"
+            },
+            {
+              "doc": "Two rows of an arena with no names (shells, loops, fins) or of a geometry pool get the same key from what they join, so name order cannot place them: the first such pair.",
+              "name": "Unordered",
+              "shape": "struct"
+            },
+            {
+              "doc": "An Euler operator refused its arguments.",
+              "name": "Euler",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A row of a geometry pool that no entity uses, so name order cannot place it.",
+              "name": "Unused",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_topo::error",
+          "name": "TopoError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why an arena's rows could not be put in name order.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/order.rs",
+          "kinds": [
+            {
+              "doc": "Two rows carry the same name: the first such pair in name order, the lower row first.",
+              "name": "DuplicateName",
+              "shape": "struct"
+            },
+            {
+              "doc": "More rows than a 32-bit index addresses.",
+              "name": "TooManyRows",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_topo::order",
+          "name": "OrderError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-topo/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-topo",
@@ -10130,12 +10219,272 @@
       "job": "Bodies to vertices in arenas; the builder; attributes and continuity records; regions and cells; the instance record.",
       "kind": "kernel",
       "layer": "3",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "[`Arenas::rows`] is constant time; [`Arenas::memory`] is linear in the number of chunks.",
+          "does": "[`Arenas`] holds a body's entities ([`crate::entity`]) and the pools their geometry is kept in: surfaces ([`SurfaceKind`]), 3D curves ([`CurveKind<3>`]), pcurves ([`CurveKind<2>`]) and points ([`P3`]), each a [`Pool`], a column whose rows are the geometry itself. Faces, edges, fins and vertices attach to geometry by index into these pools (8.1). [`crate::Builder`] edits arenas and publishes them as an immutable [`crate::Body`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/arenas.rs",
+          "guarantees": [
+            "**Vectors only.** Every container is a column in row order; there is no map, so nothing can be iterated in an order that depends on hashing or memory (8.2, 21).",
+            "**Cheap versions.** Cloning arenas copies one pointer per chunk; later writes to either copy only the chunks they land in ([`Column`]).",
+            "**Values are all that count.** Two arena sets are equal when every column's values are equal in row order."
+          ],
+          "job": "Every arena of one body: the seven entity arenas and the four geometry pools.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md"
+            ],
+            "text": "one arena per entity kind and one pool per kind of geometry, addressed by typed 32-bit indices, as chapter 8.2 and evidence report 03 lay out (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 5)."
+          },
+          "path": "geom_topo::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a lookup or an insert is `O(log n)` in the number of values; a split or a merge visits the values of its inputs only. Nothing recurses.",
+          "does": "an [`Attributes`] holds each attribute's [`Class`] and every value, keyed by the entity's [`NameKey`] and the attribute's [`AttrId`]. Values are canonical bytes ([`Value`]), carried whether or not this kernel understands them. [`Attributes::split`] and [`Attributes::merge`] give the values an operation's split and merged entities carry, by each attribute's class; the other events of section 8.4 (changed, transformed, copied, generated) come with the history records (pieces G88 and G90).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/attributes.rs",
+          "guarantees": [
+            "**Keyed by name, never by index.** Values follow names, so they survive every re-indexing a publish makes (8.2), and only named entities carry them (8.4).",
+            "**Ordered.** Every map iterates by key: attribute ids, then names, as bytes, the same on every machine (8.2, 21).",
+            "**Values are bytes.** Two values are equal exactly when their bytes are (8.4); a merge that keeps a value only when every input carries an equal one compares bytes.",
+            "**Immutable.** Every operation returns a new [`Attributes`]; nothing is changed in place, as for bodies (8.2)."
+          ],
+          "job": "Attributes: data hung on a body or on one of its named entities, keyed by persistent name, with the class that says what a value does when its entity is split or merged (8.4).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
+            ],
+            "text": "Parasolid's published attribute classes, taken as a concept only and rebuilt on persistent names (`projects/engines/geometry/architecture/08-topology.md`, 8.4; `projects/kit/notes/G01-evidence/07-persistent-naming.md`, section 5)."
+          },
+          "path": "geom_topo::attributes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "every accessor is constant time; cloning is linear in the number of chunks; [`Body::memory`] is linear in the number of chunks.",
+          "does": "a [`Body`] is a kind ([`BodyKind`]), the index of its infinite outside region, and its [`Arenas`]. Only [`crate::Builder::publish`] makes one, after checking that every link points inside the body; nothing changes a body afterwards. An edit starts a builder from the body ([`crate::Builder::edit`]) and publishes a new version, which shares every chunk the edit did not touch with the old one (8.2, 23.9).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/body.rs",
+          "guarantees": [
+            "**Immutable.** No method takes `&mut self`; a published body's values never change.",
+            "**No dangling index.** Every index a body's columns hold is a row of the arena it points into, the columns of each arena hold equally many rows, and the outside region is a void region of the body ([`crate::Builder::publish`]).",
+            "**Values are all that count.** Two bodies are equal when their kinds, outside regions and arenas' values are; which chunks they share is a memory detail ([`Body::memory`])."
+          ],
+          "job": "The body: one shape, immutable once published.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md"
+            ],
+            "text": "Parasolid's body kinds and its infinite void region (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), made immutable after building as chapter 8.2 asks, with versions sharing `Arc` chunks as report 03 advises (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 5)."
+          },
+          "path": "geom_topo::body",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Builder::new`] and [`Builder::edit`] are linear in the number of chunks (one pointer each); [`Builder::publish`] is linear in the number of rows of the link columns, one comparison each, and allocates nothing. Nothing recurses.",
+          "does": "a [`Builder`] holds [`Arenas`] to fill or edit: [`Builder::new`] starts empty, [`Builder::edit`] starts from a published body and shares all of its chunks. [`Builder::publish`] checks the arenas and returns them as an immutable [`Body`]: the columns of each arena hold equally many rows, every link points inside the arena it names, and the outside region is a void region. Piece G81 adds the Euler operators, persistent-name order and attributes on top of this; piece G84's checker judges topology (loops close, shells close, Euler's formula), which publishing does not.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder.rs",
+          "guarantees": [
+            "**Bodies come only from here.** [`Body`] has no other public constructor, so every body has passed [`Builder::publish`]'s checks.",
+            "**Every link inside the body.** A published body holds no index past the end of the arena it points into, so following any link of a body never fails.",
+            "**One answer, the first fault.** The checks run in a fixed order: each arena's column lengths from region to vertex, then each link column in [`Link::ALL`]'s order, rows ascending, then the outside region. The error is the first fault in that order, the same on every machine.",
+            "**Edits copy only what they touch.** A builder made by [`Builder::edit`] shares every chunk with the body; each write copies only the chunk it lands in, so a version made by editing ten faces of a million-face body shares all but at most ten chunks per column written (23.9).",
+            "**Metered.** Publishing charges one work unit for every chunk of every link column it checks, to the caller's meter, which polls the caller's cancellation (23.10)."
+          ],
+          "job": "The builder: the one way to make a body, by editing arenas and publishing them.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md"
+            ],
+            "text": "Parasolid's model structure, made immutable after building (chapter 8.2; `projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), with the validation layer evidence report 03 recommends copying from Fornjot, every object checked as it enters (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 2)."
+          },
+          "path": "geom_topo::builder",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each operator is constant time but for the fins it moves to another loop, which it visits once; [`Euler::publish`] is linear in the rows, then [`Builder::publish_named`]'s cost. Nothing recurses.",
+          "does": "an [`Euler`] editor holds arenas, one name per region, face, edge and vertex, and which rows are live. It starts empty ([`Euler::new`]) or from a body published by name ([`Euler::edit`]). The operators come in pairs, each undoing the other:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder/euler.rs",
+          "guarantees": [
+            "**Euler's formula is kept.** Each operator changes the counts by its row of the table above, so V − E + F − R = 2 (S − H) holds after it when it held before; `R` is loops less faces, and `H` is the count the model of `tests/euler_model.rs` keeps.",
+            "**Loops stay closed and rings stay paired.** Every operator leaves each loop's fins one cycle by `next` and `prev`, each the inverse of the other, each fin's start the end of the fin before it, and each edge it makes with two fins, each the other's radial neighbour.",
+            "**A refusal changes nothing.** Every operator checks its arguments before it changes a row; one it cannot apply is a [`TopoError::Euler`] with the [`Refusal`]. An arena that is full or an allocation refused part-way leaves the editor part-way, to be dropped.",
+            "**Rows only grow while editing.** A killed row is marked dead, so every handle the editor gave stays the row it named; [`Euler::publish`] drops dead rows and the geometry no live entity uses, then assigns every index in name order.",
+            "**Lists are made when publishing.** The editor keeps no list of a region's shells, a shell's faces or a face's loops ([`Builder::publish_named`] rebuilds them from the owner links), only each loop's and each edge's first fin."
+          ],
+          "job": "Euler operators (piece G81): edits that change a body's topology one step at a time, each keeping Euler's formula, on an editor whose rows are removed by marking them dead.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/MCG.1982.1674396"
+            ],
+            "text": "Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and their inverses; \"GWB: a solid modeler with Euler operators\", IEEE Computer Graphics and Applications 2(7), 17-31, 1982, <https://doi.org/10.1109/MCG.1982.1674396>), with fins as half-edges. A fin needs an edge here (8.1), so the first operator makes a wire of one edge and two vertices, Mäntylä's MVFS followed by MEV, and no operator leaves a loop without a fin."
+          },
+          "path": "geom_topo::builder::euler",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one sort of each arena's keys, `O(n log n)` in its rows, and one pass that copies every row once into new chunks, and one more pass over the owner links to rebuild the lists. Nothing recurses.",
+          "does": "[`Builder::publish_named`] takes one name per region, face, edge and vertex, checks the arenas as [`Builder::publish`] does, moves every named arena's rows into name order, places the arenas without names (shells, loops, fins) and the geometry pools by a fixed rule from those names, rewrites every link through the moves, rebuilds every list from the back-links, and publishes the result, carrying its names in name order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder/named.rs",
+          "guarantees": [
+            "**Index order is name order.** Every named arena's rows are in name order, and every other arena's rows are in the order of their keys above; so any order of the same rows, with their links moved to match, publishes the same body (32.17).",
+            "**Every link follows its row.** A link that pointed at a row points at that row's new place, so the body joins the same entities as the arenas given.",
+            "**Lists follow the back-links, in name order.** Each region's shells, each shell's faces and each face's loops are chained from the least row up, and each loop's and each edge's first fin is its least fin, all read from the links each entity holds to its owner (a shell's region, a face's shell, a loop's face, a fin's loop and edge). What the lists given held is replaced, so they never depend on the order a body was built in either. A loop's cycle of fins and an edge's radial ring are kept as given: their order is the shape's.",
+            "**Checked as published.** The arenas pass [`Builder::publish`]'s checks before anything is read, and the moved arenas pass them again as they are published.",
+            "**One answer, the first fault.** Faults are reported in a fixed order: [`Builder::publish`]'s checks; then, for regions, faces, edges and vertices in turn, a count of names other than one per row or two rows of one name; then equal keys among shells, loops and fins in turn; then an unused row of the surface, curve, pcurve and point pools in turn.",
+            "**Metered.** Besides what [`Builder::publish`] charges, twice (on the arenas given and on the moved ones), publishing by name charges one unit for every chunk of rows it moves."
+          ],
+          "job": "Publishing in name order (piece G81): a body's arena indices assigned in persistent-name order, so its arenas depend only on what it contains, never on how it was built (8.2, 32.17).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "the boolean rebuild's renumbering in name order (`projects/engines/geometry/architecture/ 11-booleans.md`, 11.3), done for every body by the builder, as decided in `projects/engines/geometry/architecture/32-decisions.md`, 32.17, and laid out in `projects/engines/geometry/architecture/08-topology.md`, 8.2."
+          },
+          "path": "geom_topo::builder::named",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Column::get`] is constant time. [`Column::set`] is constant time, plus a copy of one chunk (at most [`CHUNK_ROWS`] rows) when that chunk is shared. [`Column::push`] is amortised constant time, plus at most one chunk copy. Cloning is linear in the number of chunks, one pointer each. [`Column::filled`] allocates one chunk, however many rows it fills. Nothing recurses.",
+          "does": "a [`Column<K, V>`] holds one field (of type `V`) of every row of the arena of `K`, in row order: all face boxes together, all fin links together (structure of arrays, chapter 23.9). The column is cut into chunks of [`CHUNK_ROWS`] rows, each held behind a shared pointer, so cloning a column (a new body version) copies only the list of chunks, and changing a row copies only the chunk that holds it, if another version still shares it (copy on write).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+          "guarantees": [
+            "**Fixed chunks, cut by row number only.** Row r is in chunk r / [`CHUNK_ROWS`] at place r mod [`CHUNK_ROWS`]. Every chunk but the last is full, and no chunk is empty, so where a chunk starts never depends on how the column was built or edited (23.9, 24.2).",
+            "**Versions never see each other's edits.** After a clone, [`Column::set`] and [`Column::push`] on either column leave the other's values unchanged; a write copies the chunk it lands in when that chunk is shared, and only that chunk.",
+            "**Values are all that count.** Equality, iteration and every answer depend on the rows' values in row order only. Which chunks are shared is a memory detail that [`Column::memory`] reports for measurement and never reaches a result (23.8, 23.9).",
+            "**Large allocations are fallible.** A chunk's rows, and the list of chunks, are reserved with `try_reserve`, so a refusal returns [`TopoError::OutOfMemory`] instead of aborting (23.10). Only a chunk's small shared header is allocated infallibly, as the standard library's `Arc` allows no other way.",
+            "**At most `u32::MAX` rows,** the most a 32-bit index addresses: one more is [`TopoError::Full`]."
+          ],
+          "job": "One field of one arena, as a column cut into fixed chunks that body versions share.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md",
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md",
+              "https://doc.rust-lang.org/alloc/sync/struct.Arc.html#method.make_mut"
+            ],
+            "text": "structure of arrays as Manifold stores its halfedges (`projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 2), cut into the fixed chunks of chapter 23.9 and shared between versions through `Arc` chunks, as report 03 advises for immutable snapshots (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 5; `Arc::make_mut`, <https://doc.rust-lang.org/alloc/sync/struct.Arc.html#method.make_mut>). No vetted crate does this under `no_std` with fixed chunk boundaries: persistent vectors such as imbl's and rpds's cut their trees where edits happened, which chapter 24.2 rules out, and only `libm` may ship in a kernel crate (`deny-no-std.toml`)."
+          },
+          "path": "geom_topo::column",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as [`Column`]'s operations, once per field: a push is amortised constant time per field, a row read is one lookup per field.",
+          "does": "for each entity of chapter 8.1 a row type ([`Region`], [`Shell`], [`Face`], [`Loop`], [`Fin`], [`Edge`], [`Vertex`]) and its arena ([`Regions`], [`Shells`], [`Faces`], [`Loops`], [`Fins`], [`Edges`], [`Vertices`]): one [`Column`] per field, so a scan reads only the fields it needs (chapter 23.9). Entities refer to each other, and to the geometry pools, by typed index only. [`Link`] names every column that holds an index, with the arena it points from and the arena it points into.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/entity.rs",
+          "guarantees": [
+            "**Columns, not records.** Every field is a column of its own; a row exists only as the same index in each column.",
+            "**Typed links.** Every link is an [`Ix`] of the arena it points into, and an absent link is `None` at no extra size.",
+            "**Rows are values.** Two arenas are equal when their columns' values are equal in row order, whatever memory they share.",
+            "**Whole rows or an error.** [`Faces::push`] and the others add one value to each column, in field order. Only a refused allocation can stop them part way, and the arenas are then ragged, which publishing refuses ([`TopoError::Ragged`])."
+          ],
+          "job": "The entities of a body, region to vertex, each stored as a table of columns.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md"
+            ],
+            "text": "Parasolid's published model structure: body, region, shell, face, loop, fin, edge and vertex, with fins in radial order around their edge (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8; chapter 8.1), stored as structure of arrays as Manifold stores its halfedges (`projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 2)."
+          },
+          "path": "geom_topo::entity",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant.",
+          "does": "[`TopoError`] names each failure of the arenas ([`crate::column`], [`crate::entity`], [`crate::arenas`]) and of publishing them as a body ([`crate::builder`]), and maps `geom-run`'s stops onto them, so a caller sees one error type.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/error.rs",
+          "guarantees": [
+            "**Typed and placed.** Every failure is one of these kinds, and each kind that comes from one row names the arena or link column and the row, so a caller can find it without searching.",
+            "**Stops keep their reason.** A meter's stop (budget, cancellation, memory) keeps `geom-run`'s own record of it."
+          ],
+          "job": "Why an arena could not change, or arenas could not be published as a body.",
+          "method": {
+            "none": "an error enum and its conversions, with `geom-run`'s stops (chapter 23.10)."
+          },
+          "path": "geom_topo::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "every operation is constant time and allocates nothing.",
+          "does": "[`Ix<K>`] is the index of one row of the arena whose rows are of kind `K`: `Ix<Face>` ([`crate::FaceIx`]) indexes faces, `Ix<SurfaceKind>` ([`crate::SurfaceIx`]) the surface pool, and so on (chapter 8.2). [`Kind`] says which arena a kind's rows live in, and [`Arena`] names the eleven arenas: seven of topology and four geometry pools.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/ix.rs",
+          "guarantees": [
+            "**Typed.** An `Ix<Face>` can only index the face arena; mixing kinds is a compile error, not a wrong row.",
+            "**Thirty-two bits, and an absent link costs nothing.** `Ix<K>` and `Option<Ix<K>>` are both four bytes: the row is stored plus one, so zero is free for `None`. Rows run from 0 to [`Ix::MAX_ROW`], `u32::MAX − 1`, so an arena holds at most `u32::MAX` rows.",
+            "**Ordered as rows, never as addresses.** Equality, order and hashing are those of the row, so sorting indices sorts them in arena order, which is persistent-name order (8.2; 32.17). An index holds no pointer and nothing about where memory lies.",
+            "**Valid inside one body version only.** An index is a position, not a name; references and files hold persistent names (8.2, 20.1)."
+          ],
+          "job": "Typed 32-bit indices into a body's arenas, and the names of the arenas.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md",
+              "https://doc.rust-lang.org/core/num/type.NonZeroU32.html"
+            ],
+            "text": "one arena per entity kind addressed by a `u32` newtype index, never by address, the design Fornjot ended on after losing determinism to address identity (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, sections 2 and 5); the free value for `None` is `core::num::NonZeroU32`'s niche (<https://doc.rust-lang.org/core/num/type.NonZeroU32.html>)."
+          },
+          "path": "geom_topo::ix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "`O(n log n)` comparisons of 16 bytes and two vectors of `n` indices; nothing recurses.",
+          "does": "[`NameKey`] is a persistent name's 16 bytes as the caller supplies them (this crate never makes names; `geom-name` does, 20.1). [`Permutation::by_name`] sorts one arena's rows by their keys and gives, for every row, the row it moves to, so that the builder can move the arena and rewrite every index that points into it before a body is published.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/order.rs",
+          "guarantees": [
+            "**Index order is name order.** After [`Permutation::apply`], row `i` holds the entity with the `i`-th smallest key, compared as bytes, so a body's arenas depend only on the names it holds, never on the order an operation produced them in (32.17).",
+            "**Names are unique per arena.** Two rows with the same key are refused with [`OrderError::DuplicateName`], naming the two rows that come first in name order, never ordered by a guess (20.2: a duplicate the contract does not expect is a bug).",
+            "**A bijection.** [`Permutation::new_of`] maps `0..len` onto `0..len`, one to one, and [`Permutation::old_of`] is its inverse."
+          ],
+          "job": "Name order: the key every named entity is sorted by, and the permutation that moves an arena's rows into that order (8.2, accepted in 32.17).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "a sort by key, then by row to keep the order total, as section 23.4's builder sorts its scratch arrays before publishing (`projects/engines/geometry/architecture/08-topology.md`, 8.2; `projects/engines/geometry/architecture/32-decisions.md`, 32.17)."
+          },
+          "path": "geom_topo::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-topo",
       "provenance": [],
       "sections": "8, 10.2, 13.2, 18.7, 19.12, 22 and 23.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G80, G81, G90, G102, G111, G112, G143, G145, G247, G398.",
+      "status": "the arenas, their typed indices and the publishing builder (G80) built; the Euler operators, name order, attributes, regions and cells, queries, proofs and instances to come in G81, G90, G102, G111, G112, G143, G145, G247 and G398.",
       "summary": "Spare Kit geometry kernel: topology."
     }
   ],
