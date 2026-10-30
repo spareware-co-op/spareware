@@ -140,6 +140,19 @@ fn attack_every_task_runs_exactly_once() {
 
 /// A task that calls the helper again with the same pool finishes, on one thread too, with the
 /// serial answer.
+///
+/// Not under Miri while `Cargo.lock` holds rayon-core 1.13.0, whose scopes have undefined
+/// behaviour (rayon-rs/rayon#1328). A spawned job sets its scope's latch from inside
+/// `ScopeBase::execute_job_closure`, while that function's closure argument still holds a
+/// reference to the scope. Miri protects that reference until the call returns, but the thread
+/// that opened the scope can see the latch first, return and free the scope; Tree Borrows refuses
+/// that. Every scope has the race; with Miri's fixed seed, only this test's nested scopes lose it.
+/// rayon fixed it in rayon-rs/rayon#1330 (merged 2026-10-27), which no release carries yet. Once
+/// one does, update the lock and run this test under Miri again.
+#[cfg_attr(
+    miri,
+    ignore = "rayon-core 1.13.0 frees a scope under a job's protected reference: rayon-rs/rayon#1328"
+)]
 #[test]
 fn attack_the_pool_is_reentrant() {
     let outer: Vec<u64> = (0..64).collect();

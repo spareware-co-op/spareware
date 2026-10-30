@@ -184,9 +184,15 @@
               "kind": "corpus",
               "piece": "G47",
               "why": "2 new benchmarks: Interval::atan2 on typical and extreme boxes, now that its enclosure is built; no existing digest moved"
+            },
+            {
+              "sha256": "11b171b62bfa15cac6b9b442d40f91a5e0aad5f76d2706911c341dbf513ef6ad",
+              "kind": "corpus",
+              "piece": "G52",
+              "why": "12 new benchmarks in two new groups: newton (Krawczyk and Hansen-Sengupta steps on a circle and a line, and on a system of four unknowns) and dual (Jacobians over reals and over intervals), each on typical and extreme inputs; no existing digest moved"
             }
           ],
-          "sha256": "11b171b62bfa15cac6b9b442d40f91a5e0aad5f76d2706911c341dbf513ef6ad"
+          "sha256": "7a8df916ad8ce91de1084d9b84304e06cec1b696eb166a081cba3d0f7597e826"
         },
         {
           "id": "geom-nurbs/operations",
@@ -347,6 +353,16 @@
             "function": "roots_and_quadrature_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "624a2f76c0790d4cd1c05ed823c612a01217419ccce217b824f2fcd093912b26"
+        },
+        {
+          "id": "geom-num/dual-and-newton",
+          "what": "The dual numbers and the interval Newton operators (piece G52): every elemental operation on 300 pairs of dual reals and 300 pairs of dual intervals, with the tripwire's refusals at singular points; the values and Jacobians of two fixed systems at 50 points and over 50 boxes; and the Krawczyk and Hansen-Sengupta operators, up to five steps each from boxes around the zeros of 60 seeded systems in each of one to four unknowns, with singular, empty and failing systems: 10,337 results in the canonical encoding of tests/dual_newton_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "dual_newton_determinism",
+            "function": "dual_and_newton_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "dd010907a8e85d445965877e147ffce51c90c5a9b9b40536714a71035d2364dc"
         },
         {
           "id": "geom-math/rotations",

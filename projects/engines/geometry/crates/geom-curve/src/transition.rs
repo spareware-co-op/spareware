@@ -922,7 +922,7 @@ impl Parent {
         }
         // θ⁽ʲ⁾(t) = π·h⁽ʲ⁾(ξ)/Lʲ.
         let over = N::exact(1.0)?.div(N::exact(self.length)?)?;
-        let mut scale = N::pi()?;
+        let mut scale = N::half_turn()?;
         let mut rates = Vec::with_capacity(order);
         for j in 1..order {
             scale = scale.mul(over)?;
@@ -1274,8 +1274,8 @@ trait Num: Copy {
     fn exact(x: f64) -> Result<Self, CurveError>;
     /// A real whose correctly rounded double is x: a rule's node or weight.
     fn near(x: f64) -> Result<Self, CurveError>;
-    /// π.
-    fn pi() -> Result<Self, CurveError>;
+    /// π, the half-turn in radians.
+    fn half_turn() -> Result<Self, CurveError>;
     fn add(self, b: Self) -> Result<Self, CurveError>;
     fn sub(self, b: Self) -> Result<Self, CurveError>;
     fn mul(self, b: Self) -> Result<Self, CurveError>;
@@ -1299,7 +1299,7 @@ impl Num for f64 {
     fn near(x: f64) -> Result<f64, CurveError> {
         Ok(x)
     }
-    fn pi() -> Result<f64, CurveError> {
+    fn half_turn() -> Result<f64, CurveError> {
         Ok(core::f64::consts::PI)
     }
     fn add(self, b: f64) -> Result<f64, CurveError> {
@@ -1341,7 +1341,7 @@ impl Num for Interval {
     fn near(x: f64) -> Result<Interval, CurveError> {
         Ok(Interval::new(x.next_down(), x.next_up())?)
     }
-    fn pi() -> Result<Interval, CurveError> {
+    fn half_turn() -> Result<Interval, CurveError> {
         form::pi()
     }
     fn add(self, b: Interval) -> Result<Interval, CurveError> {
@@ -1414,7 +1414,7 @@ fn heading<N: Num>(h: &Heading, xi: N, j: usize) -> Result<N, CurveError> {
         // is (π·rate)ʲ·amplitude times sinpi, cospi, −sinpi or −cospi as j (plus one for a cosine)
         // is 0, 1, 2 or 3 modulo 4.
         let mut factor = amplitude;
-        let step = N::pi()?.mul(rate)?;
+        let step = N::half_turn()?.mul(rate)?;
         for _ in 0..j {
             factor = factor.mul(step)?;
         }
