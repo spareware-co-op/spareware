@@ -331,10 +331,9 @@ fn log_accurate(x: f64) -> f64 {
     // `log` reads its tables in range by construction, and its integer steps cannot overflow;
     // were either ever broken, the result is NaN, never a plausible wrong value (see
     // `support::entry`).
-    match Dint::from_f64(x).and_then(Dint::log) {
-        Some(v) => v.to_f64(),
-        None => super::NAN,
-    }
+    Dint::from_f64(x)
+        .and_then(Dint::log)
+        .map_or(super::NAN, Dint::to_f64)
 }
 
 /// A 128-bit floating-point number `(−1)^sgn · (hi + lo/2^64) · 2^(ex − 63)` (C: `dint64_t`).

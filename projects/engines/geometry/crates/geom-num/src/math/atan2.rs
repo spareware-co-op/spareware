@@ -439,7 +439,7 @@ fn accurate(y: f64, x: f64) -> Option<f64> {
     // When |y/x| < 2^−95 and x > 0, atan(y/x) rounds as y/x does, except when y/x is exactly a
     // midpoint between two subnormal numbers (see `tiny_quotient`).
     if !inv && x > 0.0 && z.ex <= -96 {
-        return Some(tiny_quotient(y, x));
+        return tiny_quotient(y, x);
     }
 
     // |z − y/x| < 2^−185.53·|z| (relative error of the division). The rational approximation is
@@ -505,14 +505,17 @@ fn accurate(y: f64, x: f64) -> Option<f64> {
 /// `y / x`, unless `q` is a midpoint, when it rounds to the neighbour of `q` towards zero. A
 /// quotient of two doubles is never a midpoint in the normal range (`M·x` would need 54
 /// significant bits), so only odd multiples of 2^−1075 are checked, with integer arithmetic.
+///
+/// `None` only if an integer step failed, which no pair of doubles makes (each is noted below);
+/// [`accurate`]'s caller then returns NaN, never a plausible wrong value.
 #[allow(
     clippy::many_single_char_names,
     reason = "the names of the C source's variables, so the two can be read side by side"
 )]
-fn tiny_quotient(y: f64, x: f64) -> f64 {
+fn tiny_quotient(y: f64, x: f64) -> Option<f64> {
     let t = y / x; // the correctly rounded quotient
     if t.abs() > f64::MIN_POSITIVE {
-        return t;
+        return Some(t);
     }
     // y = my·2^ey and x = mx·2^ex with my and mx odd. The exponent field is below 2^11, so
     // `signed` reads its value; the exponents stay within ±1200, so no checked step fails.
@@ -527,27 +530,21 @@ fn tiny_quotient(y: f64, x: f64) -> f64 {
         let tz = m.trailing_zeros(); // m ≠ 0: v is not zero here
         Some((shr(m, u64::from(tz)), e.checked_add(i64::from(tz))?))
     };
-    let (Some((my, ey)), Some((mx, ex))) = (odd_parts(y), odd_parts(x)) else {
-        return super::NAN;
-    };
-    let Some(d) = ey.checked_sub(ex) else {
-        return super::NAN;
-    };
+    let (my, ey) = odd_parts(y)?;
+    let (mx, ex) = odd_parts(x)?;
+    let d = ey.checked_sub(ex)?;
     // q = (my/mx)·2^(ey−ex) is an odd multiple of 2^−1075 exactly when mx divides my and
     // ey − ex = −1075; then q = k·2^−1075 with k = my/mx odd and k < 2^53. (`checked_rem` is
     // `None` only for mx = 0, which the C also tests.)
     if my.checked_rem(mx) != Some(0) || d != -1075 {
-        return t;
+        return Some(t);
     }
-    let Some(k) = my.checked_div(mx) else {
-        return super::NAN; // never: mx ≠ 0 here
-    };
-    if k >= 1 << 53 {
-        return t; // not reachable: q would be a midpoint of the normal range
-    }
+    // mx ≠ 0 here (it is odd), so the quotient is defined; and k ≤ my < 2^53, so k/2 below is the
+    // bit pattern of a subnormal.
+    let k = my.checked_div(mx)?;
     // C: `(k − 1)/2`, which is ⌊k/2⌋ for the odd k: (k − 1)/2 · 2^−1074, the neighbour of q
     // towards zero.
-    f64::from_bits(k / 2).copysign(y)
+    Some(f64::from_bits(k / 2).copysign(y))
 }
 
 /// A 192-bit floating-point number `(−1)^sgn · (h/2^64 + m/2^128 + l/2^192) · 2^ex`
