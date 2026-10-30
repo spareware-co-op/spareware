@@ -15,7 +15,7 @@ geom-num = { path = "../geom-num" }
 # SHA-256 (FIPS 180-4), the kernel's one hash for content IDs and names (owner action G79, 32.20):
 # RustCrypto's sha2, MIT OR Apache-2.0, without its default alloc and oid features. On the vetted
 # allow-list in deny-no-std.toml, with its audit (projects/kit/notes/G86-sha2-audit.md).
-sha2 = { version = "=0.11.0", default-features = false }
+sha2 = { version = "0.11.0", default-features = false }
 
 [dev-dependencies]
 # Property tests only, never linked into the kernel (chapter 29: a development dependency).

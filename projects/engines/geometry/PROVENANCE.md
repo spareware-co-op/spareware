@@ -9,8 +9,8 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 35 | 33 |
-| DEPEND | 2 | 2 |
+| PORT METHOD | 36 | 34 |
+| DEPEND | 3 | 3 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
 
@@ -50,6 +50,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs` | MIT | allowed | <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs> | none | `projects/engines/geometry/crates/geom-fuzz/src/lib.rs`: for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied. |
 | cargo-mutants | MIT | allowed | <https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917> | none | `projects/engines/geometry/crates/geom-test/src/mutants.rs`: for the format of the output files this module reads (`book/src/mutants-out.md`, `src/outcome.rs`, `src/mutant.rs` and `src/output.rs` at its v27.1.0 tag). No code copied. |
 | CGAL `FPU.h` | LGPL-3.0-or-later OR LicenseRef-Commercial | method only | <https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h> | `projects/engines/geometry/methods/cgal-nextafter-widening.md` | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its widening with `nextafter` when the rounding mode cannot change, which the Method above names. |
+| ciborium-ll | Apache-2.0 | allowed | <https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs> | none | `projects/engines/geometry/crates/geom-op/src/cbor.rs`: its choice of the shortest float that keeps a double's bits; used as a test oracle only. |
 | Clippy's `clippy_dev` token cursor | MIT OR Apache-2.0 | allowed | <https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs> | none | `projects/engines/geometry/crates/geom-test/src/map/errors.rs`: for the approach of finding declarations with a token cursor. No code copied. |
 | Geogram `interval_nt.h` | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h> | none | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its round-to-nearest interval class `intervalRN`, which the Method above compares. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient2d.pck> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_lang.rs`: for the form of its predicate descriptions. No code copied. |
@@ -90,6 +91,7 @@ A kernel crate may depend only on `libm` (29.1); the development crates' own dep
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | rayon | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/rayon/1.12.0> | `projects/engines/geometry/crates/geom-pool/Cargo.toml` | 1.12.0 |
+| sha2 | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/sha2/0.11.0> | `projects/engines/geometry/crates/geom-op/Cargo.toml` | 0.11.0 |
 
 ## Method notes
 
