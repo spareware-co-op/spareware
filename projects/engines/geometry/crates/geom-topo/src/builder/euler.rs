@@ -36,11 +36,11 @@
 //!   faces or a face's loops ([`Builder::publish_named`] rebuilds them from the owner links), only
 //!   each loop's and each edge's first fin.
 //!
-//! Method: Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and
-//! their inverses; "GWB: a solid modeler with Euler operators", IEEE Computer Graphics and
-//! Applications 2(7), 1982, <https://doi.org/10.1109/MCG.1982.1674296>), with fins as half-edges.
-//! A fin needs an edge here (8.1), so the first operator makes a wire of one edge and two
-//! vertices, Mäntylä's MVFS followed by MEV, and no operator leaves a loop without a fin.
+//! Method: Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and their
+//! inverses; "GWB: a solid modeler with Euler operators", IEEE Computer Graphics and Applications
+//! 2(7), 17-31, 1982, <https://doi.org/10.1109/MCG.1982.1674396>), with fins as half-edges. A fin
+//! needs an edge here (8.1), so the first operator makes a wire of one edge and two vertices,
+//! Mäntylä's MVFS followed by MEV, and no operator leaves a loop without a fin.
 //!
 //! Cost: each operator is constant time but for the fins it moves to another loop, which it
 //! visits once; [`Euler::publish`] is linear in the rows, then [`Builder::publish_named`]'s cost.
