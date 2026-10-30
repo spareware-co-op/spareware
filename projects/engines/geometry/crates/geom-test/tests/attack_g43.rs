@@ -975,14 +975,27 @@ fn a_passed_gate_has_nothing_open() {
     let found = passed_problems(&record);
     assert!(found.is_empty(), "{found:#?}");
 
-    // Seeded: the result says passed while runs are pending and rows open.
+    // Seeded: the result says passed while a condition's run is pending and a gate's row open.
     let start = record.find("**Result: ").unwrap();
     let passed = format!(
         "{}**Result: passed{}",
         &record[..start],
         &record[start + 10..]
     );
-    let found = passed_problems(&passed);
+    // The first condition's row is the section's third table line; the first gate's is
+    // `kernel.yml`'s `test`. Each gets a new last cell.
+    let text = section(&passed);
+    let rows: Vec<&str> = text.lines().filter(|l| l.starts_with("| ")).collect();
+    let gate = rows
+        .iter()
+        .find(|l| l.starts_with("| `kernel.yml` | `test` |"))
+        .unwrap();
+    let last_cell =
+        |row: &str, cell: &str| format!("{} | {cell} |", row.rsplit_once(" | ").unwrap().0);
+    let seeded = text
+        .replacen(rows[2], &last_cell(rows[2], "pending"), 1)
+        .replacen(gate, &last_cell(gate, "Open: #1"), 1);
+    let found = passed_problems(&passed.replacen(&text, &seeded, 1));
     assert!(found.iter().any(|p| p.contains("pending")), "{found:#?}");
     assert!(found.iter().any(|p| p.contains("is open")), "{found:#?}");
 }
