@@ -133,7 +133,7 @@ impl Label {
     #[must_use]
     pub fn step(name: &str) -> Option<Label> {
         let bytes = name.as_bytes();
-        let printable = bytes.iter().all(|&b| b == b' ' || b.is_ascii_graphic());
+        let printable = bytes.iter().all(|&b| matches!(b, b' '..=b'~'));
         let trimmed = bytes.first() != Some(&b' ') && bytes.last() != Some(&b' ');
         (!bytes.is_empty() && bytes.len() <= STEP_MAX && printable && trimmed)
             .then(|| Label::Step(String::from(name)))
