@@ -53,6 +53,7 @@ on:
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -69,6 +70,7 @@ on:
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -300,6 +302,50 @@ jobs:
         run: |
           start=$(date +%s)
           cargo kani -p geom-num --harness "${{ matrix.proof }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  # Bounded proofs beside geom-topo's own code (chapter 28.7; piece G112): the arenas' typed
+  # indices and columns, and the two checks publishing makes, which keep every index of a body
+  # inside its arenas. Each
+  # harness of a module's `#[cfg(kani)] mod proofs`, proven for every case of its stated bound, with
+  # Kani's overflow, bounds and panic checks on. geom-topo's tests/kani_harnesses.rs holds this list
+  # to the harnesses in the source. The budget is kani-num's.
+  kani-topo:
+    name: Kani, geom-topo (${{ matrix.proof }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        proof:
+          - builder::proofs::the_length_check_accepts_exactly_even_columns
+          - builder::proofs::the_link_check_accepts_exactly_the_links_inside_their_arena
+          - column::proofs::get_is_in_bounds
+          - column::proofs::set_writes_one_row_and_never_the_copy
+          - ix::proofs::every_row_round_trips
+          - ix::proofs::order_is_row_order
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          cargo kani setup
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Prove ${{ matrix.proof }}
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-topo --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
