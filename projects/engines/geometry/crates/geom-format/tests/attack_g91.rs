@@ -1051,7 +1051,11 @@ fn a_non_finite_value_past_the_first_scan_chunk_is_found_at_its_byte() {
         let bytes = bytes_of(&V::Floats(values));
         // Tag 86 takes two bytes, and a byte string of 12,800 bytes a three-byte head.
         let e = refused(&bytes);
-        assert_eq!((e.kind, e.offset), (CborErrorKind::NotFinite, 5 + 8 * row), "{row}");
+        assert_eq!(
+            (e.kind, e.offset),
+            (CborErrorKind::NotFinite, 5 + 8 * row),
+            "{row}"
+        );
     }
 }
 
@@ -1061,18 +1065,28 @@ fn text_and_columns_pay_one_unit_per_scanned_chunk() {
     let text = "x".repeat(10_000);
     let bytes = bytes_of(&V::T(text));
     assert!(matches!(
-        check(&bytes, 0, &mut WorkMeter::new(Budget::of_work(3))).unwrap_err().kind,
+        check(&bytes, 0, &mut WorkMeter::new(Budget::of_work(3)))
+            .unwrap_err()
+            .kind,
         CborErrorKind::Stopped(_)
     ));
-    assert_eq!(check(&bytes, 0, &mut WorkMeter::new(Budget::of_work(4))), Ok(()));
+    assert_eq!(
+        check(&bytes, 0, &mut WorkMeter::new(Budget::of_work(4))),
+        Ok(())
+    );
     // 513 values are two chunks of 512.
     let values: Vec<u8> = (0..513_i64).flat_map(i64::to_le_bytes).collect();
     let budget = |work| WorkMeter::new(Budget::new(work, u64::MAX));
     assert!(int_column(&values, &mut Vec::new(), &mut budget(1)).is_err());
     assert_eq!(int_column(&values, &mut Vec::new(), &mut budget(2)), Ok(()));
-    let floats: Vec<u8> = (0..513_i32).flat_map(|i| f64::from(i).to_le_bytes()).collect();
+    let floats: Vec<u8> = (0..513_i32)
+        .flat_map(|i| f64::from(i).to_le_bytes())
+        .collect();
     assert!(float_column(&floats, &mut Vec::new(), &mut budget(1)).is_err());
-    assert_eq!(float_column(&floats, &mut Vec::new(), &mut budget(2)), Ok(()));
+    assert_eq!(
+        float_column(&floats, &mut Vec::new(), &mut budget(2)),
+        Ok(())
+    );
 }
 
 #[test]
@@ -1102,7 +1116,10 @@ fn every_error_says_what_and_where() {
         offset: 17,
         kind: CborErrorKind::UnsortedKeys,
     };
-    assert_eq!(e.to_string(), "not SKG's deterministic CBOR at byte 17: map keys out of order");
+    assert_eq!(
+        e.to_string(),
+        "not SKG's deterministic CBOR at byte 17: map keys out of order"
+    );
     let text_kinds = [
         TextErrorKind::Unexpected,
         TextErrorKind::UnexpectedEnd,
@@ -1131,7 +1148,10 @@ fn every_error_says_what_and_where() {
 #[test]
 fn text_escapes_tab_and_carriage_return_by_name_and_refuses_a_second_point() {
     let bytes = bytes_of(&V::T("a\tb\rc\u{b}".into()));
-    assert_eq!(to_text(&bytes, 0, &mut meter()).unwrap(), "\"a\tb\rc\u000b\"");
+    assert_eq!(
+        to_text(&bytes, 0, &mut meter()).unwrap(),
+        "\"a\\tb\\rc\\u000b\""
+    );
     assert_eq!(
         text_error("0x1.8.8p0", 0),
         TextError {
