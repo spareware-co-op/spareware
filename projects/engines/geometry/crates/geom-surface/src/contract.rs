@@ -60,12 +60,10 @@ fn meets(a: &[Interval; 3], b: &Bounds<3>) -> bool {
 }
 
 fn boxes_meet(a: &Bounds<3>, b: &Bounds<3>) -> bool {
-    (0..3).all(
-        |d| match (a.lo.get(d), a.hi.get(d), b.lo.get(d), b.hi.get(d)) {
-            (Some(&al), Some(&ah), Some(&bl), Some(&bh)) => al <= bh && bl <= ah,
-            _ => false,
-        },
-    )
+    a.lo.iter()
+        .zip(&a.hi)
+        .zip(b.lo.iter().zip(&b.hi))
+        .all(|((&al, &ah), (&bl, &bh))| al <= bh && bl <= ah)
 }
 
 fn near(v: &[f64; 3], a: &[Interval; 3]) -> bool {

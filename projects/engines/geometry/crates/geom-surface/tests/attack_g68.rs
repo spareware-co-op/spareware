@@ -21,6 +21,8 @@
 //! - **Unbounded, never a guess.** Where the normal vanishes (a sphere's pole, a cone's apex) the
 //!   normal's partials are `Unbounded`; a plane's second partials and normal partials are zero
 //!   and its M is 0.
+//! - **The contract catches a wrong bound.** A kind whose second-derivative or normal-derivative
+//!   bound over a box misses the truth breaks the contract's derivative law.
 //! - **Refusals.** A region outside the domain is refused.
 //!
 //! Every surface is drawn from a printed seed (`SPAREKIT_SEED` replays one).
@@ -42,12 +44,15 @@
 use core::num::NonZeroU64;
 
 use dashu_ratio::RBig;
-use geom_curve::{CurveError, DerivativeBound, Frame};
+use geom_curve::{CurveError, DerivativeBound, Frame, Law};
+use geom_math::{Axis, GridTransform, TypedTransform};
 use geom_num::interval::Interval;
-use geom_nurbs::{Basis, Bounds, Direction, Limit, Surface};
+use geom_nurbs::{Basis, Bounds, Changed, Direction, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
+use geom_surface::contract::check;
 use geom_surface::{
-    Cone, ParamBox, ParamSurface, Plane, SecondDerivativeBound, Sphere, SurfaceKind,
+    Cone, ParamBox, ParamSurface, Plane, SecondDerivativeBound, SecondPartials, Sphere,
+    SurfaceForm, SurfaceKind,
 };
 use geom_test::nurbs_reference::Spline;
 use geom_test::seed::resolve;
@@ -530,4 +535,153 @@ fn regions_outside_are_refused() {
         );
     }
     let _ = Interval::point(0.0);
+}
+
+/// Which bound a kind broken on purpose gets wrong.
+#[derive(Clone, Copy, Debug)]
+enum Part {
+    Second,
+    Normal,
+}
+
+/// A NURBS surface whose second-derivative or normal-derivative bound over any box wider than a
+/// point is moved a million units from the truth.
+struct Moved(Surface<3>, Part);
+
+fn far(b: Bounds<3>) -> Bounds<3> {
+    Bounds {
+        lo: b.lo.map(|x| x + 1e6),
+        hi: b.hi.map(|x| x + 1e6),
+    }
+}
+
+impl ParamSurface for Moved {
+    fn domain(&self) -> ParamBox {
+        ParamSurface::domain(&self.0)
+    }
+    fn point(&self, u: f64, v: f64, s: (Limit, Limit)) -> Result<[f64; 3], CurveError> {
+        ParamSurface::point(&self.0, u, v, s)
+    }
+    fn partials(&self, u: f64, v: f64, s: (Limit, Limit)) -> Result<[[f64; 3]; 3], CurveError> {
+        self.0.partials(u, v, s)
+    }
+    fn enclose(
+        &self,
+        u: f64,
+        v: f64,
+        s: (Limit, Limit),
+        m: &mut WorkMeter<'_>,
+    ) -> Result<[[Interval; 3]; 3], CurveError> {
+        self.0.enclose(u, v, s, m)
+    }
+    fn bound(&self, r: ParamBox, m: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
+        ParamSurface::bound(&self.0, r, m)
+    }
+    fn derivative_bound(
+        &self,
+        r: ParamBox,
+        d: Direction,
+        m: &mut WorkMeter<'_>,
+    ) -> Result<DerivativeBound<3>, CurveError> {
+        ParamSurface::derivative_bound(&self.0, r, d, m)
+    }
+    fn partials_over(
+        &self,
+        r: ParamBox,
+        s: (Limit, Limit),
+        k: usize,
+        m: &mut WorkMeter<'_>,
+    ) -> Result<Vec<[Interval; 3]>, CurveError> {
+        self.0.partials_over(r, s, k, m)
+    }
+    fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
+        self.0.breaks()
+    }
+    fn normal_bound(&self, r: ParamBox, m: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
+        self.0.normal_bound(r, m)
+    }
+    fn second_derivative_bound(
+        &self,
+        r: ParamBox,
+        s: (Limit, Limit),
+        m: &mut WorkMeter<'_>,
+    ) -> Result<SecondDerivativeBound, CurveError> {
+        let b = self.0.second_derivative_bound(r, s, m)?;
+        Ok(match (self.1, b) {
+            (Part::Second, SecondDerivativeBound::Bounded(p)) if r.0.0 < r.0.1 => {
+                SecondDerivativeBound::Bounded(SecondPartials {
+                    uu: far(p.uu),
+                    uv: far(p.uv),
+                    vv: far(p.vv),
+                })
+            }
+            _ => b,
+        })
+    }
+    fn normal_derivative_bound(
+        &self,
+        r: ParamBox,
+        s: (Limit, Limit),
+        m: &mut WorkMeter<'_>,
+    ) -> Result<[DerivativeBound<3>; 2], CurveError> {
+        let n = self.0.normal_derivative_bound(r, s, m)?;
+        if matches!(self.1, Part::Normal) && r.0.0 < r.0.1 {
+            return Ok(n.map(|b| match b {
+                DerivativeBound::Bounded(x) => DerivativeBound::Bounded(far(x)),
+                DerivativeBound::Unbounded => b,
+            }));
+        }
+        Ok(n)
+    }
+    fn to_nurbs(&self, m: &mut WorkMeter<'_>) -> Result<Changed<SurfaceForm>, CurveError> {
+        self.0.to_nurbs(m)
+    }
+    fn split(
+        &self,
+        d: Direction,
+        t: f64,
+        m: &mut WorkMeter<'_>,
+    ) -> Result<(Changed<SurfaceKind>, Changed<SurfaceKind>), CurveError> {
+        ParamSurface::split(&self.0, d, t, m)
+    }
+    fn reversed(
+        &self,
+        d: Direction,
+        m: &mut WorkMeter<'_>,
+    ) -> Result<Changed<SurfaceKind>, CurveError> {
+        self.0.reversed(d, m)
+    }
+    fn transformed(
+        &self,
+        t: &TypedTransform,
+        m: &mut WorkMeter<'_>,
+    ) -> Result<Changed<SurfaceKind>, CurveError> {
+        self.0.transformed(t, m)
+    }
+}
+
+#[test]
+fn wrong_second_and_normal_bounds_are_caught() {
+    // A gently curved biquadratic patch (z = x² + y² sampled on its net): every box the contract
+    // takes has bounded second and normal partials, so a moved one must be caught.
+    let b = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
+    let mut pts = Vec::new();
+    for i in 0..3 {
+        for j in 0..3 {
+            let (x, y) = (f64::from(i) * 0.5, f64::from(j) * 0.5);
+            pts.push([x, y, (x * x + y * y) * 0.25]);
+        }
+    }
+    let s = Surface::new(b.clone(), b, &pts).unwrap();
+    let params: Vec<(f64, f64)> = [0.25, 0.5, 0.75]
+        .iter()
+        .flat_map(|&u| [0.25, 0.5, 0.75].map(|v| (u, v)))
+        .collect();
+    let t = TypedTransform::Exact(GridTransform::quarter_turns(Axis::X, 1));
+    let m = &mut meter();
+    assert_eq!(check(&s, &params, &t, m), Ok(()));
+    for part in [Part::Second, Part::Normal] {
+        let e = check(&Moved(s.clone(), part), &params, &t, m).unwrap_err();
+        assert_eq!(e.law, Law::DerivativeBoundHoldsDerivatives, "{part:?}: {e}");
+    }
 }
