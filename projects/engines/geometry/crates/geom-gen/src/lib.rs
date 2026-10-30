@@ -55,6 +55,8 @@
 //!   computed in exact rationals (Golub and Welsch's method for the Gauss rules, Kronrod's
 //!   definition for his extensions) and each node and weight rounded once, correctly, into
 //!   `geom-num`'s `src/quadrature_rules/`.
+//! - [`facade`], the facade's API documentation and MCP tool descriptions, from every operation's
+//!   schema in `engine-geometry` (piece G100), written to `engine-geometry`'s `generated/`.
 //!
 //! Invariants this crate keeps:
 //!
@@ -77,8 +79,9 @@
 //! seed discipline of 28.5 and 28.17 for its generators; and, for the first generator, the grid
 //! steps of 6.1 and the tolerance ladder of 6.5, tabulated from `geom-num`'s constants.
 //!
-//! Dependencies: `geom-num` (MPL-2.0, ours), whose constants the generators tabulate, and
-//! `geom-test` (MPL-2.0, ours), for the seed type and `SplitMix64`. Their own dependencies are
+//! Dependencies: `geom-num` (MPL-2.0, ours), whose constants the generators tabulate,
+//! `geom-test` (MPL-2.0, ours), for the seed type and `SplitMix64`, and `engine-geometry` (MPL-2.0,
+//! ours), whose operation schemas the facade generators read. Their own dependencies are
 //! recorded in their headers. Its tests also use `proc-macro2` 1.0 (a development dependency,
 //! without its default `proc-macro` feature), to compare the Verus twin's tokens with the shipped
 //! code's; `geom-test` already brings it.
@@ -98,6 +101,7 @@
 
 pub mod bignum;
 pub mod exact;
+pub mod facade;
 pub mod files;
 pub mod generator;
 pub mod grid_steps;

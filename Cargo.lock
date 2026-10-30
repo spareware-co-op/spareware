@@ -1017,9 +1017,11 @@ version = "0.0.0"
 dependencies = [
  "dashu-int",
  "dashu-ratio",
+ "engine-geometry",
  "geom-num",
  "geom-test",
  "proc-macro2",
+ "serde_json",
 ]
 
 [[package]]
