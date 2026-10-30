@@ -42,6 +42,7 @@ pub mod grid;
 pub mod growth;
 pub mod interval;
 pub mod math;
+pub mod newton;
 pub mod perturb;
 pub mod plane;
 pub mod predicate;
