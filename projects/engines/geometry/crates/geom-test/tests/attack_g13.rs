@@ -134,6 +134,35 @@ fn recursion_through_a_trait_implementation_and_a_generic_function_is_a_cycle() 
 }
 
 #[test]
+fn a_generic_parameters_associated_function_is_its_bounds_not_another_traits_of_the_same_name() {
+    // `N::pi()` for `N: Num` is `<N as Num>::pi()`, even where the type `N` stands for also
+    // implements another trait with a `pi` (as geom-num's `Interval` implements `Scalar`): only
+    // the bound is in reach, so the call returns `Num`'s `Result` and closes the cycle.
+    let r = run("pub struct Iv(u32);\n\
+                 pub trait Scalar { fn pi() -> Self; }\n\
+                 impl Scalar for Iv { fn pi() -> Iv { Iv(3) } }\n\
+                 pub trait Num: Sized { fn pi() -> Result<Self, ()>; fn twice(self) -> Result<Self, ()>; }\n\
+                 impl Num for Iv {\n\
+                     fn pi() -> Result<Iv, ()> { entry(0) }\n\
+                     fn twice(self) -> Result<Iv, ()> { Ok(self) }\n\
+                 }\n\
+                 fn turn<N: Num>(n: u32) -> Result<N, ()> { if n > 0 { return Err(()); } let p = N::pi()?; p.twice() }\n\
+                 pub fn entry(n: u32) -> Result<Iv, ()> { turn::<Iv>(n) }");
+    assert_cycles(&r, &[&["<Iv as Num>::pi", "entry", "turn"]]);
+}
+
+#[test]
+fn a_vector_becomes_an_array_through_try_into() {
+    // `TryInto`'s blanket implementation calls `U::try_from` through its bound, so the model needs
+    // the library's `TryFrom<Vec<T>> for [T; N]` itself.
+    let r = run("pub fn three(v: Vec<u32>) -> Option<u32> {\n\
+                     let [a, b, c]: [u32; 3] = v.try_into().ok()?;\n\
+                     Some(a + b + c)\n\
+                 }");
+    assert_cycles(&r, &[]);
+}
+
+#[test]
 fn a_closure_handed_to_a_generic_function_is_called_by_it() {
     let r = run(
         "pub fn apply<F: Fn(u32) -> u32>(f: F, x: u32) -> u32 { f(x) }\n\

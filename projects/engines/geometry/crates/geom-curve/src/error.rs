@@ -60,6 +60,9 @@ pub enum CurveError {
         /// The depth asked for.
         depth: usize,
     },
+    /// A transition's certified quadrature needs more panels than its cap
+    /// ([`crate::transition::MAX_PANELS`]): its heading turns too far over its length.
+    TooManyPanels,
     /// A step its own bounds rule out failed: a defect in this crate, reported, never a panic.
     Defect,
 }
@@ -95,6 +98,9 @@ impl fmt::Display for CurveError {
             CurveError::TooDeep { depth } => {
                 write!(f, "a procedural kind nested {depth} deep, past its bound")
             }
+            CurveError::TooManyPanels => f.write_str(
+                "the transition's heading turns too far for its certified quadrature's panels",
+            ),
             CurveError::Defect => f.write_str("an internal step failed (a defect in geom-curve)"),
         }
     }
