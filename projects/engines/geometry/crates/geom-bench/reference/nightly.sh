@@ -201,7 +201,7 @@ if [[ ",$engines," == *,native,* ]]; then
       if [ "$code" = 0 ]; then
         text="$(tr -d '\r' < "$tonight/out.txt" | head -1)"
       else
-        text="$name $(tr -d '\r' < "$tonight/err.txt" | grep -v '^$' | head -1)"
+        text="$name $(tr -d '\r' < "$tonight/err.txt" | { grep -v '^$' || true; } | head -1)"
       fi
       echo "job native $threads $start $end $code $text" >> "$tonight/jobs.txt"
     done < "$tonight/cases.txt"
@@ -241,7 +241,7 @@ if [ "${#browsers[@]}" -gt 0 ] && [ "$status" = complete ]; then
     set +e
     win cmd.exe /c ".\\pin.cmd $mask8 node browsers.mjs $e $round $deadline_ms cases.txt jobs-$e.txt" 2> "$tonight/$e.err" | tr -d '\r' >&2
     set -e
-    why="$(tr -d '\r' < "$tonight/$e.err" | grep -v '^$' | head -1)"
+    why="$(tr -d '\r' < "$tonight/$e.err" | { grep -v '^$' || true; } | head -1)"
     first="$(head -1 "$windows_dir/jobs-$e.txt" 2> /dev/null | tr -d '\r')"
     case "$first" in
       "# version "*)
