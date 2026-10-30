@@ -6420,7 +6420,217 @@
         27
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "The operation's own typed failure (chapter 22): one variant per family of details, each holding that family's enum. Grows with the kernel; generic code reads an error's [`kind`](crate::OpError::kind) and the operation's schema instead of matching it.",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "held detail",
+              "doc": "A stop from the parallel helper, its budgets and its cancellation.",
+              "name": "Run",
+              "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A failure of the numbers layer, wrapped by meaning.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "OpErrorDetail",
+          "non_exhaustive": true
+        },
+        {
+          "doc": "A stop from the parallel helper (`geom-run`): a budget, the caller's cancellation, the machine's memory, or a broken invariant of the helper.",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "BudgetExceeded",
+              "doc": "A deterministic budget of the operation, or of one batch item, ran out: which budget, which limit, in which phase, and what had been used, counted as a serial loop counts it.",
+              "name": "BudgetExceeded",
+              "shape": "tuple"
+            },
+            {
+              "base_kind": "BudgetExceeded",
+              "doc": "A batch's total ran out at or before this item, in key order. It belongs to the batch, not to the item, so it is never cached as the item's result (chapter 23.10).",
+              "name": "BatchTotal",
+              "shape": "tuple"
+            },
+            {
+              "base_kind": "Cancelled",
+              "doc": "The caller's cancellation stopped the operation. Not deterministic; never stored.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "OutOfMemory",
+              "doc": "The machine refused a large allocation. Not deterministic; never stored.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "An invariant of the helper broke: a bug, reported instead of a panic or a wrong answer.",
+              "name": "Internal",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "RunDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "A failure of the numbers layer (`geom-num`'s `NumError`), named and mapped by what it means for the operation (chapter 22).",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "FrameRangeExceeded",
+              "doc": "A coordinate would leave ±(2^40 − 1) grid steps of its frame's origin (`NumError::OutOfRange`).",
+              "name": "OutOfRange",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Degenerate",
+              "doc": "The inputs are degenerate for a construction: collinear points for a plane, or three planes that do not meet in exactly one point (`NumError::Degenerate`).",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Degenerate",
+              "doc": "A value or a result was not finite: a pole, such as a division by zero or the logarithm of zero, or an overflow (`NumError::NotFinite`). Base kind `Degenerate`, decided by this piece: kernel values are bounded (coordinates within ±2^40 steps), so on valid input a computation leaves the finite doubles only at a singularity of the configuration, which is chapter 22's \"degenerate for this operation\"; an operation that reads a caller's number checks it first, and reports a non-finite one as its own `InvalidInput` detail.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "NoSolution",
+              "doc": "A maths function was asked for a value it does not have: the square root or logarithm of a negative number, the arcsine of a number beyond ±1 (`NumError::OutsideDomain`). Base kind `NoSolution`, decided by this piece: no real value exists, so no result meets the input, which is chapter 22's `NoSolution`; it is not a malformed input, because the argument was computed from valid ones.",
+              "name": "OutsideDomain",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Undecided",
+              "doc": "An interval division by an interval that contains zero (`NumError::DivisorContainsZero`). Base kind `Undecided`, decided by this piece: the enclosure cannot say whether the divisor vanishes, so the decision cannot be certified at this resolution; an exact zero is found by the exact predicates first, and is `Degenerate`.",
+              "name": "DivisorContainsZero",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Undecided",
+              "doc": "An interval square root of an interval with negative values in it (`NumError::NegativeSqrt`). Base kind `Undecided`, decided by this piece for the reason [`NumDetail::DivisorContainsZero`] gives: the enclosure cannot say whether the value is negative.",
+              "name": "NegativeSqrt",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "An empty interval was asked for: a lower bound above its upper bound (`NumError::EmptyInterval`). Base kind `Internal`, decided by this piece: the kernel builds intervals from bounds it computed, so an empty one is a defect; a range a caller gives is checked by the operation as its own input.",
+              "name": "EmptyInterval",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "A conversion between grid steps was asked to go the wrong way (`NumError::WrongDirection`). Base kind `Internal`, decided by this piece: the direction is chosen by kernel code, never by data, so going the wrong way is a defect.",
+              "name": "WrongDirection",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "An exact computation did not fit the width its proven bit budget gives it (`NumError::BudgetExceeded`). Only a defect can cause it, so its base kind is `Internal`, never `BudgetExceeded` (chapter 22).",
+              "name": "BitBudget",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "ExactnessNotAccepted",
+              "doc": "A certified bound would pass the ceiling it was checked against (`NumError::ToleranceExceeded`): the result would be less exact than accepted, so its base kind is `ExactnessNotAccepted`, never `ToleranceExceeded` (chapter 22).",
+              "name": "BoundOverCeiling",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "An enclosure needs a maths function whose error is not proven (`NumError::UnprovenMaths`). The wrapping operation names the function and the piece that adds its proof (chapters 12.16 and 22).",
+              "name": "UnprovenMaths",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "NumDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "The shared base of every error (chapter 22): one of a closed set, each kind defined once.",
+          "file": "projects/engines/geometry/crates/geom-op/src/kind.rs",
+          "kinds": [
+            {
+              "doc": "An input breaks the operation's preconditions: it fails the checker, is malformed, or repeats a key. The caller can fix or replace the input.",
+              "name": "InvalidInput",
+              "shape": "unit"
+            },
+            {
+              "doc": "A valid input is degenerate for this operation: a zero length, angle or radius, coincident anchors, a folded arc, a singular start. The caller can change the value it names.",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
+              "doc": "The input is valid, but no result meets it and the rules the caller set. The caller can change a value; the remedies give the nearest one that works.",
+              "name": "NoSolution",
+              "shape": "unit"
+            },
+            {
+              "doc": "More than one result fits, and nothing given chooses between them. The caller can choose, or add what decides.",
+              "name": "Ambiguous",
+              "shape": "unit"
+            },
+            {
+              "doc": "A decision the result needs can be neither made exactly nor certified at the data's own resolution. The caller can move things apart, close the gap explicitly, or take another route.",
+              "name": "Undecided",
+              "shape": "unit"
+            },
+            {
+              "doc": "The result would be less exact than the caller accepted: a lower class, a certified bound past the accepted one, or a commit to the grid that would flip a decision. The caller can accept explicitly the class and bound it would reach, or make the change that keeps it exact.",
+              "name": "ExactnessNotAccepted",
+              "shape": "unit"
+            },
+            {
+              "doc": "For Tolerant data only: an operation would need a larger tolerance than a Tolerant body carries, or healing would need to close a gap wider than `ε_heal` allows. The caller can heal first, or raise `ε_heal` up to its cap.",
+              "name": "ToleranceExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "A coordinate would leave ±(2^40 − 1) steps of its frame's origin. The caller can work in a frame placed at the overlap or on the lattice, split, or ask for a coarser step.",
+              "name": "FrameRangeExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "A deterministic work or logical-memory budget ran out. The caller can raise the budget, split the call, or ask for a preview.",
+              "name": "BudgetExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "The caller's cancellation token, or a deadline it set, stopped the operation. Not deterministic, so never logged or cached; there is nothing to do.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "The machine refused a large allocation. Not deterministic, so never logged or cached; there is nothing to do.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "No route exists yet for this input. The caller can take a route that exists, or wait for the build piece that adds one.",
+              "name": "Unsupported",
+              "shape": "unit"
+            },
+            {
+              "doc": "An invariant broke: a bug, never a panic and never a success. The caller can report it, with what reproduces it.",
+              "name": "Internal",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::kind",
+          "name": "ErrorKind",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-op/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-op",
@@ -6435,12 +6645,216 @@
       "job": "The operation contract every crate shares: `OpContext`; the shared parts of `OpOutput` (history, names, exactness, diagnostics); the `OpError` base (`ErrorKind`, `Evidence`, `Remedy`); the exactness class, `OpId` and `OpPath`; the `NameId` value and its hashing under `NameScheme`, `TopoName`, `Role` and `PieceKey`; the history records of 20.3; the operation schema types.",
       "kind": "kernel",
       "layer": "1",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "a context is a path (one vector of labels) and a few machine words; making one and reading it never allocates beyond the path it is given.",
+          "does": "every operation has chapter 10.1's shape, `fn operation(ctx: &OpContext, input: &OpInput) -> Result<OpOutput, OpError>`. An [`OpContext`] carries the operation's [`OpPath`] (its permanent ID from the operation log, and the step or batch item it is), its [`Budget`] of work units and logical bytes (chapter 23.10), the caller's [`Cancel`], and its [`Precision`]: final, or a coarser preview the caller asked for (chapter 23.6).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/context.rs",
+          "guarantees": [
+            "**No clock and no randomness.** An `OpContext` holds a path, a budget, a precision and the caller's cancellation, and nothing else; none of them reads a clock or draws a random number. A time limit reaches an operation only as the caller's [`Cancel`] (owner action G71, section 32.15), whose only effect is to stop it, and a stopped operation publishes nothing.",
+            "**Final unless asked.** A context is made with [`Precision::Final`]; only [`OpContext::with_precision`] asks for a preview.",
+            "**Shown as its value.** `Debug` prints the path, the budget, the precision and whether a cancellation is attached, never the cancellation's address or state."
+          ],
+          "job": "What every operation is given besides its input: which operation it is, its budgets, the caller's cancellation and the precision asked for.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "chapter 10.1's operation contract and chapter 23.10's budgets and cancellation, as decided in owner action G71 (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/23-performance.md`, section 32.15 of `projects/engines/geometry/architecture/32-decisions.md`)."
+          },
+          "path": "geom_op::context",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant; the details are a few machine words, and only [`OpErrorDetail::remedies`] allocates, the vector it returns.",
+          "does": "[`OpErrorDetail`] has one variant per family of details (chapter 22), and grows with the kernel: each operation family adds its own enum as a variant, as its piece lands. This module holds the two every operation can meet. [`RunDetail`] is a stop from `geom-run`: a budget that ran out, the caller's cancellation, a refused allocation, or a broken invariant of the helper. [`NumDetail`] is a failure of `geom-num`, wrapped by meaning rather than by name (chapter 22: \"A crate's own error type never reaches a caller\"). Every detail says its base kind through its `kind` function, which the map reads to list each detail with its base kind (chapter 26.3), and gives the remedies it knows.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "guarantees": [
+            "**One base kind per detail.** Each variant maps to exactly one [`ErrorKind`] in its `kind` function, written as a match the map reads; a family variant of [`OpErrorDetail`] takes the kind of the detail it holds.",
+            "**The numbers layer maps by meaning** (chapter 22, and the open question of section 31.7 that names this piece): an exact computation over its proven bit budget is a defect, so [`NumDetail::BitBudget`] is `Internal`, never `BudgetExceeded`; a certified bound over its ceiling is [`NumDetail::BoundOverCeiling`], `ExactnessNotAccepted`; a coordinate past the frame is `FrameRangeExceeded`; a degenerate construction is `Degenerate`; maths with no proven enclosure is `Unsupported`. The six section 22 left open are decided here, each with its reason on its variant: a value that is not finite is `Degenerate`; an argument outside a function's domain is `NoSolution`; an interval divisor that contains zero and the square root of an interval with negative values are `Undecided`; an empty interval and a grid-step conversion the wrong way are `Internal`.",
+            "**The helper's stops keep their meaning.** A budget failure keeps its `{ budget, kind, phase, used }` record, and a batch's total stays the batch's ([`RunDetail::BatchTotal`]), never cached as an item's result; cancellation and refused allocations stay `Cancelled` and `OutOfMemory`, which are never stored (chapter 23.10)."
+          ],
+          "job": "Error details: each operation family's own typed failures, each mapped to one base kind; and the two the whole kernel shares, the parallel helper's stops and the numbers layer's failures.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md",
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "chapter 22's shared base and per-operation detail, and its mapping of the numbers layer's errors (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), with chapter 23.10's budget and batch rules (`projects/engines/geometry/architecture/23-performance.md`)."
+          },
+          "path": "geom_op::detail",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an error is one box holding its path, its message and three short vectors; making one allocates them, once. Errors are made only on failure, and the box keeps every operation's `Result` one pointer wide on the error side.",
+          "does": "an [`OpError`] is chapter 22's structured error, the same for people and for AI agents: `kind`, `detail`, `op`, `entities`, `at` (evidence), `message` and `remedies`. It is built from its detail ([`OpError::new`]), which fixes its kind, its first message and the remedies the detail knows; the operation then adds the entities it names, the values that explain it, a fuller message and the remedies only it knows.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/error.rs",
+          "guarantees": [
+            "**The kind always agrees with the detail.** [`OpError::kind`] is the detail's base kind, read from the detail every time; nothing can set one without the other (chapter 22).",
+            "**Never empty of meaning.** Every error has a message in plain words, the detail's own until the operation gives a fuller one, and the remedies its detail knows.",
+            "**Additions keep their order.** Entities, evidence and remedies are kept in the order the operation gave them; a deterministic operation gives them in a deterministic order, so equal inputs give equal errors (chapters 21 and 28.13).",
+            "**Replayable unless stopped.** [`OpError::is_replayable`] is false exactly for `Cancelled` and `OutOfMemory`, which are never logged, stored or cached."
+          ],
+          "job": "The error every operation returns: its base kind, its own typed detail, where it happened, the entities and values involved, plain words, and what would make it succeed.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "chapter 22's `OpError`, a closed base kind with an open, typed detail that the kind is read from (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_op::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words per value; nothing allocates.",
+          "does": "an [`Evidence`] is one named [`Value`]: a point, a coordinate, a length, a parameter, an exactness class and its bound, or a count, such as \"largest radius: 4.2 mm\" or \"station: 3.40 m\" (chapter 22's `at: Vec<Evidence>`). Values are `geom-num` values only, so this crate needs no geometry crate (chapter 27, \"Who owns what\").",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/evidence.rs",
+          "guarantees": [
+            "**Numbers layer values only.** Every [`Value`] holds `geom-num` values or plain integers, in the kernel's own units: grid steps with their step, parameters as certified intervals.",
+            "**A length always carries its step.** A count of steps means nothing alone (64 steps of `Q0` are 10 µm, of `Q1` 0.4 µm), so [`Value::Length`] holds both, as an exactness bound does.",
+            "**Plain words.** `Display` writes the name and the value, a length with its step, so a message can be read without the code."
+          ],
+          "job": "Evidence: the values an error or a warning points at, each named for what it is.",
+          "method": {
+            "none": "the values chapter 22's `Evidence` carries, written as data (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), in `geom-num`'s own types."
+          },
+          "path": "geom_op::evidence",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "IDs and names are sixteen bytes, copied by value. A path holds its labels in one vector; a child path copies its parent's labels once and adds one, so it allocates once.",
+          "does": "an [`OpId`] is the permanent 128-bit ID of one operation, set when the operation is authored and kept in the operation log forever (architecture chapter 20.1). An [`OpPath`] adds sub-step labels to it: a [`Label::Step`] named by the operation, or a [`Label::Key`], the stable key the caller gives a batch item (chapter 10.1), so an item's path is the batch's path plus that key and never its position. A [`NameId`] is the 128-bit value of a persistent name (chapter 20.1), held here as its sixteen bytes so that errors and diagnostics can name the entities they concern; computing one from a `TopoName` under `NameScheme v1` is piece G87's.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/id.rs",
+          "guarantees": [
+            "**Nothing is named by position or by chance.** An [`OpPath`] holds only the [`OpId`] and the labels given to it, in the order given; a batch item's label is the caller's key, so adding an item to a batch changes no other item's path.",
+            "**Every label hashes the same everywhere.** A step label is 1 to [`STEP_MAX`] bytes of printable ASCII or spaces, not starting or ending with a space. ASCII text is in Unicode Normalization Form C under every Unicode version, so a step label meets section 32.19's rule for text hashed into a name without a normalisation table.",
+            "**Order is byte order.** IDs, names and paths compare by their bytes and labels (a step before a key at the same depth, then by bytes), the order section 32.19 sorts names in: the order of their canonical encodings, which for sixteen-byte strings is the order of the bytes.",
+            "**Shown as their value.** `Debug` and `Display` print an ID or a name as 32 lowercase hexadecimal digits, the most significant byte first, and a path as its ID followed by its labels; nothing prints an address."
+          ],
+          "job": "Operation identity: an operation's permanent ID, the path to one of its steps or batch items, and the value of a persistent name.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/10-operations.md"
+            ],
+            "text": "chapter 20.1's three kinds of identity and section 32.19's canonical form of an `OpPath` (\"an array of the `OpId`'s 16 bytes followed by its labels\"), in `projects/engines/geometry/architecture/20-naming-history.md` and `projects/engines/geometry/architecture/32-decisions.md`, with chapter 10.1's rule that a batch item is keyed by the caller's key (`projects/engines/geometry/architecture/10-operations.md`)."
+          },
+          "path": "geom_op::id",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant; nothing allocates.",
+          "does": "[`ErrorKind`] is the shared base of every [`OpError`](crate::OpError). Generic code (the command layer, the MCP tools, AI agents, the test harness) can handle any error by its kind alone; each operation's own detail says the rest (chapter 22). Each kind's doc comment is its definition and what the caller can do, which the map lists as the base of the error catalogue (chapter 26.3).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/kind.rs",
+          "guarantees": [
+            "**Closed.** `ErrorKind` is not `#[non_exhaustive]`, so callers handle every kind; a new failure is a new detail, never a new kind (chapter 22). [`ErrorKind::ALL`] lists every kind once, in chapter 22's table order.",
+            "**Only two kinds are not replayable.** [`ErrorKind::Cancelled`] and [`ErrorKind::OutOfMemory`] depend on the caller and the machine, so they are never logged, stored or cached; every other kind is a deterministic answer (chapters 22 and 23.10).",
+            "**Named as chapter 22 names them.** [`ErrorKind::name`] is the kind's name in chapter 22, for logs, schemas and the map."
+          ],
+          "job": "The base kinds of every error: chapter 22's closed set, each defined once.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "chapter 22's table of base kinds (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), with chapter 23.10's rule that cancellation and refused allocations are never stored."
+          },
+          "path": "geom_op::kind",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an output is its result plus one vector of diagnostics; a diagnostic owns its message and two short vectors.",
+          "does": "an [`OpOutput`] is chapter 10.1's `OpOutput`: the operation's own result (bodies, meshes, a solved sketch: each crate's type), with the parts every operation shares. This piece builds two of them: the result's [`Exactness`] and its [`Diagnostic`]s, warnings with the entities they concern (\"a short edge\", \"a near-tangency handled\"). The other two shared parts, the new persistent names and the history of chapter 20.3, join it with their types, in pieces G87 and G88.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/output.rs",
+          "guarantees": [
+            "**A result states its class.** Every output carries the exactness class and bound of its result (principle 3); an output is made only with one ([`OpOutput::new`]).",
+            "**Warnings are data.** A [`Diagnostic`] has a stable code, the entities it concerns, the values that explain it and plain words; its code is lowercase ASCII letters, digits, `.` and `_`, 1 to [`CODE_MAX`] bytes, so it hashes and compares the same everywhere.",
+            "**Order is the operation's.** Diagnostics keep the order the operation added them in, which a deterministic operation fixes (chapter 21).",
+            "**Room to grow.** `OpOutput` and `Diagnostic` are `#[non_exhaustive]`: made only by their constructors, so the shared parts still to come join without breaking a caller."
+          ],
+          "job": "What a successful operation returns besides its own result: the result's exactness class and the warnings it carries.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/27-crates-folders.md"
+            ],
+            "text": "chapter 10.1's `OpOutput` and chapter 27's split of it into shared parts and each crate's own result (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/27-crates-folders.md`)."
+          },
+          "path": "geom_op::output",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words per remedy, plus the candidates' vector for [`Remedy::Choose`].",
+          "does": "a [`Remedy`] is one of the things chapter 22's table says a caller can do about an error, with the values that make it concrete: change a named input, to at most or at least a value where one is known (\"radius at most 4.2 mm here\"); choose among candidates; take another route (\"use the mesh boolean\"); accept a less exact class; heal first; work in another frame or at a coarser step; raise a budget, split the call or ask for a preview; wait for the build piece that adds a route; or report a bug.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/remedy.rs",
+          "guarantees": [
+            "**Every action chapter 22 names has a form.** Each kind's \"what the caller can do\" in chapter 22's table is one or more of these variants; `Cancelled` and `OutOfMemory` have none, because there is nothing to do.",
+            "**Concrete where the operation knows.** A value, a class, a bound or a budget is carried, never left for the reader to work out from the message.",
+            "**Plain words.** `Display` writes each remedy as an instruction."
+          ],
+          "job": "Remedies: what would make a failed operation succeed, as data a person or an AI agent can act on.",
+          "method": {
+            "none": "chapter 22's column \"What the caller can do\", written as data (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_op::remedy",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time: schemas are constants.",
+          "does": "an [`OpSchema`] is chapter 22's description of one operation: its name, version and family; its inputs and outputs, each with a type and a unit; the roles it names; the errors it can return, each detail with its base kind and its data; the warnings it can give; the exactness classes it can return; whether it has a batch entry; and an example. The types here are the vocabulary; the facade, `engine-geometry`, holds every operation's schema as data and generates from them (piece G100).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/schema.rs",
+          "guarantees": [
+            "**Constant data.** Every schema type is made of `&'static` strings and slices, so a schema is a constant, compiled in, with no allocation and nothing to initialise.",
+            "**Errors name their base kind.** An [`ErrorSpec`] gives each detail its [`ErrorKind`], as chapter 22 asks every error table and schema to.",
+            "**Classes without bounds.** A schema states which [`Class`]es its operation can return; the bound is a property of each result, and [`Class::of`] reads the class of one."
+          ],
+          "job": "Operation schemas: every operation described as data, from which the interfaces, the MCP tools and the documentation are generated.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md",
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/09-representations.md"
+            ],
+            "text": "chapter 22's list of what each operation's schema states, chapter 10.2's families and chapter 9's exactness classes, written as types (`projects/engines/geometry/architecture/22-errors-queries-ai.md`, `projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/09-representations.md`)."
+          },
+          "path": "geom_op::schema",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-op",
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G82, G83, G86, G87, G88, G104, G143, G144, G459.",
+      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract to come in G83, the canonical encoder in G86, names in G87, history in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {
@@ -8314,14 +8728,15 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the number of tokens, times a search of the crate's error type names.",
+          "cost": "linear in the number of tokens, times a search of the crate's error type names, plus one pass over each top-level `impl` block for a `kind` function.",
           "does": "[`find`] reads one source file's tokens ([`crate::map::rust`]) and returns every public enum that is an error type, declared at the top level of the file, with its doc comment, whether it is `#[non_exhaustive]`, and each variant's name, shape and doc comment. An enum is an error type when its name contains `Error` (`NumError`, and chapter 22's `ErrorKind`, `OpErrorDetail` and `IntersectError` when they arrive), or when its crate implements a trait named `Error` for it or names it as the error of a `Result<_, E>` anywhere ([`crate::map::items`]), so a family's own detail enum is found whatever it is called. Items under `#[cfg(test)]` are skipped whole.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/map/errors.rs",
           "guarantees": [
             "**Found or reported.** A public error enum inside a function, an inline module or any other block that is not a `#[cfg(test)]` item is reported ([`Rule::ErrorEnum`]): error enums are declared at the top level of a module file, where the map finds them.",
             "**Every kind explained.** An error enum or a variant without a doc comment is reported ([`Rule::ErrorDoc`]), because the catalogue of 26.3 explains every error the kernel can return.",
-            "**Only real code.** The scan runs on tokens, so an enum inside a comment, a string or a doc example is never found; `pub(crate)` and private enums are not part of the crate's interface and are not listed."
+            "**Only real code.** The scan runs on tokens, so an enum inside a comment, a string or a doc example is never found; `pub(crate)` and private enums are not part of the crate's interface and are not listed.",
+            "**Every detail with its base kind.** Chapter 22 maps every detail to one base kind, and the catalogue lists both (26.3). For an error enum whose `impl` block in the same file has a function `kind` returning `ErrorKind`, each variant's base kind is read from that function's `match self`: an arm `Enum::Variant => ErrorKind::Kind` gives `Kind`, and an arm `Enum::Variant(detail) => detail.kind()` gives [`HELD`], the kind of the detail the variant holds. A body that is not one `match self`, an arm in another form, a variant with no arm or with two, or a base kind that is not a variant of an `ErrorKind` enum in the map, is reported ([`Rule::ErrorBase`]), never guessed."
           ],
           "job": "Finding a kernel crate's error kinds: the public error enums in its source, with every variant and its doc comment.",
           "method": {
