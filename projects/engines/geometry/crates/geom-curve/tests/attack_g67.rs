@@ -1321,7 +1321,8 @@ fn undecided_scalars_take_the_pieces_route() {
 }
 
 /// Claim: coefficients whose enclosures have zero at one end, not zero itself, are not taken for
-/// zero or for certainly signed: the extent holds the scalar for every coefficient in them.
+/// zero or for certainly signed: the extent holds the scalar for every coefficient in them. So is a
+/// hyperbolic quotient (a − b)/(a + b) whose enclosure ends at exactly zero, where ½·ln is −∞.
 #[test]
 fn coefficients_with_zero_at_an_end_are_held() {
     let m = &mut meter();
@@ -1366,6 +1367,33 @@ fn coefficients_with_zero_at_an_end_are_held() {
             );
         }
     }
+    // a in [10⁻³⁰⁸, 1] and b two steps below 10⁻³⁰⁸, where the doubles are a step of 2⁻¹⁰⁷⁴ apart:
+    // a − b's lower end is two steps, widened to one, and its quotient by a + b (at most just
+    // over 1) rounds to one step, widened to zero. So the quotient's enclosure starts at exactly
+    // zero: undecided, and the extent holds the scalar for every a.
+    let low = 1e-308f64;
+    let below = low.next_down().next_down();
+    let g = Scalar::Hyperbolic {
+        p: pt(0.0),
+        a: Interval::new(low, 1.0).unwrap(),
+        b: pt(below),
+    };
+    let e = extent(&g, (-2.0, 2.0), m).unwrap();
+    for a in [low, 0.5, 1.0] {
+        let h = Scalar::Hyperbolic {
+            p: pt(0.0),
+            a: pt(a),
+            b: pt(below),
+        };
+        for i in 0..=100 {
+            let t = -2.0 + 4.0 * f64::from(i) / 100.0;
+            let v = h.over(pt(t)).unwrap();
+            assert!(
+                e.lo() <= v.hi() && v.lo() <= e.hi(),
+                "{a} at {t}: {e:?} {v:?}"
+            );
+        }
+    }
 }
 
 /// Claim: a gentle transition's box over a span costs three units of work (its one piece and the
@@ -1401,6 +1429,22 @@ fn a_clothoid_of_an_underflowing_rate_has_no_fresnel_form() {
         let law = CurvatureLaw::Clothoid { start: 0.0, end };
         let c = Transition::<2>::new([0.0, 0.0], [1.0, 0.0], 1.0, law, m).unwrap();
         assert_eq!(c.enclose_fresnel(0.5, m), Ok(None), "{end}");
+    }
+}
+
+/// Claim: a polynomial spiral with no terms is straight, the α of its heading exactly zero (no
+/// rounding enters it, unlike a clothoid of equal curvatures), and it has no Fresnel form: the
+/// route declines, and refuses nothing.
+#[test]
+fn a_spiral_of_no_terms_has_no_fresnel_form() {
+    let m = &mut meter();
+    for from in [0.0, 3.0] {
+        let law = CurvatureLaw::Polynomial {
+            terms: [None; 8],
+            from,
+        };
+        let c = Transition::<2>::new([0.0, 0.0], [1.0, 0.0], 10.0, law, m).unwrap();
+        assert_eq!(c.enclose_fresnel(5.0, m), Ok(None), "{from}");
     }
 }
 

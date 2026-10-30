@@ -501,3 +501,47 @@ fn regions_outside_are_refused() {
         assert!(t.partials_over(r, SIDES, 2, m).is_err(), "{r:?}");
     }
 }
+
+/// Claim: the last route (an affine image of a torus) cuts the v-span into ⌈32·w⌉ even pieces from
+/// its lower end, at most 64, each costing the same work: the work grows by one step a piece. And
+/// on pieces of 1/32 of a half-turn the box is within r²·|`S_vv`| of the samples' extremes, r the
+/// half-width 1/64 and |`S_vv`| at most π² times the minor radius times the map's largest factor.
+#[test]
+fn the_last_route_cuts_the_v_span_into_even_pieces() {
+    let f = Frame::new([1.0, 0.3, 0.2], [0.1, -0.4, 1.0]).unwrap();
+    let torus = Torus::new([0.0; 3], 3.0, 1.0, f, ((0.0, 2.0), (0.0, 2.0))).unwrap();
+    let t = TypedTransform::from(Transform::scale(1.0, 2.0, 0.5).unwrap());
+    let s = SurfaceKind::Torus(torus)
+        .transformed(&t, &mut meter())
+        .unwrap()
+        .value;
+    assert!(matches!(s, SurfaceKind::Affine(_)));
+    let us = (0.1, 0.4);
+    let work = |vs: (f64, f64)| {
+        let mut m = meter();
+        s.bound((us, vs), &mut m).unwrap();
+        m.used().work
+    };
+    let one = work((0.25, 0.281_25));
+    let step = work((0.25, 0.312_5)) - one;
+    assert!(step > 0);
+    for (vs, pieces) in [
+        ((0.25, 0.5), 8),
+        ((1.0, 1.25), 8),
+        ((0.1, 1.9), 58),
+        ((0.0, 2.0), 64),
+    ] {
+        assert_eq!(work(vs), one + (pieces - 1) * step, "{vs:?}");
+    }
+    let r = (us, (0.25, 0.75));
+    let b = s.bound(r, &mut meter()).unwrap();
+    let (min, max) = sampled(&s, r, 0, 200);
+    let half = 1.0 / 64.0;
+    let slack = half * half * std::f64::consts::PI.powi(2) * 2.0 + 1e-4;
+    for d in 0..3 {
+        assert!(
+            min[d] - b.lo[d] <= slack && b.hi[d] - max[d] <= slack,
+            "coordinate {d}: {b:?} against [{min:?}, {max:?}]"
+        );
+    }
+}
