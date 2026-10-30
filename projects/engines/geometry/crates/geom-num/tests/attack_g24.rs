@@ -89,6 +89,10 @@ fn libm_calls(text: &str) -> BTreeSet<String> {
     target_os = "wasi",
     ignore = "reads the crate's folder; wasm32-wasip1 under wasmtime is given no folder to read"
 )]
+#[cfg_attr(
+    miri,
+    ignore = "reads the crate's folder; Miri isolates the test from the file system"
+)]
 fn attack_the_audit_covers_every_libm_function_the_kernel_calls() {
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut folders = vec![src];
