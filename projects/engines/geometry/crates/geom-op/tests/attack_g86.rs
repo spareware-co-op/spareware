@@ -201,7 +201,7 @@ fn always_refused() -> Vec<Call> {
 /// only where refused.
 #[test]
 fn refusals_slipped_into_a_run_change_nothing() {
-    let strategy = (common::value(), any::<u64>(), 0_usize..4);
+    let strategy = (common::value(), any::<u64>(), 0_u64..4);
     let result = geom_test::prop::run(
         "refusals slipped into a run",
         Seed(0x6386_a7a1),
@@ -214,7 +214,8 @@ fn refusals_slipped_into_a_run_change_nothing() {
             let mut e = Encoder::new();
             let mut refused = 0_usize;
             for (place, call) in run.iter().enumerate() {
-                if (place + salt as usize).is_multiple_of(every + 1) {
+                // 64-bit on every target, so wasm32 slips refusals into the same places.
+                if (place as u64).wrapping_add(salt).is_multiple_of(every + 1) {
                     for bad in always_refused() {
                         prop_assert!(apply(&mut e, &bad).is_err());
                         refused += 1;
@@ -236,9 +237,10 @@ fn refusals_slipped_into_a_run_change_nothing() {
             }
             for bad in always_refused() {
                 prop_assert!(apply(&mut e, &bad).is_err());
+                refused += 1;
             }
             prop_assert_eq!(apply(&mut e, &Call::Uint(0)), Err(EncodeError::Complete));
-            prop_assert!(refused > 0 || run.len() < 2);
+            prop_assert!(refused > 0);
             prop_assert_eq!(hex(e.finish().unwrap().as_bytes()), hex(&clean));
             Ok(())
         },

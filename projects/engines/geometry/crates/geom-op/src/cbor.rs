@@ -632,7 +632,12 @@ fn narrow(bits: u64, format: &Narrow) -> Option<u64> {
     Some(sign | magnitude)
 }
 
+/// Bounded proofs (chapter 28.7; piece G86), proven by `kernel-fuzz.yml`'s `kani-op` job.
 #[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
 mod proofs {
     use super::{BINARY16, BINARY32, Encoder, narrow};
 
