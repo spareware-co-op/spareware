@@ -1448,7 +1448,7 @@
       "line_text": "} else if r == -0.5 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "r == -0.5 is then tested as r == 0.5, already handled above, so r = -0.5 falls to libm::sin(PI * -0.5) = sin(-RN(pi)/2) = -cos(1.2e-16), which rounds to exactly -1.0 (libm 0.2.16 returns -1.0 there; tests/gate1_libm.rs checks it): the same value."
+      "reason": "r == -0.5 is then tested as r == 0.5, already handled above, so r = -0.5 falls to libm::sin(PI * -0.5) = sin(-RN(pi)/2) = -cos(6.1e-17), which rounds to exactly -1.0 (libm 0.2.16 returns -1.0 there; tests/gate1_libm.rs checks it): the same value."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/unproven.rs",
@@ -1472,7 +1472,7 @@
       "line_text": "let (sh, sl) = fast_two_sum(xh, yh);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "fast_sum is used only by the second fast path; with (0, 0) its test compares -eps and +eps (eps > 0 always), which differ, so every pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+      "reason": "fast_sum is used only by the second fast path; with (0, 0) its test compares -eps and +eps (eps > 0 always), which differ, so every pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle at least eps minus its proven error from every rounding boundary (over a quarter of eps: at least 2^-92 on the first path, 2^-102.3 on the second), so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1704,7 +1704,7 @@
       "line_text": "let gt = u64::from(aix < aiy);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With gt = (aix == aiy): for |x| < |y| gt is 0 and aix - aiy wraps to at least 2^63; for |x| == |y| gt is 1 and dxy is all ones; either way dxy >= 53 << 52 sends the pair to atan2_accurate before gt is used again, and |x| > |y| is unchanged. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+      "reason": "With gt = (aix == aiy): for |x| < |y| gt is 0 and aix - aiy wraps to at least 2^63; for |x| == |y| gt is 1 and dxy is all ones; either way dxy >= 53 << 52 sends the pair to atan2_accurate before gt is used again, and |x| > |y| is unchanged. Where a fast path decides, its proven bound puts the angle at least eps minus its proven error from every rounding boundary (over a quarter of eps: at least 2^-92 on the first path, 2^-102.3 on the second), so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1712,7 +1712,7 @@
       "line_text": "let gt = u64::from(aix < aiy);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With gt = (aix > aiy): for |x| > |y| dxy = !(aix - aiy) and for |x| < |y| the wrapped aix - aiy, both at least 2^63, so the pair goes to atan2_accurate before gt is used again; |x| == |y| keeps gt = 0 as before. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+      "reason": "With gt = (aix > aiy): for |x| > |y| dxy = !(aix - aiy) and for |x| < |y| the wrapped aix - aiy, both at least 2^63, so the pair goes to atan2_accurate before gt is used again; |x| == |y| keeps gt = 0 as before. Where a fast path decides, its proven bound puts the angle at least eps minus its proven error from every rounding boundary (over a quarter of eps: at least 2^-92 on the first path, 2^-102.3 on the second), so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1720,7 +1720,7 @@
       "line_text": "let gt = u64::from(aix < aiy);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The forms differ only at |x| == |y|, where the mutant's gt = 1 makes dxy = 0 ^ !0, all ones, so the pair goes to atan2_accurate before gt is used again. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+      "reason": "The forms differ only at |x| == |y|, where the mutant's gt = 1 makes dxy = 0 ^ !0, all ones, so the pair goes to atan2_accurate before gt is used again. Where a fast path decides, its proven bound puts the angle at least eps minus its proven error from every rounding boundary (over a quarter of eps: at least 2^-92 on the first path, 2^-102.3 on the second), so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1728,7 +1728,7 @@
       "line_text": "let dxy = aix.wrapping_sub(aiy) ^ gt.wrapping_neg();",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "For gt = 0 the mask is 0 and | and ^ agree; for gt = 1 the mask is all ones and | gives all ones, so every pair with |x| < |y| goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+      "reason": "For gt = 0 the mask is 0 and | and ^ agree; for gt = 1 the mask is all ones and | gives all ones, so every pair with |x| < |y| goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle at least eps minus its proven error from every rounding boundary (over a quarter of eps: at least 2^-92 on the first path, 2^-102.3 on the second), so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1744,7 +1744,7 @@
       "line_text": "let jt = (jj >> (52 - 7)) & 127;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "jj >> 45 includes the exponent field of y/x + 2 + 1/128 (0x400 << 7), so jt is at least 0x2_0000, outside F2 and T2 (65 entries): both reads give the NaN poison, both fast tests fail on NaN, and the pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+      "reason": "jj >> 45 includes the exponent field of y/x + 2 + 1/128 (0x400 << 7), so jt is at least 0x2_0000, outside F2 and T2 (65 entries): both reads give the NaN poison, both fast tests fail on NaN, and the pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle at least eps minus its proven error from every rounding boundary (over a quarter of eps: at least 2^-92 on the first path, 2^-102.3 on the second), so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1752,7 +1752,7 @@
       "line_text": "let jt = (jj >> (52 - 7)) & 127;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "jj >> 45 includes the exponent field of y/x + 2 + 1/128 (0x400 << 7), so jt is at least 0x2_0000, outside F2 and T2 (65 entries): both reads give the NaN poison, both fast tests fail on NaN, and the pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
+      "reason": "jj >> 45 includes the exponent field of y/x + 2 + 1/128 (0x400 << 7), so jt is at least 0x2_0000, outside F2 and T2 (65 entries): both reads give the NaN poison, both fast tests fail on NaN, and the pair goes to atan2_accurate. Where a fast path decides, its proven bound puts the angle at least eps minus its proven error from every rounding boundary (over a quarter of eps: at least 2^-92 on the first path, 2^-102.3 on the second), so atan2_accurate, whose error is below 2^-182.6 of the angle (the module's step A), rounds it to the same double: sending more pairs to it changes only the time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1880,7 +1880,7 @@
       "line_text": "return Some(s * f64::INFINITY); // |a| ≥ 2^1024",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex >= 1025, so this return never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex >= 1025, so this return never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1888,7 +1888,7 @@
       "line_text": "return Some(s * f64::INFINITY); // |a| ≥ 2^1024",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex >= 1025, so this return never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex >= 1025, so this return never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1896,7 +1896,7 @@
       "line_text": "if self.ex < -1074 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1904,7 +1904,7 @@
       "line_text": "if self.ex < -1074 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1912,7 +1912,7 @@
       "line_text": "if self.ex < -1074 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1920,7 +1920,7 @@
       "line_text": "if self.ex < -1074 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1928,7 +1928,7 @@
       "line_text": "return Some(s * 0.0);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1936,7 +1936,7 @@
       "line_text": "return Some(s * 0.0);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1944,7 +1944,7 @@
       "line_text": "let mid = self.h == 1 << 63 && self.m == 0 && self.l == 0;",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1952,7 +1952,7 @@
       "line_text": "let mid = self.h == 1 << 63 && self.m == 0 && self.l == 0;",
       "occurrences": 3,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1960,7 +1960,7 @@
       "line_text": "let mid = self.h == 1 << 63 && self.m == 0 && self.l == 0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1968,7 +1968,7 @@
       "line_text": "return Some(if mid { s * 0.0 } else { s * f64::from_bits(1) });",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1976,7 +1976,7 @@
       "line_text": "return Some(if mid { s * 0.0 } else { s * f64::from_bits(1) });",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. None reaches ex <= -1074, so this block never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1984,7 +1984,7 @@
       "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -1992,7 +1992,7 @@
       "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2000,7 +2000,7 @@
       "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2008,7 +2008,7 @@
       "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2016,7 +2016,7 @@
       "line_text": "ll = shl(mm, back) | shr(ll, sh) | u64::from(ll > 0);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2024,7 +2024,7 @@
       "line_text": "mm = shl(hh, back) | shr(mm, sh);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2032,7 +2032,7 @@
       "line_text": "mm = shl(hh, back) | shr(mm, sh);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2040,7 +2040,7 @@
       "line_text": "low = hh & 0x7ff;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2048,7 +2048,7 @@
       "line_text": "low = hh & 0x7ff;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (|y/x| < 2^-95 with x > 0 went to tiny_quotient; otherwise |atan| >= 2^-96, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
+      "reason": "Tint::to_f64 receives, with err != 0, only accurate's final angle, which lies in [2^-97, pi] in magnitude (with x > 0 a quotient z below 2^-96, z.ex <= -96, went to tiny_quotient; otherwise |z| >= 2^-96 and |atan z| > 2^-97, and the octant moves only add pi/2 or pi), and with err = 0 only Tint::inv's divisor: the exact value of a non-zero double (ex from -1073 to 1024) or Q(z) for z in [0, 1], which lies between Q(0) > 2^-12 and the sum of its 30 positive coefficients < 2^5. The subnormal block (ex <= -1022) is therefore reached only from Tint::inv with err = 0, where the result takes l = 0.0 and never reads ll, mm or low: the value computed here is unused, and the result is (hh >> 11) scaled either way."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/enclose.rs",
@@ -2080,7 +2080,7 @@
       "line_text": "if x == hx { hr + hd } else { f }",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Every HARD entry's offset d is below half an ulp of its r: 0x1.ffffffffffffep-54 to 0x1.fffffffffffffp-54 against r in [1, 2) (half an ulp 2^-53), 0x1.fffffffffffffp-55 against r in [1/2, 1) (2^-54), and 2^-105 or less for the rest. So r + d and r - d both round to r (C writes the sum to raise the inexact flag): the same double for every key."
+      "reason": "Every HARD entry's offset d is below half an ulp of its r: |d| from 0x1.ffffffffffffdp-54 to 0x1.fffffffffffffp-54 against r in [1, 2) (half an ulp 2^-53) for thirteen keys, 0x1.fffffffffffffp-55 against r in [1/2, 1) (2^-54) for four, and at most 1.17·2^-105 for the other four. So r + d and r - d both round to r (C writes the sum to raise the inexact flag): the same double for every key."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -2128,7 +2128,7 @@
       "line_text": "let offset = pow2((-1022i64).checked_sub(ie));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With 1022 - ie, ie in -1076..=-1022, the exponent is 2044 to 2098, outside pow2's range, so offset is the canonical NaN, ub and lb are NaN and ub != lb holds: every possibly subnormal argument goes to exp_accurate, which computes the same correctly rounded result. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
+      "reason": "With 1022 - ie, ie in -1076..=-1022, the exponent is 2044 to 2098, outside pow2's range, so offset is the canonical NaN, ub and lb are NaN and ub != lb holds: every possibly subnormal argument goes to exp_accurate, which computes the same correctly rounded result. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65.01 (in units of th) from every midpoint (its error is at most 2^-62.005 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.795), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2136,7 +2136,7 @@
       "line_text": "b'A'..=b'F' => c.abs_diff(b'A' - 10) as u32,",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): none has an upper-case digit, so this arm never runs and every constant is the same bits."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): none has an upper-case digit, so this arm never runs and every constant is the same bits."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2144,7 +2144,7 @@
       "line_text": "b'A'..=b'F' => c.abs_diff(b'A' - 10) as u32,",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): none has an upper-case digit, so this arm never runs and every constant is the same bits."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): none has an upper-case digit, so this arm never runs and every constant is the same bits."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2152,7 +2152,7 @@
       "line_text": "b'A'..=b'F' => c.abs_diff(b'A' - 10) as u32,",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): none has an upper-case digit, so this arm never runs and every constant is the same bits."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): none has an upper-case digit, so this arm never runs and every constant is the same bits."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2160,7 +2160,7 @@
       "line_text": "magnitude | (1u64 << 63)",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): magnitude returns the bits of a finite value without its sign, so bit 63 is always 0 and setting it by | or by ^ gives the same bits for all 634 negative ones."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): magnitude returns the bits of a finite value without its sign, so bit 63 is always 0 and setting it by | or by ^ gives the same bits for every negative one (638)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2168,7 +2168,7 @@
       "line_text": "let kept = if drop > 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so > and == both take the else arm, except drop == 0, where the first arm's mask removes nothing and >> 0 equals the else arm's << 0."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): for every one drop <= 0 (none has more significand digits than its binade keeps), so > and == both take the else arm, except drop == 0, where the first arm's mask removes nothing and >> 0 equals the else arm's << 0."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2176,7 +2176,7 @@
       "line_text": "let kept = if drop > 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0, and at drop == 0, the one value where > and >= differ, the first arm's lost bits are significand & 0 = 0 and significand >> 0 equals the else arm's significand << 0."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): for every one drop <= 0, and at drop == 0, the one value where > and >= differ, the first arm's lost bits are significand & 0 = 0 and significand >> 0 equals the else arm's significand << 0."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2184,7 +2184,7 @@
       "line_text": "let lost = significand & !(u128::MAX << drop);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2192,7 +2192,7 @@
       "line_text": "let lost = significand & !(u128::MAX << drop);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2200,7 +2200,7 @@
       "line_text": "let lost = significand & !(u128::MAX << drop);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2208,7 +2208,7 @@
       "line_text": "let lost = significand & !(u128::MAX << drop);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2216,7 +2216,7 @@
       "line_text": "significand >> drop",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): for every one drop <= 0 (none has more significand digits than its binade keeps), so this arm, for drop > 0, never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
@@ -2224,7 +2224,7 @@
       "line_text": "(unbiased.abs_diff(-1023) << 52) | (kept & ((1u64 << 52) - 1))",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on the crate's 2276 hex literals outside comments and test modules (counted from the source): the exponent field (shifted to bits 52 to 62) and the masked significand (bits 0 to 51) share no bit, so | and ^ give the same bits for every one."
+      "reason": "hexf::parse runs only at compile time, inside hf!'s const block, on every hex literal in the crate (2293 outside comments, counted from the source; 2180 of them in the four ports outside their test and proof modules, the rest in those modules): the exponent field (shifted to bits 52 to 62) and the masked significand (bits 0 to 51) share no bit, so | and ^ give the same bits for every one."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2392,7 +2392,7 @@
       "line_text": "let dxy = aix.wrapping_sub(aiy) ^ gt.wrapping_neg();",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With &, gt = 1 leaves the wrapped difference (at least 2^63), so |x| < |y| still goes to atan2_accurate; gt = 0 gives dxy = 0, so pairs whose exponents are 53 or more apart then take the fast paths. There |z| < 2^-52 and jt = 0. With x > 0 the result is about z: the first test's eps (|z|·2^-51 + 2^-90) and the second's (at least 2^-100.7) exceed half an ulp of z, so both fail (also when z underflows) and atan2_accurate decides. With x < 0 (or |y| > |x|) the octant's offset pi or pi/2 dominates: both bounds round to its high part, which is the correctly rounded angle (the true angle is within 2^-52 + 1.3·10^-16 of it, inside half its ulp). The other pairs go to atan2_accurate, which rounds them as the fast paths would. So every result is the same."
+      "reason": "With &, gt = 1 leaves the wrapped difference (at least 2^63), so |x| < |y| still goes to atan2_accurate; gt = 0 gives dxy = 0, so pairs with |x| >= |y| whose exponents are 53 or more apart then take the fast paths. There |y/x| <= 2^-53, so |z| <= 2^-53 and jt = 0. With x > 0 the angle is about z: the first test's eps (at least 2^-90) and the second's (at least 2^-100.7) exceed half an ulp of z (at most 2^-106; 2^-1075 where z is subnormal, and where it underflows to 0 the bounds are -eps and +eps), so both tests fail and atan2_accurate decides. With x < 0 the angle is pi - atan|y/x|, between PI_H + 1.1·10^-17 and PI_H + 1.23·10^-16 (pi - PI_H = 1.2246·10^-16, atan|y/x| <= 2^-53 = 1.11·10^-16), inside half an ulp of pi (2.2·10^-16): rh = RN(PI_H - |z|) = PI_H, and both bounds, PI_H plus a low part within 1.23·10^-16 of 0, round to PI_H, the correctly rounded angle, which the fast path returns. So every result is the same."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2400,7 +2400,7 @@
       "line_text": "if dxy >= 53 << 52 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant inverts the test: pairs whose exponents are less than 53 apart go to atan2_accurate, and pairs whose exponents are 53 or more apart then take the fast paths. There |z| < 2^-52 and jt = 0. With x > 0 the result is about z: the first test's eps (|z|·2^-51 + 2^-90) and the second's (at least 2^-100.7) exceed half an ulp of z, so both fail (also when z underflows) and atan2_accurate decides. With x < 0 (or |y| > |x|) the octant's offset pi or pi/2 dominates: both bounds round to its high part, which is the correctly rounded angle (the true angle is within 2^-52 + 1.3·10^-16 of it, inside half its ulp). The other pairs go to atan2_accurate, which rounds them as the fast paths would. So every result is the same."
+      "reason": "The mutant inverts the test: pairs whose exponents are less than 53 apart go to atan2_accurate, and the rest take the fast paths. There |y/x| <= 2^-53, so |z| <= 2^-53 and jt = 0 (F2[0] = 0). With x > 0 and |y| < |x| the angle is about z: the first test's eps (at least 2^-90) and the second's (at least 2^-100.7) exceed half an ulp of z (at most 2^-106; 2^-1075 where z is subnormal, and where it underflows to 0 the bounds are -eps and +eps), so the bounds round apart, both tests fail and atan2_accurate decides. Otherwise the octant adds pi/2 or pi: fh and fl carry the offset's two parts (within 2^-107 of it), z = RN(y/x) errs by at most |z|·2^-53 or 2^-1075 (the second path's quotient within 2^-99·|z| even where 1/x is subnormal), the cubic term is below 2^-158, and the low-part additions round by at most 2^-104 each, so either path's sum is within 2^-101.9 of the angle, below its eps also with Lemma 1's allowance for the test's own roundings. So whatever a fast path decides is correctly rounded and lies at least 2^-102 from every midpoint, where atan2_accurate, whose error is below 2^-182.6 of the angle (step A), rounds it to the same double; what both refuse goes to atan2_accurate as before. So every result is the same."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2408,7 +2408,7 @@
       "line_text": "if dxy >= 53 << 52 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "53 >> 52 is 0, so dxy >= 0 holds for every pair and all go to atan2_accurate. Where a fast path decides, its proven bound puts the angle farther than eps from every rounding boundary, so atan2_accurate, whose error is below 2^-182.6 of the angle, rounds it to the same double. Only the time changes."
+      "reason": "53 >> 52 is 0, so dxy >= 0 holds for every pair and all go to atan2_accurate. Where a fast path decides, its proven bound puts the angle at least eps minus its proven error from every rounding boundary (over a quarter of eps: at least 2^-92 on the first path, 2^-102.3 on the second), so atan2_accurate, whose error is below 2^-182.6 of the angle, rounds it to the same double. Only the time changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2416,7 +2416,7 @@
       "line_text": "let jj = (y / x + (2.0 + 1.0 / 128.0)).to_bits();",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "1.0 % 128.0 is 1.0, so jj encodes y/x + 3 and jt = 64 + floor(64 y/x) (0 when y/x = 1): jt 65 to 127 read past F2 and T2 (the NaN poison, so both tests fail on NaN); jt 64 and jt 0 at y/x = 1 give a reduced quotient |z| > 0.9, where the first test's eps is at least 2^-51.1 and the second's at least 2^-49.9, so their bounds lie at least an ulp of any angle apart and differ. Every pair goes to atan2_accurate, which rounds it as before."
+      "reason": "1.0 % 128.0 is 1.0, so jj encodes y/x + 3 and jt = 64 + floor(64 y/x) (0 when y/x = 1): jt 65 to 127 read past F2 and T2 (the NaN poison, so both tests fail on NaN); jt 64 (t0 = 1 with y/x below 1/64) and jt 0 at y/x = 1 give a reduced quotient |z| > 63/65, where the first test's eps is at least 2^-51.1 and the second's at least 2^-49.9, so their bounds lie at least an ulp of any angle apart and differ. Every pair goes to atan2_accurate, which rounds it as before."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2432,7 +2432,7 @@
       "line_text": "if x > hf!(\"0x1p1022\") && jt != 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant also halves x and y when jt != 0 at any size, or when x > 2^1022 with jt = 0. Halving is exact there (after the scaling above x >= 2^-920, and jt != 0 or dxy < 53 << 52 keeps y far above the subnormals), and every product, its exact error, the quotients and the tests scale with it: z, zh, zl and both tests' outcomes are the same bits."
+      "reason": "The mutant also halves x and y when jt != 0 at any size, and when x > 2^1022 with jt = 0. Halving is exact (after the scaling above x >= 2^-920, and y >= x/128 when jt != 0, or y > 2^-53·x by the exponent test, so y stays normal). The first fast path reads only ratios and gives the same bits. In the second, for jt != 0 every quantity scales by a power of two within the normal range, so its bits are the same too. For jt = 0 and x > 2^1022 the original's rdh = 1/x is subnormal, with relative error up to 2^-51, where the mutant's 1/(x/2) is normal, so zh and zl can differ (they do in about half of such inputs). The correction step squares that error: zh + zl stays within 2^-99·|z| of y/x in both (F4 proves 24u² for the mutant's normal rdh), and F4's requirement still holds with that much more error: its slack, 2^-102.25 at z = 0, stays above 2^-102.3 at every |z| up to z_max, because eps2 grows as |z|³ while the extra grows as |z|. So both second fast paths decide only correctly rounded values, each at least eps2 minus its error from every midpoint, and atan2_accurate, whose error is below 2^-182.6 of the angle, gives the same double for what either refuses. So every result is the same."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2440,7 +2440,7 @@
       "line_text": "if x > hf!(\"0x1p1022\") && jt != 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The forms differ only at x = 2^1022 exactly with jt != 0, where the mutant halves x and y. Halving is exact (y >= x/128 is normal) and nothing overflows either way at 2^1022, so every product, its exact error, the quotients and the tests scale with it: the same bits."
+      "reason": "The forms differ only at x = 2^1022 exactly with jt != 0, where the mutant halves x and y. Halving is exact (y >= x/128 is normal) and nothing overflows either way at 2^1022. The first fast path reads only ratios and gives the same bits. In the second, the original's rdh = 1/(x + t0·y) lies in [2^-1023, 2^-1022), a subnormal with relative error up to 2^-52, where the mutant's is normal, so zh and zl can differ. The correction step squares that error: zh + zl stays within 2^-99·|z| of the reduced quotient in both (F4 proves 24u² for the mutant's normal rdh), and F4's requirement still holds with that much more error: its slack, 2^-102.25 at z = 0, stays above 2^-102.3 at every |z| up to z_max, because eps2 grows as |z|³ while the extra grows as |z|. So both decide only correctly rounded values, each at least eps2 minus its error from every midpoint, and atan2_accurate, whose error is below 2^-182.6 of the angle, gives the same double for what either refuses: the same bits."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2464,7 +2464,7 @@
       "line_text": "let lb = rh + (rl - eps);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2472,7 +2472,7 @@
       "line_text": "let lb = rh + (rl - eps);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0, where H is z and e about 2^-90) the low part is the cubic term, about H^3/3 in size with |H| > 2^-53, so |l/e| is again more than 2^34 ulps of H: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2480,7 +2480,7 @@
       "line_text": "let ub = rh + (rl + eps);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2520,7 +2520,7 @@
       "line_text": "let lb = fh + (fl - eps);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2528,7 +2528,7 @@
       "line_text": "let ub = fh + (fl + eps);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2536,7 +2536,7 @@
       "line_text": "let corr = fma(t, x, -y);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "fma(t, x, y) is about 2y, never 0 for the non-zero y accurate receives, so the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too (atan(t) for an exact small t = y/x is at least a sixteenth of an ulp from every midpoint): the shortcut only saves time."
+      "reason": "fma(t, x, y) is about 2y, never 0 for the non-zero y accurate receives, so the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too: for every exact t the shortcut takes, atan(t) is at least 2^-54.26 ulp of t from every midpoint (the least is at the threshold 0x1.d12ed0af1a27fp-27, whose atan lies that far above the midpoint below it; the series computed in rationals off CI), against the 192-bit path's error below 2^-182.6 of the angle, about 2^-129.6 ulp: the shortcut only saves time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -2544,7 +2544,7 @@
       "line_text": "let ub = fh + (fl + EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Write a = l + e and b = l - e (e = EPS, so a - b = 2^-60.8, below the ulp u of H and the ulp u' under it: H >= 1). The mutant accepts when RN(H - a) = RN(H + b). Both above H needs a < 0 < b, but b < a; both below H needs a and -b each at least u'/2, so a - b >= u'. So both are H: b >= -u'/2 and a <= u'/2, and H + a, between them, rounds to H too (a tie only when u' = u and H is even, as the mirror tie shows). The original then accepts as well and returns the same lb = H; otherwise exp_accurate gives the same correctly rounded value. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
+      "reason": "Write a = l + e and b = l - e (e = EPS, so a - b = 2^-60.8, below the ulp u of H and the ulp u' under it: H >= 1). The mutant accepts when RN(H - a) = RN(H + b). Both above H needs a < 0 < b, but b < a; both below H needs a and -b each at least u'/2, so a - b >= u'. So both are H: b >= -u'/2 and a <= u'/2, and H + a, between them, rounds to H too (a tie only when u' = u and H is even, as the mirror tie shows). The original then accepts as well and returns the same lb = H; otherwise exp_accurate gives the same correctly rounded value. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65.01 (in units of th) from every midpoint (its error is at most 2^-62.005 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.795), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -2560,7 +2560,7 @@
       "line_text": "let above = m >= 0x16_a09e_667f_3bcd;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Below sqrt 2 the mutant halves v, so i = m >> 44 < 362 and i - 362 fails: the NaN pair sends x to log_accurate. From sqrt 2 up it does not halve, so i = m >> 43 >= 724, in range only at i = 724 (v below 725/512), whose entry INVERSE[362] is the one the original uses for v in [724/512, sqrt 2): the reduction ln x = e ln 2 - ln r + ln(1 + z) holds for any table entry, z stays inside the polynomial's fitted interval (|z| < 0.0008) and e·LOG2_H + l1 stays exact, so the fast path's proof covers it: it returns the correctly rounded value or defers to log_accurate. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+      "reason": "The mutant halves v below sqrt 2 instead of from sqrt 2 up. For v in [1, 1.4140625) (at every exponent) i = m >> 44 is 256 to 361 and i - 362 fails: the NaN pair sends x to log_accurate. For v in [1.4140625, sqrt 2) i = m >> 44 is 362 (0x16_a09e_667f_3bcd >> 44 = 362): the fast path runs with e + 1 and y = v/2 in [0.70703125, 0.7071068), interval 362's own range (k = 0), where z = r·y - 1 lies in [-0.0016, -0.0014]. From sqrt 2 up it does not halve, so i = m >> 43 >= 724, in range only at i = 724 (v below 725/512), the entry the original uses for v in [724/512, sqrt 2), where z lies in [-0.00011, 0.00117]; above 725/512 the index is past the table and the NaN poison sends x to log_accurate. In each case the reduction ln x = e ln 2 - ln r + ln(1 + z) uses an interval of F1 with y inside it, z stays inside the polynomial's fitted interval [-0.00203, 0.00212] and e·LOG2_H + l1 stays exact, so the fast path's proof covers it: it returns the correctly rounded value or defers to log_accurate. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2568,7 +2568,7 @@
       "line_text": "let left = h + (l - ERR);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-10 in magnitude here, so it is at most |H|·2^-10, while the other bound is H plus that small term, at least |H|·(1 - 2^-10) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+      "reason": "The mutated bound h·(l - ERR) is below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while the other bound, h + (l + ERR), is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two always differ, the fast path never returns and every input goes on to log_accurate, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2592,7 +2592,7 @@
       "line_text": "let eps = x * (x2 * hf!(\"0x1p-47\") + hf!(\"0x1p-102\"));",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Both * on this line made +: x + (x2·2^-47 + 2^-102) is about x, and x·(x2 + 2^-47 + 2^-102) exceeds the original in magnitude. The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Both * on this line made +: x + (x2·2^-47 + 2^-102) is about x, and x·(x2 + 2^-47 + 2^-102) exceeds the original in magnitude. The mutated bound is never smaller in magnitude than the original one and has its sign, x's (every factor it changes only grows in magnitude, and all but x are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2600,7 +2600,7 @@
       "line_text": "let eps = x * (x2 * hf!(\"0x1p-47\") + hf!(\"0x1p-102\"));",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Both * on this line made /: x/(x2·2^-47 + 2^-102) is at least x·2^100, and x·(x2·2^47 + 2^-102) exceeds the original in magnitude (2^47 > 2^-47). The mutated bound is never below the original one (every term it changes only grows, and all are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Both * on this line made /: |x|/(x2·2^-47 + 2^-102) is at least |x|·2^56.6 (x2 <= (0x1.2p-5)², so the sum is at most 2^-56.6), and x·(x2·2^47 + 2^-102) exceeds the original in magnitude (2^47 > 2^-47). The mutated bound is never smaller in magnitude than the original one and has its sign, x's (every factor it changes only grows in magnitude, and all but x are positive), so the fast test fails at least as often; the inputs it gives up go to the accurate path. Both are correctly rounded wherever they return (the fast path by its proven bound; the accurate path unconditionally below 44 identical bits after the round bit, and every harder input on CORE-MATH's lists checked, the module's proof), so the same double. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2608,7 +2608,7 @@
       "line_text": "let lb = (zl - eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here 2^-54 <= |x| <= 0x1.2p-5: zh = RN(pi·x) is not 0 and below 0.12 in magnitude, and the low part with the bound, zl - eps or zl + eps, is below 2^-8.8·|zh| (zl is about -5.17·x³ plus zh's rounding error, eps at most 2^-56.6·|x|). The mutated lb = (zl - eps) - zh has the sign of -zh and ub the sign of zh: they differ. So the near-zero fast path never returns and sinpi_near_zero gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2616,7 +2616,7 @@
       "line_text": "let lb = (zl - eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here 2^-54 <= |x| <= 0x1.2p-5: zh = RN(pi·x) is not 0 and below 0.12 in magnitude, and the low part with the bound, zl - eps or zl + eps, is below 2^-8.8·|zh| (zl is about -5.17·x³ plus zh's rounding error, eps at most 2^-56.6·|x|). The mutated lb = (zl - eps)·zh is below 2^-11·|zh| in magnitude while ub is within 2^-8.8·|zh| of zh: they differ. So the near-zero fast path never returns and sinpi_near_zero gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2624,7 +2624,7 @@
       "line_text": "let lb = (zl - eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. Since here e < u/4 always: e/u is at most 0.026 on this path, with e below 2^-61.4, that needs |l| > u/4, so |l/e| exceeds u/(4e), many ulps of H: H + l/e rounds far from H + l + e, and the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2632,7 +2632,7 @@
       "line_text": "let ub = (zl + eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here 2^-54 <= |x| <= 0x1.2p-5: zh = RN(pi·x) is not 0 and below 0.12 in magnitude, and the low part with the bound, zl - eps or zl + eps, is below 2^-8.8·|zh| (zl is about -5.17·x³ plus zh's rounding error, eps at most 2^-56.6·|x|). The mutated ub = (zl + eps) - zh has the sign of -zh and lb the sign of zh: they differ. So the near-zero fast path never returns and sinpi_near_zero gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2640,7 +2640,7 @@
       "line_text": "let ub = (zl + eps) + zh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here 2^-54 <= |x| <= 0x1.2p-5: zh = RN(pi·x) is not 0 and below 0.12 in magnitude, and the low part with the bound, zl - eps or zl + eps, is below 2^-8.8·|zh| (zl is about -5.17·x³ plus zh's rounding error, eps at most 2^-56.6·|x|). The mutated ub = (zl + eps)·zh is below 2^-11·|zh| in magnitude while lb is within 2^-8.8·|zh| of zh: they differ. So the near-zero fast path never returns and sinpi_near_zero gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2672,7 +2672,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here |r| < 2^-10.3 (the reduced angle pi·z·2^-75 is at most pi/4096, plus sl and the cosine term) and er < 2^-59.99 (|z| <= 2^63), while sh is 0 or at least sin(pi/2048) > 2^-9.4 in magnitude; sh is 0 only where x is within 2^-12 of a non-zero integer, and there z != 0, ch = +-1 and |r| = |ch·z·fs| >= pi·2^-75·|z|·(1 - 2^-20) > er. The mutated lb = (r - er) - sh: where sh != 0 it has the sign of -sh (|r - er| < |sh|) and ub the sign of sh, so they differ; where sh = 0 it is the original lb exactly. So the fast path returns only what it returned before, or defers to refine, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2680,7 +2680,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here |r| < 2^-10.3 (the reduced angle pi·z·2^-75 is at most pi/4096, plus sl and the cosine term) and er < 2^-59.99 (|z| <= 2^63), while sh is 0 or at least sin(pi/2048) > 2^-9.4 in magnitude; sh is 0 only where x is within 2^-12 of a non-zero integer, and there z != 0, ch = +-1 and |r| = |ch·z·fs| >= pi·2^-75·|z|·(1 - 2^-20) > er. The mutated lb = (r - er)·sh: where sh != 0 it is below 2^-10.3·|sh| in magnitude while |ub| >= |sh| - 2^-10.3 > 0.47·|sh|; where sh = 0 it is 0 while ub = r + er is not. So they differ. So the fast path returns only what it returned before, or defers to refine, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2688,7 +2688,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(sh + r/er) equals RN(sh + r + er), returning that bound as the original would. Where the original refuses, a midpoint lies within er (at most 2^-77) of sh + r, so |r| is at least half an ulp of sh minus er, over 2^-64 (sh is 0 or at least sin(pi/2048)), or, at sh = 0, |r| >= pi·2^-75 (|z| >= 1, ch = +-1): either way |r/er| > 2^13 ulps of the value, and sh + r/er rounds far from sh + r + er. So the mutant accepts only inputs the original accepts, with the same double. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here |r| < 2^-10.3 (the reduced angle pi·z·2^-75 is at most pi/4096, plus sl and the cosine term) and er < 2^-59.99 (|z| <= 2^63), while sh is 0 or at least sin(pi/2048) > 2^-9.4 in magnitude; sh is 0 only where x is within 2^-12 of a non-zero integer, and there z != 0, ch = +-1 and |r| = |ch·z·fs| >= pi·2^-75·|z|·(1 - 2^-20) > er. With /, the mutant accepts only when RN(sh + r/er) = ub = RN(sh + r + er). Both sums then round to one double, whose ulp is at most 2^-52, so |r/er| < |r + er| + 2^-51.9 and |r| < 2^-51.8·er < 2^-111.7. At sh = 0 that is impossible (|r| > er). Elsewhere the original refuses only where er reaches the distance from sh + r to a midpoint, at least a quarter ulp of sh (2^-64) minus |r|: that needs |z| > 2^58.9 and ulp(sh) < 2^-57.9, so |sh| < 2^-5 and |ch| > 0.999, and there |ch·z·fs| > 2^-14.5 dwarfs |sh·z²·fc| (below 2^-16.3 of it) and |sl| (below 2^-58), so |r| > 2^-15, a contradiction. So the mutant accepts only inputs the original accepts, and returns the same double. So the fast path returns only what it returned before, or defers to refine, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2696,7 +2696,7 @@
       "line_text": "let ub = (r + er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here |r| < 2^-10.3 (the reduced angle pi·z·2^-75 is at most pi/4096, plus sl and the cosine term) and er < 2^-59.99 (|z| <= 2^63), while sh is 0 or at least sin(pi/2048) > 2^-9.4 in magnitude; sh is 0 only where x is within 2^-12 of a non-zero integer, and there z != 0, ch = +-1 and |r| = |ch·z·fs| >= pi·2^-75·|z|·(1 - 2^-20) > er. The mutated ub = (r + er) - sh: where sh != 0 it has the sign of -sh and lb the sign of sh, so they differ; where sh = 0 it is the original ub exactly. So the fast path returns only what it returned before, or defers to refine, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2728,7 +2728,7 @@
       "line_text": "let lb = (p - eps) + 1.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here 2^-28.2 < |x| <= 2^-12: p is about -4.93·x², so |p| < 2^-21.6, and eps = x²·0x1.ap-48 is below 2^-71. The mutated lb = (p - eps) - 1.0 is within 2^-21.5 of -1 and ub within 2^-21.5 of 1: they differ. So the near-zero fast path never returns and cospi_near_zero gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2736,7 +2736,7 @@
       "line_text": "let lb = (p - eps) + 1.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here 2^-28.2 < |x| <= 2^-12: p is about -4.93·x², so |p| < 2^-21.6, and eps = x²·0x1.ap-48 is below 2^-71. The mutated lb = (p - eps)·1.0 = p - eps is below 2^-21.5 in magnitude and ub within 2^-21.5 of 1: they differ. So the near-zero fast path never returns and cospi_near_zero gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2744,7 +2744,7 @@
       "line_text": "let lb = (p - eps) + 1.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. Since here e < u/4 always: H = 1 and e is below 2^-71, that needs |l| > u/4, so |l/e| exceeds u/(4e), many ulps of H: H + l/e rounds far from H + l + e, and the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2752,7 +2752,7 @@
       "line_text": "let ub = (p + eps) + 1.0;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here 2^-28.2 < |x| <= 2^-12: p is about -4.93·x², so |p| < 2^-21.6, and eps = x²·0x1.ap-48 is below 2^-71. The mutated ub = (p + eps) - 1.0 is within 2^-21.5 of -1 and lb within 2^-21.5 of 1: they differ. So the near-zero fast path never returns and cospi_near_zero gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2768,7 +2768,7 @@
       "line_text": "if shl(m, si) << 1 == 0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "shl(m, si) has its lowest set bit at 2^si with si >= 7, so shl(m, si) >> 1 == 0 holds only for 0, an integer, which the inner test still catches. Half-integers then take the general path: x·2^11 is a whole number, so z = 0, and sincosn returns exact +-1 and +-0 at the quarter turns (checked by replaying it): sinpi's bounds both round to the exact +-1, and cospi's fail, so refine at z = 0 returns the coarse table's exact 0 (no listed hard case has z = 0), which the public cospi returns as +0. The same values as the special case."
+      "reason": "shl(m, si) >> 1 == 0 holds only when shl(m, si) is 0 or 1, and it is never 1: m has bit 52 set, so for si < 12 the shifted value is at least 2^52, and for si >= 12 its lowest set bit is at 2^si or above. So only 0, an integer, passes, which the inner test still catches. Half-integers then take the general path: (x + 1/2)·2^11 is a multiple of 2^11, so z = 0 and sh = 0 exactly, the bounds -ER0 and +ER0 differ, and refine at z = 0 returns the coarse table's exact 0 (no listed hard case has z = 0), which the public cospi returns as +0 (replayed off CI for n + 1/2 with n below 2000 and for 2^k + 1/2; cospi reads |x| only). The same value as the special case."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2792,7 +2792,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here |r| < 2^-10.3 (the reduced angle pi·z·2^-75 is at most pi/4096, plus sl and the cosine term) and er < 2^-59.99 (|z| <= 2^63), while sh is 0 or at least sin(pi/2048) > 2^-9.4 in magnitude; sh is 0 only where x is within 2^-12 of a half-integer, and there z != 0, ch = +-1 and |r| = |ch·z·fs| >= pi·2^-75·|z|·(1 - 2^-20) > er. The mutated lb = (r - er) - sh: where sh != 0 it has the sign of -sh (|r - er| < |sh|) and ub the sign of sh, so they differ; where sh = 0 it is the original lb exactly. So the fast path returns only what it returned before, or defers to refine, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2800,7 +2800,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here |r| < 2^-10.3 (the reduced angle pi·z·2^-75 is at most pi/4096, plus sl and the cosine term) and er < 2^-59.99 (|z| <= 2^63), while sh is 0 or at least sin(pi/2048) > 2^-9.4 in magnitude; sh is 0 only where x is within 2^-12 of a half-integer, and there z != 0, ch = +-1 and |r| = |ch·z·fs| >= pi·2^-75·|z|·(1 - 2^-20) > er. The mutated lb = (r - er)·sh: where sh != 0 it is below 2^-10.3·|sh| in magnitude while |ub| >= |sh| - 2^-10.3 > 0.47·|sh|; where sh = 0 it is 0 while ub = r + er is not. So they differ. So the fast path returns only what it returned before, or defers to refine, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2808,7 +2808,7 @@
       "line_text": "let lb = (r - er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(sh + r/er) equals RN(sh + r + er), returning that bound as the original would. Where the original refuses, a midpoint lies within er (at most 2^-77) of sh + r, so |r| is at least half an ulp of sh minus er, over 2^-64 (sh is 0 or at least sin(pi/2048)), or, at sh = 0, |r| >= pi·2^-75 (|z| >= 1, ch = +-1): either way |r/er| > 2^13 ulps of the value, and sh + r/er rounds far from sh + r + er. So the mutant accepts only inputs the original accepts, with the same double. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here |r| < 2^-10.3 (the reduced angle pi·z·2^-75 is at most pi/4096, plus sl and the cosine term) and er < 2^-59.99 (|z| <= 2^63), while sh is 0 or at least sin(pi/2048) > 2^-9.4 in magnitude; sh is 0 only where x is within 2^-12 of a half-integer, and there z != 0, ch = +-1 and |r| = |ch·z·fs| >= pi·2^-75·|z|·(1 - 2^-20) > er. With /, the mutant accepts only when RN(sh + r/er) = ub = RN(sh + r + er). Both sums then round to one double, whose ulp is at most 2^-52, so |r/er| < |r + er| + 2^-51.9 and |r| < 2^-51.8·er < 2^-111.7. At sh = 0 that is impossible (|r| > er). Elsewhere the original refuses only where er reaches the distance from sh + r to a midpoint, at least a quarter ulp of sh (2^-64) minus |r|: that needs |z| > 2^58.9 and ulp(sh) < 2^-57.9, so |sh| < 2^-5 and |ch| > 0.999, and there |ch·z·fs| > 2^-14.5 dwarfs |sh·z²·fc| (below 2^-16.3 of it) and |sl| (below 2^-58), so |r| > 2^-15, a contradiction. So the mutant accepts only inputs the original accepts, and returns the same double. So the fast path returns only what it returned before, or defers to refine, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2816,7 +2816,7 @@
       "line_text": "let ub = (r + er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One bound is then far from the other: the high part (or 1.0) is subtracted from or multiplied into a term below 2^-40, while the other bound stays within an ulp of the non-zero high part (or of 1), so the two always differ (and where the high part is 0 the subtraction leaves exactly the original bound). The fast path returns only what it returned before, or defers to the accurate path, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
+      "reason": "Here |r| < 2^-10.3 (the reduced angle pi·z·2^-75 is at most pi/4096, plus sl and the cosine term) and er < 2^-59.99 (|z| <= 2^63), while sh is 0 or at least sin(pi/2048) > 2^-9.4 in magnitude; sh is 0 only where x is within 2^-12 of a half-integer, and there z != 0, ch = +-1 and |r| = |ch·z·fs| >= pi·2^-75·|z|·(1 - 2^-20) > er. The mutated ub = (r + er) - sh: where sh != 0 it has the sign of -sh and lb the sign of sh, so they differ; where sh = 0 it is the original ub exactly. So the fast path returns only what it returned before, or defers to refine, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's sinpi.wc and cospi.wc holding every input with at least 43 identical bits after the round bit over the ranges sincospi.rs's header names (the published BaCSeL searches its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2824,7 +2824,7 @@
       "line_text": "let corr = fma(t * hf!(\"0x1p105\"), x, -y * hf!(\"0x1p105\"));",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Both * on this line made + (t + 2^105, or -y + 2^105). The scaled residual is then about 2^105·x, y·2^105 or 2y·2^105, never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too (atan(t) for an exact small t = y/x is at least a sixteenth of an ulp from every midpoint): the shortcut only saves time."
+      "reason": "Both * on this line made + (t + 2^105, or -y + 2^105). The scaled residual is then about 2^105·x (t is far below an ulp of 2^105) or about 2^105 (t·2^105·x - y + 2^105, y tiny), never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too: for every exact t the shortcut takes, atan(t) is at least 2^-54.26 ulp of t from every midpoint (the least is at the threshold 0x1.d12ed0af1a27fp-27, whose atan lies that far above the midpoint below it; the series computed in rationals off CI), against the 192-bit path's error below 2^-182.6 of the angle, about 2^-129.6 ulp: the shortcut only saves time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2832,7 +2832,7 @@
       "line_text": "let corr = fma(t * hf!(\"0x1p105\"), x, -y * hf!(\"0x1p105\"));",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Both * on this line made / (t/2^105, or -y/2^105). The scaled residual is then about 2^105·x, y·2^105 or 2y·2^105, never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too (atan(t) for an exact small t = y/x is at least a sixteenth of an ulp from every midpoint): the shortcut only saves time."
+      "reason": "Both * on this line made / (t/2^105, or -y/2^105). The scaled residual is then about y·2^105 in magnitude (either quotient by 2^105 is negligible), never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too: for every exact t the shortcut takes, atan(t) is at least 2^-54.26 ulp of t from every midpoint (the least is at the threshold 0x1.d12ed0af1a27fp-27, whose atan lies that far above the midpoint below it; the series computed in rationals off CI), against the 192-bit path's error below 2^-182.6 of the angle, about 2^-129.6 ulp: the shortcut only saves time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2840,7 +2840,7 @@
       "line_text": "let corr = fma(t * hf!(\"0x1p105\"), x, -y * hf!(\"0x1p105\"));",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With +y·2^105 the residual is about 2y·2^105. The scaled residual is then about 2^105·x, y·2^105 or 2y·2^105, never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too (atan(t) for an exact small t = y/x is at least a sixteenth of an ulp from every midpoint): the shortcut only saves time."
+      "reason": "With +y·2^105 the residual is about 2y·2^105. The scaled residual is then about 2y·2^105, never 0 for the non-zero x and y accurate receives, so for |y| < 2^-915 the exact-quotient shortcut is never taken and those pairs go through the 192-bit evaluation, which rounds them correctly too: for every exact t the shortcut takes, atan(t) is at least 2^-54.26 ulp of t from every midpoint (the least is at the threshold 0x1.d12ed0af1a27fp-27, whose atan lies that far above the midpoint below it; the series computed in rationals off CI), against the 192-bit path's error below 2^-182.6 of the angle, about 2^-129.6 ulp: the shortcut only saves time."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2879,8 +2879,9 @@
       "mutant": "replace Tint::is_zero -> bool with false",
       "line_text": "self.h == 0",
       "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "is_zero is read only by cmp_magnitude. A zero reaches it only as ZERO times something, added back: r + r·(1 - a·r) in Tint::inv when a·r is exactly 1, and r + y·(b - a·r) in Tint::div when a·r equals b; the product's exponent is the factor's minus 1077 (r's, or y's with r about b·y and b the exact value of a double, ex >= -1073), so compared by exponent first the zero still comes out smaller than r, as is_zero would make it, and the sum is r either way."
+      "kind": "proved",
+      "proof": "math::atan2::proofs::is_zero_holds_exactly_for_zero",
+      "reason": "Caught by math::atan2::proofs::is_zero_holds_exactly_for_zero, a proof of Tint::is_zero's own contract: for every normalised or zero Tint (either sign, exponents below 2^60 in magnitude), is_zero holds exactly when all three words are 0. The mutant says false for the zero. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). Only atan2's accurate path reads it, through cmp_magnitude."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2903,16 +2904,18 @@
       "mutant": "replace ^ with | in Tint::add",
       "line_text": "if self.sgn ^ b.sgn != 0 {",
       "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Tint::add's Equal branch runs only for operands of equal magnitude, and in this file those always have opposite signs: ONE + (-(a·r)) when a·r is exactly 1 (a power-of-two divisor), and b - a·r in Tint::div when a·r equals b exactly; every other addition adds a term of another size (Horner's steps, the Newton corrections, pi or pi/2 plus an angle below pi/2). So the signs differ there, and sgn ^ b.sgn and sgn | b.sgn are both 1."
+      "kind": "proved",
+      "proof": "math::atan2::proofs::add_of_like_signs_is_within_two_ulps",
+      "reason": "Caught by math::atan2::proofs::add_of_like_signs_is_within_two_ulps, a proof of Tint::add's own contract: for every pair of normalised operands of like signs whose exponents differ by at most one (a.ex = 0, b.ex in {-1, 0, 1}; add reads exponents only through their order and difference), the result has the exact sum's sign and is normalised and less than 2 ulps of itself from the exact sum, formed in 448-bit integers. With | the Equal branch returns zero for two negative operands of equal magnitude, whose exact sum is twice either. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). Only atan2's accurate path adds Tints."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
       "mutant": "delete field ex from struct Tint expression in Tint::add",
       "line_text": "ex: self.ex.checked_add(1)?,",
       "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Tint::add's Equal branch runs only for operands of equal magnitude, and in this file those always have opposite signs: ONE + (-(a·r)) when a·r is exactly 1 (a power-of-two divisor), and b - a·r in Tint::div when a·r equals b exactly; every other addition adds a term of another size (Horner's steps, the Newton corrections, pi or pi/2 plus an angle below pi/2). So the doubling for equal signs never runs, and what it sets ex to is never seen."
+      "kind": "proved",
+      "proof": "math::atan2::proofs::add_of_like_signs_is_within_two_ulps",
+      "reason": "Caught by math::atan2::proofs::add_of_like_signs_is_within_two_ulps, a proof of Tint::add's own contract: for every pair of normalised operands of like signs whose exponents differ by at most one (a.ex = 0, b.ex in {-1, 0, 1}; add reads exponents only through their order and difference), the result has the exact sum's sign and is normalised and less than 2 ulps of itself from the exact sum, formed in 448-bit integers. Without the exponent's increment the Equal branch returns either operand for two of equal magnitude and sign, half the exact sum. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). Only atan2's accurate path adds Tints."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2952,7 +2955,7 @@
       "line_text": "while b.abs_diff(a) > 1 {",
       "occurrences": 1,
       "kind": "hangs",
-      "reason": "With b - a >= 1 the binary search never ends: once b - a = 1, m = a, and x >= HARD[a][0] (the invariant) sets a = m again, for ever. Every input exp_accurate sends to hard_case (the low part within 4 units of a power of two: every HARD key and others) loops, and the tests stop it by their timeout. It hangs; it never returns a wrong value."
+      "reason": "With b - a >= 1 the binary search never ends for any x at or above the smallest key (HARD[0][0], about -24.97): once b - a = 1, m = a, and x >= HARD[a][0] (the invariant) sets a = m again, for ever. Below that key b falls to a = 0 and the search ends, returning f as the original does (x is no key). Every input exp_accurate sends to hard_case at or above it (the low part within 4 units of a power of two: every HARD key and others) loops, and the tests stop it by their timeout. It hangs; it never returns a wrong value."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3192,7 +3195,7 @@
       "line_text": "let lb = fh + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Write a = fl + EPS and b = fl - EPS (a - b = 2^-60.8, below the ulp u of fh and the ulp u' under it: fh >= 2 here). The mutant accepts when RN(fh + a) = RN(fh - b). Both above fh needs a and -b each at least u/2, so a - b >= u; both below needs a < 0 < b, but b < a. So both are fh: a >= -u'/2 and b <= u'/2, and b >= -u/2 by the mirror; when u' = u (fh not a power of two) fh + b rounds to fh too (ties alike by evenness) and the original accepts with the same lb. A power of two fh with b < -u'/2 <= a needs fl within EPS of -u'/2 < 0, and in this branch fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) is a power of two only as 2 (s = 0, th = 1, fl ~ dx), 2^53 (th = 1, fl ~ 1) and 2^54 (fl ~ th): only the first has fl < 0, with dx = x + 1022 ln 2, which for every double x there is (247.48 + 1024k)·2^-53, never within 2^-60 of -2^-53 (computed off CI). So the mutant accepts only inputs the original accepts, with the same value; otherwise exp_accurate gives the same correctly rounded value. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
+      "reason": "Write a = fl + EPS and b = fl - EPS (a - b = 2^-60.8, below the ulp u of fh and the ulp u' under it: fh >= 2 here). The mutant accepts when RN(fh + a) = RN(fh - b). Both above fh needs a and -b each at least u/2, so a - b >= u; both below needs a < 0 < b, but b < a. So both are fh: a >= -u'/2 and b <= u'/2, and b >= -u/2 by the mirror; when u' = u (fh not a power of two) fh + b rounds to fh too (ties alike by evenness) and the original accepts with the same lb. A power of two fh with b < -u'/2 <= a needs fl within EPS of -u'/2 < 0, and in this branch fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) is a power of two only as 2 (s = 0, th = 1, fl ~ dx), 2^53 (th = 1, fl ~ 1) and 2^54 (fl ~ th): only the first has fl < 0, with dx = x + 1022 ln 2, which for every double x there is (247.48 + 1024k)·2^-53, never within 2^-60 of -2^-53 (computed off CI). So the mutant accepts only inputs the original accepts, with the same value; otherwise exp_accurate gives the same correctly rounded value. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65.01 (in units of th) from every midpoint (its error is at most 2^-62.005 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.795), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3200,7 +3203,7 @@
       "line_text": "let lb = fh + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. Since here e < u/4 always: H >= 1, so u >= 2^-52, and e = EPS = 2^-61.8, that needs |l| > u/4, so |l/e| exceeds u/(4e), many ulps of H: H + l/e rounds far from H + l + e, and the mutant refuses too. It accepts only inputs the original accepts, with the same result. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65.01 (in units of th) from every midpoint (its error is at most 2^-62.005 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.795), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3224,7 +3227,7 @@
       "line_text": "let lb = th + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. No worst-case list is needed: an input the fast path decides has at most about 13 identical bits after its round bit, and exp_accurate rounds correctly every input with fewer than 48 (exp.rs, steps F3 and A)."
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. Since here e < u/4 always: H is in [1, 2), so u = 2^-52, and e = EPS = 2^-61.8, that needs |l| > u/4, so |l/e| exceeds u/(4e), many ulps of H: H + l/e rounds far from H + l + e, and the mutant refuses too. It accepts only inputs the original accepts, with the same result. No worst-case list is needed: an input the fast path decides has at most about 13 identical bits after its round bit, and exp_accurate rounds correctly every input with fewer than 48 (exp.rs, steps F3 and A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
@@ -3232,7 +3235,7 @@
       "line_text": "let lb = fh + (fl - EPS);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Here fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) and fl is that sum's rounding error, at most half the ulp u of fh, plus terms below 2^-12. RN(fh·(fl - EPS)) can equal ub = RN(fh + (fl + EPS)), a double within an ulp of fh, only if fl - EPS is within 2^-52 of 1, so u/2 must reach about 1: s >= 53, where fh is 2^53, 2^53 + 2 or 2^54 and the products are exact. For 2^53 + 2 (th > 1) fl < 2^-12; for 2^54, ub = 2^54 and only fl - EPS = 1 matches, where the original's lb = RN(2^54 + 1) = 2^54 too; for 2^53, only fl - EPS = 1 + 2^-52 matches (ub = 2^53 + 2), where the original's lb = RN(2^53 + 1 + 2^-52) = 2^53 + 2 too. So the mutant accepts only inputs the original accepts, with the same value, and sends the rest to exp_accurate, which rounds them correctly. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65 (in units of th) from every midpoint (its error is at most 2^-62.01 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.80), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
+      "reason": "Here fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) and fl is that sum's rounding error, at most half the ulp u of fh, plus terms below 2^-12. RN(fh·(fl - EPS)) can equal ub = RN(fh + (fl + EPS)), a double within an ulp of fh, only if fl - EPS is within 2^-52 of 1, so u/2 must reach about 1: s >= 53, where fh is 2^53, 2^53 + 2 or 2^54 and the products are exact. For 2^53 + 2 (th > 1) fl < 2^-12; for 2^54, ub = 2^54 and only fl - EPS = 1 matches, where the original's lb = RN(2^54 + 1) = 2^54 too; for 2^53, only fl - EPS = 1 + 2^-52 matches (ub = 2^53 + 2), where the original's lb = RN(2^53 + 1 + 2^-52) = 2^53 + 2 too. So the mutant accepts only inputs the original accepts, with the same value, and sends the rest to exp_accurate, which rounds them correctly. Only the time changes. No worst-case list is assumed. The inputs this sends to exp_accurate instead get the same double: for results from 2^-1059 up, an input the fast path decides lies at least 2^-65.01 (in units of th) from every midpoint (its error is at most 2^-62.005 plus 2^-67 for the extra rounding, against EPS·(1 - u) = 2^-61.795), and exp_accurate errs by less than 2^-67.9 there (exp.rs, steps F3 and A); below 2^-1059 both paths err by less than 2^-34 ulp, and every double whose e^x lies within 2^-33 ulp of a midpoint there (25 358) is found exhaustively and checked on both paths (exp.rs's unit test deep_subnormal_results_near_a_midpoint), so both round every such input correctly."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -5072,7 +5075,7 @@
       "line_text": "let ub = fh + (fl + EPS);",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Two places on this line. fh * (fl + EPS) is far below fh (|fl| + EPS < 2^-11), so ub != lb always and every possibly subnormal input goes to exp_accurate, which gives the same correctly rounded result: only the time changes. fl * EPS keeps ub = fh (|fl·EPS| < 2^-70, below half an ulp of fh >= 1), so the test accepts exactly when fh + (fl - EPS) rounds to fh, and returns fh's subnormal. That puts e^x above the midpoint below it, so the answer is the correctly rounded one unless e^x passes the midpoint M = (fh - 2^s + u/2)·2^ie above it (s = -1022 - ie, u the ulp of fh); as fh + (fl - EPS) is below M, that needs e^x in (M, M + (2·EPS + 2^-68)·2^ie], within 2^(ie - 60) above M. exp.rs's unit test no_subnormal_result_just_above_the_midpoint_next_to_its_table_value walks the doubles at every one of the branch's 217089 reduction indices and finds none there. No worst-case list is assumed."
+      "reason": "Two places on this line. Here fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) and fl is that sum's rounding error, at most half the ulp u of fh, plus terms below 2^-12. The first, fh * (fl + EPS), can equal lb, a double within an ulp of fh, only if fl + EPS is within 2^-52 of 1, so u/2 must reach about 1: s >= 53, where fh is 2^53, 2^53 + 2 or 2^54 and the products are exact. For 2^53 + 2 (th > 1) fl < 2^-12, so it never matches; for 2^53 it can match only with RN(fl + EPS) = 1 or 1 + 2^-52 (giving 2^53 or 2^53 + 2), and for 2^54 only with RN(fl + EPS) = 1 (giving 2^54). In each such case the original's ub, RN(fh + RN(fl + EPS)), is that same double (2^53 + 1 rounds to even, 2^53 + 1 + 2^-52 up, 2^54 + 1 down), so where the mutant's bounds agree the original's do too, on the same value. So this form accepts only inputs the original accepts, with the same value, and sends the rest to exp_accurate, which gives the same correctly rounded result. The second, fl * EPS, keeps ub = fh (|fl·EPS| <= 2^-60.7, far below half an ulp of fh >= 1), so the test accepts exactly when fh + (fl - EPS) rounds to fh, and returns fh's subnormal. That puts e^x above the midpoint below it, so the answer is the correctly rounded one unless e^x passes the midpoint M = (fh - 2^s + u/2)·2^ie above it (s = -1022 - ie, u the ulp of fh); as fh + (fl - EPS) is below M, that needs e^x in (M, M + (2·EPS + 2^-68)·2^ie], within 2^(ie - 60) above M. exp.rs's unit test no_subnormal_result_just_above_the_midpoint_next_to_its_table_value walks the doubles at every one of the branch's 217089 reduction indices and finds none there. No worst-case list is assumed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -5080,7 +5083,7 @@
       "line_text": "let ub = (r + er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Two + on this line share the key. The second, (r + er) * sh, makes ub = (r + er)·sh while lb = (r - er) + sh: r is the table point's low part plus the reduced argument's terms, below 2^-10 in magnitude (|z| is at most half a table step, pi/4096 < 2^-10), and er < 2^-60. Where sh != 0 it is at least sin(pi/2048) > 2^-10 in magnitude, so |ub| < 2^-9·|sh| while lb is within 2^-10 of sh: they differ. Where sh = 0 (x within 2^-12 of a non-zero integer, so ulp(x) >= 2^-53) ub = 0 and lb = r - er, with |r| at least pi·ulp(x)·(1 - 2^-9) > 2^-53 > er: they differ too. So sinpi's fast path never returns and refine gives the same correctly rounded value; only the time changes. The first, r * er, is caught by gate1_libm.rs's SINPI_TROUGH."
+      "reason": "Two + on this line share the key. The second, (r + er) * sh, makes ub = (r + er)·sh while lb = (r - er) + sh: r is the table point's low part plus the reduced argument's terms, below 2^-10 in magnitude (|z| is at most half a table step, pi/4096 < 2^-10), and er < 2^-59.99 (|z| <= 2^63). Where sh != 0 it is at least sin(pi/2048) > 2^-10 in magnitude, so |ub| < 2^-9·|sh| while lb is within 2^-10 of sh: they differ. Where sh = 0 (x within 2^-12 of a non-zero integer, so ulp(x) >= 2^-53) ub = 0 and lb = r - er, with |r| at least pi·ulp(x)·(1 - 2^-9) > 2^-53 > er: they differ too. So sinpi's fast path never returns and refine gives the same correctly rounded value; only the time changes. The first, r * er, is caught by gate1_libm.rs's SINPI_TROUGH."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -5088,7 +5091,7 @@
       "line_text": "let ub = (r + er) + sh;",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Two + on this line share the key. The second, (r + er) * sh, makes ub = (r + er)·sh while lb = (r - er) + sh: r is the table point's low part plus the reduced argument's terms, below 2^-10 in magnitude (|z| is at most half a table step, pi/4096 < 2^-10), and er < 2^-60. Where sh != 0 it is at least sin(pi/2048) > 2^-10 in magnitude, so |ub| < 2^-9·|sh| while lb is within 2^-10 of sh: they differ. Where sh = 0 (x within 2^-12 of a half-integer, so ulp(x) >= 2^-54) ub = 0 and lb = r - er, with |r| at least pi·ulp(x)·(1 - 2^-9) > 2^-53 > er: they differ too. So cospi's fast path never returns and refine gives the same correctly rounded value; only the time changes. The first, r * er, is caught by gate1_libm.rs's COSPI_TROUGH."
+      "reason": "Two + on this line share the key. The second, (r + er) * sh, makes ub = (r + er)·sh while lb = (r - er) + sh: r is the table point's low part plus the reduced argument's terms, below 2^-10 in magnitude (|z| is at most half a table step, pi/4096 < 2^-10), and er < 2^-59.99 (|z| <= 2^63). Where sh != 0 it is at least sin(pi/2048) > 2^-10 in magnitude, so |ub| < 2^-9·|sh| while lb is within 2^-10 of sh: they differ. Where sh = 0 (x within 2^-12 of a half-integer, so ulp(x) >= 2^-54) ub = 0 and lb = r - er, with |r| at least pi·ulp(x)·(1 - 2^-9) > 2^-53 > er: they differ too. So cospi's fast path never returns and refine gives the same correctly rounded value; only the time changes. The first, r * er, is caught by gate1_libm.rs's COSPI_TROUGH."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -5096,7 +5099,7 @@
       "line_text": "let right = h + (l + ERR);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR) while left = h + (l - ERR). In log_fast |l| < 2^-18 (the polynomial's -z^2/2 with |z| < 2^-9, e·LOG2_L < 2^-34, l2 and a rounding), and |l| is at most 2^-8·|h|: where the table's inverse is 1 (y within 2^-8 of 1, so e = 0 and l1 = 0) h = z exactly and l is the polynomial alone, about -z^2/2; elsewhere |h| > 2^-9. So |right| <= |h|·(2^-8 + 2^-68) while |left| >= |h|·(1 - 2^-8) - 2^-68, and h = 0 only for x = 1, which returns earlier: the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
+      "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR), below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while left = h + (l - ERR) is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",

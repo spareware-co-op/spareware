@@ -114,8 +114,8 @@
 //! `fast_polynomial`]. (F3) With `p = Pe(dx)·(1 + θ)`, `|θ| ≤ 2.001u`, and `tx = RN(th·dx)`, the
 //! error of `th + fl` is at most `τ_e·T·e^r + T·ε_p + |tl|·|r|·Pe + th·(|r − dx|·Pe +
 //! |dx|·|r − dx|/2 + 5u·|dx|·Pe) + u·|tx·p| + u·|fl|`, which with Lemma 1's `u·|fl|` is at most
-//! 2^−62.01; CORE-MATH's bound `EPS·(1 − u) = 2^−61.80` covers it, so its fast path is proven as it
-//! stands (*checked*: `fast_path_bound`). For results in the subnormal range the code adds
+//! 2^−62.005; CORE-MATH's bound `EPS·(1 − u) = 2^−61.795` covers it, so its fast path is proven as
+//! it stands (*checked*: `fast_path_bound`). For results in the subnormal range the code adds
 //! `2^(−1022−ie)` to `th` (an exact fast two-sum by Dekker's exponent condition) so that the sum's
 //! last place is the result's; the extra rounding of `fl + e` is at most `u·ulp(fh)`. For
 //! `ie ≥ −1060` that is below 2^−67 and Lemma 1 still applies; below, `ulp(fh) ≥ 2^−13`, and the

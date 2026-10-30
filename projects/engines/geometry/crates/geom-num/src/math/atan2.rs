@@ -2087,4 +2087,12 @@ mod proofs {
         let (a, b) = close_operands(false, -1);
         check_add(&a, &b);
     }
+
+    /// `is_zero`'s contract: for every normalised or zero `Tint`, it holds exactly when all
+    /// three words are 0.
+    #[kani::proof]
+    fn is_zero_holds_exactly_for_zero() {
+        let a = any_tint();
+        assert_eq!(a.is_zero(), a.h == 0 && a.m == 0 && a.l == 0);
+    }
 }
