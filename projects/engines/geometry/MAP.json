@@ -6449,6 +6449,21 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a batch could not run its items.",
+          "file": "projects/engines/geometry/crates/geom-op/src/batch.rs",
+          "kinds": [
+            {
+              "base_kind": "InvalidInput",
+              "doc": "Two items carry this key: they would share one path (chapter 10.1).",
+              "name": "RepeatedKey",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::batch",
+          "name": "BatchDetail",
+          "non_exhaustive": false
+        },
+        {
           "doc": "The operation's own typed failure (chapter 22): one variant per family of details, each holding that family's enum. Grows with the kernel; generic code reads an error's [`kind`](crate::OpError::kind) and the operation's schema instead of matching it.",
           "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
           "kinds": [
