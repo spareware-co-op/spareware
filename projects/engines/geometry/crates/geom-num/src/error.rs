@@ -57,7 +57,9 @@ pub enum NumError {
     EmptyInterval,
     /// A maths function was given an argument outside its domain, where it has no real value: the
     /// square root or logarithm of a negative number, the arcsine or arccosine of a number beyond
-    /// ±1, or a negative number to a power that is not a whole number.
+    /// ±1, or a negative number to a power that is not a whole number. Also the derivative of the
+    /// angle `atan2` over a box crossing its branch cut on the negative x-axis from below, where
+    /// the angle jumps by 2π and has no derivative ([`crate::dual`]).
     OutsideDomain,
     /// An exact computation did not fit the width its proven bit budget gives it. The budgets are
     /// derived for every input the types allow, and checked when the crate compiles, so this is a
@@ -68,10 +70,10 @@ pub enum NumError {
     /// the ceiling is an error that rolls back, never silent growth), or would be too large to
     /// count.
     ToleranceExceeded,
-    /// An enclosure needs a maths function whose error is not proven, or whose interval version is
-    /// not built yet: the sine and cosine of radians, which only `libm` supplies, without a proven
-    /// bound, and the arctangent of a box. An interval built without that proof would not be a
-    /// certificate. The certified interval functions are `sinpi`, `cospi`, `exp` and `ln`.
+    /// An enclosure needs a maths function whose error is not proven: the sine and cosine of
+    /// radians, which only `libm` supplies, without a proven bound. An interval built without that
+    /// proof would not be a certificate. The certified interval functions are `sinpi`, `cospi`,
+    /// `exp`, `ln` and `atan2`.
     UnprovenMaths,
 }
 

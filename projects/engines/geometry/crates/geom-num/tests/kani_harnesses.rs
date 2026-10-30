@@ -90,6 +90,10 @@ fn sources(src: &Path) -> Vec<(String, String)> {
     target_os = "wasi",
     ignore = "reads the crate's folder; wasm32-wasip1 under wasmtime is given no folder to read"
 )]
+#[cfg_attr(
+    miri,
+    ignore = "reads the crate's folder; Miri isolates the test from the file system"
+)]
 fn every_harness_is_in_the_kani_job_and_every_entry_is_a_harness() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let found: BTreeSet<String> = sources(&src)
