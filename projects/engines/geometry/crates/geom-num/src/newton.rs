@@ -203,6 +203,16 @@ pub(crate) trait Arithmetic {
     /// An interval holding the scalar `s`.
     fn lower(s: Self::S) -> Result<Interval, NumError>;
 
+    /// Enclosures of the residuals of `system` over `x`.
+    ///
+    /// Over doubles this is the residuals themselves, with no conversion, so the operators' doubles
+    /// path is the code it was before balls came: lifting and lowering the box there cost
+    /// Krawczyk's and Hansen and Sengupta's steps 1% to 5% more instructions in the count gate.
+    fn residuals<R: Residuals<N>, const N: usize>(
+        system: &R,
+        x: [Interval; N],
+    ) -> Result<[Interval; N], NumError>;
+
     /// Enclosures of the residuals of `system` over `x`, and of their Jacobian.
     #[allow(
         clippy::type_complexity,
@@ -237,6 +247,13 @@ impl Arithmetic for InDoubles {
         Ok(s)
     }
 
+    fn residuals<R: Residuals<N>, const N: usize>(
+        system: &R,
+        x: [Interval; N],
+    ) -> Result<[Interval; N], NumError> {
+        system.residuals(x)
+    }
+
     fn jacobian<R: Residuals<N>, const N: usize>(
         system: &R,
         x: [Interval; N],
@@ -261,6 +278,13 @@ impl Arithmetic for InBalls {
 
     fn lower(s: Ball) -> Result<Interval, NumError> {
         s.to_interval()
+    }
+
+    fn residuals<R: Residuals<N>, const N: usize>(
+        system: &R,
+        x: [Interval; N],
+    ) -> Result<[Interval; N], NumError> {
+        InBalls::lower_all(system.residuals(InBalls::lift(x)?)?)
     }
 
     fn jacobian<R: Residuals<N>, const N: usize>(
@@ -467,7 +491,7 @@ impl<const N: usize> Linear<N> {
         for m in &mut mid {
             *m = Interval::from(Real::new(midpoint(*m))?);
         }
-        let at_mid = A::lower_all(system.residuals(A::lift(mid)?)?)?;
+        let at_mid = A::residuals(system, mid)?;
         let mut centre = [[0.0; N]; N];
         for (crow, jrow) in centre.iter_mut().zip(jac) {
             for (c, j) in crow.iter_mut().zip(jrow) {
