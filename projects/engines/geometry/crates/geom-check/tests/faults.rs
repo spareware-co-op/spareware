@@ -580,3 +580,35 @@ fn every_fault_says_what_is_wrong_in_its_group() {
         assert_eq!(entity.to_string(), text);
     }
 }
+
+/// A writer that refuses every write after its first `left`.
+struct FailAfter {
+    left: usize,
+}
+
+impl std::fmt::Write for FailAfter {
+    fn write_str(&mut self, _: &str) -> std::fmt::Result {
+        if self.left == 0 {
+            return Err(std::fmt::Error);
+        }
+        self.left = self.left.saturating_sub(1);
+        Ok(())
+    }
+}
+
+#[test]
+fn a_fault_written_to_a_failing_writer_reports_the_failure() {
+    use std::fmt::Write as _;
+    let fault = Fault::at(FaultKind::FinCount, Entity::Edge(ix(3)))
+        .with(Entity::Face(ix(1)))
+        .value(2);
+    let full = fault.to_string();
+    // However many writes succeed first, a refused one ends the fault's writing with the error.
+    let writes = (0..64)
+        .find(|&n| write!(FailAfter { left: n }, "{fault}").is_ok())
+        .unwrap();
+    for n in 0..writes {
+        assert!(write!(FailAfter { left: n }, "{fault}").is_err(), "{n}");
+    }
+    assert!(writes >= 3, "{full}");
+}
