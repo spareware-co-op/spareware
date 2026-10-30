@@ -540,6 +540,13 @@ impl Record {
             .busy
             .is_some_and(|busy| u64::from(busy) > own + u64::from(DISTURBED_POINTS))
     }
+
+    /// Whether `timing` is known to be quiet: the machine was sampled during its job, and it was
+    /// not disturbed. Only quiet timings are compared from night to night.
+    #[must_use]
+    pub fn quiet(&self, timing: &Timing) -> bool {
+        timing.busy.is_some() && !self.disturbed(timing)
+    }
 }
 
 /// The rest of a `time` line: engine, threads, benchmark, ns, passes, slowest and busy.
@@ -655,13 +662,18 @@ pub fn parse_busy(text: &str) -> Result<Vec<(u64, u32)>, Refused> {
     Ok(samples)
 }
 
-/// The mean busy share of the samples taken from `start` (exclusive) to `end` (inclusive),
-/// rounded half up, or `None` when no sample fell in that span.
+/// Milliseconds each busy sample covers: the sampler writes, once a second, how busy the machine
+/// was over the second before (`reference/busy.ps1`).
+pub const SAMPLE_MS: u64 = 1000;
+
+/// The mean busy share of the samples whose second overlaps the job from `start` to `end`
+/// (a sample taken at `at` covers `at - SAMPLE_MS` to `at`: so `at > start` and
+/// `at - SAMPLE_MS < end`), rounded half up, or `None` when no sample overlaps it.
 #[must_use]
 pub fn busy_between(samples: &[(u64, u32)], start: u64, end: u64) -> Option<u32> {
     let (sum, count) = samples
         .iter()
-        .filter(|&&(at, _)| at > start && at <= end)
+        .filter(|&&(at, _)| at > start && at.saturating_sub(SAMPLE_MS) < end)
         .fold((0u64, 0u64), |(sum, count), &(_, busy)| {
             (sum + u64::from(busy), count + 1)
         });
@@ -1078,8 +1090,11 @@ pub fn report(history: &[Record]) -> String {
         night.toolchain,
         night.round_ms,
     );
-    let _ = writeln!(out, "| Engine | Version | Timings | Failures | Disturbed |");
-    let _ = writeln!(out, "| --- | --- | ---: | ---: | ---: |");
+    let _ = writeln!(
+        out,
+        "| Engine | Version | Timings | Failures | Disturbed | Not sampled |"
+    );
+    let _ = writeln!(out, "| --- | --- | ---: | ---: | ---: | ---: |");
     for (engine, version) in &night.engines {
         let timings: Vec<&Timing> = night
             .timings
@@ -1092,6 +1107,7 @@ pub fn report(history: &[Record]) -> String {
             .filter(|x| x.engine == *engine)
             .count();
         let disturbed = timings.iter().filter(|t| night.disturbed(t)).count();
+        let unsampled = timings.iter().filter(|t| t.busy.is_none()).count();
         let changed = before
             .and_then(|b| b.engines.iter().find(|(e, _)| e == engine))
             .filter(|(_, v)| v != version)
@@ -1099,7 +1115,7 @@ pub fn report(history: &[Record]) -> String {
             .unwrap_or_default();
         let _ = writeln!(
             out,
-            "| {engine} | {version}{changed} | {} | {failures} | {disturbed} |",
+            "| {engine} | {version}{changed} | {} | {failures} | {disturbed} | {unsampled} |",
             timings.len()
         );
     }
@@ -1146,13 +1162,13 @@ pub fn report(history: &[Record]) -> String {
         Some(before) => {
             let mut moves: Vec<(f64, &Timing, f64)> = Vec::new();
             for t in &night.timings {
-                if night.disturbed(t) {
+                if !night.quiet(t) {
                     continue;
                 }
                 let Some(b) = before.timing(&t.engine, t.threads, &t.benchmark) else {
                     continue;
                 };
-                if before.disturbed(b) || b.ns <= 0.0 {
+                if !before.quiet(b) || b.ns <= 0.0 {
                     continue;
                 }
                 let change = (t.ns - b.ns) / b.ns * 100.0;
@@ -1169,7 +1185,8 @@ pub fn report(history: &[Record]) -> String {
             });
             let _ = writeln!(
                 out,
-                "Undisturbed timings that moved by more than {MOVE_PERCENT}% against the night of {} \
+                "Quiet timings (sampled, and not disturbed) that moved by more than {MOVE_PERCENT}% \
+                 against the night of {} \
                  (commit `{}`): {}. Wall-clock time is noisy; a move is a lead to look at, not a \
                  verdict.\n",
                 before.night,
@@ -1255,7 +1272,7 @@ pub fn report(history: &[Record]) -> String {
     let _ = writeln!(
         out,
         "Timings taken while the machine was busier than the job's own threads explain by more \
-         than {DISTURBED_POINTS} points: {}. They are left out of the changes above.\n",
+         than {DISTURBED_POINTS} points: {}. They, and the timings no busy sample covers, are left out of the changes above.\n",
         disturbed.len()
     );
     if !disturbed.is_empty() {

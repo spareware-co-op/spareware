@@ -516,6 +516,13 @@ Geogram's PCK `_SOS` predicates
     projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs
       for its compile-time bit counting, a cross-check of the certificate here. No code copied.
 
+github-action-benchmark
+  Licence:      MIT
+  Link:         https://github.com/benchmark-action/github-action-benchmark/blob/84ec6ea748925b6580796c05ce7a1c8fd0d15f3b/README.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-bench/src/timings.rs
+      for keeping benchmark history in a branch of the repository it measures. No code copied.
+
 Gitiles
   Licence:      Apache-2.0
   Link:         https://github.com/google/gitiles/blob/e54582fdd2a8783a6078f3a25eb08bb622f2e497/java/com/google/gitiles/ViewFilter.java

@@ -220,12 +220,12 @@
           "target": "bin"
         },
         {
-          "cost": "that of the command it runs (`geom_bench::guest`); `time` runs for about six times its duration.",
+          "cost": "that of the command it runs (`geom_bench::guest`); `time` runs for about six times its duration, after building one batch per thread.",
           "does": "besides `geom_bench::guest`'s commands,",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs",
           "guarantees": [
-            "for every other command, those of `geom_bench::guest`, unchanged: the exit status and output are exactly the ones it returns. `time` exits 0 with its line, or 2 for an unknown benchmark or a duration that is not a number from 1 to 60,000."
+            "for every other command, those of `geom_bench::guest`, unchanged: the exit status and output are exactly the ones it returns. `time` exits 0 with its line, or 2 for an unknown benchmark or a duration that is not a number from 1 to 60,000; with a thread count, also 2 for a count that is not 1 to 64 (or not 1 on WebAssembly) or a thread that cannot start, and 1 when a batch's digests differ from `golden.txt`, before anything is timed."
           ],
           "job": "`geom-bench-guest`: the program the WebAssembly fuel gate runs inside Wasmtime, built for `wasm32-wasip1`. It also runs natively. Everything it does is in `geom_bench::guest`, whose documentation gives its commands, its exit status and how the fuel gate uses them; this program only passes on its arguments, output and status, except for one command of its own, `time`.",
           "method": {
@@ -248,6 +248,23 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "that of the command (`geom_bench::timings`), plus reading its files.",
+          "does": "",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-timings.rs",
+          "guarantees": [
+            "exit status 0 with the output, 1 when a file cannot be read or a record, sample or job line is refused (the file and the line on standard error), 2 for a usage error. Nothing is written but standard output and standard error."
+          ],
+          "job": "`geom-bench-timings`: the reference runner's tool for its nightly records (piece G107; chapter 23.13, \"Wall clock and scaling\"). Everything it computes is in `geom_bench::timings`; this program reads files, passes them on and writes what comes back.",
+          "method": {
+            "none": "it reads its arguments and files and passes them to `geom_bench::timings`."
+          },
+          "path": "geom-bench-timings",
+          "provenance": [],
           "spdx": null,
           "target": "bin"
         },
@@ -961,6 +978,44 @@
           },
           "path": "geom_bench::sha256",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "reading and writing are linear in the lines; [`assemble`] and [`report`] sort each night's timings, O(n log n) in the timings of the nights they read, and allocate their text.",
+          "does": "the runner (`reference/nightly.sh`, beside this crate) times every benchmark of the catalogue each night on the reference machine, at 1 and 8 threads ([`THREADS`]), natively and in three browsers ([`ENGINES`]), each job with `geom-bench-guest time <name> <ms> <threads>`, and writes one job line per benchmark ([`assemble`] says the syntax). [`assemble`] turns those lines, the night's header and the machine's busy samples into a [`Record`], one text file per night in the history; [`report`] reads the history and writes the night's report in Markdown: each of 23.1's shares ([`SHARES`]) against the benchmark that measures it, what moved since the night before, how each group scales from 1 to 8 threads and from native to each browser, and the timings taken while something else was using the machine.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/timings.rs",
+          "guarantees": [
+            "**A record reads back as written:** [`Record::parse`] of a record's text gives the record again, and its text again, byte for byte ([`fmt::Display`]).",
+            "**Strict reading:** a record with a line out of order, an unknown key, a malformed field, an engine or thread count it does not know, a busy share over 100% or the same benchmark twice for one engine and thread count is refused, with the line number.",
+            "**Nothing missing in silence:** [`assemble`] gives every benchmark it is told of, on every engine of the header and at every thread count of [`THREADS`], exactly one `time` or `fail` line. A job the runner did not reach becomes a `fail` line only when the night stopped at its deadline (`status deadline`) or its engine was unavailable; otherwise [`assemble`] refuses.",
+            "**It reports and never blocks:** [`report`] only writes text. Turning a miss into a block is piece G452's, under the owner's rule of 32.42 (a nightly miss confirmed by a same-night rerun blocks merges to `main` except the fix or a revert).",
+            "**Deterministic:** no hash map (every map is a `BTreeMap`), no clock, no randomness and no platform maths; the report's statistics are medians and ratios of the recorded figures."
+          ],
+          "job": "The reference runner's nightly wall-clock timings (piece G107): the record of one night, its assembly from the runner's job lines, chapter 23.1's shares, and the report that keeps the history against them.",
+          "method": {
+            "links": [
+              "https://docs.rs/divan/0.1.21/divan/",
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "https://howardhinnant.github.io/date_algorithms.html#civil_from_days"
+            ],
+            "text": "wall-clock timing as chapter 23.13 sets it for the dedicated runner (\"Wall clock and scaling\"), on the machine and cores of decision 32.16, against the shares of 23.1; the timings are the guest's rounds (divan's sample-and-median design, <https://docs.rs/divan/0.1.21/divan/>), and the history is kept as text in a data branch of the repository, as github-action-benchmark keeps its benchmark history in a branch of its own. `projects/engines/geometry/architecture/23-performance.md`, sections 23.1 and 23.13. `projects/engines/geometry/architecture/32-decisions.md`, decisions 32.16 and 32.42. H. Hinnant, \"chrono-Compatible Low-Level Date Algorithms\", `civil_from_days`, <https://howardhinnant.github.io/date_algorithms.html#civil_from_days>, for the report's dates."
+          },
+          "path": "geom_bench::timings",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/benchmark-action/github-action-benchmark/blob/84ec6ea748925b6580796c05ce7a1c8fd0d15f3b/README.md",
+              "method_note": null,
+              "name": "github-action-benchmark",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for keeping benchmark history in a branch of the repository it measures. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         }
@@ -9543,6 +9598,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/benchmark-action/github-action-benchmark/blob/84ec6ea748925b6580796c05ce7a1c8fd0d15f3b/README.md",
+      "method_note": null,
+      "name": "github-action-benchmark",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bench/src/timings.rs"
       ]
     },
     {
