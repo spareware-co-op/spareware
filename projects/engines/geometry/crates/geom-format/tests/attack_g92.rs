@@ -99,17 +99,17 @@ fn a_stopped_meter_is_a_stop_not_damage() {
     ));
 }
 
-/// A source of `len` bytes made of runs: each run's bytes, then `zeros` zero bytes. Nothing is
-/// stored but the runs, so a 65 MiB record costs no 65 MiB input.
+/// A source of `len` bytes made of parts: each run's bytes, then `zeros` zero bytes. Nothing is
+/// stored but the parts, so a 65 MiB record costs no 65 MiB input.
 struct Runs {
-    runs: Vec<(Vec<u8>, usize)>,
+    parts: Vec<(Vec<u8>, usize)>,
     run: usize,
     at: usize,
 }
 
 impl ByteSource for Runs {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, SourceError> {
-        let Some((bytes, zeros)) = self.runs.get(self.run) else {
+        let Some((bytes, zeros)) = self.parts.get(self.run) else {
             return Ok(0);
         };
         let total = bytes.len() + zeros;
@@ -137,7 +137,7 @@ fn streamed(digest: usize, payload: usize) -> Runs {
     let mut payload_head = vec![0x5a];
     payload_head.extend((payload as u32).to_be_bytes());
     Runs {
-        runs: vec![
+        parts: vec![
             (start, digest),
             (payload_head, payload),
             (vec![0x1a, 0, 0, 0, 0], 0),
