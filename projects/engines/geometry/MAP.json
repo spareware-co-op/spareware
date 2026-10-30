@@ -3849,6 +3849,45 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why the attribute step or a set failed.",
+          "file": "projects/engines/geometry/crates/geom-name/src/classes.rs",
+          "kinds": [
+            {
+              "doc": "A value's attribute has no definition.",
+              "name": "Undefined",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The attribute may not be carried by this kind of entity.",
+              "name": "WrongKind",
+              "shape": "struct"
+            },
+            {
+              "doc": "The attributes hold a split or merge class for the attribute other than its definition's.",
+              "name": "ClassMismatch",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The entity set is not among the body's names.",
+              "name": "NotInBody",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The history could not be made (a name list with a repeated name).",
+              "name": "History",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The body's names could not be made into a set.",
+              "name": "Names",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_name::classes",
+          "name": "AttrError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why the graph refused a name or could not answer.",
           "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
           "kinds": [
@@ -3906,6 +3945,31 @@
       "kind": "kernel",
       "layer": "3",
       "modules": [
+        {
+          "cost": "`O(r · a · log v)` for `r` records, `a` attributes and `v` values per attribute; a merge compares its inputs' values' bytes. Nothing recurses.",
+          "does": "[`apply`] reads each output's [`Record`] in an operation's [`History`] as one of section 8.4's events and gives the output the values the definitions' behaviours say:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/classes.rs",
+          "guarantees": [
+            "**Pure, and one step for every operation.** The output depends only on the definitions, the input attributes, the history and the [`Step`] (the transform and the copy roles the operation's schema gives); no operation writes attribute code of its own, and nothing calls back into the operation (8.4, \"no callbacks\"): a [`Mover`] only moves values the kernel knows, by section 7's rules.",
+            "**Values of an unknown owner are carried.** A value whose schema this program does not read ([`ValueSchema::Opaque`]) follows its definition's behaviour like any other: kept, split, merged, copied or deleted, never moved and never dropped for being unknown.",
+            "**Every value has a definition.** An input value whose attribute has no definition is [`AttrError::Undefined`], never carried without a behaviour.",
+            "**Ordered.** The output's values are in attribute, then name order, and the notes in record order, the same on every machine whatever order the history was reported in (8.2, 21)."
+          ],
+          "job": "The one shared attribute step: an operation's output attributes from its input attributes, the definitions and its history (8.4); and setting a value as an operation of its own.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
+            ],
+            "text": "section 8.4's events read from section 20.3's history records (`projects/engines/geometry/architecture/08-topology.md`, `projects/engines/geometry/architecture/20-naming-history.md`), after Parasolid's attribute classes, taken as a concept only (`projects/kit/notes/G01-evidence/07-persistent-naming.md`, section 5)."
+          },
+          "path": "geom_name::classes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "interning is one encoding and one SHA-256 of a few hundred bytes, then a `BTreeMap` lookup, O(log n). [`NameGraph::is_weak`] visits each reachable node once, O(r log n) for r reachable nodes, with a stack and a visited set of at most r entries. Recursion: none.",
           "does": "a [`NameGraph`] holds name nodes keyed by their [`NameId`]. [`NameGraph::intern`] encodes a [`TopoName`], hashes it under `NameScheme v1` and keeps the node; interning the same name again returns the same `NameId` and stores nothing new. A name refers to its parents by `NameId` ([`parents`]), so the nodes form a shared graph rather than nested trees. [`NameGraph::is_weak`] says whether a name is a `Weak` node or is built on one at any depth.",
@@ -3980,7 +4044,7 @@
       "provenance": [],
       "sections": "8.4, 17.12, 20 and 24.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution in G89, attribute classes in G90, `PruneHistory` in G109 and placement references in G374.",
+      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); the one shared attribute step, [`classes`], which applies attribute behaviours from an operation's history and sets a value as an operation of its own, built (G90); references and their resolution in G89, `PruneHistory` in G109 and placement references in G374.",
       "summary": "Spare Kit geometry kernel: persistent names and references."
     },
     {
@@ -10064,6 +10128,30 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a definition is refused.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/definition.rs",
+          "kinds": [
+            {
+              "doc": "No kind of entity may carry it.",
+              "name": "NoKinds",
+              "shape": "unit"
+            },
+            {
+              "doc": "Its behaviour moves values by this kind of transform, and its schema is opaque.",
+              "name": "CannotTransform",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Another definition is already held under the same identity: a definition never changes.",
+              "name": "Redefined",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_topo::definition",
+          "name": "DefinitionError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why an arena could not change, or arenas could not be published as a body.",
           "file": "projects/engines/geometry/crates/geom-topo/src/error.rs",
           "kinds": [
@@ -10334,6 +10422,30 @@
             "text": "structure of arrays as Manifold stores its halfedges (`projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 2), cut into the fixed chunks of chapter 23.9 and shared between versions through `Arc` chunks, as report 03 advises for immutable snapshots (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 5; `Arc::make_mut`, <https://doc.rust-lang.org/alloc/sync/struct.Arc.html#method.make_mut>). No vetted crate does this under `no_std` with fixed chunk boundaries: persistent vectors such as imbl's and rpds's cut their trees where edits happened, which chapter 24.2 rules out, and only `libm` may ship in a kernel crate (`deny-no-std.toml`)."
           },
           "path": "geom_topo::column",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a definition is a few words plus its strings; [`Definitions::define`] and [`Definitions::get`] are `O(log n)` in the number of definitions. Nothing recurses.",
+          "does": "a [`Definition`] gives an attribute's identity ([`AttrId`]: owner, name, version), the [`EntityKind`]s that may carry it, its [`ValueSchema`], and its [`Behaviour`]: an action for every event an operation's history can show (changed, transformed by each kind of transform, split, merged, copied). Unchanged, generated and deleted entities need no action: the value stays, starts absent, or goes with its entity. [`Definitions`] holds every definition of a model, in `AttrId` order, and refuses to change one: a new behaviour or value schema is a new version (8.4). `geom-name`'s attribute step applies these behaviours to an operation's history (piece G90).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/definition.rs",
+          "guarantees": [
+            "**A definition never changes.** [`Definitions::define`] accepts a definition already held only when it is identical; any difference is [`DefinitionError::Redefined`].",
+            "**Only movable values move.** A behaviour may choose [`TransformAction::Transform`] only for a schema the kernel knows how to move (points, directions, frames, lengths and fields, 8.4); for an opaque schema [`Definition::new`] refuses it with [`DefinitionError::CannotTransform`], naming the transform.",
+            "**Only named entities carry values.** The kinds are the body and its named entities: regions, faces, edges and vertices. Fins, loops and shells have no names and never carry attributes (8.4); a definition with no kind is [`DefinitionError::NoKinds`].",
+            "**Ordered.** Definitions iterate in `AttrId` order, and each definition's kinds in their order, the same on every machine (8.2, 21)."
+          ],
+          "job": "Attribute definitions: who owns an attribute, which entities may carry it, what its values are, and what a value does at each of the eight events of section 8.4.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
+            ],
+            "text": "section 8.4's events and actions, the proposal the owner accepted with the attribute pieces (`projects/engines/geometry/architecture/08-topology.md`), after Parasolid's published attribute classes, taken as a concept only (`projects/kit/notes/G01-evidence/07-persistent-naming.md`, section 5)."
+          },
+          "path": "geom_topo::definition",
           "provenance": [],
           "spdx": null,
           "target": "lib"
