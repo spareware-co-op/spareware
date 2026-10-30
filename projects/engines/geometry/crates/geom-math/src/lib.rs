@@ -32,10 +32,16 @@
 //!   reverses arcs).
 //! - [`bbox`]: exact grid boxes [`Box2`] and [`Box3`], and [`FBox2`] and [`FBox3`] in `f64` with
 //!   outward rounding.
-//! - [`dd`]: double-double arithmetic [`DD`] on the error-free transformations of `geom_num::eft`.
-//! - [`frame`]: [`FrameRecord`], the link between a frame and a map projection, with conversion of
-//!   map coordinates into frame grid coordinates and back (each rounded once, correctly), exact
+//! - [`frame`]: [`FrameRecord`], the link between a frame and a map projection (step, coordinate
+//!   reference systems, linear unit, epoch, deformation model, origin, rotation and scale), exact
 //!   shifts between frames on a shared lattice, and the regional lattice of frames.
+//! - [`convert`]: conversion of map coordinates, as doubles ([`MapPoint`]) or exact decimals
+//!   ([`DecimalPoint`]), into frame grid coordinates and back, each rounded once, correctly, in
+//!   `geom_num::dd`'s double-double arithmetic settled by exact integer signs.
+//! - [`decimal`]: [`Decimal`], an exact decimal number read from text with no rounding.
+//! - [`unit`]: [`LinearUnit`], metres per unit of a coordinate reference system, as an exact ratio.
+//! - [`epoch`]: [`DecimalYear`], a coordinate epoch, and [`ModelRef`], a deformation model named by
+//!   its content.
 //! - [`rounded`]: [`Rounded`], the report every rounding to the grid returns: the value and whether
 //!   it was exact, made only by this crate's rounding functions.
 //!
@@ -67,7 +73,8 @@
 //! - **Deterministic.** Only IEEE 754 basic operations (which Rust never fuses into a fused
 //!   multiply-add), integer arithmetic and the maths of `geom_num::math`. No hash maps, no
 //!   randomness, no platform maths, no recursion; every loop is bounded, by a fixed or proven count
-//!   or by the length of the caller's own input (`from_points`, [`FrameRecord::home_of`]).
+//!   or by the length of the caller's own input (`from_points`, [`FrameRecord::home_of`],
+//!   [`Decimal::parse`]).
 //! - **Safe.** No `unsafe`, no panics, no unchecked indexing.
 //!
 //! Method: each module names the published method it follows, with its source; together they
@@ -80,14 +87,16 @@
 //! (`projects/engines/geometry/architecture/21-determinism.md`).
 //!
 //! Cost: every operation runs in constant time and allocates nothing (the crate uses neither `std`
-//! nor `alloc`), except `Box2::from_points` and `Box3::from_points`, linear in the points, and
-//! [`FrameRecord::home_of`], linear in the operands. Each module states its own costs, including
+//! nor `alloc`), except `Box2::from_points` and `Box3::from_points`, linear in the points,
+//! [`FrameRecord::home_of`], linear in the operands, and [`Decimal::parse`], linear in the text. Each module states its own costs, including
 //! the exact paths that run only when a cheaper floating-point filter cannot decide.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 pub mod bbox;
-pub mod dd;
+pub mod convert;
+pub mod decimal;
+pub mod epoch;
 pub mod error;
 mod exact;
 pub mod float;
@@ -98,19 +107,21 @@ pub mod rotation;
 pub mod rounded;
 pub mod transform;
 pub mod typed;
+pub mod unit;
 pub mod vector;
 
 pub use bbox::{Box2, Box3, FBox2, FBox3};
-pub use dd::DD;
+pub use convert::{DecimalPoint, MapPoint};
+pub use decimal::{Decimal, DecimalError};
+pub use epoch::{DecimalYear, ModelRef};
 pub use error::{FrameMismatch, MathError};
 pub use float::{F2, F3};
-pub use frame::{
-    CrsId, FrameKind, FrameRecord, FrameShift, LatticeCell, MapPoint, Rotation, Scale,
-};
+pub use frame::{CrsId, FrameKind, FrameRecord, FrameShift, LatticeCell, Rotation, Scale};
 pub use grid_transform::{Axis, GridTransform};
 pub use rational::RationalTransform;
 pub use rotation::{Pythagorean, RationalRotation, WithinAngle};
 pub use rounded::Rounded;
 pub use transform::{Classification, Transform, TransformKind};
 pub use typed::TypedTransform;
+pub use unit::LinearUnit;
 pub use vector::{V2, V3, W3};

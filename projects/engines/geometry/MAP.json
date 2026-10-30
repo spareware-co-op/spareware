@@ -3192,6 +3192,30 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a text is not a [`Decimal`].",
+          "file": "projects/engines/geometry/crates/geom-math/src/decimal.rs",
+          "kinds": [
+            {
+              "doc": "The text breaks the grammar at byte `at` (the text's length when it ends too early): an unexpected character, a second decimal point, no digits, or an exponent with no digits.",
+              "name": "Syntax",
+              "shape": "struct"
+            },
+            {
+              "doc": "The value needs more than [`DIGITS_MAX`] significant digits.",
+              "name": "TooManyDigits",
+              "shape": "unit"
+            },
+            {
+              "doc": "The value's exponent, in lowest terms, lies outside [`EXPONENT_MIN`] to [`EXPONENT_MAX`], or the written exponent does not fit an `i32`.",
+              "name": "ExponentRange",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_math::decimal",
+          "name": "DecimalError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why an operation of this crate could not produce a result.",
           "file": "projects/engines/geometry/crates/geom-math/src/error.rs",
           "kinds": [
@@ -3234,7 +3258,7 @@
         "**The same result in every build profile; defects reported, never answered.** As in the numbers layer, every integer addition, subtraction, multiplication, division and negation in this crate's code is a checked method, never a native operator, and no cast loses a value silently (each cast's bound is written beside it), so nothing depends on overflow checks being on. A step that its bit budget proves fits can fail only through a defect, and is then reported as [`NumError::BudgetExceeded`](geom_num::NumError), never replaced by a guessed value: that is why exact products and classifications return a `Result`. For valid inputs every such result is `Ok`. Clippy enforces this (`arithmetic_side_effects` and the lossy-cast lints are denied); tests and the benchmark may use native arithmetic.",
         "**Certified elsewhere.** Floating-point boxes round outward; transform classifications and orientations are decided with interval arithmetic, never with a guessed tolerance (the only tolerance used is the ladder's angular bound); conversions to the grid round exactly once and say whether they were exact.",
         "**Never NaN, never infinite.** Every floating-point value this crate makes is finite; an operation whose result would not be returns an error.",
-        "**Deterministic.** Only IEEE 754 basic operations (which Rust never fuses into a fused multiply-add), integer arithmetic and the maths of `geom_num::math`. No hash maps, no randomness, no platform maths, no recursion; every loop is bounded, by a fixed or proven count or by the length of the caller's own input (`from_points`, [`FrameRecord::home_of`]).",
+        "**Deterministic.** Only IEEE 754 basic operations (which Rust never fuses into a fused multiply-add), integer arithmetic and the maths of `geom_num::math`. No hash maps, no randomness, no platform maths, no recursion; every loop is bounded, by a fixed or proven count or by the length of the caller's own input (`from_points`, [`FrameRecord::home_of`], [`Decimal::parse`]).",
         "**Safe.** No `unsafe`, no panics, no unchecked indexing."
       ],
       "job": "points, vectors, exact and general transforms, boxes and frames, the small vocabulary every geometry crate above the numbers layer shares.",
@@ -3265,26 +3289,74 @@
           "target": "lib"
         },
         {
-          "cost": "constant time, no loops, no allocation; each operation is a fixed sequence of IEEE operations on `two_sum` and `two_prod`. [`DD::add`] is four `two_sum`s and two additions; [`DD::add_f64`] two `two_sum`s and one addition; [`DD::mul_f64`] one `two_prod`, two `two_sum`s and two more operations; [`DD::mul`] one `two_prod`, one `two_sum` and four more operations; [`DD::div`] three divisions, two [`DD::mul_f64`]s, two [`DD::sub`]s, one `two_sum` and one [`DD::add_f64`]; [`DD::sqrt`] one correctly rounded `geom_num::math::sqrt`, one `two_prod`, one [`DD::sub`], one division and one `two_sum`. Operands outside `two_prod`'s range, and every division and square root, add a power-of-two scaling of each part going in and of the result coming out (`scale_b`: a bit decomposition and one or two multiplications). [`DD::round_shifted`] is two roundings to integers, one `two_sum` and a few `i128` additions and comparisons.",
+          "cost": "no allocation, constant time.",
           "does": null,
           "family": [],
-          "file": "projects/engines/geometry/crates/geom-math/src/dd.rs",
+          "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
           "guarantees": [
-            "relative error bounds on the exact result of the operation applied to the exact values of the operands (u = 2^−53). The middle column is proven on each method below, in full, with every higher-order term kept; it is the bound the kernel relies on. The last column is the tighter bound Joldes, Muller and Popescu prove for the same algorithm, as the authors state it (see the sources; their journal text was not available to us)."
+            "**Map to frame rounds once.** [`FrameRecord::to_frame`] and [`FrameRecord::to_frame_decimal`] return the exact value of every coordinate rounded to the nearest step, ties to even, and say whether all three were exact, for every frame and every linear unit; never through a rounded intermediate, and never through `f64` for decimal text.",
+            "**Out of range, exactly.** A coordinate beyond ±(2^40 − 1) steps is refused with [`NumError::OutOfRange`] whose value is that coordinate, exactly rounded, and saturated only when it is beyond `i128` (and so, for inputs beyond 2^200 steps, a coordinate beyond 2^135 steps with its true sign). NaN and infinities are [`NumError::NotFinite`].",
+            "**Frame to map rounds once.** [`FrameRecord::to_map`] gives the nearest doubles to the exact map coordinates in the frame's linear unit, ties to even, with whether they are exact, for every frame.",
+            "**Certified or refused.** No conversion returns a value it could not certify, and no exact sign that fails is replaced by a guess: a defect is reported as [`NumError::BudgetExceeded`]."
           ],
-          "job": "Double-double arithmetic: a real number held as the unevaluated sum of two doubles.",
+          "job": "Conversion between map coordinates and a frame's grid, each way rounded once and correctly: map values in the frame's linear unit, given as doubles or as exact decimal text, go to the nearest grid step, ties to even; grid points go to the nearest doubles, ties to even.",
           "method": {
             "links": [
-              "https://doi.org/10.1007/BF01397083",
-              "https://doi.org/10.1109/ARITH.2001.930115",
-              "https://doi.org/10.1145/3121432",
-              "https://jncf2017.lip6.fr/files/slides/popescu.pdf",
-              "https://webusers.imj-prg.fr/~jean-claude.bajard/NAC2024/Supports/NAC2024_JMM.pdf",
-              "https://doi.org/10.1145/3484514"
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://doi.org/10.1007/PL00009321",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229",
+              "https://doi.org/10.1016/0925-7721(95"
             ],
-            "text": "the papers below, whose algorithms each operation follows. T. J. Dekker, \"A floating-point technique for extending the available precision\", *Numerische Mathematik* 18 (1971), 224–242, <https://doi.org/10.1007/BF01397083>: the double-length representation and the addition and multiplication. Y. Hida, X. S. Li and D. H. Bailey, \"Algorithms for quad-double precision floating point arithmetic\", *15th IEEE Symposium on Computer Arithmetic* (2001), 155–162, <https://doi.org/10.1109/ARITH.2001.930115>: the QD library's forms, including its accurate division and its square root. M. Joldes, J.-M. Muller and V. Popescu, \"Tight and rigorous error bounds for basic building blocks of double-word arithmetic\", *ACM Transactions on Mathematical Software* 44(2) (2017), <https://doi.org/10.1145/3121432>: the algorithm names, and the tighter bounds in the table as the authors state them in their JNCF 2017 slides, <https://jncf2017.lip6.fr/files/slides/popescu.pdf>, slide 17 (read 2026-10-21), with the `AccurateDWPlusDW` bound as 3u²/(1 − 4u) in J.-M. Muller's NAC 2024 talk, <https://webusers.imj-prg.fr/~jean-claude.bajard/NAC2024/Supports/NAC2024_JMM.pdf> (read 2026-10-21). That talk also reports the Coq formalisation of these proofs by Muller and Rideau, *ACM TOMS* 48(1) (2022), <https://doi.org/10.1145/3484514>, which found and repaired flaws in some published proofs; the kernel therefore relies only on the bounds proven here."
+            "text": "the conversion rules of chapter 17.1 (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`) and chapter 24's numbers to grid (`projects/engines/geometry/architecture/24-file-format-exchange.md`); double-double arithmetic with `geom-num`'s proven bounds (`geom_num::dd`, piece G25); the exact settling as the filter-then-exact pattern of the kernel's predicates (chapter 6.2; J. R. Shewchuk, *Discrete & Computational Geometry* 18 (1997), <https://doi.org/10.1007/PL00009321>), with exact values of doubles read as dyadic rationals and of decimals as rationals over powers of ten (IEEE 754-2019, <https://doi.org/10.1109/IEEESTD.2019.8766229>), and numbers a + b√n compared exactly by their squares (C. K. Yap, *Computational Geometry* 7 (1997), <https://doi.org/10.1016/0925-7721(95)00040-2>)."
           },
-          "path": "geom_math::dd",
+          "path": "geom_math::convert",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Decimal::parse`] is one pass over the text, one checked multiplication and addition per significant digit (zeros inside the significand are multiplied in at most 38 at a time), and the standard library's parse of the exponent's digits; no allocation. `Display` writes at most 38 digits and, in plain notation, at most 30 zeros.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/decimal.rs",
+          "guarantees": [
+            "**Exact.** [`Decimal::parse`] returns exactly the value the text writes, or refuses it with [`DecimalError`]; nothing is rounded.",
+            "**One form per value.** Every `Decimal` is in lowest terms, so two decimals are equal exactly when their values are, `Hash` agrees with `==`, and `Display` writes text that [`Decimal::parse`] reads back to the same `Decimal`.",
+            "**No panics, no allocation.** Every integer step is checked; `Display` writes into the given formatter."
+          ],
+          "job": "Exact decimal numbers: text such as `5921000.1234` or `-1.5e-3` read as significand·10^exponent with no rounding at all, so survey and map coordinates given as decimal text reach the grid through one rounding, never through `f64` (chapters 17.1 and 24).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/IEEESTD.2019.8766229",
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "decimal scientific notation as IEEE 754-2019 defines its character sequences (section 5.12.3, <https://doi.org/10.1109/IEEESTD.2019.8766229>), read digit by digit into an exact integer and a power of ten, with trailing zeros moved into the exponent (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.4, radix conversion, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
+          },
+          "path": "geom_math::decimal",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time; no allocation.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/epoch.rs",
+          "guarantees": [
+            "**Exact identity.** Two epochs are equal exactly when their decimal values are (a [`Decimal`] is in lowest terms, so 2023.50 and 2023.5 are one epoch); two models are equal exactly when their digests are.",
+            "**In range or refused.** [`DecimalYear::new`] refuses a year below 0 or from 10000 on with [`NumError::OutsideDomain`]."
+          ],
+          "job": "Coordinate epochs and deformation models: the two parts of a frame record that say when its map coordinates hold and how observations at other dates were carried to it (chapter 17.1, Epochs).",
+          "method": {
+            "links": [
+              "https://www.iso.org/standard/74039.html",
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "https://doi.org/10.6028/NIST.FIPS.180-4"
+            ],
+            "text": "the coordinate epoch of a dynamic coordinate reference system and the point-motion operations of ISO 19111:2019, *Geographic information: referencing by coordinates* (<https://www.iso.org/standard/74039.html>), as chapter 17.1 records them (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`), with PROJ's deformation-model operation, which takes the observation date as input; content addressing by SHA-256 (FIPS 180-4, <https://doi.org/10.6028/NIST.FIPS.180-4>), the digest chapters 21 and 28.13 specify."
+          },
+          "path": "geom_math::epoch",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3311,23 +3383,23 @@
           "target": "lib"
         },
         {
-          "cost": "no allocation. [`pow2`], [`exponent`], [`dyadic`] and [`scale_b`] are a few bit operations and at most two floating-point multiplications. [`pow2_big`], [`shl_into`] and [`round_scaled`] are linear in the number of 64-bit limbs (20 for [`Big`], at most 40 anywhere in the crate). [`sign_minus_sqrt`] is three schoolbook multiplications of L-limb integers (at most L² limb products each) and one subtraction. [`rational_to_f64`] is one 128-bit division and at most 181 shift-and-subtract steps. [`gcd_u128`] takes at most 257 remainder steps (the remainder at least halves every two steps). [`divrem_u128`] takes exactly 64·L shift-and-subtract steps.",
+          "cost": "no allocation. [`pow2`], [`exponent`], [`dyadic`] and [`scale_b`] are a few bit operations and at most two floating-point multiplications. [`pow2_big`], [`shl_into`], [`bit_length`], [`leading_106`] and [`round_scaled`] are linear in the number of 64-bit limbs (24 for [`Big`], at most 48 anywhere in the crate). [`pow5_big`] is one multiplication by a factor below 2^63 per 27 powers of five, each linear in the limbs. [`sign_minus_sqrt`] is three schoolbook multiplications of L-limb integers (at most L² limb products each) and one subtraction. [`rational_to_f64`] is one 128-bit division and at most 181 shift-and-subtract steps; [`quotient_to_f64`] is 58 shifts by multiplication with a power of two, each linear in the limbs, and 56 comparisons and subtractions. [`gcd_u128`] takes at most 257 remainder steps (the remainder at least halves every two steps). [`divrem_u128`] takes exactly 64·L shift-and-subtract steps.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-math/src/exact.rs",
           "guarantees": [
-            "**Exact, or it says so.** Every integer result is exact, and one that does not fit its type is `None`, never a wrapped value. Every rounded result is rounded once, to nearest, ties to even: [`round_scaled`] and [`rational_to_f64`] also say whether they were exact, and [`scale_b`], like IEEE 754's scaleB, returns ±∞ when the exact result overflows.",
+            "**Exact, or it says so.** Every integer result is exact, and one that does not fit its type is `None`, never a wrapped value. Every rounded result is rounded once, to nearest, ties to even: [`round_scaled`], [`rational_to_f64`] and [`quotient_to_f64`] also say whether they were exact, and [`scale_b`], like IEEE 754's scaleB, returns ±∞ when the exact result overflows. [`leading_106`] truncates toward zero and says by how many bits.",
             "**The same result in every build profile.** Every integer addition, subtraction, multiplication, division by a variable and negation is a checked method that returns `None` instead of wrapping, or `abs_diff`, which is exact for every input; the only native integer operations are shifts by amounts below the width and division and remainder by the constant 64, none of which can overflow. So nothing depends on overflow checks being on. A `None` that the bounds written here rule out is passed on, and the caller reports it as [`NumError::BudgetExceeded`](geom_num::NumError), never as an answer.",
             "**No panics.** Every shift amount is below the width it shifts (each says why), every limb access is checked, and every loop has a fixed or proven bound (below). The only casts are of values whose bound is written beside them."
           ],
-          "job": "Exact helpers shared by the crate: doubles as exact dyadic numbers, exact scaling of doubles by powers of two, wide integers built from shifted products, exact rounding of a wide integer divided by a power of two, the exact sign of a − b·√n, the correctly rounded double nearest a quotient of integers, and long division of a wide integer by a 128-bit one.",
+          "job": "Exact helpers shared by the crate: doubles as exact dyadic numbers, exact scaling of doubles by powers of two, wide integers built from shifted products and powers of two and five, their bit lengths and leading bits, exact rounding of a wide integer divided by a power of two, the exact sign of a − b·√n, the correctly rounded double nearest a quotient of integers (128-bit or wide), and long division of a wide integer by a 128-bit one.",
           "method": {
             "links": [
               "https://doi.org/10.1109/IEEESTD.2019.8766229",
               "https://doi.org/10.1016/0925-7721(95",
               "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
             ],
-            "text": "A double is exactly m·2^k with integer m (IEEE 754-2019, section 3.3); scaling by a power of two is IEEE's scaleB (section 5.3.3), rounded once. The quotient of two integers is rounded to the nearest double, ties to even (roundTiesToEven, section 4.3.1), by binary long division that produces the 53 bits of the significand, one more bit, and a sticky bit for whether anything nonzero remains (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.3.1); IEEE 754-2019, <https://doi.org/10.1109/IEEESTD.2019.8766229>. The sign of a − b·√n is decided by comparing a² with b²·n when a and b have the same sign: exact geometric computation with algebraic numbers of degree two, evaluated in exact integers instead of rounded square roots (C. K. Yap, \"Towards exact geometric computation\", *Computational Geometry* 7 (1997), 3–23, <https://doi.org/10.1016/0925-7721(95)00040-2>). Greatest common divisors by Euclid's algorithm, and long division of a wide integer one bit at a time (Knuth, *The Art of Computer Programming*, vol. 2, sections 4.5.2 and 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
+            "text": "A double is exactly m·2^k with integer m (IEEE 754-2019, section 3.3); scaling by a power of two is IEEE's scaleB (section 5.3.3), rounded once. The quotient of two integers is rounded to the nearest double, ties to even (roundTiesToEven, section 4.3.1), by binary long division that produces the 53 bits of the significand, one or more further bits, and a sticky bit for whether anything nonzero remains (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.3.1); IEEE 754-2019, <https://doi.org/10.1109/IEEESTD.2019.8766229>. The sign of a − b·√n is decided by comparing a² with b²·n when a and b have the same sign: exact geometric computation with algebraic numbers of degree two, evaluated in exact integers instead of rounded square roots (C. K. Yap, \"Towards exact geometric computation\", *Computational Geometry* 7 (1997), 3–23, <https://doi.org/10.1016/0925-7721(95)00040-2>). Greatest common divisors by Euclid's algorithm, and long division of a wide integer one bit at a time (Knuth, *The Art of Computer Programming*, vol. 2, sections 4.5.2 and 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
           },
           "path": "geom_math::exact",
           "provenance": [],
@@ -3366,21 +3438,19 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-math/src/frame.rs",
           "guarantees": [
-            "Map to frame rounds once, to the nearest step, ties to even, and says whether it was exact, for every frame; coordinates beyond ±(2^40 − 1) steps are refused with [`NumError::OutOfRange`].",
-            "Frame to map gives the nearest doubles to the exact map coordinates, ties to even, with whether they are exact, for every frame.",
-            "Frames are never mixed without an exact shift: anything else is refused with [`FrameMismatch`].",
-            "No conversion returns a value it could not certify, and no exact sign that fails is replaced by a guess: a defect is reported as [`NumError::BudgetExceeded`]."
+            "**Canonical records.** Rotations, scales and linear units are stored reduced, epochs and deformation models exactly, so two records are `==` exactly when they describe the same frame.",
+            "**Frames are never mixed without an exact shift.** [`FrameRecord::shift_to`] and [`FrameRecord::home_of`] refuse frames whose coordinate reference systems, linear units, epochs, deformation models, rotations or scales differ with the matching [`FrameMismatch`], in that order, and frames off a shared lattice with [`FrameMismatch::NotOnLattice`].",
+            "**Shifts are exact.** A shift's offset is decided whole before its range is checked, so two frames off a shared lattice are refused as such however far apart they are; an offset beyond [`SHIFT_MAX`] is [`NumError::OutOfRange`] with its exact value (saturated beyond `i128`).",
+            "**Home frames.** An operation runs in the lattice frame whose cell holds the centre of its operands' combined box, or is refused with [`MathError::FrameRangeExceeded`]."
           ],
-          "job": "Frames: the record that ties a model's flat grid to a map projection, conversion between map coordinates and the grid, exact shifts between frames on a shared lattice, and the regional lattice of frames for long networks.",
+          "job": "Frames: the record that ties a model's flat grid to a map projection, exact shifts between frames on a shared lattice, and the regional lattice of frames for long networks.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
               "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375",
-              "https://doi.org/10.1007/PL00009321",
-              "https://doi.org/10.1109/IEEESTD.2019.8766229",
-              "https://doi.org/10.1016/0925-7721(95"
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
             ],
-            "text": "the frame record and conversion rules of chapter 17.1 (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`), with EPSG:2193 as given in PROJ's copy of the EPSG data (<https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375>); double-double arithmetic as in [`crate::dd`]; the exact settling as the filter-then-exact pattern of the kernel's predicates (chapter 6.2; J. R. Shewchuk, *Discrete & Computational Geometry* 18 (1997), <https://doi.org/10.1007/PL00009321>), with exact values of doubles read as dyadic rationals (IEEE 754-2019, <https://doi.org/10.1109/IEEESTD.2019.8766229>) and numbers a + b√n compared exactly by their squares (C. K. Yap, *Computational Geometry* 7 (1997), <https://doi.org/10.1016/0925-7721(95)00040-2>)."
+            "text": "the frame record and lattice rules of chapter 17.1 (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`), with EPSG:2193 as given in PROJ's copy of the EPSG data (<https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql#L375>); exact integer shifts, with divisibility decided by long division of a wide integer (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
           },
           "path": "geom_math::frame",
           "provenance": [
@@ -3530,6 +3600,39 @@
           },
           "path": "geom_math::typed",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time; [`LinearUnit::new`] and [`LinearUnit::from_decimal`] reduce by a greatest common divisor (at most 129 remainder steps of 64-bit integers), and [`LinearUnit::from_decimal`] multiplies by at most 38 powers of ten.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-math/src/unit.rs",
+          "guarantees": [
+            "**Exact and canonical.** A unit is stored reduced by the greatest common divisor, so equal ratios have equal fields and `==` is equality of the ratios.",
+            "**In range or refused.** [`LinearUnit::new`] and [`LinearUnit::from_decimal`] refuse a zero part with [`NumError::Degenerate`], and a ratio outside 2^−32 to 2^32, or one whose reduced parts do not fit 64 bits, with [`NumError::OutsideDomain`]; nothing is rounded."
+          ],
+          "job": "Linear units: how many metres one unit of a coordinate reference system is, as an exact ratio.",
+          "method": {
+            "links": [
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html",
+              "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql"
+            ],
+            "text": "exact rational arithmetic with Euclid's greatest common divisor (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.5.2, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>); the units as EPSG defines them: the international foot 0.3048 m and Clarke's foot 0.3047972654 m as PROJ's copy of the EPSG data gives them (<https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql>), and the US survey foot by its definition, 1200/3937 m (EPSG's 12/39.37), which that copy stores only rounded, as 0.304800609601219241."
+          },
+          "path": "geom_math::unit",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql",
+              "method_note": null,
+              "name": "PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the factors of the US survey foot (EPSG:9003), the international foot (EPSG:9002) and Clarke's foot (EPSG:9005). No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -9177,6 +9280,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-math/src/frame.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql",
+      "method_note": null,
+      "name": "PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-math/src/unit.rs"
       ]
     },
     {

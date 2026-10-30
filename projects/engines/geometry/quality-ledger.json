@@ -1059,30 +1059,6 @@
       "reason": "The goal is the larger of tol and rel*|value|. The mutant picks tol also when the two are equal, which is the same double, so the goal, and every result, is the same."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/dual.rs",
-      "mutant": "replace <impl Sealed for Dual<T, N>>::atan2_smooth -> Result<(), NumError> with Ok(())",
-      "line_text": "T::atan2_smooth(y.value, x.value)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "This check runs only for a dual over a dual, from Dual<Dual<U, N>, M>::atan2, which next computes its value with Dual<U, N>::atan2 on the same values, and that runs U's check on the same pair first. So when this check would refuse, the next line refuses with the same OutsideDomain before anything else is computed, and when it passes nothing changes: every result and error is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
-      "mutant": "replace < with <= in midpoint",
-      "line_text": "if m < x.lo() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only when m == lo, where the mutant returns lo and the original m. These are the same bits: a nonzero lo equal to m is the same double, and a zero lo is +0 (a box stores a zero bound as +0) with hi >= 0, so m = +0 + 0.5*hi is +0 too. Every step's midpoint, and so every result, is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
-      "mutant": "replace > with >= in midpoint",
-      "line_text": "} else if m > x.hi() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only when m == hi, where the mutant returns hi and the original m. These are the same bits: a nonzero hi equal to m is the same double, and a zero hi is +0 with lo <= 0, so m = 0.5*lo + +0 equals zero only as -0 + +0 or +0 + +0, both +0. Every step's midpoint, and so every result, is the same."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/cols.rs",
       "mutant": "replace sub -> Result<usize, LinalgError> with Ok(1)",
       "line_text": "a.checked_sub(b).ok_or(LinalgError::Defect)",
@@ -1337,6 +1313,118 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "Without this arm two exact transforms reach the last arm, which composes them as rational transforms and simplifies the product back to the same exact transform; past the bound both refuse with OutOfRange (the rational form's reported value may differ), since a translation is no rotation to fall back on."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace + with - in settle",
+      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The filter's answer, x inexactly, is wrong only for a value within 2^-59 of a whole step or a midpoint (the estimate's error). For such a value the estimate lies within 2^-58 of that step or midpoint, a double, so hi is it (or the estimate itself near 0) and lo is at most 2^-58 in magnitude. So |hi - x - lo| differs from the original's |hi - x + lo| by at most 2^-57 there, and both stay within 2^-40 of 0 or 1/2: the filter refuses such values either way, and the exact signs decide. Wherever the mutant's filter accepts, the value rounds to x inexactly, its answer."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace + with * in settle",
+      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The filter's answer, x inexactly, is wrong only for a value within 2^-59 of a whole step or a midpoint (the estimate's error). For such a value the estimate lies within 2^-58 of that step or midpoint, a double, so hi is it (or the estimate itself near 0) and lo is at most 2^-58 in magnitude. So |(hi - x)*lo| is at most 2^-59 there: the filter refuses and the exact signs decide. Wherever it accepts, the value is farther than 2^-59 from both, and rounds to x inexactly, its answer."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace - with + in settle",
+      "line_text": "let frac = math::abs((d.hi() - xf) + d.lo())?.get();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "|hi + x + lo| is the original for x = 0, and for x != 0 is at least 2|x| - 1/2 - 2^-58 > 1/2 (the estimate lies within 1/2 + 2^-59 of x), so the filter refuses and the exact signs decide, as they would: the same rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace > with == in settle",
+      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It accepts only frac == 2^-40, where the value rounds to x inexactly (2^-40 from x, its error 2^-59), the filter's answer; every other value goes to the exact signs, which decide it as before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace > with >= in settle",
+      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It also accepts frac == 2^-40: the value is then 2^-40 from x, so (within 2^-59 of it) not a whole step and not past a midpoint, and rounds to x inexactly, the filter's answer."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace < with == in settle",
+      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It accepts only frac == 1/2 - 2^-40, where the value rounds to x inexactly (2^-40 inside x's half-step, its error 2^-59); every other value goes to the exact signs, which decide it as before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace < with <= in settle",
+      "line_text": "if frac > FILTER && frac < 0.5 - FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It also accepts frac == 1/2 - 2^-40: the value is then 2^-40 inside x's half-step (its error is 2^-59), so it rounds to x inexactly, the filter's answer."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace > with >= in Axis::round",
+      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only when the estimate's leading part is exactly 2^41. The value then lies within 2^-59 of 2^41 and rounds to it: the original settles it to 2^41 and the mutant's bisection over i128 finds the same exact rounding, which to_coord refuses alike, with OutOfRange carrying 2^41."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "replace < with <= in Axis::round",
+      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only when the estimate's leading part is exactly -2^41. The value then lies within 2^-59 of -2^41 and rounds to it: the original settles it to -2^41 and the mutant's bisection over i128 finds the same exact rounding, which to_coord refuses alike, with OutOfRange carrying -2^41."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "delete match arm (Some(_), true) in FrameRecord::to_map",
+      "line_text": "(Some(_), true) => (linear(oe, ae)?, linear(on, an)?),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without the arm a quarter turn at scale one takes the rational arm: its exact norm is 1 and its scale 1/1, so k_d*r = 1 and the quotient is (O + a)*q over S*p, the one the deleted arm forms; quotient_to_f64 rounds it to the nearest double, ties to even, and says whether it is exact, as rational_to_f64 does. The same doubles and exactness."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-math/src/convert.rs",
+      "mutant": "delete - in Axis::round",
+      "line_text": "if d.hi() > RANGE_FILTER || d.hi() < -RANGE_FILTER {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant sends every estimate but exactly 2^41 to far() instead of settling it. far() decides any X by exact signs alone, never the estimate: the bisection over i128 finds floor(X), whether X is whole, and its rounding half to even, the rounded value and exactness settling gives; its signs' budgets (|t| <= 2^128, the module documentation) do not depend on X. Only the time differs: about 130 exact signs for a coordinate instead of at most two."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/dual.rs",
+      "mutant": "replace <impl Sealed for Dual<T, N>>::atan2_smooth -> Result<(), NumError> with Ok(())",
+      "line_text": "T::atan2_smooth(y.value, x.value)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This check runs only for a dual over a dual, from Dual<Dual<U, N>, M>::atan2, which next computes its value with Dual<U, N>::atan2 on the same values, and that runs U's check on the same pair first. So when this check would refuse, the next line refuses with the same OutsideDomain before anything else is computed, and when it passes nothing changes: every result and error is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+      "mutant": "replace < with <= in midpoint",
+      "line_text": "if m < x.lo() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when m == lo, where the mutant returns lo and the original m. These are the same bits: a nonzero lo equal to m is the same double, and a zero lo is +0 (a box stores a zero bound as +0) with hi >= 0, so m = +0 + 0.5*hi is +0 too. Every step's midpoint, and so every result, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+      "mutant": "replace > with >= in midpoint",
+      "line_text": "} else if m > x.hi() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when m == hi, where the mutant returns hi and the original m. These are the same bits: a nonzero hi equal to m is the same double, and a zero hi is +0 with lo <= 0, so m = 0.5*lo + +0 equals zero only as -0 + +0 or +0 + +0, both +0. Every step's midpoint, and so every result, is the same."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",

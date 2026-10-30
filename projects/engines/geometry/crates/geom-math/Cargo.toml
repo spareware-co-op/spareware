@@ -4,7 +4,7 @@ version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
-description = "Spare Kit geometry kernel: exact grid vectors, floating-point points and vectors, typed transforms (exact, rational and certified), boxes, double-double arithmetic, and frames tied to map projections with their regional lattices."
+description = "Spare Kit geometry kernel: exact grid vectors, floating-point points and vectors, typed transforms (exact, rational and certified), boxes, and frames tied to map projections, with their linear units, epochs and regional lattices, and exact decimal text."
 
 [dependencies]
 # The numbers layer: grid coordinates, exact predicates' integers, error-free transformations,

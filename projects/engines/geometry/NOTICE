@@ -578,6 +578,13 @@ PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)
     projects/engines/geometry/crates/geom-math/src/frame.rs
       for the defining parameters of EPSG:2193, NZTM2000. No code copied.
 
+PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)
+  Licence:      MIT
+  Link:         https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql
+  Consulted by:
+    projects/engines/geometry/crates/geom-math/src/unit.rs
+      for the factors of the US survey foot (EPSG:9003), the international foot (EPSG:9002) and Clarke's foot (EPSG:9005). No code copied.
+
 rand
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/rust-random/rand/blob/9e7d328f60d6372ae22927f37d1a816fc980f25e/src/seq/slice.rs

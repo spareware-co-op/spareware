@@ -48,7 +48,6 @@
 use geom_num::grid::{P2, P3};
 use geom_num::{NumError, math};
 
-use crate::dd::DD;
 use crate::error::{MathError, budget};
 use crate::exact::const_pow2;
 use crate::frame::Rotation;
@@ -57,6 +56,7 @@ use crate::rational::RationalTransform;
 use crate::rotation::RationalRotation;
 use crate::rounded::Rounded;
 use crate::transform::{Classification, Transform, TransformKind};
+use geom_num::dd::DD;
 
 /// 2^84, the largest translation a certified transform may have to be read as whole steps (the
 /// rational transforms' bound).
