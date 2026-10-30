@@ -9281,6 +9281,30 @@
       "layer": "3",
       "modules": [
         {
+          "cost": "a lookup or an insert is `O(log n)` in the number of values; a split or a merge visits the values of its inputs only. Nothing recurses.",
+          "does": "an [`Attributes`] holds each attribute's [`Class`] and every value, keyed by the entity's [`NameKey`] and the attribute's [`AttrId`]. Values are canonical bytes ([`Value`]), carried whether or not this kernel understands them. [`Attributes::split`] and [`Attributes::merge`] give the values an operation's split and merged entities carry, by each attribute's class; the other events of section 8.4 (changed, transformed, copied, generated) come with the history records (pieces G88 and G90).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/attributes.rs",
+          "guarantees": [
+            "**Keyed by name, never by index.** Values follow names, so they survive every re-indexing a publish makes (8.2), and only named entities carry them (8.4).",
+            "**Ordered.** Every map iterates by key: attribute ids, then names, as bytes, the same on every machine (8.2, 21).",
+            "**Values are bytes.** Two values are equal exactly when their bytes are (8.4); a merge that keeps a value only when every input carries an equal one compares bytes.",
+            "**Immutable.** Every operation returns a new [`Attributes`]; nothing is changed in place, as for bodies (8.2)."
+          ],
+          "job": "Attributes: data hung on a body or on one of its named entities, keyed by persistent name, with the class that says what a value does when its entity is split or merged (8.4).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
+            ],
+            "text": "Parasolid's published attribute classes, taken as a concept only and rebuilt on persistent names (`projects/engines/geometry/architecture/08-topology.md`, 8.4; `projects/kit/notes/G01-evidence/07-persistent-naming.md`, section 5)."
+          },
+          "path": "geom_topo::attributes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`O(n log n)` comparisons of 16 bytes and two vectors of `n` indices; nothing recurses.",
           "does": "[`NameKey`] is a persistent name's 16 bytes as the caller supplies them (this crate never makes names; `geom-name` does, 20.1). [`Permutation::by_name`] sorts one arena's rows by their keys and gives, for every row, the row it moves to, so that the builder can move the arena and rewrite every index that points into it before a body is published.",
           "family": [],

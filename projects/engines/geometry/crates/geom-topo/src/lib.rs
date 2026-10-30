@@ -28,6 +28,8 @@
 //!
 //! - [`order`]: [`order::NameKey`], a persistent name's bytes, and [`order::Permutation`], the move of
 //!   an arena's rows into name order that the builder applies before publishing (8.2, 32.17).
+//! - [`attributes`]: [`attributes::Attributes`], values keyed by persistent name, and the split and
+//!   merge classes that say what they do when their entity is split or merged (8.4).
 //!
 //! Status: scaffold only; built by pieces G80, G81, G90, G102, G111, G112, G143, G145, G247, G398.
 #![cfg_attr(not(test), no_std)]
@@ -35,4 +37,5 @@
 
 extern crate alloc;
 
+pub mod attributes;
 pub mod order;
