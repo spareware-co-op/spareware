@@ -48,10 +48,26 @@ fn time(name: &str, runs: u32, bytes: usize, mut f: impl FnMut()) {
     println!("{name:<44} {:>10.1} µs {rate:>10.0} MB/s", seconds * 1e6);
 }
 
-/// A tagged column: tag `tag`, then a byte string head of 9 bytes, then the values.
+/// A tagged column: tag `tag`, then the byte string's shortest head, then the values.
 fn tagged(tag: u8, values: &[u8]) -> Vec<u8> {
-    let mut out = vec![0xd8, tag, 0x5b];
-    out.extend((values.len() as u64).to_be_bytes());
+    let mut out = vec![0xd8, tag];
+    let n = values.len() as u64;
+    match n {
+        0..24 => out.push(0x40 | n as u8),
+        24..0x100 => out.extend([0x58, n as u8]),
+        0x100..0x1_0000 => {
+            out.push(0x59);
+            out.extend((n as u16).to_be_bytes());
+        }
+        0x1_0000..0x1_0000_0000 => {
+            out.push(0x5a);
+            out.extend((n as u32).to_be_bytes());
+        }
+        _ => {
+            out.push(0x5b);
+            out.extend(n.to_be_bytes());
+        }
+    }
     out.extend(values);
     out
 }

@@ -174,7 +174,8 @@ impl Cursor<'_> {
 
 /// A number read from the text.
 enum Number {
-    /// An integer, its sign and its magnitude, below 2^65.
+    /// An integer, its sign and its magnitude. A magnitude stops growing once past 2^65, so one
+    /// out of range stays out of range.
     Int { negative: bool, magnitude: u128 },
     /// A float a double holds exactly.
     Float(f64),
@@ -466,13 +467,8 @@ fn number(cursor: &mut Cursor<'_>) -> Result<Number, TextError> {
             TextErrorKind::InexactFloat,
         ));
     }
-    if magnitude > 1 << 64 || (negative && magnitude == 0) {
-        return Err(start_error(
-            start.line,
-            start.column,
-            TextErrorKind::IntegerRange,
-        ));
-    }
+    // Whether the integer is in range is decided where its kind is known: −0 and anything past
+    // 2^64 are refused there (`Parser::item`).
     Ok(Number::Int {
         negative,
         magnitude,

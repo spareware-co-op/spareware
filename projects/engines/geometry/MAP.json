@@ -2421,6 +2421,35 @@
           "module": "geom_format::cbor::error",
           "name": "TextErrorKind",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a source could not give the bytes asked for.",
+          "file": "projects/engines/geometry/crates/geom-format/src/source.rs",
+          "kinds": [
+            {
+              "doc": "The source ended before the bytes asked for.",
+              "name": "UnexpectedEnd",
+              "shape": "unit"
+            },
+            {
+              "doc": "The source said it wrote more bytes than the buffer holds.",
+              "name": "Overrun",
+              "shape": "unit"
+            },
+            {
+              "doc": "An offset or length past the source's length.",
+              "name": "OutOfBounds",
+              "shape": "unit"
+            },
+            {
+              "doc": "The program's source failed, for a reason of its own (a network error, a locked file); the number is the program's.",
+              "name": "Failed",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::source",
+          "name": "SourceError",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -2607,6 +2636,29 @@
             "text": "RFC 8949 section 8 (diagnostic notation), <https://www.rfc-editor.org/rfc/rfc8949#section-8>, and RFC 8610 Appendix G (extended diagnostic notation; G.5, hexadecimal floats), <https://www.rfc-editor.org/rfc/rfc8610#appendix-G>; text escapes as JSON's, RFC 8259 section 7, <https://www.rfc-editor.org/rfc/rfc8259#section-7>. A hexadecimal float writes a double's 52 fraction bits as 13 hexadecimal digits after `0x1.` and its unbiased exponent after `p`; a subnormal is first scaled by 2^64, exactly, to read its leading bit as a normal double's."
           },
           "path": "geom_format::cbor::text",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one call of the source per piece it returns; no allocation. Recursion: none.",
+          "does": "[`ByteSource`] hands out bytes in order, in pieces of whatever size it likes; [`RangeSource`] reads bytes at any offset of a known length. [`read_exact`] and [`read_exact_at`] fill a buffer from either, however the source splits its reads. Byte slices implement both ([`SliceSource`] for the streamed one).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/source.rs",
+          "guarantees": [
+            "**The split never matters.** [`read_exact`] and [`read_exact_at`] fill the whole buffer or return an error; a source that returns one byte per call gives the same bytes as one that returns them all at once.",
+            "**A source that stalls is an error, not a loop.** A read that returns 0 before the buffer is full is [`SourceError::UnexpectedEnd`]; a source that claims more bytes than the buffer holds is [`SourceError::Overrun`].",
+            "**Offsets never overflow.** Every offset is checked against the source's length before it is read."
+          ],
+          "job": "Where a reader's bytes come from: the two `no_std` traits every reader reads through, so one code path reads a file, a network range, a zip entry or a SQLite blob, and the result never depends on how the bytes arrive (24.7).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://doc.rust-lang.org/std/io/trait.Read.html#method.read_exact"
+            ],
+            "text": "the reader interfaces of 24.7, `projects/engines/geometry/architecture/24-file-format-exchange.md`, in the manner of `std::io::Read::read_exact` and positioned reads (`pread`), which loop until the buffer is full (<https://doc.rust-lang.org/std/io/trait.Read.html#method.read_exact>)."
+          },
+          "path": "geom_format::source",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -6764,8 +6816,69 @@
         24,
         27
       ],
-      "depends": [],
-      "errors": [],
+      "depends": [
+        {
+          "licence": "Apache-2.0 OR MIT",
+          "link": "https://crates.io/crates/sha2/0.11.0",
+          "manifest": "projects/engines/geometry/crates/geom-op/Cargo.toml",
+          "method_note": null,
+          "name": "sha2",
+          "pinned": false,
+          "purpose": "0.11.0",
+          "take": "depend"
+        }
+      ],
+      "errors": [
+        {
+          "doc": "Why a call has no encoding in SKG's subset. The call that returns one writes nothing.",
+          "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+          "kinds": [
+            {
+              "doc": "A double, or a value of an `f64` column, that is NaN or infinite: chapter 24.3 refuses them both ways.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "A map key not greater than the key before it in the same map. Keys are written in ascending order (RFC 8949 section 4.2.1), each once.",
+              "name": "KeyNotAscending",
+              "shape": "unit"
+            },
+            {
+              "doc": "An item where the open map wants its next key.",
+              "name": "KeyExpected",
+              "shape": "unit"
+            },
+            {
+              "doc": "A key where no map wants one: at the top level, inside an array, or where a map wants the value of the key just written.",
+              "name": "KeyNotExpected",
+              "shape": "unit"
+            },
+            {
+              "doc": "An item after the encoder's one item is whole: an encoder writes exactly one data item.",
+              "name": "Complete",
+              "shape": "unit"
+            },
+            {
+              "doc": "A finish before the item is whole: no item yet, or an array or map still short of the length it declared.",
+              "name": "Unfinished",
+              "shape": "unit"
+            },
+            {
+              "doc": "A set with two equal elements; a set has no repeats (32.19).",
+              "name": "Repeated",
+              "shape": "unit"
+            },
+            {
+              "doc": "A length that does not fit the 64-bit argument of a head.",
+              "name": "TooLong",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::cbor",
+          "name": "EncodeError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-op/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-op",
@@ -6780,12 +6893,76 @@
       "job": "The operation contract every crate shares: `OpContext`; the shared parts of `OpOutput` (history, names, exactness, diagnostics); the `OpError` base (`ErrorKind`, `Evidence`, `Remedy`); the exactness class, `OpId` and `OpPath`; the `NameId` value and its hashing under `NameScheme`, `TopoName`, `Role` and `PieceKey`; the history records of 20.3; the operation schema types.",
       "kind": "kernel",
       "layer": "1",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "linear in the bytes written, with one amortised `Vec` growth; [`Encoder::set`] and [`Encoder::sorted`] sort their elements, O(n log n) comparisons of their encodings. Memory is the output plus one small frame per open array or map. No recursion: open containers are an explicit stack.",
+          "does": "an [`Encoder`] writes exactly one CBOR data item (RFC 8949) from SKG's subset of values, in the core deterministic encoding of RFC 8949 section 4.2.1 with chapter 24.3's rules on top, and [`Encoder::finish`] hands it back as an [`Item`]. The subset is what chapter 24.3 stores: unsigned and signed integers (big ones as bignums), finite doubles, byte strings, UTF-8 text, arrays, maps keyed by unsigned integers (24.3's extension maps), sets and sorted lists (arrays sorted by the bytes of each element's encoding, 32.19), and coordinate columns as RFC 8746 typed arrays of little-endian `i64` (tag 79) and `f64` (tag 86). An [`Item`] can only be made by an encoder, so an item placed inside another ([`Encoder::item`], [`Encoder::set`], [`Encoder::sorted`]) is canonical by construction. Persistent names (G87) and the native format's records and decoder (G91, G92) are built on it, and never encode a value a second way.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+          "guarantees": [
+            "**One encoding per value.** Every head carries its argument in the fewest bytes (RFC 8949 sections 4.1 and 4.2.1); lengths are always definite; an integer is a bignum (tag 2 or 3) only when it does not fit major type 0 or 1, and then with no leading zero byte (24.3, RFC 8949 section 3.4.3); a double is written as the shortest of binary16, binary32 and binary64 that holds its value bit for bit, so −0.0 stays −0.0 (RFC 8949 section 4.1; 24.3); map keys are written in ascending order, which for unsigned keys is the bytewise order of their encodings that RFC 8949 section 4.2.1 asks for; a set's elements are sorted by their encodings' bytes, without repeats, and a sorted list's the same way with repeats kept (32.19).",
+            "**Only the subset, and only well-formed items.** NaN and the infinities are refused, as a double and inside an `f64` column (24.3); a map key that is not greater than the one before it, an item where a map wants its key, a key anywhere else, a second top-level item, a set with a repeat, and a finish before the item is whole are each refused with their own [`EncodeError`]. A refused call writes nothing and leaves the encoder as it was, so the caller can still finish the item correctly. An array or map closes as soon as it holds the items it declared, so the next item belongs to the container around it.",
+            "**The same bytes on every target.** The bytes depend only on the calls made: every step is integer and bit work on the value's own bits (`f64::to_bits`), with no float arithmetic, no hash-map order and no platform width beyond `usize` lengths, which fit `u64` on every target Rust supports.",
+            "**No panic.** Nothing here indexes, unwraps or overflows: lengths are counted with checked arithmetic and a length too large for the format is refused with [`EncodeError::TooLong`]."
+          ],
+          "job": "Deterministic CBOR for SKG's subset: the one encoding every stored and hashed value has (24.3).",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8949",
+              "https://www.rfc-editor.org/rfc/rfc8746",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "RFC 8949 (CBOR, IETF STD 94), sections 3 (the head and its argument), 3.4.3 (bignums), 4.1 (preferred serialization, shortest floats) and 4.2.1 (core deterministic encoding), <https://www.rfc-editor.org/rfc/rfc8949>; RFC 8746 section 2 (typed arrays: tag 79 for little-endian `sint64`, tag 86 for little-endian binary64), <https://www.rfc-editor.org/rfc/rfc8746>; IEEE 754-2019 section 3.4 for the binary16 and binary32 interchange formats the shortest-float test narrows to; and the kernel's rules in `projects/engines/geometry/architecture/24-file-format-exchange.md` (24.3) and `projects/engines/geometry/architecture/32-decisions.md` (32.19 and 32.20)."
+          },
+          "path": "geom_op::cbor",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs",
+              "method_note": null,
+              "name": "ciborium-ll",
+              "notice": [],
+              "pinned": true,
+              "purpose": "its choice of the shortest float that keeps a double's bits; used as a test oracle only.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the message, one compression per 64-byte block; the state is a fixed 112 bytes or so, and nothing is allocated.",
+          "does": "[`Sha256`] takes a message piece by piece and gives its 32-byte digest, or the digest's leftmost 16 bytes; [`sha256`] and [`sha256_128`] hash one buffer. The owner chose SHA-256 for both uses (owner action G79, 32.20): a content ID is algorithm 1, the whole digest of a record's payload (24.2), and a `NameId` is the leftmost 128 bits of the digest of a name's domain prefix and canonical bytes (32.19, piece G87). The hashing itself is the `RustCrypto` project's `sha2` crate, the implementation 32.20 approves, at the release `Cargo.lock` pins.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/hash.rs",
+          "guarantees": [
+            "**The digest FIPS 180-4 defines.** For every message, in whatever pieces it is written, the digest is the standard's SHA-256: the tests check NIST's published test vectors (the Cryptographic Algorithm Validation Program's byte-oriented short and long messages and its Monte Carlo chain, and FIPS 180-4's examples), whole and written in pieces.",
+            "**The 128-bit cut is the digest's first 16 bytes**, the leftmost 128 bits NIST SP 800-107 section 5.1 allows a truncated SHA-256 to keep, and nothing else.",
+            "**The same digest on every target and build.** `sha2` uses a processor's SHA instructions where it has them and portable code elsewhere, WebAssembly included; each computes the one function FIPS 180-4 defines, so the choice changes speed, never bits (its audit, cited in `deny-no-std.toml`, reads each path).",
+            "**No panic, no `unsafe` here.** Writing and finishing never panic, and this module has no `unsafe` code. The crates' own `unsafe` code (`sha2`'s processor backends and its software path's table read, `block-buffer`'s buffer, `hybrid-array`'s array casts and `cpufeatures`' processor probe) is read site by site in their audit."
+          ],
+          "job": "SHA-256, the kernel's one hash: for content IDs and, cut to 128 bits, for persistent names.",
+          "method": {
+            "links": [
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+              "https://csrc.nist.gov/pubs/sp/800/107/r1/final",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/secure-hashing"
+            ],
+            "text": "NIST FIPS 180-4, *Secure Hash Standard* (2015), <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, computed by the `sha2` crate (`RustCrypto`, MIT OR Apache-2.0, a dependency, not a port); the cut follows NIST SP 800-107 Rev. 1 section 5.1, <https://csrc.nist.gov/pubs/sp/800/107/r1/final>. The owner's choice and its reasons are `projects/engines/geometry/architecture/32-decisions.md` (32.19 and 32.20). The test vectors are NIST's, <https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/secure-hashing>."
+          },
+          "path": "geom_op::hash",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-op",
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G82, G83, G86, G87, G88, G104, G143, G144, G459.",
+      "status": "the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) are built (G86); the rest is built by pieces G82, G83, G87, G88, G104, G143, G144, G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {
@@ -9642,6 +9819,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0 OR MIT",
+      "link": "https://crates.io/crates/sha2/0.11.0",
+      "method_note": null,
+      "name": "sha2",
+      "pinned": false,
+      "take": "depend",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-op/Cargo.toml"
+      ]
+    },
+    {
       "licence": "Apache-2.0",
       "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_BasisBasic.cpp",
       "method_note": null,
@@ -9966,6 +10154,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-run/src/exec.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs",
+      "method_note": null,
+      "name": "ciborium-ll",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-op/src/cbor.rs"
       ]
     },
     {
