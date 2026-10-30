@@ -12,7 +12,6 @@
     clippy::cast_precision_loss,
     clippy::unwrap_used,
     clippy::disallowed_methods,
-    clippy::result_large_err,
     reason = "a benchmark is development code, like a test; it measures wall-clock time by design"
 )]
 

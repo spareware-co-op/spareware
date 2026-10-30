@@ -38,11 +38,6 @@
 //! one allocation of n entries; each item then costs its own operation plus one child path (one
 //! allocation); the results are one vector of n. Nothing recurses.
 
-#![allow(
-    clippy::result_large_err,
-    reason = "chapter 10.1's contract returns an OpError by value, with its entities, evidence, words               and remedies; a batch passes on each item's as the item returned it"
-)]
-
 use alloc::vec::Vec;
 use core::fmt;
 

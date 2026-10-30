@@ -7,8 +7,7 @@
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::too_many_lines,
-    clippy::result_large_err,
-    reason = "tests may use native arithmetic and casts; chapter 10.1 returns OpError by value"
+    reason = "tests may use native arithmetic and casts"
 )]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 // The test pool starts threads (chapter 23.4 allows it in tests).
