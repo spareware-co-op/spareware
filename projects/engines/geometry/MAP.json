@@ -2316,6 +2316,29 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.44).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/curves.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each double is read through a rule byte that makes the hard values common: 0, ±1, a whole number or a short binary fraction on a coarse grid (so coincident and parallel data come up), a tiny or huge power of two, or a double read from the input (non-finite ones replaced by 0).",
+            "**What is a finding.** A law of the contract broken with no error behind it, or any call failing as `CurveError::Defect` (an internal step the kernel says cannot fail), is a [`Finding`]; a kind that refuses to be built, or a call that refuses with a typed error (an overflow at an extreme size, a budget stop), is legal. A panic fails every engine.",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units; running out is a typed stop, which is legal.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it."
+          ],
+          "job": "Fuzz target: every curve kind keeps the kind contract on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
@@ -2408,6 +2431,29 @@
             "text": "the fixed-seed property runs of section 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`: \"Unit and property tests with fixed seeds\" on every pull request, \"fresh, logged seeds\" nightly), over the byte strings a fuzzer would give, so the one harness function serves fuzzing and fixed-seed testing alike, the arrangement bolero's own test mode uses (<https://github.com/camshaft/bolero>)."
           },
           "path": "geom_fuzz::seeded",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.44).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/surfaces.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case, through the same rule bytes as the `curves` target: 0, ±1, whole numbers and quarters on a coarse grid, tiny and huge powers of two, or a double read from the input.",
+            "**What is a finding.** A law of the contract broken with no error behind it, or any call failing as `CurveError::Defect`, is a [`Finding`]; a kind that refuses to be built, or a call that refuses with a typed error (an overflow, a normal that cannot be separated from zero, a budget stop), is legal. A panic fails every engine.",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units; running out is a typed stop, which is legal.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it."
+          ],
+          "job": "Fuzz target: every surface kind keeps the kind contract on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the kind contract of chapter 7 as `geom_surface::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::surfaces",
           "provenance": [],
           "spdx": null,
           "target": "lib"

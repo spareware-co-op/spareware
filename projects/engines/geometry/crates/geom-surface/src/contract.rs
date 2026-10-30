@@ -103,12 +103,20 @@ pub fn check<K: ParamSurface>(
     let ((a, b), (c, d)) = kind.domain();
     let call = |law: Law, at: f64| move |e: CurveError| broken(law, at, Some(e));
     let sides = (Limit::FromRight, Limit::FromRight);
-    // One domain length and one unit past the end.
-    let beyond = b + (b - a);
-    let outside = beyond + 1.0;
+    // One domain length and one unit past the end, and one unit before the start; each at least
+    // one double, since beyond 2^53 in magnitude adding 1 rounds back to the end itself, which
+    // is inside (piece G69's fuzz target found the kit reporting a kind that rightly accepted
+    // it), and the next double where the step overflows.
+    let past_end = tight::larger(b + (b - a) + 1.0, b.next_up());
+    let outside = if past_end.is_finite() {
+        past_end
+    } else {
+        b.next_up()
+    };
+    let before = tight::smaller(a - 1.0, a.next_down());
     if kind.point(outside, c, sides) != Err(CurveError::ParameterOutside)
-        || kind.bound(((a - 1.0, b), (c, d)), meter) != Err(CurveError::SpanOutside)
-        || kind.partials_over(((a - 1.0, b), (c, d)), sides, 1, meter)
+        || kind.bound(((before, b), (c, d)), meter) != Err(CurveError::SpanOutside)
+        || kind.partials_over(((before, b), (c, d)), sides, 1, meter)
             != Err(CurveError::SpanOutside)
         || kind.split(Direction::U, a, meter).err() != Some(CurveError::ParameterOutside)
     {

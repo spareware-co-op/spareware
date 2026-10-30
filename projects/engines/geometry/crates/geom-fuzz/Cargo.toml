@@ -9,6 +9,13 @@ description = "Spare Kit geometry kernel, development only: fuzz harnesses and b
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.44). Ours,
+# MPL-2.0.
+geom-curve = { path = "../geom-curve" }
+geom-math = { path = "../geom-math" }
+geom-nurbs = { path = "../geom-nurbs" }
+geom-run = { path = "../geom-run" }
+geom-surface = { path = "../geom-surface" }
 geom-test = { path = "../geom-test" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
 geom-bench = { path = "../geom-bench", default-features = false }

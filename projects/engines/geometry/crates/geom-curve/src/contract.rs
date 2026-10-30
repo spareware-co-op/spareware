@@ -99,20 +99,32 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
     let lo = if a.is_finite() { a } else { first - 1024.0 };
     let hi = if b.is_finite() { b } else { last + 1024.0 };
     // Refusals.
+    // Every step past an end is at least one double: beyond 2^53 in magnitude, adding 1 rounds
+    // back to the end itself, which is inside (piece G69's fuzz target found the kit reporting a
+    // kind that rightly accepted it).
     let outside = if b.is_finite() {
-        // One length of the domain and one unit past the end.
-        let past_end = b + (b - lo);
-        past_end + 1.0
+        // One length of the domain and one unit past the end, or the next double where that
+        // overflows.
+        let past_end = tight::larger(b + (b - lo) + 1.0, b.next_up());
+        if past_end.is_finite() {
+            past_end
+        } else {
+            b.next_up()
+        }
     } else if a.is_finite() {
-        let before_start = a - (hi - a);
-        before_start - 1.0
+        let before_start = tight::smaller(a - (hi - a) - 1.0, a.next_down());
+        if before_start.is_finite() {
+            before_start
+        } else {
+            a.next_down()
+        }
     } else {
         f64::NAN
     };
     let beyond = if a.is_finite() {
-        (a - 1.0, hi)
+        (tight::smaller(a - 1.0, a.next_down()), hi)
     } else if b.is_finite() {
-        (lo, b + 1.0)
+        (lo, tight::larger(b + 1.0, b.next_up()))
     } else {
         (lo, f64::INFINITY)
     };

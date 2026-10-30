@@ -10,7 +10,9 @@
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
 //! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
 //! operation at every width; and [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers. The layout every target follows, and how each engine runs it locally and in CI,
+//! returns the exact value of its description, evaluated in big integers. Gate 2 (32.44) adds
+//! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
+//! [`surfaces`], every surface kind likewise (G60, G65 to G68). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -154,9 +156,11 @@
 
 use core::fmt;
 
+pub mod curves;
 pub mod orient2d;
 pub mod predicates;
 pub mod seeded;
+pub mod surfaces;
 pub mod variants;
 pub mod wide;
 
