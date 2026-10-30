@@ -6826,8 +6826,31 @@
           "target": "lib"
         },
         {
+          "cost": "[`Charge::charge`] is constant: at most two charges on the meter whatever the count. [`reserve`] is one charge and one allocation. [`OpContext::run`] adds one meter and one read of the cancellation to the body.",
+          "does": "every operation runs inside the budgets its [`OpContext`] carries (chapter 23.10). A [`Charge`] is one line of an operation version's charge schedule: in one phase, so many work units per counted thing (an input face, a pair of overlapping boxes, a Newton step), fixed by the operation's version and listed in its schema (chapter 26.2). [`Charge::charge`] charges a count of them exactly as a serial loop charging one at a time would. [`reserve`] reserves room for a number of values: their logical bytes on the meter first, then the real allocation, fallibly. [`OpContext::run`] runs an operation's body with a meter over the context's budget and cancellation, and publishes its result only if the meter never stopped and no cancellation was asked for by the time it returned.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/run.rs",
+          "guarantees": [
+            "**Counts a serial loop would make.** Charging `count` things at `units` each passes exactly when charging them one by one would, and on failure the meter has used exactly what that loop had used up to and including the first thing over the cap: never more, never a saturated total. So a `BudgetExceeded` is the same on every target, thread count and build, and may be stored (chapter 23.10).",
+            "**Large reservations are fallible.** [`reserve`] charges the logical bytes first, so a budget failure comes before any allocation and is the same everywhere; a count the target cannot address, or an allocation the machine refuses, stops the meter with `OutOfMemory`, which is never stored. Nothing aborts.",
+            "**A stopped operation publishes nothing.** [`OpContext::run`] returns the body's result only when the body succeeded, its meter never stopped, and a last read of the caller's cancellation finds no request; otherwise it returns the stop as an error at the context's path. A body that ignored a stop cannot publish a result past it."
+          ],
+          "job": "Running an operation inside its context's budgets: the charge schedule, fallible reservations, and a run that publishes nothing once stopped.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "chapter 23.10's budgets and cancellation, with owner action G71's reading that time reaches an operation only as the caller's cancellation (section 32.15) (`projects/engines/geometry/architecture/23-performance.md`, `projects/engines/geometry/architecture/32-decisions.md`), on `geom-run`'s meter, which the chapter's fuel accounting follows."
+          },
+          "path": "geom_op::run",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time: schemas are constants.",
-          "does": "an [`OpSchema`] is chapter 22's description of one operation: its name, version and family; its inputs and outputs, each with a type and a unit; the roles it names; the errors it can return, each detail with its base kind and its data; the warnings it can give; the exactness classes it can return; whether it has a batch entry; and an example. The types here are the vocabulary; the facade, `engine-geometry`, holds every operation's schema as data and generates from them (piece G100).",
+          "does": "an [`OpSchema`] is chapter 22's description of one operation: its name, version and family; its inputs and outputs, each with a type and a unit; the roles it names; the errors it can return, each detail with its base kind and its data; the warnings it can give; the exactness classes it can return; its charge schedule; whether it has a batch entry; and an example. The types here are the vocabulary; the facade, `engine-geometry`, holds every operation's schema as data and generates from them (piece G100).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-op/src/schema.rs",
           "guarantees": [
@@ -6854,7 +6877,7 @@
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract to come in G83, the canonical encoder in G86, names in G87, history in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
+      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the canonical encoder to come in G86, names in G87, history in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {

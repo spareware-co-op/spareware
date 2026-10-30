@@ -60,6 +60,7 @@ fn stepping(ctx: &OpContext<'_>, units: u64, count: u64) -> Result<u128, OpError
 
 #[cfg(not(target_family = "wasm"))]
 #[test]
+#[cfg_attr(miri, ignore = "a wall-clock bound; Miri interprets, so it measures the interpreter")]
 #[allow(
     clippy::disallowed_methods,
     clippy::disallowed_types,

@@ -33,7 +33,7 @@ use geom_op::{
 };
 use geom_run::{
     Budget, BudgetKind, CancelToken, ChunkPlan, Exceeded, Exec, LogicalSize, Phase, Pool, Stop,
-    Usage, WorkMeter,
+    Stopped, Usage, WorkMeter,
 };
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
@@ -65,12 +65,12 @@ fn meter_after(cap: u64, used: u64) -> WorkMeter<'static> {
 /// stop.
 fn by_loop(cap: u64, used: u64, units: u64, count: u64) -> (Result<(), Stop>, Usage, Option<Stop>) {
     let mut meter = meter_after(cap, used);
-    let mut result = meter.check().map_err(|s| s.reason());
+    let mut result = meter.check().map_err(Stopped::reason);
     for _ in 0..count {
         if result.is_err() {
             break;
         }
-        result = meter.charge(units).map_err(|s| s.reason());
+        result = meter.charge(units).map_err(Stopped::reason);
     }
     (result, meter.used(), meter.stopped())
 }
@@ -84,7 +84,7 @@ fn by_charge(
     let mut meter = meter_after(cap, used);
     let result = Charge::new(PHASE, "thing", units)
         .charge(&mut meter, count)
-        .map_err(|s| s.reason());
+        .map_err(Stopped::reason);
     (result, meter.used(), meter.stopped())
 }
 
@@ -317,10 +317,10 @@ struct Threads(usize);
 impl Pool for Threads {
     #[allow(clippy::disallowed_methods, reason = "a test pool starts threads")]
     fn run_all(&self, tasks: &mut [&mut (dyn FnMut() + Send)]) {
-        let mut lanes: Vec<Vec<&mut &mut (dyn FnMut() + Send)>> =
+        let mut lanes: Vec<Vec<&mut (dyn FnMut() + Send)>> =
             (0..self.0).map(|_| Vec::new()).collect();
         for (i, task) in tasks.iter_mut().enumerate() {
-            lanes[i % self.0].push(task);
+            lanes[i % self.0].push(&mut **task);
         }
         std::thread::scope(|scope| {
             for lane in lanes {
@@ -352,7 +352,11 @@ fn squares(ctx: &OpContext<'_>, exec: Exec<'_>, size: usize) -> Result<u64, OpEr
         let big = squares.iter().filter(|&&s| s > 100).count() as u64;
         FACE.charge(meter, big)
             .map_err(|s| ctx.stopped(meter, s, PHASE))?;
-        Ok(squares.iter().sum())
+        let mut total = 0;
+        for s in &squares {
+            total += s;
+        }
+        Ok(total)
     })
 }
 
