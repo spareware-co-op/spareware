@@ -282,10 +282,11 @@ pub mod inputs;
 pub mod kernels;
 pub mod rng;
 pub mod sha256;
-// With the `reference` feature (on by default): the reference runner's nightly records and report
-// (piece G107). The gate's measured runs leave it out with every default feature, so the benchmark
-// binary does not change with it (Cargo.toml).
-#[cfg(feature = "reference")]
+// Unix and Windows only, with the `reference` feature (on by default): the reference runner's
+// nightly records and report (piece G107), which run where the runner does. Like the judge, it is
+// left out of the WebAssembly guest, whose fuel the gate measures, and out of the gate's measured
+// runs, which build without default features, so no measured binary changes with it (Cargo.toml).
+#[cfg(all(feature = "reference", any(unix, windows)))]
 pub mod timings;
 
 /// The gate: the largest rise, in percent, that any gated measure of any benchmark may show

@@ -9,7 +9,9 @@
 //! runner's wiring (its pins, engines, thread counts, header order and job lines) against the code
 //! that reads what it writes.
 
-#![cfg(feature = "reference")]
+// The records and the report exist on Unix and Windows, with the `reference` feature
+// (geom-bench's Cargo.toml says why).
+#![cfg(all(feature = "reference", any(unix, windows)))]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken seeded record must stop the test loudly.
 #![allow(
@@ -649,7 +651,6 @@ fn the_report_writes_times_and_dates_plainly() {
 }
 
 /// Runs a program of this package and returns its exit status and output.
-#[cfg(any(unix, windows))]
 fn run(program: &str, args: &[&str]) -> (i32, String, String) {
     let out = std::process::Command::new(program)
         .args(args)
@@ -662,7 +663,6 @@ fn run(program: &str, args: &[&str]) -> (i32, String, String) {
     )
 }
 
-#[cfg(any(unix, windows))]
 #[test]
 fn the_guest_times_at_a_thread_count() {
     let guest = env!("CARGO_BIN_EXE_geom-bench-guest");
@@ -707,7 +707,6 @@ fn the_guest_times_at_a_thread_count() {
     }
 }
 
-#[cfg(any(unix, windows))]
 #[test]
 fn the_tool_assembles_checks_and_reports() {
     let tool = env!("CARGO_BIN_EXE_geom-bench-timings");

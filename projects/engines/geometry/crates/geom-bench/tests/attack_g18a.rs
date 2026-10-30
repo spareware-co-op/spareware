@@ -828,7 +828,7 @@ fn both_legs_judge_the_summaries_by_the_same_rule() {
             "{run}"
         );
     }
-    assert!(MANIFEST.contains("default = [\"judge\"]"));
+    assert!(MANIFEST.contains("default = [\"judge\", \"reference\"]"));
     assert!(MANIFEST.contains("judge = [\"dep:gungraun-runner\", \"dep:serde_json\"]"));
     // The summary reports the judgement.
     let summary = workflow_step("Write the summary");

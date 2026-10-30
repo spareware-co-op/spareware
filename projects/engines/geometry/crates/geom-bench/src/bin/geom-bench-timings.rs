@@ -15,20 +15,27 @@
 //!   the last night against the night before (`geom_bench::timings::report`).
 //!
 //! Guarantees: exit status 0 with the output, 1 when a file cannot be read or a record, sample or
-//! job line is refused (the file and the line on standard error), 2 for a usage error. Nothing is
-//! written but standard output and standard error.
+//! job line is refused (the file and the line on standard error), 2 for a usage error, and 2 on a
+//! platform other than Unix and Windows, where the records do not exist. Nothing is written but
+//! standard output and standard error.
 //!
 //! Method: none; it reads its arguments and files and passes them to `geom_bench::timings`.
 //!
 //! Cost: that of the command (`geom_bench::timings`), plus reading its files.
 
-use std::io::Write as _;
-use std::path::Path;
 use std::process::ExitCode;
 
+#[cfg(any(unix, windows))]
+use std::io::Write as _;
+#[cfg(any(unix, windows))]
+use std::path::Path;
+
+#[cfg(any(unix, windows))]
 use geom_bench::catalogue::names;
+#[cfg(any(unix, windows))]
 use geom_bench::timings::{Record, assemble, report};
 
+#[cfg(any(unix, windows))]
 /// What to print and how to end.
 struct Outcome {
     status: u8,
@@ -36,6 +43,7 @@ struct Outcome {
     stderr: String,
 }
 
+#[cfg(any(unix, windows))]
 impl Outcome {
     /// A success that prints `stdout`.
     fn print(stdout: String) -> Outcome {
@@ -56,15 +64,18 @@ impl Outcome {
     }
 }
 
+#[cfg(any(unix, windows))]
 /// The usage message.
 const USAGE: &str = "usage: geom-bench-timings assemble <header> <busy> <jobs> <names> \
                      | check <record>... | report <history folder>\n";
 
+#[cfg(any(unix, windows))]
 /// Reads `path` as text, or says why it cannot.
 fn read(path: &str) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|error| format!("{path}: {error}"))
 }
 
+#[cfg(any(unix, windows))]
 /// `assemble <header> <busy> <jobs> <names>`.
 fn assemble_files(header: &str, busy: &str, jobs: &str, listed: &str) -> Result<String, String> {
     let header_text = read(header)?;
@@ -88,6 +99,7 @@ fn assemble_files(header: &str, busy: &str, jobs: &str, listed: &str) -> Result<
         .map_err(|refused| format!("{header}, {busy}, {jobs}: {refused}"))
 }
 
+#[cfg(any(unix, windows))]
 /// `check <record>...`.
 fn check_files(records: &[&str]) -> Result<String, String> {
     let mut out = String::new();
@@ -103,6 +115,7 @@ fn check_files(records: &[&str]) -> Result<String, String> {
     Ok(out)
 }
 
+#[cfg(any(unix, windows))]
 /// `report <history folder>`.
 fn report_folder(folder: &str) -> Result<String, String> {
     let entries = std::fs::read_dir(folder).map_err(|error| format!("{folder}: {error}"))?;
@@ -121,6 +134,7 @@ fn report_folder(folder: &str) -> Result<String, String> {
     Ok(report(&history))
 }
 
+#[cfg(any(unix, windows))]
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -145,4 +159,10 @@ fn main() -> ExitCode {
     let _ = std::io::stdout().write_all(outcome.stdout.as_bytes());
     let _ = std::io::stderr().write_all(outcome.stderr.as_bytes());
     ExitCode::from(outcome.status)
+}
+
+/// The records and the report exist on Unix and Windows only (geom-bench's Cargo.toml).
+#[cfg(not(any(unix, windows)))]
+fn main() -> ExitCode {
+    ExitCode::from(2)
 }

@@ -66,8 +66,9 @@ default = ["judge", "reference"]
 # binary being measured, and a measurement must not change with the tool that judges it.
 judge = ["dep:gungraun-runner", "dep:serde_json"]
 # The reference runner's nightly records and report (`geom_bench::timings`, piece G107), on by
-# default. Like the judge, the measured runs leave it out (`--no-default-features`), so the
-# benchmark binary is the same with or without it. It needs no dependency.
+# default, on Unix and Windows only. Like the judge, the measured runs leave it out
+# (`--no-default-features`) and the WebAssembly guest never has it, so no measured binary changes
+# with it. It needs no dependency.
 reference = []
 
 [dev-dependencies]
