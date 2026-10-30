@@ -20,7 +20,9 @@
 //!   function FIPS 180-4 defines, so the choice changes speed, never bits (its audit, cited in
 //!   `deny-no-std.toml`, reads each path).
 //! - **No panic, no `unsafe` here.** Writing and finishing never panic, and this module has no
-//!   `unsafe` code; the crate's own, confined to its processor backends, is read in its audit.
+//!   `unsafe` code. The crates' own `unsafe` code (`sha2`'s processor backends and its software
+//!   path's table read, `block-buffer`'s buffer, `hybrid-array`'s array casts and `cpufeatures`'
+//!   processor probe) is read site by site in their audit.
 //!
 //! Method: NIST FIPS 180-4, *Secure Hash Standard* (2015),
 //! <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, computed by the `sha2` crate (`RustCrypto`,

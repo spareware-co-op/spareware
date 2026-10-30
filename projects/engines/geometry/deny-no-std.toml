@@ -44,9 +44,9 @@ exclude-dev = true
 # and RustCrypto's sha2 with the crates it brings (owner action G79, 32.20; piece G86). Our own
 # crates are workspace members and are allowed as such; which of them a kernel crate may name is
 # the crate table's rule (projects/engines/crates/engine-geometry/tests/scaffold), which also holds
-# that only geom-num names libm, the kernel's one door to maths functions (21), and that only
-# geom-op and geom-format name sha2 (32.20). A path crate outside the workspace is not allowed,
-# and a vetted crate must come from crates.io (the gate's rules, above).
+# that only geom-num names libm, the kernel's one door to maths functions (21), and that of the
+# kernel crates only geom-op and geom-format name sha2 (32.20). A path crate outside the workspace
+# is not allowed, and a vetted crate must come from crates.io (the gate's rules, above).
 allow = [
   { crate = "libm@0.2.16", reason = """\
 deterministic: pure Rust; its default arch feature takes the processor's square root on x86-64 \
@@ -73,8 +73,10 @@ projects/kit/notes/G86-sha2-audit.md, the written audit of sha2 0.11.0 and every
 at the releases these entries pin (29.20, rule 3); pinned: 1.0.5, by Cargo.lock and this entry: \
 sha2 0.11.0 asks for ^1""" },
   { crate = "cpufeatures@0.3.1", reason = """\
-deterministic: reads at run time whether the processor has SHA instructions, so sha2 can take its \
-x86 SHA-NI or AArch64 SHA2 path; each path computes the one function FIPS 180-4 defines, so the \
+deterministic: tells sha2 whether the processor has SHA instructions, so it can take its x86 \
+SHA-NI or AArch64 SHA2 path: at run time on x86-64 and AArch64 Linux, at build time where the \
+target already has the instructions (AArch64 Apple, or -C target-cpu=native on such a processor), \
+and always no on AArch64 Windows; each path computes the one function FIPS 180-4 defines, so the \
 answer changes speed, never bits; it is compiled only for x86, x86-64 and AArch64, never for \
 wasm32; no_std: yes, the crate is #![no_std]; audited: projects/kit/notes/G86-sha2-audit.md, the \
 written audit of sha2 0.11.0 and every crate it brings, at the releases these entries pin (29.20, \
@@ -108,7 +110,7 @@ crate it brings, at the releases these entries pin (29.20, rule 3); pinned: 0.2.
 Cargo.lock and this entry: cpufeatures 0.3.1 asks for ^0.2.155 on those AArch64 targets""" },
   { crate = "sha2@0.11.0", reason = """\
 deterministic: SHA-256 as FIPS 180-4 defines it, in pure Rust; its x86 SHA-NI and AArch64 SHA2 \
-backends, chosen at run time, and its portable backend, the one on wasm32, compute the one \
+backends, chosen by cpufeatures, and its portable backend, the one on wasm32, compute the one \
 function, so the digest never depends on the machine; geom-op's tests check NIST's published \
 vectors on every leg of kernel.yml, natively and in WebAssembly (owner action G79, 32.20); \
 no_std: yes, the crate is #![no_std], and geom-op names it with default-features = false, so its \

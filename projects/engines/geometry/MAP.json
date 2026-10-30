@@ -6543,7 +6543,7 @@
             "**The digest FIPS 180-4 defines.** For every message, in whatever pieces it is written, the digest is the standard's SHA-256: the tests check NIST's published test vectors (the Cryptographic Algorithm Validation Program's byte-oriented short and long messages and its Monte Carlo chain, and FIPS 180-4's examples), whole and written in pieces.",
             "**The 128-bit cut is the digest's first 16 bytes**, the leftmost 128 bits NIST SP 800-107 section 5.1 allows a truncated SHA-256 to keep, and nothing else.",
             "**The same digest on every target and build.** `sha2` uses a processor's SHA instructions where it has them and portable code elsewhere, WebAssembly included; each computes the one function FIPS 180-4 defines, so the choice changes speed, never bits (its audit, cited in `deny-no-std.toml`, reads each path).",
-            "**No panic, no `unsafe` here.** Writing and finishing never panic, and this module has no `unsafe` code; the crate's own, confined to its processor backends, is read in its audit."
+            "**No panic, no `unsafe` here.** Writing and finishing never panic, and this module has no `unsafe` code. The crates' own `unsafe` code (`sha2`'s processor backends and its software path's table read, `block-buffer`'s buffer, `hybrid-array`'s array casts and `cpufeatures`' processor probe) is read site by site in their audit."
           ],
           "job": "SHA-256, the kernel's one hash: for content IDs and, cut to 128 bits, for persistent names.",
           "method": {
