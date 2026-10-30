@@ -19,8 +19,9 @@
 //!   the wrong thing; once every thread is ready they start together, and each times its own batch
 //!   with the rounds above. The numbers layer has no pool and starts no thread of its own, so N
 //!   threads are N copies of the benchmark running at once, one per thread, as N Web Workers are
-//!   in a browser; a WebAssembly build always times one thread (the browser runner starts one
-//!   guest per worker). It prints one line,
+//!   in a browser; one thread is the program's own, so a WebAssembly build, which cannot start
+//!   threads, always times one (the browser runner starts one guest per worker). It prints one
+//!   line,
 //!   `<name> <nanoseconds per input> <passes per round> <threads> <slowest thread's nanoseconds>`:
 //!   the upper median of the threads' medians, the fewest passes any thread's last round held, and
 //!   the slowest thread's median.
@@ -155,9 +156,17 @@ fn time_threads(name: &str, milliseconds: &str, threads: &str) -> Result<String,
              guest per worker"
         )));
     }
-    if geom_bench::catalogue::prepare_named(name).is_none() {
+    let Some(mut bench) = geom_bench::catalogue::prepare_named(name) else {
         return Err(Refusal::usage(format!("no benchmark named {name}")));
+    };
+    if threads == 1 {
+        // One thread times on this one, so WebAssembly, which cannot start threads, can run it.
+        geom_bench::golden::check(name, &bench.run())
+            .map_err(|message| Refusal { status: 1, message })?;
+        let (median, passes) = rounds(&mut *bench, budget);
+        return Ok(format!("{name} {median:.3} {passes} 1 {median:.3}\n"));
     }
+    drop(bench);
     let signal: Signal = (Mutex::new(Start::default()), Condvar::new());
     let results = thread::scope(|scope| {
         let mut handles = Vec::with_capacity(threads);
