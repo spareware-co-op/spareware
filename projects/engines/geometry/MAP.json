@@ -1576,7 +1576,7 @@
           "guarantees": [
             "**Exact definition, certified evaluation.** Points, derivatives of every order (Leibniz's rule on W·C = A) and bounds over spans are interval evaluations of those rational functions.",
             "**An exact NURBS form.** The segments are rational quadratic Bezier pieces on the same parameter; an arc whose middle weight is low (a semicircle or more) is first halved, or quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight positive. The deviation bounds only the rounding of the pieces' points and weights.",
-            "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form.",
+            "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form. A grid transform that moves every vertex exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Splits are trimmed polylines.** A split leaves the polyline untouched and trims it (`crate::trimmed`); a reversal reverses the vertices and negates the bulges, exactly."
           ],
           "job": "The bulge polyline kind: lines and arcs through vertices, each arc given by its bulge, with optional widths, as DXF's LWPOLYLINE stores them.",
@@ -1623,7 +1623,7 @@
           "guarantees": [
             "**Stored as themselves.** An arc stays an arc: its center, radius and frame are the stored doubles, exactly (chapter 7).",
             "**Exact NURBS forms.** Circles, ellipses and hyperbolas convert to rational quadratics on the tangent half-angle parameter (`crate::rational`), parabolas to a quadratic on the same parameter; each with a certified deviation, 0 when the doubles hold the conversion exactly.",
-            "**Transforms change kinds explicitly.** A similarity keeps a circle a circle (radius times its scale, frame carried); any other transform makes it an [`Ellipse`] with conjugate axes, on the same parameter; principal axes on a frame stay principal under a similarity.",
+            "**Transforms change kinds explicitly.** A similarity keeps a circle a circle (radius times its scale, frame carried); any other transform makes it an [`Ellipse`] with conjugate axes, on the same parameter; principal axes on a frame stay principal under a similarity. A grid transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Exact split and reversal.** A split changes only the domain; a reversal negates the domain and v (a frame's normal), exactly."
           ],
           "job": "The conic kinds: circle and arc, ellipse and elliptical arc, hyperbola and parabola, each stored as itself.",
@@ -1864,7 +1864,7 @@
             "**Planar kinds see the plane.** For a 2D kind the classification is of the transform's 2×2 block, so a uniform scale of the plane keeps a circle a circle.",
             "**Typed.** A degenerate transform (singular, or too close to it to decide) is refused for the analytic kinds, whose definitions need independent vectors; a 2D kind takes only a transform acting in the plane.",
             "**Normals carried, not reflected.** A normal maps by n ↦ sign(det M)·M·n, so the frame built from the images, x̂′ along M·x and ŷ′ = n̂′ × x̂′, is exactly the image of x̂ and ŷ under a similarity M = s·R: (R·a) × (R·b) = det R · R·(a × b) for an orthogonal R.",
-            "**Exact where the arithmetic is.** The enclosed images use `tight`, so an exact transform of exact data gives exact points."
+            "**Exact where the arithmetic is.** The enclosed images use `tight`, so an exact transform of exact data gives exact points, and [`Motion::exact_for`] says when a grid transform moves a kind's stored points exactly, so that the kind rebuilt from them is exactly its image."
           ],
           "job": "A typed transform as the analytic kinds apply it: its entries, its classification, the images of stored points, vectors and normals, and the exact image of a kind's vectors for the deviation.",
           "method": {
@@ -1901,7 +1901,7 @@
           "target": "lib"
         },
         {
-          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis.",
+          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives.",
           "does": "[`Offset`] stores a trimmed basis curve C and an [`OffsetLaw`]:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
@@ -7786,6 +7786,29 @@
           "target": "lib"
         },
         {
+          "cost": "a product or quotient of k-bit numbers is O(k²) at these sizes; [`cos_sin`] and [`exp`] about 150 terms each; no recursion.",
+          "does": "an [`IBig`] n stands for n / 2^400. [`of`] reads a double exactly but for the bits below 2^−400, [`mul`] and [`div`] cut their results to a whole number of 2^−400, [`sqrt`] is the floor of the root, [`cos_sin`] and [`exp`] sum their Taylor series until a term vanishes, and π is read from its first 100 decimal places. [`cos_sin_pi`], [`tan_pi`] and [`tanh`] are built on them, for the half-turn angles and the tangent half-angle maps of the kinds. [`rational`] and [`of_rational`] pass values to and from the exact rationals of [`crate::nurbs_reference`], and [`within`] decides whether two points are at most a distance apart.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixed.rs",
+          "guarantees": [
+            "**Far finer than a double.** Each cut is below 2^−400; a series of up to a few hundred terms adds a few hundred cuts; π's 100 decimal places err by less than 2^−332, which [`cos_sin_pi`] carries once after reducing t exactly to [−1, 1). Values from a few operations on arguments below 2^20 are within 2^−300 of the exact ones, against the 2^−53 relative of a double, so a law checked with a margin of 2^−200 is never decided by the truth's own error.",
+            "**Independent of the kernel.** Integer arithmetic and series only: no call into a kernel crate and no `f64` maths.",
+            "**The same bits on every target.** Integer arithmetic throughout."
+          ],
+          "job": "Fixed-point numbers of 400 fractional bits: the higher precision of the law catalogue's dense refutation sampler (piece G69, chapter 28.3), in which every bound a kind or a NURBS operation states is refuted if it is wrong.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/321941.321944",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the Taylor series of cos, sin and exp in fixed point, the argument of exp halved until it is at most 1 and the result squared back (R. P. Brent, \"Fast multiple-precision evaluation of elementary functions\", *Journal of the ACM* 23 (1976), 242–251, <https://doi.org/10.1145/321941.321944>); the integer square root of dashu; the fixed point of piece G61's attack tests (`geom-curve`'s `tests/attack_g61.rs`), which this module generalises for the law catalogue of chapter 28.3 (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::fixed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the length of the path; [`kernel_crates`] reads one directory.",
           "does": "[`place`] says, for a path relative to the repository root, which kernel crate it belongs to and whether it is in the foundation set, a development crate, or outside the kernel. [`kernel_crates`] lists the kernel crates in the kernel's folder. The mutation gate ([`crate::mutants`]) and the coverage gate ([`crate::coverage`]) both classify with these, so the two gates can never disagree about what the foundation set is.",
           "family": [],
@@ -8624,7 +8647,7 @@
         },
         {
           "cost": "a blossom is O(p²·d) rational operations for dimension d; a point one blossom; insertion and refinement one blossom per new control point; elevation C(p + t, p) blossoms per new control point, which this reference accepts because it runs on small cases only. The rationals grow with the knots' and points' binary expansions; no recursion.",
-          "does": "a [`Spline`] holds a degree, a knot vector and control points as exact rationals, in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a kernel curve holds: every finite double is a binary fraction, so nothing rounds. Everything else comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at (u, …, u); [`Spline::point`] divides by the weight. [`Spline::homogeneous_derivative`] is the blossom with k of its arguments the unit direction (u + 1) − u, times p!/(p − k)!: the k-th derivative of the homogeneous curve (piece G68). A new knot vector over the same domain, finer or of higher degree, gets its control points from the dual functional property: control point i of a spline of degree q is the blossom of any of its pieces in that point's support, at the q knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces' blossoms that way. [`Spline::elevate`] reads the blossom of each piece seen as a polynomial of degree p + t, which is the mean of the original blossom over every choice of p of its p + t arguments, on the knot vector with each distinct knot repeated t more times.",
+          "does": "a [`Spline`] holds a degree, a knot vector and control points as exact rationals, in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a kernel curve holds: every finite double is a binary fraction, so nothing rounds. Everything else comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at (u, …, u); [`Spline::point`] divides by the weight. [`Spline::homogeneous_derivative`] is the blossom with k of its arguments the unit direction (u + 1) − u, times p!/(p − k)!: the k-th derivative of the homogeneous curve (piece G68). A [`Patch`] is the tensor product of two bases, each a spline whose control points are the unit vectors, so its point lists the basis values; the law catalogue checks surfaces against it (piece G69). A new knot vector over the same domain, finer or of higher degree, gets its control points from the dual functional property: control point i of a spline of degree q is the blossom of any of its pieces in that point's support, at the q knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces' blossoms that way. [`Spline::elevate`] reads the blossom of each piece seen as a polynomial of degree p + t, which is the mean of the original blossom over every choice of p of its p + t arguments, on the knot vector with each distinct knot repeated t more times.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/nurbs_reference.rs",
           "guarantees": [
@@ -8632,7 +8655,7 @@
             "**Independent of the kernel.** Written from the definitions below, without reading `geom-nurbs`'s code (chapter 28.9: a different author, a different agent session), and by a different method: blossoms, where the kernel follows The NURBS Book's algorithms as `NLib` implements them. It shares no code with the kernel and calls none.",
             "**Refused, never guessed.** Malformed input (knots out of order, counts that do not match, a weight that is not positive, a value that is not finite), a parameter outside the domain, a knot that cannot be inserted and a curve that cannot be elevated are typed [`ReferenceError`]s."
           ],
-          "job": "The reference implementation of NURBS curves (chapter 28.9): evaluation, knot insertion, refinement and degree elevation in exact rationals, to check `geom-nurbs` against.",
+          "job": "The reference implementation of NURBS curves and surfaces (chapter 28.9): evaluation, knot insertion, refinement and degree elevation in exact rationals, to check `geom-nurbs` against.",
           "method": {
             "links": [
               "https://doi.org/10.1016/0021-9045(72",
