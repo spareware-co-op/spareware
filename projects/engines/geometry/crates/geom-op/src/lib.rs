@@ -32,3 +32,8 @@
 //! Status: scaffold only; built by pieces G82, G83, G86, G87, G88, G104, G143, G144, G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod cbor;
+pub mod hash;
