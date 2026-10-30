@@ -2316,6 +2316,29 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "at most [`MAX_RECORDS`] records, two attributes and [`MAX_NAMES`] values each; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: two attributes with arbitrary behaviours (one opaque, of an unknown owner; one a point, which a transform may move), values on up to [`MAX_NAMES`] input names, a history of up to [`MAX_RECORDS`] outputs of every origin and some deleted inputs, and the step's transform and copy role. [`check`] runs the step and compares every output's value with 8.4's table, written here from the table; it checks that a note is given exactly for each value a merge or a transform dropped; and it sets a value with `geom_name::set` and checks that applying that operation's own history changes nothing. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/attributes.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case whose history `History` accepts.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-name`'s attribute step gives each output exactly the values section 8.4's table gives, and setting a value changes no entity.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "differential testing against section 8.4's table read independently (`projects/engines/geometry/architecture/08-topology.md`), over histories of chapter 20.3's records (`projects/engines/geometry/architecture/20-naming-history.md`)."
+          },
+          "path": "geom_fuzz::attributes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
