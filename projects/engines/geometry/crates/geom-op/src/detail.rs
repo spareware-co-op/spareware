@@ -45,6 +45,7 @@ use core::fmt;
 use geom_num::NumError;
 use geom_run::{Exceeded, Interrupted, ItemError, RunError};
 
+use crate::batch::BatchDetail;
 use crate::kind::ErrorKind;
 use crate::remedy::Remedy;
 
@@ -58,6 +59,8 @@ pub enum OpErrorDetail {
     Run(RunDetail),
     /// A failure of the numbers layer, wrapped by meaning.
     Num(NumDetail),
+    /// A batch that could not run its items (piece G104).
+    Batch(BatchDetail),
 }
 
 impl OpErrorDetail {
@@ -67,6 +70,7 @@ impl OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => detail.kind(),
             OpErrorDetail::Num(detail) => detail.kind(),
+            OpErrorDetail::Batch(detail) => detail.kind(),
         }
     }
 
@@ -76,6 +80,7 @@ impl OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => detail.remedies(),
             OpErrorDetail::Num(detail) => detail.remedies(),
+            OpErrorDetail::Batch(detail) => detail.remedies(),
         }
     }
 }
@@ -85,6 +90,7 @@ impl fmt::Display for OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Num(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Batch(detail) => fmt::Display::fmt(detail, f),
         }
     }
 }
