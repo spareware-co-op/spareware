@@ -2488,6 +2488,35 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a header payload cannot be read.",
+          "file": "projects/engines/geometry/crates/geom-format/src/header.rs",
+          "kinds": [
+            {
+              "doc": "The bytes break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Not a header: what was expected, at which byte of the payload.",
+              "name": "Shape",
+              "shape": "struct"
+            },
+            {
+              "doc": "A major format version this reader does not know.",
+              "name": "Format",
+              "shape": "struct"
+            },
+            {
+              "doc": "An extension key with its must-understand bit set, unknown to this version.",
+              "name": "MustUnderstand",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::header",
+          "name": "HeaderError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a stored number cannot be used.",
           "file": "projects/engines/geometry/crates/geom-format/src/range.rs",
           "kinds": [
@@ -2867,6 +2896,30 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the payload; a few small allocations for the ladder and the program's name.",
+          "does": "a [`Header`] holds the format version, the kernel edition, the `NameScheme`, the tolerance ladder in grid steps, the Unicode version of hashed text and the writing program, and ends with an extension map (24.3). [`Header::v1`] fills it for this kernel from `geom_num::ladder`'s rungs; [`Header::record`] writes it as a required record of type 1; [`Header::read`] reads a payload back. Its CDDL is `format/cddl/header.cddl` in the kernel's tree:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/header.rs",
+          "guarantees": [
+            "**One encoding** for every header: written by `geom-op`'s canonical encoder, keys ascending.",
+            "**A reader refuses what it cannot honour**: a major format version other than 1 ([`HeaderError::Format`]), and an extension key with its must-understand bit (bit 0) set that this version does not know ([`HeaderError::MustUnderstand`]). An unknown key without that bit is skipped and listed in [`Header::ignored`]. A newer minor version is read.",
+            "**The ladder is the kernel's**: [`Header::v1`] takes every rung from `geom_num::ladder`, so a file records exactly the bounds its geometry was made under."
+          ],
+          "job": "The header record, the first record of every file: what a reader must know before it reads anything else (24.4).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/06-numbers.md",
+              "https://www.rfc-editor.org/rfc/rfc8610"
+            ],
+            "text": "chapter 24.3 and 24.4 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; the ladder of chapter 6.5, `projects/engines/geometry/architecture/06-numbers.md`; CDDL by RFC 8610, <https://www.rfc-editor.org/rfc/rfc8610>."
+          },
+          "path": "geom_format::header",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant per value; a column is one pass; [`plane`]'s divisor takes at most a few hundred remainder steps on 128-bit values. No allocation, no recursion.",
           "does": "a file can pass every checksum and still hold a coordinate near 2^50, and release builds wrap integers silently. So every reader checks: grid coordinates within ±(2^40 − 1) steps ([`grid`], [`grid_column`]); doubles, control points included, finite and within the same range ([`real`], [`real_column`]); and planes reduced, with normals within 83 bits and offsets within 125 ([`plane`]). A failure is [`RangeError::OutOfRange`] with the record, the byte offset, the field and how many bits the value needs, or [`RangeError::Malformed`] for a plane that is not reduced.",
           "family": [],
@@ -2916,6 +2969,27 @@
           "target": "lib"
         },
         {
+          "cost": "constant data; rendering allocates the table's text.",
+          "does": "[`RECORDS`] lists every record type format 1 defines; [`ENVELOPE`] and each type's `fields` describe the fields a reader meets, in order. [`registry_table`] and [`field_table`] render them as the Markdown the specification holds, and the crate's `tests/registry.rs` fails when a committed table differs from what they render (the drift check). [`knows`] is the registry as a reader's `known` predicate.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/registry.rs",
+          "guarantees": [
+            "**One list.** A tag appears once, tags are never reused, and the tables in the specification are exactly what this list renders.",
+            "**The constants agree**: the header's and END's tags and schemas here are the ones `file` and `header` write (the tests check each)."
+          ],
+          "job": "The registry of record types, as code: every version-1 record's tag, name, schema, flags, CDDL and fields, from which `format/REGISTRY.md`'s table and `format/SPEC.md`'s field tables are generated (24.2, 24.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.2 and 24.6 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`: \"field tables are generated from code annotations\"."
+          },
+          "path": "geom_format::registry",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one call of the source per piece it returns; no allocation. Recursion: none.",
           "does": "[`ByteSource`] hands out bytes in order, in pieces of whatever size it likes; [`RangeSource`] reads bytes at any offset of a known length. [`read_exact`] and [`read_exact_at`] fill a buffer from either, however the source splits its reads. Byte slices implement both ([`SliceSource`] for the streamed one).",
           "family": [],
@@ -2943,7 +3017,7 @@
       "provenance": [],
       "sections": "12.12, 16.1, 18.10, 21, 23.8, 23.11 and 24.1 to 24.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the rest by pieces G93, G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.",
+      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); the rest by pieces G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.",
       "summary": "Spare Kit geometry kernel: the native file format."
     },
     {
