@@ -931,28 +931,36 @@ pub fn check_narrowed(list: &[Mutant], all: &[Mutant], files: &Regex) -> Result<
 /// crates differ by their test suites: geom-num's mean is about twenty times geom-curve's.
 ///
 /// Measured: each mutant's build and test time (the `phase_results` of `outcomes.json`) in the
-/// shards of the full run 40859780064 (6954 mutants of geom-math, geom-num, geom-pool and
-/// geom-run) and of the diff runs of pieces G54, G55, G60, G61, G62, G65 and G66 (40859433175,
-/// 40859444605, 40866610641, 40866622419, 40882301597, 40882313615 and 40898596532), which
-/// mutated every crate. The largest mean of each crate, in seconds, with the run that found it:
-/// geom-bvh 1.9 (40882313615), geom-curve 1.4 (40882301597), geom-linalg 0.8 (40866622419),
-/// geom-math 22.1 (40866622419; 9.3 over the whole crate in 40859780064), geom-num 33.2
-/// (40866610641; 25.4 over the whole crate in 40859780064), geom-nurbs 5.8 (40882313615),
-/// geom-pool 6.0 and geom-run 5.5 (40859780064), geom-surface 2.2 (40898596532).
+/// shards of the full runs 40859780064 (6954 mutants of geom-math, geom-num, geom-pool and
+/// geom-run) and 40964349843 (all 17,589 of the kernel), and of the diff runs of pieces G54, G55,
+/// G60, G61, G62, G65 and G66 (40859433175, 40859444605, 40866610641, 40866622419, 40882301597,
+/// 40882313615 and 40898596532). The largest mean of each crate, in seconds, with the run that
+/// found it: geom-bvh 1.9 (40882313615), geom-curve 1.4 (40882301597 and 40964349843),
+/// geom-linalg 0.8 (40866622419 and 40964349843), geom-math 22.1 (40866622419; 10.6 over the whole
+/// crate in 40964349843), geom-num 33.2 (40866610641; 25.9 over the whole crate in 40964349843),
+/// geom-nurbs 6.2 (40964349843), geom-pool 6.0 (40859780064), geom-run 11.7 (40964349843),
+/// geom-surface 2.4 (40964349843).
+///
+/// A run narrowed to some files is not a measure of its crates while cargo-mutants 27.1.0 is
+/// pinned. Its struct-field strays (see [`UNFILTERED_GENRE`]) put other crates' tests into a
+/// shard's baseline, and cargo-mutants sets the shard's timeout from that baseline. In run
+/// 40964341569, narrowed to geom-run, geom-run's 17 timeouts took 466 s each in one shard and
+/// 105 s in the other.
 ///
 /// The margin covers a shard of mutants slower than their crate's mean: cargo-mutants gives each
 /// shard a run of consecutive mutants (its default `--sharding slice`), so a shard can hold one
 /// stretch of one crate. In those runs, the slowest stretch of each crate as long as a shard of it
-/// took at most 0.69 of its planned time: 214 geom-num mutants in 164 minutes of the full run.
+/// took at most 0.69 of its planned time: 214 geom-num mutants in 164 minutes of the full run
+/// 40859780064. In 40964349843 it was 0.57, and the longest shard job took 135 minutes.
 pub const SECONDS_PER_MUTANT: [(&str, u64); 9] = [
     ("geom-bvh", 4),
     ("geom-curve", 3),
     ("geom-linalg", 2),
     ("geom-math", 45),
     ("geom-num", 67),
-    ("geom-nurbs", 12),
+    ("geom-nurbs", 13),
     ("geom-pool", 13),
-    ("geom-run", 11),
+    ("geom-run", 24),
     ("geom-surface", 5),
 ];
 
