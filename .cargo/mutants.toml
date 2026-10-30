@@ -8,7 +8,16 @@
 # ones below; list options, the file globs included, are added to them, so a command-line --file
 # widens the run rather than narrowing it. The CI jobs give none. To narrow a local run, match the
 # mutants' names with --re (for example --re 'geom-num/src/grid\.rs:'), which this file leaves
-# empty.
+# empty, and narrow by file as well: cargo-mutants 27.1.0 applies --re and --exclude-re to every
+# mutant except "delete field ... from struct ... expression", which it adds without the name test
+# (src/visit.rs, visit_expr_struct), so a --re run still lists those from every file examined here.
+# A command-line --exclude adds to exclude_globs and so narrows; a --file narrows only under
+# --no-config, which then needs this file's settings given on the command line.
+#
+# cargo-mutants reads source and does not evaluate cfg, so it mutates Kani harnesses, which only
+# Kani compiles, and every such mutant would survive. Each `#[cfg(kani)] mod proofs` therefore
+# carries `#[cfg_attr(test, mutants::skip)]`: cargo-mutants reads the attribute from the source,
+# and no build evaluates it, since the module exists only under Kani, where `test` is off.
 
 # Mutate only the kernel crates' own source, never their tests (cargo-mutants skips #[test]
 # functions and #[cfg(test)] modules by itself) and never the development crates, which do not ship

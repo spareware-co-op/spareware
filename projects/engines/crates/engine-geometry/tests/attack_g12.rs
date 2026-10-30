@@ -533,7 +533,10 @@ fn attack_panic_macros_other_than_panic_pass() {
 /// through the gate's own readers as geom-op's folder, each must be reported. (The fixer's gate
 /// reads, besides the folder, every file the compiler read for the library, from the dep-info its
 /// builds and clippy runs leave, `gate::compiled_sources`; this test reads both, as the gate's
-/// `gate_build` and `gate_clippy` runs do.)
+/// `gate_build` and `gate_clippy` runs do.) The gate reads crate folders relative to the
+/// workspace root, so the probe's folder, under `CARGO_TARGET_TMPDIR`, must sit under it too: with
+/// `CARGO_TARGET_DIR` pointed outside the workspace (a target directory shared between checkouts)
+/// this test fails, which says nothing about the gate; CI's target directory is in the workspace.
 #[test]
 fn attack_statics_from_files_the_scan_never_reads() {
     let root = repo::workspace_root();
