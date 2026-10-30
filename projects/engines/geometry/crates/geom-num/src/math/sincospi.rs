@@ -406,17 +406,27 @@ fn refine(iq: u64, z: f64, hard: &[HardCase]) -> f64 {
     // or all zeros; then the input may be one of the listed hard cases.
     let t = tsl.to_bits();
     if (t | (0xfff << 52)) == u64::MAX || (t << 12) == 0 {
-        let sgn = if iq > 2048 { -1.0 } else { 1.0 };
-        let iq = iq & 0x7ff;
-        for h in hard {
-            // At most one of the two conditions can hold.
-            // C: `iq == 2048 − h.iq`; every listed index is below 2048.
-            if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {
-                return sgn * h.r + sgn * h.d;
-            }
+        if let Some(r) = hard_case(x, iq, hard) {
+            return r;
         }
     }
     tsh + tsl
+}
+
+/// The listed result for the input at table index `iq` with remainder `x`, if it is one of `hard`
+/// or its mirror image, with the sign of the fold; `None` otherwise (C: the loop over `db` in
+/// `as_sinpi_refine` and `as_cospi_refine`).
+fn hard_case(x: f64, iq: u64, hard: &[HardCase]) -> Option<f64> {
+    let sgn = if iq > 2048 { -1.0 } else { 1.0 };
+    let iq = iq & 0x7ff;
+    for h in hard {
+        // At most one of the two conditions can hold.
+        // C: `iq == 2048 − h.iq`; every listed index is below 2048.
+        if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {
+            return Some(sgn * h.r + sgn * h.d);
+        }
+    }
+    None
 }
 
 /// Hard cases of `sinpi`'s accurate path (C: `db` in `as_sinpi_refine`).
@@ -1714,6 +1724,35 @@ mod tests {
                     let got = refine(iq, x * hf!("0x1p63"), hard);
                     assert_eq!(got.to_bits(), want.to_bits(), "iq = {iq}, x = {x:e}");
                 }
+            }
+        }
+    }
+
+    /// `sticky` leaves a zero `y1` alone, of either sign and whatever `y2` is: the C code's
+    /// decrement of the bit pattern would make a NaN there, and the adjustment could not change
+    /// `y0 + y1` anyway.
+    #[test]
+    fn sticky_leaves_a_zero_alone() {
+        for y1 in [0.0, -0.0] {
+            for y2 in [1.0, -1.0, f64::MIN_POSITIVE] {
+                assert_eq!(sticky(y1, y2).to_bits(), y1.to_bits(), "{y1} {y2}");
+            }
+        }
+    }
+
+    /// `hard_case` returns a listed result only at the listed table index (with the sign of the
+    /// fold above 2048), or for the mirror image at the mirrored index: the listed remainder at
+    /// any other index, or its mirror at any other index, is no hard case.
+    #[test]
+    fn a_hard_case_needs_its_own_index() {
+        for hard in [&SINPI_HARD[..], &COSPI_HARD[..]] {
+            for h in hard {
+                let s = h.r + h.d;
+                assert_eq!(hard_case(h.x, h.iq, hard), Some(s));
+                assert_eq!(hard_case(h.x, h.iq + 2048, hard), Some(-s));
+                assert_eq!(hard_case(h.x, h.iq + 1, hard), None);
+                assert_eq!(hard_case(-h.x, 2048 - h.iq, hard), Some(s));
+                assert_eq!(hard_case(-h.x, (2048 - h.iq) ^ 1, hard), None);
             }
         }
     }
