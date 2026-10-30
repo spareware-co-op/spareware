@@ -33,7 +33,6 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     reason = "oracles and generators; the rules are for kernel code"
 )]
 #![allow(
@@ -175,7 +174,11 @@ fn oracle(points: &[&[i64]], lift: bool, negate: bool) -> BigInt {
         .map(|p| {
             let mut row: Vec<BigInt> = p.iter().map(|&v| BigInt::from(v)).collect();
             if lift {
-                row.push(p.iter().map(|&v| BigInt::from(v) * v).sum::<BigInt>());
+                row.push(
+                    p.iter()
+                        .map(|&v| BigInt::from(v) * v)
+                        .fold(BigInt::from(0), |s, x| s + x),
+                );
             }
             row.push(BigInt::from(1));
             row
@@ -331,7 +334,12 @@ fn orient3d_filter_is_exact_just_inside_and_just_outside_its_bound() {
         let a: [i64; 3] = std::array::from_fn(|_| rng.range(-(1 << 37), 1 << 37));
         let u: [f64; 3] = std::array::from_fn(|_| rng.real(-1.0, 1.0) * (1u64 << 38) as f64);
         let k = rng.real(20.0, 38.0);
-        let e: [f64; 3] = std::array::from_fn(|_| rng.real(-1.0, 1.0) * k.exp2());
+        // 2^k as exp(k·ln 2) through the correctly rounded exp, not `exp2`, which IEEE 754 does
+        // not make correctly rounded: the same draws everywhere.
+        let scale = geom_num::math::exp(k * core::f64::consts::LN_2)
+            .unwrap()
+            .get();
+        let e: [f64; 3] = std::array::from_fn(|_| rng.real(-1.0, 1.0) * scale);
         let lambda = rng.real(-1.0, 1.0);
         let ba = round(u);
         let ca = round(std::array::from_fn(|i| lambda * u[i] + e[i]));

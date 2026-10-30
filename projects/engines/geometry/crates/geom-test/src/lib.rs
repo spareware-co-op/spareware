@@ -161,6 +161,8 @@
 //! - `clap` 4.6 (G21), the command line of the `kernel-quality` binary, without colour or terminal
 //!   detection.
 //! - `lcov` 0.8 (G21), to read the LCOV tracefiles cargo-llvm-cov writes ([`coverage`]).
+//! - `regex-lite` 0.1.9, the regular expressions of a full mutation run narrowed to some files
+//!   ([`mutants::check_narrowed`]), in the syntax of cargo-mutants' `--re`.
 //! - `yaml-rust2` 0.13, a development dependency (G21), which reads
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
@@ -180,7 +182,7 @@
 //!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
 //!   `yaml-rust2`, `hashlink`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
 //!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
-//!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base` and
+//!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
 //!   `static_assertions`.
 //! - Apache-2.0: `num-modular`, which `dashu-int` brings in.
 //! - MIT/Apache-2.0: `lcov` and `arraydeque` (the older spelling of MIT OR Apache-2.0).

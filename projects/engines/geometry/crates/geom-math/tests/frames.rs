@@ -87,7 +87,7 @@ const MAP_DIRECTIONS: [(i32, i32); 1] = [(1, 0)];
 const IRRATIONAL_DIRECTIONS: [(i32, i32); 5] = [(1, 2), (2, 3), (-5, 7), (1000, 1), (12345, -6789)];
 
 /// Scale factors as (num, den).
-const SCALES: [(u32, u32); 7] = [
+const SCALES: [(u64, u64); 7] = [
     (1, 1),
     (99_987_654, 100_000_000),
     (9996, 10000),
@@ -795,7 +795,14 @@ fn frame_kinds_and_vertical_crs() {
 /// Scale ratios far from one (chapter 17.1 allows any): exact conversions both ways.
 #[test]
 fn extreme_scales_convert_exactly() {
-    for (kn, kd) in [(1, 1000), (4_000_000_007, 3), (1, u32::MAX), (u32::MAX, 2)] {
+    // The 32-bit extremes, where a map value's half-ulp error, magnified by 1/k, stays below half
+    // a step; piece G48's attack holds 64-bit ratios to the exact model instead.
+    for (kn, kd) in [
+        (1, 1000),
+        (4_000_000_007, 3),
+        (1, 4_294_967_295),
+        (4_294_967_295, 2),
+    ] {
         let k = Scale::new(kn, kd).unwrap();
         for dir in [(3, 4), (1, 0), (1, 2)] {
             let r = Rotation::direction(dir.0, dir.1).unwrap();

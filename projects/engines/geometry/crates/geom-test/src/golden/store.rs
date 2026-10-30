@@ -35,6 +35,10 @@
 //!   `src/golden.txt`, chapter 23.13's output hashes), and its digest is the SHA-256 of the file's
 //!   text with `\n` line ends ([`text_digest`]), so every edit to that file is an edit to the store.
 //!
+//! A pull request that adds a golden or a history record runs this crate's `tests/attack_g19.rs`
+//! before it pushes, besides `golden check`: those attacks plant malformed variants of the real
+//! store, and a new record that parses can still break one of them, on every test leg at once.
+//!
 //! Guarantees:
 //!
 //! - **Nothing ambiguous parses.** Unknown fields, a missing field, a digest that is not 64

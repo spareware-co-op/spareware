@@ -756,6 +756,7 @@ version = "0.0.0"
 dependencies = [
  "divan",
  "geom-num",
+ "geom-run",
  "geom-test",
  "gungraun",
  "gungraun-runner",
@@ -1404,6 +1405,7 @@ dependencies = [
  "pulldown-cmark",
  "quote",
  "rand 0.10.3",
+ "regex-lite",
  "serde",
  "serde_json",
  "sha2",

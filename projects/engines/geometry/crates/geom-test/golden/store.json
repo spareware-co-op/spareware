@@ -88,13 +88,19 @@
             "test": "determinism",
             "function": "golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6",
+          "sha256": "d46b124ed75682f9718101362b4a9a858fb17170e264db37fc68ac037fb8edac",
           "history": [
             {
               "sha256": "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126",
               "kind": "improvement",
               "piece": "G05",
               "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which geom-math's rotations call: only the two sections that build rotations from them changed, transform (6773dadd...852b18 before) and boxes (2e8f3297...bc7e3e before); every other section's digest is the same. Recorded on main in G03's pull request (commit bbbc379), before the store existed."
+            },
+            {
+              "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6",
+              "kind": "improvement",
+              "piece": "G48",
+              "why": "Piece G48 moved geom-math onto geom-num's double-double type (piece G25) and made out-of-range conversions report the exact coordinate. Only two sections changed: dd (a675b95c...61b257 before), which now exercises geom-num's DD, the one geom-math's frames use, with its own algorithms, tighter proven bounds and errors (division by zero NotFinite, the root of a negative OutsideDomain); and frames (ae980551...e555d700 before), whose OutOfRange values are now the exact rounded coordinate, saturated only beyond i128, in the order height, x, y, where G03 reported estimates. Every successful conversion is unchanged: both pieces round correctly, and the rounding is unique. The other eight sections' digests are the same."
             }
           ]
         },
@@ -106,15 +112,31 @@
             "test": "attack_g03",
             "function": "results_identical_across_targets"
           },
-          "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25",
+          "sha256": "629014b5a4dbadaf75b8d24b6aa1224580df998a43a9139fc762001196816e27",
           "history": [
             {
               "sha256": "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9",
               "kind": "improvement",
               "piece": "G05",
               "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which the workload's rotations call; sqrt, abs, floor, ceil and round_ties_even, the only other maths functions geom-math calls, are unchanged. Recorded on main in G03's pull request (commit c19cca4), before the store existed."
+            },
+            {
+              "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25",
+              "kind": "improvement",
+              "piece": "G48",
+              "why": "Piece G48 moved geom-math onto geom-num's double-double type (piece G25): the workload's double-double arithmetic (add, mul, div and sqrt of random operands) now runs geom-num's DD, with its own algorithms and tighter proven bounds, so some results differ in their last bits and its errors differ (division by zero NotFinite, the root of a negative OutsideDomain). The workload's map conversions hash only successful results, which are correctly rounded in both pieces and so unchanged, and its transforms are untouched."
             }
           ]
+        },
+        {
+          "id": "geom-math/frames",
+          "what": "geom-math's frame workload (piece G48): map to frame from doubles and from exact decimal text, frame to map, in metres, feet, Clarke's foot and random linear units, Map and Ground frames with 64-bit scale factors, out-of-range values, decimal text forms, units from decimals and exact shifts, as tests/attack_g48.rs records it.",
+          "check": {
+            "crate": "geom-math",
+            "test": "attack_g48",
+            "function": "frame_results_identical_across_targets"
+          },
+          "sha256": "8a315871b62b2c0f1065d7092766e9033c0329f127a43a9fea2b89955577b574"
         },
         {
           "id": "geom-run/helpers",
@@ -190,9 +212,15 @@
               "kind": "corpus",
               "piece": "G52",
               "why": "12 new benchmarks in two new groups: newton (Krawczyk and Hansen-Sengupta steps on a circle and a line, and on a system of four unknowns) and dual (Jacobians over reals and over intervals), each on typical and extreme inputs; no existing digest moved"
+            },
+            {
+              "sha256": "7a8df916ad8ce91de1084d9b84304e06cec1b696eb166a081cba3d0f7597e826",
+              "kind": "corpus",
+              "piece": "G53",
+              "why": "6 new benchmarks in two new groups: isolate (the root-isolation engine on a cubic in one unknown and on a circle and a line) and ball (a cubic evaluated in double-double balls), each on typical and extreme inputs; no existing digest moved"
             }
           ],
-          "sha256": "7a8df916ad8ce91de1084d9b84304e06cec1b696eb166a081cba3d0f7597e826"
+          "sha256": "c52cb535ddfc80e66dbcac7dc95fc0b542fd912357820c9afb7e49aee1058e8d"
         },
         {
           "id": "geom-nurbs/operations",
@@ -232,7 +260,15 @@
             "test": "analytic_determinism",
             "function": "analytic_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342"
+          "sha256": "0c25c27e3c8c9f679924d6644ccd47a55eeb0929eee4271c638c9bce12627fe9",
+          "history": [
+            {
+              "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "The analytic kinds' bounds and derivative bounds are their closed-form extents now (piece G67): each coordinate's range over the span from its values at the span's ends and at its critical points in closed form, where G61 took the interval extension over eighths of a turn. So the bound records of the line, circle, ellipse, hyperbola, parabola, helix and involute moved inward, and so did the deviations of the helix's and involute's NURBS forms, whose Taylor remainders rest on derivative bounds. The change is in the bound route alone (form.rs's bound and derivative_bound); the result count (30606) and the refusals (6) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-curve/compound",
@@ -242,7 +278,43 @@
             "test": "compound_determinism",
             "function": "compound_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2"
+          "sha256": "3f8ae9216582bafeecce26ad7b619ffa4208ab095251518127420cd24c400760",
+          "history": [
+            {
+              "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "The analytic kinds' bounds and derivative bounds are their closed-form extents now (piece G67). The bulge, trimmed, composite and offset kinds bound their analytic leaves through them, a composite's enclosures over a parameter interval use them, and the offsets' NURBS caches take their Taylor remainders from them, so those records moved. No compound kind's own code changed; the result count (10506) and the refusals (6) are unchanged."
+            }
+          ]
+        },
+        {
+          "id": "geom-curve/transition",
+          "what": "The transition kind of geom-curve (piece G63): 30 rounds of one transition per curvature law (clothoid, Helmert, Bloss, cosine, sine, cant-coupled, and IFC's polynomial, cosine and sine spirals), each with its panel count and remainder and, at six stations, its point and three derivatives in doubles, its enclosures to the third derivative, its turn and its curvature; and 6 refusals (the five asked for, and one random polynomial spiral past the panel cap): 6731 results in the canonical encoding of tests/transition_determinism.rs.",
+          "check": {
+            "crate": "geom-curve",
+            "test": "transition_determinism",
+            "function": "transition_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "3cb00aed8da0c554da8bfda0423b62ed46559d7d794394056018577c17f0c7db"
+        },
+        {
+          "id": "geom-curve/transition-operations",
+          "what": "The transition kind's operations in geom-curve (piece G64): 6 rounds of one transition per curvature law (clothoid, Helmert, Bloss, cosine, sine, cant-coupled, and IFC's polynomial, cosine and sine spirals), each with its NURBS form (every knot, control point and the deviation), its split at 0.37 of its length (both parts' domains and enclosures there), its reversal, a reversed part with its bound, its bound and three derivative bounds over a span, and its images under a certified rotation and a uniform scale of the plane (kind, deviation and an enclosure); and 6 refusals: 978 results in the canonical encoding of tests/transition_ops_determinism.rs.",
+          "check": {
+            "crate": "geom-curve",
+            "test": "transition_ops_determinism",
+            "function": "transition_operations_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "70b485106f19a98f27ddb0531c7911f82d4ef2dc541a934736fd984cb527f766",
+          "history": [
+            {
+              "sha256": "32a3d23ee2e28474af4405e94e197229c774ce904ddf8fc13999a2837dedabec",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "Piece G67 gives a transition's bound and derivative bounds by pieces over which the heading turns at most a sixteenth of a half-turn, each boxed from the certified points at both its ends (G64 boxed each panel from its start alone, and bounded a derivative by one interval evaluation over the span). So the bound records moved inward, and so did the NURBS forms' deviations, whose Taylor remainders rest on the derivative bounds. The result count (978) and the refusals (6) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-surface/analytic",
@@ -252,7 +324,15 @@
             "test": "surface_determinism",
             "function": "surface_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd"
+          "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
+          "history": [
+            {
+              "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r·cos πv)·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-surface/offset",
@@ -262,7 +342,15 @@
             "test": "offset_determinism",
             "function": "offset_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00"
+          "sha256": "5db0b17f229440b5a05b6605630a24563c485cf383bf4cb5dc969563127c0fc9",
+          "history": [
+            {
+              "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "An offset bounds itself and builds its certified cache from its base's bounds and partials over boxes, which for the analytic bases are their closed-form extents now (piece G67): the records that rest on them moved. The offset kind's own code did not change; the result count (314) and the refusals (4) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-bvh/tree",
@@ -303,6 +391,16 @@
             "function": "dual_and_newton_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "dd010907a8e85d445965877e147ffce51c90c5a9b9b40536714a71035d2364dc"
+        },
+        {
+          "id": "geom-num/root-isolation",
+          "what": "The double-double balls and the root-isolation engine (piece G53): every ball operation on 400 seeded pairs, results and errors alike; and the engine, by both operators, on seeded product systems (24, 12, 6 and 4 in one to four unknowns), on zeros on split lines and on the domain's boundary, zeros closer than the floor, multiple zeros, a dependent system, a zero without a derivative, the double-double fallbacks, and every cap (the work and logical-memory budgets, an unreachable target, an imprecise position, a box that cannot be split): 6,181 results in the canonical encoding of tests/isolate_determinism.rs, with the work and logical memory each isolation charged.",
+          "check": {
+            "crate": "geom-num",
+            "test": "isolate_determinism",
+            "function": "root_isolation_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "ce9699711dc7f72a1b12491ffd673e7b720f28e9d22936550f618a24e0bc6421"
         },
         {
           "id": "geom-math/rotations",

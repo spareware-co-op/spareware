@@ -50,7 +50,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use crate::recursion::Problem;
 use crate::recursion::index::Index;
 use crate::recursion::model::{NodeKind, Role};
-use crate::recursion::ty::{ClosureKey, NodeId, Ty};
+use crate::recursion::ty::{ClosureKey, ItemId, NodeId, Ty};
 
 /// How many copies of one function the graph holds before it is reported: a bound that keeps the
 /// graph finite, not a rule of the code. With the Phase 2 pieces through G62 the generic
@@ -120,6 +120,13 @@ pub struct Mono {
     pub rets: BTreeMap<InstId, Ty>,
     /// Each closure's parameter types and result, once its function's body was checked.
     pub closure_sigs: BTreeMap<ClosureKey, (Vec<Ty>, Ty)>,
+    /// The trait each method call of a generic body resolved through when its open copy was
+    /// checked, by the call's site (the node, and the line and column of the method's name). Its
+    /// other copies keep to that trait ([`Index::probe_in`]): rustc chooses the method once, in the
+    /// generic body, through a generic receiver's bounds, and every copy calls that trait's
+    /// implementation for its types. Every node of the crates read has an open copy among the
+    /// roots, which are checked first.
+    pub method_traits: BTreeMap<(NodeId, usize, usize), ItemId>,
     /// Closures and function items coerced to a closure trait object.
     pub dyn_callables: BTreeSet<Ty>,
     /// Closures and function items coerced to a function pointer.

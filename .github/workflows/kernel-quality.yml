@@ -16,7 +16,17 @@ name: Kernel quality
 # - The full run, weekly and on demand: every mutant of every kernel crate, judged against the
 #   ledger as a whole; the judge also fails on any ledger entry that no survivor matches any more.
 #   Both runs are sharded across runners: the plan job lists the mutants and asks the judge how
-#   many shards they need, and the judge proves the shards together tested exactly that list.
+#   many shards they need, and the judge proves the shards together tested exactly that list. A
+#   matrix holds at most 256 jobs, so two jobs run the shards, `mutants` shards 0 to 255 and
+#   `mutants-2` shards 256 to 511, each numbered in the whole run (`--shard k/n`).
+# - A narrowed full run, on demand: `gh workflow run kernel-quality.yml --ref <branch> -f
+#   files=<regex>` mutates only the files whose path the regular expression matches
+#   (`cargo mutants --re`), and the judge counts only those files' ledger entries, so an entry of
+#   another file is not reported stale. The plan checks that cargo-mutants selected every mutant
+#   of the matching files and, of other files, only the struct-field deletions cargo-mutants 27.1.0
+#   lists whatever --re says (geom_test::mutants::UNFILTERED_GENRE), which the shards then test
+#   too. A narrowed run is the mutation gate alone: coverage, the seeded gates and Miri are
+#   skipped, so its shards are not queued behind them.
 # - Coverage, on every pull request that touches the kernel and weekly and on demand: each crate
 #   measured by its own tests with cargo-llvm-cov, lines and branches, on the pinned nightly that
 #   branch coverage needs. The foundation set needs 100% of lines and branches, every other kernel
@@ -71,6 +81,12 @@ on:
     # Weekly, Saturdays at 02:17 UTC.
     - cron: "17 2 * * 6"
   workflow_dispatch:
+    inputs:
+      files:
+        description: "Only the files whose path this regular expression matches, e.g. geom-num/src/math/ (empty: every mutant)"
+        required: false
+        default: ""
+        type: string
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
 
@@ -78,8 +94,10 @@ permissions:
   contents: read
 
 # A newer push to the same pull request cancels the runs it supersedes; scheduled runs all run.
+# Dispatches on one branch queue behind each other only when they narrow to the same files, so a
+# narrowed run never waits hours behind a whole one.
 concurrency:
-  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}
+  group: kernel-quality-${{ github.ref }}-${{ github.event_name }}-${{ inputs.files }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -97,6 +115,8 @@ env:
   # behind debug assertions is built, tested and measured.
   CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "true"
   CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+  # A dispatched full run narrowed to some files (the input above); empty on every other run.
+  FILES: ${{ inputs.files }}
 
 jobs:
   mutants-plan:
@@ -106,6 +126,8 @@ jobs:
     outputs:
       count: ${{ steps.plan.outputs.count }}
       shards: ${{ steps.plan.outputs.shards }}
+      count_2: ${{ steps.plan.outputs.count_2 }}
+      shards_2: ${{ steps.plan.outputs.shards_2 }}
     defaults:
       run:
         shell: bash
@@ -139,17 +161,28 @@ jobs:
             # use (geom_test::mutants). A base without a ledger has none.
             git show "HEAD^1:projects/engines/geometry/quality-ledger.json" > "$RUNNER_TEMP/plan/base-ledger.json" \
               || rm -f "$RUNNER_TEMP/plan/base-ledger.json"
+          elif [ -n "$FILES" ]; then
+            # A narrowed full run: the mutants the shards' --re selects, and every mutant, for the
+            # plan's check that the two agree on which files are in it.
+            cargo mutants --re "$FILES" --list --json > "$RUNNER_TEMP/plan/list.json"
+            cargo mutants --list --json > "$RUNNER_TEMP/plan/all.json"
           else
             cargo mutants --list --json > "$RUNNER_TEMP/plan/list.json"
           fi
       - name: How many shards the mutants need
         id: plan
         run: |
+          narrowed=()
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] && [ -n "$FILES" ]; then
+            narrowed=(--files "$FILES" --all "$RUNNER_TEMP/plan/all.json")
+          fi
           plan=$(cargo run --locked -p geom-test --bin kernel-quality -- mutants-plan \
-            --list "$RUNNER_TEMP/plan/list.json")
+            --list "$RUNNER_TEMP/plan/list.json" "${narrowed[@]}")
           echo "$plan"
           echo "count=$(jq -r .count <<<"$plan")" >> "$GITHUB_OUTPUT"
           echo "shards=$(jq -c .shards <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "count_2=$(jq -r .count_2 <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "shards_2=$(jq -c .shards_2 <<<"$plan")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutants-plan
@@ -204,12 +237,104 @@ jobs:
         run: |
           # rust-cache turns incremental compilation off for the whole job; turn it back on here.
           export CARGO_INCREMENTAL=1
-          diff=()
+          # At most 8 GiB of data for each process (RLIMIT_DATA: its heap and private writable
+          # mappings; the runner has 16 GB). A mutant that stops a budget from ever stopping a map
+          # over usize::MAX items made a test grow until the runner ran out of memory and was shut
+          # down, losing the whole shard (runs 40947686294 and 40956182700). Under the limit such a
+          # test aborts on a failed allocation, cargo-mutants counts the mutant caught, and the
+          # shard goes on. The baseline runs under the same limit, so a test that needs more fails
+          # the shard, never one mutant.
+          ulimit -d $((8 * 1024 * 1024))
+          # The plan's selection: a pull request's diff, or a narrowed full run's files.
+          only=()
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            diff=(--in-diff "$RUNNER_TEMP/plan/pr.diff")
+            only=(--in-diff "$RUNNER_TEMP/plan/pr.diff")
+          elif [ -n "$FILES" ]; then
+            only=(--re "$FILES")
           fi
           set +e
-          cargo mutants "${diff[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
+          cargo mutants "${only[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
+            -vV --output "$RUNNER_TEMP/out"
+          code=$?
+          set -e
+          # 0: every mutant caught; 2: survivors; 3: timeouts. The judge decides those. Any other
+          # code (a usage error, a failing baseline, a diff that does not match the tree, an
+          # internal error) means the run itself failed.
+          case "$code" in 0|2|3) ;; *) exit "$code" ;; esac
+          test -f "$RUNNER_TEMP/out/mutants.out/mutants.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: mutants-${{ matrix.shard }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+
+  mutants-2:
+    name: Mutants (shard ${{ matrix.shard }})
+    needs: mutants-plan
+    # Shards 256 on, for a run of more shards than one matrix may hold: the same steps as `mutants`,
+    # word for word, with the same `--shard k/n`. A plan of 256 shards or fewer runs none; its
+    # matrix still lists shard 256, because a matrix may not be empty.
+    if: needs.mutants-plan.outputs.count_2 != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      # Every shard reports, so the judge sees every survivor.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.mutants-plan.outputs.shards_2) }}
+    env:
+      SHARDS: ${{ needs.mutants-plan.outputs.count }}
+      # Mutated builds are tests only: optimise lightly and build incrementally, so each mutant
+      # rebuilds in seconds rather than minutes.
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: "1"
+      CARGO_PROFILE_RELEASE_INCREMENTAL: "true"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: mutants
+      - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
+        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mutants-plan
+          path: ${{ runner.temp }}/plan
+      - name: Mutate the kernel code (shard ${{ matrix.shard }})
+        env:
+          # The judge reads each mutant's log for a compiler error (geom_test::mutants); colour
+          # codes before `error[E...]` would hide it, so the logs are written without colour.
+          CARGO_TERM_COLOR: never
+        run: |
+          # rust-cache turns incremental compilation off for the whole job; turn it back on here.
+          export CARGO_INCREMENTAL=1
+          # At most 8 GiB of data for each process (RLIMIT_DATA: its heap and private writable
+          # mappings; the runner has 16 GB). A mutant that stops a budget from ever stopping a map
+          # over usize::MAX items made a test grow until the runner ran out of memory and was shut
+          # down, losing the whole shard (runs 40947686294 and 40956182700). Under the limit such a
+          # test aborts on a failed allocation, cargo-mutants counts the mutant caught, and the
+          # shard goes on. The baseline runs under the same limit, so a test that needs more fails
+          # the shard, never one mutant.
+          ulimit -d $((8 * 1024 * 1024))
+          # The plan's selection: a pull request's diff, or a narrowed full run's files.
+          only=()
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            only=(--in-diff "$RUNNER_TEMP/plan/pr.diff")
+          elif [ -n "$FILES" ]; then
+            only=(--re "$FILES")
+          fi
+          set +e
+          cargo mutants "${only[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
             -vV --output "$RUNNER_TEMP/out"
           code=$?
           set -e
@@ -227,7 +352,7 @@ jobs:
 
   mutants-judge:
     name: Mutants, judged against the ledger
-    needs: [mutants-plan, mutants]
+    needs: [mutants-plan, mutants, mutants-2]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -237,9 +362,10 @@ jobs:
     steps:
       - name: Every job the judge reads succeeded
         run: |
-          echo "plan: ${{ needs.mutants-plan.result }}; shards: ${{ needs.mutants.result }}"
+          echo "plan: ${{ needs.mutants-plan.result }}; shards: ${{ needs.mutants.result }}; shards 256 on: ${{ needs.mutants-2.result }}"
           test "${{ needs.mutants-plan.result }}" = success
           case "${{ needs.mutants.result }}" in success) ;; skipped) test "${{ needs.mutants-plan.outputs.count }}" = 0 ;; *) exit 1 ;; esac
+          case "${{ needs.mutants-2.result }}" in success) ;; skipped) test "${{ needs.mutants-plan.outputs.count_2 }}" = 0 ;; *) exit 1 ;; esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -275,11 +401,16 @@ jobs:
             fi
           else
             args+=(--mode full)
+            if [ -n "$FILES" ]; then
+              args+=(--files "$FILES")
+            fi
           fi
           cargo run --locked -p geom-test --bin kernel-quality -- mutants "${args[@]}" "${outs[@]}"
 
   coverage:
     name: Coverage (lines, and branches on the pinned nightly)
+    # Every run but a narrowed mutation run.
+    if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     defaults:
@@ -355,6 +486,8 @@ jobs:
 
   gates-seeded:
     name: The gates fail on seeded faults
+    # Every run but a narrowed mutation run.
+    if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     defaults:
@@ -384,6 +517,8 @@ jobs:
 
   miri:
     name: Miri (partition ${{ matrix.partition }})
+    # Every run but a narrowed mutation run.
+    if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
     timeout-minutes: 345
     strategy:

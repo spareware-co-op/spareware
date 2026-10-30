@@ -2,7 +2,7 @@
 //! offset kinds and curves on surfaces are built on.
 //!
 //! What it does: [`Basis`] is a closed enum with one variant per leaf kind (NURBS, the analytic
-//! kinds, the bulge polyline), dispatching the kind contract to each, with the conversions to and
+//! kinds, the bulge polyline, the transition), dispatching the kind contract to each, with the conversions to and
 //! from [`CurveKind`]. The kinds that hold curves hold a `Basis`, never a `CurveKind`, so no kind
 //! contains itself: no recursive type, no recursive call, nothing for WebAssembly's stack to
 //! bound (chapter 28.8).
@@ -11,13 +11,14 @@
 //!
 //! - **The same behaviour as the kind.** Every method is the leaf kind's own.
 //! - **Leaves stay leaves.** Every leaf's reversal and transform is a leaf (a circle may become an
-//!   ellipse, a bulge polyline its NURBS form); a split of a bulge polyline is a trimmed one, so
+//!   ellipse, a bulge polyline or a scaled transition its NURBS form); a split of a bulge polyline is a trimmed one, so
 //!   the trimmed kind splits by its interval instead.
 //!
 //! Method: the storage-and-behaviour split chapter 7 decides, closed enums for storage and traits
 //! for behaviour (`projects/engines/geometry/architecture/07-geometry-types.md`); a leaf's breaks
 //! are a NURBS curve's knots (where its smoothness may drop, The NURBS Book, 2nd ed., P2.5,
-//! <https://doi.org/10.1007/978-3-642-59223-2>) and a polyline's vertices.
+//! <https://doi.org/10.1007/978-3-642-59223-2>), a polyline's vertices and the middle of a
+//! Helmert transition.
 //!
 //! Cost: one match per call.
 
@@ -37,6 +38,7 @@ use crate::line::Line;
 use crate::map::NurbsForm;
 use crate::param::{CurveKind, DerivativeBound, ParamCurve};
 use crate::polynomial::Polynomial;
+use crate::transition::Transition;
 
 /// A leaf curve kind (module documentation).
 #[derive(Clone, Debug, PartialEq)]
@@ -61,6 +63,8 @@ pub enum Basis<const D: usize> {
     Involute(Involute<D>),
     /// A bulge polyline (2D), with optional widths.
     Bulge(BulgePolyline<D>),
+    /// A transition curve (2D), or a part of one.
+    Transition(Transition<D>),
 }
 
 impl<const D: usize> From<Basis<D>> for CurveKind<D> {
@@ -76,6 +80,7 @@ impl<const D: usize> From<Basis<D>> for CurveKind<D> {
             Basis::Polynomial(c) => CurveKind::Polynomial(c),
             Basis::Involute(c) => CurveKind::Involute(c),
             Basis::Bulge(c) => CurveKind::Bulge(c),
+            Basis::Transition(c) => CurveKind::Transition(c),
         }
     }
 }
@@ -97,6 +102,7 @@ impl<const D: usize> TryFrom<CurveKind<D>> for Basis<D> {
             CurveKind::Polynomial(c) => Ok(Basis::Polynomial(c)),
             CurveKind::Involute(c) => Ok(Basis::Involute(c)),
             CurveKind::Bulge(c) => Ok(Basis::Bulge(c)),
+            CurveKind::Transition(c) => Ok(Basis::Transition(c)),
             CurveKind::Trimmed(_)
             | CurveKind::Composite(_)
             | CurveKind::Offset(_)
@@ -108,7 +114,8 @@ impl<const D: usize> TryFrom<CurveKind<D>> for Basis<D> {
 impl<const D: usize> Basis<D> {
     /// The parameters where the leaf may not be smooth, in increasing order, some perhaps
     /// repeated or outside a trimmed interval (their users keep the ones inside a span): a NURBS
-    /// curve's knots, a bulge polyline's vertices; none for the analytic kinds.
+    /// curve's knots, a bulge polyline's vertices, a Helmert transition's middle; none for the
+    /// analytic kinds.
     pub(crate) fn breaks(&self) -> Vec<f64> {
         match self {
             Basis::Nurbs(c) => c.basis().knots().to_vec(),
@@ -119,6 +126,7 @@ impl<const D: usize> Basis<D> {
                     .map(|i| a + f64::from(i))
                     .collect()
             }
+            Basis::Transition(c) => c.breaks(),
             _ => Vec::new(),
         }
     }
@@ -137,6 +145,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => ParamCurve::domain(c),
             Basis::Involute(c) => ParamCurve::domain(c),
             Basis::Bulge(c) => ParamCurve::domain(c),
+            Basis::Transition(c) => ParamCurve::domain(c),
         }
     }
 
@@ -152,6 +161,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => ParamCurve::point(c, t, side),
             Basis::Involute(c) => ParamCurve::point(c, t, side),
             Basis::Bulge(c) => ParamCurve::point(c, t, side),
+            Basis::Transition(c) => ParamCurve::point(c, t, side),
         }
     }
 
@@ -167,6 +177,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => ParamCurve::derivatives(c, t, side, out),
             Basis::Involute(c) => ParamCurve::derivatives(c, t, side, out),
             Basis::Bulge(c) => ParamCurve::derivatives(c, t, side, out),
+            Basis::Transition(c) => ParamCurve::derivatives(c, t, side, out),
         }
     }
 
@@ -188,6 +199,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => c.enclose(t, side, order, meter),
             Basis::Involute(c) => c.enclose(t, side, order, meter),
             Basis::Bulge(c) => c.enclose(t, side, order, meter),
+            Basis::Transition(c) => c.enclose(t, side, order, meter),
         }
     }
 
@@ -203,6 +215,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => ParamCurve::bound(c, span, meter),
             Basis::Involute(c) => ParamCurve::bound(c, span, meter),
             Basis::Bulge(c) => ParamCurve::bound(c, span, meter),
+            Basis::Transition(c) => ParamCurve::bound(c, span, meter),
         }
     }
 
@@ -223,6 +236,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => c.derivative_bound(span, order, meter),
             Basis::Involute(c) => c.derivative_bound(span, order, meter),
             Basis::Bulge(c) => c.derivative_bound(span, order, meter),
+            Basis::Transition(c) => c.derivative_bound(span, order, meter),
         }
     }
 
@@ -238,6 +252,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => c.to_nurbs(meter),
             Basis::Involute(c) => c.to_nurbs(meter),
             Basis::Bulge(c) => c.to_nurbs(meter),
+            Basis::Transition(c) => c.to_nurbs(meter),
         }
     }
 
@@ -257,6 +272,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => ParamCurve::split(c, t, meter),
             Basis::Involute(c) => ParamCurve::split(c, t, meter),
             Basis::Bulge(c) => ParamCurve::split(c, t, meter),
+            Basis::Transition(c) => ParamCurve::split(c, t, meter),
         }
     }
 
@@ -272,6 +288,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => c.reversed(meter),
             Basis::Involute(c) => c.reversed(meter),
             Basis::Bulge(c) => c.reversed(meter),
+            Basis::Transition(c) => c.reversed(meter),
         }
     }
 
@@ -291,6 +308,7 @@ impl<const D: usize> ParamCurve<D> for Basis<D> {
             Basis::Polynomial(c) => c.transformed(transform, meter),
             Basis::Involute(c) => c.transformed(transform, meter),
             Basis::Bulge(c) => c.transformed(transform, meter),
+            Basis::Transition(c) => c.transformed(transform, meter),
         }
     }
 }
