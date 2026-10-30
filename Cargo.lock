@@ -1241,6 +1241,7 @@ dependencies = [
  "geom-run",
  "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]
@@ -1535,6 +1536,8 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
+ "proptest",
 ]
 
 [[package]]
