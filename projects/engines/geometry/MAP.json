@@ -1658,13 +1658,37 @@
           "target": "lib"
         },
         {
-          "cost": "a few dozen floating-point operations per evaluation and derivative order; a bound evaluates one interval extension per piece, at most 64 pieces.",
+          "cost": "a few interval evaluations of g, one `atan2` and at most sixteen evaluations per family; the pieces' route at most 64 × 9 evaluations of g and of g′.",
+          "does": "[`Scalar`] names the functions the analytic kinds are made of, one coordinate of one derivative at a time, each with interval coefficients (enclosures of the exact ones the stored data define), and the closed form of the zeros of its derivative:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/extent.rs",
+          "guarantees": [
+            "**Certified.** The result holds g(t) for every t of the span and every coefficient in its enclosure. A function continuous on a closed span takes its extremes at the ends or where g′ is zero; every such zero inside the span lies in one of the enclosures evaluated (the table's closed forms in interval arithmetic: `geom-num`'s proven `atan2`, `ln`, `sinpi` and `cospi`, π between its neighbouring doubles), and g over an enclosure holds g there.",
+            "**Few evaluations however long the span.** Periodic critical points come in families t = c + 2m, each one period of cos πt apart. Along a family the values of g are constant (`Wave` with q = 0) or step by the same amount from one member to the next (2q for `Wave`, ±2πR for `Involute`), so the extremes over the members inside the span are at the first or the last of them. So at most four members of a family are evaluated: the first two and the last two whose enclosure meets the span, since an enclosure narrower than a period may reach into the span while its member lies just outside, and the next member then lies inside.",
+            "**Undecided cases are refined, not guessed.** Where the coefficients' enclosures leave a closed form undecided (a and b enclosing the origin without both being zero, \\|q\\| enclosing πR, r or a + b enclosing zero without being zero, a family wider than half a period, a span or critical point beyond 2⁵⁰), and for `Modulated`, which has no closed form, the span is cut into monotone pieces: at most 64 pieces of at most a quarter of a half-turn; a piece whose derivative's enclosure has a certain sign contributes g at its two ends, any other is cut in eight and tested again, and a piece still undecided contributes the intersection of g's interval extension over it and its mean-value form g(m) + g′·[−r, r] about its middle m. That is sound too, and only a little wider.",
+            "**Deterministic.** The same function and span give the same bits on every target."
+          ],
+          "job": "Closed-form extents: the range of one function of one parameter over a span, from its values at the span's ends and at its critical points, each critical point in closed form.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "the extreme value theorem with the critical points in closed form, the amplitude and phase form R·cos(π(t − φ)) of a·cos πt + b·sin πt, and interval arithmetic for every closed form (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>: the natural interval extension, and the monotonicity test and the mean-value form of chapter 6 for the pieces)."
+          },
+          "path": "geom_curve::extent",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few dozen floating-point operations per evaluation and derivative order; a bound one closed-form extent per coordinate, a few evaluations each.",
           "does": "[`Shape`] names the scalar functions (f₁, f₂, f₃) of each kind, with angles in half-turns, the kernel's proven angle form (chapter 6):",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/form.rs",
           "guarantees": [
             "**Certified.** An enclosure holds the exact value of C⁽ᵏ⁾ at every parameter of the interval: `geom-num`'s proven `sinpi`, `cospi` and `exp` enclosures, π between its two neighbouring doubles, and interval arithmetic that is exact where it can be (`tight`).",
             "**Derivatives in closed form.** The k-th derivative of each scalar function is its formula, never a finite difference (chapter 7): cos and sin of πt shift by a quarter turn per derivative and gain a factor π, cosh and sinh trade places, and the involute's terms follow d^k(θ·cos θ) = θ·cos⁽ᵏ⁾θ + k·cos⁽ᵏ⁻¹⁾θ.",
+            "**Closed-form extents.** A bound holds every value of C⁽ᵏ⁾ over the span, and is the hull of its values at the span's ends and at the critical points of each coordinate inside it (`crate::extent`'s guarantees).",
             "**Refused outside.** A parameter or span outside the domain, or not finite, is an error."
           ],
           "job": "The certified evaluation the analytic kinds share: every one of them is C(t) = c + f₁(t)·u + f₂(t)·v + f₃(t)·w, fixed vectors times scalar functions of the parameter.",
@@ -1672,7 +1696,7 @@
             "links": [
               "https://doi.org/10.1137/1.9780898717716"
             ],
-            "text": "direct evaluation of the closed forms, in interval arithmetic for the enclosures (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the natural interval extension); a span is cut into eighths of a turn for the periodic shapes, so the box follows the curve."
+            "text": "direct evaluation of the closed forms, in interval arithmetic for the enclosures (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the natural interval extension); the extents of chapter 12.3's analytic row, from the ends and the closed-form critical points (`crate::extent`)."
           },
           "path": "geom_curve::form",
           "provenance": [],
@@ -2050,6 +2074,29 @@
           "target": "lib"
         },
         {
+          "cost": "the series about 20 terms (about 2 µs), the expansion at most 64 (about 2 µs); between, up to about 35 panels of 8 evaluations each, with five of Trefethen's bounds per panel (a few hundred µs: the slow range, which a clothoid near its inflection point never reaches).",
+          "does": "[`fresnel`] encloses C and S over an interval of arguments. Both are odd, so the work is at |x|, at the double m nearest the interval's middle, in one of four ranges:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/transition/fresnel.rs",
+          "guarantees": [
+            "**Certified.** Each enclosure holds C(x) and S(x) for every x of the interval: every series and expansion summed in interval arithmetic with its remainder bound added, π between its neighbouring doubles, the angle πx²/2 taken from x² split exactly into two doubles (`geom-num`'s two-product) so `geom-num`'s proven `sinpi` and `cospi` see it exactly however large x is, and the quadrature's remainder bounded, never estimated.",
+            "**Tight.** About 10⁻¹⁵ wide on the expansion's range, a few times that on the series', and a few times 10⁻¹⁴ between (the rounding of a few dozen panels).",
+            "**Deterministic.** Fixed ranges, a fixed series stop, panels fixed by their position alone: the same bits on every target."
+          ],
+          "job": "The Fresnel integrals C(x) = ∫₀ˣ cos(πt²/2) dt and S(x) = ∫₀ˣ sin(πt²/2) dt, enclosed: the clothoid's own functions, by series and asymptotic expansion with their remainder bounds, and by the transition kind's certified quadrature between them; and a clothoid's point by them, [`Transition::enclose_fresnel`] (piece G67).",
+          "method": {
+            "links": [
+              "https://dlmf.nist.gov/7",
+              "https://doi.org/10.1137/060659831"
+            ],
+            "text": "written from the published mathematical forms, DLMF (NIST Digital Library of Mathematical Functions), §7.2 (definitions), §7.5 (7.5.3, 7.5.4), §7.6 (7.6.4, 7.6.6) and §7.12 (7.12.2, 7.12.3 and the remainder bounds of 7.12(ii)), <https://dlmf.nist.gov/7>, read 2026-10-30, as chapter 17.8 asks; the alternating series' remainder by Leibniz's test; and the quadrature of the transition kind (L. N. Trefethen, \"Is Gauss quadrature better than Clenshaw–Curtis?\", SIAM Review 50 (2008), <https://doi.org/10.1137/060659831>, Theorem 4.5). No code from the Clothoids library's `Fresnel.cc` (chapter 29's row for it), and none of its rational approximations."
+          },
+          "path": "geom_curve::transition::fresnel",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the basis's costs; a conversion adds at most two splits.",
           "does": "[`Trimmed`] stores a [`Basis`] (any leaf kind: NURBS, analytic or bulge polyline) and an interval [a, b] inside its domain, and is the basis on that interval, on the basis's own parameter. Trimming keeps the basis exactly as stored: a NURBS curve trimmed at a crossing keeps its knots and control points, where cutting it would insert knots and round (chapter 14: \"a trimmed spline is section 7's trimmed curve, the original curve on an implicit parameter interval\"). Composite and offset curves and curves on surfaces are built on trimmed curves, so the kinds that hold curves hold only leaves: no kind contains itself.",
           "family": [],
@@ -2076,7 +2123,7 @@
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) and the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), built; the other kinds to come in G67, G68, G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), and the analytic and transcendental enclosures (G67) built; the other kinds to come in G68, G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {
@@ -7122,6 +7169,28 @@
           "target": "lib"
         },
         {
+          "cost": "at most three extents in one parameter per coordinate, or one per piece (at most 64) on the last route.",
+          "does": "a coordinate of ∂^{i+j}S/∂u^i∂v^j of a kind written in `crate::terms`' form is Σ M_{fg}·f(u)·g(v) over f and g each 1, t, cos πt or sin πt: a grid of coefficients, each the enclosure of an exact real. [`terms`] reads the grid's shape and takes the closed form that fits it:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/extent.rs",
+          "guarantees": [
+            "**Certified.** Every route holds every value of the coordinate over the box: the extents in one parameter are certified (`geom_curve::extent`), and each step's reduction is exact over the reals: a function affine in a parameter takes its extremes over a span at the span's ends; a function affine in G takes them over [G₋, G₊] at its ends, and [G₋, G₊] holds G's values; on a piece, Taylor's theorem with the remainder ½δ²·`S_vv`(u, ξ) for some ξ in it.",
+            "**The kinds' own extents.** Every route but the last gives the coordinate's extent over the box up to rounding; the last within ½r² times the second v-derivative's size, about 10⁻³ of it on pieces of a thirty-second of a half-turn.",
+            "**Deterministic.** The same terms and box give the same bits on every target."
+          ],
+          "job": "Closed-form extents of the analytic surface kinds: the range of each coordinate of a partial derivative over a parameter box, from `geom-curve`'s closed-form extents in one parameter.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "separation of the parameters by linearity (a bilinear or affine function's extremes on a box lie on its edges), then `geom-curve`'s closed-form extents in one parameter (`geom_curve::extent`), all in interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_surface::extent",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant for a plane: nine interval operations.",
           "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields with `geom-field`.",
           "family": [],
@@ -7284,7 +7353,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the other kinds to come in G67, G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); the other kinds to come in G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {

@@ -254,7 +254,15 @@
             "test": "analytic_determinism",
             "function": "analytic_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342"
+          "sha256": "0c25c27e3c8c9f679924d6644ccd47a55eeb0929eee4271c638c9bce12627fe9",
+          "history": [
+            {
+              "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "The analytic kinds' bounds and derivative bounds are their closed-form extents now (piece G67): each coordinate's range over the span from its values at the span's ends and at its critical points in closed form, where G61 took the interval extension over eighths of a turn. So the bound records of the line, circle, ellipse, hyperbola, parabola, helix and involute moved inward, and so did the deviations of the helix's and involute's NURBS forms, whose Taylor remainders rest on derivative bounds. The change is in the bound route alone (form.rs's bound and derivative_bound); the result count (30606) and the refusals (6) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-curve/compound",
@@ -264,7 +272,15 @@
             "test": "compound_determinism",
             "function": "compound_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2"
+          "sha256": "3f8ae9216582bafeecce26ad7b619ffa4208ab095251518127420cd24c400760",
+          "history": [
+            {
+              "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "The analytic kinds' bounds and derivative bounds are their closed-form extents now (piece G67). The bulge, trimmed, composite and offset kinds bound their analytic leaves through them, a composite's enclosures over a parameter interval use them, and the offsets' NURBS caches take their Taylor remainders from them, so those records moved. No compound kind's own code changed; the result count (10506) and the refusals (6) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-curve/transition",
@@ -284,7 +300,15 @@
             "test": "transition_ops_determinism",
             "function": "transition_operations_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "32a3d23ee2e28474af4405e94e197229c774ce904ddf8fc13999a2837dedabec"
+          "sha256": "70b485106f19a98f27ddb0531c7911f82d4ef2dc541a934736fd984cb527f766",
+          "history": [
+            {
+              "sha256": "32a3d23ee2e28474af4405e94e197229c774ce904ddf8fc13999a2837dedabec",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "Piece G67 gives a transition's bound and derivative bounds by pieces over which the heading turns at most a sixteenth of a half-turn, each boxed from the certified points at both its ends (G64 boxed each panel from its start alone, and bounded a derivative by one interval evaluation over the span). So the bound records moved inward, and so did the NURBS forms' deviations, whose Taylor remainders rest on the derivative bounds. The result count (978) and the refusals (6) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-surface/analytic",
@@ -294,7 +318,15 @@
             "test": "surface_determinism",
             "function": "surface_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd"
+          "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
+          "history": [
+            {
+              "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r·cos πv)·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-surface/offset",
@@ -304,7 +336,15 @@
             "test": "offset_determinism",
             "function": "offset_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00"
+          "sha256": "5db0b17f229440b5a05b6605630a24563c485cf383bf4cb5dc969563127c0fc9",
+          "history": [
+            {
+              "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00",
+              "kind": "improvement",
+              "piece": "G67",
+              "why": "An offset bounds itself and builds its certified cache from its base's bounds and partials over boxes, which for the analytic bases are their closed-form extents now (piece G67): the records that rest on them moved. The offset kind's own code did not change; the result count (314) and the refusals (4) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-bvh/tree",

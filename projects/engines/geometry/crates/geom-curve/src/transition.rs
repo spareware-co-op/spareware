@@ -120,6 +120,8 @@ use crate::param::{CurveKind, DerivativeBound, ParamCurve};
 use crate::taylor;
 use crate::tight::{self, point};
 
+pub mod fresnel;
+
 /// The Gauss–Legendre points per panel.
 pub const NODES: usize = 8;
 
@@ -749,78 +751,164 @@ impl Parent {
         Ok(out)
     }
 
-    /// An enclosure of the point at every station of [s₀, s₁]: over each panel the span meets,
-    /// the point at the start of its part of the span plus up to the part's length times any
-    /// tangent the heading allows on it, placed.
+    /// The parts of [s₀, s₁] on either side of Helmert's middle, each with its heading and the
+    /// enclosure of ξ = s/L over it; a part that ends at the middle has its point there from the
+    /// other side too.
+    fn parts(&self, (s0, s1): (f64, f64)) -> Result<Vec<Part<'_>>, CurveError> {
+        let Some(second) = &self.second else {
+            return Ok(vec![(
+                (s0, s1),
+                &self.first,
+                self.xi((s0, s1), (0.0, 1.0))?,
+            )]);
+        };
+        let middle = self.length * 0.5;
+        let mut out = Vec::with_capacity(2);
+        // The first half holds the stations up to L/2, the second those from L/2 on.
+        if compare(s0, self.length, 0.5) != Ordering::Greater {
+            let b = if compare(s1, self.length, 0.5) == Ordering::Greater {
+                middle
+            } else {
+                s1
+            };
+            out.push(((s0, b), &self.first, self.xi((s0, b), (0.0, 0.5))?));
+        }
+        if compare(s1, self.length, 0.5) != Ordering::Less {
+            let a = if compare(s0, self.length, 0.5) == Ordering::Less {
+                middle
+            } else {
+                s0
+            };
+            out.push(((a, s1), second, self.xi((a, s1), (0.5, 1.0))?));
+        }
+        Ok(out)
+    }
+
+    /// The enclosure of ξ = s/L over the stations [a, b], cut to the heading's `range` of ξ.
+    fn xi(&self, (a, b): (f64, f64), range: (f64, f64)) -> Result<Interval, CurveError> {
+        let l = point(self.length)?;
+        let lo = tight::larger(tight::div(point(a)?, l)?.lo(), range.0);
+        let hi = tight::smaller(tight::div(point(b)?, l)?.hi(), range.1);
+        Ok(Interval::new(lo, tight::larger(hi, lo))?)
+    }
+
+    /// A part cut into pieces over each of which the heading turns at most 1/16 of a half-turn
+    /// (by its enclosure over the part), at most 64: each piece's stations and enclosure of ξ.
+    fn pieces(
+        &self,
+        (a, b): (f64, f64),
+        h: &Heading,
+        xi: Interval,
+    ) -> Result<Vec<Piece>, CurveError> {
+        let turn = heading(h, xi, 0)?;
+        let n = math::ceil((turn.hi() - turn.lo()) * PER_HALF_TURN)?.get();
+        let count = if n >= f64::from(MAX_PIECES) {
+            MAX_PIECES
+        } else if n >= 1.0 {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "n is a whole number in [1, 64)"
+            )]
+            let m = n as u32;
+            m
+        } else {
+            1
+        };
+        let mut out = Vec::with_capacity(64);
+        for (s0, s1) in cut((a, b), count) {
+            out.push(((s0, s1), self.xi((s0, s1), (xi.lo(), xi.hi()))?));
+        }
+        Ok(out)
+    }
+
+    /// The certified point at station s.
+    fn position(&self, s: f64, meter: &mut WorkMeter<'_>) -> Result<[Interval; 2], CurveError> {
+        self.enclose(s, false, 0, meter)?
+            .first()
+            .copied()
+            .ok_or(CurveError::Defect)
+    }
+
+    /// The unit tangent over ξ in `xi`, enclosed, turned by the start direction.
+    fn tangent(&self, h: &Heading, xi: Interval) -> Result<[Interval; 2], CurveError> {
+        self.turned(
+            self.units(h, xi, 1)?
+                .first()
+                .copied()
+                .ok_or(CurveError::Defect)?,
+        )
+    }
+
+    /// An enclosure of the point at every station of [s₀, s₁] (piece G67). The span is cut where
+    /// Helmert's halves meet, then into pieces over each of which the heading turns at most a
+    /// sixteenth of a half-turn (at most 64), counted from the heading's enclosure over the part,
+    /// so from the stored data alone. Over a piece [a, b] of width w, P(s) = P(a) + ∫ T, and the
+    /// mean of the unit tangent T lies in T's box over the piece, so P(s) lies in P(a) + [0, w]·T
+    /// and in P(b) − [0, w]·T: the piece's box is their intersection, P(a) and P(b) the certified
+    /// Gauss–Legendre enclosures with their panels' remainders. A piece over which a coordinate
+    /// of T may change sign (the coordinate may turn back inside it, where a first-order box
+    /// overshoots by about the piece's width times the tangent's turn) is cut in eight, each part
+    /// boxed the same way. Method: the mean-value form of an integral (R. E. Moore,
+    /// R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009),
+    /// <https://doi.org/10.1137/1.9780898717716>). Cost: at most 65 point enclosures and 64
+    /// heading evaluations, and seven enclosures more for each piece cut in eight.
     fn bound(
         &self,
-        (s0, s1): (f64, f64),
+        stations: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; 2], CurveError> {
-        let count = self.panels.len();
-        let (first, xi0) = self.locate(s0, false)?;
-        let (last, xi1) = self.locate(s1, false)?;
-        meter.charge(
-            u64::try_from(last.saturating_sub(first))
-                .map_err(|_| CurveError::Defect)?
-                .saturating_add(1),
-        )?;
-        let l = point(self.length)?;
         let mut out: Option<[Interval; 2]> = None;
-        for k in first..=last {
-            let panel = self.panels.get(k).ok_or(CurveError::Defect)?;
-            let (lo, start) = if k == first {
-                (xi0.lo(), self.local_at(k, xi0)?)
-            } else {
-                (ratio(k, count)?, [panel.x, panel.y])
-            };
-            let hi = if k == last {
-                xi1.hi()
-            } else {
-                ratio(k.checked_add(1).ok_or(CurveError::Defect)?, count)?
-            };
-            let turn = heading(self.heading_of(panel), Interval::new(lo, hi)?, 0)?;
-            // The integral of the unit tangent over at most L·(hi − lo) of arc lies in that arc
-            // times the tangent's box.
-            let reach = Interval::new(0.0, l.mul(point(hi)?.sub(point(lo)?)?)?.hi())?;
-            let local = [
-                start[0].add(reach.mul(turn.cospi()?)?)?,
-                start[1].add(reach.mul(turn.sinpi()?)?)?,
-            ];
-            out = Some(hull(out, self.placed_enclosed(local)?)?);
+        for (part, h, xi) in self.parts(stations)? {
+            let mut start: Option<[Interval; 2]> = None;
+            for ((s0, s1), x) in self.pieces(part, h, xi)? {
+                meter.charge(1)?;
+                let p0 = match start {
+                    Some(p) => p,
+                    None => self.position(s0, meter)?,
+                };
+                let p1 = self.position(s1, meter)?;
+                let tangent = self.tangent(h, x)?;
+                if tangent.iter().any(|d| d.lo() < 0.0 && 0.0 < d.hi()) {
+                    meter.charge(u64::from(SUBPIECES))?;
+                    let mut q0 = p0;
+                    for (r0, r1) in cut((s0, s1), SUBPIECES) {
+                        let q1 = if r1 == s1 {
+                            p1
+                        } else {
+                            self.position(r1, meter)?
+                        };
+                        let sub = self.xi((r0, r1), (x.lo(), x.hi()))?;
+                        let t = self.tangent(h, sub)?;
+                        out = Some(hull(out, piece_box((r0, r1), q0, q1, t)?)?);
+                        q0 = q1;
+                    }
+                } else {
+                    out = Some(hull(out, piece_box((s0, s1), p0, p1, tangent)?)?);
+                }
+                start = Some(p1);
+            }
         }
         out.ok_or(CurveError::Defect)
     }
 
     /// An enclosure of the derivative of `order` (at least 1) with respect to the station at
-    /// every station of [s₀, s₁], from both sides at Helmert's middle.
+    /// every station of [s₀, s₁], from both sides at Helmert's middle (piece G67): the closed form
+    /// in the heading's derivatives (Leibniz's rule on e^{iθ}) over each piece of
+    /// [`Parent::bound`]'s, hulled.
     fn derivative_bound(
         &self,
-        (s0, s1): (f64, f64),
+        stations: (f64, f64),
         order: usize,
+        meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; 2], CurveError> {
-        let l = point(self.length)?;
-        let (x0, x1) = (tight::div(point(s0)?, l)?, tight::div(point(s1)?, l)?);
-        let mut parts = Vec::with_capacity(2);
-        match &self.second {
-            None => parts.push((&self.first, Interval::new(x0.lo(), x1.hi())?)),
-            Some(second) => {
-                // The first half holds the stations up to L/2, the second those from L/2 on.
-                if compare(s0, self.length, 0.5) != Ordering::Greater {
-                    let hi = tight::smaller(x1.hi(), 0.5);
-                    parts.push((&self.first, Interval::new(x0.lo(), hi)?));
-                }
-                if compare(s1, self.length, 0.5) != Ordering::Less {
-                    let lo = tight::larger(x0.lo(), 0.5);
-                    parts.push((second, Interval::new(lo, x1.hi())?));
-                }
-            }
-        }
         let mut out: Option<[Interval; 2]> = None;
-        for (h, xi) in parts {
-            let units = self.units(h, xi, order)?;
-            let top = *units.last().ok_or(CurveError::Defect)?;
-            out = Some(hull(out, self.turned(top)?)?);
+        for (part, h, xi) in self.parts(stations)? {
+            for (_, x) in self.pieces(part, h, xi)? {
+                meter.charge(1)?;
+                let top = *self.units(h, x, order)?.last().ok_or(CurveError::Defect)?;
+                out = Some(hull(out, self.turned(top)?)?);
+            }
         }
         out.ok_or(CurveError::Defect)
     }
@@ -936,7 +1024,9 @@ impl<const D: usize> ParamCurve<D> for Transition<D> {
                 .map_err(|_| CurveError::Defect)?
                 .saturating_add(1),
         )?;
-        let b = self.parent.derivative_bound(self.stations(span), order)?;
+        let b = self
+            .parent
+            .derivative_bound(self.stations(span), order, meter)?;
         Ok(DerivativeBound::Bounded(boxed(self.signed(b, order)?)))
     }
 
@@ -1072,6 +1162,66 @@ fn hull(so_far: Option<[Interval; 2]>, p: [Interval; 2]) -> Result<[Interval; 2]
             tight::larger(y.hi(), b.hi()),
         )?,
     ])
+}
+
+/// A part of a span: its stations, its heading and the enclosure of ξ over it.
+type Part<'h> = ((f64, f64), &'h Heading, Interval);
+
+/// A piece of a part: its stations and the enclosure of ξ over it.
+type Piece = ((f64, f64), Interval);
+
+/// The most pieces a span's part is cut into for its bounds.
+const MAX_PIECES: u32 = 64;
+
+/// The pieces a piece is cut into where a coordinate may turn back inside it.
+const SUBPIECES: u32 = 8;
+
+/// Pieces per half-turn of heading.
+const PER_HALF_TURN: f64 = 16.0;
+
+/// [lo, hi] cut into `n` pieces that join exactly and stay inside it.
+fn cut((lo, hi): (f64, f64), n: u32) -> Vec<(f64, f64)> {
+    let width = hi - lo;
+    let count = f64::from(n);
+    let mut out = Vec::new();
+    let mut start = lo;
+    for i in 1..=n {
+        let end = if i == n {
+            hi
+        } else {
+            lo + width * (f64::from(i) / count)
+        };
+        // Rounding may step past either end; the piece stays in [start, hi].
+        let end = tight::larger(tight::smaller(end, hi), start);
+        out.push((start, end));
+        start = end;
+    }
+    out
+}
+
+/// The box of a piece [a, b] from its ends' enclosures and its tangent's box: the intersection
+/// of P(a) + [0, w]·T and P(b) − [0, w]·T ([`Parent::bound`]).
+fn piece_box(
+    (a, b): (f64, f64),
+    p0: [Interval; 2],
+    p1: [Interval; 2],
+    tangent: [Interval; 2],
+) -> Result<[Interval; 2], CurveError> {
+    let w = tight::sub(point(b)?, point(a)?)?.hi();
+    let reach = Interval::new(0.0, tight::larger(w, 0.0))?;
+    let mut out = p0;
+    for ((slot, (&x, &y)), &d) in out.iter_mut().zip(p0.iter().zip(&p1)).zip(&tangent) {
+        let step = tight::mul(reach, d)?;
+        let forward = tight::add(x, step)?;
+        let backward = tight::sub(y, step)?;
+        // Both hold every point of the piece, so they meet: an empty intersection would be a
+        // defect, which `Interval::new` refuses.
+        *slot = Interval::new(
+            tight::larger(forward.lo(), backward.lo()),
+            tight::smaller(forward.hi(), backward.hi()),
+        )?;
+    }
+    Ok(out)
 }
 
 /// How s compares with L·b, decided exactly: the sign of s − (p + e) for L·b = p + e exactly (the
