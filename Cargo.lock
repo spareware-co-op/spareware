@@ -1161,6 +1161,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
  "geom-topo",
 ]
 
