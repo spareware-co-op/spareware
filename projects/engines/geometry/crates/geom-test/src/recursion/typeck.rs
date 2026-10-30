@@ -170,6 +170,8 @@ enum Pending {
         turbofish: Vec<Ty>,
         out: Ty,
         line: usize,
+        /// The line and column of the method's name, for a method call the source writes.
+        site: Option<(usize, usize)>,
     },
     TraitFn {
         origin: Origin,
@@ -540,6 +542,12 @@ impl<'a, 'p> Checker<'a, 'p> {
             hints: Vec::new(),
         }
         .with_hints()
+    }
+
+    /// Whether this is a generic node's open copy (every generic parameter left as itself), whose
+    /// method calls choose the trait every other copy calls ([`Mono::method_traits`]).
+    fn is_open(&self) -> bool {
+        !self.map.is_empty() && self.map.iter().all(|(g, t)| *t == Ty::Param(*g))
     }
 
     /// Fills [`Checker::hints`].
@@ -1150,6 +1158,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                 turbofish,
                 out,
                 line,
+                site,
             } => {
                 let r = self.now(recv);
                 if self.unresolved(&r) {
@@ -1157,7 +1166,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                 }
                 let saved = self.origin;
                 self.origin = *origin;
-                let t = self.method_on(&r, name, Args::Tys(args), turbofish, None, *line);
+                let t = self.method_on(&r, name, Args::Tys(args), turbofish, None, *line, *site);
                 self.unify(out, &t);
                 self.origin = saved;
                 true
@@ -2181,7 +2190,9 @@ impl<'a, 'p> Checker<'a, 'p> {
                     .collect();
                 let name = mc.method.to_string();
                 let args: Vec<Expr> = mc.args.iter().cloned().collect();
-                self.method_call(&recv, &name, &args, &turbofish, expected, line)
+                let at = mc.method.span().start();
+                let site = Some((at.line, at.column));
+                self.method_call(&recv, &name, &args, &turbofish, expected, line, site)
             }
             Expr::Field(f) => {
                 let base = self.expr(&f.base, None);
@@ -3418,6 +3429,7 @@ impl<'a, 'p> Checker<'a, 'p> {
     }
 
     /// `receiver.name(args)` with the receiver's type `recv`.
+    #[allow(clippy::too_many_arguments, reason = "each is one part of the call")]
     fn method_call(
         &mut self,
         recv: &Ty,
@@ -3426,6 +3438,7 @@ impl<'a, 'p> Checker<'a, 'p> {
         turbofish: &[Ty],
         expected: Option<&Ty>,
         line: usize,
+        site: Option<(usize, usize)>,
     ) -> Ty {
         let r = self.now(recv);
         if self.unresolved(&r) {
@@ -3443,13 +3456,19 @@ impl<'a, 'p> Checker<'a, 'p> {
                 turbofish: turbofish.to_vec(),
                 out: out.clone(),
                 line,
+                site,
             });
             return out;
         }
-        self.method_on(&r, name, Args::Exprs(args), turbofish, expected, line)
+        self.method_on(&r, name, Args::Exprs(args), turbofish, expected, line, site)
     }
 
-    /// A method call on a receiver of known type `r`.
+    /// A method call on a receiver of known type `r`; `site` is where the source writes the
+    /// method's name, for a call it writes. An open copy records the trait the call resolves
+    /// through; another copy of the same node keeps to it, so a generic receiver reaches its
+    /// bound's method, never an inherent method or another trait's of the type the copy puts for
+    /// it, as rustc resolves the call in the generic body.
+    #[allow(clippy::too_many_arguments, reason = "each is one part of the call")]
     fn method_on(
         &mut self,
         r: &Ty,
@@ -3458,6 +3477,7 @@ impl<'a, 'p> Checker<'a, 'p> {
         turbofish: &[Ty],
         expected: Option<&Ty>,
         line: usize,
+        site: Option<(usize, usize)>,
     ) -> Ty {
         let r = self.numeric_default(r);
         if matches!(r, Ty::Unknown) {
@@ -3472,8 +3492,22 @@ impl<'a, 'p> Checker<'a, 'p> {
             }
             return Ty::Unknown;
         }
+        let key = site.map(|(l, c)| (self.node, l, c));
+        let open = self.is_open();
+        let only = if open {
+            None
+        } else {
+            key.and_then(|k| self.m.method_traits.get(&k).copied())
+        };
         let (picks, adjusted, derefs) =
-            self.with_ix(|ix, infer, sigs| ix.probe(&r, name, infer, sigs));
+            self.with_ix(|ix, infer, sigs| ix.probe_in(&r, name, only, infer, sigs));
+        if open && let Some(k) = key {
+            let traits: BTreeSet<Option<ItemId>> =
+                picks.iter().map(|p| self.ix.pick_trait(p)).collect();
+            if let [Some(t)] = traits.into_iter().collect::<Vec<_>>().as_slice() {
+                self.m.method_traits.insert(k, *t);
+            }
+        }
         self.implicit_derefs(&derefs, line);
         if picks.is_empty() {
             let shown = self.ix.show(&self.infer.resolve(&r));
@@ -4685,6 +4719,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                             turbofish: Vec::new(),
                             out: out.clone(),
                             line,
+                            site: None,
                         });
                         result = out;
                     } else {
@@ -4695,6 +4730,7 @@ impl<'a, 'p> Checker<'a, 'p> {
                             &[],
                             None,
                             line,
+                            None,
                         );
                     }
                 }
