@@ -43,7 +43,11 @@ fn a_refused_reservation_stops_the_check() {
         ALLOCATOR.set_limit(ALLOCATOR.allocated() + room).unwrap();
         let result = check(&body, Exactness::Exact, Level::Full, &mut m);
         ALLOCATOR.set_limit(usize::MAX).unwrap();
-        outcomes.push(result.map(|r| r.passed()).map_err(|s| s.reason()));
+        outcomes.push(
+            result
+                .map(|r| r.passed())
+                .map_err(geom_run::Stopped::reason),
+        );
     }
     assert_eq!(
         outcomes,

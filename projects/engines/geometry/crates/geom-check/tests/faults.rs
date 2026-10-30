@@ -10,7 +10,8 @@
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
-    reason = "test code: a failure should stop loudly"
+    clippy::many_single_char_names,
+    reason = "test code: a failure should stop loudly; rows and faults named as in the builder"
 )]
 
 mod common;
@@ -66,6 +67,57 @@ fn a_child_listed_twice() {
         f,
         [Fault::at(FaultKind::ListedTwice, Entity::Face(ix(3))).with(Entity::Shell(ix(1)))]
     );
+}
+
+#[test]
+fn every_list_is_walked_the_same_way() {
+    use geom_topo::Shell;
+    // A region's shells.
+    let f = broken_cube(|r| {
+        let extra = r.region(RegionKind::Solid);
+        r.regions[extra as usize].first_shell = Some(ix(0));
+    });
+    assert_eq!(
+        f,
+        [Fault::at(FaultKind::ListedTwice, Entity::Shell(ix(0))).with(Entity::Region(ix(2)))]
+    );
+    let f = broken_cube(|r| r.shells[0].region = ix(0));
+    assert_eq!(
+        f,
+        [Fault::at(FaultKind::WrongParent, Entity::Shell(ix(0))).with(Entity::Region(ix(1)))]
+    );
+    let f = broken_cube(|r| {
+        r.shells.push(Shell {
+            region: ix(1),
+            next: None,
+            first_face: None,
+        });
+    });
+    assert_eq!(f, [Fault::at(FaultKind::Orphan, Entity::Shell(ix(1)))]);
+    // A shell's faces.
+    let f = broken_cube(|r| r.faces[5].next = Some(ix(0)));
+    assert_eq!(f, [Fault::at(FaultKind::ChainCycle, Entity::Shell(ix(0)))]);
+    let f = broken_cube(|r| {
+        let s = r.shell(1);
+        r.faces[1].shell = ix(s);
+    });
+    assert_eq!(
+        f,
+        [Fault::at(FaultKind::WrongParent, Entity::Face(ix(1))).with(Entity::Shell(ix(0)))]
+    );
+    // A face's loops.
+    let f = broken_cube(|r| r.loops[0].next = Some(ix(0)));
+    assert_eq!(f, [Fault::at(FaultKind::ChainCycle, Entity::Face(ix(0)))]);
+    let f = broken_cube(|r| r.faces[1].first_loop = Some(ix(0)));
+    assert_eq!(
+        f,
+        [
+            Fault::at(FaultKind::ListedTwice, Entity::Loop(ix(0))).with(Entity::Face(ix(1))),
+            Fault::at(FaultKind::Orphan, Entity::Loop(ix(1)))
+        ]
+    );
+    let f = broken_cube(|r| r.faces[0].first_loop = None);
+    assert_eq!(f, [Fault::at(FaultKind::Orphan, Entity::Loop(ix(0)))]);
 }
 
 #[test]
@@ -402,7 +454,7 @@ fn an_exact_record_on_curved_geometry() {
         [Fault::at(FaultKind::NotFlat, Entity::Face(ix(0)))]
     );
     // Certified, the same geometry is the record's to bound, not group 4's to refuse.
-    assert!(faults(&r, BodyKind::Solid).is_empty());
+    assert_eq!(faults(&r, BodyKind::Solid), Vec::<Fault>::new());
     let mut r = cube();
     r.curves[0] = circle();
     assert_eq!(
@@ -423,7 +475,7 @@ fn faults_past_the_cap_are_counted() {
     // 300 fins in no loop and on no ring: 600 faults.
     let mut r = cube();
     for _ in 0..300 {
-        let at = r.fins.len() as u32;
+        let at = u32::try_from(r.fins.len()).unwrap();
         r.fins.push(Fin {
             loop_: ix(0),
             next: ix(at),

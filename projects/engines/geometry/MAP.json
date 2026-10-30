@@ -1300,12 +1300,131 @@
       "job": "The B-rep validity checker.",
       "kind": "kernel",
       "layer": "5",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "linear in the body's rows, plus the near-constant time of each set union; memory: a few words per row of each arena, reserved before use.",
+          "does": "the check runs in two stages, as Parasolid gates its body check. The first follows every list and ring of the body once: each region's shells, each shell's faces and each face's loops (a first child and a `next` chain, each child naming its parent), each loop's fins (a ring both ways), each edge's fins (a radial ring), and each edge's two ends. It finds a list that comes back on itself, a child listed twice or by the wrong parent or by none, a ring that does not close, a fin off its edge's ring, and an edge with one end. Only a body whose lists and rings are sound goes on to the second stage, which reads them:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+          "guarantees": [
+            "**Finite on any body.** Every walk of the first stage marks each row it visits and stops at the first row it meets twice, so it visits each row at most once, however the links are broken; the second stage walks only rings and lists the first found sound.",
+            "**The second stage reads only sound structure.** It runs only when the first found nothing, so a fault it reports is real, never an echo of a broken list.",
+            "**Every fault, in a fixed order.** The checks run in the order above, rows ascending, so the same body gives the same faults in the same order on every machine.",
+            "**Charged.** One work unit per row visited, to the caller's meter."
+          ],
+          "job": "Group 1 of chapter 8.3, combinatorial: every loop closes, every fin has a partner or is a boundary, shells are closed and consistently oriented, regions nest correctly, and Euler's formula holds.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "http://www.q-solid.com/Parasolid_Docs/chapters/fd_chap.09.html",
+              "https://pi.math.cornell.edu/~hatcher/AT/AT.pdf",
+              "https://doi.org/10.1145/62.2160"
+            ],
+            "text": "Parasolid's published body check, its loop, fin and shell checks and its gating (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5, and the checking chapter it links, <http://www.q-solid.com/Parasolid_Docs/chapters/fd_chap.09.html>); the shell check of Open CASCADE, each edge used exactly twice in a closed shell (`BRepCheck_Shell`, linked from the same section); and the Euler–Poincaré formula for boundary representations, V − E + F − (L − F) = 2(S − G): M. Mäntylä, *An Introduction to Solid Modeling*, Computer Science Press, 1988, chapter 3. A. Hatcher, *Algebraic Topology*, Cambridge University Press, 2002, section 2.2 (the Euler characteristic of a compact surface, 2 − 2g − b), <https://pi.math.cornell.edu/~hatcher/AT/AT.pdf>. R. E. Tarjan and J. van Leeuwen, \"Worst-case analysis of set union algorithms\", *Journal of the ACM* 31 (1984), 245–281, <https://doi.org/10.1145/62.2160>, for the connected sets (union by size, path halving)."
+          },
+          "path": "geom_check::combinatorial",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the body's faces, edges and fins; no allocation.",
+          "does": "a body recorded [`Exactness::Exact`] must be one its geometry can make exact. Chapter 9 makes a B-rep exact for flat faces and certified for curved ones, so every face of an exact body lies on a plane, every edge on a line, and every pcurve it holds is a line; any other kind of carrier is a fault at the entity that uses it. A body recorded [`Exactness::Certified`] or [`Exactness::Approximate`] may use any carrier: its stated bound is judged against the geometry by group 2, which certifies every vertex and edge against its carriers at that bound (11.12), and the record's own arithmetic, the least exact class of the inputs with their bounds added, is `geom_num::Exactness`'s, proven there.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/exactness.rs",
+          "guarantees": [
+            "**An exact record is flat.** A body recorded exact passes only when every face's surface is a plane, every edge's curve a line and every pcurve a line.",
+            "**Every fault, in a fixed order.** Faces, then edges, then fins, rows ascending.",
+            "**Charged.** One work unit per row visited, to the caller's meter."
+          ],
+          "job": "Group 4 of chapter 8.3, the exactness record: the body's exactness class is consistent with its geometry.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/09-representations.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 9's exactness classes and the kinds that keep a B-rep exact (`projects/engines/geometry/architecture/09-representations.md`), checked as chapter 8.3's fourth group (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_check::exactness",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time per accessor; a report holds one fault per thing found wrong.",
+          "does": "[`Group`] names the four groups of 8.3; [`Level`] says which run ([`Level::Cheap`] after every operation in every build, [`Level::Full`] in debug builds, in continuous integration, on every import and on request); [`Entity`] names one entity of a body by its index; [`Fault`] is one thing found wrong, of a [`FaultKind`], at one entity and possibly naming a second; [`Report`] holds the faults of one check in the order they were found (the first [`crate::MAX_FAULTS`], and a count of the rest), the groups that ran, and the groups the level asked for that this checker does not have yet.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/report.rs",
+          "guarantees": [
+            "**Nothing hidden.** A [`Report`] passes only when it found no fault, kept or counted; a group the level asked for but which is not built yet is listed in [`Report::missing`], never counted as passed.",
+            "**One order.** Faults are listed in the order the checks find them, which is fixed (each check runs over rows in ascending order), so the same body gives the same report everywhere.",
+            "**Plain words.** Every [`FaultKind`] has a sentence saying what is wrong ([`FaultKind::what`]), and [`Fault`]'s `Display` names its entities by arena and row."
+          ],
+          "job": "What the checker reports: the groups of chapter 8.3, how many of them a check runs, and each fault with the entities it involves.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "Parasolid's published body check, which runs in gated groups and reports each fault with the entities involved (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5), as chapter 8.3 sets out (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_check::report",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the sum of the groups run, each linear in the body's rows; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most four per vertex and one per edge), shared by every check.",
+          "does": "[`check`] runs, for each group of [`Group::ALL`] the [`Level`] asks for, the group's checks on the body and the exactness the body is recorded with, and reports every fault in the order found. A group the level asks for that this checker does not have yet is listed as missing in the report, never run and never counted as passed. An operation calls it on its result before returning it, at [`Level::of_build`] (8.3; principle 4); an import, and any caller who asks, call it at [`Level::Full`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/run.rs",
+          "guarantees": [
+            "**Never changes the body.** The check reads the body through `&Body` only.",
+            "**The same report everywhere.** The groups run in 8.3's order and each in a fixed order, so one body gives one report on every machine and thread count.",
+            "**Stoppable.** Every row visited is charged to the caller's meter, so the caller's budget or cancellation stops a check like any operation (23.10), and a refused allocation stops it as the meter's `OutOfMemory`, never as an abort."
+          ],
+          "job": "One check of a body: the groups its level asks for, in chapter 8.3's order, each charged to the caller's meter, into one report.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "Parasolid's body check in gated groups, reporting each fault with its entities (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5), as chapter 8.3 and 28.4 run it (`projects/engines/geometry/architecture/08-topology.md`, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_check::run",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time per charge and per fault; [`Sink::new`] reserves [`MAX_FAULTS`] faults.",
+          "does": "[`Sink`] holds the faults of one check and the caller's [`WorkMeter`]. It reserves room for [`MAX_FAULTS`] faults before the check starts, as Parasolid's body check takes a largest number of faults to return, so recording a fault never allocates; a fault past the cap is counted, not kept. Each check charges one work unit per row it visits ([`Sink::charge`]), so a check of a huge body can be stopped by the caller's budget or cancellation like any operation (23.10). The checks' scratch space is reserved once, by [`crate::check`], so a refused allocation stops the check through the meter instead of aborting ([`Sink::out_of_memory`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/sink.rs",
+          "guarantees": [
+            "**The first faults kept, in order, and the rest counted.** [`Sink::push`] keeps a fault while fewer than [`MAX_FAULTS`] are kept, and counts it otherwise; it never allocates.",
+            "**Never aborts on memory.** A refused reservation is the meter's [`geom_run::Stop::OutOfMemory`]."
+          ],
+          "job": "Where a check puts what it finds, and how it pays for its work: the faults found so far, the count of those past the cap, and the caller's meter.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md"
+            ],
+            "text": "the work meter of chapter 23.10 (`geom_run::WorkMeter`), charged per row as `geom_topo::Builder::publish` charges per chunk (`projects/engines/geometry/architecture/23-performance.md`, section 23.10), and the cap on returned faults of Parasolid's body check (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5)."
+          },
+          "path": "geom_check::sink",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-check",
       "provenance": [],
       "sections": "8.3, 10.2, 16.1, 18.10, 19.2, 22, 24.7 and 28.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G84, G85, G102, G134, G177, G322.",
+      "status": "the framework and groups 1 and 4 (G84) built; geometric consistency and self-intersection to come in G85, G102, G134, G177 and G322.",
       "summary": "Spare Kit geometry kernel: the validity checker."
     },
     {
