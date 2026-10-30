@@ -826,6 +826,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-fuzz.yml` | `clusterfuzzlite-seeded` | `trip clusterfuzzlite`: the job is `clusterfuzzlite`'s seeded run, and fails if ClusterFuzzLite's build and fuzzing stop finding the planted crash |
 | `kernel-quality.yml` | `mutants-plan` | J: `geom-test/tests/quality_gates.rs::shard_plans_fit_the_budget_and_a_matrix` |
 | `kernel-quality.yml` | `mutants` | R: `geom-test/tests/seeded_gates.rs::a_seeded_survivor_fails_the_mutation_gate_until_a_test_catches_it`; J: `geom-test/tests/kernel_quality_workflow.rs::every_gate_is_judged_and_tool_failures_are_not_swallowed` |
+| `kernel-quality.yml` | `mutants-2` | The tests of `mutants`: shards 256 on, with its steps word for word (J: `geom-test/tests/kernel_quality_workflow.rs::every_shard_and_partition_runs_once`) |
 | `kernel-quality.yml` | `mutants-judge` | R: `geom-test/tests/seeded_gates.rs::a_pull_request_that_adds_a_survivor_fails_the_diff_gate`; J: `geom-test/tests/quality_gates.rs::stale_entries_fail` |
 | `kernel-quality.yml` | `coverage` | R: `geom-test/tests/seeded_gates.rs::seeded_uncovered_code_fails_the_coverage_gate_until_tests_reach_it` |
 | `kernel-quality.yml` | `gates-seeded` | R: the job itself, which runs `geom-test/tests/seeded_gates.rs` with the real tools |

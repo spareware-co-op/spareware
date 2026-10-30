@@ -55,6 +55,11 @@ petgraph = { version = "0.8.3", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
 # The LCOV tracefiles cargo-llvm-cov writes, read by the coverage gate (G21). MIT OR Apache-2.0.
 lcov = "0.8.2"
+# The regular expressions of a narrowed full mutation run (`kernel-quality --files`), in the syntax
+# cargo-mutants' `--re` takes; the plan checks the two select the same mutants. regex-lite 0.1.9:
+# MIT OR Apache-2.0, the Rust project's regex crate without Unicode tables, already in the lock
+# (divan's), with no dependencies of its own.
+regex-lite = "=0.1.9"
 # The exact rationals of the NURBS reference implementation (G57, `nurbs_reference`): big integers
 # and rationals. MIT OR Apache-2.0, the versions geom-num's and geom-linalg's tests use, without
 # the default num-order and dashu-float features, which the reference does not use.

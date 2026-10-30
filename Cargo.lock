@@ -1404,6 +1404,7 @@ dependencies = [
  "pulldown-cmark",
  "quote",
  "rand 0.10.3",
+ "regex-lite",
  "serde",
  "serde_json",
  "sha2",
