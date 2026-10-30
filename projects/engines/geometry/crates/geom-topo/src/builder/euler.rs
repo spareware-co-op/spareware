@@ -59,7 +59,6 @@ use super::Builder;
 use super::named::{Keep, Moves, to};
 use crate::arenas::Arenas;
 use crate::body::{Body, BodyKind};
-use crate::column::Column;
 use crate::entity::{
     Edge, EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, Region, RegionIx, RegionKind, Sense,
     Shell, ShellIx, Vertex, VertexIx,
@@ -214,11 +213,6 @@ fn used(rows: u32, users: impl Iterator<Item = (Option<u32>, bool)>) -> Vec<bool
             .for_each(|u| *u = true);
     }
     used
-}
-
-/// A list column of `rows` empty links.
-fn cleared<K: Kind, T>(rows: u32) -> Result<Column<K, Option<Ix<T>>>, TopoError> {
-    Column::filled(None, rows)
 }
 
 impl Euler {
@@ -859,7 +853,7 @@ impl Euler {
     }
 
     /// Drops the dead rows and the geometry no live entity uses, and publishes the rest by name
-    /// ([`Builder::publish_named`]) as a body of `kind` whose infinite void region is `outside`.
+    /// ([`Builder::publish_named`], which rebuilds the lists the editor does not keep) as a body of `kind` whose infinite void region is `outside`.
     ///
     /// # Errors
     ///
@@ -872,20 +866,12 @@ impl Euler {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Body, TopoError> {
         let Euler {
-            mut arenas,
+            arenas,
             names,
             live,
             ..
         } = self;
-        let a = &mut arenas;
-        a.regions.first_shell = cleared(a.regions.len())?;
-        a.shells.next = cleared(a.shells.len())?;
-        a.shells.first_face = cleared(a.shells.len())?;
-        a.faces.next = cleared(a.faces.len())?;
-        a.faces.first_loop = cleared(a.faces.len())?;
-        a.loops.next = cleared(a.loops.len())?;
-        a.loops.first_fin = cleared(a.loops.len())?;
-        a.edges.first_fin = cleared(a.edges.len())?;
+        let a = &arenas;
         let surfaces = used(
             a.surfaces.len(),
             a.faces

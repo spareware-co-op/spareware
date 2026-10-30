@@ -429,7 +429,10 @@ impl Moves<Permutation> {
 }
 
 impl<P: Place> Moves<P> {
-    /// `a` moved: every row at its new place, every link pointing at its target's new place.
+    /// `a` moved: every row at its new place, every link pointing at its target's new place, and
+    /// every list left empty for [`rechain`] to rebuild (a region's first shell, a shell's next
+    /// and first face, a face's next and first loop, a loop's next and first fin, an edge's first
+    /// fin).
     pub(crate) fn arenas(
         &self,
         a: &Arenas,
@@ -442,8 +445,8 @@ impl<P: Place> Moves<P> {
             |ix| a.regions.get(ix),
             |r: Region| {
                 Ok(Region {
-                    first_shell: to_some(&self.shells, r.first_shell)?,
-                    ..r
+                    kind: r.kind,
+                    first_shell: None,
                 })
             },
         )?;
@@ -455,8 +458,8 @@ impl<P: Place> Moves<P> {
             |s: Shell| {
                 Ok(Shell {
                     region: to(&self.regions, s.region)?,
-                    next: to_some(&self.shells, s.next)?,
-                    first_face: to_some(&self.faces, s.first_face)?,
+                    next: None,
+                    first_face: None,
                 })
             },
         )?;
@@ -468,10 +471,11 @@ impl<P: Place> Moves<P> {
             |f: Face| {
                 Ok(Face {
                     shell: to(&self.shells, f.shell)?,
-                    next: to_some(&self.faces, f.next)?,
+                    next: None,
                     surface: to(&self.surfaces, f.surface)?,
-                    first_loop: to_some(&self.loops, f.first_loop)?,
-                    ..f
+                    sense: f.sense,
+                    first_loop: None,
+                    bound: f.bound,
                 })
             },
         )?;
@@ -483,8 +487,8 @@ impl<P: Place> Moves<P> {
             |l: Loop| {
                 Ok(Loop {
                     face: to(&self.faces, l.face)?,
-                    next: to_some(&self.loops, l.next)?,
-                    first_fin: to_some(&self.fins, l.first_fin)?,
+                    next: None,
+                    first_fin: None,
                 })
             },
         )?;
@@ -512,7 +516,7 @@ impl<P: Place> Moves<P> {
             |ix| a.edges.get(ix),
             |e: Edge| {
                 Ok(Edge {
-                    first_fin: to_some(&self.fins, e.first_fin)?,
+                    first_fin: None,
                     start: to_some(&self.vertices, e.start)?,
                     end: to_some(&self.vertices, e.end)?,
                     curve: to(&self.curves, e.curve)?,
