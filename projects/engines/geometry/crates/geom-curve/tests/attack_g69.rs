@@ -8,8 +8,9 @@
 //! - **An offset's cache tries narrower pieces.** Where the offset's derivatives could not be
 //!   bounded over a piece of the coarsest cut, the conversion failed as a defect; now it tries
 //!   narrower pieces, as a transition's does, and a piece too wide even at the finest cut is
-//!   `Unbounded`. (Where the offset folds, the cache it makes states a large deviation: honest,
-//!   and checked against the definition by the catalogue.)
+//!   `Unbounded`: an offset through a cusp of its basis, whose normal vanishes, refuses so. (Where
+//!   the offset folds, the cache it makes states a large deviation: honest, and checked against
+//!   the definition by the catalogue.)
 #![allow(
     clippy::unwrap_used,
     clippy::float_cmp,
@@ -22,7 +23,8 @@
 use geom_curve::offset::{Offset, OffsetLaw};
 use geom_curve::trimmed::Trimmed;
 use geom_curve::{
-    Axes, Basis, BulgePolyline, Circle, CurveKind, DerivativeBound, Ellipse, Frame, ParamCurve,
+    Axes, Basis, BulgePolyline, Circle, CurveError, CurveKind, DerivativeBound, Ellipse, Frame,
+    ParamCurve, Polynomial,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, TypedTransform};
 use geom_run::{Budget, WorkMeter};
@@ -141,4 +143,21 @@ fn a_folding_offset_converts_on_narrower_pieces() {
         "{}",
         n.deviation
     );
+}
+
+#[test]
+fn an_offset_through_a_cusp_is_unbounded_even_on_the_finest_pieces() {
+    // C(t) = (t², t³) stops at t = 0: its normal vanishes there, so every piece holding 0 is
+    // unbounded at every width, and the conversion refuses as unbounded, not as a defect.
+    let cusp = Polynomial::new(
+        vec![[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        (-1.0, 1.0),
+    )
+    .unwrap();
+    let basis = Trimmed::new(Basis::Polynomial(cusp), (-1.0, 1.0)).unwrap();
+    let o = Offset::new(basis, OffsetLaw::Planar { distance: 0.25 }).unwrap();
+    assert!(matches!(
+        o.to_nurbs(&mut meter()),
+        Err(CurveError::Unbounded)
+    ));
 }
