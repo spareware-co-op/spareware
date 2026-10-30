@@ -439,24 +439,18 @@ pub fn salvage(bytes: &[u8], meter: &mut WorkMeter<'_>) -> Result<Salvage, FileE
     let mut damage_from: Option<usize> = None;
     while at < bytes.len() {
         let rest = bytes.get(at..).unwrap_or_default();
-        match Record::decode(rest, meter) {
-            Ok((record, len)) => {
-                if let Some(from) = damage_from.take() {
-                    damaged.push((wide(from), wide(at)));
-                }
-                records.push((wide(at), record));
-                at = at.saturating_add(len.max(1));
+        if let Ok((record, len)) = Record::decode(rest, meter) {
+            if let Some(from) = damage_from.take() {
+                damaged.push((wide(from), wide(at)));
             }
-            Err(RecordError::Cbor(e)) if matches!(e.kind, CborErrorKind::Stopped(_)) => {
-                if let CborErrorKind::Stopped(s) = e.kind {
-                    return Err(FileError::Stopped(s));
-                }
-            }
-            Err(_) => {
-                damage_from.get_or_insert(at);
-                meter.charge(1).map_err(FileError::Stopped)?;
-                at = at.saturating_add(1);
-            }
+            records.push((wide(at), record));
+            at = at.saturating_add(len.max(1));
+        } else {
+            // A meter that stopped inside the decode stays stopped (WorkMeter latches its first
+            // stop), so the charge below returns that stop: a stop is never counted as damage.
+            damage_from.get_or_insert(at);
+            meter.charge(1).map_err(FileError::Stopped)?;
+            at = at.saturating_add(1);
         }
     }
     if let Some(from) = damage_from {
