@@ -658,6 +658,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/newton.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and its classes are what they claim: every typical box is proven with the zero inside, every extreme batch ends in exactly the verdicts and errors listed above, and every typical Jacobian succeeds while every extreme one is refused (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the interval Newton operators, `geom_num::newton`, and the Jacobians of `geom_num::dual`: boxes for [`krawczyk_2`], [`hansen_sengupta_2`], [`krawczyk_4`] and [`hansen_sengupta_4`] on the two fixed systems [`CircleLine`] and [`Four`], and points and boxes for `dual::jacobian` on [`Four`] ([`jacobian_real`], [`jacobian_interval`]).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the cases an interval Newton step decides, as chapter 12.4 lists them (exclusion, uniqueness, refinement) and as `geom_num::newton`'s module header proves them (`projects/engines/geometry/architecture/12-intersections.md`), each with its own class, and boxes around a zero at widths a decade apart, as the root-isolation engine (G53) will hand them over."
+          },
+          "path": "geom_bench::inputs::newton",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the exact predicates' inputs and N keys per input, once per batch.",
           "does": null,
           "family": [],
@@ -3839,7 +3859,7 @@
               "shape": "unit"
             },
             {
-              "doc": "A maths function was given an argument outside its domain, where it has no real value: the square root or logarithm of a negative number, the arcsine or arccosine of a number beyond ±1, or a negative number to a power that is not a whole number.",
+              "doc": "A maths function was given an argument outside its domain, where it has no real value: the square root or logarithm of a negative number, the arcsine or arccosine of a number beyond ±1, or a negative number to a power that is not a whole number. Also the derivative of the angle `atan2` over a box crossing its branch cut on the negative x-axis from below, where the angle jumps by 2π and has no derivative ([`crate::dual`]).",
               "name": "OutsideDomain",
               "shape": "unit"
             },
@@ -3854,13 +3874,32 @@
               "shape": "unit"
             },
             {
-              "doc": "An enclosure needs a maths function whose error is not proven, or whose interval version is not built yet: the sine and cosine of radians, which only `libm` supplies, without a proven bound, and the arctangent of a box. An interval built without that proof would not be a certificate. The certified interval functions are `sinpi`, `cospi`, `exp` and `ln`.",
+              "doc": "An enclosure needs a maths function whose error is not proven: the sine and cosine of radians, which only `libm` supplies, without a proven bound. An interval built without that proof would not be a certificate. The certified interval functions are `sinpi`, `cospi`, `exp`, `ln` and `atan2`.",
               "name": "UnprovenMaths",
               "shape": "unit"
             }
           ],
           "module": "geom_num::error",
           "name": "NumError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why an operator could not make its step.",
+          "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+          "kinds": [
+            {
+              "doc": "The midpoint of the Jacobian's enclosure has a zero pivot, or an inverse that is not finite, so the system is refused: no preconditioner can be formed.",
+              "name": "Singular",
+              "shape": "unit"
+            },
+            {
+              "doc": "The residuals failed, or an enclosure left the finite doubles.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_num::newton",
+          "name": "NewtonError",
           "non_exhaustive": false
         },
         {
@@ -3946,7 +3985,7 @@
         "A [`plane::Plane`] and a [`plane::Tpi`] check their bit budgets when they are made, so every computation on them fits its type.",
         "Committing a three-plane point to the grid ([`plane::Tpi::to_grid`]) rounds each coordinate to the nearest step, ties to even, moving it by at most half a step ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.",
         "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] and [`wide32`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
-        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1); [`brent`]'s searches and [`quadrature`]'s integrals return `Real`s, and stop at a caller's cap with an error, never a best guess. Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
+        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1); [`brent`]'s searches and [`quadrature`]'s integrals return `Real`s, and stop at a caller's cap with an error, never a best guess; every operation of [`scalar::Scalar`] on a `Real`, and so of a [`dual::Dual`] over it, checks its result, so a NaN or an infinity in a value or a derivative is `NotFinite` (the NaN tripwire of chapter 15.4); and [`newton`]'s operators return enclosures with finite bounds or an error. Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
         "Every interval operation encloses the exact result of its operation on any reals in its operands, and an enclosure that needs a maths function without a proven error is refused ([`NumError::UnprovenMaths`]).",
         "A bound carries its grid step, and bounds add exactly in the finer step ([`exactness::Exactness`]).",
         "Every double-double operation ([`dd::DD`]) is within its stated error bound of the exact result: the published, machine-checked bound of its algorithm (the theorem is named on each operation), plus, from the range of binary64, 2^−398 relative for products, quotients and roots and 2^−1074 absolute for products and quotients. A `DD` is never NaN or infinite: an overflow is [`NumError::NotFinite`].",
@@ -4020,6 +4059,30 @@
             "text": "the algorithms are those whose bounds are proven and machine-checked (Joldes, Muller and Popescu 2017, <https://doi.org/10.1145/3121432>, and the other references below): addition, `AccurateDWPlusDW` (JMP Algorithm 6, the QD library's \"IEEE addition\" of Li et al.) and `DWPlusFP` (JMP Algorithm 4, QD's); multiplication by a double, `DWTimesFP3` (JMP Algorithm 9), and of two `DD`s, `DWTimesDW3` (JMP Algorithm 12), the ones JMP recommend when a fused multiply-add is available; division by a double, `DWDivFP3` (JMP Algorithm 15), and of two `DD`s, `DWDivDW3` (JMP Algorithm 18, the more accurate of their two divisions); the square root, `SQRTDWtoDW` (LLMPR Algorithm 8); `TwoProduct` as Kahan's `Fast2Mult` with a fused multiply-add ([`two_prod_fma`], JMP Algorithm 3), and `TwoSum` as Knuth's ([`crate::eft::two_sum`])."
           },
           "path": "geom_num::dd",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an operation on a `Dual<T, N>` costs a few operations of `T` on the value and the same again for each of the `N` partials; [`jacobian`] runs the function once. No allocation, no recursion.",
+          "does": "a [`Dual<T, N>`] holds a value `v` and `N` partial derivatives `∂v/∂xⱼ`, all in a [`Scalar`] `T`. Every operation applies the chain rule to them, with the derivative rule of each function written once below, and is itself a [`Scalar`], so a residual written over `Scalar` (`crate::scalar`) runs on dual numbers unchanged. [`Dual::variables`] seeds `N` unknowns with the unit directions, and [`jacobian`] runs a function on them and reads the values and the Jacobian off the result. Over [`Real`] that is the Jacobian at a point, rounded; over [`Interval`] it is an enclosure of the Jacobian over a box, which the interval Newton operators of [`crate::newton`] need. Chapter 15.4 asks for exactly this: derivatives \"from forward-mode automatic differentiation ... over the same code and the kernel's own maths functions\".",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/dual.rs",
+          "guarantees": [
+            "**Derivatives of the code.** The partials are the derivatives of the function the operations compute, each operation's rule applied once, in the order the code runs; tests check them against central differences of the same code at seeded points (`tests/attack_g52.rs`).",
+            "**The NaN tripwire.** Over `Real`, every value and every partial is checked as it is made, so a NaN or an infinity anywhere, in a value or in a derivative, is [`NumError::NotFinite`] from the operation that made it, in every build (`crate::scalar`). That includes the derivative's own singularities: the square root at zero, the logarithm's slope at a tiny argument, and the angle's at the origin, whose rules divide by zero or overflow. A dual number never holds a NaN.",
+            "**Enclosures over a box.** Over `Interval`, the value encloses the function's range over the box and each partial encloses that partial derivative's range, by induction over the operations: each rule is evaluated in outward-rounded interval arithmetic on enclosures of its inputs. That needs the function continuously differentiable on the box, which the rules themselves enforce: a rule that divides by an interval holding zero (the square root at zero, the angle at the origin) refuses with [`NumError::DivisorContainsZero`], the logarithm refuses a box reaching zero, and `atan2` refuses a box crossing its branch cut on the negative x-axis from below with [`NumError::OutsideDomain`], where [`Interval::atan2`] itself gives the whole range but the angle jumps by 2π and has no derivative.",
+            "**Deterministic.** Only the operations of [`Scalar`], in a fixed order: the same bits on every target."
+          ],
+          "job": "Forward-mode dual numbers over the kernel's own arithmetic: a value carried together with its derivatives along `N` directions, so that one evaluation of a residual gives its Jacobian.",
+          "method": {
+            "links": [
+              "doi:10.1137/1.9780898717761",
+              "doi:10.1137/1.9780898717716"
+            ],
+            "text": "forward-mode automatic differentiation by operator overloading on dual numbers, as in A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM, 2008, chapter 3 (the tangent propagation of each elemental function), doi:10.1137/1.9780898717761, with all `N` tangents carried at once (their vector mode, section 3.1); over intervals it is the interval evaluation of derivatives of R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM, 2009, chapter 8, doi:10.1137/1.9780898717716. Written for this kernel for the reason `crate::scalar` gives."
+          },
+          "path": "geom_num::dual",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4755,6 +4818,38 @@
           "target": "lib"
         },
         {
+          "cost": "two evaluations of the residuals, one on `N` dual intervals and one on `N` point intervals, then O(N³) operations on doubles and intervals for the preconditioner and the products, with `N` at most 4: a few hundred interval operations at most. No allocation, no recursion.",
+          "does": "a system `F(x) = 0` of `N` equations in `N` unknowns is written once over [`Scalar`] ([`Residuals`]). One step of [`krawczyk`] or [`hansen_sengupta`] on a box `X`:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
+          "guarantees": [
+            "**A unique zero is proven (Krawczyk).** Let `x ∈ X` and let `J̃` be the matrix whose row `i` is the gradient of `Fᵢ` at a point of the segment from `m` to `x`, so that `F(x) = F(m) + J̃·(x − m)` (the mean value theorem, row by row, which needs `F` continuously differentiable on `X`: [`crate::dual`] refuses every box where it is not). Every entry of `J̃` lies in its entry of `J(X)`, so `g(x) = x − C·F(x) = m − C·F(m) + (I − C·J̃)·(x − m)` lies in the computed `K`, which encloses that expression for every choice inside its interval operands. If `K ⊆ int X`, `g` maps `X` into itself and is continuous, so it has a fixed point (Brouwer). For uniqueness, let `wⱼ` be the width of `Xⱼ`, positive since `Kⱼ` is strictly inside it. The width of an interval sum is the sum of the widths, and a product with an interval holding zero is at least as wide as its operand's magnitude times that interval's width, so the width of `Kᵢ` is at least `Σⱼ |I − A|ᵢⱼ wⱼ`, where `|·|` is the entrywise magnitude; `Kᵢ ⊂ int Xᵢ` makes that less than `wᵢ`. So the norm `‖v‖_w = maxⱼ |vⱼ|/wⱼ` gives `‖(I − C·J̃) v‖_w < ‖v‖_w` for every `J̃` in `J(X)` and `v ≠ 0`. Hence `C·J̃` is nonsingular, so `C` is, and the fixed point is a zero of `F`; and two zeros `x ≠ y` in `X` would give `x − y = (I − C·J̃)(x − y)` for some such `J̃`, which that inequality forbids. So `X` holds exactly one zero, and it lies in `K`. The same argument shows that the Jacobian is nonsingular at every point of `X`: a zero where it is singular, or two zeros, are never reported as one. The rounding of steps 2 to 5 only widens what the argument uses, so it applies to the computed `K`. This is the test of Krawczyk (1969) as Moore (1977) and Rump (1983) made it a proof of existence and uniqueness, here with its uniqueness argument written out in the weighted norm the strict inclusion itself provides.",
+            "**A unique zero is proven (Hansen and Sengupta).** For a box `X`, any `m` in it, a vector `y` holding `C·F(m)` and an interval matrix holding `C·F′(x)` for every `x` in `X`, Hansen and Sengupta's operator `X′ = m + Γ(A, −y, X − m)` holds every zero of `F` in `X`, and `∅ ≠ X′ ⊆ int X` proves that `F` has exactly one zero in `X′` (Neumaier 1990, chapter 5, as Goldsztejn states it, theorem 1). The computed sweep encloses the exact one: each computed quotient `qᵢ` holds the exact one, and the narrowed rows feed the later ones as supersets. [`Verdict::Unique`] is given only when every diagonal entry of `A` excludes zero and every computed `m + qᵢ` is strictly inside `Xᵢ`. Then each exact quotient is too, so the exact operator's image is the exact quotients, not empty and inside `int X`.",
+            "**No zero is lost.** Every zero of `F` in `X` lies in the enclosure of [`Verdict::Unique`] and of [`Verdict::Narrowed`]: for Krawczyk because `g` fixes each zero, so each lies in `K`; for Hansen and Sengupta by the theorem's first part. [`Verdict::NoZero`] is given only when `X` holds none: some `Fᵢ(X)` excludes zero, or an operator's image misses `X` in a coordinate.",
+            "**Singular systems are refused, never certified.** A midpoint Jacobian with a zero pivot is [`NewtonError::Singular`]. Over any box, a zero where the Jacobian is singular is never proven unique by Krawczyk's operator (the first guarantee), nor by Hansen and Sengupta's while the box's diagonal entries hold zero, as they do at a multiple root of one equation.",
+            "**Errors, never guesses.** A failing residual is [`NewtonError::Num`] with its error; so is an enclosure that leaves the finite doubles. Every enclosure is finite and inside the box given.",
+            "**Deterministic.** Doubles and outward-rounded intervals only, in a fixed order, through [`Scalar`]'s operations: the same bits on every target."
+          ],
+          "job": "Interval Newton operators for one to four unknowns: Krawczyk's and Hansen and Sengupta's, each of which proves that a box holds exactly one zero of a system of equations, proves that it holds none, or narrows it to where every zero in it lies.",
+          "method": {
+            "links": [
+              "doi:10.1007/BF02234767",
+              "doi:10.1137/0714044",
+              "doi:10.1016/B978-0-12-428660-3.50010-0",
+              "https://arxiv.org/abs/2011.05000",
+              "doi:10.1007/BF01933165",
+              "doi:10.1017/CBO9780511526473",
+              "https://arxiv.org/abs/0811.2984",
+              "https://jhupbooks.press.jhu.edu/title/matrix-computations"
+            ],
+            "text": "the Krawczyk operator (R. Krawczyk, \"Newton-Algorithmen zur Bestimmung von Nullstellen mit Fehlerschranken\", *Computing* 4, 1969, doi:10.1007/BF02234767), as a test of existence (R. E. Moore, \"A test for existence of solutions to nonlinear systems\", *SIAM J. Numer. Anal.* 14, 1977, doi:10.1137/0714044) and of uniqueness (S. M. Rump, \"Solving algebraic problems with high accuracy\", in *A New Approach to Scientific Computation*, Academic Press, 1983, doi:10.1016/B978-0-12-428660-3.50010-0; P. Breiding, K. Rose and S. Timme, \"Certifying zeros of polynomial systems using interval arithmetic\", *ACM Trans. Math. Softw.* 49, 2023, theorem 3.6, <https://arxiv.org/abs/2011.05000>). The Hansen-Sengupta operator (E. Hansen and S. Sengupta, \"Bounding solutions of systems of equations using interval analysis\", *BIT* 21, 1981, doi:10.1007/BF01933165), in the form of A. Neumaier, *Interval Methods for Systems of Equations*, Cambridge University Press, 1990, chapter 5, doi:10.1017/CBO9780511526473, as A. Goldsztejn states it (\"Sensitivity analysis using a fixed point interval iteration\", 2008, section 1, <https://arxiv.org/abs/0811.2984>). The preconditioner's inverse by Gaussian elimination with partial pivoting and the triangular solves of G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013, algorithm 3.4.1 and section 3.1, <https://jhupbooks.press.jhu.edu/title/matrix-computations>, as chapter 12.4 asks. Written for this kernel: the operators must run on its own interval type and maths functions (chapter 21), which no published interval library offers without changing the rounding mode."
+          },
+          "path": "geom_num::newton",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "on the exact path, the predicate itself. Only on an exact tie, a walk over the masks of the N·(N − 1) perturbed entries (6 for orient2d, 12 for orient3d and incircle, 20 for insphere) until a coefficient is not zero, each candidate an exact N × N determinant by cofactors (at most 120 products in [`I256`]); for points in general position but for the tie, the first few masks decide, and even five coincident points with distinct keys are decided within 2^16 masks.",
           "does": null,
           "family": [],
@@ -4961,6 +5056,32 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one operation of the underlying type per operation, plus one finiteness check on a `Real`. No allocation, no recursion.",
+          "does": "[`Scalar`] is the set of operations a residual function may use: the four basic operations, the negation, the square, the fused multiply-add, the square root, π, and the proven maths functions `sinpi`, `cospi`, `exp`, `ln` and `atan2` of [`crate::math`]. It is implemented for [`Real`], rounded to nearest; for [`Interval`], rounded outward; and for [`crate::dual::Dual`] over any scalar. A residual written once as `fn residuals<S: Scalar>(x: [S; N]) -> Result<[S; N], NumError>` then gives its value at a point with `S = Real`, an enclosure of its range over a box with `S = Interval`, its Jacobian at a point with `S = Dual<Real, N>`, and an enclosure of its Jacobian over a box with `S = Dual<Interval, N>`, all from the one text, so a derivative can never drift from the value it belongs to (chapter 15.4: \"Derivatives are generated\"). The interval Newton operators of [`crate::newton`] take residuals in this form.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/scalar.rs",
+          "guarantees": [
+            "**Never NaN, never infinite.** Every operation on a [`Real`] rounds to nearest and checks its result with [`Real::new`], so a NaN or an infinity anywhere, whether an overflow, a division by zero or ∞ − ∞, is [`NumError::NotFinite`] at the operation that made it, in every build. That check is the NaN tripwire of chapters 15.4 and 21: an error, never a debug-only panic (31.7's G24 row explains why the kernel has no panicking tripwire), and never a NaN carried on. Operations on an [`Interval`] keep its invariant: finite bounds, or an error.",
+            "**The maths is the kernel's.** Every function comes from [`crate::math`] for a `Real` and from the certified interval versions (`interval.rs`, `math/enclose.rs`) for an `Interval`: correctly rounded `sinpi`, `cospi`, `exp`, `ln` and `atan2`, and `libm`'s correctly rounded square root and fused multiply-add. No platform maths, so every target computes the same bits.",
+            "**Enclosures.** On an `Interval`, each operation is the interval operation of the same name, so it encloses the exact result over its operands, and [`Scalar::pi`] encloses π ([`Interval::PI`]). By induction over the operations, a residual evaluated in `Interval` encloses the exact residual at every point of the box: the natural interval extension (Moore, Kearfott and Cloud).",
+            "**Sealed.** Only this crate implements `Scalar`, for `Real`, `Interval` and [`crate::dual::Dual`], so the operators that certify roots only ever run on arithmetic whose rounding this crate proves.",
+            "**Errors as the operation states them.** A domain error is the underlying function's (`OutsideDomain` for the square root of a negative `Real` or the logarithm of a value that is not positive, `NegativeSqrt` for an interval reaching below zero, `DivisorContainsZero` for an interval divisor holding zero), unchanged."
+          ],
+          "job": "The arithmetic a residual is written over once, so that the same code gives a rounded value, a certified enclosure and, through [`crate::dual::Dual`], its derivatives.",
+          "method": {
+            "links": [
+              "doi:10.1137/1.9780898717761",
+              "doi:10.1137/1.9780898717716",
+              "https://rust-lang.github.io/api-guidelines/future-proofing.html"
+            ],
+            "text": "a number type the computation is generic over, as forward-mode automatic differentiation by operator overloading uses it (A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM, 2008, chapters 2 and 3, doi:10.1137/1.9780898717761), and the natural interval extension of an expression (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM, 2009, chapter 5, doi:10.1137/1.9780898717716). The trait is sealed in the usual Rust way, by a supertrait in a private module (Rust API Guidelines, C-SEALED, <https://rust-lang.github.io/api-guidelines/future-proofing.html>). Written for this kernel because the published dual-number crates compute with the platform's maths functions, which chapter 21 forbids, and none has an outward-rounded interval scalar."
+          },
+          "path": "geom_num::scalar",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
