@@ -3048,13 +3048,6 @@
       "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "line_text": "let exact = te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0);",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "if propagate(&mut theirs).is_none() {",
       "occurrences": 1,
