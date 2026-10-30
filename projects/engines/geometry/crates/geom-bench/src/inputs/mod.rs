@@ -41,6 +41,7 @@ pub mod generated;
 pub mod grid;
 pub mod growth;
 pub mod interval;
+pub mod isolate;
 pub mod math;
 pub mod newton;
 pub mod perturb;

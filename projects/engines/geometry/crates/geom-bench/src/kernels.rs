@@ -1527,3 +1527,79 @@ pub mod dual {
         run(batch, out, |&x| jacobian(|v| Four.residuals(v), x));
     }
 }
+
+/// The root-isolation engine of `geom_num::isolate` (G53) on the fixed systems
+/// [`crate::inputs::isolate::Cubic`] and [`crate::inputs::newton::CircleLine`], each domain
+/// isolated whole under a meter with no budget.
+pub mod isolate {
+    use geom_num::interval::Interval;
+    use geom_num::isolate::{IsolateError, Isolation, Options, isolate};
+    use geom_num::real::Real;
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+    use crate::inputs::isolate::Cubic;
+    use crate::inputs::newton::CircleLine;
+
+    /// `isolate::isolate` on [`Cubic`] over each domain, to each target.
+    #[inline(never)]
+    pub fn cubic_1(
+        batch: &[([Interval; 1], Real)],
+        out: &mut Vec<Result<Isolation<1>, IsolateError<1>>>,
+    ) {
+        run(batch, out, |&(domain, target)| {
+            let options = Options {
+                target,
+                ..Options::DEFAULT
+            };
+            isolate(
+                &Cubic,
+                domain,
+                options,
+                &mut WorkMeter::new(Budget::UNLIMITED),
+            )
+        });
+    }
+
+    /// `isolate::isolate` on [`CircleLine`] over each domain, to each target.
+    #[inline(never)]
+    pub fn circle_line_2(
+        batch: &[([Interval; 2], Real)],
+        out: &mut Vec<Result<Isolation<2>, IsolateError<2>>>,
+    ) {
+        run(batch, out, |&(domain, target)| {
+            let options = Options {
+                target,
+                ..Options::DEFAULT
+            };
+            isolate(
+                &CircleLine,
+                domain,
+                options,
+                &mut WorkMeter::new(Budget::UNLIMITED),
+            )
+        });
+    }
+}
+
+/// The double-double balls of `geom_num::ball` (G53): the cubic of
+/// [`crate::inputs::isolate::Cubic`] over each box, the box made a ball, the cubic evaluated in
+/// balls and enclosed in an interval again.
+pub mod ball {
+    use geom_num::NumError;
+    use geom_num::ball::Ball;
+    use geom_num::interval::Interval;
+    use geom_num::newton::Residuals;
+
+    use super::run;
+    use crate::inputs::isolate::Cubic;
+
+    /// `Ball::from_interval`, the cubic in balls, and `Ball::to_interval`, over each box.
+    #[inline(never)]
+    pub fn cubic(batch: &[[Interval; 1]], out: &mut Vec<Result<Interval, NumError>>) {
+        run(batch, out, |&[x]| {
+            let [value] = Cubic.residuals([Ball::from_interval(x)?])?;
+            value.to_interval()
+        });
+    }
+}

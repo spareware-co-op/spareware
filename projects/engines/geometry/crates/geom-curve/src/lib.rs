@@ -42,9 +42,22 @@
 //! jets (`jet`); [`OnSurface`] in [`on_surface`]; all built on the leaves of [`Basis`] in
 //! [`basis`], so no kind contains itself.
 //!
-//! Status: the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61)
-//! and the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) built; the other
-//! kinds to come in G63, G64, G67, G68, G175, G361 and G371.
+//! The transition curves of road and rail alignments (pieces G63 and G64): [`Transition`] in
+//! [`transition`], one kind with the closed set of [`CurvatureLaw`]s, its heading exact and its
+//! positions by certified Gauss–Legendre quadrature, a part of its parent run either way, with a
+//! certified NURBS form and typed transforms.
+//!
+//! Enclosures (piece G67): the closed-form extents in one parameter ([`extent`]), from which every
+//! analytic kind's bound and derivative bounds come (through `form`); a transition's bound and
+//! derivative bounds over a span on pieces of a sixteenth of a half-turn of heading; the Fresnel
+//! integrals, enclosed by series, asymptotic expansion and quadrature with their remainder bounds
+//! ([`transition::fresnel`]), and the clothoid's point by them
+//! ([`Transition::enclose_fresnel`]).
+//!
+//! Status: the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61),
+//! the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind,
+//! its evaluation (G63) and its conversion, split, reversal and transforms (G64), and the analytic
+//! and transcendental enclosures (G67) built; the other kinds to come in G68, G175, G361 and G371.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -58,6 +71,7 @@ pub mod composite;
 pub mod conic;
 pub mod contract;
 pub mod error;
+pub mod extent;
 mod form;
 pub mod frame;
 pub mod helix;
@@ -74,6 +88,7 @@ pub mod polynomial;
 mod rational;
 pub mod taylor;
 pub mod tight;
+pub mod transition;
 pub mod trimmed;
 
 pub use axes::{Axes, HelixAxes};
@@ -91,4 +106,5 @@ pub use offset::{Offset, OffsetLaw, Station};
 pub use on_surface::{OnSurface, SurfaceRef};
 pub use param::{CurveKind, DerivativeBound, ParamCurve};
 pub use polynomial::Polynomial;
+pub use transition::{CurvatureLaw, Transition};
 pub use trimmed::Trimmed;
