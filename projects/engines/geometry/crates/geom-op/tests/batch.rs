@@ -273,9 +273,21 @@ fn the_batch_total_cuts_in_key_order_and_belongs_to_the_batch() {
         again.reverse();
         assert_eq!(again, results);
     });
-    // Alone, an item never meets a total.
+    // Alone, an item never meets a total: one over the batch's total but within its own budget
+    // succeeds alone, though in a batch of itself it meets the total.
     let alone = b.single(key(9), &items[2], panel).unwrap();
     assert_eq!(alone.value, 31);
+    let big = Panel {
+        key: key(77),
+        work: 60,
+        fails: false,
+    };
+    assert_eq!(b.single(big.key, &big, panel).unwrap().value, 181);
+    let in_batch = b.run(&Exec::serial(), &[big], |p| p.key, panel).unwrap();
+    assert!(matches!(
+        in_batch[0].as_ref().unwrap_err().detail(),
+        OpErrorDetail::Run(RunDetail::BatchTotal(_))
+    ));
 }
 
 #[test]
