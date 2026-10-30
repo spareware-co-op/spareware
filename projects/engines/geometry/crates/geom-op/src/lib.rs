@@ -60,11 +60,13 @@
 //! manifest at the version in `Cargo.lock` states it:
 //!
 //! - MIT OR Apache-2.0: `sha2`.
+//! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-normalization`.
 //!
 //! Status: the context, the error base and its details for the parallel helper and the numbers
 //! layer, the exactness class and warnings of an output, operation identity and the schema types
-//! built (G82); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); budgets
-//! in the contract to come in G83, names in G87, history in G88, the batch runner in G104,
+//! built (G82); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent
+//! names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); budgets in the contract
+//! to come in G83, history in G88, the batch runner in G104,
 //! per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
@@ -79,6 +81,7 @@ pub mod evidence;
 pub mod hash;
 pub mod id;
 pub mod kind;
+pub mod name;
 pub mod output;
 pub mod remedy;
 pub mod schema;
@@ -90,6 +93,10 @@ pub use evidence::{Evidence, Value};
 pub use geom_num::Exactness;
 pub use id::{Label, NameId, OpId, OpPath};
 pub use kind::ErrorKind;
+pub use name::{
+    EdgeOrVertex, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal, PieceKey, Role,
+    RoleArg, Side, TopoName,
+};
 pub use output::{Diagnostic, OpOutput};
 pub use remedy::{Bound, Remedy};
 pub use schema::{Class, DiagnosticSpec, ErrorSpec, Family, Field, OpSchema, RoleSpec, Unit};

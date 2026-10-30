@@ -1223,6 +1223,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "sha2",
+ "unicode-normalization",
 ]
 
 [[package]]
