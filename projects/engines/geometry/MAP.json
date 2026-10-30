@@ -9243,7 +9243,27 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an arena's rows could not be put in name order.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/order.rs",
+          "kinds": [
+            {
+              "doc": "Two rows carry the same name: the first such pair in name order, the lower row first.",
+              "name": "DuplicateName",
+              "shape": "struct"
+            },
+            {
+              "doc": "More rows than a 32-bit index addresses.",
+              "name": "TooManyRows",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_topo::order",
+          "name": "OrderError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-topo/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-topo",
@@ -9259,7 +9279,31 @@
       "job": "Bodies to vertices in arenas; the builder; attributes and continuity records; regions and cells; the instance record.",
       "kind": "kernel",
       "layer": "3",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "`O(n log n)` comparisons of 16 bytes and two vectors of `n` indices; nothing recurses.",
+          "does": "[`NameKey`] is a persistent name's 16 bytes as the caller supplies them (this crate never makes names; `geom-name` does, 20.1). [`Permutation::by_name`] sorts one arena's rows by their keys and gives, for every row, the row it moves to, so that the builder can move the arena and rewrite every index that points into it before a body is published.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/order.rs",
+          "guarantees": [
+            "**Index order is name order.** After [`Permutation::apply`], row `i` holds the entity with the `i`-th smallest key, compared as bytes, so a body's arenas depend only on the names it holds, never on the order an operation produced them in (32.17).",
+            "**Names are unique per arena.** Two rows with the same key are refused with [`OrderError::DuplicateName`], naming the two rows that come first in name order, never ordered by a guess (20.2: a duplicate the contract does not expect is a bug).",
+            "**A bijection.** [`Permutation::new_of`] maps `0..len` onto `0..len`, one to one, and [`Permutation::old_of`] is its inverse."
+          ],
+          "job": "Name order: the key every named entity is sorted by, and the permutation that moves an arena's rows into that order (8.2, accepted in 32.17).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "a sort by key, then by row to keep the order total, as section 23.4's builder sorts its scratch arrays before publishing (`projects/engines/geometry/architecture/08-topology.md`, 8.2; `projects/engines/geometry/architecture/32-decisions.md`, 32.17)."
+          },
+          "path": "geom_topo::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-topo",
       "provenance": [],
       "sections": "8, 10.2, 13.2, 18.7, 19.12, 22 and 23.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
