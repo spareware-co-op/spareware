@@ -3101,6 +3101,37 @@ impl<'a, 'p> Checker<'a, 'p> {
                         line,
                     );
                 }
+                // A generic parameter's associated function is its bound's: `N::pi()` for
+                // `N: Num` is `<N as Num>::pi()`. In an instance the parameter stands for a type
+                // that may also implement another trait with a function of that name (geom-num's
+                // `Interval` implements `Scalar`), which Rust does not reach from here.
+                if let Res::Generic(g) = &**base
+                    && let Some(tr) = self
+                        .ix
+                        .bounds(*g)
+                        .into_iter()
+                        .find(|tr| self.ix.trait_declaring_method(tr.id, name) == Some(tr.id))
+                {
+                    let base_ty = self.base_ty(base, base_args);
+                    let targs: Vec<Ty> = tr
+                        .args
+                        .iter()
+                        .map(|x| {
+                            let x = x.subst(&self.map);
+                            self.inst_ty(&x)
+                        })
+                        .collect();
+                    return self.trait_path_call(
+                        tr.id,
+                        targs,
+                        name,
+                        Args::Exprs(args),
+                        Some(base_ty),
+                        &turbofish,
+                        expected,
+                        line,
+                    );
+                }
                 let base_ty = self.base_ty(base, base_args);
                 self.assoc_call(
                     &base_ty,
