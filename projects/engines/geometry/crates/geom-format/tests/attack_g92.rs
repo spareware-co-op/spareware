@@ -15,7 +15,7 @@
 use geom_format::content::ContentId;
 use geom_format::file::{FileError, HEADER_TAG, LABEL, RECORD_CAP, read, write};
 use geom_format::record::{PAYLOAD_CAP, REQUIRED, Record, RecordError};
-use geom_format::source::{ByteSource, SliceSource, SourceError};
+use geom_format::source::{ByteSource, RangeSource, SliceSource, SourceError, read_exact_at};
 use geom_op::cbor::Encoder;
 use geom_run::{Budget, WorkMeter};
 
@@ -169,4 +169,57 @@ fn the_stream_caps_hold_at_their_limits() {
         matches!(over_payload, Err(FileError::Malformed { .. })),
         "{over_payload:?}"
     );
+}
+
+/// "A payload over 64 MiB is refused both ways", at the cap: a payload of exactly 64 MiB (one
+/// byte string item) is written and read back; one byte more is refused when read.
+#[test]
+#[cfg_attr(miri, ignore = "writes 64 MiB")]
+#[cfg_attr(target_family = "wasm", ignore = "writes 64 MiB")]
+fn the_payload_cap_is_inclusive_both_ways() {
+    let cap = PAYLOAD_CAP as usize;
+    let mut payload = vec![0x5a];
+    payload.extend(((cap - 5) as u32).to_be_bytes());
+    payload.resize(cap, 0);
+    let r = Record {
+        tag: 9,
+        flags: 0,
+        schema: 1,
+        depends: Vec::new(),
+        payload,
+    };
+    let bytes = r.encode(&mut meter()).unwrap();
+    assert_eq!(Record::decode(&bytes, &mut meter()).unwrap().0, r);
+    // One more byte in the payload, the record otherwise the same shape.
+    let mut over = vec![0x86, 0x09, 0x00, 0x01, 0x80, 0x5a];
+    over.extend(((cap + 1) as u32).to_be_bytes());
+    over.resize(over.len() + cap + 1, 0);
+    over.push(0x00);
+    assert_eq!(
+        Record::decode(&over, &mut meter()),
+        Err(RecordError::PayloadTooLarge(PAYLOAD_CAP + 1))
+    );
+}
+
+/// The sources at their edges: an empty range source, a read that ends exactly at the end, and a
+/// range source that claims more than it was asked for.
+#[test]
+fn range_sources_at_their_edges() {
+    /// Says it wrote one byte more than asked.
+    struct Liar;
+    impl RangeSource for Liar {
+        fn len(&self) -> u64 {
+            100
+        }
+        fn read_at(&self, _: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
+            Ok(buf.len() + 1)
+        }
+    }
+    let empty: &[u8] = &[];
+    assert!(RangeSource::is_empty(empty));
+    let bytes: Vec<u8> = (0..20).collect();
+    let mut buf = [0; 7];
+    read_exact_at(&bytes[..], 13, &mut buf).unwrap();
+    assert_eq!(buf, [13, 14, 15, 16, 17, 18, 19]);
+    assert_eq!(read_exact_at(&Liar, 0, &mut buf), Err(SourceError::Overrun));
 }
