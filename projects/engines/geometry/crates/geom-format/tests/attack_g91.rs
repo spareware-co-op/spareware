@@ -989,3 +989,159 @@ fn every_byte_string_of_up_to_three_bytes_is_refused_or_round_trips() {
     }
     assert!(accepted > 1000, "{accepted}");
 }
+
+#[test]
+fn offset_and_depth_follow_the_heads() {
+    // [[1], 2]: heads at 0 (outer array), 1 (inner array), 2 (1), 3 (2).
+    let bytes = [0x82, 0x81, 0x01, 0x02];
+    let mut decoder = Decoder::new(&bytes, 2);
+    let mut m = meter();
+    let mut seen = Vec::new();
+    loop {
+        let at = (decoder.offset(), decoder.depth());
+        let Some(item) = decoder.next(&mut m).unwrap() else {
+            break;
+        };
+        seen.push((at, item));
+    }
+    assert_eq!(
+        seen,
+        vec![
+            ((0, 0), Item::Array(2)),
+            ((1, 1), Item::Array(1)),
+            ((2, 2), Item::Uint(1)),
+            ((3, 1), Item::Uint(2)),
+        ]
+    );
+    assert_eq!((decoder.offset(), decoder.depth()), (4, 0));
+    assert_eq!(decoder.end(), Ok(4));
+}
+
+#[test]
+fn end_is_an_error_until_the_item_is_complete() {
+    let truncated = |len| {
+        Err(CborError {
+            offset: len,
+            kind: CborErrorKind::Truncated,
+        })
+    };
+    // Before anything is read, the item is not complete.
+    assert_eq!(Decoder::new(&[0x00], 0).end(), truncated(1));
+    // Part-way through an array.
+    let bytes = [0x82, 0x01, 0x02];
+    let mut decoder = Decoder::new(&bytes, 1);
+    decoder.next(&mut meter()).unwrap();
+    assert_eq!(decoder.end(), truncated(3));
+    // After an error inside an open array, nothing more is handed out and the item never ends.
+    let bytes = [0x82, 0x01, 0xf7];
+    let mut decoder = Decoder::new(&bytes, 1);
+    let mut m = meter();
+    decoder.next(&mut m).unwrap();
+    decoder.next(&mut m).unwrap();
+    assert!(decoder.next(&mut m).is_err());
+    assert_eq!(decoder.next(&mut m), Ok(None));
+    assert_eq!(decoder.end(), truncated(3));
+}
+
+#[test]
+fn a_non_finite_value_past_the_first_scan_chunk_is_found_at_its_byte() {
+    for row in [511_usize, 512, 600, 1023, 1024, 1500] {
+        let mut values = vec![0.25; 1600];
+        values[row] = f64::INFINITY;
+        let bytes = bytes_of(&V::Floats(values));
+        // Tag 86 takes two bytes, and a byte string of 12,800 bytes a three-byte head.
+        let e = refused(&bytes);
+        assert_eq!((e.kind, e.offset), (CborErrorKind::NotFinite, 5 + 8 * row), "{row}");
+    }
+}
+
+#[test]
+fn text_and_columns_pay_one_unit_per_scanned_chunk() {
+    // A 10,000-byte text: one unit for its head and three for its 4 KiB chunks.
+    let text = "x".repeat(10_000);
+    let bytes = bytes_of(&V::T(text));
+    assert!(matches!(
+        check(&bytes, 0, &mut WorkMeter::new(Budget::of_work(3))).unwrap_err().kind,
+        CborErrorKind::Stopped(_)
+    ));
+    assert_eq!(check(&bytes, 0, &mut WorkMeter::new(Budget::of_work(4))), Ok(()));
+    // 513 values are two chunks of 512.
+    let values: Vec<u8> = (0..513_i64).flat_map(i64::to_le_bytes).collect();
+    let budget = |work| WorkMeter::new(Budget::new(work, u64::MAX));
+    assert!(int_column(&values, &mut Vec::new(), &mut budget(1)).is_err());
+    assert_eq!(int_column(&values, &mut Vec::new(), &mut budget(2)), Ok(()));
+    let floats: Vec<u8> = (0..513_i32).flat_map(|i| f64::from(i).to_le_bytes()).collect();
+    assert!(float_column(&floats, &mut Vec::new(), &mut budget(1)).is_err());
+    assert_eq!(float_column(&floats, &mut Vec::new(), &mut budget(2)), Ok(()));
+}
+
+#[test]
+fn every_error_says_what_and_where() {
+    let kinds = [
+        CborErrorKind::Truncated,
+        CborErrorKind::ReservedInfo,
+        CborErrorKind::Indefinite,
+        CborErrorKind::NonShortestHead,
+        CborErrorKind::NonShortestFloat,
+        CborErrorKind::NotFinite,
+        CborErrorKind::UnsupportedSimple,
+        CborErrorKind::UnsupportedTag,
+        CborErrorKind::TagContent,
+        CborErrorKind::NonCanonicalBignum,
+        CborErrorKind::ColumnLength,
+        CborErrorKind::InvalidUtf8,
+        CborErrorKind::UnsortedKeys,
+        CborErrorKind::DuplicateKey,
+        CborErrorKind::TooDeep,
+        CborErrorKind::TrailingBytes,
+    ];
+    let texts: std::collections::BTreeSet<String> = kinds.iter().map(ToString::to_string).collect();
+    assert_eq!(texts.len(), kinds.len());
+    assert!(texts.iter().all(|t| !t.is_empty()));
+    let e = CborError {
+        offset: 17,
+        kind: CborErrorKind::UnsortedKeys,
+    };
+    assert_eq!(e.to_string(), "not SKG's deterministic CBOR at byte 17: map keys out of order");
+    let text_kinds = [
+        TextErrorKind::Unexpected,
+        TextErrorKind::UnexpectedEnd,
+        TextErrorKind::IntegerRange,
+        TextErrorKind::InexactFloat,
+        TextErrorKind::BadEscape,
+        TextErrorKind::BadHex,
+        TextErrorKind::OpenComment,
+        TextErrorKind::Trailing,
+        TextErrorKind::Cbor(CborErrorKind::TooDeep),
+    ];
+    let texts: std::collections::BTreeSet<String> =
+        text_kinds.iter().map(ToString::to_string).collect();
+    assert_eq!(texts.len(), text_kinds.len());
+    let e = TextError {
+        line: 3,
+        column: 9,
+        kind: TextErrorKind::Cbor(CborErrorKind::DuplicateKey),
+    };
+    assert_eq!(
+        e.to_string(),
+        "not SKG's diagnostic text at line 3, column 9: a repeated map key"
+    );
+}
+
+#[test]
+fn text_escapes_tab_and_carriage_return_by_name_and_refuses_a_second_point() {
+    let bytes = bytes_of(&V::T("a\tb\rc\u{b}".into()));
+    assert_eq!(to_text(&bytes, 0, &mut meter()).unwrap(), "\"a\tb\rc\u000b\"");
+    assert_eq!(
+        text_error("0x1.8.8p0", 0),
+        TextError {
+            line: 1,
+            column: 3,
+            kind: TextErrorKind::InexactFloat
+        }
+    );
+    assert_eq!(
+        text_error("18446744073709551616(h'')", 1).kind,
+        TextErrorKind::IntegerRange
+    );
+}
