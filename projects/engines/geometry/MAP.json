@@ -9458,9 +9458,9 @@
           "job": "Euler operators (piece G81): edits that change a body's topology one step at a time, each keeping Euler's formula, on an editor whose rows are removed by marking them dead.",
           "method": {
             "links": [
-              "https://doi.org/10.1109/MCG.1982.1674296"
+              "https://doi.org/10.1109/MCG.1982.1674396"
             ],
-            "text": "Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and their inverses; \"GWB: a solid modeler with Euler operators\", IEEE Computer Graphics and Applications 2(7), 1982, <https://doi.org/10.1109/MCG.1982.1674296>), with fins as half-edges. A fin needs an edge here (8.1), so the first operator makes a wire of one edge and two vertices, Mäntylä's MVFS followed by MEV, and no operator leaves a loop without a fin."
+            "text": "Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and their inverses; \"GWB: a solid modeler with Euler operators\", IEEE Computer Graphics and Applications 2(7), 17-31, 1982, <https://doi.org/10.1109/MCG.1982.1674396>), with fins as half-edges. A fin needs an edge here (8.1), so the first operator makes a wire of one edge and two vertices, Mäntylä's MVFS followed by MEV, and no operator leaves a loop without a fin."
           },
           "path": "geom_topo::builder::euler",
           "provenance": [],
