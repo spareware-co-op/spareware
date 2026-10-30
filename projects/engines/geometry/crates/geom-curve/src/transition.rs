@@ -1123,8 +1123,7 @@ trait Num: Copy {
     fn exact(x: f64) -> Result<Self, CurveError>;
     /// A real whose correctly rounded double is x: a rule's node or weight.
     fn near(x: f64) -> Result<Self, CurveError>;
-    /// π, the half-turn in radians (not named `pi`, which the recursion check would read as
-    /// `Interval::PI`).
+    /// π, the half-turn in radians.
     fn half_turn() -> Result<Self, CurveError>;
     fn add(self, b: Self) -> Result<Self, CurveError>;
     fn sub(self, b: Self) -> Result<Self, CurveError>;
