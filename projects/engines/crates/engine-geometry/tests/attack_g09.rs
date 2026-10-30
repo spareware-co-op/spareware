@@ -1270,10 +1270,6 @@ mod repository {
             "geom-terrain",
             "G362 G363 G364 G365 G366 G367 G368 G369 G370 G374 G377 G380",
         ),
-        (
-            "geom-topo",
-            "G80 G81 G90 G102 G111 G112 G143 G145 G247 G398",
-        ),
         ("engine-geometry", "G100 G482"),
     ];
 
