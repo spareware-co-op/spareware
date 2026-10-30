@@ -64,7 +64,7 @@ impl Diagnostic {
             && bytes.len() <= CODE_MAX
             && bytes
                 .iter()
-                .all(|&b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'_');
+                .all(|&b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'.' | b'_'));
         valid.then(|| Self {
             code,
             entities: Vec::new(),
