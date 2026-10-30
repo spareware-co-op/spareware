@@ -541,7 +541,7 @@ IFC 4.3 documentation (buildingSMART)
   Link:         https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas
   Consulted by:
     projects/engines/geometry/crates/geom-curve/src/transition.rs
-      for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement. No text adapted.
+      for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement, and for `IfcCurveSegment`'s trimming of a parent curve by a start and a signed length, which windows and senses follow. No text adapted.
 
 Kani 0.68.0 `library/std/src/lib.rs`
   Licence:      MIT OR Apache-2.0

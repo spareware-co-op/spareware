@@ -1528,12 +1528,12 @@
         },
         {
           "cost": "one match per call.",
-          "does": "[`Basis`] is a closed enum with one variant per leaf kind (NURBS, the analytic kinds, the bulge polyline), dispatching the kind contract to each, with the conversions to and from [`CurveKind`]. The kinds that hold curves hold a `Basis`, never a `CurveKind`, so no kind contains itself: no recursive type, no recursive call, nothing for WebAssembly's stack to bound (chapter 28.8).",
+          "does": "[`Basis`] is a closed enum with one variant per leaf kind (NURBS, the analytic kinds, the bulge polyline, the transition), dispatching the kind contract to each, with the conversions to and from [`CurveKind`]. The kinds that hold curves hold a `Basis`, never a `CurveKind`, so no kind contains itself: no recursive type, no recursive call, nothing for WebAssembly's stack to bound (chapter 28.8).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/basis.rs",
           "guarantees": [
             "**The same behaviour as the kind.** Every method is the leaf kind's own.",
-            "**Leaves stay leaves.** Every leaf's reversal and transform is a leaf (a circle may become an ellipse, a bulge polyline its NURBS form); a split of a bulge polyline is a trimmed one, so the trimmed kind splits by its interval instead."
+            "**Leaves stay leaves.** Every leaf's reversal and transform is a leaf (a circle may become an ellipse, a bulge polyline or a scaled transition its NURBS form); a split of a bulge polyline is a trimmed one, so the trimmed kind splits by its interval instead."
           ],
           "job": "The leaf curve kinds: the kinds that hold no other curve, which the trimmed, composite and offset kinds and curves on surfaces are built on.",
           "method": {
@@ -1541,7 +1541,7 @@
               "projects/engines/geometry/architecture/07-geometry-types.md",
               "https://doi.org/10.1007/978-3-642-59223-2"
             ],
-            "text": "the storage-and-behaviour split chapter 7 decides, closed enums for storage and traits for behaviour (`projects/engines/geometry/architecture/07-geometry-types.md`); a leaf's breaks are a NURBS curve's knots (where its smoothness may drop, The NURBS Book, 2nd ed., P2.5, <https://doi.org/10.1007/978-3-642-59223-2>) and a polyline's vertices."
+            "text": "the storage-and-behaviour split chapter 7 decides, closed enums for storage and traits for behaviour (`projects/engines/geometry/architecture/07-geometry-types.md`); a leaf's breaks are a NURBS curve's knots (where its smoothness may drop, The NURBS Book, 2nd ed., P2.5, <https://doi.org/10.1007/978-3-642-59223-2>), a polyline's vertices and the middle of a Helmert transition."
           },
           "path": "geom_curve::basis",
           "provenance": [],
@@ -2011,23 +2011,27 @@
           "target": "lib"
         },
         {
-          "cost": "construction O(P·n) evaluations of the heading for P panels of n nodes, with up to twelve ellipses tried per panel; each evaluation n evaluations of the heading and of its sine and cosine, and O(k²) more operations for the k-th derivative.",
-          "does": "[`Transition`] stores a start point, a start direction, a length L and a [`CurvatureLaw`], and is parameterised by arc length t from 0 to L; positive curvature turns left. The laws are decision 32.33's closed set. From a start curvature κ₁ to an end curvature κ₂, with ξ = t/L: the clothoid, Helmert, Bloss, cosine and sine transitions and the cant-coupled transition, IFC 4.3's CLOTHOID, HELMERTCURVE, BLOSSCURVE, COSINECURVE, SINECURVE and the curve IFC calls VIENNESEBEND. And IFC's parent spirals, read from a station along them: `IfcClothoid` and the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`. It gives the point and derivatives in doubles, and certified enclosures of them, of the turn of the heading and of the curvature, at any station.",
+          "cost": "construction O(P·n) evaluations of the heading for P panels of n nodes, with up to twelve ellipses tried per panel; each evaluation n evaluations of the heading and of its sine and cosine, and O(k²) more operations for the k-th derivative; a bound O(1) per panel the span meets; the NURBS form O(m·p²) per attempt for m pieces of degree p, the attempts doubling m; a split or reversal copies the panels, and a transform keeping lengths builds them again.",
+          "does": "[`Transition`] holds a parent curve and the part of it the curve covers. The parent is a start point, a start direction, a length L and a [`CurvatureLaw`], parameterised by its station, the arc length σ from 0 to L; positive curvature turns left. The part is a window of stations [σ₀, σ₁] and a sense, as IFC 4.3's `IfcCurveSegment` trims a parent curve with its `SegmentStart` and `SegmentLength`, the length's sign giving the sense: run forward, the curve's parameter is the station, on [σ₀, σ₁]; reversed, it is minus the station, on [−σ₁, −σ₀]. [`Transition::new`] makes the whole parent, forward, and [`Transition::segment`] any part of it. The laws are decision 32.33's closed set. From a start curvature κ₁ to an end curvature κ₂, with ξ = σ/L: the clothoid, Helmert, Bloss, cosine and sine transitions and the cant-coupled transition, IFC 4.3's CLOTHOID, HELMERTCURVE, BLOSSCURVE, COSINECURVE, SINECURVE and the curve IFC calls VIENNESEBEND. And IFC's parent spirals, read from a station along them: `IfcClothoid` and the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`. It is a curve kind of chapter 7 ([`ParamCurve`], `CurveKind::Transition`): points and derivatives in doubles and certified enclosures of them, bounds on the point and on each derivative over any span, conversion to NURBS with a certified error, split, reversal and typed transforms; and certified enclosures of the turn of the heading and of the curvature at any station of the parent.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/transition.rs",
           "guarantees": [
             "**Exact heading.** The heading is the closed-form integral of the law's curvature: in half-turns, a polynomial of degree at most 8 in ξ plus at most one sine or cosine of an affine argument, its coefficients enclosed from the stored doubles. No quadrature touches it.",
             "**Certified positions.** The position is the start plus the integrals of the cosine and sine of the heading, each by the [`NODES`]-point Gauss–Legendre rule on panels of equal width in ξ. Each panel's remainder is bounded by Trefethen's theorem for integrands analytic in a Bernstein ellipse, the integrand's size on the ellipse bounded in interval arithmetic; the panel count is the smallest power of two (from 1, or 2 for Helmert's two halves) whose remainders sum to at most L·2⁻⁵⁶. An enclosure holds the rounding of every step and the remainders of every panel it passes.",
             "**Deterministic.** The panel count, and so every result, depends only on the stored doubles.",
-            "**Located exactly.** A station is placed in its panel by an exact comparison, so an enclosure never mixes two panels, or Helmert's two halves.",
-            "**Never a guess.** A law that needs more than [`MAX_PANELS`] panels is refused ([`CurveError::TooManyPanels`]), never evaluated with a bound it does not meet."
+            "**Located exactly.** A station is placed in its panel by an exact comparison, so an enclosure never mixes two panels, or Helmert's two halves. Helmert's middle, where the fourth derivative jumps, is evaluated on the half its side asks for.",
+            "**Never a guess.** A law that needs more than [`MAX_PANELS`] panels is refused ([`CurveError::TooManyPanels`]), never evaluated with a bound it does not meet.",
+            "**Exact split and reversal.** A split narrows the window and a reversal flips the sense; the parent and its panels are untouched, so each part, and the reversed curve at −t, evaluate as the original does at the same station, bit for bit (a reversed derivative of odd order negated), with deviation 0.",
+            "**Bounds from the panels.** A span's box is the union, over the panels it meets, of the point at the panel's start (or the span's) moved by up to the panel's length along any tangent the heading's enclosure allows there: no sampling. A derivative's box is the interval evaluation of its closed form over the span, from both sides at Helmert's middle.",
+            "**A certified NURBS form.** Taylor pieces of degree 9 on the same parameter (`crate::taylor`), each piece's remainder bounded by the box of the tenth derivative, cut at Helmert's middle. The pieces double, from one per smooth part, while each doubling more than halves the certified deviation: the remainder falls about a thousandfold a doubling, so the refining stops where rounding, which no doubling reduces, has taken over: the width of the enclosures the pieces start from and of the stored control points, a few dozen steps of the coordinates. At most [`MAX_PANELS`] pieces.",
+            "**Typed transforms.** A transform that keeps lengths keeps a transition: the start point and direction move, a mirror negates the law's curvatures, and the deviation bounds the rounding of both and how far the transform is from the rigid motion they define, over the window. Any other transform gives the moved NURBS form, since the parameter is arc length, which a scale does not keep; its deviation is the conversion's times a bound on the transform's stretch, plus the move's."
           ],
           "job": "The transition kind: a plane curve whose curvature follows a law along its length, the transition curves (spirals) of road and rail alignments.",
           "method": {
             "links": [
               "https://doi.org/10.1137/060659831"
             ],
-            "text": "the heading as the exact integral of curvature and the position by certified Gauss–Legendre quadrature (chapter 17.8). The laws are IFC 4.3's (`IfcAlignmentHorizontalSegmentTypeEnum` and the `IfcSpiral` subtypes, in the record below). An `IfcSineSpiral` is read by its heading, as `IfcSpiral` defines the curve (x = ∫cos Θ dl), where its printed curvature disagrees with the heading's derivative. The remainder bound is L. N. Trefethen, \"Is Gauss quadrature better than Clenshaw–Curtis?\", SIAM Review 50 (2008), <https://doi.org/10.1137/060659831>, Theorem 4.5: on [−1, 1], |I − Iₙ| ≤ (64/15)·M·ρ⁻²ⁿ/(ρ² − 1) for f analytic in the open ellipse Eρ with |f| ≤ M there; for f = cos πh or sin πh, M ≤ cosh(π·sup |Im h|). The ellipse of a part of a panel lies inside the panel's, so the panel's bound holds for every station in it. No code from the Clothoids library's `Fresnel.cc`: the clothoid uses this same evaluator."
+            "text": "the heading as the exact integral of curvature and the position by certified Gauss–Legendre quadrature (chapter 17.8). The laws are IFC 4.3's (`IfcAlignmentHorizontalSegmentTypeEnum` and the `IfcSpiral` subtypes, in the record below). An `IfcSineSpiral` is read by its heading, as `IfcSpiral` defines the curve (x = ∫cos Θ dl), where its printed curvature disagrees with the heading's derivative. The remainder bound is L. N. Trefethen, \"Is Gauss quadrature better than Clenshaw–Curtis?\", SIAM Review 50 (2008), <https://doi.org/10.1137/060659831>, Theorem 4.5: on [−1, 1], |I − Iₙ| ≤ (64/15)·M·ρ⁻²ⁿ/(ρ² − 1) for f analytic in the open ellipse Eρ with |f| ≤ M there; for f = cos πh or sin πh, M ≤ cosh(π·sup |Im h|). The ellipse of a part of a panel lies inside the panel's, so the panel's bound holds for every station in it. No code from the Clothoids library's `Fresnel.cc`: the clothoid uses this same evaluator. A part of the parent is `IfcCurveSegment`'s trimming; the NURBS form is `crate::taylor`'s Taylor pieces with the Lagrange remainder. A rigid motion keeps a plane curve's signed curvature at each arc length and a mirror negates it, and the curvature with the start point and direction fixes the curve (the fundamental theorem of plane curves), so the image of a transition under one is the transition of the moved start and direction with that law."
           },
           "path": "geom_curve::transition",
           "provenance": [
@@ -2038,7 +2042,7 @@
               "name": "IFC 4.3 documentation (buildingSMART)",
               "notice": [],
               "pinned": true,
-              "purpose": "for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement. No text adapted.",
+              "purpose": "for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement, and for `IfcCurveSegment`'s trimming of a parent curve by a start and a signed length, which windows and senses follow. No text adapted.",
               "take": "port-method"
             }
           ],
@@ -2072,7 +2076,7 @@
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) and the transition kind's evaluation (G63) built; the transition's conversion and transforms (G64) and the other kinds to come in G67, G68, G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) and the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), built; the other kinds to come in G67, G68, G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {

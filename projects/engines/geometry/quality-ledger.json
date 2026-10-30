@@ -795,6 +795,14 @@
       "reason": "The two differ only when the panels' remainder bounds sum to exactly L·2⁻⁵⁶, the tolerance: > keeps that panel count, >= doubles it. Both counts are certified, every enclosure carries its remainders either way, and the choice is the same on every target, so a tie changes how many panels a transition gets, never whether its results hold."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-curve/src/transition.rs",
+      "mutant": "replace < with <= in <impl ParamCurve<D> for Transition<D>>::to_nurbs",
+      "line_text": "return Ok(if n.deviation < b.deviation { n } else { b });",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when two doublings' certified deviations are exactly equal: < keeps the form with fewer pieces, <= the one with more. Both are NURBS forms of the transition within that same certified deviation, and the choice is the same on every target, so a tie changes how many pieces the form has, never whether it holds."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "mutant": "replace classify -> Option<Sign> with None",
       "line_text": "let ([nx, ny, nz], [xx, xy, xz]) = (*n, x);",
