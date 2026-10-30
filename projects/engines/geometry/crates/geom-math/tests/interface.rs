@@ -7,8 +7,6 @@
 //!   numbers layer's sentence for `Num`.
 //! - `F2`'s negation negates both components and its squared length is the dot product with
 //!   itself; `F3`'s components read back as given.
-//! - `DD::exact_product` answers only inside its precondition: never for a factor that is not
-//!   finite, a zero factor included, and never for a factor of 2^996 or more.
 //! - Frame to map, irrational directions, where the origin cancels most of the rotated offset: the
 //!   nearest double, on points whose double-double value lies on the near side of a midpoint while
 //!   the exact value lies just past it (found by search, so the certificate must refuse them), and
@@ -52,7 +50,7 @@ use common::{
 };
 use geom_math::frame::steps_per_metre;
 use geom_math::{
-    CrsId, DD, F2, F3, FrameMismatch, FrameRecord, MathError, RationalRotation, Rotation, Scale,
+    CrsId, F2, F3, FrameMismatch, FrameRecord, MathError, RationalRotation, Rotation, Scale,
     Transform, TransformKind,
 };
 use geom_num::grid::{GridStep, P3};
@@ -128,33 +126,6 @@ fn float_vectors_negate_and_measure_componentwise() {
     assert_eq!(F3::new(-0.75, 0.0, 0.0).unwrap().x(), -0.75);
 }
 
-#[test]
-fn exact_products_answer_only_inside_their_precondition() {
-    // A factor that is not finite: no answer, even with a zero factor.
-    for bad in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
-        for other in [0.0, -0.0, 2.0] {
-            assert!(DD::exact_product(bad, other).is_none(), "{bad} · {other}");
-            assert!(DD::exact_product(other, bad).is_none(), "{other} · {bad}");
-        }
-    }
-    // A zero factor with a finite one: exactly zero.
-    let zero = DD::exact_product(0.0, 1.5).unwrap();
-    assert_eq!((zero.hi(), zero.lo()), (0.0, 0.0));
-    // Both factors below 2^996, with a product well inside the range: the exact product.
-    let below = 1.75 * pow2(995);
-    let p = DD::exact_product(3.0, below).unwrap();
-    assert_eq!((p.hi(), p.lo()), (3.0 * below, 0.0));
-    let p = DD::exact_product(below, 3.0).unwrap();
-    assert_eq!((p.hi(), p.lo()), (3.0 * below, 0.0));
-    // A factor of 2^996 or more is outside the precondition, however small the other.
-    for big in [pow2(996), 1.75 * pow2(996), f64::MAX] {
-        for small in [1.0, 3.0, pow2(-40)] {
-            assert!(DD::exact_product(small, big).is_none(), "{small} · {big}");
-            assert!(DD::exact_product(big, small).is_none(), "{big} · {small}");
-        }
-    }
-}
-
 const NZTM: CrsId = CrsId::Epsg(2193);
 
 /// Whether `d` is the double nearest the map coordinate V = (o + `k_n`·a/(`k_d`·√n))/S, by exact signs
@@ -169,7 +140,7 @@ fn nearest_irrational(d: f64, o: i128, a: i128, scale: Scale, n2: u64, s: i128) 
 
 /// Converts the point (x, y, 0) of a frame at q0 with origin (o, 0, 0) and checks that both
 /// horizontal map coordinates are the nearest doubles; returns the easting.
-fn check_irrational(dir: (i32, i32), scale: (u32, u32), o: i64, x: i64, y: i64) -> f64 {
+fn check_irrational(dir: (i32, i32), scale: (u64, u64), o: i64, x: i64, y: i64) -> f64 {
     let rot = Rotation::direction(dir.0, dir.1).unwrap();
     assert!(
         rot.exact_norm().is_none(),
@@ -196,7 +167,7 @@ fn check_irrational(dir: (i32, i32), scale: (u32, u32), o: i64, x: i64, y: i64) 
 }
 
 /// A direction, a scale (num, den), an easting origin and a point (x, y).
-type Case = ((i32, i32), (u32, u32), i64, i64, i64);
+type Case = ((i32, i32), (u64, u64), i64, i64, i64);
 
 #[test]
 fn frame_to_map_rounds_values_just_past_a_midpoint() {

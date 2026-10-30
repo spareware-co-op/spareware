@@ -37,9 +37,13 @@ use geom_math::frame::{ORIGIN_MAX, SHIFT_MAX, steps_per_metre};
 use geom_math::grid_transform::TRANSLATION_MAX;
 use geom_math::vector::VEC_MAX;
 use geom_math::{
-    Axis, Box2, Box3, CrsId, DD, F2, F3, FBox3, FrameMismatch, FrameRecord, GridTransform,
-    MapPoint, MathError, Rotation, Scale, Transform, TransformKind, V3,
+    Axis, Box2, Box3, CrsId, F2, F3, FBox3, FrameMismatch, FrameRecord, GridTransform, MapPoint,
+    MathError, Rotation, Scale, Transform, TransformKind, V3,
 };
+// The double-double type the frame conversions use: `geom-num`'s (piece G25), since piece G48
+// moved `geom-math` onto it. G03's attacks on its own type now hold that one to the bounds G03
+// documented, which `geom-num` proves tighter.
+use geom_num::dd::DD;
 use geom_num::grid::{COORD_MAX, GridStep, P2, P3};
 use geom_num::ladder::ANGULAR;
 use geom_num::{NumError, math};
@@ -529,54 +533,6 @@ fn dd_round_shifted_matches_exact_rounding() {
         other => Err(format!("i128 edges: {other:?}")),
     });
     f.assert_none("round_shifted");
-}
-
-/// `exact_product` answers exactly inside its documented exponent window and refuses outside.
-#[test]
-fn dd_exact_product_at_its_documented_edges() {
-    let mut rng = Rng(0xE7AC_7000);
-    let mut f = Failures::new();
-    let mant = |rng: &mut Rng| -> u64 { rng.next() & ((1u64 << 52) - 1) };
-    let make = |e: i32, m: u64, neg: bool| -> f64 {
-        let v = f64::from_bits((u64::try_from(e + 1023).unwrap() << 52) | m);
-        if neg { -v } else { v }
-    };
-    for _ in 0..4000 {
-        let target = rng.pick(&[-971, -970, -969, 0, 1020, 1021, 1022]);
-        let ea = i32::try_from(rng.range(-500, 997)).unwrap();
-        let eb = target - ea;
-        if !(-1022..=1023).contains(&eb) {
-            continue;
-        }
-        let a = make(ea, mant(&mut rng), rng.coin());
-        let b = make(eb, mant(&mut rng), rng.coin());
-        let got = DD::exact_product(a, b);
-        let allowed = ea < 996 && eb < 996 && (-970..=1021).contains(&(ea + eb));
-        let r = match got {
-            Some(d) if allowed => {
-                if dd_value(d) == exact(a) * exact(b) && normalized(d) {
-                    Ok(())
-                } else {
-                    Err(format!("{a:e} · {b:e} = {d:?} is not exact"))
-                }
-            }
-            Some(d) => Err(format!("{a:e} · {b:e} answered {d:?} outside the window")),
-            None if allowed => Err(format!("{a:e} · {b:e} refused inside the window")),
-            None => Ok(()),
-        };
-        f.record(r);
-    }
-    f.record(if DD::exact_product(f64::from_bits(1), 2.0).is_none() {
-        Ok(())
-    } else {
-        Err("subnormal operand answered".into())
-    });
-    f.record(if DD::exact_product(0.0, f64::MAX) == Some(DD::ZERO) {
-        Ok(())
-    } else {
-        Err("zero factor".into())
-    });
-    f.assert_none("exact_product");
 }
 
 #[test]
@@ -1485,7 +1441,7 @@ const DIRECTIONS: [(i32, i32); 18] = [
     (i32::MIN + 1, i32::MIN),
 ];
 
-const SCALES: [(u32, u32); 10] = [
+const SCALES: [(u64, u64); 10] = [
     (1, 1),
     (1, 2),
     (2, 1),
@@ -1513,7 +1469,7 @@ fn origin(rng: &mut Rng) -> [i64; 3] {
     [o(rng), o(rng), o(rng)]
 }
 
-fn frame(rng: &mut Rng, dir: (i32, i32), scale: (u32, u32), step: GridStep) -> FrameRecord {
+fn frame(rng: &mut Rng, dir: (i32, i32), scale: (u64, u64), step: GridStep) -> FrameRecord {
     FrameRecord::new(
         CrsId::Epsg(2193),
         step,
@@ -1990,13 +1946,13 @@ fn frame_records_reject_and_canonicalize() {
     assert_eq!(Rotation::direction(0, 0), Err(NumError::Degenerate));
     assert_eq!(Rotation::direction(-3, -4).unwrap().exact_norm(), Some(5));
     assert_eq!(Scale::new(2, 4).unwrap(), Scale::new(1, 2).unwrap());
-    assert_eq!(Scale::new(u32::MAX, u32::MAX).unwrap(), Scale::ONE);
+    assert_eq!(Scale::new(u64::MAX, u64::MAX).unwrap(), Scale::ONE);
     // Fixer: chapter 17.1 puts no limit on a Ground frame's scale ratio (the review found the
     // builder's [1/2, 2] limit to be its own rule), so any positive ratio of 32-bit integers is
     // accepted and reduced, and only a zero part is refused. Extreme ratios are checked against the
     // exact oracle in the frame sweeps below (SCALES).
     assert_eq!(Scale::new(3, 9).unwrap(), Scale::new(1, 3).unwrap());
-    assert!(Scale::new(3, 1).is_ok() && Scale::new(1, u32::MAX).is_ok());
+    assert!(Scale::new(3, 1).is_ok() && Scale::new(1, u64::MAX).is_ok());
     assert!(Scale::new(0, 1).is_err());
     assert!(Scale::new(1, 0).is_err());
 }
@@ -2050,13 +2006,14 @@ fn frame_non_finite_and_out_of_range_inputs() {
     assert!(DD::from_sum(1.0, f64::INFINITY).is_err());
     assert!(DD::from_f64(1.0).unwrap().add_f64(f64::NAN).is_err());
     assert!(DD::from_f64(1.0).unwrap().mul_f64(f64::INFINITY).is_err());
+    // `geom-num`'s double-double refuses these as its own maths functions do.
     assert_eq!(
         DD::from_f64(1.0).unwrap().div(DD::ZERO),
-        Err(NumError::Degenerate)
+        Err(NumError::NotFinite)
     );
     assert_eq!(
         DD::from_f64(-1.0).unwrap().sqrt(),
-        Err(NumError::NegativeSqrt)
+        Err(NumError::OutsideDomain)
     );
     assert!(
         DD::from_f64(f64::MAX)
@@ -2232,7 +2189,7 @@ fn workload(seed: u64) -> String {
         i64::try_from(5_921_000 * s).unwrap(),
         0,
     ];
-    let ground = |step, dir: (i32, i32), k: (u32, u32)| {
+    let ground = |step, dir: (i32, i32), k: (u64, u64)| {
         let rot = Rotation::direction(dir.0, dir.1).unwrap();
         FrameRecord::new(
             CrsId::Epsg(2193),
@@ -2307,7 +2264,9 @@ fn workload(seed: u64) -> String {
 /// `c1c5d1b6…747c9` when piece G05 made `geom_num::math::sinpi` and `cospi`, which the workload's
 /// rotations call, correctly rounded (ports of CORE-MATH in place of an msun-method
 /// approximation): of the maths functions geom-math calls, only those two changed, so every
-/// rotation now uses the correctly rounded sine and cosine.
+/// rotation now uses the correctly rounded sine and cosine. It replaced `97782873…2cfda25` when
+/// piece G48 moved geom-math onto `geom-num`'s double-double type: only the workload's
+/// double-double arithmetic changed.
 const WORKLOAD: &str = "geom-math/workload";
 
 /// Principle 5 and chapter 21: bit-identical results on every target. The workload covers map

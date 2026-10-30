@@ -2420,3 +2420,47 @@ pub mod dual {
         benchmarks = jacobian_real, jacobian_interval
     );
 }
+
+/// The root-isolation engine (G53).
+pub mod isolate {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("isolate/cubic_1/typical"))]
+    #[bench::extreme(leak("isolate/cubic_1/extreme"))]
+    fn cubic_1(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("isolate/circle_line_2/typical"))]
+    #[bench::extreme(leak("isolate/circle_line_2/extreme"))]
+    fn circle_line_2(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = isolate;
+        benchmarks = cubic_1, circle_line_2
+    );
+}
+
+/// The double-double balls (G53).
+pub mod ball {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("ball/cubic/typical"))]
+    #[bench::extreme(leak("ball/cubic/extreme"))]
+    fn cubic(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = ball;
+        benchmarks = cubic
+    );
+}

@@ -55,8 +55,10 @@
 //!   integrals return `Real`s, and stop at a caller's cap with an error, never a best guess; every
 //!   operation of [`scalar::Scalar`] on a `Real`, and so of a [`dual::Dual`] over it, checks its
 //!   result, so a NaN or an infinity in a value or a derivative is `NotFinite` (the NaN tripwire
-//!   of chapter 15.4); and [`newton`]'s operators return enclosures with finite bounds or an
-//!   error. Inside [`math`], where the ports compute on
+//!   of chapter 15.4); [`newton`]'s operators return enclosures with finite bounds or an
+//!   error; a [`ball::Ball`] has a finite double-double centre and a finite radius, or the
+//!   operation is `NotFinite`; and [`isolate`] returns enclosures and regions with finite bounds,
+//!   or an error. Inside [`math`], where the ports compute on
 //!   raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function
 //!   returns one.
 //! - Every interval operation encloses the exact result of its operation on any reals in its
@@ -87,6 +89,11 @@
 //! - MIT: `libm`.
 #![cfg_attr(not(test), no_std)]
 
+// The work list of the root-isolation engine ([`isolate`]) grows with the system, so it is a
+// vector, reserved fallibly and charged to the caller's logical-memory budget (chapter 23.10).
+extern crate alloc;
+
+pub mod ball;
 pub mod brent;
 pub mod crossing;
 pub mod dd;
@@ -98,6 +105,7 @@ pub mod exactness;
 pub mod generated;
 pub mod grid;
 pub mod interval;
+pub mod isolate;
 pub mod ladder;
 pub mod math;
 pub mod newton;

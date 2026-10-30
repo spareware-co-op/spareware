@@ -113,6 +113,13 @@ impl Motion {
         self.class.mirror
     }
 
+    /// Whether the transform keeps lengths (a rotation, possibly with a mirror, and a
+    /// translation), as the classification certifies it.
+    #[must_use]
+    pub fn rigid(&self) -> bool {
+        self.class.keeps_lengths()
+    }
+
     /// M·x (+ t for a point), in doubles, in a fixed order.
     fn apply(&self, x: [f64; 3], translate: bool) -> Result<[f64; 3], CurveError> {
         let mut out = [0.0; 3];

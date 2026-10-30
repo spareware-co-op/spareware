@@ -579,7 +579,6 @@ const HARD: [[f64; 3]; 21] = [
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     reason = "tests may use native arithmetic, casts and std reductions"
 )]
 #[allow(
@@ -648,7 +647,7 @@ mod tests {
         assert!(le(&r_bound, &Dy::from_f64(R_MAX)), "R_MAX");
         // L2H has 29 significant bits, so L2H·t is exact for |t| < 2^23 (t ≤ 746·S < 2^22.1).
         assert_eq!(L2H.to_bits() & ((1 << 24) - 1), 0);
-        assert!(746.0 * S < 2f64.powi(23));
+        const { assert!(746.0 * S < 8_388_608.0) }; // 2^23
     }
 
     /// Steps F1 and A1: the table products `th + tl = mul_dd(T0[i0], T1[i1])` approximate
@@ -668,14 +667,18 @@ mod tests {
                 let v = h.mul(&h, P);
                 let err = dd_error(th, tl, &v);
                 worst = dmax(worst, Dy::div(&err, &v.lo, P, true));
-                sigma = sigma.max(tl.abs() / th);
+                // By comparison, not `f64::max` (chapter 21's ban).
+                let ratio = tl.abs() / th;
+                if ratio > sigma {
+                    sigma = ratio;
+                }
                 assert!((1.0..2.0).contains(&th));
             }
         }
         eprintln!(
             "table products: relative error 2^{:.3}, |tl/th| ≤ {:.3}u",
             log2_approx(&worst),
-            sigma / 2f64.powi(-53)
+            sigma / (f64::EPSILON / 2.0) // in units of 2^−53
         );
         assert!(le(&worst, &Dy::from_f64(TAU_E)));
         assert!(sigma <= SIGMA_E);

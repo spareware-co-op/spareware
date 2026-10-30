@@ -1507,7 +1507,6 @@ const LOG_INV_2: [Dint; 182] = [
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     reason = "tests may use native arithmetic, casts and std reductions"
 )]
 #[allow(
@@ -1607,7 +1606,7 @@ mod tests {
                     || i64::from(l1.to_bits().trailing_zeros())
                         >= -42 - ((l1.abs().to_bits() >> 52) as i64 - 1075)
             );
-            assert!(l2.abs() < 2f64.powi(-43));
+            assert!(l2.abs() < f64::EPSILON * 512.0); // 2^−43
             let lr = ln_iv(&Iv::point(Dy::from_f64(r)));
             let s = l1d.add(&Dy::from_f64(l2));
             worst = dmax(worst, dmax(s.add(&lr.lo).abs(), s.add(&lr.hi).abs()));

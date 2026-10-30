@@ -12,6 +12,7 @@
 //! its work before it starts, refusing a budget one unit short.
 
 #![allow(
+    clippy::disallowed_methods,
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
@@ -21,7 +22,6 @@
     clippy::many_single_char_names,
     clippy::similar_names,
     clippy::needless_range_loop,
-    clippy::disallowed_methods,
     reason = "oracles and generators, indexed as the formulas are; the rules, chapter 21's bans               included, are for kernel code"
 )]
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
@@ -32,6 +32,23 @@ use geom_linalg::{
     solve_tridiagonal, solve_upper,
 };
 use geom_num::real::Real;
+
+/// The larger and the smaller of two doubles by comparison, the first on a tie: not `f64::max` and
+/// `f64::min`, which may return either zero for −0 and +0 (chapter 21's ban), and Miri may pick
+/// either on purpose.
+trait Pick {
+    fn larger(self, other: f64) -> f64;
+    fn smaller(self, other: f64) -> f64;
+}
+
+impl Pick for f64 {
+    fn larger(self, other: f64) -> f64 {
+        if other > self { other } else { self }
+    }
+    fn smaller(self, other: f64) -> f64 {
+        if other < self { other } else { self }
+    }
+}
 
 const U: f64 = 1.0 / 9_007_199_254_740_992.0;
 
@@ -103,13 +120,17 @@ fn random(rng: &mut Lcg, m: usize, n: usize, k: i64) -> Matrix {
     Matrix::from_rows(m, n, &entries).unwrap()
 }
 
+/// 10^−3 to 10^3, each the double the compiler rounds its decimal to. Not `10f64.powi(k)`, which
+/// IEEE 754 does not make correctly rounded and Miri perturbs on purpose.
+const POWERS_OF_TEN: [f64; 7] = [1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3];
+
 /// Rows scaled by 10^(i mod 7 − 3) and columns by 10^(3 − j mod 7): a graded matrix.
 fn graded(a: &Matrix) -> Matrix {
     let mut g = a.clone();
     for i in 0..a.rows() {
         for j in 0..a.cols() {
-            let r = 10f64.powi((i % 7) as i32 - 3);
-            let c = 10f64.powi(3 - (j % 7) as i32);
+            let r = POWERS_OF_TEN[i % 7];
+            let c = POWERS_OF_TEN[6 - j % 7];
             g.set(i, j, a.get(i, j).unwrap() * r * c).unwrap();
         }
     }
@@ -439,8 +460,8 @@ fn cod_finds_the_rank_and_the_least_norm_solution() {
         let want = mul(&pinv, &bx);
         let scale = want
             .iter()
-            .fold(0.0f64, |acc, v| acc.max(to_f64(&abs(&v[0]))))
-            .max(1.0);
+            .fold(0.0f64, |acc, v| acc.larger(to_f64(&abs(&v[0]))))
+            .larger(1.0);
         for (xi, wi) in x.iter().zip(&want) {
             let d = (xi - to_f64(&wi[0])).abs();
             assert!(
@@ -535,7 +556,7 @@ fn kahan_matrix_shows_the_limit_of_column_pivoting() {
     );
     let last = (0..n)
         .filter_map(|i| qr.r_diagonal(i))
-        .fold(f64::INFINITY, |m, d| m.min(d.abs()));
+        .fold(f64::INFINITY, |m, d| m.smaller(d.abs()));
     assert!(last > 0.1, "R's smallest diagonal entry {last}");
     // At a relative tolerance of 10⁻³ the decision says full rank ...
     assert_eq!(qr.rank(Real::new(1e-3).unwrap()), n);
@@ -549,7 +570,7 @@ fn kahan_matrix_shows_the_limit_of_column_pivoting() {
         }
         x[i] = sum / &ex[i][i];
     }
-    let big = x.iter().fold(0.0f64, |m, v| m.max(to_f64(&abs(v))));
+    let big = x.iter().fold(0.0f64, |m, v| m.larger(to_f64(&abs(v))));
     // ... yet ‖K⁻¹‖₂ ≥ |x|∞, so the smallest singular value is at most 1/|x|∞, below 10⁻³ times
     // ‖K‖₂ ≥ 1: a deficiency at that tolerance that R's diagonal (at least 0.1) does not show.
     assert!(
