@@ -190,9 +190,15 @@
               "kind": "corpus",
               "piece": "G52",
               "why": "12 new benchmarks in two new groups: newton (Krawczyk and Hansen-Sengupta steps on a circle and a line, and on a system of four unknowns) and dual (Jacobians over reals and over intervals), each on typical and extreme inputs; no existing digest moved"
+            },
+            {
+              "sha256": "7a8df916ad8ce91de1084d9b84304e06cec1b696eb166a081cba3d0f7597e826",
+              "kind": "corpus",
+              "piece": "G43",
+              "why": "ExactSum's Debug text, by which canonical.rs encodes a sum, now writes the sum's value only (its digits after a carry propagation, its special values and its lost flag, and `..` for the rest), not the raw chunks and the additions left before a propagation (chapter 28.8; Gate 1's ledger review): the 12 exact_sum digests moved, the results of add, add_slice and add_iter, the inputs of round and round_ieee, and both of merge; no result changed, and every other benchmark's digests are the same"
             }
           ],
-          "sha256": "7a8df916ad8ce91de1084d9b84304e06cec1b696eb166a081cba3d0f7597e826"
+          "sha256": "47cfa5e079777ece8dc6c89ee307996efed215b2ed071c4fd430db455e4e4cca"
         },
         {
           "id": "geom-nurbs/operations",
