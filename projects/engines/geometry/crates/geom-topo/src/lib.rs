@@ -24,7 +24,7 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today (piece G80, the arenas):
+//! Modules today (pieces G80, the arenas, and G81, in progress):
 //!
 //! - [`ix`]: [`Ix`], the typed 32-bit index of one row of one arena, the [`Kind`] of row each arena
 //!   holds and the [`Arena`]s' names.
@@ -37,6 +37,10 @@
 //! - [`builder`]: [`Builder`], the one way to make a body: arenas filled or edited, checked and
 //!   published.
 //! - [`TopoError`], in [`error`]: why an arena could not change or a body could not be published.
+//! - [`order`]: [`order::NameKey`], a persistent name's bytes, and [`order::Permutation`], the move of
+//!   an arena's rows into name order that the builder applies before publishing (8.2, 32.17).
+//! - [`attributes`]: [`attributes::Attributes`], values keyed by persistent name, and the split and
+//!   merge classes that say what they do when their entity is split or merged (8.4).
 //!
 //! Status: the arenas, their typed indices and the publishing builder (G80) built; the Euler
 //! operators, name order, attributes, regions and cells, queries, proofs and instances to come in
@@ -47,26 +51,28 @@
 extern crate alloc;
 
 pub mod arenas;
+pub mod attributes;
 pub mod body;
 pub mod builder;
 pub mod column;
 pub mod entity;
 pub mod error;
 pub mod ix;
+pub mod order;
 
 pub use arenas::{Arenas, Pool};
 pub use body::{Body, BodyKind};
-pub use builder::Builder;
+pub use builder::{Builder, Euler, NewEdge, NewFace, NewVertex, Wire};
 pub use column::{CHUNK_ROWS, Column, Memory};
-// The geometry kinds a body's pools hold, for the crates above this one that read them (such as
-// geom-check's exactness record) without a direct dependency on geom-curve and geom-surface,
-// which chapter 27's crate table does not give them.
 pub use entity::{
     CurveIx, Edge, EdgeIx, Edges, Face, FaceIx, Faces, Fin, FinIx, Fins, Link, Loop, LoopIx, Loops,
     PcurveIx, PointIx, Region, RegionIx, RegionKind, Regions, Sense, Shell, ShellIx, Shells,
     SurfaceIx, Vertex, VertexIx, Vertices,
 };
-pub use error::TopoError;
+pub use error::{Refusal, TopoError};
+// The geometry kinds a body's pools hold, for the crates above this one that read them (such as
+// geom-check's exactness record) without a direct dependency on geom-curve and geom-surface,
+// which chapter 27's crate table does not give them.
 pub use geom_curve::CurveKind;
 pub use geom_surface::SurfaceKind;
 pub use ix::{Arena, Ix, Kind};
