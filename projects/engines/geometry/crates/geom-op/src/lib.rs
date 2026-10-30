@@ -65,9 +65,10 @@
 //! Status: the context, the error base and its details for the parallel helper and the numbers
 //! layer, the exactness class and warnings of an output, operation identity and the schema types
 //! built (G82); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent
-//! names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); budgets in the contract
-//! to come in G83, history in G88, the batch runner in G104,
-//! per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.
+//! names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their
+//! laws and their composition ([`history`]) built (G88); budgets in the contract to come in G83,
+//! the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and
+//! preview precision in G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -79,6 +80,7 @@ pub mod detail;
 pub mod error;
 pub mod evidence;
 pub mod hash;
+pub mod history;
 pub mod id;
 pub mod kind;
 pub mod name;
@@ -91,6 +93,10 @@ pub use detail::{NumDetail, OpErrorDetail, RunDetail};
 pub use error::OpError;
 pub use evidence::{Evidence, Value};
 pub use geom_num::Exactness;
+pub use history::{
+    ChangeClass, History, HistoryError, LawBreak, LoopChange, Origin, Record, Relations,
+    TopologyChange, Vanish,
+};
 pub use id::{Label, NameId, OpId, OpPath};
 pub use kind::ErrorKind;
 pub use name::{

@@ -1427,6 +1427,7 @@ dependencies = [
  "dashu-ratio",
  "geom-num",
  "geom-nurbs",
+ "geom-op",
  "geom-run",
  "lcov",
  "num-rational",
