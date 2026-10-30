@@ -1770,13 +1770,17 @@ fn the_repository_ledger_reads_and_every_mark_in_the_kernel_has_its_proof() {
     let root = std::fs::canonicalize(repo_root()).unwrap();
     let ledger = Ledger::read(&root.join(geom_test::quality_ledger::LEDGER_PATH)).unwrap();
     for s in &ledger.survivors {
-        // The foundation set keeps only equivalent mutants (and hangs, which are caught by time).
+        // The foundation set keeps only equivalent mutants, those a contract proof catches, and
+        // hangs, which are caught by time.
         if let Place::Kernel {
             set: Set::Foundation,
             ..
         } = place(&s.file)
         {
-            assert!(matches!(s.kind, Kind::Equivalent | Kind::Hangs), "{s:?}");
+            assert!(
+                matches!(s.kind, Kind::Equivalent | Kind::Proved | Kind::Hangs),
+                "{s:?}"
+            );
         }
         let text = std::fs::read_to_string(root.join(&s.file)).unwrap();
         assert!(text.lines().any(|l| l.trim() == s.line_text), "{s:?}");
