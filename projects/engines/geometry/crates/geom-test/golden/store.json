@@ -212,9 +212,15 @@
               "kind": "corpus",
               "piece": "G52",
               "why": "12 new benchmarks in two new groups: newton (Krawczyk and Hansen-Sengupta steps on a circle and a line, and on a system of four unknowns) and dual (Jacobians over reals and over intervals), each on typical and extreme inputs; no existing digest moved"
+            },
+            {
+              "sha256": "7a8df916ad8ce91de1084d9b84304e06cec1b696eb166a081cba3d0f7597e826",
+              "kind": "corpus",
+              "piece": "G53",
+              "why": "6 new benchmarks in two new groups: isolate (the root-isolation engine on a cubic in one unknown and on a circle and a line) and ball (a cubic evaluated in double-double balls), each on typical and extreme inputs; no existing digest moved"
             }
           ],
-          "sha256": "7a8df916ad8ce91de1084d9b84304e06cec1b696eb166a081cba3d0f7597e826"
+          "sha256": "c52cb535ddfc80e66dbcac7dc95fc0b542fd912357820c9afb7e49aee1058e8d"
         },
         {
           "id": "geom-nurbs/operations",
@@ -385,6 +391,16 @@
             "function": "dual_and_newton_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "dd010907a8e85d445965877e147ffce51c90c5a9b9b40536714a71035d2364dc"
+        },
+        {
+          "id": "geom-num/root-isolation",
+          "what": "The double-double balls and the root-isolation engine (piece G53): every ball operation on 400 seeded pairs, results and errors alike; and the engine, by both operators, on seeded product systems (24, 12, 6 and 4 in one to four unknowns), on zeros on split lines and on the domain's boundary, zeros closer than the floor, multiple zeros, a dependent system, a zero without a derivative, the double-double fallbacks, and every cap (the work and logical-memory budgets, an unreachable target, an imprecise position, a box that cannot be split): 6,181 results in the canonical encoding of tests/isolate_determinism.rs, with the work and logical memory each isolation charged.",
+          "check": {
+            "crate": "geom-num",
+            "test": "isolate_determinism",
+            "function": "root_isolation_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "ce9699711dc7f72a1b12491ffd673e7b720f28e9d22936550f618a24e0bc6421"
         },
         {
           "id": "geom-math/rotations",

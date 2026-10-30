@@ -1112,6 +1112,38 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     )
                 }),
         ),
+        ("isolate", "cubic_1") => fold(inputs::isolate::cubic_1(class).into_iter().map(
+            |(domain, target)| {
+                let options = geom_num::isolate::Options {
+                    target,
+                    ..geom_num::isolate::Options::DEFAULT
+                };
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_num::isolate::isolate(&inputs::isolate::Cubic, domain, options, &mut meter)
+            },
+        )),
+        ("isolate", "circle_line_2") => fold(
+            inputs::isolate::circle_line_2(class)
+                .into_iter()
+                .map(|(domain, target)| {
+                    let options = geom_num::isolate::Options {
+                        target,
+                        ..geom_num::isolate::Options::DEFAULT
+                    };
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_num::isolate::isolate(
+                        &inputs::newton::CircleLine,
+                        domain,
+                        options,
+                        &mut meter,
+                    )
+                }),
+        ),
+        ("ball", "cubic") => fold(inputs::isolate::ball_cubic(class).into_iter().map(|[x]| {
+            let ball = geom_num::ball::Ball::from_interval(x)?;
+            let [value] = geom_num::newton::Residuals::residuals(&inputs::isolate::Cubic, [ball])?;
+            value.to_interval()
+        })),
         ("eft", "two_sum") => fold(
             ie::two_sum(class)
                 .into_iter()
