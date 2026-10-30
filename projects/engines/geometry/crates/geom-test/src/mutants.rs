@@ -534,7 +534,9 @@ fn line_of(
 /// Whether the ledger's `kind` may keep a mutant with `outcome` in `set`.
 fn allowed(kind: Kind, outcome: Outcome, set: Set) -> bool {
     match (kind, outcome) {
-        (Kind::Hangs, Outcome::Timeout) | (Kind::Equivalent, Outcome::Missed) => true,
+        (Kind::Hangs, Outcome::Timeout) | (Kind::Equivalent | Kind::Proved, Outcome::Missed) => {
+            true
+        }
         (Kind::Harmless | Kind::Known, Outcome::Missed) => set == Set::Elsewhere,
         _ => false,
     }
@@ -560,8 +562,10 @@ fn check_entries(ledger: &Ledger, repo: &Path, failures: &mut Vec<String>) {
                 s.file
             )),
         }
-        let present = std::fs::read_to_string(repo.join(&s.file))
-            .is_ok_and(|t| t.lines().any(|l| l.trim() == s.line_text));
+        let text = std::fs::read_to_string(repo.join(&s.file)).ok();
+        let present = text
+            .as_ref()
+            .is_some_and(|t| t.lines().any(|l| l.trim() == s.line_text));
         if !present {
             failures.push(format!(
                 "ledger: {} has no line {:?} (for {}): the code changed, so judge the mutant again \
@@ -569,7 +573,34 @@ fn check_entries(ledger: &Ledger, repo: &Path, failures: &mut Vec<String>) {
                 s.file, s.line_text, s.mutant
             ));
         }
+        if let Some(proof) = &s.proof {
+            let name = proof.rsplit_once("::").map_or(proof.as_str(), |(_, n)| n);
+            if !text.as_ref().is_some_and(|t| is_harness(t, name)) {
+                failures.push(format!(
+                    "ledger: {} in {} is kept as proved by {proof}, but that file has no \
+                     #[kani::proof] function {name}",
+                    s.mutant, s.file
+                ));
+            }
+        }
     }
+}
+
+/// Whether `text` has a function `name` marked `#[kani::proof]` (other attributes may stand
+/// between the two).
+fn is_harness(text: &str, name: &str) -> bool {
+    let head = format!("fn {name}(");
+    let mut marked = false;
+    for line in text.lines().map(str::trim) {
+        if line == "#[kani::proof]" {
+            marked = true;
+        } else if marked && line.starts_with(&head) {
+            return true;
+        } else if !line.starts_with("#[") {
+            marked = false;
+        }
+    }
+    false
 }
 
 /// Every mutant of every run once, with its key; shards that overlap and lines that cannot be
@@ -943,5 +974,18 @@ mod tests {
         assert!(!allowed(Kind::Hangs, Outcome::Missed, Set::Elsewhere));
         assert!(!allowed(Kind::Equivalent, Outcome::Timeout, Set::Elsewhere));
         assert!(allowed(Kind::Known, Outcome::Missed, Set::Elsewhere));
+        assert!(allowed(Kind::Proved, Outcome::Missed, Set::Foundation));
+        assert!(!allowed(Kind::Proved, Outcome::Timeout, Set::Foundation));
+    }
+
+    #[test]
+    fn a_proof_must_be_a_harness_of_its_file() {
+        let text = "fn f() {}\n#[kani::proof]\n#[kani::unwind(3)]\nfn f_is_exact() {}\n";
+        assert!(is_harness(text, "f_is_exact"));
+        assert!(!is_harness(text, "f"));
+        assert!(!is_harness(
+            "#[kani::proof]\nconst X: u8 = 0;\nfn g() {}\n",
+            "g"
+        ));
     }
 }

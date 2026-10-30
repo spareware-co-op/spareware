@@ -417,6 +417,50 @@ const ATAN2_FAST_BOUND: [(u64, u64); 3] = [
     (0x7fdd_4773_a21e_7d7b, 0x7fe9_52ad_15eb_77b0),
 ];
 
+/// Doubles near the troughs of `sinpi` (−1 at x = 3/2 + 2k) whose exact value lies just above the
+/// midpoint −1 + 2^−54, by less than the general path's error bound `er`: there `r` is about
+/// 2^−54 and the result is −1 + 2^−53. A rounding test whose upper bound loses `er` (`(r * er) +
+/// sh`) takes the lower bound, −1, for both. Found off CI by comparing every double within three
+/// places of each crossing point `t ± √(2^−53)/π`, for every extremum below 2^25.
+#[rustfmt::skip]
+const SINPI_TROUGH: [u64; 6] = [
+    0x3ff8_0000_00e6_7b22, 0x3ff7_ffff_ff19_84de, 0xbfe0_0000_01cc_f644,
+    0xbfdf_ffff_fc66_1379, 0xc004_0000_0073_3d91, 0x400c_0000_0073_3d91,
+];
+
+/// The same for `cospi`, whose troughs are at x = 1 + 2k.
+#[rustfmt::skip]
+const COSPI_TROUGH: [u64; 4] = [
+    0x3ff0_0000_00e6_7b22, 0x3fef_ffff_fe33_09bb, 0x4008_0000_0073_3d91, 0x4007_ffff_ff8c_c26f,
+];
+
+/// Arguments `x = 2^e·y` with `e > 0` where `ln`'s fast path's low part nearly cancels: its
+/// polynomial term (about −z²/2) against `e·LOG2_L` (log.rs `log_fast`), so `l` is within an ulp
+/// of `h` and the result lies within the bound `ERR` above a midpoint. A rounding test whose upper
+/// bound is `h + l·ERR` takes the lower bound there. Found off CI by scanning the doubles where
+/// `z = ±√(2e·LOG2_L)` in several table slices, for e = 300 to 1000.
+#[rustfmt::skip]
+const LN_CANCELLATION: [u64; 6] = [
+    0x6567_45c5_1109_d1ac, 0x52a7_45da_36d3_909b, 0x6567_45dd_d83a_21f3,
+    0x7827_45e0_9f24_f756, 0x52a7_45c8_b1da_52cf, 0x656e_2c61_27b4_b0c3,
+];
+
+/// Pairs whose angle lies within about 2^−100 of a midpoint between doubles, with the reduced
+/// argument `z` near 2^−39, where the first fast path's bound `|z|·EPS1_REL + EPS1_ABS` is
+/// mostly its absolute term: with that term subtracted (or multiplied in), the first fast path
+/// accepts a wrongly rounded angle. Built off CI: for a midpoint `m` near `atan(j/64) + 2^−39`,
+/// `y/x` is the last convergent of the continued fraction of `tan(m)` (from `math_reference.rs`'s
+/// interval sine and cosine) with both terms below 2^53.
+#[rustfmt::skip]
+const ATAN2_FIRST_BOUND: [(u64, u64); 6] = [
+    (0x42e8_8b6b_1be7_b120, 0x4330_5cf2_1297_9768),
+    (0x42ee_a15b_ca12_0880, 0x4302_d973_900a_a768),
+    (0x42f5_d912_07c3_dc10, 0x433d_216d_5faa_f272),
+    (0x42f6_9c6d_5820_83f0, 0x430b_d437_ceec_4cc0),
+    (0x42fb_2207_d86f_3340, 0x430a_4f8b_7c8a_5898),
+    (0x4301_7471_d9bb_0598, 0x432f_07e6_d867_2270),
+];
+
 /// Checks `atan2` on each pair (given by its bits) in all four sign combinations, and swapped
 /// when `swap` (the other octants), against the reference.
 #[track_caller]
@@ -520,6 +564,32 @@ fn atan2_tiny_quotients_whose_residual_underflows() {
 #[test]
 fn atan2_hard_cases_at_the_fast_path_bound() {
     check_atan2(&ATAN2_FAST_BOUND, true);
+}
+
+/// `sinpi` and `cospi` near their troughs, where the general path's result is −1 or the double
+/// above it and the exact value lies just above the midpoint: the rounding test must keep its
+/// whole bound on both sides.
+#[test]
+fn sinpi_and_cospi_just_above_the_midpoint_next_to_minus_one() {
+    let sinpi = |x: f64| reference::sinpi(x) + 0.0;
+    let cospi = |x: f64| reference::cospi(x) + 0.0;
+    let both = |l: &[u64]| -> Vec<u64> { l.iter().flat_map(|&b| [b, b ^ (1 << 63)]).collect() };
+    check_each("sinpi", &both(&SINPI_TROUGH), math::sinpi, sinpi);
+    check_each("cospi", &both(&COSPI_TROUGH), math::cospi, cospi);
+}
+
+/// `ln` where its fast path's low part nearly cancels and the result lies just above a midpoint:
+/// the rounding test must keep its bound on the upper side.
+#[test]
+fn ln_where_the_low_part_cancels() {
+    check_each("ln", &LN_CANCELLATION, math::ln, reference::ln);
+}
+
+/// `atan2` within about 2^−100 of a midpoint with a reduced argument near 2^−39, where the first
+/// fast path's bound is mostly its absolute term.
+#[test]
+fn atan2_hard_cases_at_the_first_fast_path_bound() {
+    check_atan2(&ATAN2_FIRST_BOUND, true);
 }
 
 /// The unproven `sinpi` and `cospi` special-case the quarter turns; the ledger keeps three of their

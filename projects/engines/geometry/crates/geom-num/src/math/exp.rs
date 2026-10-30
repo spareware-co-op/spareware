@@ -837,6 +837,67 @@ mod tests {
         assert!(near >= 25_358, "{near}");
     }
 
+    /// The subnormal branch's rounding test keeps its bound above the value it returns. With an
+    /// upper bound `fh + fl·EPS` instead (within a rounding of `fh`), the test would return `fh`
+    /// whenever `fh + (fl − EPS)` rounds to `fh`; where the original refuses, that is wrong only
+    /// for an `x` whose `e^x` lies above the midpoint `M = (fh − 2^s + u/2)·2^ie` next to `fh`
+    /// (`s = −1022 − ie`, `u` the ulp of `fh`) by at most `(2·EPS + 2^−68)·2^ie < 2^(ie − 60)`,
+    /// the fast path's error and the bound with the rounding of `fl − EPS`; below `M` the original
+    /// accepts too, with the same `fh`. For every reduction index of the branch (`x` from
+    /// −0x1.74910d52d3052p+9 to −0x1.6232bdd7abcd2p+9), this walks the doubles from `ln M` and
+    /// checks that none has `e^x` in `(M, M + 2^(ie − 60)]`: `e^x` is increasing, so the first
+    /// double above `M` decides it.
+    #[test]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "exact-arithmetic proof check: seconds in release, minutes in a debug build"
+    )]
+    fn no_subnormal_result_just_above_the_midpoint_next_to_its_table_value() {
+        use num_traits::ToPrimitive;
+        // e^x·2^1074 enclosed within far less than 2^−60 of it: as in the test above.
+        let scaled_exp = |x: f64| -> Iv {
+            let d = Dy::from_f64(x);
+            let k = Dy::div(&d, &ln2().lo, 64, false).round_to_int();
+            let r = Iv::point(d).sub(&ln2().mul(&Iv::point(Dy::big(k.clone())), 224), 224);
+            exp_small_iv(&r, 112).scale(k.to_i64().unwrap() + 1074)
+        };
+        let step = hf!("0x1p-43"); // the spacing of the doubles in [−1024, −512), where x lies
+        let first = libm::rint(hf!("-0x1.74910d52d3052p+9") * S) as i64;
+        let last = libm::rint(hf!("-0x1.6232bdd7abcd2p+9") * S) as i64;
+        let mut indices = 0u32;
+        for jt in first..=last {
+            let (t, ie, th, _) = reduce(jt as f64 / S);
+            assert_eq!(t, jt as f64);
+            let offset = pow2((-1022i64).checked_sub(ie));
+            let (fh, _) = fast_two_sum(offset, th);
+            let u = fh.next_up() - fh;
+            // (fh − 2^s) + u/2 is exact: fh − 2^s is in [1, 2) on a grid of u ≥ 2^−51.
+            let mid = (fh - offset) + u / 2.0;
+            let m = Dy::from_f64(mid).scale(ie + 1074);
+            let top = m.add(&p2(ie + 1074 - 60));
+            let mut x = crate::math::log::ln(mid) + ie as f64 * core::f64::consts::LN_2;
+            // Down to the last double with e^x below M, then up to the first above it.
+            while !le(&scaled_exp(x).hi, &m) {
+                x -= step;
+            }
+            loop {
+                let e = scaled_exp(x);
+                if le(&e.hi, &m) {
+                    x += step;
+                    continue;
+                }
+                assert!(
+                    le(&m, &e.lo) && le(&top, &e.lo),
+                    "e^x for x = {x:e} lies within 2^(ie - 60) above the midpoint for jt = {jt}"
+                );
+                break;
+            }
+            indices += 1;
+        }
+        eprintln!("{indices} reduction indices, none within 2^(ie - 60) above its midpoint");
+        assert!(indices > 200_000, "{indices}");
+    }
+
     /// Step A2: the accurate polynomial and reduction are accurate to far below 2^−95.
     #[test]
     fn accurate_path_bound() {

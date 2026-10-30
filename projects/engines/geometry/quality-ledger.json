@@ -4993,6 +4993,182 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The range test only ends early. A whole translation the mutant lets through at or beyond 2^84 goes on to RationalTransform::new (refused at 2^126, and saturated casts beyond 2^127 with it) and to_grid, which refuses any translation beyond 2^41 - 2: None either way. One it refuses at exactly +-2^84 would be refused by to_grid too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace || with && in Tint::to_f64",
+      "line_text": "} else if low > 0x400 || mm != 0 || ll != 0 {",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::to_f64_rounds_to_nearest",
+      "reason": "Caught by math::atan2::proofs::to_f64_rounds_to_nearest, a proof of Tint::to_f64's own contract: for every normalised Tint (three words with the top bit set, any exponent, either sign) and any non-zero error bound, the bits of the double nearest the value, ties to even, overflowing to infinity and through the subnormal range, from an integer-only reference (kept bits, round bit, sticky bit). With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). The change breaks the sticky test that decides ties; it changes atan2's result for about 2^45 input pairs of the accurate path, none of which can be found, so no test can show it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with == in Tint::to_f64",
+      "line_text": "} else if low > 0x400 || mm != 0 || ll != 0 {",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::to_f64_rounds_to_nearest",
+      "reason": "Caught by math::atan2::proofs::to_f64_rounds_to_nearest, a proof of Tint::to_f64's own contract: for every normalised Tint (three words with the top bit set, any exponent, either sign) and any non-zero error bound, the bits of the double nearest the value, ties to even, overflowing to infinity and through the subnormal range, from an integer-only reference (kept bits, round bit, sticky bit). With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). The change breaks the sticky test that decides ties; it changes atan2's result for about 2^45 input pairs of the accurate path, none of which can be found, so no test can show it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with < in Tint::to_f64",
+      "line_text": "} else if low > 0x400 || mm != 0 || ll != 0 {",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::to_f64_rounds_to_nearest",
+      "reason": "Caught by math::atan2::proofs::to_f64_rounds_to_nearest, a proof of Tint::to_f64's own contract: for every normalised Tint (three words with the top bit set, any exponent, either sign) and any non-zero error bound, the bits of the double nearest the value, ties to even, overflowing to infinity and through the subnormal range, from an integer-only reference (kept bits, round bit, sticky bit). With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). The change breaks the sticky test that decides ties; it changes atan2's result for about 2^45 input pairs of the accurate path, none of which can be found, so no test can show it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace > with >= in Tint::to_f64",
+      "line_text": "} else if low > 0x400 || mm != 0 || ll != 0 {",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::to_f64_rounds_to_nearest",
+      "reason": "Caught by math::atan2::proofs::to_f64_rounds_to_nearest, a proof of Tint::to_f64's own contract: for every normalised Tint (three words with the top bit set, any exponent, either sign) and any non-zero error bound, the bits of the double nearest the value, ties to even, overflowing to infinity and through the subnormal range, from an integer-only reference (kept bits, round bit, sticky bit). With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). The change breaks the sticky test that decides ties; it changes atan2's result for about 2^45 input pairs of the accurate path, none of which can be found, so no test can show it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace != with == in Tint::to_f64",
+      "line_text": "} else if low > 0x400 || mm != 0 || ll != 0 {",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::to_f64_rounds_to_nearest",
+      "reason": "Caught by math::atan2::proofs::to_f64_rounds_to_nearest, a proof of Tint::to_f64's own contract: for every normalised Tint (three words with the top bit set, any exponent, either sign) and any non-zero error bound, the bits of the double nearest the value, ties to even, overflowing to infinity and through the subnormal range, from an integer-only reference (kept bits, round bit, sticky bit). With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). The change breaks the sticky test that decides ties; it changes atan2's result for about 2^45 input pairs of the accurate path, none of which can be found, so no test can show it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in Dint::is_zero",
+      "line_text": "self.hi | self.lo == 0",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::log::proofs::is_zero_reads_both_words",
+      "reason": "Caught by math::log::proofs::is_zero_reads_both_words, a proof of Dint::is_zero's own contract: it holds exactly when hi == 0 and lo == 0, for every bit pattern. With ^ for | it also holds when hi == lo != 0, and the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI); ln's accurate path never forms such a value from any input that can be found."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace >> with << in Wide192::shl",
+      "line_text": "hi: (self.hi << k) | u128::from(self.lo >> 64u64.abs_diff(k)),",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::shl_moves_every_bit_up",
+      "reason": "Caught by math::atan2::proofs::shl_moves_every_bit_up, a proof of Wide192::shl's own contract: for every 192-bit value, every shift k and every bit index i below 192, bit i of shl(k) is bit i - k of the value when i >= k, and 0 otherwise. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI); the shifts it breaks run only in the accurate path's normalisations, on inputs no test can find."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace << with >> in Wide192::shl",
+      "line_text": "lo: self.lo << k,",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::shl_moves_every_bit_up",
+      "reason": "Caught by math::atan2::proofs::shl_moves_every_bit_up, a proof of Wide192::shl's own contract: for every 192-bit value, every shift k and every bit index i below 192, bit i of shl(k) is bit i - k of the value when i >= k, and 0 otherwise. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI); the shifts it breaks run only in the accurate path's normalisations, on inputs no test can find."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
+      "mutant": "replace + with * in exp",
+      "line_text": "let ub = fh + (fl + EPS);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Two places on this line. fh * (fl + EPS) is far below fh (|fl| + EPS < 2^-11), so ub != lb always and every possibly subnormal input goes to exp_accurate, which gives the same correctly rounded result: only the time changes. fl * EPS keeps ub = fh (|fl·EPS| < 2^-70, below half an ulp of fh >= 1), so the test accepts exactly when fh + (fl - EPS) rounds to fh, and returns fh's subnormal. That puts e^x above the midpoint below it, so the answer is the correctly rounded one unless e^x passes the midpoint M = (fh - 2^s + u/2)·2^ie above it (s = -1022 - ie, u the ulp of fh); as fh + (fl - EPS) is below M, that needs e^x in (M, M + (2·EPS + 2^-68)·2^ie], within 2^(ie - 60) above M. exp.rs's unit test no_subnormal_result_just_above_the_midpoint_next_to_its_table_value walks the doubles at every one of the branch's 217089 reduction indices and finds none there. No worst-case list is assumed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in sinpi",
+      "line_text": "let ub = (r + er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two + on this line share the key. The second, (r + er) * sh, makes ub = (r + er)·sh while lb = (r - er) + sh: r is the table point's low part plus the reduced argument's terms, below 2^-10 in magnitude (|z| is at most half a table step, pi/4096 < 2^-10), and er < 2^-60. Where sh != 0 it is at least sin(pi/2048) > 2^-10 in magnitude, so |ub| < 2^-9·|sh| while lb is within 2^-10 of sh: they differ. Where sh = 0 (x within 2^-12 of a non-zero integer, so ulp(x) >= 2^-53) ub = 0 and lb = r - er, with |r| at least pi·ulp(x)·(1 - 2^-9) > 2^-53 > er: they differ too. So sinpi's fast path never returns and refine gives the same correctly rounded value; only the time changes. The first, r * er, is caught by gate1_libm.rs's SINPI_TROUGH."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with * in cospi",
+      "line_text": "let ub = (r + er) + sh;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two + on this line share the key. The second, (r + er) * sh, makes ub = (r + er)·sh while lb = (r - er) + sh: r is the table point's low part plus the reduced argument's terms, below 2^-10 in magnitude (|z| is at most half a table step, pi/4096 < 2^-10), and er < 2^-60. Where sh != 0 it is at least sin(pi/2048) > 2^-10 in magnitude, so |ub| < 2^-9·|sh| while lb is within 2^-10 of sh: they differ. Where sh = 0 (x within 2^-12 of a half-integer, so ulp(x) >= 2^-54) ub = 0 and lb = r - er, with |r| at least pi·ulp(x)·(1 - 2^-9) > 2^-53 > er: they differ too. So cospi's fast path never returns and refine gives the same correctly rounded value; only the time changes. The first, r * er, is caught by gate1_libm.rs's COSPI_TROUGH."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace + with * in ln",
+      "line_text": "let right = h + (l + ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR) while left = h + (l - ERR). In log_fast |l| < 2^-18 (the polynomial's -z^2/2 with |z| < 2^-9, e·LOG2_L < 2^-34, l2 and a rounding), and |l| is at most 2^-8·|h|: where the table's inverse is 1 (y within 2^-8 of 1, so e = 0 and l1 = 0) h = z exactly and l is the polynomial alone, about -z^2/2; elsewhere |h| > 2^-9. So |right| <= |h|·(2^-8 + 2^-68) while |left| >= |h|·(1 - 2^-8) - 2^-68, and h = 0 only for x = 1, which returns earlier: the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in Tint::mul",
+      "line_text": "h = h.checked_add(u64::from(m < c))?;",
+      "occurrences": 2,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::mul_keeps_every_carry",
+      "reason": "Caught by math::atan2::proofs::mul_keeps_every_carry, a proof of Tint::mul's own contract: for every pair of operands (normalised or zero, either sign, exponents below 2^60), the result is exactly the six partial products mul keeps, summed by 128-bit columns in the reference, normalised, with the signs' exclusive or and the exponents' sum; what mul drops is below 5 units, the 10 ulps it documents. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI): the comparison adds a carry where none is, or drops one, moving the product by a whole word for operands whose limb sum lands on a carry boundary. Only atan2's accurate path multiplies, on inputs no test can construct with such limbs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in Tint::mul",
+      "line_text": "let mut cm = u64::from(l < lo2); // carry into m",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::mul_keeps_every_carry",
+      "reason": "Caught by math::atan2::proofs::mul_keeps_every_carry, a proof of Tint::mul's own contract: for every pair of operands (normalised or zero, either sign, exponents below 2^60), the result is exactly the six partial products mul keeps, summed by 128-bit columns in the reference, normalised, with the signs' exclusive or and the exponents' sum; what mul drops is below 5 units, the 10 ulps it documents. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI): the comparison adds a carry where none is, or drops one, moving the product by a whole word for operands whose limb sum lands on a carry boundary. Only atan2's accurate path multiplies, on inputs no test can construct with such limbs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in Tint::mul",
+      "line_text": "cm = cm.checked_add(u64::from(l < lo3))?;",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::mul_keeps_every_carry",
+      "reason": "Caught by math::atan2::proofs::mul_keeps_every_carry, a proof of Tint::mul's own contract: for every pair of operands (normalised or zero, either sign, exponents below 2^60), the result is exactly the six partial products mul keeps, summed by 128-bit columns in the reference, normalised, with the signs' exclusive or and the exponents' sum; what mul drops is below 5 units, the 10 ulps it documents. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI): the comparison adds a carry where none is, or drops one, moving the product by a whole word for operands whose limb sum lands on a carry boundary. Only atan2's accurate path multiplies, on inputs no test can construct with such limbs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in Tint::mul",
+      "line_text": "h = h.checked_add(u64::from(m < cm))?;",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::mul_keeps_every_carry",
+      "reason": "Caught by math::atan2::proofs::mul_keeps_every_carry, a proof of Tint::mul's own contract: for every pair of operands (normalised or zero, either sign, exponents below 2^60), the result is exactly the six partial products mul keeps, summed by 128-bit columns in the reference, normalised, with the signs' exclusive or and the exponents' sum; what mul drops is below 5 units, the 10 ulps it documents. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI): the comparison adds a carry where none is, or drops one, moving the product by a whole word for operands whose limb sum lands on a carry boundary. Only atan2's accurate path multiplies, on inputs no test can construct with such limbs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with == in Tint::mul",
+      "line_text": "h = h.checked_add(u64::from(m < cm))?;",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::mul_keeps_every_carry",
+      "reason": "Caught by math::atan2::proofs::mul_keeps_every_carry, a proof of Tint::mul's own contract: for every pair of operands (normalised or zero, either sign, exponents below 2^60), the result is exactly the six partial products mul keeps, summed by 128-bit columns in the reference, normalised, with the signs' exclusive or and the exponents' sum; what mul drops is below 5 units, the 10 ulps it documents. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI): the comparison adds a carry where none is, or drops one, moving the product by a whole word for operands whose limb sum lands on a carry boundary. Only atan2's accurate path multiplies, on inputs no test can construct with such limbs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace == with != in Tint::add",
+      "line_text": "if ex <= 1 || sh == 0 {",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::add_of_unlike_signs_one_apart_is_within_two_ulps",
+      "reason": "Caught by math::atan2::proofs::add_of_unlike_signs_one_apart_is_within_two_ulps, a proof of Tint::add's own contract: for every pair of normalised operands of unlike signs whose exponents differ by one (a.ex = 0, b.ex = -1; add reads exponents only through their order and difference, and orders its operands by magnitude first, so this stands for both orders), the result has the exact difference's sign and is normalised and less than 2 ulps of itself from it, formed in 448-bit integers. With `sh != 0`, a difference at sh = 1 that cancels two or more leading bits takes the first branch instead of the second: b loses its last bit in the shift before the subtraction, and shifting the difference left by ex turns that half unit into 2^(ex-1) >= 2 ulps. (At equal exponents the mutant's second branch gives the same bits, its 192-bit subtraction wrapping exactly.) With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). Only atan2's accurate path adds Tints, on inputs no test can construct with such operands."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with <= in Tint::add",
+      "line_text": "ch = ch.checked_add(u128::from(hi < cl))?;",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::add_of_like_signs_is_within_two_ulps",
+      "reason": "Caught by math::atan2::proofs::add_of_like_signs_is_within_two_ulps, a proof of Tint::add's own contract: for every pair of normalised operands of like signs whose exponents differ by at most one (a.ex = 0, b.ex in {-1, 0, 1}; add reads exponents only through their order and difference), the result has the exact sum's sign and is normalised and less than 2 ulps of itself from the exact sum, formed in 448-bit integers. `hi <= cl` also counts a carry when the high 128 bits wrap to exactly the low carry, as for equal exponents with h = 2^63 and m = 0 in both: the carry count becomes 2, `ch << 127` loses it and the result's top word is 0. With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). Only atan2's accurate path adds Tints, on inputs no test can construct with such operands."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace < with == in Tint::add",
+      "line_text": "ch = ch.checked_add(u128::from(hi < cl))?;",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::add_of_like_signs_is_within_two_ulps",
+      "reason": "Caught by math::atan2::proofs::add_of_like_signs_is_within_two_ulps, a proof of Tint::add's own contract: for every pair of normalised operands of like signs whose exponents differ by at most one (a.ex = 0, b.ex in {-1, 0, 1}; add reads exponents only through their order and difference), the result has the exact sum's sign and is normalised and less than 2 ulps of itself from the exact sum, formed in 448-bit integers. `hi == cl` misses the carry when the low carry wraps the high 128 bits to 0 (the result is half the sum) and counts one when they wrap to exactly 1 after a first carry (a carry count of 2, which `ch << 127` loses). With this change applied the harness reports VERIFICATION:- FAILED (Kani 0.68.0, off CI). Only atan2's accurate path adds Tints, on inputs no test can construct with such operands."
     }
   ],
   "coverage_off": [],
