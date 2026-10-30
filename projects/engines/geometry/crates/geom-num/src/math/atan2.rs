@@ -1792,6 +1792,47 @@ mod tests {
             assert!(le(&rel, &Dy::from_f64(EPS_DIV)), "{case}: ε₁ = ε₄");
         }
     }
+    /// The arms of the 192-bit helpers that atan2's evaluation never takes, each against its
+    /// exact value: shifts by 192 places or more, magnitude comparisons with zero, additions of
+    /// equal magnitudes, and `to_f64` beyond the double range, below it and at a midpoint.
+    #[test]
+    fn helper_arms_atan2_never_takes() {
+        let w = Wide192 {
+            hi: u128::MAX,
+            lo: u64::MAX,
+        };
+        for k in [192, 193, 1000, u64::MAX] {
+            let (r, l) = (w.shr(k), w.shl(k));
+            assert_eq!((r.hi, r.lo, l.hi, l.lo), (0, 0, 0, 0), "{k}");
+        }
+        assert_eq!(ZERO.cmp_magnitude(&ZERO), Ordering::Equal);
+        assert_eq!(ZERO.cmp_magnitude(&ONE), Ordering::Less);
+        assert_eq!(ONE.cmp_magnitude(&ZERO), Ordering::Greater);
+        // Equal magnitudes: opposite signs give zero, equal signs exactly twice.
+        assert!(ONE.add(&t(1 << 63, 0, 0, 1, 1)).unwrap().is_zero());
+        let two = ONE.add(&ONE).unwrap();
+        assert_eq!(
+            (two.h, two.m, two.l, two.ex, two.sgn),
+            (1 << 63, 0, 0, 2, 0)
+        );
+        // 2^1024 overflows to infinity, 2^−1076 is zero, exactly 2^−1075 ties to zero and just
+        // above it rounds to the smallest subnormal, each with its sign.
+        for sgn in [0, 1] {
+            let s = if sgn == 0 { 1.0 } else { -1.0 };
+            let got = |h: u64, ex: i64| t(h, 0, 0, ex, sgn).to_f64(1).unwrap().to_bits();
+            assert_eq!(got(1 << 63, 1025), (s * f64::INFINITY).to_bits());
+            assert_eq!(got(1 << 63, -1075), (s * 0.0).to_bits());
+            assert_eq!(got(1 << 63, -1074), (s * 0.0).to_bits());
+            assert_eq!(got((1 << 63) | 1, -1074), (s * f64::from_bits(1)).to_bits());
+        }
+        // 1 + 2^−53 is exactly the midpoint between 1 and its successor: ties to even, to 1. A
+        // bit in either lower word puts it above the midpoint, to 1 + 2^−52.
+        let mid = (1u64 << 63) | 0x400;
+        assert_eq!(t(mid, 0, 0, 1, 0).to_f64(1).unwrap(), 1.0);
+        let above = 1.0 + f64::EPSILON;
+        assert_eq!(t(mid, 1, 0, 1, 0).to_f64(1).unwrap(), above);
+        assert_eq!(t(mid, 0, 1, 1, 0).to_f64(1).unwrap(), above);
+    }
 }
 
 /// Bounded proofs (chapter 28.7): the own contracts of [`Tint::to_f64`] and [`Wide192::shl`], for

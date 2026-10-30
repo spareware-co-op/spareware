@@ -494,22 +494,18 @@ impl Dint {
         // Below 2^64 · 2^11 = 2^75: the checked products cannot fail.
         let mut t = u128::from(a.hi).checked_mul(u128::from(c))?;
         let hi = hi64(t);
-        let mut m = if hi != 0 { hi.leading_zeros() } else { 64 };
+        let m = if hi != 0 { hi.leading_zeros() } else { 64 };
         t <<= m;
         // m ≥ 53 here, since a.hi·|b| < 2^75 makes hi < 2^11; so m − 1 is exact.
         let l = shl128(
             u128::from(a.lo).checked_mul(u128::from(c))?,
             u64::from(m.checked_sub(1)?),
         ) >> 63;
-        let (sum, carry) = l.overflowing_add(t);
-        t = sum;
-        if carry {
-            // C: `t += t & 1` on the wrapped sum, then the carried-out bit on top: the checked
-            // step fails only for a sum of all ones, which the bounds above exclude.
-            t = t.checked_add(t & 1)?;
-            t = (1u128 << 127) | (t >> 1);
-            m = m.checked_sub(1)?;
-        }
+        // C adds with a carry out of 128 bits (then `t += t & 1` and the carried bit on top), a
+        // branch its only call, `mul_int(E, LOG2)`, never takes for any exponent E a double has
+        // (`mul_int_never_carries_for_ln`, for every E in ±2000). So the sum is a checked step:
+        // were it ever to carry, `ln` would give NaN, never a plausible wrong value.
+        t = l.checked_add(t)?;
         let ex = a.ex.checked_add(64)?.checked_sub(i64::from(m))?;
         Some(Dint::with_significand(t, ex, sgn))
     }
@@ -569,12 +565,9 @@ impl Dint {
         // 181 ≤ i ≤ 362, so the table index i − 181 is in range of the trimmed tables (C:
         // `i − 181`), and the checked difference cannot fail.
         let k = i.checked_sub(181)?;
-        let (Some(&inverse), Some(&log_inverse)) = (
-            usize::try_from(k).ok().and_then(|k| INVERSE_2.get(k)),
-            usize::try_from(k).ok().and_then(|k| LOG_INV_2.get(k)),
-        ) else {
-            return None; // never: k is in range, as above
-        };
+        let index = usize::try_from(k).ok()?;
+        let inverse = *INVERSE_2.get(index)?;
+        let log_inverse = *LOG_INV_2.get(index)?;
         let z = x.mul(inverse)?.add(M_ONE)?;
         let r = Dint::mul_int(big_e, LOG2)?;
         // For i = 255 the table's inverse is 1, so z = x − 1 ∈ [−2^−8, 0): outside the range
@@ -1904,7 +1897,7 @@ mod tests {
         assert!(le(&worst, &p2(-101)));
     }
 
-    /// `mul_int`'s carry branch is never taken. Its only call is `mul_int(E, LOG2)`, with `E` the
+    /// `mul_int`'s checked sum never fails. Its only call is `mul_int(E, LOG2)`, with `E` the
     /// input's binary exponent (`|E| ≤ 1075`), and for every `|E| ≤ 2000` the sum `l + t` that
     /// could carry out of 128 bits fits: `mul_int`'s own steps up to that sum, repeated here.
     #[test]
@@ -1918,6 +1911,74 @@ mod tests {
             let l = shl128(u128::from(LOG2.lo) * c, u64::from(m - 1)) >> 63;
             assert!(l.checked_add(t).is_some(), "E = {b}");
         }
+    }
+
+    /// `Dint::add`'s arms that `ln`'s evaluation never takes (see the test above), each checked
+    /// against the exact sum of the operands: equal magnitudes (exactly zero, or exactly twice),
+    /// an addend 128 places or more below the other (the larger, unchanged), an aligned addend
+    /// whose rounding carries out of 128 bits, and a difference that this rounding cancels to zero.
+    /// Each result is within two units of the larger operand's last place of the exact sum.
+    #[test]
+    fn dint_add_arms_ln_never_takes() {
+        let x = Dint {
+            hi: 0xb504_f333_f9de_6484,
+            lo: 0x5979_6b3e_9f7a_3c21,
+            ex: 3,
+            sgn: 0,
+        };
+        let close = |a: Dint, b: Dint| {
+            let r = a.add(b).unwrap();
+            let exact = dint_value(a).add(&dint_value(b));
+            // Two units of the last place of the larger operand, 2^(ex − 127) each.
+            let two_ulps = Dy::pow2(a.ex.max(b.ex) - 126);
+            assert!(
+                le(&dint_value(r).sub(&exact).abs(), &two_ulps),
+                "({:x}, {:x}, {}, {}) + ({:x}, {:x}, {}, {}) = ({:x}, {:x}, {}, {})",
+                a.hi,
+                a.lo,
+                a.ex,
+                a.sgn,
+                b.hi,
+                b.lo,
+                b.ex,
+                b.sgn,
+                r.hi,
+                r.lo,
+                r.ex,
+                r.sgn
+            );
+            r
+        };
+        // Equal magnitudes: opposite signs give exactly zero, equal signs exactly twice.
+        assert!(close(x, Dint { sgn: 1, ..x }).is_zero());
+        let twice = close(x, x);
+        assert_eq!((twice.hi, twice.lo, twice.ex), (x.hi, x.lo, x.ex + 1));
+        // An addend 200 places below: the larger, unchanged, in either order.
+        let tiny = Dint {
+            ex: x.ex - 200,
+            ..x
+        };
+        for r in [close(x, tiny), close(tiny, x)] {
+            assert_eq!((r.hi, r.lo, r.ex, r.sgn), (x.hi, x.lo, x.ex, x.sgn));
+        }
+        // An all-ones significand one place below 2^ex: aligned, its rounding bit carries it out
+        // of 128 bits, to exactly 2^ex's significand. Added to 2^ex it doubles it; subtracted,
+        // the difference cancels to zero.
+        let power = Dint {
+            hi: 1 << 63,
+            lo: 0,
+            ex: 7,
+            sgn: 0,
+        };
+        let ones = Dint {
+            hi: u64::MAX,
+            lo: u64::MAX,
+            ex: 6,
+            sgn: 0,
+        };
+        let sum = close(power, ones);
+        assert_eq!((sum.hi, sum.lo, sum.ex), (1 << 63, 0, 8));
+        assert!(close(power, Dint { sgn: 1, ..ones }).is_zero());
     }
 
     /// No power of two reaches the accurate path: for every `2^k`, `k` from −1074 to 1023 (`ln 1`
