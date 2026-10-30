@@ -257,7 +257,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-timings.rs",
           "guarantees": [
-            "exit status 0 with the output, 1 when a file cannot be read or a record, sample or job line is refused (the file and the line on standard error), 2 for a usage error. Nothing is written but standard output and standard error."
+            "exit status 0 with the output, 1 when a file cannot be read or a record, sample or job line is refused (the file and the line on standard error), 2 for a usage error, and 2 on a platform other than Unix and Windows, where the records do not exist. Nothing is written but standard output and standard error."
           ],
           "job": "`geom-bench-timings`: the reference runner's tool for its nightly records (piece G107; chapter 23.13, \"Wall clock and scaling\"). Everything it computes is in `geom_bench::timings`; this program reads files, passes them on and writes what comes back.",
           "method": {
