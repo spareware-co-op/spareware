@@ -218,9 +218,15 @@
               "kind": "corpus",
               "piece": "G53",
               "why": "6 new benchmarks in two new groups: isolate (the root-isolation engine on a cubic in one unknown and on a circle and a line) and ball (a cubic evaluated in double-double balls), each on typical and extreme inputs; no existing digest moved"
+            },
+            {
+              "sha256": "c52cb535ddfc80e66dbcac7dc95fc0b542fd912357820c9afb7e49aee1058e8d",
+              "kind": "corpus",
+              "piece": "G43",
+              "why": "ExactSum's Debug text, by which canonical.rs encodes a sum, now writes the sum's value only (its digits after a carry propagation, its special values and its lost flag, and `..` for the rest), not the raw chunks and the additions left before a propagation (chapter 28.8; Gate 1's ledger review): the 12 exact_sum digests moved, the results of add, add_slice and add_iter, the inputs of round and round_ieee, and both of merge; no result changed, and every other benchmark's digests are the same; merged after G53's 6 isolate and ball benchmarks, whose rows are kept unchanged"
             }
           ],
-          "sha256": "c52cb535ddfc80e66dbcac7dc95fc0b542fd912357820c9afb7e49aee1058e8d"
+          "sha256": "a333cd51bc9ab310418e88347fcc516abf6e9822dda90aa44ed998df9b1bf96b"
         },
         {
           "id": "geom-nurbs/operations",
