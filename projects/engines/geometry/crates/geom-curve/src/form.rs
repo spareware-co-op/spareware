@@ -431,7 +431,7 @@ fn combine(u: Interval, v: Interval, x: f64, y: f64) -> Result<Interval, CurveEr
 /// p·x, exactly zero when x is: a coordinate the curve does not move in stays exactly zero, so the
 /// closed form sees it (an interval product with zero would round outward past it).
 fn scaled(p: Interval, x: Interval) -> Result<Interval, CurveError> {
-    if x.lo() == 0.0 && x.hi() == 0.0 {
+    if crate::extent::is_zero(x) {
         point(0.0)
     } else {
         tight::mul(p, x)

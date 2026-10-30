@@ -66,8 +66,8 @@ const MAX_TERMS: usize = 64;
 /// A term below 2⁻⁶⁴ ends a sum.
 const NEGLIGIBLE: f64 = 1.0 / 18_446_744_073_709_551_616.0;
 
-/// The least panel width between the ranges, 2⁻¹⁰.
-const NARROWEST: f64 = 1.0 / 1024.0;
+/// The halvings a panel's width may take from its first guess.
+const HALVINGS: usize = 8;
 
 /// The ellipses tried for a panel's remainder: ρ = 4, 8, 16, 32 and 64, where the best lies for
 /// the panels' widths here.
@@ -152,15 +152,18 @@ fn tiny(x: f64) -> Result<[Interval; 2], CurveError> {
     ])
 }
 
-/// The power series at 0 ≤ x ≤ 1 (module documentation).
+/// The power series at 0 ≤ x ≤ 1 (module documentation). There y = πx²/2 ≤ π/2 < 2, so the
+/// terms pₙ = x·yⁿ/n! fall from n = 1 on, and each sum's tail after pₙ is at most pₙ/(2n + 1).
 fn series(x: f64) -> Result<[Interval; 2], CurveError> {
     let (y, _, _) = angle(x)?;
+    if y.hi() >= 2.0 {
+        return Err(CurveError::Defect);
+    }
     let zero = point(0.0)?;
     let (mut c, mut s) = (zero, zero);
     // pₙ = x·yⁿ/n!; C takes the even n, S the odd, each (−1)^⌊n/2⌋·pₙ/(2n + 1).
     let mut p = point(x)?;
-    let mut n = 0usize;
-    loop {
+    for n in 0..MAX_TERMS {
         let term = tight::div(
             p,
             point(form::count(n.saturating_mul(2).saturating_add(1))?)?,
@@ -173,22 +176,18 @@ fn series(x: f64) -> Result<[Interval; 2], CurveError> {
         }
         let next = n.checked_add(1).ok_or(CurveError::Defect)?;
         p = tight::mul(p, tight::div(y, point(form::count(next)?)?)?)?;
-        n = next;
-        // From here on pₖ falls (k + 1 > y), so each tail is at most its first term, and both
-        // first terms are at most pₙ/(2n + 1).
         let tail = tight::div(
             p,
-            point(form::count(n.saturating_mul(2).saturating_add(1))?)?,
+            point(form::count(next.saturating_mul(2).saturating_add(1))?)?,
         )?
         .hi();
-        if (y.hi() < form::count(n.saturating_add(1))? && tail <= NEGLIGIBLE) || n >= MAX_TERMS {
-            if y.hi() >= form::count(n.saturating_add(1))? {
-                return Err(CurveError::Defect);
-            }
+        // Stop after an S term, so both sums have their first term.
+        if n & 1 == 1 && tail <= NEGLIGIBLE {
             let r = Interval::new(-tail, tail)?;
             return Ok([tight::add(c, r)?, tight::add(s, r)?]);
         }
     }
+    Err(CurveError::Defect)
 }
 
 /// The asymptotic expansion at x ≥ 5 (module documentation).
@@ -296,7 +295,8 @@ fn between(x: f64) -> Result<[Interval; 2], CurveError> {
         } else {
             0.0625
         };
-        let bound = loop {
+        let mut found = None;
+        for _ in 0..HALVINGS {
             let half = width * 0.5;
             let mid = point(start)?.add(point(half)?)?;
             let mut r = f64::INFINITY;
@@ -307,12 +307,13 @@ fn between(x: f64) -> Result<[Interval; 2], CurveError> {
                 }
             }
             if r <= PANEL_TOLERANCE {
-                break r;
+                found = Some(r);
+                break;
             }
             width *= 0.5;
-            if width < NARROWEST {
-                return Err(CurveError::Defect);
-            }
+        }
+        let Some(bound) = found else {
+            return Err(CurveError::Defect);
         };
         // A last panel short of its width keeps the whole panel's bound: its ellipse lies inside.
         let end = start + width;
@@ -370,10 +371,11 @@ impl Parent {
             CurvatureLaw::Polynomial { terms, .. } => terms.iter().skip(2).all(Option::is_none),
             _ => false,
         };
-        let h = &self.first;
-        if !quadratic || self.second.is_some() || h.wave.is_some() {
+        // Such a law has no wave and no second half (`headings`).
+        if !quadratic {
             return Ok(None);
         }
+        let h = &self.first;
         let mut coefficients = h.poly.iter().copied();
         let zero = point(0.0)?;
         let gamma = coefficients.next().unwrap_or(zero);

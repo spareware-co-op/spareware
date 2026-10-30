@@ -16,7 +16,11 @@
 //!   clothoid's Fresnel route against the same truth for its heading, and against the quadrature.
 //! - **Edges**: spans ending on a critical point, spans of one station, helices of a thousand
 //!   turns, a helix past 2⁵⁰, a lift at the edge of monotone, coefficients whose enclosures hold
-//!   zero, huge Fresnel arguments, and refusals.
+//!   zero or end at it, tiny and huge Fresnel arguments (a second truth past 1000: DLMF's
+//!   expansion in 256-bit fixed point with the angle reduced exactly), and refusals.
+//! - **Routes, by their work**: every closed form costs one unit of work, and every undecided
+//!   case takes the pieces' route, which costs more, so a closed form that falls back, or a
+//!   fallback that is skipped, shows in a meter's budget.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -39,6 +43,7 @@
 mod series;
 
 use dashu_int::IBig;
+use dashu_ratio::RBig;
 use geom_curve::extent::{Scalar, extent};
 use geom_curve::transition::fresnel::fresnel;
 use geom_curve::{
@@ -48,7 +53,7 @@ use geom_curve::{
 use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Limit};
 use geom_run::{Budget, WorkMeter};
-use series::{Truth, div, frac, fx, mul, one, pi};
+use series::{F, Truth, abs, cos_sin, div, frac, fx, mul, one, pi};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -1134,4 +1139,390 @@ fn the_fresnel_route_holds_the_truth_and_meets_the_quadrature() {
     )
     .unwrap();
     assert_eq!(cubic.enclose_fresnel(5.0, m), Ok(None));
+}
+
+// ---- Routes, by the work they cost ------------------------------------------------------------
+
+fn pt(x: f64) -> Interval {
+    Interval::point(x).unwrap()
+}
+
+/// A meter allowing `n` units of work.
+fn budget(n: u64) -> WorkMeter<'static> {
+    WorkMeter::new(Budget::of_work(n))
+}
+
+/// Claim: every closed form is one unit of work, however long the span, monotone or not: no
+/// fallback to pieces where the closed form decides.
+#[test]
+fn closed_forms_cost_one_unit_of_work() {
+    let wave = |q: f64| Scalar::Wave {
+        p: pt(1.0),
+        q: pt(q),
+        a: pt(0.6),
+        b: pt(-0.8),
+    };
+    let cases = [
+        // A circle's coordinate, and a helix's with a slope below and above π·R.
+        (wave(0.0), (-0.7, 2.9)),
+        (wave(0.3), (-0.7, 2.9)),
+        (wave(0.3), (17.3, 1789.6)),
+        (wave(-0.3), (17.3, 1789.6)),
+        (wave(4.0), (-0.7, 2.9)),
+        (wave(-4.0), (-0.7, 2.9)),
+        // A line.
+        (
+            Scalar::Wave {
+                p: pt(1.0),
+                q: pt(2.0),
+                a: pt(0.0),
+                b: pt(0.0),
+            },
+            (-3.0, 5.0),
+        ),
+        (
+            Scalar::Quadratic {
+                p: pt(1.0),
+                q: pt(-2.0),
+                r: pt(0.7),
+            },
+            (-3.0, 5.0),
+        ),
+        // Interior extremum, none (a + b = 0, so a·e⁻ᵗ), and monotone (b > a).
+        (
+            Scalar::Hyperbolic {
+                p: pt(0.0),
+                a: pt(1.0),
+                b: pt(0.5),
+            },
+            (-2.0, 2.0),
+        ),
+        (
+            Scalar::Hyperbolic {
+                p: pt(0.0),
+                a: pt(1.0),
+                b: pt(-1.0),
+            },
+            (-2.0, 2.0),
+        ),
+        (
+            Scalar::Hyperbolic {
+                p: pt(0.0),
+                a: pt(0.5),
+                b: pt(1.0),
+            },
+            (-2.0, 2.0),
+        ),
+        (
+            Scalar::Involute {
+                p: pt(0.0),
+                a: pt(0.6),
+                b: pt(-0.8),
+            },
+            (-0.7, 2.9),
+        ),
+        // A modulated scalar with no t in its coefficients is a wave.
+        (
+            Scalar::Modulated {
+                p: pt(0.0),
+                a: pt(0.6),
+                b: pt(-0.8),
+                c: pt(0.0),
+                d: pt(0.0),
+            },
+            (-0.7, 2.9),
+        ),
+    ];
+    for (g, s) in cases {
+        let one = extent(&g, s, &mut budget(1));
+        let any = extent(&g, s, &mut meter()).unwrap();
+        assert_eq!(one, Ok(any), "{g:?} over {s:?}");
+    }
+    // The modulated scalar with no t in its coefficients is exactly the wave.
+    let modulated = Scalar::Modulated {
+        p: pt(0.25),
+        a: pt(0.6),
+        b: pt(-0.8),
+        c: pt(0.0),
+        d: pt(0.0),
+    };
+    let same = Scalar::Wave {
+        p: pt(0.25),
+        q: pt(0.0),
+        a: pt(0.6),
+        b: pt(-0.8),
+    };
+    assert_eq!(
+        extent(&modulated, (-0.7, 2.9), &mut meter()),
+        extent(&same, (-0.7, 2.9), &mut meter())
+    );
+}
+
+/// Claim: where the closed form is undecided (no closed form, coefficients holding the origin, a
+/// critical point that cannot be placed, a span reaching 2⁵⁰), the pieces' route bounds the scalar
+/// at more than one unit of work, and still holds it.
+#[test]
+fn undecided_scalars_take_the_pieces_route() {
+    let far = 1_125_899_906_842_624.0;
+    let cases = [
+        (
+            Scalar::Modulated {
+                p: pt(0.0),
+                a: pt(0.6),
+                b: pt(-0.8),
+                c: pt(1.9),
+                d: pt(2.5),
+            },
+            (-0.7, 2.9),
+        ),
+        (
+            Scalar::Wave {
+                p: pt(0.0),
+                q: pt(0.0),
+                a: Interval::new(-0.5, 1.0).unwrap(),
+                b: Interval::new(-0.5, 1.0).unwrap(),
+            },
+            (-0.7, 2.9),
+        ),
+        (
+            Scalar::Quadratic {
+                p: pt(0.0),
+                q: pt(1.0),
+                r: Interval::new(0.0, 1.0).unwrap(),
+            },
+            (-3.0, 2.0),
+        ),
+        (
+            Scalar::Wave {
+                p: pt(0.0),
+                q: pt(0.0),
+                a: pt(0.6),
+                b: pt(-0.8),
+            },
+            (0.0, far),
+        ),
+        (
+            Scalar::Wave {
+                p: pt(0.0),
+                q: pt(0.0),
+                a: pt(0.6),
+                b: pt(-0.8),
+            },
+            (-far, 0.0),
+        ),
+    ];
+    for (g, s) in cases {
+        assert!(
+            matches!(extent(&g, s, &mut budget(1)), Err(CurveError::Stopped(_))),
+            "{g:?} over {s:?}"
+        );
+        assert!(extent(&g, s, &mut meter()).is_ok(), "{g:?} over {s:?}");
+    }
+}
+
+/// Claim: coefficients whose enclosures have zero at one end, not zero itself, are not taken for
+/// zero or for certainly signed: the extent holds the scalar for every coefficient in them.
+#[test]
+fn coefficients_with_zero_at_an_end_are_held() {
+    let m = &mut meter();
+    // a·cos πt for a in [0, 1] reaches 1 at t = 0.
+    let g = Scalar::Wave {
+        p: pt(0.0),
+        q: pt(0.0),
+        a: Interval::new(0.0, 1.0).unwrap(),
+        b: pt(0.0),
+    };
+    let e = extent(&g, (-0.5, 0.5), m).unwrap();
+    assert!(e.lo() <= 0.0 && e.hi() >= 1.0, "{e:?}");
+    // q·t + r·t² for r in [0, 1] and in [−1, 0]: the vertex −q/2r may be anywhere.
+    for (r, extreme) in [((0.0, 1.0), -0.25), ((-1.0, 0.0), 0.25)] {
+        let g = Scalar::Quadratic {
+            p: pt(0.0),
+            q: pt(1.0),
+            r: Interval::new(r.0, r.1).unwrap(),
+        };
+        let e = extent(&g, (-3.0, 2.0), m).unwrap();
+        assert!(e.lo() <= extreme && extreme <= e.hi(), "{r:?}: {e:?}");
+    }
+    // a·cosh t + sinh t for a in [1, 1.001]: (a − b)/(a + b) holds 0 at its lower end.
+    let g = Scalar::Hyperbolic {
+        p: pt(0.0),
+        a: Interval::new(1.0, 1.001).unwrap(),
+        b: pt(1.0),
+    };
+    let e = extent(&g, (-3.0, 1.0), m).unwrap();
+    for a in [1.0, 1.0005, 1.001] {
+        let h = Scalar::Hyperbolic {
+            p: pt(0.0),
+            a: pt(a),
+            b: pt(1.0),
+        };
+        for i in 0..=100 {
+            let t = -3.0 + 4.0 * f64::from(i) / 100.0;
+            let v = h.over(pt(t)).unwrap();
+            assert!(
+                e.lo() <= v.hi() && v.lo() <= e.hi(),
+                "{a} at {t}: {e:?} {v:?}"
+            );
+        }
+    }
+}
+
+/// Claim: a gentle transition's box over a span costs three units of work (its one piece and the
+/// two certified points at its ends): no piece is cut in eight where no coordinate turns back.
+#[test]
+fn a_gentle_transition_is_one_piece() {
+    let law = CurvatureLaw::Clothoid {
+        start: 0.0,
+        end: 0.001,
+    };
+    let c = Transition::<2>::new([3.0, -2.0], [3.0, 4.0], 100.0, law, &mut meter()).unwrap();
+    let b = c.bound((10.0, 70.0), &mut budget(3)).unwrap();
+    let p = |t: f64| c.point(t, Limit::FromRight).unwrap();
+    let (a, z) = (p(10.0), p(70.0));
+    for d in 0..2 {
+        assert!(
+            b.lo[d] <= a[d].min(z[d]) && a[d].max(z[d]) <= b.hi[d],
+            "{b:?}"
+        );
+    }
+    assert!(matches!(
+        c.bound((10.0, 70.0), &mut budget(2)),
+        Err(CurveError::Stopped(_))
+    ));
+}
+
+/// Claim: a clothoid whose rate of curvature underflows, so that α's enclosure has zero at one
+/// end, has no Fresnel form: the route declines, and refuses nothing.
+#[test]
+fn a_clothoid_of_an_underflowing_rate_has_no_fresnel_form() {
+    let m = &mut meter();
+    for end in [5e-324, -5e-324] {
+        let law = CurvatureLaw::Clothoid { start: 0.0, end };
+        let c = Transition::<2>::new([0.0, 0.0], [1.0, 0.0], 1.0, law, m).unwrap();
+        assert_eq!(c.enclose_fresnel(0.5, m), Ok(None), "{end}");
+    }
+}
+
+/// Claim: below 2⁻³⁰⁰ the Fresnel integrals' enclosures hold x³-sized S, never a point at zero,
+/// and at 2⁻³⁰⁰ itself the series gives S strictly positive.
+#[test]
+fn tiny_fresnel_arguments_keep_s_positive() {
+    for x in [1e-300, 1e-320, 5e-324] {
+        let [c, s] = fresnel(pt(x)).unwrap();
+        assert!(c.lo() <= x && x <= c.hi(), "{x}: {c:?}");
+        assert!(s.lo() >= 0.0 && s.hi() > 0.0, "{x}: {s:?}");
+    }
+    let x = 4.909_093_465_297_727e-91;
+    let [_, s] = fresnel(pt(x)).unwrap();
+    assert!(s.lo() > 0.0, "{s:?}");
+}
+
+/// C(x) and S(x) for x ≥ 1000 in 256-bit fixed point: DLMF 7.5.3 and 7.5.4 with the expansions
+/// 7.12.2 and 7.12.3 summed until a term is below 2⁻²⁴⁰ (where the least term is far smaller), and
+/// the angle πx²/2 taken from x² exactly: x²/2 reduced modulo 2 as a rational.
+fn fresnel_far_truth(x: f64) -> [IBig; 2] {
+    let q = RBig::try_from(x).unwrap();
+    let num = q.numerator().clone();
+    let den = IBig::from(q.denominator().clone());
+    let (n2, d2) = (&num * &num, &den * &den);
+    // x²/2 = n2/(2·d2); modulo 2 its numerator is n2 modulo 4·d2.
+    let modulus = &d2 * IBig::from(4);
+    let r = (n2.clone() % &modulus + &modulus) % &modulus;
+    let half_turns = (r << F) / (&d2 * IBig::from(2));
+    let (cs, sn) = cos_sin(&mul(&pi(), &half_turns));
+    let y = mul(&pi(), &((n2 << F) / &d2)) >> 1;
+    let (mut f, mut g) = (IBig::ZERO, IBig::ZERO);
+    let mut a = one();
+    for k in 0..400usize {
+        match k % 4 {
+            0 => f += &a,
+            1 => g += &a,
+            2 => f -= &a,
+            _ => g -= &a,
+        }
+        a = div(&mul(&a, &frac(2 * k as i64 + 1, 2)), &y);
+        if abs(&a) < (one() >> 240) {
+            break;
+        }
+    }
+    let scale = div(&one(), &mul(&pi(), &fx(x)));
+    let (f, g) = (mul(&scale, &f), mul(&scale, &g));
+    let half = one() >> 1;
+    [
+        half.clone() + mul(&f, &sn) - mul(&g, &cs),
+        half - mul(&f, &cs) - mul(&g, &sn),
+    ]
+}
+
+/// Claim: at large arguments, where x² is not a double, the Fresnel integrals' enclosures hold the
+/// truth: the angle's rounding error e of x² = p + e is taken exactly, not dropped or scaled.
+#[test]
+fn far_fresnel_arguments_hold_the_truth() {
+    for x in [
+        1000.5,
+        12_345.678,
+        333_333.333_333,
+        10_000_000.1,
+        98_765_432.123_456_7,
+        1.5e15 + 2.0,
+    ] {
+        let [c, s] = fresnel(pt(x)).unwrap();
+        let [tc, ts] = fresnel_far_truth(x);
+        assert!(holds(c, &tc) && holds(s, &ts), "{x}: {c:?} {s:?}");
+        let [nc, ns] = fresnel(pt(-x)).unwrap();
+        assert!(holds(nc, &-tc) && holds(ns, &-ts), "{x}");
+    }
+}
+
+/// Claim: along a family of critical points whose values step evenly, the extreme over a span is
+/// at its first or its last member inside it, and both are found: cos πt − t/10 over [1, 9] peaks
+/// at its first maximum, cos πt + t/10 over [0.5, 8.5] at its last.
+#[test]
+fn the_first_and_last_members_of_a_family_are_found() {
+    for (q, s) in [(-0.1, (1.0, 9.0)), (0.1, (0.5, 8.5))] {
+        let g = Scalar::Wave {
+            p: pt(0.0),
+            q: pt(q),
+            a: pt(1.0),
+            b: pt(0.0),
+        };
+        let e = extent(&g, s, &mut budget(1)).unwrap();
+        let mut max = f64::NEG_INFINITY;
+        let mut min = f64::INFINITY;
+        for i in 0..=100_000 {
+            let t = s.0 + (s.1 - s.0) * (f64::from(i) / 100_000.0);
+            let v = (std::f64::consts::PI * t).cos() + q * t;
+            max = max.max(v);
+            min = min.min(v);
+        }
+        assert!(
+            e.hi() >= max - 1e-12 && e.hi() - max < 1e-6,
+            "{q}: {e:?} against {max}"
+        );
+        assert!(
+            e.lo() <= min + 1e-12 && min - e.lo() < 1e-6,
+            "{q}: {e:?} against {min}"
+        );
+    }
+}
+
+/// Claim: a helix's derivative bounds are closed forms in every coordinate, the axial one, which
+/// does not turn, included: one unit of work per coordinate.
+#[test]
+fn a_helix_derivative_bound_is_one_unit_per_coordinate() {
+    let f = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let axes = HelixAxes::Frame {
+        frame: f,
+        radius: 3.0,
+        pitch: 0.5,
+    };
+    let h = Helix::new([0.0; 3], axes, (0.0, 2000.0)).unwrap();
+    for order in 0..4 {
+        assert!(
+            h.derivative_bound((17.3, 1789.6), order, &mut budget(3))
+                .is_ok(),
+            "{order}"
+        );
+    }
 }

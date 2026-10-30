@@ -74,6 +74,9 @@ const MAX_PIECES: u32 = 64;
 /// The pieces each undecided piece is cut into, once.
 const SUBPIECES: u32 = 8;
 
+/// The steps a scan for a family's first or last member in a span may take.
+const SCAN: usize = 6;
+
 /// 2⁵⁰: past it a period of 2 is too near the doubles' spacing to place a member of a family.
 const FAR: f64 = 1_125_899_906_842_624.0;
 
@@ -141,8 +144,10 @@ enum Critical {
     Undecided,
 }
 
-/// Whether an enclosure is exactly zero.
-fn is_zero(x: Interval) -> bool {
+/// Whether an enclosure is exactly the point zero: the test the closed forms use to see that a
+/// coefficient, and so a term, is absent.
+#[must_use]
+pub fn is_zero(x: Interval) -> bool {
     x.lo() == 0.0 && x.hi() == 0.0
 }
 
@@ -359,8 +364,9 @@ fn wave_critical(q: Interval, a: Interval, b: Interval) -> Result<Critical, Curv
         // g′ keeps the sign of q, zero at most at isolated points: monotone.
         return Ok(Critical::Families(Vec::new()));
     }
+    // Where ρ's enclosure reaches ±1, ρ² reaches 1 and 1 − ρ² reaches 0: undecided.
     let cos2 = tight::sub(one, tight::square(rho)?)?;
-    if !(rho.lo() > -1.0 && rho.hi() < 1.0) || cos2.lo() <= 0.0 {
+    if cos2.lo() <= 0.0 {
         return Ok(Critical::Undecided);
     }
     // ψ = asin ρ / π, in [−½, ½]: the angle whose sine is ρ and cosine √(1 − ρ²).
@@ -384,8 +390,36 @@ fn clip(e: Interval, (t0, t1): (f64, f64)) -> Result<Interval, CurveError> {
     )?)
 }
 
+/// The first member of a family whose enclosure reaches `t0`: the estimate (t₀ − c)/2, which
+/// rounding moves by less than one, so a scan up from two below it starts below the answer and
+/// meets it within [`SCAN`] steps; `None` if it does not.
+fn first_reaching(base: Interval, t0: f64) -> Result<Option<f64>, CurveError> {
+    let mut m = math::ceil((t0 - base.hi()) * 0.5)?.get() - 2.0;
+    for _ in 0..SCAN {
+        if member(base, m)?.hi() >= t0 {
+            return Ok(Some(m));
+        }
+        m += 1.0;
+    }
+    Ok(None)
+}
+
+/// The last member of a family whose enclosure does not pass `t1`: a scan down from two above
+/// the estimate, as [`first_reaching`].
+fn last_within(base: Interval, t1: f64) -> Result<Option<f64>, CurveError> {
+    let mut m = math::floor((t1 - base.lo()) * 0.5)?.get() + 2.0;
+    for _ in 0..SCAN {
+        if member(base, m)?.lo() <= t1 {
+            return Ok(Some(m));
+        }
+        m -= 1.0;
+    }
+    Ok(None)
+}
+
 /// The members of a family to evaluate, clipped to the span (module documentation), or `None` if
-/// they cannot be placed.
+/// they cannot be placed: a family as wide as half a period (coefficients enclosing the origin).
+/// The bases are phases within [−2, 3] and the span is inside ±2⁵⁰ ([`extent`]), so 2m is exact.
 fn members(
     (base, periodic): (Interval, bool),
     (t0, t1): (f64, f64),
@@ -397,38 +431,12 @@ fn members(
             Vec::new()
         }));
     }
-    if !(base.hi() - base.lo() < 1.0 && base.lo().abs() < FAR && base.hi().abs() < FAR) {
+    if base.hi() - base.lo() >= 1.0 {
         return Ok(None);
     }
-    // The first member reaching t0: the estimate, then a few steps to settle its rounding.
-    let mut first = math::ceil((t0 - base.hi()) * 0.5)?.get();
-    let mut settled = false;
-    for _ in 0..4 {
-        if member(base, first - 1.0)?.hi() >= t0 {
-            first -= 1.0;
-        } else if member(base, first)?.hi() < t0 {
-            first += 1.0;
-        } else {
-            settled = true;
-            break;
-        }
-    }
-    // The last member not past t1, the same way.
-    let mut last = math::floor((t1 - base.lo()) * 0.5)?.get();
-    let mut done = false;
-    for _ in 0..4 {
-        if member(base, last + 1.0)?.lo() <= t1 {
-            last += 1.0;
-        } else if member(base, last)?.lo() > t1 {
-            last -= 1.0;
-        } else {
-            done = true;
-            break;
-        }
-    }
-    if !(settled && done) {
+    let (Some(first), Some(last)) = (first_reaching(base, t0)?, last_within(base, t1)?) else {
         return Ok(None);
-    }
+    };
     let mut out = Vec::with_capacity(4);
     let mut previous = f64::NEG_INFINITY;
     for m in [first, first + 1.0, last - 1.0, last] {

@@ -46,7 +46,7 @@
 )]
 
 use geom_curve::CurveError;
-use geom_curve::extent::{Scalar, extent};
+use geom_curve::extent::{Scalar, extent, is_zero};
 use geom_curve::tight::{self, point};
 use geom_num::interval::Interval;
 use geom_run::WorkMeter;
@@ -144,11 +144,6 @@ fn grids(t: &Terms, (i, j): (usize, usize)) -> Result<[Grid; 3], CurveError> {
         }
     }
     Ok(out)
-}
-
-/// Whether an enclosure is exactly zero.
-fn is_zero(x: Interval) -> bool {
-    x.lo() == 0.0 && x.hi() == 0.0
 }
 
 /// The grid with rows and columns exchanged: the same function with u and v exchanged.

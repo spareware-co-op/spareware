@@ -1214,13 +1214,12 @@ fn piece_box(
         let step = tight::mul(reach, d)?;
         let forward = tight::add(x, step)?;
         let backward = tight::sub(y, step)?;
-        let lo = tight::larger(forward.lo(), backward.lo());
-        let hi = tight::smaller(forward.hi(), backward.hi());
-        // Both hold every point of the piece, so they meet.
-        if lo > hi {
-            return Err(CurveError::Defect);
-        }
-        *slot = Interval::new(lo, hi)?;
+        // Both hold every point of the piece, so they meet: an empty intersection would be a
+        // defect, which `Interval::new` refuses.
+        *slot = Interval::new(
+            tight::larger(forward.lo(), backward.lo()),
+            tight::smaller(forward.hi(), backward.hi()),
+        )?;
     }
     Ok(out)
 }
