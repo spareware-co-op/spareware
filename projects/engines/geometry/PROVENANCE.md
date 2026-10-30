@@ -10,7 +10,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | --- | --- | --- |
 | PORT | 11 | 18 |
 | PORT METHOD | 36 | 34 |
-| DEPEND | 4 | 3 |
+| DEPEND | 5 | 4 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
 
@@ -88,6 +88,7 @@ A kernel crate may depend only on `libm` (29.1); the development crates' own dep
 
 | Crate | Licence | Class (29.2) | Link | Manifest | Version requirement |
 | --- | --- | --- | --- | --- | --- |
+| crc | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/crc/3.4.0> | `projects/engines/geometry/crates/geom-format/Cargo.toml` | 3.4.0 |
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | rayon | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/rayon/1.12.0> | `projects/engines/geometry/crates/geom-pool/Cargo.toml` | 1.12.0 |

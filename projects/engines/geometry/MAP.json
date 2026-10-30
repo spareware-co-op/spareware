@@ -2272,8 +2272,348 @@
         23,
         24
       ],
-      "depends": [],
-      "errors": [],
+      "depends": [
+        {
+          "licence": "Apache-2.0 OR MIT",
+          "link": "https://crates.io/crates/crc/3.4.0",
+          "manifest": "projects/engines/geometry/crates/geom-format/Cargo.toml",
+          "method_note": null,
+          "name": "crc",
+          "pinned": false,
+          "purpose": "3.4.0",
+          "take": "depend"
+        }
+      ],
+      "errors": [
+        {
+          "doc": "The rule of SKG's CBOR subset (24.3, RFC 8949 section 4.2.1) an input breaks.",
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/error.rs",
+          "kinds": [
+            {
+              "doc": "The input ends inside an item.",
+              "name": "Truncated",
+              "shape": "unit"
+            },
+            {
+              "doc": "Additional information 28, 29 or 30, which RFC 8949 reserves.",
+              "name": "ReservedInfo",
+              "shape": "unit"
+            },
+            {
+              "doc": "An indefinite length or a \"break\" byte; deterministic CBOR has neither.",
+              "name": "Indefinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "An integer, length, count or tag number not written in the shortest head that holds it.",
+              "name": "NonShortestHead",
+              "shape": "unit"
+            },
+            {
+              "doc": "A float written wider than the shortest of half, single and double precision that holds its value exactly.",
+              "name": "NonShortestFloat",
+              "shape": "unit"
+            },
+            {
+              "doc": "A NaN or an infinity, in a float item or in a column of doubles (tag 86).",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "A simple value other than `false`, `true` and `null`.",
+              "name": "UnsupportedSimple",
+              "shape": "unit"
+            },
+            {
+              "doc": "A tag outside the subset's four: 2 and 3 (bignums), 79 (`i64` column) and 86 (`f64` column).",
+              "name": "UnsupportedTag",
+              "shape": "unit"
+            },
+            {
+              "doc": "A tag whose content is not a byte string.",
+              "name": "TagContent",
+              "shape": "unit"
+            },
+            {
+              "doc": "A bignum whose value fits in 64 bits, or whose bytes start with a zero byte.",
+              "name": "NonCanonicalBignum",
+              "shape": "unit"
+            },
+            {
+              "doc": "A column whose byte string is not a whole number of 8-byte values.",
+              "name": "ColumnLength",
+              "shape": "unit"
+            },
+            {
+              "doc": "A text string that is not UTF-8.",
+              "name": "InvalidUtf8",
+              "shape": "unit"
+            },
+            {
+              "doc": "A map key not after the previous key in the bytewise order of their encodings.",
+              "name": "UnsortedKeys",
+              "shape": "unit"
+            },
+            {
+              "doc": "A map key equal to the previous key.",
+              "name": "DuplicateKey",
+              "shape": "unit"
+            },
+            {
+              "doc": "Containers and tags nested deeper than the caller's limit.",
+              "name": "TooDeep",
+              "shape": "unit"
+            },
+            {
+              "doc": "Bytes after the one item the input holds.",
+              "name": "TrailingBytes",
+              "shape": "unit"
+            },
+            {
+              "doc": "The work meter stopped: over its budget, cancelled, or a large allocation refused.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::cbor::error",
+          "name": "CborErrorKind",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "What is wrong with text given as the diagnostic form.",
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/error.rs",
+          "kinds": [
+            {
+              "doc": "A character no item can start with, or one that does not belong where it stands.",
+              "name": "Unexpected",
+              "shape": "unit"
+            },
+            {
+              "doc": "The text ends inside an item, or holds no item.",
+              "name": "UnexpectedEnd",
+              "shape": "unit"
+            },
+            {
+              "doc": "An integer outside −2^64 to 2^64 − 1, or a tag number above 2^64 − 1.",
+              "name": "IntegerRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "A float that is not a hexadecimal float, or one no double holds exactly.",
+              "name": "InexactFloat",
+              "shape": "unit"
+            },
+            {
+              "doc": "A malformed escape in a text string, or one naming a lone surrogate.",
+              "name": "BadEscape",
+              "shape": "unit"
+            },
+            {
+              "doc": "An odd number of hexadecimal digits, or a character that is not one, in `h'...'`.",
+              "name": "BadHex",
+              "shape": "unit"
+            },
+            {
+              "doc": "A comment that is never closed.",
+              "name": "OpenComment",
+              "shape": "unit"
+            },
+            {
+              "doc": "Text after the one item.",
+              "name": "Trailing",
+              "shape": "unit"
+            },
+            {
+              "doc": "The item the text describes breaks a rule of SKG's CBOR subset; the kind says which.",
+              "name": "Cbor",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::cbor::error",
+          "name": "TextErrorKind",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a file could not be written or read.",
+          "file": "projects/engines/geometry/crates/geom-format/src/file.rs",
+          "kinds": [
+            {
+              "doc": "The source failed or ended early at this byte offset.",
+              "name": "Source",
+              "shape": "struct"
+            },
+            {
+              "doc": "The first 12 bytes are not SKG's label.",
+              "name": "Label",
+              "shape": "unit"
+            },
+            {
+              "doc": "A head that no SKG record can hold (a reserved or indefinite length), or a string or record over its cap, at this offset.",
+              "name": "Malformed",
+              "shape": "struct"
+            },
+            {
+              "doc": "The record at this offset is damaged or not a record.",
+              "name": "Record",
+              "shape": "struct"
+            },
+            {
+              "doc": "A required record the caller's registry does not know (24.2).",
+              "name": "UnsupportedRecord",
+              "shape": "struct"
+            },
+            {
+              "doc": "The first record is not the header, or a header or END record is out of place.",
+              "name": "Misplaced",
+              "shape": "struct"
+            },
+            {
+              "doc": "The END record's payload is not `[count, h'digest']`, or its count or digest differs.",
+              "name": "End",
+              "shape": "unit"
+            },
+            {
+              "doc": "Bytes after the END record.",
+              "name": "TrailingBytes",
+              "shape": "struct"
+            },
+            {
+              "doc": "The work meter stopped the read.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::file",
+          "name": "FileError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a header payload cannot be read.",
+          "file": "projects/engines/geometry/crates/geom-format/src/header.rs",
+          "kinds": [
+            {
+              "doc": "The bytes break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Not a header: what was expected, at which byte of the payload.",
+              "name": "Shape",
+              "shape": "struct"
+            },
+            {
+              "doc": "A major format version this reader does not know.",
+              "name": "Format",
+              "shape": "struct"
+            },
+            {
+              "doc": "An extension key with its must-understand bit set, unknown to this version.",
+              "name": "MustUnderstand",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::header",
+          "name": "HeaderError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a stored number cannot be used.",
+          "file": "projects/engines/geometry/crates/geom-format/src/range.rs",
+          "kinds": [
+            {
+              "doc": "A value past its bit budget.",
+              "name": "OutOfRange",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A plane whose four numbers share a divisor, or whose normal is zero.",
+              "name": "Malformed",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_format::range",
+          "name": "RangeError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a record has no encoding, or its bytes are not one.",
+          "file": "projects/engines/geometry/crates/geom-format/src/record.rs",
+          "kinds": [
+            {
+              "doc": "The bytes break SKG's canonical CBOR (the decoder's error, its offset within the record).",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The bytes are canonical CBOR but not a record: what was expected, at which offset.",
+              "name": "Shape",
+              "shape": "struct"
+            },
+            {
+              "doc": "A flag bit this version does not know.",
+              "name": "UnknownFlags",
+              "shape": "tuple"
+            },
+            {
+              "doc": "`depends` out of order, or with a repeat.",
+              "name": "DependsOrder",
+              "shape": "unit"
+            },
+            {
+              "doc": "A content ID of algorithm 1 whose digest is not 32 bytes.",
+              "name": "ContentId",
+              "shape": "unit"
+            },
+            {
+              "doc": "A payload over [`PAYLOAD_CAP`] bytes.",
+              "name": "PayloadTooLarge",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The stored check differs from the CRC-32C of the bytes it covers.",
+              "name": "Checksum",
+              "shape": "struct"
+            },
+            {
+              "doc": "The encoder refused a value (writing only).",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::record",
+          "name": "RecordError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a source could not give the bytes asked for.",
+          "file": "projects/engines/geometry/crates/geom-format/src/source.rs",
+          "kinds": [
+            {
+              "doc": "The source ended before the bytes asked for.",
+              "name": "UnexpectedEnd",
+              "shape": "unit"
+            },
+            {
+              "doc": "The source said it wrote more bytes than the buffer holds.",
+              "name": "Overrun",
+              "shape": "unit"
+            },
+            {
+              "doc": "An offset or length past the source's length.",
+              "name": "OutOfBounds",
+              "shape": "unit"
+            },
+            {
+              "doc": "The program's source failed, for a reason of its own (a network error, a locked file); the number is the program's.",
+              "name": "Failed",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::source",
+          "name": "SourceError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-format/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-format",
@@ -2288,12 +2628,396 @@
       "job": "The native file format, its versions and canonical bytes; content hashes, `CacheKey` and the reference memo store.",
       "kind": "kernel",
       "layer": "12",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "see each module.",
+          "does": "SKG's bytes are deterministic CBOR (RFC 8949, section 4.2.1) with the rules of 24.3. [`decode`] reads them head by head and refuses any other encoding; [`column`] reads the `i64` and `f64` columns coordinates and reals are stored in; [`text`] writes the diagnostic text form of 24.6, and [`parse`] reads it back into the same bytes. The canonical encoder that writes SKG's bytes from values is `geom-op`'s (piece G86), so that `NameId` hashing below this crate uses it too (30.5, \"Placed to keep the crate graph acyclic\").",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor.rs",
+          "guarantees": [
+            "**One encoding per value.** The decoder accepts exactly the bytes the canonical form gives a value, so equal accepted values are equal bytes, and a content hash over them is a hash of the value (24.2, 24.3).",
+            "**Text and bytes convert both ways, bit for bit.** For every input the decoder accepts, the text form reads back to the same bytes."
+          ],
+          "job": "SKG's CBOR subset: the strict decoder that refuses anything but deterministic CBOR, its columns, and the lossless text form.",
+          "method": {
+            "none": "it declares its modules and states the subset they share."
+          },
+          "path": "geom_format::cbor",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n) time in the column's bytes, in one pass over chunks of [`SCAN_BYTES_PER_CHARGE`]; one reservation of exactly the values appended. Recursion: none.",
+          "does": "[`int_column`] and [`float_column`] read the byte string a tag 79 or tag 86 holds (RFC 8746) into values, appending to the caller's vector, after reserving the memory through the caller's work meter. 24.3 stores grid coordinates as `i64` columns and other reals as `f64` columns.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/column.rs",
+          "guarantees": [
+            "**Exact.** Each value is the little-endian reading of its eight bytes, bit for bit.",
+            "**Finite reals only.** A NaN or an infinity in a float column is refused with the offset of its first byte, and nothing of that column is appended.",
+            "**A whole number of values.** A byte string whose length is not a multiple of eight is refused.",
+            "**Metered and fallible.** The memory is reserved from the meter and from the allocator before anything is appended; a refused reservation stops the meter rather than aborting. Each [`SCAN_BYTES_PER_CHARGE`] bytes charge the meter one unit."
+          ],
+          "job": "Columns: the little-endian `i64` and `f64` arrays SKG stores coordinates and other reals in, read into vectors.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8746#section-2",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "RFC 8746 section 2's typed arrays, tags 79 (signed 64-bit, little endian) and 86 (binary64, little endian), <https://www.rfc-editor.org/rfc/rfc8746#section-2>, read with Rust's `from_le_bytes`, which every target computes the same way; SKG's columns, `projects/engines/geometry/architecture/24-file-format-exchange.md` (24.3)."
+          },
+          "path": "geom_format::cbor::column",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n) time in the input's length, one pass; no allocation but the explicit stack, which holds one small frame per open container or tag, at most the caller's depth limit. Recursion: none.",
+          "does": "a [`Decoder`] walks one data item and hands out its heads as [`Item`]s, in the order the bytes hold them, borrowing strings from the input. Before handing out a head it checks every rule of 24.3's canonical form that the head, and the bytes so far, can break. [`check`] walks one whole item and refuses trailing bytes; [`item_len`] walks the first item of a CBOR Sequence and says where it ends.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+          "guarantees": [
+            "**Canonical or refused.** The decoder accepts bytes only if they are the one encoding SKG's canonical form gives their value; any other input is refused with the offset of the item at fault and the rule it breaks. So two accepted inputs that decode to the same items are the same bytes.",
+            "**Never panics, never reads past the input.** Every length and count is checked against the bytes left before it is used: a string must fit in them, an array of n items needs n bytes and a map of n pairs 2n.",
+            "**Bounded nesting without recursion.** Containers and tags are walked with an explicit stack no deeper than the caller's limit; deeper input is refused, never recursed into (24.7).",
+            "**Metered.** Every head charges the caller's work meter one unit, and every [`SCAN_BYTES_PER_CHARGE`] bytes of text or column it scans charge one more, so a budget or a cancellation stops a read within a bounded amount of work, and the same input stops at the same charge on every machine.",
+            "**Independent of how the input arrives.** The decoder reads a byte slice and nothing else; the items, the errors and the offsets depend only on the bytes."
+          ],
+          "job": "The strict decoder: reads one item of SKG's deterministic CBOR, head by head, and refuses any byte that is not in the one canonical encoding of its value.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8949",
+              "https://www.rfc-editor.org/rfc/rfc8746#section-2",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "RFC 8949 (Concise Binary Object Representation), sections 3 (encoding), 3.4.3 (bignums), 4.1 (preferred serialization) and 4.2.1 (core deterministic encoding requirements), <https://www.rfc-editor.org/rfc/rfc8949>; RFC 8746 (typed arrays as byte strings), section 2, <https://www.rfc-editor.org/rfc/rfc8746#section-2>; and SKG's canonical bytes, `projects/engines/geometry/architecture/24-file-format-exchange.md` (24.3, 24.7). A head's argument is in its shortest form when additional information 24, 25, 26 or 27 carries a value that would not fit in the next shorter one (RFC 8949, section 4.2.1, first rule). Map keys are compared as the byte slices of their encodings, which is the bytewise lexicographic order of section 4.2.1; RFC 7049's length-first order is not used."
+          },
+          "path": "geom_format::cbor::decode",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words; nothing allocates.",
+          "does": "[`CborError`] carries the byte offset of the head at fault and a [`CborErrorKind`]; [`TextError`] carries the line and column of the text at fault and a [`TextErrorKind`]. Every refusal of the decoder and of the text form is one of these, never a panic (24.7).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/error.rs",
+          "guarantees": [
+            "**One kind per rule.** Each rule of 24.3's canonical form that bytes can break has its own kind, so a test can tell which rule refused an input."
+          ],
+          "job": "Why bytes or text were refused as SKG's deterministic CBOR, and where.",
+          "method": {
+            "none": "it defines error types and their `Display` and `Error` implementations."
+          },
+          "path": "geom_format::cbor::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few integer and float operations; nothing allocates; no loops.",
+          "does": "[`half_to_f64`] and [`single_to_f64`] read a half or single precision float into the double that holds it exactly. [`shortest`] says which of the three widths is the shortest that holds a double exactly, with its bits: the one width RFC 8949's preferred serialization allows for a float (section 4.1), which section 4.2.1's deterministic form requires and SKG keeps (24.3).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/float.rs",
+          "guarantees": [
+            "**Exact both ways.** A half or single precision value reads as the double of exactly the same value, `−0.0` included; [`shortest`] gives bits that read back to the same double, bit for bit.",
+            "**The shortest width.** [`shortest`] gives half precision whenever a half holds the value, otherwise single precision whenever a single holds it, otherwise double precision.",
+            "**Finite only.** A NaN or an infinity has no width here: the reads return `None` for them, and [`shortest`] refuses them."
+          ],
+          "job": "Half, single and double precision floats: reading each width exactly, and finding the shortest width that holds a value.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8949#section-4.1"
+            ],
+            "text": "IEEE 754-2019's binary16, binary32 and binary64 interchange formats, and RFC 8949 section 4.1's preferred serialization of floats (<https://www.rfc-editor.org/rfc/rfc8949#section-4.1>). A half's 15 magnitude bits, shifted up 13 places, are the bits of the single precision float `2^−112` times its value, for normal and subnormal halves alike (the exponent biases differ by 127 − 15 = 112, and both formats' subnormals sit one step below their least normal exponent), so a half is read through the exact conversion of that single and one exact scaling by `2^112`. Whether a single holds a double is Rust's round-to-nearest conversion compared with the double, bit for bit; whether a half holds it is the same map read backwards."
+          },
+          "path": "geom_format::cbor::float",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an `Item` is a few words; strings borrow the input and copy nothing.",
+          "does": "[`Item`] names what each head of SKG's CBOR subset says (24.3). A container's head carries its count, and its contents follow as later items, so a decoder hands out one `Item` per head in the order the bytes hold them, and never builds a tree.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/item.rs",
+          "guarantees": [
+            "**One variant per kind of head the subset allows.** Indefinite lengths, `undefined` and every other simple value have no variant, because the subset refuses them (24.3)."
+          ],
+          "job": "One CBOR data item as the decoder yields it: a head and, for strings, the bytes it holds.",
+          "method": {
+            "none": "it defines a type and nothing that computes."
+          },
+          "path": "geom_format::cbor::item",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n) time and memory in the text: one list of heads, then the bytes, then one decoder pass. Recursion: none.",
+          "does": "[`from_text`] reads the one item of the text into a flat list of heads, in three passes: it parses the text with an explicit stack, counting each array's items and each map's pairs as their brackets close; it writes every head in its shortest form and every float in the shortest width that holds it; and it checks the bytes with the strict decoder, so whatever the decoder refuses (keys out of order, a repeated key, a tag outside the subset, a bignum that fits in 64 bits, a column of the wrong length) is refused here too, at the line and column of the item at fault.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+          "guarantees": [
+            "**Canonical bytes or an error.** What it returns is accepted by the strict decoder at the same depth: the one encoding SKG's canonical form gives the items the text describes.",
+            "**Lossless.** `from_text(to_text(bytes))` gives back `bytes` for every input the decoder accepts, floats bit for bit, −0.0 included.",
+            "**Exact or refused.** A number is never rounded: an integer out of range or a float no double holds is an error.",
+            "**Never panics, no recursion.** Nesting is walked with an explicit stack no deeper than the caller's limit; every error carries the line and column where it was found."
+          ],
+          "job": "Reading the text form back: diagnostic notation with hexadecimal floats, turned into SKG's deterministic CBOR bytes.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8610#appendix-G",
+              "https://www.rfc-editor.org/rfc/rfc8949#section-8",
+              "https://www.rfc-editor.org/rfc/rfc8259#section-7"
+            ],
+            "text": "RFC 8610 Appendix G (extended diagnostic notation), with G.5's hexadecimal floats and G.6's comments, <https://www.rfc-editor.org/rfc/rfc8610#appendix-G>; RFC 8949 section 8 (diagnostic notation), <https://www.rfc-editor.org/rfc/rfc8949#section-8>; JSON's string escapes, RFC 8259 section 7, <https://www.rfc-editor.org/rfc/rfc8259#section-7>; and RFC 8949 sections 3, 4.1 and 4.2.1 for the bytes written. A hexadecimal float m·2^e, m an integer, is a double exactly when, with its trailing zero bits moved into e, m has at most 53 bits, e is at least −1074 and its leading bit's exponent is at most 1023 (IEEE 754-2019, binary64)."
+          },
+          "path": "geom_format::cbor::parse",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n) time in the input and the text, which is at most about three bytes per input byte (hexadecimal) plus the indentation; the text is built in one `String`. The formatting stack holds one entry per open container or tag, at most the depth limit. Recursion: none.",
+          "does": "[`to_text`] decodes one item with the strict decoder and writes it as text. The layout is fixed, so equal bytes give equal text:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cbor/text.rs",
+          "guarantees": [
+            "**Lossless.** For any bytes the strict decoder accepts, `from_text(to_text(bytes))` is the same bytes, floats bit for bit.",
+            "**One text per item.** The layout depends only on the bytes.",
+            "**Refuses what the decoder refuses.** Bytes that are not SKG's deterministic CBOR give the decoder's error and no text."
+          ],
+          "job": "The text form: SKG's deterministic CBOR written as extended diagnostic notation, with every float a hexadecimal float, for diffs, fixtures and AI agents; never for storage (24.6).",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8949#section-8",
+              "https://www.rfc-editor.org/rfc/rfc8610#appendix-G",
+              "https://www.rfc-editor.org/rfc/rfc8259#section-7"
+            ],
+            "text": "RFC 8949 section 8 (diagnostic notation), <https://www.rfc-editor.org/rfc/rfc8949#section-8>, and RFC 8610 Appendix G (extended diagnostic notation; G.5, hexadecimal floats), <https://www.rfc-editor.org/rfc/rfc8610#appendix-G>; text escapes as JSON's, RFC 8259 section 7, <https://www.rfc-editor.org/rfc/rfc8259#section-7>. A hexadecimal float writes a double's 52 fraction bits as 13 hexadecimal digits after `0x1.` and its unbiased exponent after `p`; a subnormal is first scaled by 2^64, exactly, to read its leading bit as a normal double's."
+          },
+          "path": "geom_format::cbor::text",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the input, one table read per byte; the table is a constant built at compile time, and nothing is allocated.",
+          "does": "[`crc32c`] is the CRC-32C (Castagnoli) of a byte string, computed by the `crc` crate with its catalogue entry `CRC_32_ISCSI`: polynomial 0x1EDC6F41, reflected input and output, initial value and final XOR 0xFFFFFFFF.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/checksum.rs",
+          "guarantees": [
+            "**The checksum RFC 7143 and RFC 3720 define.** The tests check the catalogue's check value (the CRC of `123456789` is 0xE3069283) and RFC 3720's appendix B.4 examples.",
+            "**The same value on every target.** The crate is table-driven integer code with no processor paths, so the bits depend only on the input.",
+            "**No panic, no `unsafe`.** The crate forbids `unsafe` code, and its table reads are bounded by its loop guards and an 8-bit mask (its audit, cited in `deny-no-std.toml`)."
+          ],
+          "job": "CRC-32C, the cheap check every record carries so damage is found before its bytes are trusted (24.2).",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc7143",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "CRC-32C as RFC 3720 appendix B.4 and RFC 7143 section 13.1 specify it, <https://www.rfc-editor.org/rfc/rfc7143>, computed by the `crc` crate (MIT OR Apache-2.0, a dependency, not a port); chapter 24.2 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`."
+          },
+          "path": "geom_format::checksum",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time, no allocation.",
+          "does": "[`CHUNK_ROWS`] is the run length; [`chunk_count`] says how many chunks a table of `rows` rows takes, and [`chunk`] gives the rows of one. Body records (G94) write one chunk record per run and an index listing their content IDs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/chunk.rs",
+          "guarantees": [
+            "**Fixed runs.** Every chunk but the last holds exactly [`CHUNK_ROWS`] rows; the last holds the rest, at least one; an empty table has no chunk. The chunks cover the table once, in order.",
+            "**No panic, no overflow**, for every `usize` length."
+          ],
+          "job": "Chunks: every table of a body is cut into fixed runs of 4,096 rows, so chunk boundaries are a pure function of the table's length, never of how memory was shared (24.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.2's chunk rule (4,096 rows, proposed and fixed by the specification) in `projects/engines/geometry/architecture/24-file-format-exchange.md`."
+          },
+          "path": "geom_format::chunk",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one SHA-256 pass over the payload for [`ContentId::of_payload`]; the digest is copied.",
+          "does": "a [`ContentId`] is `[alg, digest]`. Algorithm 1 is the SHA-256 of the payload's bytes (owner action G79, 32.20), computed by `geom-op`'s hash, so names and content share one implementation. An ID of another algorithm is kept as read, so a file written once a stronger hash joins as algorithm 2 still carries its IDs through this reader byte for byte.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/content.rs",
+          "guarantees": [
+            "**Algorithm 1 is SHA-256 of exactly the payload's bytes**, its digest 32 bytes; an ID that says algorithm 1 with any other length is refused when read.",
+            "**One encoding.** [`ContentId::item`] writes `[alg, h'digest']` in `geom-op`'s canonical encoding."
+          ],
+          "job": "Content IDs: a record's payload named by its hash, behind an algorithm code (24.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final"
+            ],
+            "text": "chapter 24.2's content-id rule, `content-id = [alg: uint, digest: bstr]`, in `projects/engines/geometry/architecture/24-file-format-exchange.md`; SHA-256 by NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, through `geom_op::hash`."
+          },
+          "path": "geom_format::content",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the file for [`write`] and [`read`], one SHA-256 pass over it; [`salvage`] tries a record at each byte of a damaged span, so a span of `d` bytes costs up to `d` attempts, each charged to the meter.",
+          "does": "[`write`] lays out RFC 9277's 12-byte label (`d9 d9 f8`, the protocol tag `da 53 4b 47 46`, \"SKGF\", owner action G77, 32.18, and the byte string `43 42 4f 52`), the header record, the records, and an END record whose payload is `[count, h'sha256']`: how many records came before it, the header's included, and the SHA-256 of every byte before it, the label included. [`read`] reads such a file from a [`ByteSource`] (or a [`RangeSource`] through [`RangeCursor`]), record by record, and [`salvage`] keeps every intact record of damaged bytes and names the damaged spans.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/file.rs",
+          "guarantees": [
+            "**The read does not depend on how the bytes arrive.** [`read`] takes every byte through `read_exact`, so a source that returns one byte a call gives the same result, error offsets included, as one that returns everything at once (the tests split reads at random).",
+            "**Unknown records are handled as 24.2 says.** A record the caller's registry does not know stops the read with [`FileError::UnsupportedRecord`] (tag, schema, byte offset) if it is required, and is skipped and listed in [`ReadFile::skipped`] if it is optional.",
+            "**Every length is checked before anything is allocated:** a string head longer than [`PAYLOAD_CAP`], or a record longer than [`RECORD_CAP`], is refused before its bytes are read.",
+            "**The END record is checked**: its count and digest must match what was read, nothing may follow it, and a file without one is refused.",
+            "**Salvage keeps what is intact**: every record that decodes with a matching check is kept with its offset, and each run of bytes between them is named as damaged.",
+            "**No panic, no recursion**: nested items are counted with an explicit counter."
+          ],
+          "job": "A standalone `.skgf` file: the label, the header record, the records and the END record (24.2), written, read from any source however it splits its reads, and salvaged when damaged.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://www.rfc-editor.org/rfc/rfc9277",
+              "https://www.rfc-editor.org/rfc/rfc8742"
+            ],
+            "text": "chapter 24.2 and 24.5 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; RFC 9277's labelled CBOR Sequence, <https://www.rfc-editor.org/rfc/rfc9277>, and RFC 8742's CBOR Sequences, <https://www.rfc-editor.org/rfc/rfc8742>; the item lengths of RFC 8949 section 3."
+          },
+          "path": "geom_format::file",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the payload; a few small allocations for the ladder and the program's name.",
+          "does": "a [`Header`] holds the format version, the kernel edition, the `NameScheme`, the tolerance ladder in grid steps, the Unicode version of hashed text and the writing program, and ends with an extension map (24.3). [`Header::v1`] fills it for this kernel from `geom_num::ladder`'s rungs; [`Header::record`] writes it as a required record of type 1; [`Header::read`] reads a payload back. Its CDDL is `format/cddl/header.cddl` in the kernel's tree:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/header.rs",
+          "guarantees": [
+            "**One encoding** for every header: written by `geom-op`'s canonical encoder, keys ascending.",
+            "**A reader refuses what it cannot honour**: a major format version other than 1 ([`HeaderError::Format`]), and an extension key with its must-understand bit (bit 0) set that this version does not know ([`HeaderError::MustUnderstand`]). An unknown key without that bit is skipped and listed in [`Header::ignored`]. A newer minor version is read.",
+            "**The ladder is the kernel's**: [`Header::v1`] takes every rung from `geom_num::ladder`, so a file records exactly the bounds its geometry was made under."
+          ],
+          "job": "The header record, the first record of every file: what a reader must know before it reads anything else (24.4).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/06-numbers.md",
+              "https://www.rfc-editor.org/rfc/rfc8610"
+            ],
+            "text": "chapter 24.3 and 24.4 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; the ladder of chapter 6.5, `projects/engines/geometry/architecture/06-numbers.md`; CDDL by RFC 8610, <https://www.rfc-editor.org/rfc/rfc8610>."
+          },
+          "path": "geom_format::header",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per value; a column is one pass; [`plane`]'s divisor takes at most a few hundred remainder steps on 128-bit values. No allocation, no recursion.",
+          "does": "a file can pass every checksum and still hold a coordinate near 2^50, and release builds wrap integers silently. So every reader checks: grid coordinates within ±(2^40 − 1) steps ([`grid`], [`grid_column`]); doubles, control points included, finite and within the same range ([`real`], [`real_column`]); and planes reduced, with normals within 83 bits and offsets within 125 ([`plane`]). A failure is [`RangeError::OutOfRange`] with the record, the byte offset, the field and how many bits the value needs, or [`RangeError::Malformed`] for a plane that is not reduced.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/range.rs",
+          "guarantees": [
+            "**Exactly the frame.** [`grid`] accepts a value exactly when `geom_num::grid::Coord::new` does, `|v| ≤ 2^40 − 1`, proven by Kani for every `i64` (`proofs`), and tested at ±(2^40 − 1) and one beyond.",
+            "**Exactly the finite doubles of the frame.** [`real`] accepts `x` exactly when it is finite and `|x| ≤ 2^40 − 1`, proven by Kani for every `f64`.",
+            "**The bits the predicates assume.** [`plane`] accepts a plane exactly when its normal is not zero, each normal component needs at most 83 bits and the offset at most 125 (the bounds of `geom_num::plane`, from 40-bit coordinates), and the greatest common divisor of the four is 1.",
+            "**No panic, no overflow**: magnitudes are taken with `unsigned_abs`, offsets with checked arithmetic."
+          ],
+          "job": "Range checks on numbers read from a file, made before any body is built, so the fixed-width predicates stay exact (24.7, \"Range checks keep the predicates sound\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/06-numbers.md"
+            ],
+            "text": "chapter 24.7 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`, with the bit budgets of chapter 6.2 (`projects/engines/geometry/architecture/06-numbers.md`); the greatest common divisor by Euclid's algorithm (Knuth, TAOCP vol. 2, 4.5.2, Algorithm A)."
+          },
+          "path": "geom_format::range",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the record's bytes: one strict decode, one CRC and, for the payload, one check of its canonical form; the payload is copied once.",
+          "does": "a [`Record`] is",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/record.rs",
+          "guarantees": [
+            "**Damage is found.** The check is the CRC-32C of the bytes of the five items before it, read back exactly as stored; a record whose check differs is refused with [`RecordError::Checksum`] and nothing of it is returned.",
+            "**One encoding per record.** `depends` is a set sorted by the bytes of each content ID's encoding (refused otherwise, repeats included), the payload is one item of SKG's canonical CBOR nested at most [`PAYLOAD_DEPTH`] deep, and every head is canonical.",
+            "**Bounded.** A payload over [`PAYLOAD_CAP`] (64 MiB, 24.2's proposed cap) is refused both ways, before anything is allocated for it when reading from a source.",
+            "**No panic.** Every refusal is a [`RecordError`] with the byte offset at fault."
+          ],
+          "job": "The record envelope every SKG record shares: type, flags, schema, the records it was derived from, its payload and a CRC-32C over the rest (24.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://www.w3.org/TR/png-3/#5Chunk-naming-conventions",
+              "https://www.rfc-editor.org/rfc/rfc7143"
+            ],
+            "text": "chapter 24.2 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; PNG's critical and safe-to-copy chunk rule (<https://www.w3.org/TR/png-3/#5Chunk-naming-conventions>), which 24.2's flags make exact; CRC-32C by RFC 7143 (<https://www.rfc-editor.org/rfc/rfc7143>)."
+          },
+          "path": "geom_format::record",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant data; rendering allocates the table's text.",
+          "does": "[`RECORDS`] lists every record type format 1 defines; [`ENVELOPE`] and each type's `fields` describe the fields a reader meets, in order. [`registry_table`] and [`field_table`] render them as the Markdown the specification holds, and the crate's `tests/registry.rs` fails when a committed table differs from what they render (the drift check). [`knows`] is the registry as a reader's `known` predicate.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/registry.rs",
+          "guarantees": [
+            "**One list.** A tag appears once, tags are never reused, and the tables in the specification are exactly what this list renders.",
+            "**The constants agree**: the header's and END's tags and schemas here are the ones `file` and `header` write (the tests check each)."
+          ],
+          "job": "The registry of record types, as code: every version-1 record's tag, name, schema, flags, CDDL and fields, from which `format/REGISTRY.md`'s table and `format/SPEC.md`'s field tables are generated (24.2, 24.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.2 and 24.6 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`: \"field tables are generated from code annotations\"."
+          },
+          "path": "geom_format::registry",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one call of the source per piece it returns; no allocation. Recursion: none.",
+          "does": "[`ByteSource`] hands out bytes in order, in pieces of whatever size it likes; [`RangeSource`] reads bytes at any offset of a known length. [`read_exact`] and [`read_exact_at`] fill a buffer from either, however the source splits its reads. Byte slices implement both ([`SliceSource`] for the streamed one).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/source.rs",
+          "guarantees": [
+            "**The split never matters.** [`read_exact`] and [`read_exact_at`] fill the whole buffer or return an error; a source that returns one byte per call gives the same bytes as one that returns them all at once.",
+            "**A source that stalls is an error, not a loop.** A read that returns 0 before the buffer is full is [`SourceError::UnexpectedEnd`]; a source that claims more bytes than the buffer holds is [`SourceError::Overrun`].",
+            "**Offsets never overflow.** Every offset is checked against the source's length before it is read."
+          ],
+          "job": "Where a reader's bytes come from: the two `no_std` traits every reader reads through, so one code path reads a file, a network range, a zip entry or a SQLite blob, and the result never depends on how the bytes arrive (24.7).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://doc.rust-lang.org/std/io/trait.Read.html#method.read_exact"
+            ],
+            "text": "the reader interfaces of 24.7, `projects/engines/geometry/architecture/24-file-format-exchange.md`, in the manner of `std::io::Read::read_exact` and positioned reads (`pread`), which loop until the buffer is full (<https://doc.rust-lang.org/std/io/trait.Read.html#method.read_exact>)."
+          },
+          "path": "geom_format::source",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-format",
       "provenance": [],
       "sections": "12.12, 16.1, 18.10, 21, 23.8, 23.11 and 24.1 to 24.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G91, G92, G93, G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.",
+      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); the rest by pieces G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.",
       "summary": "Spare Kit geometry kernel: the native file format."
     },
     {
@@ -2315,6 +3039,28 @@
       "kind": "development",
       "layer": "Development",
       "modules": [
+        {
+          "cost": "one decoder pass, one text form and one parse per input, each linear in the input's length; the text form is at most about three times as long as the bytes.",
+          "does": "[`harness`] reads the fuzzer's bytes twice, as the native reader must read any file (24.7: \"is a fuzz target from its first commit\").",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/cbor.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; nothing is decoded first.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal."
+          ],
+          "job": "Fuzz target: `geom-format`'s strict CBOR decoder and its text form never panic, refuse within their input, and convert both ways bit for bit.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the round-trip and determinism laws of `geom-format`'s `cbor` module headers (`projects/engines/geometry/architecture/24-file-format-exchange.md`, 24.3, 24.6 and 24.7), on arbitrary bytes, the property-based fuzzing of 28.5 (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::cbor",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
@@ -10093,6 +10839,17 @@
   "grammar": "projects/engines/geometry/HEADERS.md",
   "pending": [],
   "sources": [
+    {
+      "licence": "Apache-2.0 OR MIT",
+      "link": "https://crates.io/crates/crc/3.4.0",
+      "method_note": null,
+      "name": "crc",
+      "pinned": false,
+      "take": "depend",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-format/Cargo.toml"
+      ]
+    },
     {
       "licence": "MIT",
       "link": "https://crates.io/crates/libm/0.2.16",
