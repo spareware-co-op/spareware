@@ -62,12 +62,12 @@ pub mod order;
 
 pub use arenas::{Arenas, Pool};
 pub use body::{Body, BodyKind};
-pub use builder::Builder;
+pub use builder::{Builder, Euler, NewEdge, NewFace, NewVertex, Wire};
 pub use column::{CHUNK_ROWS, Column, Memory};
 pub use entity::{
     CurveIx, Edge, EdgeIx, Edges, Face, FaceIx, Faces, Fin, FinIx, Fins, Link, Loop, LoopIx, Loops,
     PcurveIx, PointIx, Region, RegionIx, RegionKind, Regions, Sense, Shell, ShellIx, Shells,
     SurfaceIx, Vertex, VertexIx, Vertices,
 };
-pub use error::TopoError;
+pub use error::{Refusal, TopoError};
 pub use ix::{Arena, Ix, Kind};

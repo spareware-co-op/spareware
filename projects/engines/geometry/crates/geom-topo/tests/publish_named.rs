@@ -260,10 +260,10 @@ fn outside(r: &Rows) -> Ix<Region> {
 }
 
 /// The least of `items` (by row) whose owner is `owner`.
-fn least_of(owners: impl Iterator<Item = (usize, u32)>, n: usize) -> Vec<Option<u32>> {
+fn least_of<T: Ord + Copy>(owners: impl Iterator<Item = (usize, T)>, n: usize) -> Vec<Option<T>> {
     let mut best = vec![None; n];
     for (owner, place) in owners {
-        let b: &mut Option<u32> = &mut best[owner];
+        let b: &mut Option<T> = &mut best[owner];
         *b = Some(b.map_or(place, |x| x.min(place)));
     }
     best
@@ -271,6 +271,7 @@ fn least_of(owners: impl Iterator<Item = (usize, u32)>, n: usize) -> Vec<Option<
 
 /// Checks that `body`'s rows are in the order of the module's keys, each strictly increasing.
 fn assert_in_name_order(body: &Body) {
+    assert_chained(body.arenas());
     let n = body.names().unwrap();
     for list in [&n.regions, &n.faces, &n.edges, &n.vertices] {
         assert!(list.windows(2).all(|w| w[0] < w[1]));
@@ -298,7 +299,8 @@ fn assert_in_name_order(body: &Body) {
             .loop_
             .iter()
             .zip(a.fins.edge.iter())
-            .map(|(l, e)| (l.to_usize(), e.row())),
+            .zip(a.fins.sense.iter())
+            .map(|((l, e), s)| (l.to_usize(), (e.row(), *s == Sense::Reversed))),
         rows(a.loops.len()),
     );
     let loops: Vec<_> = a
@@ -358,8 +360,88 @@ fn assert_in_name_order(body: &Body) {
     }
 }
 
+/// Children in row order whose parent is `parent`, following a chain from `first` by `next`.
+fn walk(first: Option<u32>, next: impl Fn(u32) -> Option<u32>) -> Vec<u32> {
+    let mut out = Vec::new();
+    let mut at = first;
+    while let Some(x) = at {
+        out.push(x);
+        at = next(x);
+    }
+    out
+}
+
+/// Checks that every list of `a` holds its parent's children, by their back-links, in row order,
+/// and that each loop's and edge's first fin is its least.
+fn assert_chained(a: &Arenas) {
+    let kids = |parents: Vec<u32>, p: u32| -> Vec<u32> {
+        (0..parents.len() as u32)
+            .filter(|&c| parents[c as usize] == p)
+            .collect()
+    };
+    let shell_region: Vec<u32> = a.shells.region.iter().map(|r| r.row()).collect();
+    for r in 0..a.regions.len() {
+        let first = a
+            .regions
+            .get(ix(r))
+            .unwrap()
+            .first_shell
+            .map(geom_topo::Ix::row);
+        let got = walk(first, |s| {
+            a.shells.get(ix(s)).unwrap().next.map(geom_topo::Ix::row)
+        });
+        assert_eq!(got, kids(shell_region.clone(), r));
+    }
+    let face_shell: Vec<u32> = a.faces.shell.iter().map(|s| s.row()).collect();
+    for s in 0..a.shells.len() {
+        let first = a
+            .shells
+            .get(ix(s))
+            .unwrap()
+            .first_face
+            .map(geom_topo::Ix::row);
+        let got = walk(first, |f| {
+            a.faces.get(ix(f)).unwrap().next.map(geom_topo::Ix::row)
+        });
+        assert_eq!(got, kids(face_shell.clone(), s));
+    }
+    let loop_face: Vec<u32> = a.loops.face.iter().map(|f| f.row()).collect();
+    for f in 0..a.faces.len() {
+        let first = a
+            .faces
+            .get(ix(f))
+            .unwrap()
+            .first_loop
+            .map(geom_topo::Ix::row);
+        let got = walk(first, |l| {
+            a.loops.get(ix(l)).unwrap().next.map(geom_topo::Ix::row)
+        });
+        assert_eq!(got, kids(loop_face.clone(), f));
+    }
+    let fin_loop: Vec<u32> = a.fins.loop_.iter().map(|l| l.row()).collect();
+    for l in 0..a.loops.len() {
+        let first = a
+            .loops
+            .get(ix(l))
+            .unwrap()
+            .first_fin
+            .map(geom_topo::Ix::row);
+        assert_eq!(first, kids(fin_loop.clone(), l).first().copied());
+    }
+    let fin_edge: Vec<u32> = a.fins.edge.iter().map(|e| e.row()).collect();
+    for e in 0..a.edges.len() {
+        let first = a
+            .edges
+            .get(ix(e))
+            .unwrap()
+            .first_fin
+            .map(geom_topo::Ix::row);
+        assert_eq!(first, kids(fin_edge.clone(), e).first().copied());
+    }
+}
+
 /// Every row of `a` described by names alone: what it is and what it joins, each link written as
-/// the name-made identity of its target. Sorted, so two descriptions are equal exactly when the
+/// the name-made identity of its target; the lists, which publishing rebuilds, are left out. Sorted, so two descriptions are equal exactly when the
 /// arenas join the same named entities in the same way, whatever their row order.
 fn describe(a: &Arenas, n: &Names) -> Vec<String> {
     let none = NameKey([0; 16]);
@@ -378,9 +460,9 @@ fn describe(a: &Arenas, n: &Names) -> Vec<String> {
         let least = (0..a.fins.len())
             .map(|i| a.fins.get(ix(i)).unwrap())
             .filter(|fin| fin.loop_ == l)
-            .map(|fin| edge_name(fin.edge))
+            .map(|fin| (edge_name(fin.edge), fin.sense == Sense::Reversed))
             .min()
-            .unwrap_or(none);
+            .unwrap_or((none, false));
         (face_name(a.loops.get(l).unwrap().face), least)
     };
     let fin_id = |i: Ix<Fin>| {
@@ -390,43 +472,24 @@ fn describe(a: &Arenas, n: &Names) -> Vec<String> {
     let mut out = Vec::new();
     for r in 0..a.regions.len() {
         let x = a.regions.get(ix(r)).unwrap();
-        out.push(format!(
-            "region {:?} {:?} {:?}",
-            n.regions[r as usize],
-            x.kind,
-            x.first_shell.map(shell_id)
-        ));
+        out.push(format!("region {:?} {:?}", n.regions[r as usize], x.kind));
     }
     for s in 0..a.shells.len() {
-        let x = a.shells.get(ix(s)).unwrap();
-        out.push(format!(
-            "shell {:?} {:?} {:?}",
-            shell_id(ix(s)),
-            x.next.map(shell_id),
-            x.first_face.map(face_name)
-        ));
+        out.push(format!("shell {:?}", shell_id(ix(s))));
     }
     for f in 0..a.faces.len() {
         let x = a.faces.get(ix(f)).unwrap();
         out.push(format!(
-            "face {:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+            "face {:?} {:?} {:?} {:?} {:?}",
             n.faces[f as usize],
             shell_id(x.shell),
-            x.next.map(face_name),
             a.surfaces.get(x.surface).unwrap(),
             x.sense,
-            x.first_loop.map(loop_id),
             x.bound
         ));
     }
     for l in 0..a.loops.len() {
-        let x = a.loops.get(ix(l)).unwrap();
-        out.push(format!(
-            "loop {:?} {:?} {:?}",
-            loop_id(ix(l)),
-            x.next.map(loop_id),
-            x.first_fin.map(fin_id)
-        ));
+        out.push(format!("loop {:?}", loop_id(ix(l))));
     }
     for i in 0..a.fins.len() {
         let x = a.fins.get(ix(i)).unwrap();
@@ -446,9 +509,8 @@ fn describe(a: &Arenas, n: &Names) -> Vec<String> {
             (n.vertices[v.to_usize()], *a.points.get(point).unwrap())
         };
         out.push(format!(
-            "edge {:?} {:?} {:?} {:?} {:?}",
+            "edge {:?} {:?} {:?} {:?}",
             n.edges[e as usize],
-            x.first_fin.map(fin_id),
             x.start.map(vertex),
             x.end.map(vertex),
             a.curves.get(x.curve).unwrap()
@@ -614,18 +676,13 @@ fn the_meter_is_charged_exactly_and_stops_publishing() {
     let mut m = meter();
     publish_with(&w, &n, &mut m).unwrap();
     assert_eq!(m.used().work, 22 + 10 + 22);
-    for (budget, ok) in [
-        (21, false),
-        (22, false),
-        (31, false),
-        (32, false),
-        (53, false),
-        (54, true),
-    ] {
+    // Every budget short of the total stops it: in the first checks, in each arena's move, or in
+    // the checks of the moved arenas.
+    for budget in 0..=54 {
         let mut m = WorkMeter::new(Budget::new(budget, u64::MAX));
         let got = publish_with(&w, &n, &mut m);
-        if ok {
-            assert!(got.is_ok(), "budget {budget}");
+        if budget == 54 {
+            assert!(got.is_ok());
         } else {
             assert_eq!(
                 got,

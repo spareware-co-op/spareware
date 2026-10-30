@@ -32,7 +32,10 @@
 //! each); [`Builder::publish`] is linear in the number of rows of the link columns, one comparison
 //! each, and allocates nothing. Nothing recurses.
 
+mod euler;
 mod named;
+
+pub use euler::{Euler, NewEdge, NewFace, NewVertex, Wire};
 
 use geom_run::WorkMeter;
 

@@ -4,14 +4,15 @@
 //! What it does: [`Builder::publish_named`] takes one name per region, face, edge and vertex,
 //! checks the arenas as [`Builder::publish`] does, moves every named arena's rows into name order,
 //! places the arenas without names (shells, loops, fins) and the geometry pools by a fixed rule
-//! from those names, rewrites every link through the moves, and publishes the result, carrying its
-//! names in name order.
+//! from those names, rewrites every link through the moves, rebuilds every list from the
+//! back-links, and publishes the result, carrying its names in name order.
 //!
 //! The fixed rule, one key per row, compared in the order listed (8.2: they "follow a fixed rule
 //! derived from the names of the faces, edges and vertices they join"):
 //!
 //! - **Shell:** its region's place, then the least place among its faces.
-//! - **Loop:** its face's place, then the least place among its fins' edges.
+//! - **Loop:** its face's place, then the least of its fins' edge places, each with its fin's sense
+//!   (forward first), so two loops of one face that share an edge differ.
 //! - **Fin:** its edge's place, then its loop's place, then its sense (forward first).
 //! - **Surface, curve, pcurve, point:** the least place among the faces, edges, fins or vertices
 //!   that lie on it.
@@ -28,6 +29,12 @@
 //!   links moved to match, publishes the same body (32.17).
 //! - **Every link follows its row.** A link that pointed at a row points at that row's new place,
 //!   so the body joins the same entities as the arenas given.
+//! - **Lists follow the back-links, in name order.** Each region's shells, each shell's faces and
+//!   each face's loops are chained from the least row up, and each loop's and each edge's first fin
+//!   is its least fin, all read from the links each entity holds to its owner (a shell's region, a
+//!   face's shell, a loop's face, a fin's loop and edge). What the lists given held is replaced, so
+//!   they never depend on the order a body was built in either. A loop's cycle of fins and an
+//!   edge's radial ring are kept as given: their order is the shape's.
 //! - **Checked as published.** The arenas pass [`Builder::publish`]'s checks before anything is
 //!   read, and the moved arenas pass them again as they are published.
 //! - **One answer, the first fault.** Faults are reported in a fixed order: [`Builder::publish`]'s
@@ -43,7 +50,8 @@
 //! `projects/engines/geometry/architecture/08-topology.md`, 8.2.
 //!
 //! Cost: one sort of each arena's keys, `O(n log n)` in its rows, and one pass that copies every
-//! row once into new chunks. Nothing recurses.
+//! row once into new chunks, and one more pass over the owner links to rebuild the lists. Nothing
+//! recurses.
 
 use alloc::vec::Vec;
 
@@ -52,7 +60,7 @@ use geom_run::WorkMeter;
 use super::{Builder, even_columns, inside};
 use crate::arenas::{Arenas, Pool};
 use crate::body::{Body, BodyKind};
-use crate::column::CHUNK_ROWS;
+use crate::column::{CHUNK_ROWS, Column};
 use crate::entity::{Edge, Face, Fin, Loop, Region, RegionIx, RegionKind, Sense, Shell, Vertex};
 use crate::error::TopoError;
 use crate::ix::{Arena, Ix, Kind};
@@ -85,7 +93,7 @@ impl Builder {
             return Err(TopoError::Outside);
         }
         let moves = Moves::new(a, names)?;
-        let arenas = moves.arenas(a, meter)?;
+        let arenas = rechain(moves.arenas(a, meter)?)?;
         let sorted = Names {
             regions: in_order(&moves.regions, &names.regions),
             faces: in_order(&moves.faces, &names.faces),
@@ -114,8 +122,11 @@ fn order<T: Ord>(keys: &[T], arena: Arena, named: bool) -> Result<Permutation, T
 
 /// For each of `owners` rows, the least place among its members, or `None` with none. Each pair
 /// is one member's owner and place; a member with no owner (a fin without a pcurve) is skipped.
-fn least(owners: u32, pairs: impl Iterator<Item = (Option<u32>, Option<u32>)>) -> Vec<Option<u32>> {
-    let mut best: Vec<Option<u32>> = (0..owners).map(|_| None).collect();
+fn least<T: Ord + Copy>(
+    owners: u32,
+    pairs: impl Iterator<Item = (Option<u32>, Option<T>)>,
+) -> Vec<Option<T>> {
+    let mut best: Vec<Option<T>> = (0..owners).map(|_| None).collect();
     for pair in pairs {
         let (Some(owner), Some(place)) = pair else {
             continue;
@@ -147,6 +158,9 @@ fn pool(
     order(&keys, arena, false)
 }
 
+/// A fin's place among a loop's fins: its edge's place, then its sense.
+type FinKey = (u32, u8);
+
 /// A sense's place in a fin's key: forward first.
 const fn sense(s: Sense) -> u8 {
     match s {
@@ -160,10 +174,91 @@ fn in_order(moves: &Permutation, names: &[NameKey]) -> Vec<NameKey> {
     moves.apply(names).unwrap_or_default()
 }
 
-/// The new place of `ix` (every link was checked to point inside its arena).
-fn to<K: Kind>(moves: &Permutation, ix: Ix<K>) -> Result<Ix<K>, TopoError> {
+/// Where an arena's rows go: a [`Permutation`] moves every row, a [`Keep`] drops some.
+pub(crate) trait Place {
+    /// The rows after the move.
+    fn rows(&self) -> u32;
+    /// The new row of the row `old`, or `None` if it is dropped.
+    fn place(&self, old: u32) -> Option<u32>;
+    /// The row that moves to `new`.
+    fn source(&self, new: u32) -> Option<u32>;
+}
+
+impl Place for Permutation {
+    fn rows(&self) -> u32 {
+        self.len()
+    }
+
+    fn place(&self, old: u32) -> Option<u32> {
+        self.new_of(old)
+    }
+
+    fn source(&self, new: u32) -> Option<u32> {
+        self.old_of(new)
+    }
+}
+
+/// The live rows of an arena, kept in their order, the others dropped.
+pub(crate) struct Keep {
+    /// The new row of each row, `None` for a dropped one.
+    new_of_old: Vec<Option<u32>>,
+    /// The row each new row comes from.
+    old_of_new: Vec<u32>,
+}
+
+impl Keep {
+    /// Keeps the rows whose flag in `live` is set.
+    pub(crate) fn new(live: impl Iterator<Item = bool>) -> Keep {
+        let mut keep = Keep {
+            new_of_old: Vec::new(),
+            old_of_new: Vec::new(),
+        };
+        for (old, alive) in (0_u32..).zip(live) {
+            if alive {
+                keep.new_of_old.push(Some(keep.rows()));
+                keep.old_of_new.push(old);
+            } else {
+                keep.new_of_old.push(None);
+            }
+        }
+        keep
+    }
+
+    /// `rows`, one per row before, with the dropped ones left out.
+    pub(crate) fn apply<T: Clone>(&self, rows: &[T]) -> Vec<T> {
+        self.old_of_new
+            .iter()
+            .filter_map(|&old| usize::try_from(old).ok().and_then(|o| rows.get(o)).cloned())
+            .collect()
+    }
+}
+
+impl Place for Keep {
+    fn rows(&self) -> u32 {
+        // At most one new row per row of a 32-bit arena.
+        u32::try_from(self.old_of_new.len()).unwrap_or(u32::MAX)
+    }
+
+    fn place(&self, old: u32) -> Option<u32> {
+        usize::try_from(old)
+            .ok()
+            .and_then(|o| self.new_of_old.get(o))
+            .copied()
+            .flatten()
+    }
+
+    fn source(&self, new: u32) -> Option<u32> {
+        usize::try_from(new)
+            .ok()
+            .and_then(|n| self.old_of_new.get(n))
+            .copied()
+    }
+}
+
+/// The new place of `ix`; a link to a dropped row, or past the end, is [`TopoError::NoSuchRow`].
+pub(crate) fn to<K: Kind, P: Place>(moves: &P, ix: Ix<K>) -> Result<Ix<K>, TopoError> {
     moves
-        .new_of(ix.row())
+        .place(ix.row())
         .and_then(Ix::new)
         .ok_or(TopoError::NoSuchRow {
             arena: K::ARENA,
@@ -172,24 +267,24 @@ fn to<K: Kind>(moves: &Permutation, ix: Ix<K>) -> Result<Ix<K>, TopoError> {
 }
 
 /// The new place of `ix`, if there is one.
-fn to_some<K: Kind>(moves: &Permutation, ix: Option<Ix<K>>) -> Result<Option<Ix<K>>, TopoError> {
+fn to_some<K: Kind, P: Place>(moves: &P, ix: Option<Ix<K>>) -> Result<Option<Ix<K>>, TopoError> {
     ix.map(|i| to(moves, i)).transpose()
 }
 
 /// The rows of an arena moved by `moves`: row `new` is `get` of the row that moves there,
 /// rewritten by `link`, charging `meter` one unit as each chunk begins.
-fn moved<K: Kind, R>(
-    moves: &Permutation,
+fn moved<K: Kind, R, P: Place>(
+    moves: &P,
     meter: &mut WorkMeter<'_>,
     get: impl Fn(Ix<K>) -> Option<R>,
     mut link: impl FnMut(R) -> Result<R, TopoError>,
 ) -> Result<Vec<R>, TopoError> {
-    (0..moves.len())
+    (0..moves.rows())
         .map(|new| {
             if new % CHUNK_ROWS == 0 {
                 meter.charge(1)?;
             }
-            let old = moves.old_of(new).unwrap_or(new);
+            let old = moves.source(new).unwrap_or(new);
             let row = Ix::new(old).and_then(&get).ok_or(TopoError::NoSuchRow {
                 arena: K::ARENA,
                 row: old,
@@ -200,9 +295,9 @@ fn moved<K: Kind, R>(
 }
 
 /// A geometry pool with its rows moved by `moves`.
-fn moved_pool<T: Kind + Clone>(
+fn moved_pool<T: Kind + Clone, P: Place>(
     pool: &Pool<T>,
-    moves: &Permutation,
+    moves: &P,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Pool<T>, TopoError> {
     let rows = moved(moves, meter, |ix| pool.get(ix).cloned(), Ok)?;
@@ -212,23 +307,23 @@ fn moved_pool<T: Kind + Clone>(
 }
 
 /// Every arena's move.
-struct Moves {
-    regions: Permutation,
-    shells: Permutation,
-    faces: Permutation,
-    loops: Permutation,
-    fins: Permutation,
-    edges: Permutation,
-    vertices: Permutation,
-    surfaces: Permutation,
-    curves: Permutation,
-    pcurves: Permutation,
-    points: Permutation,
+pub(crate) struct Moves<P> {
+    pub(crate) regions: P,
+    pub(crate) shells: P,
+    pub(crate) faces: P,
+    pub(crate) loops: P,
+    pub(crate) fins: P,
+    pub(crate) edges: P,
+    pub(crate) vertices: P,
+    pub(crate) surfaces: P,
+    pub(crate) curves: P,
+    pub(crate) pcurves: P,
+    pub(crate) points: P,
 }
 
-impl Moves {
+impl Moves<Permutation> {
     /// Every arena's move into name order, from `names` and the keys of the module's rule.
-    fn new(a: &Arenas, names: &Names) -> Result<Moves, TopoError> {
+    fn new(a: &Arenas, names: &Names) -> Result<Moves<Permutation>, TopoError> {
         let regions = by_name(&names.regions, a.regions.len(), Arena::Region)?;
         let faces = by_name(&names.faces, a.faces.len(), Arena::Face)?;
         let edges = by_name(&names.edges, a.edges.len(), Arena::Edge)?;
@@ -253,13 +348,15 @@ impl Moves {
 
         let loop_edges = least(
             a.loops.len(),
-            a.fins
-                .loop_
-                .iter()
-                .map(|l| Some(l.row()))
-                .zip(a.fins.edge.iter().map(|e| edges.new_of(e.row()))),
+            a.fins.loop_.iter().map(|l| Some(l.row())).zip(
+                a.fins
+                    .edge
+                    .iter()
+                    .zip(a.fins.sense.iter())
+                    .map(|(e, s)| edges.new_of(e.row()).map(|p| (p, sense(*s)))),
+            ),
         );
-        let loop_keys: Vec<(Option<u32>, Option<u32>)> = a
+        let loop_keys: Vec<(Option<u32>, Option<FinKey>)> = a
             .loops
             .face
             .iter()
@@ -329,9 +426,15 @@ impl Moves {
             points,
         })
     }
+}
 
+impl<P: Place> Moves<P> {
     /// `a` moved: every row at its new place, every link pointing at its target's new place.
-    fn arenas(&self, a: &Arenas, meter: &mut WorkMeter<'_>) -> Result<Arenas, TopoError> {
+    pub(crate) fn arenas(
+        &self,
+        a: &Arenas,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Arenas, TopoError> {
         let mut out = Arenas::new();
         let regions = moved(
             &self.regions,
@@ -446,4 +549,47 @@ impl Moves {
             ..out
         })
     }
+}
+
+/// `a` with every list rebuilt from the back-links, in row order, so in name order: each region's
+/// shells, each shell's faces and each face's loops chained from the least row up, and each loop's
+/// and each edge's first fin its least fin. What the lists held before is replaced.
+fn rechain(mut a: Arenas) -> Result<Arenas, TopoError> {
+    let (first_shell, shell_next) = chain(a.shells.region.iter().map(|r| r.row()), a.regions.len());
+    let (first_face, face_next) = chain(a.faces.shell.iter().map(|s| s.row()), a.shells.len());
+    let (first_loop, loop_next) = chain(a.loops.face.iter().map(|f| f.row()), a.faces.len());
+    let (loop_fin, _) = chain(a.fins.loop_.iter().map(|l| l.row()), a.loops.len());
+    let (edge_fin, _) = chain(a.fins.edge.iter().map(|e| e.row()), a.edges.len());
+    a.regions.first_shell = column(first_shell)?;
+    a.shells.next = column(shell_next)?;
+    a.shells.first_face = column(first_face)?;
+    a.faces.next = column(face_next)?;
+    a.faces.first_loop = column(first_loop)?;
+    a.loops.next = column(loop_next)?;
+    a.loops.first_fin = column(loop_fin)?;
+    a.edges.first_fin = column(edge_fin)?;
+    Ok(a)
+}
+
+/// For children whose parents are `parents`, in child row order: each of `count` parents' least
+/// child, and each child's next sibling in row order.
+fn chain(parents: impl Iterator<Item = u32>, count: u32) -> (Vec<Option<u32>>, Vec<Option<u32>>) {
+    let parents: Vec<u32> = parents.collect();
+    let mut first: Vec<Option<u32>> = (0..count).map(|_| None).collect();
+    let mut next: Vec<Option<u32>> = Vec::with_capacity(parents.len());
+    let children = u32::try_from(parents.len()).unwrap_or(u32::MAX);
+    for (child, &parent) in (0..children).zip(&parents).rev() {
+        // Every parent is a row of its arena, which `inside` checked.
+        let head = usize::try_from(parent).ok().and_then(|p| first.get_mut(p));
+        next.push(head.and_then(|h| h.replace(child)));
+    }
+    next.reverse();
+    (first, next)
+}
+
+/// A link column holding `rows`.
+fn column<K: Kind, T>(rows: Vec<Option<u32>>) -> Result<Column<K, Option<Ix<T>>>, TopoError> {
+    let mut out = Column::new();
+    out.extend(rows.into_iter().map(|r| r.and_then(Ix::new)))?;
+    Ok(out)
 }
