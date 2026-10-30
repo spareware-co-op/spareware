@@ -1001,8 +1001,11 @@ dependencies = [
  "bolero",
  "geom-bench",
  "geom-gen",
+ "geom-name",
  "geom-num",
+ "geom-op",
  "geom-test",
+ "geom-topo",
  "num-bigint",
 ]
 

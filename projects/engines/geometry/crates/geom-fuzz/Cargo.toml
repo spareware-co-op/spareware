@@ -18,6 +18,11 @@ geom-gen = { path = "../geom-gen" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
+# The attributes target (G90): geom-name's attribute step and geom-topo's definitions, under
+# test, with geom-op's history records (ours, MPL-2.0).
+geom-name = { path = "../geom-name" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under
