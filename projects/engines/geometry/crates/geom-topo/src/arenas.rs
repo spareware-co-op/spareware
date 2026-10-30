@@ -33,7 +33,7 @@ use crate::ix::Arena;
 pub type Pool<T> = Column<T, T>;
 
 /// Every arena of one body.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Arenas {
     /// The regions.
     pub regions: Regions,
@@ -62,8 +62,20 @@ pub struct Arenas {
 impl Arenas {
     /// Empty arenas.
     #[must_use]
-    pub fn new() -> Self {
-        Arenas::default()
+    pub const fn new() -> Self {
+        Arenas {
+            regions: Regions::new(),
+            shells: Shells::new(),
+            faces: Faces::new(),
+            loops: Loops::new(),
+            fins: Fins::new(),
+            edges: Edges::new(),
+            vertices: Vertices::new(),
+            surfaces: Column::new(),
+            curves: Column::new(),
+            pcurves: Column::new(),
+            points: Column::new(),
+        }
     }
 
     /// The rows of `arena` (for an entity arena, the rows of its first column).
@@ -99,5 +111,11 @@ impl Arenas {
             .plus(self.curves.memory())
             .plus(self.pcurves.memory())
             .plus(self.points.memory())
+    }
+}
+
+impl Default for Arenas {
+    fn default() -> Self {
+        Arenas::new()
     }
 }

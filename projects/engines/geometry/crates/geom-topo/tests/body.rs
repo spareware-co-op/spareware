@@ -219,6 +219,25 @@ fn the_wall_publishes_with_every_row_as_built() {
 }
 
 #[test]
+fn new_and_default_are_empty() {
+    let empty = Arenas::new();
+    assert_eq!(Arenas::default(), empty);
+    assert_eq!(Builder::default(), Builder::new());
+    assert_eq!(Builder::new().arenas, empty);
+    for arena in Arena::ALL {
+        assert_eq!(empty.rows(arena), 0);
+    }
+    assert_eq!(empty.regions, geom_topo::Regions::default());
+    assert_eq!(empty.shells, geom_topo::Shells::default());
+    assert_eq!(empty.faces, geom_topo::Faces::default());
+    assert_eq!(empty.loops, geom_topo::Loops::default());
+    assert_eq!(empty.fins, geom_topo::Fins::default());
+    assert_eq!(empty.edges, geom_topo::Edges::default());
+    assert_eq!(empty.vertices, geom_topo::Vertices::default());
+    assert_eq!(empty.memory(), geom_topo::Memory::default());
+}
+
+#[test]
 fn push_and_extend_build_the_same_body() {
     let pushed = publish(wall_builder(false)).unwrap();
     let extended = publish(wall_builder(true)).unwrap();

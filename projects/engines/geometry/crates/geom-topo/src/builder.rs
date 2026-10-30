@@ -42,7 +42,7 @@ use crate::error::TopoError;
 use crate::ix::{Arena, Ix};
 
 /// Arenas being filled or edited, to be published as a body.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Builder {
     /// The arenas: fill and edit them freely; [`Builder::publish`] checks them.
     pub arenas: Arenas,
@@ -184,8 +184,10 @@ fn inside(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), TopoError> {
 impl Builder {
     /// A builder with empty arenas.
     #[must_use]
-    pub fn new() -> Self {
-        Builder::default()
+    pub const fn new() -> Self {
+        Builder {
+            arenas: Arenas::new(),
+        }
     }
 
     /// A builder holding `body`'s arenas, sharing every chunk with it until written to.
@@ -217,5 +219,11 @@ impl Builder {
             return Err(TopoError::Outside);
         }
         Ok(Body::checked(kind, outside, self.arenas))
+    }
+}
+
+impl Default for Builder {
+    fn default() -> Self {
+        Builder::new()
     }
 }

@@ -208,6 +208,9 @@ fn set_changes_one_row_and_refuses_rows_past_the_end() {
     assert_eq!(c.set(ix(2 * CHUNK_ROWS), 1), Err(missing(2 * CHUNK_ROWS)));
     assert_eq!(c.set(ix(u32::MAX - 1), 1), Err(missing(u32::MAX - 1)));
     assert_eq!(c, before);
+    // A refused write copies nothing: the two still share every chunk.
+    assert_eq!(c.memory().unique_chunks, 0);
+    assert_eq!(before.memory().unique_chunks, 0);
     let mut empty = Col::new();
     assert_eq!(empty.set(ix(0), 1), Err(missing(0)));
 }
@@ -278,6 +281,18 @@ fn extend_onto_a_shared_last_chunk_copies_it_and_leaves_the_original() {
     assert_eq!(edited.get(ix(12)), Some(&102));
     assert_eq!(edited.memory().unique_chunks, 1);
     assert_eq!(base.memory().unique_chunks, 1);
+}
+
+#[test]
+fn extending_by_nothing_copies_nothing() {
+    let base = column(10);
+    let mut c = base.clone();
+    c.extend(std::iter::empty()).unwrap();
+    assert_eq!(c.memory().unique_chunks, 0);
+    assert_eq!(c, base);
+    let mut empty = Col::new();
+    empty.extend(std::iter::empty()).unwrap();
+    assert_eq!(empty.memory(), Memory::default());
 }
 
 #[test]
@@ -402,8 +417,11 @@ fn a_full_column_refuses_one_more_row_and_leaves_itself_unchanged() {
     let mut c = Column::<Face, ()>::filled((), u32::MAX - 1).unwrap();
     assert_eq!(c.extend([(), ()]), Err(TopoError::Full(Arena::Face)));
     assert_eq!(c.len(), u32::MAX - 1);
+    let mut d = c.clone();
     assert_eq!(c.push(()).map(Ix::row), Ok(u32::MAX - 1));
     assert_eq!(c.len(), u32::MAX);
+    d.extend([()]).unwrap();
+    assert_eq!(d.len(), u32::MAX);
 }
 
 #[test]

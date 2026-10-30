@@ -209,7 +209,7 @@ impl Kind for P3 {
 }
 
 /// The region arena: one column per field of [`Region`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Regions {
     /// Each region's kind.
     pub kind: Column<Region, RegionKind>,
@@ -218,6 +218,15 @@ pub struct Regions {
 }
 
 impl Regions {
+    /// An empty arena.
+    #[must_use]
+    pub const fn new() -> Self {
+        Regions {
+            kind: Column::new(),
+            first_shell: Column::new(),
+        }
+    }
+
     /// The rows of the first column.
     #[must_use]
     pub const fn len(&self) -> u32 {
@@ -268,7 +277,7 @@ impl Regions {
 }
 
 /// The shell arena: one column per field of [`Shell`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shells {
     /// Each shell's region.
     pub region: Column<Shell, RegionIx>,
@@ -279,6 +288,16 @@ pub struct Shells {
 }
 
 impl Shells {
+    /// An empty arena.
+    #[must_use]
+    pub const fn new() -> Self {
+        Shells {
+            region: Column::new(),
+            next: Column::new(),
+            first_face: Column::new(),
+        }
+    }
+
     /// The rows of the first column.
     #[must_use]
     pub const fn len(&self) -> u32 {
@@ -335,7 +354,7 @@ impl Shells {
 }
 
 /// The face arena: one column per field of [`Face`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Faces {
     /// Each face's shell.
     pub shell: Column<Face, ShellIx>,
@@ -352,6 +371,19 @@ pub struct Faces {
 }
 
 impl Faces {
+    /// An empty arena.
+    #[must_use]
+    pub const fn new() -> Self {
+        Faces {
+            shell: Column::new(),
+            next: Column::new(),
+            surface: Column::new(),
+            sense: Column::new(),
+            first_loop: Column::new(),
+            bound: Column::new(),
+        }
+    }
+
     /// The rows of the first column.
     #[must_use]
     pub const fn len(&self) -> u32 {
@@ -420,7 +452,7 @@ impl Faces {
 }
 
 /// The loop arena: one column per field of [`Loop`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Loops {
     /// Each loop's face.
     pub face: Column<Loop, FaceIx>,
@@ -431,6 +463,16 @@ pub struct Loops {
 }
 
 impl Loops {
+    /// An empty arena.
+    #[must_use]
+    pub const fn new() -> Self {
+        Loops {
+            face: Column::new(),
+            next: Column::new(),
+            first_fin: Column::new(),
+        }
+    }
+
     /// The rows of the first column.
     #[must_use]
     pub const fn len(&self) -> u32 {
@@ -487,7 +529,7 @@ impl Loops {
 }
 
 /// The fin arena: one column per field of [`Fin`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fins {
     /// Each fin's loop.
     pub loop_: Column<Fin, LoopIx>,
@@ -506,6 +548,20 @@ pub struct Fins {
 }
 
 impl Fins {
+    /// An empty arena.
+    #[must_use]
+    pub const fn new() -> Self {
+        Fins {
+            loop_: Column::new(),
+            next: Column::new(),
+            prev: Column::new(),
+            edge: Column::new(),
+            sense: Column::new(),
+            radial: Column::new(),
+            pcurve: Column::new(),
+        }
+    }
+
     /// The rows of the first column.
     #[must_use]
     pub const fn len(&self) -> u32 {
@@ -578,7 +634,7 @@ impl Fins {
 }
 
 /// The edge arena: one column per field of [`Edge`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Edges {
     /// Each edge's first fin.
     pub first_fin: Column<Edge, Option<FinIx>>,
@@ -591,6 +647,17 @@ pub struct Edges {
 }
 
 impl Edges {
+    /// An empty arena.
+    #[must_use]
+    pub const fn new() -> Self {
+        Edges {
+            first_fin: Column::new(),
+            start: Column::new(),
+            end: Column::new(),
+            curve: Column::new(),
+        }
+    }
+
     /// The rows of the first column.
     #[must_use]
     pub const fn len(&self) -> u32 {
@@ -651,13 +718,21 @@ impl Edges {
 }
 
 /// The vertex arena: one column per field of [`Vertex`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Vertices {
     /// Each vertex's point.
     pub point: Column<Vertex, PointIx>,
 }
 
 impl Vertices {
+    /// An empty arena.
+    #[must_use]
+    pub const fn new() -> Self {
+        Vertices {
+            point: Column::new(),
+        }
+    }
+
     /// The rows of the first column.
     #[must_use]
     pub const fn len(&self) -> u32 {
@@ -856,5 +931,47 @@ impl Link {
 impl core::fmt::Display for Link {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.name())
+    }
+}
+
+impl Default for Regions {
+    fn default() -> Self {
+        Regions::new()
+    }
+}
+
+impl Default for Shells {
+    fn default() -> Self {
+        Shells::new()
+    }
+}
+
+impl Default for Faces {
+    fn default() -> Self {
+        Faces::new()
+    }
+}
+
+impl Default for Loops {
+    fn default() -> Self {
+        Loops::new()
+    }
+}
+
+impl Default for Fins {
+    fn default() -> Self {
+        Fins::new()
+    }
+}
+
+impl Default for Edges {
+    fn default() -> Self {
+        Edges::new()
+    }
+}
+
+impl Default for Vertices {
+    fn default() -> Self {
+        Vertices::new()
     }
 }
