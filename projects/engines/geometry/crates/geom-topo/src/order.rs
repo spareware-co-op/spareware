@@ -25,6 +25,9 @@
 
 use alloc::vec::Vec;
 
+use crate::error::TopoError;
+use crate::ix::Arena;
+
 /// A persistent name's 16 bytes (`NameScheme` v1, 20.1), compared as bytes: the order a named
 /// arena is published in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -42,6 +45,27 @@ pub enum OrderError {
     },
     /// More rows than a 32-bit index addresses.
     TooManyRows,
+}
+
+impl OrderError {
+    /// The fault in `arena` it is: two rows of one key are [`TopoError::DuplicateName`] in a
+    /// `named` arena and [`TopoError::Unordered`] in any other; too many rows is
+    /// [`TopoError::Full`].
+    pub(crate) const fn in_arena(self, arena: Arena, named: bool) -> TopoError {
+        match self {
+            OrderError::DuplicateName { first, second } if named => TopoError::DuplicateName {
+                arena,
+                first,
+                second,
+            },
+            OrderError::DuplicateName { first, second } => TopoError::Unordered {
+                arena,
+                first,
+                second,
+            },
+            OrderError::TooManyRows => TopoError::Full(arena),
+        }
+    }
 }
 
 /// A one-to-one map of the rows `0..len` onto themselves: where each row of an arena moves.
@@ -62,6 +86,17 @@ impl Permutation {
     /// [`OrderError::DuplicateName`] when two keys are equal; [`OrderError::TooManyRows`] when
     /// there are more keys than a 32-bit index addresses.
     pub fn by_name(keys: &[NameKey]) -> Result<Permutation, OrderError> {
+        Permutation::by_key(keys)
+    }
+
+    /// The permutation that sorts `keys`, for any totally ordered key: the entity at row `old`
+    /// moves to the row its key takes among all of them. Equal keys are refused as
+    /// [`OrderError::DuplicateName`], whatever the key is.
+    ///
+    /// # Errors
+    ///
+    /// As [`Permutation::by_name`].
+    pub fn by_key<T: Ord>(keys: &[T]) -> Result<Permutation, OrderError> {
         let n = u32::try_from(keys.len()).map_err(|_| OrderError::TooManyRows)?;
         let mut old_of_new: Vec<u32> = (0..n).collect();
         // Rows are distinct, so the order is total even before duplicates are refused.
@@ -89,6 +124,11 @@ impl Permutation {
             new_of_old,
             old_of_new,
         })
+    }
+
+    /// The row each row moves to, in row order.
+    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
+        self.new_of_old.iter().copied()
     }
 
     /// The number of rows it moves.
@@ -142,13 +182,24 @@ impl Permutation {
     }
 }
 
-/// The key at `row`, or the greatest key past the end (never reached: `row < keys.len()`).
-fn key(keys: &[NameKey], row: u32) -> NameKey {
-    usize::try_from(row)
-        .ok()
-        .and_then(|r| keys.get(r))
-        .copied()
-        .unwrap_or(NameKey([u8::MAX; 16]))
+/// The key at `row`, or `None` past the end (never reached: `row < keys.len()`). `None` sorts
+/// before every key, so a row past the end could not hide among the others.
+fn key<T>(keys: &[T], row: u32) -> Option<&T> {
+    usize::try_from(row).ok().and_then(|r| keys.get(r))
+}
+
+/// The persistent names of a body's named entities, one per row of each named arena (8.2: fins,
+/// loops and shells have none). In a published body, each list is in name order, as its arena is.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Names {
+    /// One per region.
+    pub regions: Vec<NameKey>,
+    /// One per face.
+    pub faces: Vec<NameKey>,
+    /// One per edge.
+    pub edges: Vec<NameKey>,
+    /// One per vertex.
+    pub vertices: Vec<NameKey>,
 }
 
 #[cfg(test)]

@@ -9282,6 +9282,26 @@
               "doc": "A large allocation (a chunk of rows, or a column's list of chunks) was refused.",
               "name": "OutOfMemory",
               "shape": "unit"
+            },
+            {
+              "doc": "The names given for a named arena are not one per row.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two rows of a named arena have the same name: the first such pair in name order.",
+              "name": "DuplicateName",
+              "shape": "struct"
+            },
+            {
+              "doc": "Two rows of an arena with no names (shells, loops, fins) or of a geometry pool get the same key from what they join, so name order cannot place them: the first such pair.",
+              "name": "Unordered",
+              "shape": "struct"
+            },
+            {
+              "doc": "A row of a geometry pool that no entity uses, so name order cannot place it.",
+              "name": "Unused",
+              "shape": "struct"
             }
           ],
           "module": "geom_topo::error",
@@ -9414,6 +9434,31 @@
             "text": "Parasolid's model structure, made immutable after building (chapter 8.2; `projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), with the validation layer evidence report 03 recommends copying from Fornjot, every object checked as it enters (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 2)."
           },
           "path": "geom_topo::builder",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one sort of each arena's keys, `O(n log n)` in its rows, and one pass that copies every row once into new chunks. Nothing recurses.",
+          "does": "[`Builder::publish_named`] takes one name per region, face, edge and vertex, checks the arenas as [`Builder::publish`] does, moves every named arena's rows into name order, places the arenas without names (shells, loops, fins) and the geometry pools by a fixed rule from those names, rewrites every link through the moves, and publishes the result, carrying its names in name order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder/named.rs",
+          "guarantees": [
+            "**Index order is name order.** Every named arena's rows are in name order, and every other arena's rows are in the order of their keys above; so any order of the same rows, with their links moved to match, publishes the same body (32.17).",
+            "**Every link follows its row.** A link that pointed at a row points at that row's new place, so the body joins the same entities as the arenas given.",
+            "**Checked as published.** The arenas pass [`Builder::publish`]'s checks before anything is read, and the moved arenas pass them again as they are published.",
+            "**One answer, the first fault.** Faults are reported in a fixed order: [`Builder::publish`]'s checks; then, for regions, faces, edges and vertices in turn, a count of names other than one per row or two rows of one name; then equal keys among shells, loops and fins in turn; then an unused row of the surface, curve, pcurve and point pools in turn.",
+            "**Metered.** Besides what [`Builder::publish`] charges, twice (on the arenas given and on the moved ones), publishing by name charges one unit for every chunk of rows it moves."
+          ],
+          "job": "Publishing in name order (piece G81): a body's arena indices assigned in persistent-name order, so its arenas depend only on what it contains, never on how it was built (8.2, 32.17).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "the boolean rebuild's renumbering in name order (`projects/engines/geometry/architecture/ 11-booleans.md`, 11.3), done for every body by the builder, as decided in `projects/engines/geometry/architecture/32-decisions.md`, 32.17, and laid out in `projects/engines/geometry/architecture/08-topology.md`, 8.2."
+          },
+          "path": "geom_topo::builder::named",
           "provenance": [],
           "spdx": null,
           "target": "lib"

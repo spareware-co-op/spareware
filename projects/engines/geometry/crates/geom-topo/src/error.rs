@@ -50,6 +50,34 @@ pub enum TopoError {
     Stopped(Stop),
     /// A large allocation (a chunk of rows, or a column's list of chunks) was refused.
     OutOfMemory,
+    /// The names given for a named arena are not one per row.
+    Names(Arena),
+    /// Two rows of a named arena have the same name: the first such pair in name order.
+    DuplicateName {
+        /// The arena.
+        arena: Arena,
+        /// The lower of the two rows.
+        first: u32,
+        /// The higher of the two rows.
+        second: u32,
+    },
+    /// Two rows of an arena with no names (shells, loops, fins) or of a geometry pool get the same
+    /// key from what they join, so name order cannot place them: the first such pair.
+    Unordered {
+        /// The arena.
+        arena: Arena,
+        /// The lower of the two rows.
+        first: u32,
+        /// The higher of the two rows.
+        second: u32,
+    },
+    /// A row of a geometry pool that no entity uses, so name order cannot place it.
+    Unused {
+        /// The pool.
+        arena: Arena,
+        /// The row.
+        row: u32,
+    },
 }
 
 impl fmt::Display for TopoError {
@@ -81,6 +109,25 @@ impl fmt::Display for TopoError {
             }
             TopoError::Stopped(stop) => write!(f, "publishing the body stopped: {stop}"),
             TopoError::OutOfMemory => f.write_str("an allocation was refused"),
+            TopoError::Names(arena) => {
+                write!(f, "the names of the {arena} arena are not one per row")
+            }
+            TopoError::DuplicateName {
+                arena,
+                first,
+                second,
+            } => write!(f, "{arena} rows {first} and {second} have the same name"),
+            TopoError::Unordered {
+                arena,
+                first,
+                second,
+            } => write!(
+                f,
+                "{arena} rows {first} and {second} join the same names, so name order cannot place them"
+            ),
+            TopoError::Unused { arena, row } => {
+                write!(f, "no entity uses row {row} of the {arena} pool")
+            }
         }
     }
 }
