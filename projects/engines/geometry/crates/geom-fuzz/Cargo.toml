@@ -18,6 +18,13 @@ geom-gen = { path = "../geom-gen" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
+# The batch target (G104): geom-op's batch driver and the curve and surface kinds' many-point
+# calls, under test, with the crates they need (ours, MPL-2.0).
+geom-curve = { path = "../geom-curve" }
+geom-nurbs = { path = "../geom-nurbs" }
+geom-op = { path = "../geom-op" }
+geom-run = { path = "../geom-run" }
+geom-surface = { path = "../geom-surface" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

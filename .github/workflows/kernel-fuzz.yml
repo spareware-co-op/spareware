@@ -27,7 +27,8 @@ name: Kernel fuzzing and proofs
 #   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-gen, geom-num, geom-run and geom-test today;
+# every crate of the workspace it depends on (geom-bench, geom-curve, geom-gen, geom-linalg,
+# geom-math, geom-num, geom-nurbs, geom-op, geom-run, geom-surface and geom-test today;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
 # ClusterFuzzLite files and this workflow.
@@ -48,10 +49,16 @@ on:
   pull_request:
     paths:
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-linalg/**"
+      - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-num/**"
+      - "projects/engines/geometry/crates/geom-nurbs/**"
+      - "projects/engines/geometry/crates/geom-op/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -64,10 +71,16 @@ on:
     branches: [main]
     paths:
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-linalg/**"
+      - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-num/**"
+      - "projects/engines/geometry/crates/geom-nurbs/**"
+      - "projects/engines/geometry/crates/geom-op/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -103,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
+        target: [batch_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

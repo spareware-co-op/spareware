@@ -2343,6 +2343,28 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "at most [`MAX_ITEMS`] items of at most 63 work units each, each run twice (in the batch and alone), and [`MAX_PARAMS`] parameters through three kinds twice; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_ITEMS`] batch items (a key from a small alphabet, so keys repeat, the work each charges and whether it fails), each item's own budget, an optional batch total, and parameters for a line, a circle and a plane. [`check`] runs the batch and compares it with the rules of chapter 23.10 read independently: a repeated key refuses the whole batch; otherwise one result per item, at the batch's path plus the item's key, equal to the item run alone ([`geom_op::Batch::single`]) until the running sum of work in key order first passes the total, and the batch's total from that item on. It then evaluates the three geometry kinds at the case's parameters through `points` and through single calls and requires the same bits, and the same failures. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/batch.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-op`'s batch driver gives one result per item, each the item's own, and every curve and surface kind's many-point call gives the single calls' bits.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "differential testing against chapter 23.10's batch rule read independently (`projects/engines/geometry/architecture/23-performance.md`), and of the flat-array calls against the single calls they are defined by (chapter 23.6)."
+          },
+          "path": "geom_fuzz::batch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],

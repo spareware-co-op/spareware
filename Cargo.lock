@@ -978,8 +978,13 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "geom-bench",
+ "geom-curve",
  "geom-gen",
  "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
  "geom-test",
  "num-bigint",
 ]

@@ -9,8 +9,10 @@ how each engine runs a target, on your machine and in CI. The first target built
 `orient2d` (`src/orient2d.rs`): `geom-num`'s orient2d, its exact path and its `f64` filter must
 agree with the exact determinant of orient2d's definition, computed from scratch. The others:
 `predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
-flips its sign; and `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
-every operation at every width, `I128` to the reserved 768 bits.
+flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
+every operation at every width, `I128` to the reserved 768 bits; and `batch` (`src/batch.rs`,
+G104), `geom-op`'s batch driver gives each item its own result, and the many-point calls give
+the single calls' bits.
 
 ## One law, four engines
 
