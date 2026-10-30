@@ -26,6 +26,10 @@ geom-sketch = { path = "../geom-sketch" }
 geom-subd = { path = "../geom-subd" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
+# CRC-32C (Castagnoli), every record's check (24.2): the `crc` crate, MIT OR Apache-2.0,
+# no_std and forbid(unsafe_code), with its catalogue crc-catalog. On the vetted allow-list in
+# deny-no-std.toml, with its audit (projects/kit/notes/G92-crc-audit.md).
+crc = "3.4.0"
 
 [dev-dependencies]
 # The tests' seeded generator and seed printing (geom_test::rng and geom_test::seed).
