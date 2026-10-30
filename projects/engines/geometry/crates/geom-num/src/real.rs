@@ -52,6 +52,13 @@ impl Real {
     /// Zero (+0).
     pub const ZERO: Real = Real(0.0);
 
+    /// One.
+    pub const ONE: Real = Real(1.0);
+
+    /// π rounded to nearest: `core::f64::consts::PI`, 884279719003555 · 2^−48, which is below π by
+    /// about 1.2 · 10^−16. An enclosure of π itself is [`crate::interval::Interval::PI`].
+    pub const PI: Real = Real(core::f64::consts::PI);
+
     /// A `Real`, or `NotFinite` for NaN and infinities.
     ///
     /// # Errors

@@ -52,7 +52,11 @@
 //!   `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a
 //!   [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`;
 //!   [`rng`] draws its doubles as `Real`s in [0, 1); [`brent`]'s searches and [`quadrature`]'s
-//!   integrals return `Real`s, and stop at a caller's cap with an error, never a best guess. Inside [`math`], where the ports compute on
+//!   integrals return `Real`s, and stop at a caller's cap with an error, never a best guess; every
+//!   operation of [`scalar::Scalar`] on a `Real`, and so of a [`dual::Dual`] over it, checks its
+//!   result, so a NaN or an infinity in a value or a derivative is `NotFinite` (the NaN tripwire
+//!   of chapter 15.4); and [`newton`]'s operators return enclosures with finite bounds or an
+//!   error. Inside [`math`], where the ports compute on
 //!   raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function
 //!   returns one.
 //! - Every interval operation encloses the exact result of its operation on any reals in its
@@ -86,6 +90,7 @@
 pub mod brent;
 pub mod crossing;
 pub mod dd;
+pub mod dual;
 pub mod eft;
 pub mod error;
 pub mod exact_sum;
@@ -95,6 +100,7 @@ pub mod grid;
 pub mod interval;
 pub mod ladder;
 pub mod math;
+pub mod newton;
 pub mod perturb;
 pub mod plane;
 pub mod predicate;
@@ -102,6 +108,7 @@ pub mod quadrature;
 pub mod quadrature_rules;
 pub mod real;
 pub mod rng;
+pub mod scalar;
 pub mod sign;
 pub mod wide;
 pub mod wide32;

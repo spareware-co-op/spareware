@@ -30,6 +30,7 @@ use geom_num::dd::DD;
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
+use geom_num::newton::{NewtonError, Verdict};
 use geom_num::plane::{Lpi, Plane, Tpi};
 use geom_num::real::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange};
@@ -417,6 +418,48 @@ impl<T: Canonical> Canonical for Vec<T> {
         (self.len() as u64).encode(h);
         for item in self {
             item.encode(h);
+        }
+    }
+}
+
+impl<const N: usize> Canonical for Verdict<N> {
+    // A tag, then for a box the enclosure, then the contraction bound.
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Verdict::NoZero => h.update(&[0]),
+            Verdict::Unique {
+                enclosure,
+                contraction,
+            } => {
+                h.update(&[1]);
+                enclosure.encode(h);
+                contraction.encode(h);
+            }
+            Verdict::Narrowed {
+                enclosure,
+                contraction,
+            } => {
+                h.update(&[2]);
+                enclosure.encode(h);
+                contraction.encode(h);
+            }
+        }
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, NewtonError> {
+    // A tag: 0 and the value; 1 for `Singular`; 2 and the numbers layer's error.
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(NewtonError::Singular) => h.update(&[1]),
+            Err(NewtonError::Num(e)) => {
+                h.update(&[2]);
+                e.encode(h);
+            }
         }
     }
 }

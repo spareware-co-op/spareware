@@ -1459,3 +1459,71 @@ pub mod perturb {
         run(batch, out, |&[a, b, c, d, e]| p::insphere(a, b, c, d, e));
     }
 }
+
+/// The interval Newton operators: `geom_num::newton` (G52), one step on each box, on the fixed
+/// systems of [`crate::inputs::newton`].
+pub mod newton {
+    use geom_num::interval::Interval;
+    use geom_num::newton::{self as n, NewtonError, Verdict};
+
+    use super::run;
+    use crate::inputs::newton::{CircleLine, Four};
+
+    /// `newton::krawczyk` on [`CircleLine`] over each box.
+    #[inline(never)]
+    pub fn krawczyk_2(batch: &[[Interval; 2]], out: &mut Vec<Result<Verdict<2>, NewtonError>>) {
+        run(batch, out, |&b| n::krawczyk(&CircleLine, b));
+    }
+
+    /// `newton::hansen_sengupta` on [`CircleLine`] over each box.
+    #[inline(never)]
+    pub fn hansen_sengupta_2(
+        batch: &[[Interval; 2]],
+        out: &mut Vec<Result<Verdict<2>, NewtonError>>,
+    ) {
+        run(batch, out, |&b| n::hansen_sengupta(&CircleLine, b));
+    }
+
+    /// `newton::krawczyk` on [`Four`] over each box.
+    #[inline(never)]
+    pub fn krawczyk_4(batch: &[[Interval; 4]], out: &mut Vec<Result<Verdict<4>, NewtonError>>) {
+        run(batch, out, |&b| n::krawczyk(&Four, b));
+    }
+
+    /// `newton::hansen_sengupta` on [`Four`] over each box.
+    #[inline(never)]
+    pub fn hansen_sengupta_4(
+        batch: &[[Interval; 4]],
+        out: &mut Vec<Result<Verdict<4>, NewtonError>>,
+    ) {
+        run(batch, out, |&b| n::hansen_sengupta(&Four, b));
+    }
+}
+
+/// The values and Jacobians of `geom_num::dual` (G52), of the fixed system
+/// [`crate::inputs::newton::Four`], at each point or over each box.
+pub mod dual {
+    use geom_num::NumError;
+    use geom_num::dual::jacobian;
+    use geom_num::interval::Interval;
+    use geom_num::newton::Residuals;
+    use geom_num::real::Real;
+
+    use super::run;
+    use crate::inputs::newton::Four;
+
+    /// What a Jacobian of `Four` gives: its four values and its 4 × 4 Jacobian, by rows.
+    pub type Values<T> = Result<([T; 4], [[T; 4]; 4]), NumError>;
+
+    /// `dual::jacobian` over reals at each point.
+    #[inline(never)]
+    pub fn jacobian_real(batch: &[[Real; 4]], out: &mut Vec<Values<Real>>) {
+        run(batch, out, |&x| jacobian(|v| Four.residuals(v), x));
+    }
+
+    /// `dual::jacobian` over intervals over each box.
+    #[inline(never)]
+    pub fn jacobian_interval(batch: &[[Interval; 4]], out: &mut Vec<Values<Interval>>) {
+        run(batch, out, |&x| jacobian(|v| Four.residuals(v), x));
+    }
+}
