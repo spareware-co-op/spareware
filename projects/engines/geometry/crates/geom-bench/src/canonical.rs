@@ -30,7 +30,8 @@ use geom_num::dd::DD;
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
-use geom_num::newton::{NewtonError, Verdict};
+use geom_num::isolate::{Flagged, IsolateError, Isolation, Reason, Zero};
+use geom_num::newton::{NewtonError, Precision, Verdict};
 use geom_num::plane::{Lpi, Plane, Tpi};
 use geom_num::real::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange};
@@ -460,6 +461,88 @@ impl<T: Canonical> Canonical for Result<T, NewtonError> {
             Err(NewtonError::Num(e)) => {
                 h.update(&[2]);
                 e.encode(h);
+            }
+        }
+    }
+}
+
+impl Canonical for Precision {
+    // A tag: 0 for doubles, 1 for double-double balls.
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&[match self {
+            Precision::Double => 0,
+            Precision::DoubleDouble => 1,
+        }]);
+    }
+}
+
+impl<const N: usize> Canonical for Isolation<N> {
+    // The zeros, each its enclosure, its proof box and its precision; then the flagged regions,
+    // each its box and a tag for its reason (0 unproven, 1 singular, 2 not smooth).
+    fn encode(&self, h: &mut Sha256) {
+        (self.zeros.len() as u64).encode(h);
+        for Zero {
+            enclosure,
+            proof,
+            precision,
+        } in &self.zeros
+        {
+            enclosure.encode(h);
+            proof.encode(h);
+            precision.encode(h);
+        }
+        (self.flagged.len() as u64).encode(h);
+        for Flagged { region, reason } in &self.flagged {
+            region.encode(h);
+            h.update(&[match reason {
+                Reason::Unproven => 0,
+                Reason::Singular => 1,
+                Reason::NotSmooth => 2,
+            }]);
+        }
+    }
+}
+
+impl<T: Canonical, const N: usize> Canonical for Result<T, IsolateError<N>> {
+    // A tag: 0 and the value; then one tag per error, with its fields: the numbers layer's error;
+    // a budget failure's limits, kind, phase name and use; the box of a cap.
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(IsolateError::InvalidTarget) => h.update(&[1]),
+            Err(IsolateError::Num(e)) => {
+                h.update(&[2]);
+                e.encode(h);
+            }
+            Err(IsolateError::Exceeded(e)) => {
+                h.update(&[3]);
+                e.budget.work.encode(h);
+                e.budget.logical_bytes.encode(h);
+                h.update(&[u8::from(e.kind == geom_run::BudgetKind::Work)]);
+                h.update(e.phase.name().as_bytes());
+                e.used.work.encode(h);
+                e.used.logical_bytes.encode(h);
+            }
+            Err(IsolateError::Cancelled) => h.update(&[4]),
+            Err(IsolateError::OutOfMemory) => h.update(&[5]),
+            Err(IsolateError::CapReached { enclosure }) => {
+                h.update(&[6]);
+                enclosure.encode(h);
+            }
+            Err(IsolateError::Imprecise { region }) => {
+                h.update(&[7]);
+                region.encode(h);
+            }
+            Err(IsolateError::Unsplittable { region }) => {
+                h.update(&[8]);
+                region.encode(h);
+            }
+            Err(IsolateError::Internal { region }) => {
+                h.update(&[9]);
+                region.encode(h);
             }
         }
     }

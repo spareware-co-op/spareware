@@ -11,8 +11,12 @@ name: Kernel nightly
 # adds the proven maths functions (sinpi, cospi, exp, ln and atan2): every input of CORE-MATH's
 # worst-case lists, fetched at the commit the ports come from and checked by SHA-256, and ten
 # million inputs per function from the night's seed, each against geom-num's big-number reference
-# (tests/math_full_worst_cases.rs and tests/math_oracle.rs). Later pieces add the rest of 28.17's
-# nightly list (hours of fuzzing, slow fixtures, outside oracles).
+# (tests/math_full_worst_cases.rs and tests/math_oracle.rs). Piece G63 adds the first outside
+# oracle run out of process (28.10's differential testing; 17.8): Bertolazzi and Frego's Clothoids
+# library, built from source at a pinned commit in a container pinned by digest, evaluates the
+# night's seeded clothoids, and geom-curve's tests/clothoids_oracle.rs compares every point with
+# the kernel's certified enclosure, settling any difference by a fixed-point truth. Later pieces add
+# the rest of 28.17's nightly list (hours of fuzzing, slow fixtures, the other outside oracles).
 #
 # --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
 # guard).
@@ -108,3 +112,50 @@ jobs:
         run: >-
           cargo test --locked --release -p geom-num --test math_oracle
           -- --ignored --nocapture
+
+  clothoids:
+    name: Clothoids, out of process
+    runs-on: ubuntu-latest
+    # Measured (G63): the oracle builds in about a minute on twenty cores, so a few on a hosted
+    # runner's four; the comparison takes seconds.
+    timeout-minutes: 60
+    env:
+      # Bertolazzi and Frego's Clothoids (BSD-2-Clause), at the commit chapter 17.8 cites; its
+      # submodules come at the commits it records.
+      CLOTHOIDS_COMMIT: dafdc29acee5c4f25e777c6cffe56ecb39b0ec11
+      # gcc:13.3.0, pinned by digest.
+      GCC_IMAGE: gcc:13.3.0@sha256:1d71f0f3450214bef38fe09e6f610fb6cca90cf97b43f4ce845bfc32a4168818
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Tonight's seed, printed, and the files
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+          mkdir -p "$RUNNER_TEMP/clothoids"
+          echo "CLOTHOIDS_CASES=$RUNNER_TEMP/clothoids/cases.txt" >> "$GITHUB_ENV"
+          echo "CLOTHOIDS_ANSWERS=$RUNNER_TEMP/clothoids/answers.txt" >> "$GITHUB_ENV"
+      - name: Tonight's cases
+        run: >-
+          cargo test --locked --release -p geom-curve --test clothoids_oracle
+          -- --ignored --exact write_the_cases --nocapture
+      - name: Clothoids at the pinned commit, built and run in the container
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/clothoids"
+          git clone --quiet https://github.com/ebertolazzi/Clothoids.git "$dir/src"
+          git -C "$dir/src" checkout --quiet "$CLOTHOIDS_COMMIT"
+          git -C "$dir/src" submodule --quiet update --init --recursive
+          docker run --rm -i -v "$PWD:/work:ro" -v "$dir:/oracle" -w /work "$GCC_IMAGE" \
+            bash projects/engines/geometry/crates/geom-curve/oracles/clothoids.sh \
+            /oracle/src /oracle/build < "$CLOTHOIDS_CASES" > "$CLOTHOIDS_ANSWERS"
+      - name: The kernel against Clothoids' points
+        run: >-
+          cargo test --locked --release -p geom-curve --test clothoids_oracle
+          -- --ignored --exact compare_with_the_answers --nocapture

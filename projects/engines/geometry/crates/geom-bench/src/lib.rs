@@ -13,8 +13,9 @@
 //! arithmetic, with the certified enclosures of the proven maths functions; grid coordinates and
 //! grid steps; total order on doubles; exactness classes; the deterministic maths functions, those
 //! with proven error bounds and those without; the counter-based random numbers (the Philox4x32-10 block, a
-//! stream's draws, and stream ranges); double-double arithmetic; the exact sum of doubles; and
-//! chapter 23.3's comparison of exact-path variants (piece G42): every generated exact path in
+//! stream's draws, and stream ranges); double-double arithmetic; the exact sum of doubles; the
+//! interval Newton operators and the Jacobians of the dual numbers; whole root isolations and the
+//! double-double balls they fall back to; and chapter 23.3's comparison of exact-path variants (piece G42): every generated exact path in
 //! plain `i128` and in width-aware 32-bit limbs beside the shipped one, and the 32-bit-limb
 //! integers `Wide32` at the bit widths `Wide` is measured at; with them, [`avnaim`], the reference
 //! chapter 23.3 names (Avnaim et al.'s signs), which lives here because no kernel crate ships it.

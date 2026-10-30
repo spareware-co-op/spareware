@@ -26,7 +26,6 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     clippy::panic,
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -42,6 +41,18 @@ use geom_num::interval::Interval;
 use geom_num::{NumError, math};
 use geom_test::SplitMix64;
 use geom_test::seed::{Seed, resolve};
+
+/// The larger of two doubles by comparison, the first on a tie: not `f64::max`, which may return
+/// either zero for −0 and +0 (chapter 21's ban), and Miri may pick either on purpose.
+trait Pick {
+    fn larger(self, other: f64) -> f64;
+}
+
+impl Pick for f64 {
+    fn larger(self, other: f64) -> f64 {
+        if other > self { other } else { self }
+    }
+}
 
 /// `RN(π)`, the double nearest π (below it).
 const PI: f64 = std::f64::consts::PI;
@@ -284,7 +295,7 @@ fn samples(rng: &mut SplitMix64, y: (f64, f64), x: (f64, f64)) -> Vec<(f64, f64)
     points.push((at(y.0, y.1), x.1));
     if y.0 < 0.0 && y.1 >= 0.0 && x.0 < 0.0 {
         // Just below the cut: angles next to −π.
-        points.push((-f64::from_bits(1).max(-y.0 * 1e-300), x.0));
+        points.push((-f64::from_bits(1).larger(-y.0 * 1e-300), x.0));
     }
     points.retain(|&(py, px)| py != 0.0 || px != 0.0);
     points
@@ -345,11 +356,15 @@ fn bounds_are_the_widened_extreme_corners() {
                 Err(NumError::OutsideDomain)
             } else {
                 Ok((
-                    corners.iter().map(|c| c.0).fold(f64::INFINITY, f64::min) + 0.0,
+                    corners
+                        .iter()
+                        .map(|c| c.0)
+                        .fold(f64::INFINITY, |m, x| if x < m { x } else { m })
+                        + 0.0,
                     corners
                         .iter()
                         .map(|c| c.1)
-                        .fold(f64::NEG_INFINITY, f64::max)
+                        .fold(f64::NEG_INFINITY, |m, x| if x > m { x } else { m })
                         + 0.0,
                 ))
             }

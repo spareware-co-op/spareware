@@ -98,12 +98,12 @@ use geom_num::sign::Sign;
 use geom_num::wide::Wide;
 use geom_num::{NumError, math};
 
-use crate::dd::DD;
 use crate::error::{MathError, budget};
 use crate::exact::{const_pow2, dyadic, exponent, round_scaled, scale_b, shl_into};
 use crate::float::{F2, F3};
 use crate::grid_transform::{Axis, GridTransform};
 use crate::rounded::Rounded;
+use geom_num::dd::DD;
 
 /// What a transform does to kinds of geometry. See the module documentation for the table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -522,8 +522,8 @@ impl Transform {
     ///
     /// Each coordinate l₀x + l₁y + l₂z + t is first evaluated as a double-double from the exact
     /// products (`two_prod`, the coordinates being integers below 2^40); three additions lose at
-    /// most (`2·B_a` + `B_f)(|l₀x`| + |l₁y| + |l₂z| + |t|) < 15.01u²·Σ (bounds from [`crate::dd`]), far
-    /// below the filter 2^−98·Σ. A value farther than the filter from every whole step and every
+    /// most (`2·B_a` + `B_f)(|l₀x`| + |l₁y| + |l₂z| + |t|) < 8.01u²·Σ (the bounds `ADD_BOUND` and
+    /// `ADD_F64_BOUND` of `geom_num::dd`), far below the filter 2^−98·Σ. A value farther than the filter from every whole step and every
     /// midpoint rounds like the exact value. Otherwise, and whenever a product is outside
     /// `two_prod`'s range, the exact value is formed as an integer: every entry is m·2^e exactly,
     /// so the coordinate is Σ mᵢxᵢ2^(eᵢ) with |mᵢxᵢ| < 2^93, summed in a wide integer after shifting
@@ -836,8 +836,9 @@ fn float_row(row: [f64; 4], v: [i64; 3]) -> Option<Result<Rounded<Coord>, NumErr
 /// The double-double filter of [`round_row`]: `None` when it cannot decide.
 ///
 /// The products are exact (`exact_product`). The three additions err by at most `B_a|p₀` + p₁|,
-/// `B_a|s₁` + p₂| and `B_f|s₂` + t| (`B_a` < 6u² + 45u³, `B_f` < 3u² + 10u³), so the double-double value
-/// lies within (`2B_a` + `B_f)(1` + 13u²)·Σ < 15.01u²·Σ of the exact value, with Σ = |p₀| + |p₁| +
+/// `B_a|s₁` + p₂| and `B_f|s₂` + t| (`B_a` = 3u²/(1 − 4u) < 3.01u² and `B_f` = 2u², `geom_num::dd`'s
+/// `ADD_BOUND` and `ADD_F64_BOUND`), so the double-double value lies within
+/// (`2B_a` + `B_f)(1` + 13u²)·Σ < 8.03u²·Σ of the exact value, with Σ = |p₀| + |p₁| +
 /// |p₂| + |t|. The filter `err` is 2^−98 times Σ computed from the leading parts, which is at least
 /// 255u²·Σ even after the rounding of that sum, and `frac` (the distance of the double-double
 /// value from its nearest integer x, one rounding) is compared with a further 2^−52 of slack.

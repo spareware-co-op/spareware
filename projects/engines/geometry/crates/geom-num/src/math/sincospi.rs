@@ -1029,7 +1029,6 @@ const CM2: [[f64; 2]; 32] = [
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     reason = "tests may use native arithmetic, casts and std reductions"
 )]
 #[allow(
@@ -1143,14 +1142,22 @@ mod tests {
             let (sv, cv) = exact_sincos(s);
             let (sh, sl, ch, cl) = sincosn(s);
             tau1 = dmax(tau1, dmax(dd_error(sh, sl, &sv), dd_error(ch, cl, &cv)));
-            sigma1 = sigma1.max(sl.abs()).max(cl.abs());
+            // By comparison, not `f64::max` (chapter 21's ban).
+            for low in [sl.abs(), cl.abs()] {
+                if low > sigma1 {
+                    sigma1 = low;
+                }
+            }
             assert!(sh.abs() <= 1.0 && ch.abs() <= 1.0);
             let (sh, sl, ch, cl) = sincosn2(s);
             for (h, l) in [(sh, sl), (ch, cl)] {
                 if h == 0.0 {
                     assert_eq!(l, 0.0);
                 } else {
-                    low_ratio = low_ratio.max(l.abs() / h.abs());
+                    let ratio = l.abs() / h.abs();
+                    if ratio > low_ratio {
+                        low_ratio = ratio;
+                    }
                 }
             }
         }
@@ -1164,11 +1171,7 @@ mod tests {
             low_ratio <= 24.0 * f64::EPSILON / 2.0,
             "accurate table: |low| ≤ 24u·|high|"
         );
-        eprintln!(
-            "τ₁ = 2^{:.3}, σ₁ = 2^{:.3}",
-            log2_approx(&tau1),
-            sigma1.log2()
-        );
+        eprintln!("τ₁ = 2^{:.3}, σ₁ = {:.3e}", log2_approx(&tau1), sigma1);
     }
 
     /// Steps F2 to F4: `E_F(b) + u·R(b) ≤ (1 − u)²·(|k|·2^−123 + ER0)` at both ends of

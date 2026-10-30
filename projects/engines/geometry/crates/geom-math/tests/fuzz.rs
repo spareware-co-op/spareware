@@ -7,7 +7,7 @@
 //! harness proves, for every input:
 //!
 //! - no panic (the debug build also checks every integer operation for overflow);
-//! - every `Ok` floating-point result is finite and every double-double normalized;
+//! - every `Ok` floating-point result is finite;
 //! - every error is one the operation documents, and none is `BudgetExceeded`, which only a defect
 //!   can cause, never an input (`error.rs`), even where the harness discards the result;
 //! - every rounded grid result is inside the frame's range (by its type) and every classification
@@ -38,8 +38,9 @@ mod common;
 
 use common::config;
 use geom_math::{
-    Axis, Box3, CrsId, DD, F2, F3, FBox3, FrameRecord, GridTransform, MapPoint, MathError,
-    RationalTransform, Rotation, Scale, Transform, TransformKind, TypedTransform, V3,
+    Axis, Box3, CrsId, Decimal, DecimalPoint, F2, F3, FBox3, FrameRecord, GridTransform,
+    LinearUnit, MapPoint, MathError, RationalTransform, Rotation, Scale, Transform, TransformKind,
+    TypedTransform, V3,
 };
 use geom_num::NumError;
 use geom_num::grid::{COORD_MAX, GridStep, P3};
@@ -57,36 +58,6 @@ fn no_defect<T, E: Into<MathError>>(r: Result<T, E>) -> Option<T> {
         Err(MathError::Num(NumError::BudgetExceeded)) => panic!("a defect was reported"),
         Err(_) => None,
     }
-}
-
-fn dd_ok(r: Result<DD, NumError>, allowed: &[NumError]) {
-    match r {
-        Ok(d) => {
-            assert!(d.hi().is_finite() && d.lo().is_finite(), "{d:?}");
-            assert_eq!(d.hi() + d.lo(), d.hi(), "not normalized: {d:?}");
-        }
-        Err(e) => assert!(allowed.contains(&e), "undocumented error {e:?}"),
-    }
-}
-
-/// Double-doubles from arbitrary bits.
-fn dd_harness(bits: [u64; 5], offset: i128) {
-    let Ok(a) = DD::from_sum(f(bits[0]), f(bits[1])) else {
-        return;
-    };
-    let b = DD::from_sum(f(bits[2]), f(bits[3])).unwrap_or(DD::ZERO);
-    let y = f(bits[4]);
-    let nf = [NumError::NotFinite];
-    dd_ok(a.add(b), &nf);
-    dd_ok(a.sub(b), &nf);
-    dd_ok(a.add_f64(y), &nf);
-    dd_ok(a.mul_f64(y), &nf);
-    dd_ok(a.mul(b), &nf);
-    dd_ok(a.div(b), &[NumError::NotFinite, NumError::Degenerate]);
-    dd_ok(a.sqrt(), &[NumError::NegativeSqrt]);
-    let _ = a.round_shifted(offset);
-    let _ = DD::exact_product(f(bits[0]), y);
-    let _ = DD::from_i128(offset);
 }
 
 fn finite2(v: F2) -> bool {
@@ -248,9 +219,11 @@ fn step(k: u8) -> GridStep {
 fn frame_harness(
     origin: [i64; 3],
     dir: (i32, i32),
-    scale: (u32, u32),
+    scale: (u64, u64),
+    unit: (u64, u64),
     steps: (u8, u8),
     map: [u64; 3],
+    decimals: [(i128, i32); 3],
     p: [i64; 3],
     index: [i64; 2],
 ) {
@@ -263,6 +236,8 @@ fn frame_harness(
     let Ok(fr) = FrameRecord::new(CrsId::Epsg(2193), step(steps.0), origin, rot, k) else {
         return;
     };
+    // Any unit the record accepts; the metre otherwise.
+    let fr = fr.with_linear_unit(LinearUnit::new(unit.0, unit.1).unwrap_or(LinearUnit::METRE));
     let m = MapPoint {
         easting: f(map[0]),
         northing: f(map[1]),
@@ -270,6 +245,16 @@ fn frame_harness(
     };
     match fr.to_frame(m) {
         Ok(_) | Err(NumError::OutOfRange { .. } | NumError::NotFinite) => {}
+        Err(e) => panic!("undocumented error {e:?}"),
+    }
+    let decimal = decimals.map(|(m, e)| Decimal::new(m, e).unwrap_or(Decimal::ZERO));
+    let d = DecimalPoint {
+        easting: decimal[0],
+        northing: decimal[1],
+        height: decimal[2],
+    };
+    match fr.to_frame_decimal(d) {
+        Ok(_) | Err(NumError::OutOfRange { .. }) => {}
         Err(e) => panic!("undocumented error {e:?}"),
     }
     let q = P3::new(p[0], p[1], p[2]).unwrap();
@@ -298,6 +283,21 @@ fn frame_harness(
     }
 }
 
+/// Decimal text from arbitrary bytes and from arbitrary parts: never a panic, and every decimal
+/// reads back from its own text.
+fn decimal_harness(bytes: &[u8], m: i128, e: i32) {
+    let text = String::from_utf8_lossy(bytes);
+    if let Ok(d) = Decimal::parse(&text) {
+        assert_eq!(Decimal::parse(&d.to_string()), Ok(d), "{text:?}");
+    }
+    if let Ok(d) = Decimal::new(m, e) {
+        assert_eq!(Decimal::parse(&d.to_string()), Ok(d), "{m}e{e}");
+        if let Ok(unit) = LinearUnit::from_decimal(d) {
+            assert!(unit.num() > 0 && unit.den() > 0);
+        }
+    }
+}
+
 fn coord() -> BoxedStrategy<i64> {
     prop_oneof![
         -COORD_MAX..=COORD_MAX,
@@ -316,8 +316,15 @@ proptest! {
     #![proptest_config(config(4096))]
 
     #[test]
-    fn fuzz_double_double(bits in any::<[u64; 5]>(), offset in any::<i128>()) {
-        dd_harness(bits, offset);
+    fn fuzz_decimals(
+        bytes in prop::collection::vec(prop_oneof![
+            Just(b'0'), Just(b'5'), Just(b'9'), Just(b'.'), Just(b'e'), Just(b'E'), Just(b'-'),
+            Just(b'+'), any::<u8>()
+        ], 0..60),
+        m in prop_oneof![any::<i128>(), -1000i128..=1000],
+        e in prop_oneof![any::<i32>(), -400i32..=400],
+    ) {
+        decimal_harness(&bytes, m, e);
     }
 
     #[test]
@@ -369,16 +376,21 @@ proptest! {
     fn fuzz_frames(
         origin in prop::array::uniform3(prop_oneof![wide_i64(), -(1i64 << 60)..=(1i64 << 60)]),
         dir in (any::<i32>(), any::<i32>()),
-        scale in (any::<u32>(), any::<u32>()),
+        scale in (any::<u64>(), any::<u64>()),
+        unit in prop_oneof![(any::<u64>(), any::<u64>()), (1u64..5000, 1u64..5000)],
         steps in (any::<u8>(), any::<u8>()),
         map in prop::array::uniform3(prop_oneof![
             any::<u64>(),
             (-10_000_000.0f64..10_000_000.0).prop_map(f64::to_bits)
         ]),
+        decimals in prop::array::uniform3((
+            prop_oneof![any::<i128>(), -10_000_000_000i128..10_000_000_000],
+            prop_oneof![any::<i32>(), -12i32..=4, -340i32..=340],
+        )),
         p in prop::array::uniform3(coord()),
         index in prop::array::uniform2(prop_oneof![wide_i64(), -3i64..=3]),
     ) {
-        frame_harness(origin, dir, scale, steps, map, p, index);
+        frame_harness(origin, dir, scale, unit, steps, map, decimals, p, index);
     }
 
     #[test]

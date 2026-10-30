@@ -374,10 +374,15 @@ pub static OPS: &[Op] = &[
     Op { group: "newton", name: "hansen_sengupta_4", measures: "newton::hansen_sengupta", classes: TE, prepare: |c| bind(inputs::newton::hansen_sengupta_4(c), kernels::newton::hansen_sengupta_4) },
     Op { group: "dual", name: "jacobian_real", measures: "dual::jacobian", classes: TE, prepare: |c| bind(inputs::newton::jacobian_real(c), kernels::dual::jacobian_real) },
     Op { group: "dual", name: "jacobian_interval", measures: "dual::jacobian", classes: TE, prepare: |c| bind(inputs::newton::jacobian_interval(c), kernels::dual::jacobian_interval) },
+    // The root-isolation engine, each domain isolated whole, and the double-double balls it falls
+    // back to (G53).
+    Op { group: "isolate", name: "cubic_1", measures: "isolate::isolate", classes: TE, prepare: |c| bind(inputs::isolate::cubic_1(c), kernels::isolate::cubic_1) },
+    Op { group: "isolate", name: "circle_line_2", measures: "isolate::isolate", classes: TE, prepare: |c| bind(inputs::isolate::circle_line_2(c), kernels::isolate::circle_line_2) },
+    Op { group: "ball", name: "cubic", measures: "Ball::from_interval", classes: TE, prepare: |c| bind(inputs::isolate::ball_cubic(c), kernels::ball::cubic) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 20] = [
+pub const GROUPS: [&str; 22] = [
     "predicate",
     "sign",
     "wide",
@@ -398,6 +403,8 @@ pub const GROUPS: [&str; 20] = [
     "perturb",
     "newton",
     "dual",
+    "isolate",
+    "ball",
 ];
 
 /// The group of the growth checks.
@@ -600,6 +607,9 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Dual::value", "field accessor"),
     ("Dual::partials", "field accessor"),
     ("Dual::variables", "N stores per unknown, measured inside dual::jacobian, which calls it once per evaluation"),
+    ("Ball::to_interval", "two outward roundings, measured inside ball/cubic, which calls it once per box"),
+    ("Ball::mid", "field accessor"),
+    ("Ball::rad", "field accessor"),
     ("ladder::quarter_nm", "one checked multiplication by GridStep::quarter_nm, for reports; never on a kernel path"),
     ("Philox::new", "raw constructor"),
     ("Philox::seed", "field accessor"),

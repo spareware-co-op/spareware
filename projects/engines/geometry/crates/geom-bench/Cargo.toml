@@ -28,6 +28,8 @@ bench = false
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The work meter the root-isolation engine runs under (its benchmarks, G53).
+geom-run = { path = "../geom-run" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
 # crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
 # sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which

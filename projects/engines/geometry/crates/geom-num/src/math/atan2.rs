@@ -1116,7 +1116,6 @@ const OCTANT: [[f64; 2]; 8] = [
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    clippy::disallowed_methods,
     reason = "tests may use native arithmetic, casts and std reductions"
 )]
 #[allow(
@@ -1197,7 +1196,7 @@ mod tests {
                     "j = {j}, kw = {kw}: fh is exact"
                 );
             }
-            assert!(fl.abs() < 2f64.powi(-52));
+            assert!(fl.abs() < f64::EPSILON); // 2^−52
         }
         let half_pi = pi().scale(-1);
         let mut delta_o = Dy::zero();

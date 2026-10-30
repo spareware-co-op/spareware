@@ -284,7 +284,15 @@ fn verdict_with_base(
             .map(|m| mutants::mutant_from_json(m).unwrap())
             .collect()
     });
-    judge(&runs, ledger, &repo.root, mode, expected.as_deref(), base)
+    judge(
+        &runs,
+        ledger,
+        &repo.root,
+        mode,
+        expected.as_deref(),
+        base,
+        None,
+    )
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -639,32 +647,150 @@ fn known_entries_must_come_from_the_base_branch() {
 #[test]
 fn shard_plans_fit_the_budget_and_a_matrix() {
     use geom_test::mutants::{
-        MAX_SHARDS, MINUTES_PER_MUTANT, SHARD_MINUTES, shard_count, shard_matrix,
+        MATRIX_JOBS, MAX_SHARDS, Mutant, SECONDS_PER_MUTANT, SHARD_JOBS, SHARD_MINUTES,
+        seconds_per_mutant, shard_count, shard_matrix,
     };
-    assert_eq!(shard_count(0), Ok(0));
-    assert_eq!(shard_count(1), Ok(1));
-    let per_shard = usize::try_from(SHARD_MINUTES / MINUTES_PER_MUTANT).unwrap();
-    assert_eq!(shard_count(per_shard), Ok(1));
-    assert_eq!(shard_count(per_shard + 1), Ok(2));
-    for n in [1, 7, 60, 61, 6190, 15_000] {
-        let shards = shard_count(n).unwrap();
-        // Every shard plans for at most SHARD_MINUTES, and one fewer shard would not do.
-        assert!(
-            n as u64 * MINUTES_PER_MUTANT <= shards * SHARD_MINUTES,
-            "{n}"
-        );
-        assert!(
-            n as u64 * MINUTES_PER_MUTANT > (shards - 1) * SHARD_MINUTES,
-            "{n}"
-        );
+    // `n` mutants of `package`, on lines 1 to `n`.
+    let of = |package: &str, n: usize| -> Vec<Mutant> {
+        (1..=n)
+            .map(|line| Mutant {
+                name: format!("{package}/src/a.rs:{line}:1: x"),
+                package: package.to_owned(),
+                file: format!("{package}/src/a.rs"),
+                line,
+                description: "x".to_owned(),
+                genre: "BinaryOperator".to_owned(),
+            })
+            .collect()
+    };
+    let budget = SHARD_MINUTES * 60;
+    // The table: one row per crate in name order, each a whole number of seconds a shard holds;
+    // a crate no run has measured is planned at the slowest row.
+    assert!(SECONDS_PER_MUTANT.windows(2).all(|w| w[0].0 < w[1].0));
+    let slowest = SECONDS_PER_MUTANT.iter().map(|(_, s)| *s).max().unwrap();
+    for (package, s) in SECONDS_PER_MUTANT {
+        assert!((1..=budget).contains(&s), "{package}: {s}");
+        assert_eq!(seconds_per_mutant(package), s);
     }
-    let too_many = usize::try_from(MAX_SHARDS * SHARD_MINUTES / MINUTES_PER_MUTANT).unwrap() + 1;
-    assert!(shard_count(too_many).is_err());
-    let plan: Value = serde_json::from_str(&shard_matrix(3)).unwrap();
-    assert_eq!(plan, json!({"count": 3, "shards": [0, 1, 2]}));
-    // A matrix may not be empty: a plan of no shard still lists shard 0, and count 0 skips it.
-    let none: Value = serde_json::from_str(&shard_matrix(0)).unwrap();
-    assert_eq!(none, json!({"count": 0, "shards": [0]}));
+    assert_eq!(seconds_per_mutant("geom-unmeasured"), slowest);
+    assert_eq!(MAX_SHARDS, MATRIX_JOBS * SHARD_JOBS);
+    assert_eq!(MATRIX_JOBS, 256);
+    // No mutant, no shard.
+    assert_eq!(shard_count(&[]), Ok(0));
+    // One crate: as many mutants to a shard as fit its budget, and no more.
+    for (package, s) in SECONDS_PER_MUTANT {
+        let per_shard = (budget / s) as usize;
+        assert_eq!(shard_count(&of(package, 1)), Ok(1), "{package}");
+        assert_eq!(shard_count(&of(package, per_shard)), Ok(1), "{package}");
+        assert_eq!(shard_count(&of(package, per_shard + 1)), Ok(2), "{package}");
+    }
+    // cargo-mutants' slices (`--sharding slice`, its default; src/shard.rs at v27.1.0): shard k of
+    // n runs mutants k c to (k + 1) c - 1 of the list, c = ceil(len / n), the last fewer.
+    let slices = |len: u64, n: u64| -> Vec<u64> {
+        let c = len.div_ceil(n);
+        (0..n)
+            .map(|k| len.min((k + 1) * c).saturating_sub(k * c))
+            .collect()
+    };
+    // Several crates, in cargo-mutants' order (by name): the kernel on 2026-10-29, which the old
+    // plan of 4 minutes a mutant refused (17557 mutants in 293 shards), a few small lists, and
+    // geom-num beside a fast crate. Every shard is sized at the list's slowest crate, wherever
+    // its slice falls: each holds at least one mutant and fits the budget at that rate, and one
+    // shard fewer would give some slice more mutants than fit.
+    let kernel = [
+        ("geom-bvh", 357),
+        ("geom-curve", 5228),
+        ("geom-linalg", 978),
+        ("geom-math", 1988),
+        ("geom-num", 5384),
+        ("geom-nurbs", 2126),
+        ("geom-pool", 4),
+        ("geom-run", 252),
+        ("geom-surface", 1272),
+    ];
+    let lists: Vec<Vec<(&str, usize)>> = vec![
+        kernel.to_vec(),
+        vec![("geom-curve", 9000), ("geom-num", 1)],
+        vec![("geom-curve", 7), ("geom-surface", 60)],
+        vec![("geom-math", 61), ("geom-run", 6190)],
+        vec![("geom-num", 15_000)],
+    ];
+    for list in lists {
+        let mutants: Vec<Mutant> = list.iter().flat_map(|(p, n)| of(p, *n)).collect();
+        let len = mutants.len() as u64;
+        let rate = list
+            .iter()
+            .map(|(p, _)| seconds_per_mutant(p))
+            .max()
+            .unwrap();
+        let shards = shard_count(&mutants).unwrap();
+        assert!(shards <= MAX_SHARDS, "{list:?}");
+        for (k, size) in slices(len, shards).into_iter().enumerate() {
+            assert!(size >= 1, "{list:?}: shard {k} of {shards} is empty");
+            assert!(
+                size * rate <= budget,
+                "{list:?}: shard {k} of {shards} holds {size}"
+            );
+        }
+        if shards > 1 {
+            assert!(
+                slices(len, shards - 1)
+                    .iter()
+                    .any(|size| size * rate > budget),
+                "{list:?}: {} shards would do",
+                shards - 1
+            );
+        }
+    }
+    // More than the two shard jobs hold fails, and names why.
+    let per_shard = (budget / seconds_per_mutant("geom-num")) as usize;
+    let most = of("geom-num", per_shard * MAX_SHARDS as usize);
+    assert_eq!(shard_count(&most), Ok(MAX_SHARDS));
+    let too_many = of("geom-num", per_shard * MAX_SHARDS as usize + 1);
+    let why = shard_count(&too_many).unwrap_err();
+    assert!(why.contains("more than the 512"), "{why}");
+    // The matrices: the first job's shards 0 to 255, the second's 256 on, each shard numbered in
+    // the whole run. A matrix may not be empty: a job with no shard lists its first all the same,
+    // and its count, 0, skips it.
+    let plan = |count: u64| -> Value { serde_json::from_str(&shard_matrix(count)).unwrap() };
+    assert_eq!(
+        plan(3),
+        json!({"count": 3, "shards": [0, 1, 2], "count_2": 0, "shards_2": [256]})
+    );
+    assert_eq!(
+        plan(0),
+        json!({"count": 0, "shards": [0], "count_2": 0, "shards_2": [256]})
+    );
+    assert_eq!(
+        plan(258)["shards_2"],
+        json!([256, 257]),
+        "{}",
+        shard_matrix(258)
+    );
+    for count in 0..=MAX_SHARDS {
+        let p = plan(count);
+        let list = |key: &str| -> Vec<u64> {
+            p[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_u64().unwrap())
+                .collect()
+        };
+        let (first, second) = (list("shards"), list("shards_2"));
+        assert_eq!(p["count"], json!(count));
+        assert_eq!(p["count_2"], json!(count.saturating_sub(MATRIX_JOBS)));
+        assert!(first.len() as u64 <= MATRIX_JOBS && second.len() as u64 <= MATRIX_JOBS);
+        // The shards the two jobs run, each only when its count is not 0, are exactly 0 to n - 1.
+        let mut run: Vec<u64> = Vec::new();
+        if count > 0 {
+            run.extend(&first);
+        }
+        if count > MATRIX_JOBS {
+            run.extend(&second);
+        }
+        assert_eq!(run, (0..count).collect::<Vec<_>>(), "{count}");
+    }
 }
 
 #[cfg_attr(
@@ -729,6 +855,191 @@ fn stale_entries_fail() {
         &verdict(&repo, &[dir], gone, Mode::Diff, None),
         "the code changed",
     );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_caught_key_mate_beside_a_survivor_is_not_stale() {
+    // Two places on one line, one key: the entry explains the survivor, whatever its key-mate does.
+    let repo = mutation_repo("key-mates");
+    let mates = [
+        (mutant(NUM, 3, 5, "replace < with <= in f"), Summary::Caught),
+        (mutant(NUM, 3, 9, "replace < with <= in f"), Summary::Missed),
+    ];
+    let dir = write_run(&repo, "a", &mates);
+    let all: Vec<Value> = mates.iter().map(|(m, _)| m.clone()).collect();
+    let one = vec![entry(NUM, 3, "replace < with <= in f", 1, "equivalent")];
+    assert!(verdict(&repo, &[dir.clone()], one.clone(), Mode::Diff, None).passes());
+    assert!(verdict(&repo, &[dir], one, Mode::Full, Some(&all)).passes());
+    // Unviable beside a survivor: not stale either.
+    let mates = [
+        (
+            mutant(NUM, 3, 5, "replace < with <= in f"),
+            Summary::Unviable,
+        ),
+        (mutant(NUM, 3, 9, "replace < with <= in f"), Summary::Missed),
+    ];
+    let dir = write_run(&repo, "b", &mates);
+    let one = vec![entry(NUM, 3, "replace < with <= in f", 1, "equivalent")];
+    assert!(verdict(&repo, &[dir], one, Mode::Diff, None).passes());
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn an_entry_whose_key_mates_are_all_caught_is_stale() {
+    let repo = mutation_repo("key-mates-caught");
+    let mates = [
+        (mutant(NUM, 3, 5, "replace < with <= in f"), Summary::Caught),
+        (mutant(NUM, 3, 9, "replace < with <= in f"), Summary::Caught),
+    ];
+    let dir = write_run(&repo, "a", &mates);
+    let all: Vec<Value> = mates.iter().map(|(m, _)| m.clone()).collect();
+    let one = vec![entry(NUM, 3, "replace < with <= in f", 1, "equivalent")];
+    fails_with(
+        &verdict(&repo, &[dir.clone()], one.clone(), Mode::Diff, None),
+        "remove the stale entry",
+    );
+    fails_with(
+        &verdict(&repo, &[dir], one, Mode::Full, Some(&all)),
+        "the entry is stale",
+    );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn key_mates_beside_a_caught_one_must_match_the_count() {
+    let repo = mutation_repo("key-mates-count");
+    let mates = [
+        (mutant(NUM, 3, 5, "replace < with <= in f"), Summary::Caught),
+        (mutant(NUM, 3, 9, "replace < with <= in f"), Summary::Missed),
+        (
+            mutant(NUM, 3, 13, "replace < with <= in f"),
+            Summary::Missed,
+        ),
+    ];
+    let dir = write_run(&repo, "a", &mates);
+    let all: Vec<Value> = mates.iter().map(|(m, _)| m.clone()).collect();
+    // Two survivors, counted as one: fails in both modes.
+    let one = vec![entry(NUM, 3, "replace < with <= in f", 1, "equivalent")];
+    fails_with(
+        &verdict(&repo, &[dir.clone()], one.clone(), Mode::Diff, None),
+        "counts 1 occurrence",
+    );
+    fails_with(
+        &verdict(&repo, &[dir.clone()], one, Mode::Full, Some(&all)),
+        "counts 1 occurrence",
+    );
+    // Counted as three, the caught one included: fails in the full run.
+    let three = vec![entry(NUM, 3, "replace < with <= in f", 3, "equivalent")];
+    fails_with(
+        &verdict(&repo, &[dir.clone()], three, Mode::Full, Some(&all)),
+        "counts 3 occurrence",
+    );
+    let two = vec![entry(NUM, 3, "replace < with <= in f", 2, "equivalent")];
+    assert!(verdict(&repo, &[dir], two, Mode::Full, Some(&all)).passes());
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_narrowed_full_run_counts_only_its_files_entries() {
+    let repo = mutation_repo("narrowed");
+    // geom-num's survivor ran and is kept; geom-bool's entry is of a file the run left out.
+    let l = ledger(vec![
+        entry(NUM, 3, "replace < with <= in f", 1, "equivalent"),
+        entry(BOOL, 5, "replace < with <= in f", 1, "equivalent"),
+    ]);
+    let dir = write_run(&repo, "a", &[missed(NUM, 3)]);
+    let runs = vec![read_run(&dir).unwrap()];
+    let expected =
+        [mutants::mutant_from_json(&mutant(NUM, 3, 5, "replace < with <= in f")).unwrap()];
+    let judged = |files: Option<&regex_lite::Regex>| {
+        judge(
+            &runs,
+            &l,
+            &repo.root,
+            Mode::Full,
+            Some(&expected),
+            None,
+            files,
+        )
+    };
+    // Whole, geom-bool's entry matches no survivor: stale.
+    fails_with(&judged(None), "the entry is stale");
+    // Narrowed to geom-num, geom-bool's entry is not counted.
+    let num = regex_lite::Regex::new("geom-num/src/").unwrap();
+    let v = judged(Some(&num));
+    assert!(v.passes(), "{}", mutants::report(&v));
+    // An entry of a file inside the narrowed run is still held to its count.
+    let both = regex_lite::Regex::new("geom-(num|bool)/src/").unwrap();
+    fails_with(&judged(Some(&both)), "the entry is stale");
+    // The ledger's own checks still cover every entry: a line gone fails, narrowed or not.
+    let gone = ledger(vec![
+        entry(NUM, 3, "replace < with <= in f", 1, "equivalent"),
+        json!({
+            "file": BOOL, "mutant": "replace < with <= in f", "line_text": "let gone = 0;",
+            "occurrences": 1, "kind": "equivalent", "reason": REASON,
+        }),
+    ]);
+    fails_with(
+        &judge(
+            &runs,
+            &gone,
+            &repo.root,
+            Mode::Full,
+            Some(&expected),
+            None,
+            Some(&num),
+        ),
+        "the code changed",
+    );
+}
+
+#[test]
+fn a_narrowed_list_holds_its_files_mutants_and_no_other_but_struct_fields() {
+    use geom_test::mutants::check_narrowed;
+    use regex_lite::Regex;
+    let m = |file: &str, line: usize| {
+        mutants::mutant_from_json(&mutant(file, line, 5, "replace < with <= in f")).unwrap()
+    };
+    let all = vec![m(NUM, 3), m(NUM, 4), m(BOOL, 3)];
+    let num = Regex::new("geom-num/src/").unwrap();
+    assert_eq!(check_narrowed(&all[..2], &all, &num), Ok(0));
+    // A struct-field deletion of another file comes along: cargo-mutants 27.1.0 lists those
+    // whatever --re says, and the shards run the same selection.
+    let mut field = mutant(BOOL, 9, 5, "delete field x from struct P expression");
+    field["genre"] = json!("StructField");
+    let field = mutants::mutant_from_json(&field).unwrap();
+    let mut all_and_field = all.clone();
+    all_and_field.push(field.clone());
+    let list = [all[0].clone(), all[1].clone(), field];
+    assert_eq!(check_narrowed(&list, &all_and_field, &num), Ok(1));
+    // cargo-mutants left out a mutant of a matching file ...
+    let why = check_narrowed(&all[..1], &all, &num).unwrap_err();
+    assert!(why.contains("did not select it"), "{why}");
+    // ... or selected mutants by more than their path: a word of their description,
+    let word = Regex::new("replace").unwrap();
+    let why = check_narrowed(&all, &all, &word).unwrap_err();
+    assert!(why.contains("whose file it does not match"), "{why}");
+    // or a `$` after the file name, which matches the path but not the name cargo-mutants reads.
+    let end = Regex::new(r"a\.rs$").unwrap();
+    let why = check_narrowed(&[], &all, &end).unwrap_err();
+    assert!(why.contains("did not select it"), "{why}");
+    // A regular expression no file matches is refused, not run as an empty gate.
+    let none = Regex::new("geom-none/").unwrap();
+    let why = check_narrowed(&[], &all, &none).unwrap_err();
+    assert!(why.contains("no mutant's file matches"), "{why}");
 }
 
 #[cfg_attr(
@@ -1550,6 +1861,82 @@ fn kernel_quality(repo: &Repo, args: &[&str]) -> (i32, String) {
     ignore = "runs the binary as a child process and writes files, which a WebAssembly test run cannot"
 )]
 #[test]
+fn a_narrowed_run_is_checked_by_the_plan_and_judged_on_its_files() {
+    let repo = mutation_repo("binary-narrowed");
+    let path = |name: &str, value: &Value| {
+        let p = repo.path(name);
+        std::fs::write(&p, value.to_string()).unwrap();
+        p.to_str().unwrap().to_owned()
+    };
+    let in_num = mutant(NUM, 3, 5, "replace < with <= in f");
+    let all = path(
+        "all.json",
+        &json!([in_num.clone(), mutant(BOOL, 3, 5, "replace < with <= in f")]),
+    );
+    let narrowed = path("narrowed.json", &json!([in_num]));
+    let plan = |args: &[&str]| kernel_quality(&repo, &[&["mutants-plan"][..], args].concat());
+    // The plan: the narrowed list must hold exactly the matching files' mutants.
+    let (code, text) = plan(&[
+        "--list",
+        &narrowed,
+        "--files",
+        "geom-num/src/",
+        "--all",
+        &all,
+    ]);
+    assert_eq!(code, 0, "{text}");
+    assert!(text.starts_with(r#"{"count":1,"#), "{text}");
+    let (code, text) = plan(&["--list", &all, "--files", "geom-num/src/", "--all", &all]);
+    assert_eq!(code, 2, "{text}");
+    assert!(text.contains("whose file it does not match"), "{text}");
+    let (code, text) = plan(&["--list", &narrowed, "--files", "(", "--all", &all]);
+    assert_eq!(code, 2, "{text}");
+    // --files and --all go together.
+    assert_eq!(
+        plan(&["--list", &narrowed, "--files", "geom-num/src/"]).0,
+        2
+    );
+    assert_eq!(plan(&["--list", &narrowed, "--all", &all]).0, 2);
+    // The judge: an entry of a file outside the run is not counted, and says so.
+    let l = path(
+        "ledger.json",
+        &json!({
+            "schema": SCHEMA,
+            "survivors": [entry(BOOL, 5, "replace < with <= in f", 1, "equivalent")],
+            "coverage_off": [],
+        }),
+    );
+    let pass = write_run(&repo, "pass", &[caught(NUM, 3)]);
+    let out = pass.to_str().unwrap();
+    let judged = |extra: &[&str]| {
+        let args = [
+            &["mutants", "--expected", &narrowed, "--ledger", &l][..],
+            extra,
+            &[out][..],
+        ]
+        .concat();
+        kernel_quality(&repo, &args)
+    };
+    let (code, text) = judged(&["--mode", "full"]);
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("the entry is stale"), "{text}");
+    let (code, text) = judged(&["--mode", "full", "--files", "geom-num/src/"]);
+    assert_eq!(code, 0, "{text}");
+    assert!(
+        text.contains("1 ledger entry of other files not counted"),
+        "{text}"
+    );
+    // A diff is narrowed already.
+    let (code, text) = judged(&["--mode", "diff", "--files", "geom-num/src/"]);
+    assert_eq!(code, 2, "{text}");
+    assert!(text.contains("narrows a full run"), "{text}");
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "runs the binary as a child process and writes files, which a WebAssembly test run cannot"
+)]
+#[test]
 fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     let repo = mutation_repo("binary");
     let ledger_path = repo.path("ledger.json");
@@ -1637,10 +2024,16 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     assert!(text.contains("(no mutants)"), "{text}");
     let (code, text) = kernel_quality(&repo, &["mutants-plan", "--list", empty.to_str().unwrap()]);
     assert_eq!(code, 0, "{text}");
-    assert_eq!(text.trim(), r#"{"count":0,"shards":[0]}"#);
+    assert_eq!(
+        text.trim(),
+        r#"{"count":0,"count_2":0,"shards":[0],"shards_2":[256]}"#
+    );
     let (code, text) = kernel_quality(&repo, &["mutants-plan", "--list", longer.to_str().unwrap()]);
     assert_eq!(code, 0, "{text}");
-    assert_eq!(text.trim(), r#"{"count":1,"shards":[0]}"#);
+    assert_eq!(
+        text.trim(),
+        r#"{"count":1,"count_2":0,"shards":[0],"shards_2":[256]}"#
+    );
     // Bad input: an unknown mode, a missing list, a run that is not whole.
     let (code, _) = kernel_quality(
         &repo,
