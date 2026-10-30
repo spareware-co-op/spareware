@@ -10,9 +10,10 @@
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
 //! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
 //! operation at every width; [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers; and [`arenas`] (G80),
+//! returns the exact value of its description, evaluated in big integers; [`arenas`] (G80),
 //! `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see each
-//! other's edits. Gate 2 (32.44) adds
+//! other's edits; and [`attributes`] (G90), `geom-name`'s attribute step gives each output exactly
+//! what section 8.4's table gives. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
@@ -125,6 +126,7 @@
 //!   target reads the predicates with.
 //! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (Apache-2.0, ours), the code
 //!   under test of the [`arenas`] target and the values that fill its arenas.
+//! - `geom-name` and `geom-op` (Apache-2.0, ours), the code under test of the [`attributes`] target.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
@@ -172,6 +174,7 @@
 use core::fmt;
 
 pub mod arenas;
+pub mod attributes;
 pub mod boxtree;
 pub mod curves;
 pub mod linalg;
