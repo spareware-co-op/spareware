@@ -646,3 +646,94 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn a_combined_value_moves_whole_or_not_at_all() {
+    let a = attr("kit.geom", "datum");
+    let mut b = keeping();
+    b.merged = MergeAction::Combine;
+    b.transformed = OnTransform::all(TransformAction::Transform);
+    let defs = define(&Definitions::new(), &a, ValueSchema::Point, b);
+    let before = holding(&a, b, &[(1, 10), (2, 20)]);
+    let merged = history(vec![(7, Origin::Merged { of: names(&[1, 2]) })], &[]);
+    let (combined, _) = apply(&defs, &before, &merged, &Step::default()).unwrap();
+    let moved = history(vec![(7, Origin::Modified { from: names(&[7]) })], &[]);
+    let step = Step {
+        transform: Some((TransformKind::Move, &AddOne)),
+        copies: &[],
+    };
+    let (after, notes) = apply(&defs, &combined, &moved, &step).unwrap();
+    let want: BTreeMap<NameKey, Value> = [
+        (k(1), Value(vec![11, (0x0a ^ 0x5a) + 1])),
+        (k(2), Value(vec![21, (0x14 ^ 0x5a) + 1])),
+    ]
+    .into();
+    assert_eq!(
+        values(&after, &a).get(&k(7)),
+        Some(&Carried::Combined(want))
+    );
+    assert_eq!(notes, []);
+    // One part that cannot move drops the whole value.
+    let mut each = BTreeMap::new();
+    each.insert(k(1), v(10));
+    each.insert(k(2), Value(vec![]));
+    let odd = combined.rebuilt([(a.clone(), k(7), Carried::Combined(each))]);
+    let (after, notes) = apply(&defs, &odd, &moved, &step).unwrap();
+    assert_eq!(values(&after, &a), BTreeMap::new());
+    assert_eq!(
+        notes,
+        [Note::NotMoved {
+            attr: a.clone(),
+            entity: n(7)
+        }]
+    );
+}
+
+#[test]
+fn setting_one_entity_leaves_the_others_values() {
+    let a = attr("kit.geom", "rating");
+    let other = attr("kit.geom", "colour");
+    let b = keeping();
+    let defs = define(
+        &define(&Definitions::new(), &a, opaque(), b),
+        &other,
+        opaque(),
+        b,
+    );
+    let body = names(&[1, 2, 3]);
+    let before = holding(&a, b, &[(1, 10)]);
+    let before = before
+        .define(other.clone(), b.class())
+        .unwrap()
+        .set(&other, k(2), v(99))
+        .unwrap();
+    let (after, _) = set(
+        &defs,
+        &before,
+        &body,
+        n(2),
+        EntityKind::Face,
+        &a,
+        Some(v(20)),
+    )
+    .unwrap();
+    assert_eq!(
+        values(&after, &a),
+        [(k(1), Carried::One(v(10))), (k(2), Carried::One(v(20)))].into()
+    );
+    assert_eq!(values(&after, &other), [(k(2), Carried::One(v(99)))].into());
+}
+
+#[test]
+fn history_and_name_errors_print_what_they_are() {
+    let e = AttrError::History(geom_op::HistoryError::RepeatedOutput { output: n(4) });
+    assert_eq!(
+        e.to_string(),
+        geom_op::HistoryError::RepeatedOutput { output: n(4) }.to_string()
+    );
+    let names_error = NameSet::new([n(1), n(1)]).unwrap_err();
+    assert_eq!(
+        AttrError::Names(names_error).to_string(),
+        names_error.to_string()
+    );
+}
