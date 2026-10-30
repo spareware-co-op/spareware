@@ -42,7 +42,7 @@ use dashu_int::{IBig, UBig};
 use dashu_ratio::RBig;
 use geom_nurbs::{Basis, Curve, Limit};
 use geom_run::{Budget, WorkMeter};
-use geom_test::nurbs_reference::Spline;
+use geom_test::nurbs_reference::{Patch, ReferenceError, Spline};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
@@ -517,4 +517,55 @@ fn the_comparison_catches_a_moved_point() {
             assert!(changed_problem(&reweighted, got.deviation, &want, true).is_some());
         }
     }
+}
+
+/// Piece G69: a patch is the tensor product of its bases. A bilinear patch at (1/2, 1/4) is
+/// (1 − u)(1 − v)·P₀₀ + (1 − u)·v·P₀₁ + u·(1 − v)·P₁₀ + u·v·P₁₁, worked by hand; equal weights
+/// leave it unchanged; and a patch whose rows are one curve's points is that curve in u.
+#[test]
+fn a_patch_is_the_tensor_product_of_its_bases() {
+    let half = RBig::try_from(0.5).unwrap();
+    let quarter = RBig::try_from(0.25).unwrap();
+    let k = [0.0, 0.0, 1.0, 1.0];
+    let net: [&[f64]; 4] = [
+        &[0.0, 0.0, 0.0],
+        &[0.0, 1.0, 0.0],
+        &[1.0, 0.0, 0.0],
+        &[1.0, 1.0, 1.0],
+    ];
+    let want: Vec<RBig> = [0.5, 0.25, 0.125]
+        .iter()
+        .map(|&x| RBig::try_from(x).unwrap())
+        .collect();
+    let p = Patch::new((1, 1), (&k, &k), &net).unwrap();
+    assert_eq!(p.point(&half, &quarter).unwrap(), want);
+    let weighted: [&[f64]; 4] = [
+        &[0.0, 0.0, 0.0],
+        &[0.0, 2.0, 0.0],
+        &[2.0, 0.0, 0.0],
+        &[2.0, 2.0, 2.0],
+    ];
+    let w = Patch::new_rational((1, 1), (&k, &k), &weighted, &[2.0; 4]).unwrap();
+    assert_eq!(w.point(&half, &quarter).unwrap(), want);
+    // Rows i = 0, 1, 2 of a degree (2, 1) patch, each the same point twice: the quadratic curve.
+    let ku = [0.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+    let rows: [&[f64]; 6] = [
+        &[0.0, 0.0],
+        &[0.0, 0.0],
+        &[2.0, 4.0],
+        &[2.0, 4.0],
+        &[4.0, 0.0],
+        &[4.0, 0.0],
+    ];
+    let c = Patch::new((2, 1), (&ku, &k), &rows).unwrap();
+    let curve = Spline::new(2, &ku, &[&[0.0, 0.0], &[2.0, 4.0], &[4.0, 0.0]]).unwrap();
+    assert_eq!(
+        c.point(&half, &quarter).unwrap(),
+        curve.point(&half).unwrap()
+    );
+    assert_eq!(c.domain().unwrap()[0], curve.domain().unwrap());
+    assert_eq!(
+        Patch::new((1, 1), (&k, &k), &net[..3]),
+        Err(ReferenceError::Points)
+    );
 }

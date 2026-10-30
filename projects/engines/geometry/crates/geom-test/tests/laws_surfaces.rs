@@ -112,7 +112,7 @@ fn surfaces_convert_to_nurbs_within_their_stated_error() {
                 let (sf, tf) = (fx(s), fx(t));
                 let p = truth.point(&sf, &tf);
                 let q = patch_at(&patch, &map_at(u, &sf), &map_at(v, &tf));
-                let r = &dev + slack(truth.coarse(), &p);
+                let r = &dev + slack(truth.coarse(), &p) + truth.margin();
                 if !within(&p, &q, &r) {
                     found.add(format!("{name}: beyond its deviation"), || {
                         format!(
@@ -146,7 +146,7 @@ fn check_image(
     let mut checked = 0;
     for (u, v) in grid(rng, kind.domain(), (&[], &[]), n) {
         let exact = image(e, &truth.point(&fx(u), &fx(v)));
-        let r = dev + slack(truth.coarse(), &exact);
+        let r = dev + slack(truth.coarse(), &exact) + truth.margin();
         match moved.enclose(u, v, SIDES, &mut meter()) {
             Ok(got) => {
                 let got = got[0];
@@ -187,7 +187,7 @@ fn surfaces_change_kind_only_as_chapter_7_says() {
                         continue;
                     }
                 };
-                let want = surface_rule(&kind, *class);
+                let want = surface_rule(&kind, *class, moved.deviation == 0.0);
                 let got = surface_name(&moved.value);
                 if got != want {
                     found.add(format!("{case}: became {got}"), || {

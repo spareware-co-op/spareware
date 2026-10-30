@@ -7235,7 +7235,7 @@
             "**Stored as themselves.** Centres, radii, slopes and frames are the stored doubles, exactly.",
             "**Certified, or refused.** Enclosures and bounds are the terms' closed forms in interval arithmetic; the normal bound is the closed-form direction, which survives the poles of a sphere and the apex of a cone (where its sign may be either: then both).",
             "**Exact NURBS forms.** Each converts to a tensor-product rational surface (a circle in each angular direction, a line in each linear one) with a parameter map per direction, its deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).",
-            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, the frame carried, a mirror flipping the axial sign); any other transform gives the moved NURBS form. A plane takes every affine map.",
+            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, the frame carried, a mirror flipping the axial sign); any other transform gives the moved NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Exact split and reversal.**"
           ],
           "job": "The analytic surface kinds: plane, cylinder, cone, sphere and torus, each stored as itself.",
@@ -7457,7 +7457,7 @@
         },
         {
           "cost": "an evaluation is the profiles' plus O(1); a bound O(1) profile bounds per piece; a conversion O(m·n) for its control net, plus the profiles' conversions.",
-          "does": "each kind is a placement c + L·X(u, v) of an unplaced shape X, with L a stored 3 × 3 matrix (the identity when built), so every affine transform keeps the kind on the same parameters (c′ = M·c + t, L′ = M·L):",
+          "does": "each kind is a placement c + L·X(u, v) of an unplaced shape X, with L a stored 3 × 3 matrix (the identity when built) and c a stored point (when built, the origin, or a revolution's axis point a, about which X turns), so every affine transform keeps the kind on the same parameters (c′ = M·c + t, L′ = M·L):",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
           "guarantees": [

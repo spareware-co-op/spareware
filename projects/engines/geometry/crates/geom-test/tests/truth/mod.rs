@@ -498,8 +498,10 @@ pub fn nurbs_curve<const D: usize>(rng: &mut Rng, grid: bool) -> geom_nurbs::Cur
     }
 }
 
-/// A NURBS surface of degree 1 to 3 each way, rational for two in three; near a graph over the
-/// plane when `gentle`, so its normal never vanishes.
+/// A NURBS surface of degree 1 to 3 each way, rational for two in three; when `gentle`, near a
+/// graph over the plane with weights within a factor of 2 of each other, so its normal stays well
+/// away from zero (an offset's base: where the weights spread, the offset may honestly refuse to
+/// convert, its normal not separated from zero over the boxes it certifies on).
 pub fn nurbs_surface(rng: &mut Rng, grid: bool, gentle: bool) -> geom_nurbs::Surface<3> {
     let (p, q) = (1 + rng.below(3) as usize, 1 + rng.below(3) as usize);
     let (bu, bv) = (knots(rng, p), knots(rng, q));
@@ -507,10 +509,12 @@ pub fn nurbs_surface(rng: &mut Rng, grid: bool, gentle: bool) -> geom_nurbs::Sur
     let mut pts = Vec::with_capacity(n * m);
     for i in 0..n {
         for j in 0..m {
+            // On the grid of 2^−12, so whole-step translations move it exactly.
+            let on = |x: f64| ((x * 4096.0) as i64) as f64 / 4096.0;
             pts.push(if gentle {
                 [
-                    4.0 * i as f64 / (n - 1) as f64,
-                    4.0 * j as f64 / (m - 1) as f64,
+                    on(4.0 * i as f64 / (n - 1) as f64),
+                    on(4.0 * j as f64 / (m - 1) as f64),
                     rng.value(0.5, grid),
                 ]
             } else {
@@ -521,7 +525,15 @@ pub fn nurbs_surface(rng: &mut Rng, grid: bool, gentle: bool) -> geom_nurbs::Sur
     if rng.below(3) == 0 {
         geom_nurbs::Surface::new(bu, bv, &pts).unwrap()
     } else {
-        let w: Vec<f64> = (0..pts.len()).map(|_| rng.weight()).collect();
+        let w: Vec<f64> = (0..pts.len())
+            .map(|_| {
+                if gentle {
+                    1.0 + ((rng.unit() * 256.0) as i64) as f64 / 256.0
+                } else {
+                    rng.weight()
+                }
+            })
+            .collect();
         geom_nurbs::Surface::new_rational(bu, bv, &pts, &w).unwrap()
     }
 }
@@ -728,6 +740,10 @@ pub enum Surface {
     Offset(Box<Surface>, IBig),
     /// The image of a surface under a transform.
     Image(Entries, Box<Surface>),
+    /// A surface within a stated distance of another: a kind built by a transform, which states
+    /// how far its own definition may be from the exact image (an affine image of a torus, whose
+    /// stored terms round its irrational frame).
+    Within(IBig, Box<Surface>),
 }
 
 impl Surface {
@@ -781,6 +797,17 @@ impl Surface {
                 core::array::from_fn(|i| &p[i] + div(&mul(d, &n[i]), &len).expect("regular"))
             }
             Surface::Image(e, base) => image(e, &base.point(u, v)),
+            Surface::Within(_, base) => base.point(u, v),
+        }
+    }
+
+    /// How far the kind's own definition may be from this truth: the deviations its construction
+    /// stated.
+    pub fn margin(&self) -> IBig {
+        match self {
+            Surface::Within(d, base) => d + base.margin(),
+            Surface::Offset(base, _) | Surface::Image(_, base) => base.margin(),
+            _ => IBig::ZERO,
         }
     }
 
@@ -802,7 +829,7 @@ impl Surface {
             Surface::Offset(..) => true,
             Surface::Revolution(p, ..) | Surface::Extrusion(p, _) => p.coarse(),
             Surface::Ruled(p, q) => p.coarse() || q.coarse(),
-            Surface::Image(_, b) => b.coarse(),
+            Surface::Image(_, b) | Surface::Within(_, b) => b.coarse(),
             _ => false,
         }
     }
@@ -854,9 +881,14 @@ pub fn surfaces(rng: &mut Rng, grid: bool) -> Vec<(SurfaceKind, Surface)> {
     let t = TypedTransform::from(Transform::scale(1.0, 2.0, 0.5).unwrap());
     let affine = SurfaceKind::Torus(torus)
         .transformed(&t, &mut meter())
-        .unwrap()
-        .value;
-    out.push((affine, Surface::Image(entries(&t), Box::new(torus_truth))));
+        .unwrap();
+    out.push((
+        affine.value,
+        Surface::Within(
+            fx(affine.deviation),
+            Box::new(Surface::Image(entries(&t), Box::new(torus_truth))),
+        ),
+    ));
     // The swept kinds, on profiles from the curve kinds.
     let profile = nurbs_curve::<3>(rng, grid);
     let profile_truth = Truth::Nurbs(spline_of(&profile));
@@ -1095,12 +1127,14 @@ pub fn curve_rule<const D: usize>(k: &CurveKind<D>, class: Class, exact: bool) -
 
 /// The kind a surface becomes, by chapter 7 and each kind's stated rule: the analytic kinds but
 /// the plane stay themselves under a similarity and are otherwise affine images; an offset stays
-/// one under a grid transform and is otherwise its moved cache; every other kind keeps its kind.
-pub fn surface_rule(k: &SurfaceKind, class: Class) -> &'static str {
+/// one under a grid transform that moves its base exactly (`exact`) and is otherwise its moved
+/// cache; every other kind keeps its kind.
+pub fn surface_rule(k: &SurfaceKind, class: Class, exact: bool) -> &'static str {
     let name = surface_name(k);
     match (name, class) {
         ("Cylinder" | "Cone" | "Sphere" | "Torus", Class::NonUniform) => "Affine",
-        ("Offset", Class::Rigid | Class::Scale | Class::NonUniform) => "Nurbs",
+        ("Offset", Class::Grid) if exact => name,
+        ("Offset", _) => "Nurbs",
         _ => name,
     }
 }
