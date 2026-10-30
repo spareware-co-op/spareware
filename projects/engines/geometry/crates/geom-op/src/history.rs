@@ -37,10 +37,9 @@
 //! (doi:10.1016/S0010-4485(96)00040-1).
 //!
 //! Cost: making a history sorts its records and changes, `O(n log n)` in their number; a check and
-//! a composition are `O(m log m)` in the number of relation pairs, with ordered sets
-//! (`BTreeSet`), never hashed ones. Recursion: none.
+//! a composition are `O(m log m)` in the number of relation pairs, on sorted vectors searched by
+//! bisection, never hashed sets. Recursion: none.
 
-use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -378,39 +377,34 @@ impl History {
     /// The history as relations between inputs and outputs.
     #[must_use]
     pub fn relations(&self) -> Relations {
-        let mut relations = Relations {
-            outputs: BTreeSet::new(),
-            modified: BTreeSet::new(),
-            generated: BTreeSet::new(),
-            from_nothing: BTreeSet::new(),
-            deleted: self.deleted.names().iter().copied().collect(),
-        };
+        let mut outputs = Vec::new();
+        let mut modified = Vec::new();
+        let mut generated = Vec::new();
+        let mut from_nothing = Vec::new();
         for record in &self.records {
             let o = record.output;
-            relations.outputs.insert(o);
+            outputs.push(o);
             match &record.origin {
-                Origin::Unchanged => {
-                    relations.modified.insert((o, o));
-                }
+                Origin::Unchanged => modified.push((o, o)),
                 Origin::Modified { from: inputs } | Origin::Merged { of: inputs } => {
-                    relations
-                        .modified
-                        .extend(inputs.names().iter().map(|&i| (i, o)));
+                    modified.extend(inputs.names().iter().map(|&i| (i, o)));
                 }
-                Origin::Split { of, .. } => {
-                    relations.modified.insert((*of, o));
-                }
+                Origin::Split { of, .. } => modified.push((*of, o)),
                 Origin::Generated { from, .. } => {
                     if from.names().is_empty() {
-                        relations.from_nothing.insert(o);
+                        from_nothing.push(o);
                     }
-                    relations
-                        .generated
-                        .extend(from.names().iter().map(|&i| (i, o)));
+                    generated.extend(from.names().iter().map(|&i| (i, o)));
                 }
             }
         }
-        relations
+        Relations {
+            outputs: sorted(outputs),
+            modified: sorted(modified),
+            generated: sorted(generated),
+            from_nothing: sorted(from_nothing),
+            deleted: self.deleted.names().to_vec(),
+        }
     }
 
     /// Check the history of an operation with these inputs against laws 1 and 3 of chapter 20.3
@@ -464,16 +458,35 @@ impl History {
     }
 }
 
+/// `values` sorted, each once.
+fn sorted<T: Ord>(mut values: Vec<T>) -> Vec<T> {
+    values.sort_unstable();
+    values.dedup();
+    values
+}
+
+/// Whether the sorted `values` hold `value`.
+fn holds<T: Ord>(values: &[T], value: &T) -> bool {
+    values.binary_search(value).is_ok()
+}
+
+/// The outputs paired with `input` in the sorted `pairs`.
+fn images(pairs: &[(NameId, NameId)], input: NameId) -> &[(NameId, NameId)] {
+    let start = pairs.partition_point(|&(i, _)| i < input);
+    let end = pairs.partition_point(|&(i, _)| i <= input);
+    pairs.get(start..end).unwrap_or_default()
+}
+
 /// A history as relations between inputs and outputs: the form in which histories compose
 /// (chapter 20.3; the method note's three relations). An unchanged output is its own modified
-/// image.
+/// image. Every list is sorted and holds each item once.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Relations {
-    outputs: BTreeSet<NameId>,
-    modified: BTreeSet<(NameId, NameId)>,
-    generated: BTreeSet<(NameId, NameId)>,
-    from_nothing: BTreeSet<NameId>,
-    deleted: BTreeSet<NameId>,
+    outputs: Vec<NameId>,
+    modified: Vec<(NameId, NameId)>,
+    generated: Vec<(NameId, NameId)>,
+    from_nothing: Vec<NameId>,
+    deleted: Vec<NameId>,
 }
 
 impl Relations {
@@ -509,9 +522,8 @@ impl Relations {
     ///
     /// The first [`LawBreak`] found, laws in order.
     pub fn check(&self, inputs: &NameSet) -> Result<(), LawBreak> {
-        let is_input = |name: NameId| inputs.names().binary_search(&name).is_ok();
         // Law 1: a deleted input has no modified outputs.
-        if let Some(&(input, output)) = self.modified.iter().find(|(i, _)| self.deleted.contains(i))
+        if let Some(&(input, output)) = self.modified.iter().find(|(i, _)| holds(&self.deleted, i))
         {
             return Err(LawBreak::DeletedButModified { input, output });
         }
@@ -524,7 +536,7 @@ impl Relations {
             .map(|&(i, _)| i)
             .chain(self.deleted.iter().copied());
         for name in named {
-            if !is_input(name) {
+            if !holds(inputs.names(), &name) {
                 return Err(LawBreak::NotAnInput { name });
             }
         }
@@ -539,57 +551,50 @@ impl Relations {
     /// `next`.
     #[must_use]
     pub fn then(&self, next: &Relations) -> Relations {
-        let after = |pairs: &BTreeSet<(NameId, NameId)>, middle: NameId| {
-            pairs
-                .range(
-                    (middle, NameId::from_bytes([0; 16]))
-                        ..=(middle, NameId::from_bytes([u8::MAX; 16])),
-                )
-                .map(|&(_, o)| o)
-                .collect::<Vec<NameId>>()
-        };
-        let mut modified = BTreeSet::new();
-        let mut traced = BTreeSet::new();
+        let mut modified = Vec::new();
+        let mut traced = Vec::new();
         for &(i, m) in &self.modified {
-            for o in after(&next.modified, m) {
-                modified.insert((i, o));
-                traced.insert((i, o));
+            for &(_, o) in images(&next.modified, m) {
+                modified.push((i, o));
+                traced.push((i, o));
             }
-            for o in after(&next.generated, m) {
-                traced.insert((i, o));
+            for &(_, o) in images(&next.generated, m) {
+                traced.push((i, o));
             }
         }
         for &(i, m) in &self.generated {
-            for o in after(&next.modified, m)
-                .into_iter()
-                .chain(after(&next.generated, m))
+            for &(_, o) in images(&next.modified, m)
+                .iter()
+                .chain(images(&next.generated, m))
             {
-                traced.insert((i, o));
+                traced.push((i, o));
             }
         }
+        let modified = sorted(modified);
         // Two paths to one part: modified wins (20.3).
-        let generated: BTreeSet<(NameId, NameId)> = traced.difference(&modified).copied().collect();
-        let reached: BTreeSet<NameId> = traced.iter().map(|&(_, o)| o).collect();
+        let mut generated = sorted(traced);
+        let reached = sorted(generated.iter().map(|&(_, o)| o).collect());
+        generated.retain(|pair| !holds(&modified, pair));
         let from_nothing = next
             .outputs
             .iter()
             .copied()
-            .filter(|o| !reached.contains(o))
+            .filter(|o| !holds(&reached, o))
             .collect();
-        let kept: BTreeSet<NameId> = modified.iter().map(|&(i, _)| i).collect();
+        let kept = sorted(modified.iter().map(|&(i, _)| i).collect());
         let mut deleted = self.deleted.clone();
         deleted.extend(
             self.modified
                 .iter()
                 .map(|&(i, _)| i)
-                .filter(|i| !kept.contains(i)),
+                .filter(|i| !holds(&kept, i)),
         );
         Relations {
             outputs: next.outputs.clone(),
             modified,
             generated,
             from_nothing,
-            deleted,
+            deleted: sorted(deleted),
         }
     }
 }
