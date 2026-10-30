@@ -125,12 +125,82 @@ fn a_method_on_the_receivers_type_is_followed_and_a_fields_method_of_the_same_na
 }
 
 #[test]
+fn a_generic_receivers_method_is_its_bounds_not_the_instance_types_inherent_one() {
+    // `x.neg()` for `x: N` with `N: Num` is `Num::neg`, chosen in the generic body: the inherent
+    // `neg` of the type an instance puts for `N` (as geom-num's `Interval` has one) is not in
+    // reach there, so the call returns `Num`'s `Result` and closes the cycle.
+    let r = run("pub struct Iv(u32);\n\
+                 impl Iv { pub fn neg(self) -> Iv { Iv(0) } }\n\
+                 pub trait Num: Sized { fn neg(self) -> Result<Self, ()>; }\n\
+                 impl Num for Iv { fn neg(self) -> Result<Iv, ()> { entry(0) } }\n\
+                 fn flip<N: Num>(x: N, n: u32) -> Result<N, ()> { if n > 0 { return Err(()); } let y = x.neg()?; Ok(y) }\n\
+                 pub fn entry(n: u32) -> Result<Iv, ()> { flip(Iv(1), n) }");
+    assert_cycles(&r, &[&["<Iv as Num>::neg", "entry", "flip"]]);
+}
+
+#[test]
+fn a_generic_receivers_method_is_its_bounds_not_another_traits_of_the_same_name() {
+    // The type an instance puts for `N` also implements `Scalar`, with its own `twice`; the
+    // generic body sees only `N: Num`.
+    let r = run("pub struct Iv(u32);\n\
+                 pub trait Scalar { fn twice(self) -> Self; }\n\
+                 impl Scalar for Iv { fn twice(self) -> Iv { self } }\n\
+                 pub trait Num: Sized { fn twice(self) -> Result<Self, ()>; }\n\
+                 impl Num for Iv { fn twice(self) -> Result<Iv, ()> { entry(0) } }\n\
+                 fn go<N: Num>(x: N, n: u32) -> Result<N, ()> { if n > 0 { return Err(()); } let y = x.twice()?; Ok(y) }\n\
+                 pub fn entry(n: u32) -> Result<Iv, ()> { go(Iv(1), n) }");
+    assert_cycles(&r, &[&["<Iv as Num>::twice", "entry", "go"]]);
+}
+
+#[test]
+fn a_concrete_receiver_in_a_generic_body_keeps_its_inherent_method() {
+    // `y: Iv` is no generic receiver: its `neg` is the inherent one, whose recursion is the cycle,
+    // while the generic `x.neg()` beside it is `Num`'s, which recurses nowhere.
+    let r = run("pub struct Iv(u32);\n\
+                 impl Iv { pub fn neg(self) -> Iv { let _ = entry(1); Iv(0) } }\n\
+                 pub trait Num: Sized { fn neg(self) -> Result<Self, ()>; }\n\
+                 impl Num for Iv { fn neg(self) -> Result<Iv, ()> { Ok(self) } }\n\
+                 fn mixed<N: Num>(x: N, y: Iv, n: u32) -> Result<N, ()> { if n > 0 { return Err(()); } let _z = y.neg(); let w = x.neg()?; Ok(w) }\n\
+                 pub fn entry(n: u32) -> Result<Iv, ()> { mixed(Iv(1), Iv(2), n) }");
+    assert_cycles(&r, &[&["Iv::neg", "entry", "mixed"]]);
+}
+
+#[test]
 fn recursion_through_a_trait_implementation_and_a_generic_function_is_a_cycle() {
     let r = run("pub trait Visit { fn visit(&self, depth: u32); }\n\
                  pub struct Leaf;\n\
                  impl Visit for Leaf { fn visit(&self, depth: u32) { if depth > 0 { go(self, depth - 1) } } }\n\
                  pub fn go<T: Visit>(t: &T, depth: u32) { t.visit(depth) }");
     assert_cycles(&r, &[&["<Leaf as Visit>::visit", "go"]]);
+}
+
+#[test]
+fn a_generic_parameters_associated_function_is_its_bounds_not_another_traits_of_the_same_name() {
+    // `N::pi()` for `N: Num` is `<N as Num>::pi()`, even where the type `N` stands for also
+    // implements another trait with a `pi` (as geom-num's `Interval` implements `Scalar`): only
+    // the bound is in reach, so the call returns `Num`'s `Result` and closes the cycle.
+    let r = run("pub struct Iv(u32);\n\
+                 pub trait Scalar { fn pi() -> Self; }\n\
+                 impl Scalar for Iv { fn pi() -> Iv { Iv(3) } }\n\
+                 pub trait Num: Sized { fn pi() -> Result<Self, ()>; fn twice(self) -> Result<Self, ()>; }\n\
+                 impl Num for Iv {\n\
+                     fn pi() -> Result<Iv, ()> { entry(0) }\n\
+                     fn twice(self) -> Result<Iv, ()> { Ok(self) }\n\
+                 }\n\
+                 fn turn<N: Num>(n: u32) -> Result<N, ()> { if n > 0 { return Err(()); } let p = N::pi()?; p.twice() }\n\
+                 pub fn entry(n: u32) -> Result<Iv, ()> { turn::<Iv>(n) }");
+    assert_cycles(&r, &[&["<Iv as Num>::pi", "entry", "turn"]]);
+}
+
+#[test]
+fn a_vector_becomes_an_array_through_try_into() {
+    // `TryInto`'s blanket implementation calls `U::try_from` through its bound, so the model needs
+    // the library's `TryFrom<Vec<T>> for [T; N]` itself.
+    let r = run("pub fn three(v: Vec<u32>) -> Option<u32> {\n\
+                     let [a, b, c]: [u32; 3] = v.try_into().ok()?;\n\
+                     Some(a + b + c)\n\
+                 }");
+    assert_cycles(&r, &[]);
 }
 
 #[test]

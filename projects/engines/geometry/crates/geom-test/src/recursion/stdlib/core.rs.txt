@@ -2701,6 +2701,12 @@ pub mod vec {
         buf: crate::boxed::Box<[T]>,
         len: usize,
     }
+    impl<T, const N: usize> crate::convert::TryFrom<Vec<T>> for [T; N] {
+        type Error = Vec<T>;
+        fn try_from(vec: Vec<T>) -> Result<[T; N], Vec<T>> {
+            loop {}
+        }
+    }
     impl<T> Vec<T> {
         pub const fn new() -> Vec<T> {
             loop {}

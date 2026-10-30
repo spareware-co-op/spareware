@@ -2119,3 +2119,86 @@ fn newton_and_dual_classes_are_what_they_claim() {
         BTreeSet::from(["NegativeSqrt", "NotFinite", "OutsideDomain"].map(String::from))
     );
 }
+
+/// Every typical isolation proves every zero in its domain and flags nothing; the extreme batches
+/// end in exactly the outcomes their inputs' header lists; every typical ball succeeds, and the
+/// extreme balls include an overflow.
+#[test]
+fn isolate_and_ball_classes_are_what_they_claim() {
+    use geom_bench::inputs::isolate::{self as i, Cubic};
+    use geom_bench::inputs::newton::CircleLine;
+    use geom_num::ball::Ball;
+    use geom_num::isolate::{IsolateError, Isolation, Options, System, isolate};
+    use geom_num::newton::Residuals;
+    use geom_num::real::Real;
+    use geom_run::{Budget, WorkMeter};
+
+    fn run<Sys: System<N, D>, const N: usize, const D: usize>(
+        system: &Sys,
+        domain: [Interval; N],
+        target: Real,
+    ) -> Result<Isolation<N>, IsolateError<N>> {
+        let options = Options {
+            target,
+            ..Options::DEFAULT
+        };
+        isolate(
+            system,
+            domain,
+            options,
+            &mut WorkMeter::new(Budget::UNLIMITED),
+        )
+    }
+    fn ending<const N: usize>(r: &Result<Isolation<N>, IsolateError<N>>) -> &'static str {
+        match r {
+            Ok(found) if found.zeros.is_empty() && found.flagged.is_empty() => "no zero",
+            Ok(found) if found.flagged.is_empty() => "proven",
+            Ok(_) => "flagged",
+            Err(IsolateError::CapReached { .. }) => "cap reached",
+            Err(_) => "other",
+        }
+    }
+    let inside = |b: &[Interval], z: &[f64]| b.iter().zip(z).all(|(i, v)| i.contains(*v));
+    for (domain, target) in i::cubic_1(Typical) {
+        let found = run(&Cubic, domain, target).unwrap();
+        let expected = [-1.5, 0.25, 2.0]
+            .iter()
+            .filter(|z| domain[0].contains(**z))
+            .count();
+        assert_eq!(found.zeros.len(), expected);
+        assert!(found.flagged.is_empty());
+    }
+    let endings: BTreeSet<&str> = i::cubic_1(Extreme)
+        .into_iter()
+        .map(|(domain, target)| ending(&run(&Cubic, domain, target)))
+        .collect();
+    assert_eq!(
+        endings,
+        BTreeSet::from(["cap reached", "flagged", "no zero", "proven"])
+    );
+    for (domain, target) in i::circle_line_2(Typical) {
+        let found = run(&CircleLine, domain, target).unwrap();
+        assert_eq!(found.zeros.len(), 1);
+        assert!(found.flagged.is_empty());
+        let e = &found.zeros[0].enclosure;
+        assert!(inside(e, &[4.0, 3.0]) || inside(e, &[-3.0, -4.0]));
+    }
+    let endings: BTreeSet<&str> = i::circle_line_2(Extreme)
+        .into_iter()
+        .map(|(domain, target)| ending(&run(&CircleLine, domain, target)))
+        .collect();
+    assert_eq!(
+        endings,
+        BTreeSet::from(["cap reached", "flagged", "no zero"])
+    );
+    let cubic = |[x]: [Interval; 1]| -> Result<Interval, NumError> {
+        let [v] = Cubic.residuals([Ball::from_interval(x)?])?;
+        v.to_interval()
+    };
+    assert!(i::ball_cubic(Typical).into_iter().all(|x| cubic(x).is_ok()));
+    assert!(
+        i::ball_cubic(Extreme)
+            .into_iter()
+            .any(|x| cubic(x) == Err(NumError::NotFinite))
+    );
+}

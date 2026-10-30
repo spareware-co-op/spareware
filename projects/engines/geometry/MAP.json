@@ -615,6 +615,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/isolate.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and its classes are what they claim: every typical isolation proves every zero and flags nothing, every extreme batch ends in exactly the outcomes listed above, and every typical ball succeeds while the extreme batch holds a `NotFinite` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the root-isolation engine, `geom_num::isolate`, and the double-double balls of `geom_num::ball`: domains and targets for [`cubic_1`] and [`circle_line_2`] on the systems [`Cubic`] and [`crate::inputs::newton::CircleLine`], and boxes for [`ball_cubic`].",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the outcomes chapter 12.3's engine distinguishes (proven, flagged at the floor, a cap reached) and the double-double evaluation it falls back to (`projects/engines/geometry/architecture/12-intersections.md`), each with its own class, on systems whose zeros are known exactly."
+          },
+          "path": "geom_bench::inputs::isolate",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -1452,6 +1472,11 @@
               "shape": "struct"
             },
             {
+              "doc": "A transition's certified quadrature needs more panels than its cap ([`crate::transition::MAX_PANELS`]): its heading turns too far over its length.",
+              "name": "TooManyPanels",
+              "shape": "unit"
+            },
+            {
               "doc": "A step its own bounds rule out failed: a defect in this crate, reported, never a panic.",
               "name": "Defect",
               "shape": "unit"
@@ -1523,12 +1548,12 @@
         },
         {
           "cost": "one match per call.",
-          "does": "[`Basis`] is a closed enum with one variant per leaf kind (NURBS, the analytic kinds, the bulge polyline), dispatching the kind contract to each, with the conversions to and from [`CurveKind`]. The kinds that hold curves hold a `Basis`, never a `CurveKind`, so no kind contains itself: no recursive type, no recursive call, nothing for WebAssembly's stack to bound (chapter 28.8).",
+          "does": "[`Basis`] is a closed enum with one variant per leaf kind (NURBS, the analytic kinds, the bulge polyline, the transition), dispatching the kind contract to each, with the conversions to and from [`CurveKind`]. The kinds that hold curves hold a `Basis`, never a `CurveKind`, so no kind contains itself: no recursive type, no recursive call, nothing for WebAssembly's stack to bound (chapter 28.8).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/basis.rs",
           "guarantees": [
             "**The same behaviour as the kind.** Every method is the leaf kind's own.",
-            "**Leaves stay leaves.** Every leaf's reversal and transform is a leaf (a circle may become an ellipse, a bulge polyline its NURBS form); a split of a bulge polyline is a trimmed one, so the trimmed kind splits by its interval instead."
+            "**Leaves stay leaves.** Every leaf's reversal and transform is a leaf (a circle may become an ellipse, a bulge polyline or a scaled transition its NURBS form); a split of a bulge polyline is a trimmed one, so the trimmed kind splits by its interval instead."
           ],
           "job": "The leaf curve kinds: the kinds that hold no other curve, which the trimmed, composite and offset kinds and curves on surfaces are built on.",
           "method": {
@@ -1536,7 +1561,7 @@
               "projects/engines/geometry/architecture/07-geometry-types.md",
               "https://doi.org/10.1007/978-3-642-59223-2"
             ],
-            "text": "the storage-and-behaviour split chapter 7 decides, closed enums for storage and traits for behaviour (`projects/engines/geometry/architecture/07-geometry-types.md`); a leaf's breaks are a NURBS curve's knots (where its smoothness may drop, The NURBS Book, 2nd ed., P2.5, <https://doi.org/10.1007/978-3-642-59223-2>) and a polyline's vertices."
+            "text": "the storage-and-behaviour split chapter 7 decides, closed enums for storage and traits for behaviour (`projects/engines/geometry/architecture/07-geometry-types.md`); a leaf's breaks are a NURBS curve's knots (where its smoothness may drop, The NURBS Book, 2nd ed., P2.5, <https://doi.org/10.1007/978-3-642-59223-2>), a polyline's vertices and the middle of a Helmert transition."
           },
           "path": "geom_curve::basis",
           "provenance": [],
@@ -1653,13 +1678,37 @@
           "target": "lib"
         },
         {
-          "cost": "a few dozen floating-point operations per evaluation and derivative order; a bound evaluates one interval extension per piece, at most 64 pieces.",
+          "cost": "a few interval evaluations of g, one `atan2` and at most sixteen evaluations per family; the pieces' route at most 64 × 9 evaluations of g and of g′.",
+          "does": "[`Scalar`] names the functions the analytic kinds are made of, one coordinate of one derivative at a time, each with interval coefficients (enclosures of the exact ones the stored data define), and the closed form of the zeros of its derivative:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/extent.rs",
+          "guarantees": [
+            "**Certified.** The result holds g(t) for every t of the span and every coefficient in its enclosure. A function continuous on a closed span takes its extremes at the ends or where g′ is zero; every such zero inside the span lies in one of the enclosures evaluated (the table's closed forms in interval arithmetic: `geom-num`'s proven `atan2`, `ln`, `sinpi` and `cospi`, π between its neighbouring doubles), and g over an enclosure holds g there.",
+            "**Few evaluations however long the span.** Periodic critical points come in families t = c + 2m, each one period of cos πt apart. Along a family the values of g are constant (`Wave` with q = 0) or step by the same amount from one member to the next (2q for `Wave`, ±2πR for `Involute`), so the extremes over the members inside the span are at the first or the last of them. So at most four members of a family are evaluated: the first two and the last two whose enclosure meets the span, since an enclosure narrower than a period may reach into the span while its member lies just outside, and the next member then lies inside.",
+            "**Undecided cases are refined, not guessed.** Where the coefficients' enclosures leave a closed form undecided (a and b enclosing the origin without both being zero, \\|q\\| enclosing πR, r or a + b enclosing zero without being zero, a family wider than half a period, a span or critical point beyond 2⁵⁰), and for `Modulated`, which has no closed form, the span is cut into monotone pieces: at most 64 pieces of at most a quarter of a half-turn; a piece whose derivative's enclosure has a certain sign contributes g at its two ends, any other is cut in eight and tested again, and a piece still undecided contributes the intersection of g's interval extension over it and its mean-value form g(m) + g′·[−r, r] about its middle m. That is sound too, and only a little wider.",
+            "**Deterministic.** The same function and span give the same bits on every target."
+          ],
+          "job": "Closed-form extents: the range of one function of one parameter over a span, from its values at the span's ends and at its critical points, each critical point in closed form.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "the extreme value theorem with the critical points in closed form, the amplitude and phase form R·cos(π(t − φ)) of a·cos πt + b·sin πt, and interval arithmetic for every closed form (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>: the natural interval extension, and the monotonicity test and the mean-value form of chapter 6 for the pieces)."
+          },
+          "path": "geom_curve::extent",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few dozen floating-point operations per evaluation and derivative order; a bound one closed-form extent per coordinate, a few evaluations each.",
           "does": "[`Shape`] names the scalar functions (f₁, f₂, f₃) of each kind, with angles in half-turns, the kernel's proven angle form (chapter 6):",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/form.rs",
           "guarantees": [
             "**Certified.** An enclosure holds the exact value of C⁽ᵏ⁾ at every parameter of the interval: `geom-num`'s proven `sinpi`, `cospi` and `exp` enclosures, π between its two neighbouring doubles, and interval arithmetic that is exact where it can be (`tight`).",
             "**Derivatives in closed form.** The k-th derivative of each scalar function is its formula, never a finite difference (chapter 7): cos and sin of πt shift by a quarter turn per derivative and gain a factor π, cosh and sinh trade places, and the involute's terms follow d^k(θ·cos θ) = θ·cos⁽ᵏ⁾θ + k·cos⁽ᵏ⁻¹⁾θ.",
+            "**Closed-form extents.** A bound holds every value of C⁽ᵏ⁾ over the span, and is the hull of its values at the span's ends and at the critical points of each coordinate inside it (`crate::extent`'s guarantees).",
             "**Refused outside.** A parameter or span outside the domain, or not finite, is an error."
           ],
           "job": "The certified evaluation the analytic kinds share: every one of them is C(t) = c + f₁(t)·u + f₂(t)·v + f₃(t)·w, fixed vectors times scalar functions of the parameter.",
@@ -1667,7 +1716,7 @@
             "links": [
               "https://doi.org/10.1137/1.9780898717716"
             ],
-            "text": "direct evaluation of the closed forms, in interval arithmetic for the enclosures (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the natural interval extension); a span is cut into eighths of a turn for the periodic shapes, so the box follows the curve."
+            "text": "direct evaluation of the closed forms, in interval arithmetic for the enclosures (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the natural interval extension); the extents of chapter 12.3's analytic row, from the ends and the closed-form critical points (`crate::extent`)."
           },
           "path": "geom_curve::form",
           "provenance": [],
@@ -2006,6 +2055,68 @@
           "target": "lib"
         },
         {
+          "cost": "construction O(P·n) evaluations of the heading for P panels of n nodes, with up to twelve ellipses tried per panel; each evaluation n evaluations of the heading and of its sine and cosine, and O(k²) more operations for the k-th derivative; a bound O(1) per panel the span meets; the NURBS form O(m·p²) per attempt for m pieces of degree p, the attempts doubling m; a split or reversal copies the panels, and a transform keeping lengths builds them again.",
+          "does": "[`Transition`] holds a parent curve and the part of it the curve covers. The parent is a start point, a start direction, a length L and a [`CurvatureLaw`], parameterised by its station, the arc length σ from 0 to L; positive curvature turns left. The part is a window of stations [σ₀, σ₁] and a sense, as IFC 4.3's `IfcCurveSegment` trims a parent curve with its `SegmentStart` and `SegmentLength`, the length's sign giving the sense: run forward, the curve's parameter is the station, on [σ₀, σ₁]; reversed, it is minus the station, on [−σ₁, −σ₀]. [`Transition::new`] makes the whole parent, forward, and [`Transition::segment`] any part of it. The laws are decision 32.33's closed set. From a start curvature κ₁ to an end curvature κ₂, with ξ = σ/L: the clothoid, Helmert, Bloss, cosine and sine transitions and the cant-coupled transition, IFC 4.3's CLOTHOID, HELMERTCURVE, BLOSSCURVE, COSINECURVE, SINECURVE and the curve IFC calls VIENNESEBEND. And IFC's parent spirals, read from a station along them: `IfcClothoid` and the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`. It is a curve kind of chapter 7 ([`ParamCurve`], `CurveKind::Transition`): points and derivatives in doubles and certified enclosures of them, bounds on the point and on each derivative over any span, conversion to NURBS with a certified error, split, reversal and typed transforms; and certified enclosures of the turn of the heading and of the curvature at any station of the parent.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/transition.rs",
+          "guarantees": [
+            "**Exact heading.** The heading is the closed-form integral of the law's curvature: in half-turns, a polynomial of degree at most 8 in ξ plus at most one sine or cosine of an affine argument, its coefficients enclosed from the stored doubles. No quadrature touches it.",
+            "**Certified positions.** The position is the start plus the integrals of the cosine and sine of the heading, each by the [`NODES`]-point Gauss–Legendre rule on panels of equal width in ξ. Each panel's remainder is bounded by Trefethen's theorem for integrands analytic in a Bernstein ellipse, the integrand's size on the ellipse bounded in interval arithmetic; the panel count is the smallest power of two (from 1, or 2 for Helmert's two halves) whose remainders sum to at most L·2⁻⁵⁶. An enclosure holds the rounding of every step and the remainders of every panel it passes.",
+            "**Deterministic.** The panel count, and so every result, depends only on the stored doubles.",
+            "**Located exactly.** A station is placed in its panel by an exact comparison, so an enclosure never mixes two panels, or Helmert's two halves. Helmert's middle, where the fourth derivative jumps, is evaluated on the half its side asks for.",
+            "**Never a guess.** A law that needs more than [`MAX_PANELS`] panels is refused ([`CurveError::TooManyPanels`]), never evaluated with a bound it does not meet.",
+            "**Exact split and reversal.** A split narrows the window and a reversal flips the sense; the parent and its panels are untouched, so each part, and the reversed curve at −t, evaluate as the original does at the same station, bit for bit (a reversed derivative of odd order negated), with deviation 0.",
+            "**Bounds from the panels.** A span's box is the union, over the panels it meets, of the point at the panel's start (or the span's) moved by up to the panel's length along any tangent the heading's enclosure allows there: no sampling. A derivative's box is the interval evaluation of its closed form over the span, from both sides at Helmert's middle.",
+            "**A certified NURBS form.** Taylor pieces of degree 9 on the same parameter (`crate::taylor`), each piece's remainder bounded by the box of the tenth derivative, cut at Helmert's middle. The pieces double, from one per smooth part, while each doubling more than halves the certified deviation: the remainder falls about a thousandfold a doubling, so the refining stops where rounding, which no doubling reduces, has taken over: the width of the enclosures the pieces start from and of the stored control points, a few dozen steps of the coordinates. At most [`MAX_PANELS`] pieces.",
+            "**Typed transforms.** A transform that keeps lengths keeps a transition: the start point and direction move, a mirror negates the law's curvatures, and the deviation bounds the rounding of both and how far the transform is from the rigid motion they define, over the window. Any other transform gives the moved NURBS form, since the parameter is arc length, which a scale does not keep; its deviation is the conversion's times a bound on the transform's stretch, plus the move's."
+          ],
+          "job": "The transition kind: a plane curve whose curvature follows a law along its length, the transition curves (spirals) of road and rail alignments.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/060659831"
+            ],
+            "text": "the heading as the exact integral of curvature and the position by certified Gauss–Legendre quadrature (chapter 17.8). The laws are IFC 4.3's (`IfcAlignmentHorizontalSegmentTypeEnum` and the `IfcSpiral` subtypes, in the record below). An `IfcSineSpiral` is read by its heading, as `IfcSpiral` defines the curve (x = ∫cos Θ dl), where its printed curvature disagrees with the heading's derivative. The remainder bound is L. N. Trefethen, \"Is Gauss quadrature better than Clenshaw–Curtis?\", SIAM Review 50 (2008), <https://doi.org/10.1137/060659831>, Theorem 4.5: on [−1, 1], |I − Iₙ| ≤ (64/15)·M·ρ⁻²ⁿ/(ρ² − 1) for f analytic in the open ellipse Eρ with |f| ≤ M there; for f = cos πh or sin πh, M ≤ cosh(π·sup |Im h|). The ellipse of a part of a panel lies inside the panel's, so the panel's bound holds for every station in it. No code from the Clothoids library's `Fresnel.cc`: the clothoid uses this same evaluator. A part of the parent is `IfcCurveSegment`'s trimming; the NURBS form is `crate::taylor`'s Taylor pieces with the Lagrange remainder. A rigid motion keeps a plane curve's signed curvature at each arc length and a mirror negates it, and the curvature with the start point and direction fixes the curve (the fundamental theorem of plane curves), so the image of a transition under one is the transition of the moved start and direction with that law."
+          },
+          "path": "geom_curve::transition",
+          "provenance": [
+            {
+              "licence": "CC-BY-ND-4.0",
+              "link": "https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas",
+              "method_note": null,
+              "name": "IFC 4.3 documentation (buildingSMART)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement, and for `IfcCurveSegment`'s trimming of a parent curve by a start and a signed length, which windows and senses follow. No text adapted.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the series about 20 terms (about 2 µs), the expansion at most 64 (about 2 µs); between, up to about 35 panels of 8 evaluations each, with five of Trefethen's bounds per panel (a few hundred µs: the slow range, which a clothoid near its inflection point never reaches).",
+          "does": "[`fresnel`] encloses C and S over an interval of arguments. Both are odd, so the work is at |x|, at the double m nearest the interval's middle, in one of four ranges:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/transition/fresnel.rs",
+          "guarantees": [
+            "**Certified.** Each enclosure holds C(x) and S(x) for every x of the interval: every series and expansion summed in interval arithmetic with its remainder bound added, π between its neighbouring doubles, the angle πx²/2 taken from x² split exactly into two doubles (`geom-num`'s two-product) so `geom-num`'s proven `sinpi` and `cospi` see it exactly however large x is, and the quadrature's remainder bounded, never estimated.",
+            "**Tight.** About 10⁻¹⁵ wide on the expansion's range, a few times that on the series', and a few times 10⁻¹⁴ between (the rounding of a few dozen panels).",
+            "**Deterministic.** Fixed ranges, a fixed series stop, panels fixed by their position alone: the same bits on every target."
+          ],
+          "job": "The Fresnel integrals C(x) = ∫₀ˣ cos(πt²/2) dt and S(x) = ∫₀ˣ sin(πt²/2) dt, enclosed: the clothoid's own functions, by series and asymptotic expansion with their remainder bounds, and by the transition kind's certified quadrature between them; and a clothoid's point by them, [`Transition::enclose_fresnel`] (piece G67).",
+          "method": {
+            "links": [
+              "https://dlmf.nist.gov/7",
+              "https://doi.org/10.1137/060659831"
+            ],
+            "text": "written from the published mathematical forms, DLMF (NIST Digital Library of Mathematical Functions), §7.2 (definitions), §7.5 (7.5.3, 7.5.4), §7.6 (7.6.4, 7.6.6) and §7.12 (7.12.2, 7.12.3 and the remainder bounds of 7.12(ii)), <https://dlmf.nist.gov/7>, read 2026-10-30, as chapter 17.8 asks; the alternating series' remainder by Leibniz's test; and the quadrature of the transition kind (L. N. Trefethen, \"Is Gauss quadrature better than Clenshaw–Curtis?\", SIAM Review 50 (2008), <https://doi.org/10.1137/060659831>, Theorem 4.5). No code from the Clothoids library's `Fresnel.cc` (chapter 29's row for it), and none of its rational approximations."
+          },
+          "path": "geom_curve::transition::fresnel",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the basis's costs; a conversion adds at most two splits.",
           "does": "[`Trimmed`] stores a [`Basis`] (any leaf kind: NURBS, analytic or bulge polyline) and an interval [a, b] inside its domain, and is the basis on that interval, on the basis's own parameter. Trimming keeps the basis exactly as stored: a NURBS curve trimmed at a crossing keeps its knots and control points, where cutting it would insert knots and round (chapter 14: \"a trimmed spline is section 7's trimmed curve, the original curve on an implicit parameter interval\"). Composite and offset curves and curves on surfaces are built on trimmed curves, so the kinds that hold curves hold only leaves: no kind contains itself.",
           "family": [],
@@ -2032,7 +2143,7 @@
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61) and the bulge, trimmed, composite, offset and curve-on-surface kinds (G62) built; the other kinds to come in G63, G64, G67, G68, G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), and the analytic and transcendental enclosures (G67) built; the other kinds to come in G68, G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {
@@ -3884,6 +3995,60 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why [`isolate`] returned no result.",
+          "file": "projects/engines/geometry/crates/geom-num/src/isolate.rs",
+          "kinds": [
+            {
+              "doc": "The target is not positive.",
+              "name": "InvalidTarget",
+              "shape": "unit"
+            },
+            {
+              "doc": "The residuals or the position failed over a box of the domain, or a box could not be formed: the system must be defined, and finite, over its whole domain.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter's work or logical-memory budget ran out. Deterministic.",
+              "name": "Exceeded",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The caller's cancellation stopped the engine. Not deterministic; never stored.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "An allocation was refused. Not deterministic; never stored.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "A zero's refinement reached its cap, or stopped shrinking in double-double balls, before its image reached the target or it could be told apart from a zero found before it.",
+              "name": "CapReached",
+              "shape": "struct"
+            },
+            {
+              "doc": "The evaluation error at the midpoint of a box is a quarter step or more even in double-double balls.",
+              "name": "Imprecise",
+              "shape": "struct"
+            },
+            {
+              "doc": "A box above the resolution floor could not be split: no unknown has a double strictly between its bounds.",
+              "name": "Unsplittable",
+              "shape": "struct"
+            },
+            {
+              "doc": "A proof did not close: an operator step found no zero, or no preconditioner, in a box inside a zero's proof box. Only a system whose residuals are not a function of its unknowns (a defect in the caller) or a defect in geom-num can cause it; it is reported instead of a wrong answer.",
+              "name": "Internal",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_num::isolate",
+          "name": "IsolateError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why an operator could not make its step.",
           "file": "projects/engines/geometry/crates/geom-num/src/newton.rs",
           "kinds": [
@@ -3985,7 +4150,7 @@
         "A [`plane::Plane`] and a [`plane::Tpi`] check their bit budgets when they are made, so every computation on them fits its type.",
         "Committing a three-plane point to the grid ([`plane::Tpi::to_grid`]) rounds each coordinate to the nearest step, ties to even, moving it by at most half a step ([`ladder::COMMIT_PER_AXIS`]), and says whether it moved.",
         "Integer arithmetic on fixed-width values in kernel code is a checked method (`checked_*`, or in [`wide`] and [`wide32`] the `overflowing_*` limb steps, whose carry or borrow is kept), so nothing depends on overflow checks being on: a result that does not fit is `None` or an error, never a silently wrapped value. Three kinds of step compute modulo a power of two on purpose, and each cites what defines it so. In [`rng`], Philox's multiplications and key schedule, modulo 2^32 (its 32 × 32-bit product is formed modulo 2^64, as its reference does, and never reaches 2^64), and Lemire's threshold, a negation modulo 2^64. In the large accumulator inside [`exact_sum::ExactSum::add_slice`] and [`exact_sum::ExactSum::add_iter`], the sum of a double's whole bit pattern modulo 2^64, as Neal's method specifies, from which the exact sum of the significands is recovered. In those two a `wrapping_*` method is the specified operation, not a result that failed to fit. And in the CORE-MATH ports of [`math`], a `wrapping_*` method where the C source computes modulo 2^64 or 2^128 on purpose, each with a comment saying why the C does it (a two's complement negation, a sum of which only the low bits are read, or a limb sum whose carry is kept by comparison as [`wide`] keeps its own), so a wrap there is the computation the proof describes, never a lost value. Every other integer step in the ports is checked too: its `None`, which each step proves cannot come, ends the computation with the canonical NaN, which the public functions report as `NotFinite`. Only the compiler's evaluation of constants uses native operators, where an overflow stops the build. Counts of steps never saturate: a saturated bound would understate the truth.",
-        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1); [`brent`]'s searches and [`quadrature`]'s integrals return `Real`s, and stop at a caller's cap with an error, never a best guess; every operation of [`scalar::Scalar`] on a `Real`, and so of a [`dual::Dual`] over it, checks its result, so a NaN or an infinity in a value or a derivative is `NotFinite` (the NaN tripwire of chapter 15.4); and [`newton`]'s operators return enclosures with finite bounds or an error. Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
+        "No floating-point value produced here from finite inputs is NaN. [`math`] returns a [`real::Real`] or an error; an [`interval::Interval`] has finite bounds or is refused as `NotFinite`; [`eft`] reports a pair that is not exact with an infinite second part; a [`dd::DD`] is finite by construction; [`exact_sum::ExactSum`] gives a `Real` or `NotFinite`; [`rng`] draws its doubles as `Real`s in [0, 1); [`brent`]'s searches and [`quadrature`]'s integrals return `Real`s, and stop at a caller's cap with an error, never a best guess; every operation of [`scalar::Scalar`] on a `Real`, and so of a [`dual::Dual`] over it, checks its result, so a NaN or an infinity in a value or a derivative is `NotFinite` (the NaN tripwire of chapter 15.4); [`newton`]'s operators return enclosures with finite bounds or an error; a [`ball::Ball`] has a finite double-double centre and a finite radius, or the operation is `NotFinite`; and [`isolate`] returns enclosures and regions with finite bounds, or an error. Inside [`math`], where the ports compute on raw doubles, any NaN is the canonical `0x7ff8_0000_0000_0000`, and no public function returns one.",
         "Every interval operation encloses the exact result of its operation on any reals in its operands, and an enclosure that needs a maths function without a proven error is refused ([`NumError::UnprovenMaths`]).",
         "A bound carries its grid step, and bounds add exactly in the finer step ([`exactness::Exactness`]).",
         "Every double-double operation ([`dd::DD`]) is within its stated error bound of the exact result: the published, machine-checked bound of its algorithm (the theorem is named on each operation), plus, from the range of binary64, 2^−398 relative for products, quotients and roots and 2^−1074 absolute for products and quotients. A `DD` is never NaN or infinite: an overflow is [`NumError::NotFinite`].",
@@ -3996,6 +4161,31 @@
       "kind": "kernel",
       "layer": "1",
       "modules": [
+        {
+          "cost": "one [`DD`] operation and a few double operations per operation; the maths functions add an interval enclosure on each side. No allocation, no recursion.",
+          "does": "a [`Ball`] is a centre, a [`DD`], and a radius, a double rounded up; it stands for every real within the radius of the centre. Each operation computes its centre by the [`DD`] operation of the same name, and its radius from the operands' centres and radii (midpoint-radius arithmetic) plus that [`DD`] operation's proven error bound, every step of the radius rounded up. `Ball` implements [`Scalar`], so a residual written once runs in it, and [`crate::dual::Dual`] over it gives enclosures of Jacobians. Near a root, where a residual is the small difference of large terms, an enclosure in doubles is as wide as the rounding of the terms, while a ball is about 2^−53 times narrower; [`crate::isolate`] evaluates a box in balls when the evaluation in doubles is not precise enough (chapter 12.3: \"that box is evaluated in double-double arithmetic\").",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/ball.rs",
+          "guarantees": [
+            "**Enclosure.** Every operation returns a ball holding the exact result of the operation on every pair of reals in its operands (on every real in its operand, for the functions of one argument). Each operation's documentation gives the bound its radius adds; with the exact centres `a`, `b` and radii `r`, `s` of the operands: - sum and difference: `r + s`; - product: `|a|·s + |b|·r + r·s`, from `xy − ab = a·δy + b·δx + δx·δy`; the square `2|a|·r + r²`; - quotient: `(r·|b| + |a|·s) / (|b|·(|b| − s))`, from `x/y − a/b = (δx·b − a·δy)/(y·b)` with `|y| ≥ |b| − s > 0`; - square root: the smaller of `r/√a` and `√r`, from `|√x − √a| = |x − a|/(√x + √a)` and the concavity of the root. To that it adds the [`DD`] operation's rounding: an operation proven within `B·|z| + A` of the exact result `z` that returned `c` is within `2B·|c| + 2A` of it, because `|z| ≤ (|c| + A)/(1 − B) ≤ 2(|c| + A)` for `B ≤ 1/2` (every bound of [`DD`] is below 10⁻³⁰), so the error is at most `2B·(|c| + A) + A ≤ 2B·|c| + 2A`. Every radius step is a double operation rounded to nearest and then moved one double up, which is at or above the exact result; bounds on a centre's magnitude are read from its two parts the same way ([`DD`]'s invariant puts the value within half a step of its leading part).",
+            "**Where the precision stops.** `exp`, `ln`, `sinpi`, `cospi` and `atan2` have proven versions in doubles only ([`crate::math`]), so a ball takes them through [`Interval`]: the ball is enclosed in an interval, the certified interval function applied, and the result made a ball again. Those results are as wide as the interval ones, still certified. π is the double nearest to it with radius 2^−52, above its distance from π (about 1.22 · 10⁻¹⁶).",
+            "**A ball cannot say a square is never negative.** A square whose ball reaches zero still reaches below it, so a square root of it is refused (`NegativeSqrt`), where an interval would take it; over such a box the derivative of the root is refused anyway ([`crate::dual`]), so the operators lose nothing they could otherwise prove.",
+            "**Never NaN, never infinite.** The centre is a [`DD`], finite by construction; a radius that overflows is [`NumError::NotFinite`]. A divisor ball reaching zero is [`NumError::DivisorContainsZero`], and the square root of a ball reaching below zero [`NumError::NegativeSqrt`], the errors [`Interval`] gives.",
+            "**Deterministic and commutative.** Only [`DD`]'s operations, double `+`, `−`, `×` and `÷` rounded to nearest, `next_up` and `next_down`, and [`crate::math`]'s correctly rounded square root, so every target gives the same bits. Sums and products have the same bits in either order, as [`DD`]'s do."
+          ],
+          "job": "Double-double balls: a real number known to lie within a radius of a double-double centre, the arithmetic the root-isolation engine falls back to where enclosures in doubles are too wide.",
+          "method": {
+            "links": [
+              "doi:10.1023/A:1022374804152",
+              "https://hal.science/hal-00432152"
+            ],
+            "text": "midpoint-radius interval arithmetic, also called ball arithmetic: S. M. Rump, \"Fast and parallel interval arithmetic\", *BIT Numerical Mathematics* 39(3) (1999), doi:10.1023/A:1022374804152, and J. van der Hoeven, \"Ball arithmetic\" (2009), <https://hal.science/hal-00432152>, with the centre in double-double ([`DD`], whose error bounds are proven and machine-checked) and the radius in doubles rounded up with `next_up`, since neither Rust nor WebAssembly can change the rounding mode. The radius formulas are the standard ones those papers give, re-derived above. Written for this kernel: no published Rust crate has a double-double ball with proven bounds."
+          },
+          "path": "geom_num::ball",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "each step is a few dozen floating-point operations and one evaluation of `f`; the number of steps is at most about (log₂((b − a)/δ))² for [`zero`] and of the order of log((b − a)/δ)/log(1/0.618) golden-section steps for [`minimum`] (δ the tolerance), and in any case at most `cap`. No allocation, no recursion.",
           "does": "[`zero`] narrows a bracket `[a, b]` across which `f` changes sign, by bisection, the secant step and inverse quadratic interpolation, taking an interpolated step only while it stays well inside the bracket and keeps shrinking it fast enough, so it converges as surely as bisection and usually much faster. [`minimum`] narrows an interval holding a minimum of `f` by golden-section steps and successive parabolic interpolation, under the same safeguards. Chapter 12.4 asks for exactly this in one unknown (\"bracketing in the manner of Brent (1973)\"); a caller that has a derivative takes a Newton step only inside the bracket this returns.",
@@ -4539,6 +4729,35 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per box taken, a comparison with each zero found, one enclosure of the position at a point and one of the residuals over the box, one operator step (`crate::newton`'s cost: a Jacobian on dual intervals and O(N³) interval operations) and at most one more for inflation; double-double boxes cost about ten times as much. The number of boxes depends on the system; the list holds at most (2^N − 1) boxes per level of splitting, plus 2N per complement, and each zero's refinement takes at most its cap of steps. Allocation: the work list and the two result lists, each reserved fallibly. No recursion.",
+          "does": "[`isolate`] takes a [`System`] (residuals written once over [`Scalar`], and the position in space that the unknowns stand for), a domain box, [`Options`] and the caller's [`WorkMeter`]. Boxes wait on an explicit work list, a stack, never in recursion (principle 13), and are taken in a fixed order: depth first, the lower half first, the first unknown before the next (chapter 12.3). For each box taken:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/isolate.rs",
+          "guarantees": [
+            "**No zero is lost.** Every zero of the system in the domain lies in the enclosure of a returned [`Zero`] or in a returned [`Flagged`] region. By induction over the boxes taken: each zero of the domain lies in a box on the list, a returned enclosure or a returned region. A box inside a proof box, or the part of a box or region inside one, holds at most that proof box's zero, already returned; the boxes put back for the rest cover the rest. Exclusion and the operators' `NoZero` drop only boxes with no zero; a narrowed box holds every zero of its box; an inflated box with a unique zero holds every zero of the narrowed box inside it; the halves of a box cover it; a zero proven in a proof box is returned or is the same as one returned; and refinement keeps every zero of the enclosure ([`crate::newton`]'s guarantees, in either precision).",
+            "**Every returned zero is a zero, and they are distinct.** The proof box of each [`Zero`] lies in the domain and holds exactly one zero of the system, which lies in its enclosure, strictly inside the proof box ([`crate::newton`]: the operator's image strictly inside the box). A zero is returned only when its enclosure is disjoint from every enclosure returned before it, so no two returned zeros are the same. No returned region shares an interior point with a zero's proof box.",
+            "**Every enclosure meets the target.** The enclosure's image is at most [`Options::target`] grid steps. Every flagged region's image is below one step.",
+            "**Every cap is an error.** A refinement past its cap, a box that cannot be split, an evaluation error too large even in double-double, and the meter's work or logical-memory budget each stop the engine with an [`IsolateError`] saying which; so do the caller's cancellation and a refused allocation. No partial result is returned.",
+            "**Deterministic.** The traversal, the splits, the complements, the inflation and the refinement are fixed, and all arithmetic is [`crate::newton`]'s, [`crate::interval`]'s and [`crate::ball`]'s, so every target returns the same zeros and regions in the same order, with the same bits, and charges the same work. Only cancellation depends on timing, and it returns no result.",
+            "**What is charged** (chapter 23.10; changing it changes the engine's version): one work unit for each box taken from the list and one for each operator step, wherever it is taken; and logical memory for each box put on the list and each zero and region returned, at the fixed sizes of their [`LogicalSize`] implementations. The lists' real allocations are reserved fallibly, and a refusal stops the engine as [`IsolateError::OutOfMemory`].",
+            "**Where it can stop short.** A zero exactly on the domain's boundary cannot be proven, since the proof box stays in the domain and must hold its zero strictly inside, so it lies in a flagged region; so do zeros closer together than the floor, multiple zeros, zeros where the residuals are not differentiable, and every zero of a domain with an unknown fixed at a point (no box is wider than a point there, so none can hold a zero strictly inside)."
+          ],
+          "job": "The certified root-isolation engine: every zero of a system of one to four equations in a box, each proven to be the only one in a box of its own and refined to a requested size, or a flagged box at the resolution floor where the tests could not decide. No zero is ever lost.",
+          "method": {
+            "links": [
+              "doi:10.1007/978-1-4757-2495-0",
+              "doi:10.1137/1.9780898717716",
+              "doi:10.1023/A:1024419816707",
+              "doi:10.1137/S0036142902418898"
+            ],
+            "text": "branch-and-prune subdivision with interval Newton operators, as R. B. Kearfott, *Rigorous Global Search: Continuous Problems*, Kluwer, 1996, doi:10.1007/978-1-4757-2495-0, chapter 4, and R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM, 2009, chapter 8, doi:10.1137/1.9780898717716, describe it: a list of boxes, exclusion by the range enclosure, contraction and proof by the operator, bisection of what is left. Inflation of a box that does not prove its zero, after S. M. Rump, \"A note on epsilon-inflation\", *Reliable Computing* 4(4) (1998), doi:10.1023/A:1024419816707. Proof boxes as regions no other zero can share, every box and region cut against them, as the exclusion regions of H. Schichl and A. Neumaier, \"Exclusion regions for systems of equations\", *SIAM J. Numer. Anal.* 42(1) (2004), 383–408, doi:10.1137/S0036142902418898, and Kearfott's box complementation (chapter 4 above). The fixed order, the floor, the evaluation limit and double-double fallback, the per-zero caps and their errors are chapter 12.3's; the budgets and cancellation are `geom-run`'s (chapter 23.10). Written for this kernel: it runs on the kernel's own interval, ball and operator code, under its work meter."
+          },
+          "path": "geom_num::isolate",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },
@@ -7078,6 +7297,28 @@
           "target": "lib"
         },
         {
+          "cost": "at most three extents in one parameter per coordinate, or one per piece (at most 64) on the last route.",
+          "does": "a coordinate of ∂^{i+j}S/∂u^i∂v^j of a kind written in `crate::terms`' form is Σ M_{fg}·f(u)·g(v) over f and g each 1, t, cos πt or sin πt: a grid of coefficients, each the enclosure of an exact real. [`terms`] reads the grid's shape and takes the closed form that fits it:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/extent.rs",
+          "guarantees": [
+            "**Certified.** Every route holds every value of the coordinate over the box: the extents in one parameter are certified (`geom_curve::extent`), and each step's reduction is exact over the reals: a function affine in a parameter takes its extremes over a span at the span's ends; a function affine in G takes them over [G₋, G₊] at its ends, and [G₋, G₊] holds G's values; on a piece, Taylor's theorem with the remainder ½δ²·`S_vv`(u, ξ) for some ξ in it.",
+            "**The kinds' own extents.** Every route but the last gives the coordinate's extent over the box up to rounding; the last within ½r² times the second v-derivative's size, about 10⁻³ of it on pieces of a thirty-second of a half-turn.",
+            "**Deterministic.** The same terms and box give the same bits on every target."
+          ],
+          "job": "Closed-form extents of the analytic surface kinds: the range of each coordinate of a partial derivative over a parameter box, from `geom-curve`'s closed-form extents in one parameter.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "separation of the parameters by linearity (a bilinear or affine function's extremes on a box lie on its edges), then `geom-curve`'s closed-form extents in one parameter (`geom_curve::extent`), all in interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_surface::extent",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant for a plane: nine interval operations.",
           "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields with `geom-field`.",
           "family": [],
@@ -7240,7 +7481,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the other kinds to come in G67, G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); the other kinds to come in G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
@@ -9302,6 +9543,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs"
+      ]
+    },
+    {
+      "licence": "CC-BY-ND-4.0",
+      "link": "https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas",
+      "method_note": null,
+      "name": "IFC 4.3 documentation (buildingSMART)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-curve/src/transition.rs"
       ]
     },
     {
