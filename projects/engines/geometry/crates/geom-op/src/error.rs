@@ -22,9 +22,11 @@
 //! Method: chapter 22's `OpError`, a closed base kind with an open, typed detail that the kind is
 //! read from (`projects/engines/geometry/architecture/22-errors-queries-ai.md`).
 //!
-//! Cost: an error owns its path, its message and three short vectors; making one allocates them,
-//! once. Errors are made only on failure.
+//! Cost: an error is one box holding its path, its message and three short vectors; making one
+//! allocates them, once. Errors are made only on failure, and the box keeps every operation's
+//! `Result` one pointer wide on the error side.
 
+use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
@@ -36,8 +38,17 @@ use crate::kind::ErrorKind;
 use crate::remedy::Remedy;
 
 /// Why an operation returned no result (chapter 22).
+///
+/// One pointer wide: its parts live behind one box, so the `Result` every operation returns stays
+/// small on the success path, the way `std::io::Error` keeps its own.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OpError {
+    parts: Box<Parts>,
+}
+
+/// The parts of an [`OpError`], behind its one box.
+#[derive(Clone, Debug, PartialEq)]
+struct Parts {
     detail: OpErrorDetail,
     op: OpPath,
     entities: Vec<NameId>,
@@ -53,101 +64,109 @@ impl OpError {
     pub fn new(op: OpPath, detail: impl Into<OpErrorDetail>) -> Self {
         let detail = detail.into();
         Self {
-            message: detail.to_string(),
-            remedies: detail.remedies(),
-            detail,
-            op,
-            entities: Vec::new(),
-            at: Vec::new(),
+            parts: Box::new(Parts {
+                message: detail.to_string(),
+                remedies: detail.remedies(),
+                detail,
+                op,
+                entities: Vec::new(),
+                at: Vec::new(),
+            }),
         }
     }
 
     /// The same error naming `entities` too, after those it names already.
     #[must_use]
     pub fn with_entities(mut self, entities: impl IntoIterator<Item = NameId>) -> Self {
-        self.entities.extend(entities);
+        self.parts.entities.extend(entities);
         self
     }
 
     /// The same error with `evidence` added after the evidence it has.
     #[must_use]
     pub fn with_evidence(mut self, evidence: Evidence) -> Self {
-        self.at.push(evidence);
+        self.parts.at.push(evidence);
         self
     }
 
     /// The same error with `remedy` added after the remedies it has.
     #[must_use]
     pub fn with_remedy(mut self, remedy: Remedy) -> Self {
-        self.remedies.push(remedy);
+        self.parts.remedies.push(remedy);
         self
     }
 
     /// The same error with `message`, in plain words, in place of the one it has.
     #[must_use]
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
-        self.message = message.into();
+        self.parts.message = message.into();
         self
     }
 
     /// The base kind: the detail's.
     #[must_use]
-    pub const fn kind(&self) -> ErrorKind {
-        self.detail.kind()
+    pub fn kind(&self) -> ErrorKind {
+        self.parts.detail.kind()
     }
 
     /// The operation's own typed detail.
     #[must_use]
-    pub const fn detail(&self) -> &OpErrorDetail {
-        &self.detail
+    pub fn detail(&self) -> &OpErrorDetail {
+        &self.parts.detail
     }
 
     /// The operation and step that failed.
     #[must_use]
-    pub const fn op(&self) -> &OpPath {
-        &self.op
+    pub fn op(&self) -> &OpPath {
+        &self.parts.op
     }
 
     /// The faces, edges and vertices involved, in the order the operation gave them.
     #[must_use]
     pub fn entities(&self) -> &[NameId] {
-        &self.entities
+        &self.parts.entities
     }
 
     /// The points, parameters, distances and bounds that explain the error.
     #[must_use]
     pub fn evidence(&self) -> &[Evidence] {
-        &self.at
+        &self.parts.at
     }
 
     /// The error in plain words.
     #[must_use]
     pub fn message(&self) -> &str {
-        &self.message
+        &self.parts.message
     }
 
     /// What would make the operation succeed.
     #[must_use]
     pub fn remedies(&self) -> &[Remedy] {
-        &self.remedies
+        &self.parts.remedies
     }
 
     /// Whether the error is a deterministic answer that may be logged, stored and cached: false
     /// exactly for `Cancelled` and `OutOfMemory` (chapter 22).
     #[must_use]
-    pub const fn is_replayable(&self) -> bool {
+    pub fn is_replayable(&self) -> bool {
         self.kind().is_replayable()
     }
 }
 
 impl fmt::Display for OpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at {}: {}", self.kind(), self.op, self.message)
+        write!(
+            f,
+            "{} at {}: {}",
+            self.kind(),
+            self.parts.op,
+            self.parts.message
+        )
     }
 }
 
 impl core::error::Error for OpError {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        Some(&self.detail)
+        Some(&self.parts.detail)
     }
 }
