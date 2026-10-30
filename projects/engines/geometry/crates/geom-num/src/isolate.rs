@@ -500,7 +500,7 @@ impl<Sys: System<N, D>, const N: usize, const D: usize> Engine<'_, '_, '_, Sys, 
                 enclosure,
                 contraction,
             }) => {
-                if contraction.get() < 1.0 {
+                if under(contraction.get(), Real::ONE) {
                     if self.inflated(enclosure, precision)? {
                         return Ok(());
                     }
@@ -513,7 +513,7 @@ impl<Sys: System<N, D>, const N: usize, const D: usize> Engine<'_, '_, '_, Sys, 
             Err(NewtonError::Singular) => (x, Reason::Singular),
             Err(NewtonError::Num(_)) => (x, Reason::NotSmooth),
         };
-        if self.image(rest, precision)? < RESOLUTION_FLOOR.get() {
+        if under(self.image(rest, precision)?, RESOLUTION_FLOOR) {
             return match precision {
                 Precision::Double => {
                     push(&mut self.work, self.meter, rest, Precision::DoubleDouble)
@@ -538,12 +538,14 @@ impl<Sys: System<N, D>, const N: usize, const D: usize> Engine<'_, '_, '_, Sys, 
         x: [Interval; N],
         precision: Precision,
     ) -> Result<Precision, IsolateError<N>> {
-        let limit = EVALUATION_LIMIT.get();
-        if self.evaluation_error(x, precision)? < limit {
+        if under(self.evaluation_error(x, precision)?, EVALUATION_LIMIT) {
             return Ok(precision);
         }
         if precision == Precision::Double
-            && self.evaluation_error(x, Precision::DoubleDouble)? < limit
+            && under(
+                self.evaluation_error(x, Precision::DoubleDouble)?,
+                EVALUATION_LIMIT,
+            )
         {
             return Ok(Precision::DoubleDouble);
         }
@@ -691,7 +693,7 @@ impl<Sys: System<N, D>, const N: usize, const D: usize> Engine<'_, '_, '_, Sys, 
             if !ambiguous && size <= target {
                 break;
             }
-            if cap.is_none() && r < 1.0 {
+            if cap.is_none() && under(r, Real::ONE) {
                 cap = Some(
                     steps
                         .saturating_add(steps_to(size, target, r)?)
@@ -747,7 +749,8 @@ impl<Sys: System<N, D>, const N: usize, const D: usize> Engine<'_, '_, '_, Sys, 
             precision: p,
         });
         for f in &self.found.flagged {
-            if overlap(f.region, proof) && !inside(f.region, proof) {
+            // A region inside the proof box leaves nothing to examine again.
+            if overlap(f.region, proof) {
                 complement(
                     &mut self.work,
                     self.meter,
@@ -785,6 +788,13 @@ fn steps_to(size: f64, target: f64, r: f64) -> Result<u64, NumError> {
     Ok(steps)
 }
 
+/// Whether `value` is strictly under `bound`: the one comparison behind the resolution floor (an
+/// image under one step), the evaluation limit (an error under a quarter step) and a contracting
+/// step (a contraction bound under one), so that each is decided the same way at its bound.
+fn under(value: f64, bound: Real) -> bool {
+    value < bound.get()
+}
+
 /// Whether `a`, narrowed from `x`, is at most half as wide as `x` in some unknown (and narrower: a
 /// point stays a point).
 fn halved<const N: usize>(a: [Interval; N], x: [Interval; N]) -> bool {
@@ -794,11 +804,12 @@ fn halved<const N: usize>(a: [Interval; N], x: [Interval; N]) -> bool {
     })
 }
 
-/// Whether every coordinate of `a` lies within the same coordinate of `b`.
+/// Whether every coordinate of `a` lies within the same coordinate of `b`: `b` holds both of its
+/// ends.
 fn inside<const N: usize>(a: [Interval; N], b: [Interval; N]) -> bool {
     a.iter()
         .zip(b)
-        .all(|(ai, bi)| ai.lo() >= bi.lo() && ai.hi() <= bi.hi())
+        .all(|(ai, bi)| bi.contains(ai.lo()) && bi.contains(ai.hi()))
 }
 
 /// Whether the interiors of `a` and `b` meet: in every coordinate each begins before the other
@@ -809,11 +820,12 @@ fn overlap<const N: usize>(a: [Interval; N], b: [Interval; N]) -> bool {
         .all(|(ai, bi)| ai.lo() < bi.hi() && bi.lo() < ai.hi())
 }
 
-/// Whether `a` and `b` share no point: some coordinate of one ends before the other's begins.
+/// Whether `a` and `b` share no point: in some coordinate neither holds the other's lower end (two
+/// closed intervals meet exactly when one holds the other's lower end, the larger of the two).
 fn disjoint<const N: usize>(a: [Interval; N], b: [Interval; N]) -> bool {
     a.iter()
         .zip(b)
-        .any(|(ai, bi)| ai.hi() < bi.lo() || bi.hi() < ai.lo())
+        .any(|(ai, bi)| !ai.contains(bi.lo()) && !bi.contains(ai.lo()))
 }
 
 /// The boxes `x` splits into, in the engine's order (the first unknown most significant, the lower

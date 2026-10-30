@@ -9,11 +9,14 @@
 //! every exact result of every operation on seeded operands (against exact rationals), commute,
 //! have the double-double results as centres, hold and are held by their intervals, refuse what
 //! they cannot hold, survive the cancellation that defeats intervals, and carry derivatives. The
-//! engine proves zeros on split lines once each, by either operator; flags a zero on the domain's
+//! engine proves zeros on split lines once each, by either operator, and a zero proven a second
+//! time is returned once; cuts or drops the flagged regions a later proof box meets; splits a box
+//! whose image is exactly one step; flags a zero on the domain's
 //! boundary, zeros closer than the floor, multiple zeros, a dependent system and a zero without a
 //! derivative, never proving them; moves to double-double for a large evaluation error, for
 //! undecided boxes at the floor and for a stalled refinement, and falls back to doubles where balls
-//! fail; and returns an error at every cap: the work and logical-memory budgets, cancellation, a
+//! fail; refines a zero for as many steps as its contraction bound predicts, and no more than eight
+//! beyond; and returns an error at every cap: the work and logical-memory budgets, cancellation, a
 //! refused allocation, a target that is not positive, an unreachable target, a refinement slower
 //! than its cap, an evaluation error too large even in balls, a box above the floor that cannot be
 //! split, residuals that fail, and a proof that does not close because the residuals are not a
@@ -306,6 +309,11 @@ fn inside_box<const N: usize>(x: &[BigRational; N], b: &[Interval; N]) -> bool {
         .all(|(xi, bi)| exact(bi.lo()) <= *xi && *xi <= exact(bi.hi()))
 }
 
+/// A budget no isolation in these tests comes near (the largest, on the board in four unknowns,
+/// charges about 150,000 work units and 6 MB of logical memory), so that an engine that loops
+/// stops with `Exceeded` within seconds instead of running on.
+const ROOMY: Budget = Budget::new(2_000_000, 64 << 20);
+
 /// Grid steps per unit of the seeded systems' unknowns: their zeros are rationals a few units
 /// apart, and the floor is 1/64 of a unit, as a parameter's floor is a small part of its range.
 const SCALE: f64 = 64.0;
@@ -402,27 +410,7 @@ fn board<const N: usize>(name: &str, seed: u64, min_proven: f64) {
     let mut tally = Tally::default();
     for s in 0..SYSTEMS {
         let (system, zeros) = random_system::<N>(&mut rng);
-        // Half the domains split on dyadic lines through the grid points the forms pass through, so
-        // zeros land on split lines; the others are offset off them.
-        let shift = if s % 2 == 0 { 0.0 } else { 0.3 };
-        let domain: [Interval; N] = core::array::from_fn(|_| iv(-16.0 + shift, 16.0 + shift));
-        let operator = if s % 3 == 0 {
-            Operator::HansenSengupta
-        } else {
-            Operator::Krawczyk
-        };
-        let options = Options {
-            operator,
-            target: Options::DEFAULT.target,
-        };
-        let mut meter = WorkMeter::new(Budget::UNLIMITED);
-        let found = isolate(&system, domain, options, &mut meter).unwrap_or_else(|e| {
-            panic!(
-                "system {s} in {N} unknowns: {e:?}
-{system:?}"
-            )
-        });
-        check(&found, &zeros, &domain, 1.0 / SCALE, 1.0 / SCALE);
+        let (domain, found, meter) = isolate_case(s, &system, &zeros);
         tally.systems += 1;
         tally.zeros += zeros.iter().filter(|z| inside_box(z, &domain)).count();
         tally.proven += found.zeros.len();
@@ -432,6 +420,44 @@ fn board<const N: usize>(name: &str, seed: u64, min_proven: f64) {
     println!("{N} unknowns: {tally:?}");
     let proven = tally.proven as f64 / tally.zeros as f64;
     assert!(proven >= min_proven, "{proven} of the zeros proven");
+}
+
+/// Isolates case `s` of a board's corpus, `system` with its exact `zeros`, and checks it; returns
+/// the case's domain, what was found and the meter. Half the domains split on dyadic lines through
+/// the grid points the forms pass through, so zeros land on split lines; the others are offset off
+/// them. A third of the cases use Hansen-Sengupta.
+fn isolate_case<const N: usize>(
+    s: usize,
+    system: &Products<N>,
+    zeros: &[[BigRational; N]],
+) -> ([Interval; N], Isolation<N>, WorkMeter<'static>) {
+    let shift = if s % 2 == 0 { 0.0 } else { 0.3 };
+    let domain: [Interval; N] = core::array::from_fn(|_| iv(-16.0 + shift, 16.0 + shift));
+    let operator = if s % 3 == 0 {
+        Operator::HansenSengupta
+    } else {
+        Operator::Krawczyk
+    };
+    let options = Options {
+        operator,
+        target: Options::DEFAULT.target,
+    };
+    let mut meter = WorkMeter::new(ROOMY);
+    let found = isolate(system, domain, options, &mut meter)
+        .unwrap_or_else(|e| panic!("system {s} in {N} unknowns: {e:?}\n{system:?}"));
+    check(&found, zeros, &domain, 1.0 / SCALE, 1.0 / SCALE);
+    (domain, found, meter)
+}
+
+/// Case `s` of the board's corpus in `N` unknowns from its default `seed` (never the override).
+fn board_case<const N: usize>(seed: u64, s: usize) -> Isolation<N> {
+    let mut rng = SplitMix64::new(Seed(seed));
+    let mut drawn = random_system::<N>(&mut rng);
+    for _ in 0..s {
+        drawn = random_system::<N>(&mut rng);
+    }
+    let (system, zeros) = drawn;
+    isolate_case(s, &system, &zeros).1
 }
 
 #[test]
@@ -468,6 +494,32 @@ fn no_zero_is_lost_in_four_unknowns() {
         0x6753_0000_0001_0004,
         0.88,
     );
+}
+
+// The board's cases below take paths the first 300 systems of each dimension (the debug run) never
+// take, found by counting, in an instrumented build, where the release run's 10,000 systems per
+// dimension take each one (system 874 of two unknowns by running the release board with the
+// duplicate check needing both containments). Each is replayed from the board's default seed and
+// checked as the board checks it.
+
+/// A zero proven a second time, from an inflated box reaching into the proof box of the zero found
+/// first, is returned once (systems 336, 388 and 874 of two unknowns): each time the new enclosure
+/// lies in the first proof box or the first enclosure in the new proof box, and in 874 only one of
+/// the two holds.
+#[test]
+fn a_zero_proven_twice_is_returned_once() {
+    for s in [336, 388, 874] {
+        board_case::<2>(0x6753_0000_0001_0002, s);
+    }
+}
+
+/// A flagged region that a proof box found later meets is cut against it, and what lies outside is
+/// examined again (system 5784 of one unknown); one inside a later proof box leaves nothing (system
+/// 2927 of two unknowns). No flagged region is left inside a proof box, and no zero is lost.
+#[test]
+fn flagged_regions_a_later_proof_box_meets_are_cut_or_dropped() {
+    board_case::<1>(0x6753_0000_0001_0001, 5784);
+    board_case::<2>(0x6753_0000_0001_0002, 2927);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -862,7 +914,7 @@ fn run<Sys: System<N, D>, const N: usize, const D: usize>(
     domain: [(f64, f64); N],
     options: Options,
 ) -> Result<Isolation<N>, IsolateError<N>> {
-    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let mut meter = WorkMeter::new(ROOMY);
     isolate(
         system,
         domain.map(|(lo, hi)| iv(lo, hi)),
@@ -1142,9 +1194,10 @@ fn a_refinement_that_stalls_in_doubles_continues_in_double_double() {
     assert!(holds_point(&z.enclosure, [0.125]));
 }
 
-/// `√(x² + 1) − 2`, evaluated in balls because its position cancels: over wide boxes the ball of
-/// `x² + 1` reaches below zero and its root is refused, so the engine encloses those boxes in
-/// doubles, and still proves both zeros.
+/// `√(x² + 1) − 2`, evaluated in balls because its position's first coordinate cancels: over wide
+/// boxes the ball of `x² + 1` reaches below zero and its root is refused, so the engine encloses
+/// those boxes in doubles (their residuals, and their image through the position's second
+/// coordinate, the same root), and still proves both zeros.
 struct Hypot;
 
 impl Residuals<1> for Hypot {
@@ -1153,10 +1206,13 @@ impl Residuals<1> for Hypot {
     }
 }
 
-impl System<1, 1> for Hypot {
-    fn position<S: Scalar>(&self, x: [S; 1]) -> Result<[S; 1], NumError> {
+impl System<1, 2> for Hypot {
+    fn position<S: Scalar>(&self, x: [S; 1]) -> Result<[S; 2], NumError> {
         let big = pow2(60);
-        Ok([x[0].add(c(big))?.sub(c(big))?])
+        Ok([
+            x[0].add(c(big))?.sub(c(big))?,
+            x[0].square()?.add(c(1.0))?.sqrt()?,
+        ])
     }
 }
 
@@ -1196,12 +1252,12 @@ fn every_budget_and_stop_is_an_error() {
     }
     let token = CancelToken::new();
     token.cancel();
-    let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&token);
+    let mut meter = WorkMeter::new(ROOMY).with_cancel(&token);
     assert_eq!(
         isolate(&system, domain, Options::DEFAULT, &mut meter),
         Err(IsolateError::Cancelled)
     );
-    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let mut meter = WorkMeter::new(ROOMY);
     let _ = meter.out_of_memory();
     assert_eq!(
         isolate(&system, domain, Options::DEFAULT, &mut meter),
@@ -1219,8 +1275,8 @@ fn every_budget_and_stop_is_an_error() {
     }
     // The work the whole isolation charges: one unit for each box and for each operator step, the
     // same on every run.
-    let mut a = WorkMeter::new(Budget::UNLIMITED);
-    let mut b = WorkMeter::new(Budget::UNLIMITED);
+    let mut a = WorkMeter::new(ROOMY);
+    let mut b = WorkMeter::new(ROOMY);
     let first = isolate(&system, domain, Options::DEFAULT, &mut a).unwrap();
     assert_eq!(
         isolate(&system, domain, Options::DEFAULT, &mut b).unwrap(),
@@ -1255,6 +1311,99 @@ impl System<1, 1> for Loose {
     fn position<S: Scalar>(&self, x: [S; 1]) -> Result<[S; 1], NumError> {
         Ok(x)
     }
+}
+
+/// `x · (1 + 2⁵⁰(π − π))`, a zero at 0 whose Jacobian's enclosure is about `[½, 3/2]` however small
+/// the box: each refinement step halves the enclosure (the contraction bound is ½, and the value
+/// at the midpoint, 0, is exact), as the bound predicts. Its position is the unknown at 2³⁰ steps
+/// per unit plus `blur · (π − π)`: with a blur the image stops shrinking near `2^−50 · blur`
+/// steps, while the unknown keeps halving.
+struct Halving {
+    blur: f64,
+}
+
+impl Residuals<1> for Halving {
+    fn residuals<S: Scalar>(&self, x: [S; 1]) -> Result<[S; 1], NumError> {
+        let slack = S::pi().sub(S::pi())?;
+        let factor = c::<S>(1.0).add(c::<S>(pow2(50)).mul(slack)?)?;
+        Ok([x[0].mul(factor)?])
+    }
+}
+
+impl System<1, 1> for Halving {
+    fn position<S: Scalar>(&self, x: [S; 1]) -> Result<[S; 1], NumError> {
+        let slack = S::pi().sub(S::pi())?;
+        Ok([c::<S>(pow2(30))
+            .mul(x[0])?
+            .add(c::<S>(self.blur).mul(slack)?)?])
+    }
+}
+
+/// The per-zero cap of 12.3, `⌈log(target / image) / log r⌉ + 8` steps, counted exactly. The first
+/// box, `[−3, 5]`, proves the zero with enclosure `[−2.5, 2.5]` (contraction bound ½): an image of
+/// 5 · 2³⁰ steps. To a target of 2⁻³⁰ steps that predicts ⌈60 + log₂ 5⌉ = 63 steps, and halving
+/// takes exactly those, inside the cap of 71. Blurred, the image never reaches a target of 2⁻⁴⁰
+/// steps; the cap, ⌈70 + log₂ 5⌉ + 8 = 81 steps, stops it: one unit for the box, one for its step
+/// and one for each refinement step, 83 in all.
+#[test]
+fn a_refinement_takes_the_steps_its_bound_predicts_and_stops_at_its_cap() {
+    let mut meter = WorkMeter::new(ROOMY);
+    let options = Options {
+        target: r(pow2(-30)),
+        ..Options::DEFAULT
+    };
+    let found = isolate(&Halving { blur: 0.0 }, [iv(-3.0, 5.0)], options, &mut meter).unwrap();
+    assert_eq!(found.zeros.len(), 1);
+    let e = found.zeros[0].enclosure[0];
+    assert!(e.lo() <= 0.0 && 0.0 <= e.hi());
+    assert!((e.hi() - e.lo()) * pow2(30) <= pow2(-30));
+    assert_eq!(found.zeros[0].precision, Precision::Double);
+    assert_eq!(meter.used().work, 2 + 63);
+    let mut meter = WorkMeter::new(ROOMY);
+    let options = Options {
+        target: r(pow2(-40)),
+        ..Options::DEFAULT
+    };
+    match isolate(
+        &Halving { blur: pow2(20) },
+        [iv(-3.0, 5.0)],
+        options,
+        &mut meter,
+    ) {
+        Err(IsolateError::CapReached { enclosure }) => {
+            assert!(enclosure[0].lo() <= 0.0 && 0.0 <= enclosure[0].hi());
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(meter.used().work, 2 + 81);
+}
+
+/// `x²`, its unknown in grid steps: a double zero, which no operator proves.
+struct Square;
+
+impl Residuals<1> for Square {
+    fn residuals<S: Scalar>(&self, x: [S; 1]) -> Result<[S; 1], NumError> {
+        Ok([x[0].square()?])
+    }
+}
+
+impl System<1, 1> for Square {
+    fn position<S: Scalar>(&self, x: [S; 1]) -> Result<[S; 1], NumError> {
+        Ok(x)
+    }
+}
+
+/// The floor is strict: a box whose image is exactly one step is split, not flagged. The domain
+/// `[−½, ½ − 2⁻⁵³]` is `1 − 2⁻⁵³` wide, rounded up once to an image of exactly 1. Its lower half
+/// excludes the zero and its upper half, half a step, is flagged.
+#[test]
+fn a_box_whose_image_is_one_step_is_split() {
+    let found = run(&Square, [(-0.5, 0.5 - pow2(-53))], Options::DEFAULT).unwrap();
+    assert!(found.zeros.is_empty());
+    assert_eq!(found.flagged.len(), 1);
+    let f = found.flagged[0].region[0];
+    assert!(f.lo() <= 0.0 && 0.0 <= f.hi());
+    assert!((f.hi() - f.lo()).next_up() < 1.0, "{f:?}");
 }
 
 #[test]

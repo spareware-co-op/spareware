@@ -360,7 +360,9 @@ fn corpus() -> Recorder {
     products::<2>(&mut rec, &mut rng, 12);
     products::<3>(&mut rec, &mut rng, 6);
     products::<4>(&mut rec, &mut rng, 4);
-    let unlimited = Budget::UNLIMITED;
+    // A budget no record here comes near (the largest charges under 2,000 units), so that an
+    // engine that loops stops with `Exceeded` instead of running on.
+    let roomy = Budget::new(2_000_000, 64 << 20);
     let default = Options::DEFAULT;
     let hs = Options {
         operator: Operator::HansenSengupta,
@@ -380,7 +382,7 @@ fn corpus() -> Recorder {
                 },
                 [(-2.0, 2.0)],
                 options,
-                unlimited,
+                roomy,
             );
             rec.isolation(
                 &Roots {
@@ -389,7 +391,7 @@ fn corpus() -> Recorder {
                 },
                 [(0.0, 1.0)],
                 options,
-                unlimited,
+                roomy,
             );
         }
     }
@@ -397,7 +399,7 @@ fn corpus() -> Recorder {
         roots: vec![0.25, 0.5],
         scale: 1.0,
     };
-    rec.isolation(&near, [(-3.0, 3.0)], default, unlimited);
+    rec.isolation(&near, [(-3.0, 3.0)], default, roomy);
     let fine = Options {
         target: r(1e-9),
         ..default
@@ -409,7 +411,7 @@ fn corpus() -> Recorder {
         },
         [(-8.0, 8.0)],
         fine,
-        unlimited,
+        roomy,
     );
     let big = pow2(60);
     for options in [default, hs] {
@@ -421,7 +423,7 @@ fn corpus() -> Recorder {
             },
             [(0.0, 2048.0)],
             options,
-            unlimited,
+            roomy,
         );
         rec.isolation(
             &Cancelling {
@@ -431,7 +433,7 @@ fn corpus() -> Recorder {
             },
             [(0.0, 2048.0)],
             options,
-            unlimited,
+            roomy,
         );
     }
     rec.isolation(
@@ -442,13 +444,13 @@ fn corpus() -> Recorder {
         },
         [(-4.0, 4.0)],
         fine,
-        unlimited,
+        roomy,
     );
     rec.isolation(
         &Odd { dependent: true },
         [(-1.0, 1.0), (-1.0, 1.0)],
         default,
-        unlimited,
+        roomy,
     );
     rec.isolation(
         &Odd { dependent: false },
@@ -485,7 +487,7 @@ fn corpus() -> Recorder {
             target: r(1e-300),
             ..default
         },
-        unlimited,
+        roomy,
     );
     rec.isolation(
         &Cancelling {
@@ -495,13 +497,13 @@ fn corpus() -> Recorder {
         },
         [(0.0, 4.0)],
         default,
-        unlimited,
+        roomy,
     );
     rec.isolation(
         &Stretched,
         [(1.0, 1.0 + 4.0 * f64::EPSILON)],
         default,
-        unlimited,
+        roomy,
     );
     rec
 }
