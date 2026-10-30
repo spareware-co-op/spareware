@@ -969,7 +969,9 @@ dependencies = [
  "geom-sketch",
  "geom-subd",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "serde_json",
 ]
 
 [[package]]
@@ -978,8 +980,10 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "geom-bench",
+ "geom-format",
  "geom-gen",
  "geom-num",
+ "geom-run",
  "geom-test",
  "num-bigint",
 ]
