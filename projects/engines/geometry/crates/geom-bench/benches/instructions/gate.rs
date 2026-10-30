@@ -1098,10 +1098,18 @@ pub mod interval {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("interval/atan2/typical"))]
+    #[bench::extreme(leak("interval/atan2/extreme"))]
+    fn atan2(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = interval;
         benchmarks = new, contains, add, sub, mul, div, mul_add, square, sqrt, norm, neg, sinpi,
-            cospi, exp, ln, certain_sign
+            cospi, exp, ln, atan2, certain_sign
     );
 }
 
@@ -2342,5 +2350,73 @@ pub mod perturb {
     library_benchmark_group!(
         name = perturb;
         benchmarks = orient2d, orient3d, incircle, insphere
+    );
+}
+
+/// The interval Newton operators (G52).
+pub mod newton {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("newton/krawczyk_2/typical"))]
+    #[bench::extreme(leak("newton/krawczyk_2/extreme"))]
+    fn krawczyk_2(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("newton/hansen_sengupta_2/typical"))]
+    #[bench::extreme(leak("newton/hansen_sengupta_2/extreme"))]
+    fn hansen_sengupta_2(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("newton/krawczyk_4/typical"))]
+    #[bench::extreme(leak("newton/krawczyk_4/extreme"))]
+    fn krawczyk_4(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("newton/hansen_sengupta_4/typical"))]
+    #[bench::extreme(leak("newton/hansen_sengupta_4/extreme"))]
+    fn hansen_sengupta_4(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = newton;
+        benchmarks = krawczyk_2, hansen_sengupta_2, krawczyk_4, hansen_sengupta_4
+    );
+}
+
+/// The Jacobians of the dual numbers (G52).
+pub mod dual {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dual/jacobian_real/typical"))]
+    #[bench::extreme(leak("dual/jacobian_real/extreme"))]
+    fn jacobian_real(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("dual/jacobian_interval/typical"))]
+    #[bench::extreme(leak("dual/jacobian_interval/extreme"))]
+    fn jacobian_interval(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = dual;
+        benchmarks = jacobian_real, jacobian_interval
     );
 }

@@ -24,6 +24,10 @@ use num_traits::{One, Signed, ToPrimitive, Zero};
 use proptest::test_runner::Config;
 
 /// The configuration a property runs with: `cases` random cases.
+#[allow(
+    dead_code,
+    reason = "some of the test files that share this module do not use it"
+)]
 pub fn config(cases: u32) -> Config {
     Config {
         cases,

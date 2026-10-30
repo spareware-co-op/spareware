@@ -78,6 +78,10 @@
 //! - `fma` is `libm::fma` ([`super::support::fma`]), correctly rounded like `__builtin_fma`; the
 //!   C source's unfused `ah * bl + f` stays unfused (its no-contraction configuration).
 //! - `roundeven_finite` is `libm::rint` (round to nearest, ties to even, exact).
+//! - `muldd`'s exact product error, `__builtin_fma(ch, xh, -ahhh)`, is
+//!   [`super::support::product_error`]: that fused multiply-add natively, and on WebAssembly,
+//!   whose fused multiply-add `libm` computes in software, Dekker's two-product, the same exact
+//!   value (piece G47: it brings `exp` within twice `libm`'s time there).
 //! - Table reads are total ([`super::support::entry`]); the accurate path is kept out of line
 //!   (`#[cold]`, `#[inline(never)]`) so that the fast path's code stays small.
 //! - The C code's integer steps follow the crate's rule (`lib.rs`): the conversion of the rounded
@@ -140,7 +144,7 @@
 //! error below `2^−50·ulp`, so Lemma 2 applies with `t = 33`. ∎
 
 use super::hexf::hf;
-use super::support::{entry, fast_two_sum, fma, pow2, unsigned};
+use super::support::{entry, fast_two_sum, fma, pow2, product_error, unsigned};
 
 /// `2^12/ln 2`, rounded: the reduction's scale.
 const S: f64 = hf!("0x1.71547652b82fep+12");
@@ -173,11 +177,13 @@ const EPS_P: f64 = hf!("0x1p-76");
 /// subnormal result.
 const SUBNORMAL_THRESHOLD: u64 = 0xc086_232b_dd7a_bcd2;
 
-/// Double-double product `(xh + xl)·(ch + cl)` (C: `muldd`), low-order terms unfused.
+/// Double-double product `(xh + xl)·(ch + cl)` (C: `muldd`), low-order terms unfused. The exact
+/// error of `ch·xh` is C's `__builtin_fma(ch, xh, -ahhh)`, through [`product_error`]: Lemma 4's
+/// proof takes it exact, so every call has `|ch·xh| ≥ 2^−969`.
 #[inline]
 fn mul_dd(xh: f64, xl: f64, ch: f64, cl: f64) -> (f64, f64) {
     let ahhh = ch * xh;
-    let l = (ch * xl + cl * xh) + fma(ch, xh, -ahhh);
+    let l = (ch * xl + cl * xh) + product_error(ch, xh, ahhh);
     (ahhh, l)
 }
 

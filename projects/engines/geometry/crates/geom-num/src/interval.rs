@@ -23,11 +23,10 @@
 //!
 //! - **Inclusion**, as above, for `add`, `sub`, `mul`, `div`, `mul_add`, `square`, `sqrt`, `norm`
 //!   and `neg`. These are built from the operations IEEE 754 rounds correctly, so one step outward
-//!   is a proven enclosure. The same holds for `sinpi`, `cospi`, `exp` and `ln`, built from the
-//!   correctly rounded functions of [`crate::math`] in `math/enclose.rs`, which carries their
-//!   proofs. An enclosure that needs a function whose error is not proven (the radian `sin` and
-//!   `cos`, which only `libm` supplies) or whose interval version is not built yet (`atan2`) is
-//!   refused with [`NumError::UnprovenMaths`].
+//!   is a proven enclosure. The same holds for `sinpi`, `cospi`, `exp`, `ln` and `atan2`, built
+//!   from the correctly rounded functions of [`crate::math`] in `math/enclose.rs`, which carries
+//!   their proofs. An enclosure that needs a function whose error is not proven (the radian `sin`
+//!   and `cos`, which only `libm` supplies) is refused with [`NumError::UnprovenMaths`].
 //! - **Finite, ordered, never NaN.** Both bounds are finite and `lo ≤ hi`. An operation whose
 //!   widened bound would leave the finite doubles (a rounded bound that reaches
 //!   ±(2 − 2^−52) · 2^1023 or overflows) returns [`NumError::NotFinite`] instead.
@@ -38,9 +37,9 @@
 //!   the upper bound at most the double above the smallest double at or above the exact upper
 //!   bound. A bound that is exact by construction is not widened, so it is the exact bound
 //!   itself: both bounds of `neg`, the lower bound 0 of `square` over an interval holding zero,
-//!   a zero bound of `sqrt`, and the exact values and peaks of `sinpi`, `cospi`, `exp` and `ln`
-//!   (`math/enclose.rs`). `norm` chains several operations, so each of its steps is tight in this
-//!   sense but the whole is not.
+//!   a zero bound of `sqrt`, the exact values and peaks of `sinpi`, `cospi`, `exp` and `ln`, and
+//!   the exact zero angle of `atan2` (`math/enclose.rs`). `norm` chains several operations, so
+//!   each of its steps is tight in this sense but the whole is not.
 //!
 //!   Counted in steps, where the step at a value is the spacing of the doubles in its binade, a
 //!   computed bound is at most 2.5 steps of the exact bound outside it, at most 2 steps of the
@@ -196,6 +195,15 @@ const fn widened(lo: f64, hi: f64) -> Result<Interval, NumError> {
     reason = "fallible arithmetic returns Result, not Self"
 )]
 impl Interval {
+    /// An enclosure of π: `[PI, next_up(PI)]`, the two doubles either side of it. `core::f64::consts::PI`
+    /// is π rounded to nearest, 884279719003555 · 2^−48, which is below π by about 1.2 · 10^−16, and
+    /// the next double is 2^−51 ≈ 4.4 · 10^−16 above it, so above π (`tests/attack_g52.rs` checks
+    /// both against π's digits).
+    pub const PI: Interval = Interval {
+        lo: core::f64::consts::PI,
+        hi: core::f64::consts::PI.next_up(),
+    };
+
     /// The interval holding exactly `x`.
     ///
     /// It encloses the double `x` itself, nothing more. If `x` was computed, for example by a
@@ -359,8 +367,8 @@ impl Interval {
     /// bound, with the upper bound of `c` in place of the lower one, so a corner that overflows
     /// upward makes the upper bound overflow, and one that overflows downward the lower bound.
     pub fn mul_add(self, b: Interval, c: Interval) -> Result<Interval, NumError> {
-        let low = |x: f64, y: f64| math::fma(x, y, c.lo).map(Real::get);
-        let high = |x: f64, y: f64| math::fma(x, y, c.hi).map(Real::get);
+        let low = |x: f64, y: f64| math::fma_of_finite(x, y, c.lo);
+        let high = |x: f64, y: f64| math::fma_of_finite(x, y, c.hi);
         let (ll, lh, hl, hh) = (
             low(self.lo, b.lo)?,
             low(self.lo, b.hi)?,
@@ -408,26 +416,6 @@ impl Interval {
         reason = "refuses every interval: no radian cosine is proven; Interval::cospi is certified"
     )]
     pub const fn cos(self) -> Result<Interval, NumError> {
-        Err(NumError::UnprovenMaths)
-    }
-
-    /// The angle of the points (x, y) for y in this interval and x in `x`: refused, until its
-    /// interval version is built.
-    ///
-    /// The point function [`crate::math::atan2()`] has a proven error bound, but an enclosure of
-    /// its values over a box is not built yet: its extremes are at the box's corners except across
-    /// the branch cut on the negative x-axis and at the origin, which it must handle before its
-    /// result is a certificate (`math/enclose.rs`). It keeps this signature.
-    ///
-    /// # Errors
-    ///
-    /// Always [`NumError::UnprovenMaths`].
-    #[allow(
-        clippy::unused_self,
-        reason = "refuses every interval until its enclosure is built, which keeps this signature"
-    )]
-    pub const fn atan2(self, x: Interval) -> Result<Interval, NumError> {
-        let _ = x;
         Err(NumError::UnprovenMaths)
     }
 
@@ -582,6 +570,15 @@ impl Interval {
     }
 }
 
+/// The interval holding exactly the finite double `x`, as [`Interval::point`] makes it; a `Real`
+/// is finite, so this cannot fail. A zero is stored as +0.
+impl From<Real> for Interval {
+    fn from(x: Real) -> Interval {
+        let v = zero_to_plus(x.get());
+        Interval { lo: v, hi: v }
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
@@ -732,15 +729,15 @@ mod tests {
         assert!(r.contains(-(e * e)));
     }
 
-    /// The enclosures that are not certified yet refuse every interval: the radian sine and
-    /// cosine, whose error `libm` does not prove, and `atan2`, whose interval version is not built.
-    /// `exp` and `ln` are certified (`math/enclose.rs`) and refuse only outside their domains.
+    /// The enclosures that are not certified refuse every interval: the radian sine and cosine,
+    /// whose error `libm` does not prove. `exp`, `ln` and `atan2` are certified
+    /// (`math/enclose.rs`) and refuse only outside their domains.
     #[test]
     fn unproven_functions_are_refused() {
         for x in intervals() {
             assert_eq!(x.sin(), Err(NumError::UnprovenMaths));
             assert_eq!(x.cos(), Err(NumError::UnprovenMaths));
-            assert_eq!(x.atan2(x), Err(NumError::UnprovenMaths));
+            assert_ne!(x.atan2(x), Err(NumError::UnprovenMaths));
             assert_ne!(x.exp(), Err(NumError::UnprovenMaths));
             assert_ne!(x.ln(), Err(NumError::UnprovenMaths));
         }

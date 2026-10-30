@@ -457,9 +457,11 @@ fn every_malformed_variant_of_the_real_store_is_refused() {
     push("history without a piece", &|v| {
         goldens(v)[0]["history"][0]["piece"] = Value::from(" ");
     });
+    // The last record's successor is the golden's digest, however many records come before it.
     push("history equal to its successor", &|v| {
         let digest = goldens(v)[0]["sha256"].clone();
-        goldens(v)[0]["history"][0]["sha256"] = digest;
+        let history = goldens(v)[0]["history"].as_array_mut().unwrap();
+        history.last_mut().unwrap()["sha256"] = digest;
     });
     push("negative operation version", &|v| {
         goldens(v)[0]["operations"] = serde_json::json!({"extrude": -1});
@@ -823,8 +825,18 @@ fn kernel_golden_yml_runs_the_check_and_the_approval_rule() {
 // ---------------------------------------------------------------------------------------------
 
 /// Code that orders by address sees different orders under different perturbations: on whatever
-/// allocator this target has, sixteen seeds give at least two orders of 64 boxes, and a golden
+/// allocator this target has, sixteen seeds give at least eight orders of 64 boxes, and a golden
 /// whose case orders by address fails as a repeat.
+///
+/// What holds on each of CI's allocators is in `golden::perturb`'s last three guarantees, with what
+/// was measured for issues #370 and #377: sixteen orders in nearly every sweep of sixteen seeds on
+/// every runner, debug and release, alone and among busy tests, and never fewer than 13 (macOS on
+/// x86-64) or 14 (macOS on arm64). Eight is a wide margin below that, so the test does not pass or
+/// fail by chance. Where the perturbation's boxes did not reach the pool of the 64 boxes (macOS on
+/// arm64 before the perturbation boxed the small classes, and in about one release process in
+/// eight while it boxed each size from one call site), the boxes gave their own two orders
+/// (ascending, then descending, from their own reuse) and once one: the old bound of two passed
+/// that by chance and failed it now and then (issues #370 and #377); eight fails it every time.
 #[test]
 fn the_perturbation_changes_what_address_ordered_code_sees() {
     let mut seen = BTreeSet::new();
@@ -833,7 +845,11 @@ fn the_perturbation_changes_what_address_ordered_code_sees() {
         seen.insert(address_order_digest(64));
         drop(heap);
     }
-    assert!(seen.len() >= 2, "every perturbation left the order alone");
+    assert!(
+        seen.len() >= 8,
+        "sixteen perturbations gave {} orders of 64 boxes",
+        seen.len()
+    );
     let store = Store::parse(&format!(
         r#"{{"format": 1, "about": "t", "editions": [{{"edition": "pre-edition", "state": "open",
         "goldens": [{{"id": "geom-x/by-address", "what": "w", "sha256": "{}",

@@ -1074,6 +1074,44 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[x, y, z, w, v]| geom_num::perturb::insphere(x, y, z, w, v)),
         ),
+        ("newton", "krawczyk_2") => fold(
+            inputs::newton::krawczyk_2(class)
+                .into_iter()
+                .map(|b| geom_num::newton::krawczyk(&inputs::newton::CircleLine, b)),
+        ),
+        ("newton", "hansen_sengupta_2") => fold(
+            inputs::newton::hansen_sengupta_2(class)
+                .into_iter()
+                .map(|b| geom_num::newton::hansen_sengupta(&inputs::newton::CircleLine, b)),
+        ),
+        ("newton", "krawczyk_4") => fold(
+            inputs::newton::krawczyk_4(class)
+                .into_iter()
+                .map(|b| geom_num::newton::krawczyk(&inputs::newton::Four, b)),
+        ),
+        ("newton", "hansen_sengupta_4") => fold(
+            inputs::newton::hansen_sengupta_4(class)
+                .into_iter()
+                .map(|b| geom_num::newton::hansen_sengupta(&inputs::newton::Four, b)),
+        ),
+        ("dual", "jacobian_real") => {
+            fold(inputs::newton::jacobian_real(class).into_iter().map(|x| {
+                geom_num::dual::jacobian(
+                    |v| geom_num::newton::Residuals::residuals(&inputs::newton::Four, v),
+                    x,
+                )
+            }))
+        }
+        ("dual", "jacobian_interval") => fold(
+            inputs::newton::jacobian_interval(class)
+                .into_iter()
+                .map(|x| {
+                    geom_num::dual::jacobian(
+                        |v| geom_num::newton::Residuals::residuals(&inputs::newton::Four, v),
+                        x,
+                    )
+                }),
+        ),
         ("eft", "two_sum") => fold(
             ie::two_sum(class)
                 .into_iter()
@@ -1115,6 +1153,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("interval", "cospi") => fold(ii::cospi(class).into_iter().map(Interval::cospi)),
         ("interval", "exp") => fold(ii::exp(class).into_iter().map(Interval::exp)),
         ("interval", "ln") => fold(ii::ln(class).into_iter().map(Interval::ln)),
+        ("interval", "atan2") => fold(ii::atan2(class).into_iter().map(|(y, x)| y.atan2(x))),
         ("interval", "certain_sign") => fold(
             ii::certain_sign(class)
                 .into_iter()
@@ -3396,6 +3435,43 @@ fn every_enclosure_finds_its_peaks_exactly_and_holds_its_ends() {
                 }
                 if x.lo() == 1.0 {
                     assert_eq!(y.lo(), 0.0, "ln({x:?}): ln 1 is exactly 0");
+                }
+            }
+        }
+    }
+    // atan2: the whole range where the box meets the branch cut from both sides, the origin alone
+    // refused, and otherwise every corner but the origin held, inside [−π, π] rounded outward.
+    let pi_up = std::f64::consts::PI.next_up();
+    for class in Class::ALL {
+        for (y, x) in i::atan2(class) {
+            let r = y.atan2(x);
+            if x.lo() < 0.0 && y.lo() < 0.0 && y.hi() >= 0.0 {
+                assert_eq!(
+                    r,
+                    Ok(Interval::new(-pi_up, pi_up).unwrap()),
+                    "{y:?}.atan2({x:?})"
+                );
+            } else if (y.lo(), y.hi(), x.lo(), x.hi()) == (0.0, 0.0, 0.0, 0.0) {
+                assert_eq!(r, Err(NumError::OutsideDomain), "{y:?}.atan2({x:?})");
+            } else {
+                let r = r.unwrap();
+                assert!(
+                    -pi_up <= r.lo() && r.hi() <= pi_up,
+                    "{y:?}.atan2({x:?}) = {r:?}"
+                );
+                for (cy, cx) in [
+                    (y.lo(), x.lo()),
+                    (y.lo(), x.hi()),
+                    (y.hi(), x.lo()),
+                    (y.hi(), x.hi()),
+                ] {
+                    if cy != 0.0 || cx != 0.0 {
+                        let v = math::atan2(cy, cx).unwrap().get();
+                        assert!(
+                            r.contains(v),
+                            "{y:?}.atan2({x:?}) = {r:?} leaves out ({cx:e}, {cy:e})"
+                        );
+                    }
                 }
             }
         }

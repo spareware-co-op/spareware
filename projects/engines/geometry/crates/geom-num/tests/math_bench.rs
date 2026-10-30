@@ -150,6 +150,13 @@ fn proven_functions_are_within_twice_libm() {
         Ok(i) => i.exp().map_or(0.0, Interval::hi),
         Err(_) => 0.0,
     });
+    // Boxes one unit wide at the same points: four corners, or none across the branch cut.
+    let interval_atan2 = per_call(&atan2_args, |y, x| {
+        match (Interval::new(y, y + 1.0), Interval::new(x, x + 1.0)) {
+            (Ok(b), Ok(a)) => b.atan2(a).map_or(0.0, Interval::hi),
+            _ => 0.0,
+        }
+    });
 
     eprintln!("function   kernel ns   libm ns   ratio");
     let mut over = Vec::new();
@@ -163,6 +170,9 @@ fn proven_functions_are_within_twice_libm() {
             over.push(format!("{} is {ratio:.2} times libm", l.name));
         }
     }
-    eprintln!("Interval::sinpi {interval_sinpi:.1} ns, Interval::exp {interval_exp:.1} ns");
+    eprintln!(
+        "Interval::sinpi {interval_sinpi:.1} ns, Interval::exp {interval_exp:.1} ns, \
+         Interval::atan2 {interval_atan2:.1} ns"
+    );
     assert!(over.is_empty(), "over the 2x target: {over:?}");
 }
