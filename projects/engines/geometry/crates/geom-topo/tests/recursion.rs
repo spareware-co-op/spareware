@@ -39,7 +39,7 @@ fn hash<T: Hash>(t: &T) -> u64 {
 /// Clones, compares, hashes, prints and drops one row, and returns its printed form.
 fn round<T: Clone + PartialEq + Hash + Debug>(row: &T) -> String {
     let copy = row.clone();
-    assert!(copy == *row);
+    assert_eq!(copy, *row);
     assert_eq!(hash(&copy), hash(row));
     let text = format!("{copy:?}");
     drop(copy);
