@@ -236,9 +236,21 @@
               "kind": "corpus",
               "piece": "G105",
               "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
+            },
+            {
+              "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812",
+              "kind": "corpus",
+              "piece": "G158",
+              "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
+            },
+            {
+              "sha256": "71d5020c80411fdbcffcc856ab61ead6142460d6afde64e30b08e01bea0ad627",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
-          "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812"
+          "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1"
         },
         {
           "id": "geom-nurbs/operations",
@@ -278,13 +290,19 @@
             "test": "analytic_determinism",
             "function": "analytic_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "0c25c27e3c8c9f679924d6644ccd47a55eeb0929eee4271c638c9bce12627fe9",
+          "sha256": "b9e16212d966052945e4131e1705a3bc9a5e5c01df31a5ccd1a16216bc459dfb",
           "history": [
             {
               "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342",
               "kind": "improvement",
               "piece": "G67",
               "why": "The analytic kinds' bounds and derivative bounds are their closed-form extents now (piece G67): each coordinate's range over the span from its values at the span's ends and at its critical points in closed form, where G61 took the interval extension over eighths of a turn. So the bound records of the line, circle, ellipse, hyperbola, parabola, helix and involute moved inward, and so did the deviations of the helix's and involute's NURBS forms, whose Taylor remainders rest on derivative bounds. The change is in the bound route alone (form.rs's bound and derivative_bound); the result count (30606) and the refusals (6) are unchanged."
+            },
+            {
+              "sha256": "0c25c27e3c8c9f679924d6644ccd47a55eeb0929eee4271c638c9bce12627fe9",
+              "kind": "improvement",
+              "piece": "G69",
+              "why": "A grid transform that moves a circle's centre exactly now states deviation 0 (chapter 7: grid transforms stay exact; piece G69's law catalogue found circles on frames with irrational unit vectors stating about 1e-14, from comparing interval enclosures that are never points). The corpus's quarter turns of circles moved; the kinds, their data and every other record are unchanged, and so are the result count (30606) and the refusals (6)."
             }
           ]
         },
@@ -296,13 +314,19 @@
             "test": "compound_determinism",
             "function": "compound_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "3f8ae9216582bafeecce26ad7b619ffa4208ab095251518127420cd24c400760",
+          "sha256": "da8e6e689c1157e9a9b81f1164620b70ddffb9be97fae2746e19fea2b2b49338",
           "history": [
             {
               "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2",
               "kind": "improvement",
               "piece": "G67",
               "why": "The analytic kinds' bounds and derivative bounds are their closed-form extents now (piece G67). The bulge, trimmed, composite and offset kinds bound their analytic leaves through them, a composite's enclosures over a parameter interval use them, and the offsets' NURBS caches take their Taylor remainders from them, so those records moved. No compound kind's own code changed; the result count (10506) and the refusals (6) are unchanged."
+            },
+            {
+              "sha256": "3f8ae9216582bafeecce26ad7b619ffa4208ab095251518127420cd24c400760",
+              "kind": "improvement",
+              "piece": "G69",
+              "why": "A grid transform that moves a bulge polyline's vertices, or a circle's centre, exactly now states deviation 0 (chapter 7; piece G69's law catalogue), and so do the trimmed and composite curves built on them. The corpus's quarter turns of those curves moved; the result count (10506) and the refusals (6) are unchanged."
             }
           ]
         },
@@ -342,13 +366,19 @@
             "test": "surface_determinism",
             "function": "surface_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
+          "sha256": "b649188c5a496949dbfdc81714544cc36aeee9c50bb90cd6402ec5a8117cbf94",
           "history": [
             {
               "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd",
               "kind": "improvement",
               "piece": "G67",
               "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r·cos πv)·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
+            },
+            {
+              "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
+              "kind": "improvement",
+              "piece": "G69",
+              "why": "A grid transform that moves a cylinder's, cone's, sphere's or torus's centre exactly now states deviation 0 (chapter 7; piece G69's law catalogue found about 1e-15 stated, from comparing interval enclosures of irrational unit vectors). The corpus's quarter turns of those kinds moved; its revolutions turn about the origin, so piece G69's fix of a revolution's placement moved none of them; the result count (2693) and the refusals (5) are unchanged."
             }
           ]
         },
@@ -360,7 +390,7 @@
             "test": "offset_determinism",
             "function": "offset_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "0a84316b9ba89bd537d18c1c017a9acf8680cbaec57ec8612342702abad14906",
+          "sha256": "400046692e8651b4708068b01fa6e4b86efc7af0632345e1ae6705813e16afde",
           "history": [
             {
               "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00",
@@ -373,6 +403,12 @@
               "kind": "improvement",
               "piece": "G68",
               "why": "A rational NURBS patch's partials over a box now start from the hull of its Euclidean control points (chapter 19.3's interval quotient rule, piece G68) rather than from the quotient of the boxes of its numerator and weight. The second round's offset is of a rational patch, and an offset bounds itself and builds its certified cache from its base's partials over boxes, so the records that rest on them moved. The offset kind's own code did not change; the result count (314) and the refusals (4) are unchanged."
+            },
+            {
+              "sha256": "0a84316b9ba89bd537d18c1c017a9acf8680cbaec57ec8612342702abad14906",
+              "kind": "improvement",
+              "piece": "G69",
+              "why": "A grid mirror of an analytic base now states deviation 0 (piece G69), so a grid mirror of an offset of such a base is an offset again, its distance negated, by the offset kind's own rule (an exact move of the base keeps the kind), where before the base's stated rounding sent it to its moved NURBS cache. The result count (314) and the refusals (4) are unchanged."
             }
           ]
         },

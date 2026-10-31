@@ -866,7 +866,9 @@ dependencies = [
  "geom-bvh",
  "geom-curve",
  "geom-format",
+ "geom-intersect",
  "geom-linalg",
+ "geom-make",
  "geom-math",
  "geom-num",
  "geom-nurbs",
@@ -1108,6 +1110,7 @@ dependencies = [
  "geom-curve",
  "geom-format",
  "geom-gen",
+ "geom-intersect",
  "geom-make",
  "geom-math",
  "geom-num",
@@ -1182,6 +1185,7 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
 ]
 
 [[package]]
@@ -1212,6 +1216,7 @@ dependencies = [
 name = "geom-make"
 version = "0.0.0"
 dependencies = [
+ "cap",
  "geom-check",
  "geom-curve",
  "geom-math",
@@ -1545,13 +1550,16 @@ dependencies = [
  "clap",
  "dashu-int",
  "dashu-ratio",
+ "geom-curve",
  "geom-format",
+ "geom-intersect",
  "geom-make",
  "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
  "geom-run",
+ "geom-surface",
  "geom-topo",
  "hex",
  "lcov",

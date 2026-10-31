@@ -1333,6 +1333,39 @@ fn a_moved_count_is_refused_on_any_record() {
 }
 
 #[test]
+fn a_changed_error_is_not_only_a_moved_count() {
+    let err = fixture(vec![op("bad", 1)]);
+    let k = key(&err.log);
+    let Expect::Err { kind, entities, .. } = err.expect[&k].clone() else {
+        panic!()
+    };
+    let with = |kind: Kind, entities: Vec<Name>| {
+        let mut moved = err.clone();
+        moved.expect.insert(
+            k.clone(),
+            Expect::Err {
+                kind,
+                entities,
+                work: Some(ONE),
+            },
+        );
+        moved
+    };
+    let other = Kind(if kind.0 == ErrorKind::Internal {
+        ErrorKind::BudgetExceeded
+    } else {
+        ErrorKind::Internal
+    });
+    let mut more = entities.clone();
+    more.push(Name(NameId::from_bytes([9; 16])));
+    // Each takes the ordinary road, and so asks for a record, not a new version.
+    for changed in [with(other, entities), with(kind, more)] {
+        let d = diff(&[err.clone()], &[changed], state);
+        assert!(d.refused[0].contains("without a record"), "{d:?}");
+    }
+}
+
+#[test]
 fn counts_are_required_where_a_golden_is_stored() {
     let good = fixture(vec![op("good", 1)]);
     let mut f = good.clone();

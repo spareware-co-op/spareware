@@ -39,7 +39,7 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, cache, cbor, make, orient2d, predicates, sequence, variants, wide,
+    Harness, arenas, cache, cbor, intersect, make, orient2d, predicates, sequence, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
@@ -51,10 +51,11 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 9] = [
+const TARGETS: [(&str, Harness); 10] = [
     ("arenas", arenas::harness),
     ("cache", cache::harness),
     ("cbor", cbor::harness),
+    ("intersect", intersect::harness),
     ("make", make::harness),
     ("orient2d", orient2d::harness),
     ("predicates", predicates::harness),
@@ -544,8 +545,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
 
     // Seeded violations: each must be reported.
     let drop_fuzz = workflow.replace(
-        "[arenas_fuzz, cache_fuzz, cbor_fuzz, make_fuzz, orient2d_fuzz, predicates_fuzz, sequence_fuzz, variants_fuzz, wide_fuzz]",
-        "[arenas_fuzz, cache_fuzz, cbor_fuzz, make_fuzz, predicates_fuzz, sequence_fuzz, variants_fuzz, wide_fuzz]",
+        "[arenas_fuzz, cache_fuzz, cbor_fuzz, intersect_fuzz, make_fuzz, orient2d_fuzz, predicates_fuzz, sequence_fuzz, variants_fuzz, wide_fuzz]",
+        "[arenas_fuzz, cache_fuzz, cbor_fuzz, intersect_fuzz, make_fuzz, predicates_fuzz, sequence_fuzz, variants_fuzz, wide_fuzz]",
     );
     assert_ne!(drop_fuzz, workflow);
     assert!(

@@ -884,6 +884,49 @@ impl<T: Canonical> Canonical for Result<T, geom_curve::CurveError> {
     }
 }
 
+// `geom-make`'s operations (decision 32.44's count benchmarks for piece G101).
+
+impl Canonical for geom_make::BoxInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.min.encode(h);
+        self.size.map(geom_num::Steps::get).encode(h);
+    }
+}
+
+impl Canonical for geom_make::RoundInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.base.encode(h);
+        self.radius.get().encode(h);
+        self.height.get().encode(h);
+        self.step.rung().encode(h);
+    }
+}
+
+impl Canonical for geom_op::OpOutput<geom_make::Made> {
+    // A built body, as a transform's input: its corners, then its class's rank.
+    fn encode(&self, h: &mut Sha256) {
+        for point in self.result.body.arenas().points.iter() {
+            point.encode(h);
+        }
+        u32::from(self.exactness.rank()).encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // Root finding and quadrature (decision 32.44's count benchmark for piece G51).
 
 impl Canonical for geom_num::brent::Zero {
@@ -891,6 +934,49 @@ impl Canonical for geom_num::brent::Zero {
     // prints each double in the shortest form that reads back to the same bits.
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
+    }
+}
+
+// `geom-intersect`'s results (decision 32.44's count benchmarks for piece G158), each through its
+// debug text: their fields are public only as far as the kernel needs, and a double's debug text
+// is the same on every target.
+
+impl Canonical for geom_curve::CurveKind<3> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::Item {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::Intersection {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::CanonicalKey {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_intersect::IntersectError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
     }
 }
 

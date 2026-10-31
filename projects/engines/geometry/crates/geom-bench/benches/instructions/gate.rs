@@ -13,9 +13,8 @@
 //!
 //! Guarantees: a rise over [`GATE_PERCENT`] in instructions, estimated cycles or any heap measure,
 //! or a golden digest that differs, fails the run; the miss counts are judged after the run from
-//! its summaries (`geom_bench::callgrind`: gated at [`GATE_PERCENT`] from a merge-base count of 20
-//! up, below that listed and judged through estimated cycles, because a count below 20 cannot show
-//! a 5% change smaller than one event, while code layout alone moves it by one or two);
+//! its summaries (`geom_bench::callgrind`: every miss count is listed and judged through estimated
+//! cycles, which price every miss, because code layout alone moves miss counts);
 //! `tests/coverage.rs`, `tests/attack_g06.rs` and `tests/attack_g18a.rs` check this file's wiring.
 //!
 //! Identifiers are `instructions::<group>::<op> <class>`, for example
@@ -67,9 +66,9 @@ fn verify(run: &'static mut Named) {
 /// workflow passes its own limits on the command line, which replace these
 /// (`geom_bench::CALLGRIND_LIMITS` and `DHAT_LIMITS`), so the gate does not depend on this file:
 /// they gate instructions, estimated cycles and heap, and `geom_bench::callgrind` judges the miss
-/// counts from the run's summaries, gating only those large enough to resolve 5%. A bare run is
-/// stricter than the gate on miss counts below 20; pass the workflow's limits to compare as CI does
-/// (the crate documentation). This code is part of the measured binary, so it is left as it was.
+/// counts from the run's summaries, through estimated cycles. A bare run is stricter than the gate
+/// on every miss count; pass the workflow's limits to compare as CI does (the crate
+/// documentation). This code is part of the measured binary, so it is left as it was.
 pub fn config() -> LibraryBenchmarkConfig {
     let mut callgrind = Callgrind::default();
     callgrind.args([ZERO_BEFORE]);
@@ -2755,5 +2754,74 @@ pub mod quadrature {
     library_benchmark_group!(
         name = quadrature;
         benchmarks = gauss_legendre
+    );
+}
+
+/// geom-make's hot paths (piece G101; decision 32.44).
+pub mod make {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/build_box/typical"))]
+    fn build_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/cylinder/typical"))]
+    fn cylinder(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/move_box/typical"))]
+    fn move_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/turn_box/typical"))]
+    fn turn_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = make;
+        benchmarks = build_box, cylinder, move_box, turn_box
+    );
+}
+
+/// geom-intersect's hot paths (piece G158; decision 32.44).
+pub mod intersect {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/sort_items/typical"))]
+    fn sort_items(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/key_circle/typical"))]
+    fn key_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/pair_lines/typical"))]
+    fn pair_lines(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = intersect;
+        benchmarks = sort_items, key_circle, pair_lines
     );
 }

@@ -39,7 +39,7 @@
 //!
 //! Cost: an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations;
 //! the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval
-//! of the basis.
+//! of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives.
 
 #![allow(
     clippy::many_single_char_names,
@@ -558,9 +558,13 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
                 .fold(1.0_f64, |s, x| tight::larger(s, x.abs()));
         for per in [8, 16, 32, 64, 128] {
             let cuts = taylor::cuts_between(self.domain(), &breaks, per)?;
-            let n = taylor::from_cuts(self, CACHE_DEGREE, &cuts, meter)?;
-            if n.deviation <= scale * 1e-10 || per == 128 {
-                return Ok(n);
+            match taylor::from_cuts(self, CACHE_DEGREE, &cuts, meter) {
+                Ok(n) if n.deviation <= scale * 1e-10 || per == 128 => return Ok(n),
+                Ok(_) => {}
+                // Pieces so wide that the offset's derivatives cannot be bounded on them (its
+                // normal not separated from zero): narrower ones may be (piece G69).
+                Err(CurveError::Unbounded) if per < 128 => {}
+                Err(e) => return Err(e),
             }
         }
         Err(CurveError::Defect)

@@ -35,7 +35,7 @@ exclude_globs = [
 # strength when internals are rewritten"). `--test *` selects every integration test target and
 # leaves out the unit tests in src/ (which can call private items) and the doctests. A crate with
 # code but no integration test fails the baseline, which fails the gate.
-additional_cargo_test_args = ["--test", "fixtures", "--test", "fixture_tool", "--test", "corpus", "--test", "oracle", "--test", "oracle_tool", "--test", "determinism", "--test", "flat_reference"]
+additional_cargo_test_args = ["--lib", "--test", "fixtures", "--test", "fixture_tool", "--test", "corpus", "--test", "oracle", "--test", "oracle_tool", "--test", "determinism", "--test", "replay", "--test", "flat_reference", "--test", "ssi", "--test", "ssi_tool"]
 
 # Cargo.lock is committed and CI never resolves a different version (28.13, the toolchain guard).
 additional_cargo_args = ["--locked"]

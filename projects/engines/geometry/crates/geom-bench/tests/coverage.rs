@@ -495,6 +495,13 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_intersect",
+        &[
+            ("order", include_str!("../../geom-intersect/src/order.rs")),
+            ("result", include_str!("../../geom-intersect/src/result.rs")),
+        ],
+    ),
+    (
         "geom_math",
         &[
             ("typed", include_str!("../../geom-math/src/typed.rs")),
@@ -508,6 +515,19 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("qr", include_str!("../../geom-linalg/src/qr.rs")),
             ("svd", include_str!("../../geom-linalg/src/svd.rs")),
+        ],
+    ),
+    (
+        "geom_make",
+        &[
+            (
+                "primitive",
+                include_str!("../../geom-make/src/primitive.rs"),
+            ),
+            (
+                "transform",
+                include_str!("../../geom-make/src/transform.rs"),
+            ),
         ],
     ),
     (
@@ -758,7 +778,7 @@ fn the_gate_is_five_percent_on_every_measure() {
     );
     // A bare local run gates every measure at a plain 5%. The workflow's limits replace these and
     // gate instructions and estimated cycles; the miss counts are judged from Gungraun's summaries
-    // (geom_bench::callgrind, G18a), which gate only those that can resolve 5%.
+    // (geom_bench::callgrind), which lists them and judges them through estimated cycles.
     for metric in GATED_METRICS {
         assert!(
             GATE.contains(&format!("(EventKind::{metric}, GATE_PERCENT)")),
@@ -772,7 +792,6 @@ fn the_gate_is_five_percent_on_every_measure() {
             .map(|&(_, name)| name)
             .collect();
         assert_eq!(judged, GATED_METRICS);
-        assert_eq!(geom_bench::callgrind::floor(5), Some(20));
     }
     for metric in GATED_HEAP_METRICS {
         assert!(

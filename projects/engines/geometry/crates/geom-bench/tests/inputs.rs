@@ -2295,6 +2295,17 @@ fn linalg_typical_batches_all_succeed() {
     all_ok("svd_jacobi", k::svd_jacobi, &m::svd_jacobi(Typical));
 }
 
+/// Every typical batch of `geom-make`'s benchmarks (decision 32.44) builds or moves every body.
+#[test]
+fn make_typical_batches_all_succeed() {
+    use geom_bench::inputs::make as m;
+    use geom_bench::kernels::make as k;
+    all_ok("build_box", k::boxes, &m::boxes(Typical));
+    all_ok("cylinder", k::cylinders, &m::cylinders(Typical));
+    all_ok("move_box", k::moved_boxes, &m::moved_boxes(Typical));
+    all_ok("turn_box", k::turned_boxes, &m::turned_boxes(Typical));
+}
+
 /// Every typical batch of `geom-bvh`'s benchmarks (decision 32.44) builds every scene and answers
 /// every query.
 #[test]
@@ -2407,4 +2418,15 @@ fn roots_typical_batches_all_succeed() {
         k::gauss_legendre,
         &m::gauss_legendre(Typical),
     );
+}
+
+/// Every typical batch of `geom-intersect`'s benchmarks (decision 32.44) orders every list and
+/// reads every key.
+#[test]
+fn intersect_typical_batches_all_succeed() {
+    use geom_bench::inputs::intersect as m;
+    use geom_bench::kernels::intersect as k;
+    all_ok("sort_items", k::sorted, &m::items(Typical));
+    all_ok("key_circle", k::keys, &m::circles(Typical));
+    all_ok("pair_lines", k::paired, &m::lines(Typical));
 }

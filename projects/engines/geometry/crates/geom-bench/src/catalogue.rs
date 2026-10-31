@@ -421,6 +421,17 @@ pub static OPS: &[Op] = &[
     Op { group: "format", name: "cache_key", measures: "geom_format::CacheKey::new", classes: T, prepare: |c| bind(inputs::format::cache_key(c), kernels::format::cache_key) },
     Op { group: "format", name: "memo_get", measures: "geom_format::MemoStore::get", classes: T, prepare: |c| bind(inputs::format::memo_get(c), kernels::format::memo_get) },
     Op { group: "format", name: "next_version", measures: "geom_format::BodyVersion::next", classes: T, prepare: |c| bind(inputs::format::next_version(c), kernels::format::next_version) },
+    // geom-intersect's canonical order (piece G158; decision 32.44): a list of items sorted and
+    // proven disjoint, a key read through a circle's NURBS form, and a pair of keys put in order.
+    Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
+    Op { group: "intersect", name: "key_circle", measures: "geom_intersect::CanonicalKey::of_curve", classes: T, prepare: |c| bind(inputs::intersect::circles(c), kernels::intersect::keys) },
+    Op { group: "intersect", name: "pair_lines", measures: "geom_intersect::order::pair", classes: T, prepare: |c| bind(inputs::intersect::lines(c), kernels::intersect::paired) },
+    // geom-make's hot paths (piece G101; decision 32.44): a primitive built and a body moved, named,
+    // published and checked.
+    Op { group: "make", name: "build_box", measures: "geom_make::primitive::make_box", classes: T, prepare: |c| bind(inputs::make::boxes(c), kernels::make::boxes) },
+    Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
+    Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
+    Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -428,7 +439,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 31] = [
+pub const GROUPS: [&str; 33] = [
     "predicate",
     "sign",
     "wide",
@@ -460,6 +471,8 @@ pub const GROUPS: [&str; 31] = [
     "brent",
     "quadrature",
     "linalg",
+    "intersect",
+    "make",
 ];
 
 /// The group of the growth checks.

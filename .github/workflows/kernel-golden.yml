@@ -218,6 +218,11 @@ jobs:
       - name: No oracle is linked
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin oracle -- check
+      # The intersection harness (12.17; piece G160): the ceilings keep 12.17's rules, and every case
+      # of the failure catalogue goes on the grid with its truth kept.
+      - name: The intersection harness's ceilings and catalogue
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --bin ssi -- check
       # The corpus register (28.12; piece G114): no unlicensed or non-commercial file is vendored,
       # no credit is missing, and every stored corpus is byte for byte what the register pins.
       - name: Every corpus holds its rules, and every vendored file its register entry
