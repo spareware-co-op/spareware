@@ -22,9 +22,18 @@ use std::num::NonZeroU64;
 use geom_name::prune;
 use geom_name::resolve::Step;
 use geom_op::name::encode_op_path;
-use geom_op::{History, NameId, NameSet, OpId, OpPath, Origin, PieceKey, Record, Role, Side};
+use geom_op::{
+    History, NameId, NameSet, OpContext, OpId, OpPath, Origin, PieceKey, Record, Role, Side,
+};
+use geom_run::Budget;
 use geom_test::golden::{self, hex, sha256};
 use geom_test::{Seed, SplitMix64};
+
+/// `history` pruned by an operation at `by`, with no budget to run out.
+fn cut_down(history: &[Step], held: &NameSet, by: &OpPath) -> Vec<Step> {
+    let ctx = OpContext::new(by.clone(), Budget::UNLIMITED);
+    prune(&ctx, history, held).unwrap().result
+}
 
 /// The corpus's golden in the golden store.
 const GOLDEN: &str = "geom-name/prune";
@@ -51,7 +60,7 @@ fn one(name: NameId) -> NameSet {
 
 /// One step over `body`, its outputs named from `fresh` on: the step's history and the body after.
 fn step(rng: &mut SplitMix64, body: &[NameId], fresh: &mut u64) -> (History, Vec<NameId>) {
-    let mut new = |fresh: &mut u64| {
+    let new = |fresh: &mut u64| {
         *fresh += 1;
         n(*fresh)
     };
@@ -152,7 +161,7 @@ fn corpus() -> (Vec<u8>, usize) {
                 .collect::<BTreeSet<NameId>>(),
         )
         .unwrap();
-        for step in prune(&history, &held, &op(1 << 32 | round)) {
+        for step in cut_down(&history, &held, &op(1 << 32 | round)) {
             let Step::Kept {
                 by,
                 history,

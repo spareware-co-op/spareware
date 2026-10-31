@@ -19,6 +19,7 @@
     clippy::panic,
     clippy::indexing_slicing,
     clippy::many_single_char_names,
+    clippy::too_many_lines,
     reason = "tests: native arithmetic and indexing, short names for the entities of each case, and a \
               failing test should stop loudly"
 )]
@@ -32,10 +33,17 @@ use geom_name::{
 };
 use geom_op::history::{History, Origin, Record, TopologyChange};
 use geom_op::name::{NameList, NameSet, PieceKey, Role, Side, TopoName};
-use geom_op::{NameId, OpId, OpPath};
+use geom_op::{ErrorKind, NameId, OpContext, OpId, OpPath};
+use geom_run::Budget;
 use geom_test::history::chain;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
+
+/// `history` pruned by an operation at `by`, with no budget to run out.
+fn cut_down(history: &[Step], held: &NameSet, by: &OpPath) -> Vec<Step> {
+    let ctx = OpContext::new(by.clone(), Budget::UNLIMITED);
+    prune(&ctx, history, held).unwrap().result
+}
 
 fn op(byte: u8) -> OpPath {
     OpPath::new(OpId::from_bytes([byte; 16]))
@@ -148,7 +156,7 @@ fn a_pruned_step_keeps_what_held_walks_meet() {
         },
     ];
     let held = set(&[a]);
-    let pruned = prune(&history, &held, &op(9));
+    let pruned = cut_down(&history, &held, &op(9));
     let kept = |by: u8, records: Vec<Record>, deleted: &[NameId]| Step::Kept {
         by: op(by),
         history: History::new(records, set(deleted), []).unwrap(),
@@ -208,7 +216,7 @@ fn a_pruned_step_keeps_what_held_walks_meet() {
         Resolution::HistoryPruned { by: Some(op(9)) }
     );
     // Nothing is held: every step keeps nothing, and every walk is pruned.
-    let none = prune(&history, &NameSet::default(), &op(9));
+    let none = cut_down(&history, &NameSet::default(), &op(9));
     assert!(
         none.iter()
             .all(|s| matches!(s, Step::Kept { history, .. } if *history == History::default()))
@@ -226,7 +234,7 @@ fn a_pruned_step_keeps_what_held_walks_meet() {
             history: first,
         },
     ];
-    let again = prune(&linked, &set(&[b]), &op(10));
+    let again = cut_down(&linked, &set(&[b]), &op(10));
     assert_eq!(again[..2], linked[..2]);
     assert!(
         matches!(&again[2], Step::Kept { by, pruned_by, .. } if *by == op(3) && *pruned_by == op(10))
@@ -374,7 +382,7 @@ proptest! {
     ) {
         let m = model(&steps);
         let held = chosen(&m.names, mask);
-        let pruned = prune(&m.history, &held, &op(200));
+        let pruned = cut_down(&m.history, &held, &op(200));
         prop_assert_eq!(pruned.len(), m.history.len());
         let graph = &m.interned.graph;
         for from in 0..=m.history.len() {
@@ -406,9 +414,9 @@ proptest! {
         let at = 1 + cut.index(m.history.len() - 1);
         let first = chosen(&m.names, masks.0);
         let second = chosen(&m.names, masks.1);
-        let mut once = prune(&m.history[..at], &first, &op(201));
+        let mut once = cut_down(&m.history[..at], &first, &op(201));
         once.extend_from_slice(&m.history[at..]);
-        let twice = prune(&once, &second, &op(202));
+        let twice = cut_down(&once, &second, &op(202));
         prop_assert_eq!(&twice[..at], &once[..at]);
         let graph = &m.interned.graph;
         for from in 0..=m.history.len() {
@@ -422,4 +430,51 @@ proptest! {
             }
         }
     }
+}
+
+#[test]
+fn a_run_stopped_by_its_budget_publishes_nothing() {
+    let mut graph = NameGraph::new();
+    let a = face(&mut graph, "a");
+    let history = vec![
+        Step::Recorded {
+            by: op(1),
+            history: History::new([record(a, Origin::Unchanged)], NameSet::default(), [],).unwrap(),
+        };
+        3
+    ];
+    // Two units a step: one for the step, one for its record.
+    let held = set(&[a]);
+    let small = Budget {
+        work: 5,
+        logical_bytes: u64::MAX,
+    };
+    let got = prune(&OpContext::new(op(9), small), &history, &held);
+    let stop = got.unwrap_err();
+    assert_eq!(stop.kind(), ErrorKind::BudgetExceeded);
+    assert_eq!(stop.op(), &op(9));
+    let enough = Budget { work: 6, ..small };
+    let run = prune(&OpContext::new(op(9), enough), &history, &held);
+    assert_eq!(run.unwrap().result.len(), 3);
+}
+
+#[test]
+fn a_cancelled_run_publishes_nothing() {
+    struct Now;
+    impl geom_run::Cancel for Now {
+        fn requested(&self) -> bool {
+            true
+        }
+    }
+    let got = prune(
+        &OpContext::new(op(9), Budget::UNLIMITED).with_cancel(&Now),
+        &[],
+        &NameSet::default(),
+    );
+    assert_eq!(got.unwrap_err().kind(), ErrorKind::Cancelled);
+}
+
+#[test]
+fn the_charge_schedule_is_one_line() {
+    assert_eq!(geom_name::prune::CHARGES.len(), 1);
 }

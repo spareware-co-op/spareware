@@ -29,8 +29,8 @@ use geom_name::{
     resolve,
 };
 use geom_op::{
-    History, NameId, NameList, NameSet, OpId, OpPath, Origin, PieceKey, Record as Entry, Role,
-    Side, TopoName,
+    History, NameId, NameList, NameSet, OpContext, OpId, OpPath, Origin, PieceKey, Record as Entry,
+    Role, Side, TopoName,
 };
 use geom_run::{Budget, WorkMeter};
 
@@ -41,6 +41,12 @@ fn meter() -> WorkMeter<'static> {
 fn through_file(record: &Record) -> Record {
     let bytes = record.encode(&mut meter()).unwrap();
     Record::decode(&bytes, &mut meter()).unwrap().0
+}
+
+/// `history` pruned by an operation at `by`, with no budget to run out.
+fn cut_down(history: &[Step], held: &NameSet, by: &OpPath) -> Vec<Step> {
+    let ctx = OpContext::new(by.clone(), Budget::UNLIMITED);
+    prune(&ctx, history, held).unwrap().result
 }
 
 fn op(step: &str) -> OpPath {
@@ -178,7 +184,7 @@ fn kept_steps(history: &[Step]) -> (OpPath, NameSet, Vec<(OpPath, History)>) {
 #[test]
 fn a_pruned_history_round_trips() {
     let w = wall();
-    let pruned = prune(&w.history, &set(&[w.side, w.cap]), &op("prune"));
+    let pruned = cut_down(&w.history, &set(&[w.side, w.cap]), &op("prune"));
     let (pruned_by, held, steps) = kept_steps(&pruned);
     let record = through_file(&pruned_record(&pruned_by, &held, &steps).unwrap());
     assert_eq!((record.tag, record.flags, record.schema), (21, 1, 1));
@@ -196,7 +202,7 @@ fn a_pruned_history_round_trips() {
 #[test]
 fn a_broken_pruned_history_is_refused() {
     let w = wall();
-    let pruned = prune(&w.history, &set(&[w.side]), &op("prune"));
+    let pruned = cut_down(&w.history, &set(&[w.side]), &op("prune"));
     let (pruned_by, held, steps) = kept_steps(&pruned);
     let payload = encode_pruned(&pruned_by, &held, &steps).unwrap();
     let mut longer = payload.clone();
@@ -254,7 +260,7 @@ fn the_pruned_errors_read_as_sentences() {
 #[test]
 fn the_pruned_payload_matches_its_cddl() {
     let w = wall();
-    let pruned = prune(&w.history, &set(&[w.side, w.top]), &op("prune"));
+    let pruned = cut_down(&w.history, &set(&[w.side, w.top]), &op("prune"));
     let (pruned_by, held, steps) = kept_steps(&pruned);
     let schema = [
         include_str!("../../../format/cddl/pruned.cddl"),
@@ -316,7 +322,7 @@ fn every_held_reference_resolves_identically_after_prune_save_and_reload() {
         )
     };
     let held = set(&[w.side, w.cap, w.pieces[0]]);
-    let pruned = prune(&w.history, &held, &op("prune"));
+    let pruned = cut_down(&w.history, &held, &op("prune"));
     let (graph_back, reloaded) = save_and_reload(&w.graph, &pruned);
     assert_eq!(reloaded, pruned);
     // Every held reference, from every step it could have been made at: the same before the
@@ -341,7 +347,7 @@ fn every_held_reference_resolves_identically_after_prune_save_and_reload() {
     );
     // A prune that does not hold the cap: the cap's reference, deleted before, is pruned after,
     // and stays pruned through the save; the faces in the body stay exact.
-    let pruned = prune(&w.history, &set(&[w.side]), &op("prune"));
+    let pruned = cut_down(&w.history, &set(&[w.side]), &op("prune"));
     let (graph_back, reloaded) = save_and_reload(&w.graph, &pruned);
     let pruned_answer = Resolution::HistoryPruned {
         by: Some(op("prune")),
