@@ -5041,7 +5041,7 @@
             "**Never a guess.** `Zero` means the gap is exactly c; a line or plane that does not exist is [`NumError::Degenerate`], decided exactly.",
             "**Unmoved by order.** Swapping the two points of [`point_point`] or the two lines of [`line_line`] changes nothing, and neither does moving every input by one grid vector."
           ],
-          "job": null,
+          "job": "Exact distance comparisons on grid points: whether a gap is within a clearance (19.10).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"

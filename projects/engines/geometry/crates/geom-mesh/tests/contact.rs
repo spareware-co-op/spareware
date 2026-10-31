@@ -129,10 +129,7 @@ fn no_area(t: [P3; 3]) -> bool {
 }
 
 fn triangle(rng: &mut SplitMix64, reach: u64) -> [P3; 3] {
-    let mut c = || {
-        let v = rng.below(NonZeroU64::new(reach).unwrap()) as i64;
-        v
-    };
+    let mut c = || rng.below(NonZeroU64::new(reach).unwrap()) as i64;
     [p(c(), c(), c()), p(c(), c(), c()), p(c(), c(), c())]
 }
 
