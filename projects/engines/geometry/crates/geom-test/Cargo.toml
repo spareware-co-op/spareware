@@ -7,6 +7,11 @@ publish.workspace = true
 license.workspace = true
 description = "Spare Kit geometry kernel, development only: shared test support, seeds, generators and the dependency rule."
 
+[features]
+# Reference mode (23.13; piece G106): caches and filters off through the kernel, for the fixture
+# tool and the tests that replay under it.
+reference = ["geom-num/reference", "geom-format/reference"]
+
 [dependencies]
 geom-num = { path = "../geom-num" }
 # The native format, for fixtures' operation logs (src/fixture, piece G97): a log is a standalone

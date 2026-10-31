@@ -7,6 +7,10 @@ publish.workspace = true
 license.workspace = true
 description = "Spare Kit geometry kernel, development only: fuzz harnesses and bounded proofs, run as tests on stable, under libFuzzer with cargo-bolero, in ClusterFuzzLite and under Kani."
 
+[features]
+# Reference mode (23.13; piece G106), for `replay-hashes`.
+reference = ["geom-test/reference"]
+
 [dependencies]
 geom-num = { path = "../geom-num" }
 geom-test = { path = "../geom-test" }

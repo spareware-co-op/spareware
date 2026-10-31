@@ -807,7 +807,7 @@ fn xyz(p: P3) -> [i64; 3] {
 /// (the module documentation): never a sign that was not computed.
 pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
     if ORIENT2D_FILTER_FIRST {
-        match generated::orient2d::filter(a, b, c) {
+        match filtered(|| generated::orient2d::filter(a, b, c)) {
             Some(sign) => Ok(sign),
             None => orient2d_unfiltered(a, b, c),
         }
@@ -825,6 +825,18 @@ const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
     target_pointer_width = "64",
     not(target_family = "wasm")
 ));
+
+/// Whether this build runs the generated filters: false in reference mode (23.13; piece G106), the
+/// `reference` feature, where every predicate answers from its exact path.
+pub const FILTERS: bool = !cfg!(feature = "reference");
+
+/// `filter`'s answer in a build that runs filters, and none in reference mode, which leaves the
+/// call to the exact path. Every call of a generated filter in this crate goes through here
+/// (`tests/attack_g106.rs`), so reference mode leaves none behind.
+#[inline]
+pub(crate) fn filtered<T>(filter: impl FnOnce() -> Option<T>) -> Option<T> {
+    if FILTERS { filter() } else { None }
+}
 
 /// [`orient2d`] when its filter cannot decide. Out of line, so that a call the filter answers
 /// does not pay for the exact paths' stack frame.
@@ -860,7 +872,7 @@ fn orient2d_exact(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
 /// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
 /// (the module documentation): never a sign that was not computed.
 pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
-    match generated::orient3d::filter(a, b, c, d) {
+    match filtered(|| generated::orient3d::filter(a, b, c, d)) {
         Some(sign) => Ok(sign),
         None => orient3d_unfiltered(a, b, c, d),
     }
@@ -911,7 +923,7 @@ fn orient3d_unfiltered(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
 /// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
 /// (the module documentation): never a sign that was not computed.
 pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
-    match generated::incircle::filter(a, b, c, d) {
+    match filtered(|| generated::incircle::filter(a, b, c, d)) {
         Some(sign) => Ok(sign),
         None => incircle_unfiltered(a, b, c, d),
     }
@@ -979,7 +991,7 @@ fn incircle_unfiltered(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
     reason = "a to e name the points of the documented formula"
 )]
 pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
-    match generated::insphere::filter(a, b, c, d, e) {
+    match filtered(|| generated::insphere::filter(a, b, c, d, e)) {
         Some(sign) => Ok(sign),
         None => insphere_unfiltered(a, b, c, d, e),
     }

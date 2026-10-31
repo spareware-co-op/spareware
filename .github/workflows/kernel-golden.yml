@@ -216,6 +216,19 @@ jobs:
       - name: The fast fixtures pass
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin fixture -- run --tier fast
+      # Reference mode (23.13; piece G106): caches and the generated filters off. The fixtures meet
+      # the same goldens, and seeded logs give the same hash, names and measures line by line.
+      - name: The fixtures pass in reference mode
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --features reference --bin fixture -- run --tier fast
+      - name: Reference mode replays every seeded log to the same answers
+        if: github.event_name != 'pull_request_review'
+        run: |
+          cargo run --locked --release -p geom-fuzz --bin replay-hashes > "$RUNNER_TEMP/normal.txt"
+          cargo run --locked --release -p geom-fuzz --features reference --bin replay-hashes \
+            > "$RUNNER_TEMP/reference.txt"
+          test -s "$RUNNER_TEMP/normal.txt"
+          diff "$RUNNER_TEMP/normal.txt" "$RUNNER_TEMP/reference.txt"
       - name: The pull request's reviews and its reviewers' permissions
         if: github.event_name != 'push' && steps.edits.outputs.fixtures == 'edited'
         env:

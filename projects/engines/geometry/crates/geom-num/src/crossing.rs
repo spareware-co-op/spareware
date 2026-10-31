@@ -43,6 +43,7 @@ use crate::error::NumError;
 use crate::generated;
 use crate::grid::{Coord, P2, Rounded};
 use crate::plane::{BUDGET_LIMBS, TOTAL_LIMBS, commit_axes, difference};
+use crate::predicate::filtered;
 use crate::sign::Sign;
 use crate::wide::{I256, I320, Wide};
 
@@ -151,9 +152,9 @@ impl Ssi {
     )]
     fn routed(&self, p: P2, q: P2) -> Option<Sign> {
         let [a, b, c, d] = self.points;
-        let weight = generated::ssi_weight::filter(a, b, c, d)
+        let weight = filtered(|| generated::ssi_weight::filter(a, b, c, d))
             .or_else(|| generated::ssi_weight::exact(a, b, c, d))?;
-        let side = generated::ssi_side::filter(a, b, c, d, p, q)
+        let side = filtered(|| generated::ssi_side::filter(a, b, c, d, p, q))
             .or_else(|| generated::ssi_side::exact(a, b, c, d, p, q))?;
         Some(side.mul(weight))
     }

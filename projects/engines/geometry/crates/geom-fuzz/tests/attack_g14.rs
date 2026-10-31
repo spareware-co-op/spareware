@@ -273,6 +273,10 @@ fn target_modules() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for entry in std::fs::read_dir(crate_dir().join("src")).unwrap() {
         let path = entry.unwrap().path();
+        // `src/bin` holds the crate's tools, not targets.
+        if path.is_dir() {
+            continue;
+        }
         let text = std::fs::read_to_string(&path).unwrap();
         if text.contains("pub fn harness(") {
             out.insert(path.file_stem().unwrap().to_str().unwrap().to_owned());
