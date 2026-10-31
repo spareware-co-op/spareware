@@ -13,11 +13,12 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
-use geom_bool::rebuild::{Carrier, Merge, Outward, RebuildError, rebuild, select};
+use geom_bool::rebuild::{Carrier, RebuildError, rebuild};
 use geom_check::{Level, check};
 use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
+use geom_poly::merge::{Merge, MergeError, Outward, select};
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon};
 use geom_poly::winding::{Winding, WindingTest};
@@ -116,7 +117,7 @@ fn classified(polygons: &[Polygon], leaf: usize) -> Vec<Classified> {
 
 fn body(blocks: &[Block], test: &WindingTest, leaf: usize) -> Body {
     let (polygons, carriers) = scene(blocks);
-    let kept = select(test, &classified(&polygons, leaf));
+    let kept = select(test, &classified(&polygons, leaf)).unwrap();
     rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()).unwrap()
 }
 
@@ -210,7 +211,7 @@ fn blocks_apart_make_two_solids_and_one_in_a_cavity_makes_three() {
         geom_poly::winding::Term::Or,
     ])
     .unwrap();
-    let kept = select(&test, &classified(&polygons, LEAF_POLYGONS));
+    let kept = select(&test, &classified(&polygons, LEAF_POLYGONS)).unwrap();
     polygons.clear();
     carriers.shrink_to_fit();
     let b = rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()).unwrap();
@@ -231,7 +232,7 @@ fn a_shared_face_disappears_and_flush_faces_merge() {
 fn seams_stay_when_asked() {
     let right = block([4, 0, 0], [8, 4, 4]);
     let (polygons, carriers) = scene(&[A, right]);
-    let kept = select(&WindingTest::unite(), &classified(&polygons, LEAF_POLYGONS));
+    let kept = select(&WindingTest::unite(), &classified(&polygons, LEAF_POLYGONS)).unwrap();
     let b = rebuild(&kept, &carriers, Merge::KeepSeams, &mut meter()).unwrap();
     assert_eq!(counts(&b), [1, 10, 10, 20, 12]);
     checked(&b);
@@ -266,7 +267,7 @@ fn the_same_body_comes_out_however_the_boxes_fall() {
 #[test]
 fn the_same_body_comes_out_whatever_order_the_pieces_came_in() {
     let (polygons, carriers) = scene(&[A, B]);
-    let mut kept = select(&WindingTest::unite(), &classified(&polygons, 4));
+    let mut kept = select(&WindingTest::unite(), &classified(&polygons, 4)).unwrap();
     let once = rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()).unwrap();
     kept.reverse();
     let again = rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()).unwrap();
@@ -276,23 +277,23 @@ fn the_same_body_comes_out_whatever_order_the_pieces_came_in() {
 #[test]
 fn pieces_that_do_not_close_are_refused() {
     let (polygons, carriers) = scene(&[A]);
-    let mut kept = select(&WindingTest::unite(), &classified(&polygons, LEAF_POLYGONS));
+    let mut kept = select(&WindingTest::unite(), &classified(&polygons, LEAF_POLYGONS)).unwrap();
     kept.pop();
     assert_eq!(
         rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()),
-        Err(RebuildError::Open)
+        Err(RebuildError::Merge(MergeError::Open))
     );
 }
 
 #[test]
 fn pieces_that_overlap_are_refused() {
     let (polygons, carriers) = scene(&[A]);
-    let mut kept = select(&WindingTest::unite(), &classified(&polygons, LEAF_POLYGONS));
+    let mut kept = select(&WindingTest::unite(), &classified(&polygons, LEAF_POLYGONS)).unwrap();
     let copy: Outward = kept[0].clone();
     kept.push(copy);
     assert_eq!(
         rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()),
-        Err(RebuildError::Overlap)
+        Err(RebuildError::Merge(MergeError::Overlap))
     );
 }
 
@@ -304,38 +305,37 @@ fn a_shell_turned_inside_out_is_refused() {
         geom_poly::winding::Term::Not,
     ])
     .unwrap();
-    let kept = select(&test, &classified(&polygons, LEAF_POLYGONS));
+    let kept = select(&test, &classified(&polygons, LEAF_POLYGONS)).unwrap();
     assert_eq!(
         rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()),
-        Err(RebuildError::Inside)
+        Err(RebuildError::Merge(MergeError::Inside))
     );
 }
 
 #[test]
 fn errors_say_what_was_wrong() {
     assert_eq!(
-        RebuildError::Overlap.to_string(),
-        "two pieces of one face overlap"
-    );
-    assert_eq!(RebuildError::Open.to_string(), "kept pieces do not close");
-    assert_eq!(
-        RebuildError::Inside.to_string(),
-        "a shell faces inward with no shell around it"
+        RebuildError::from(MergeError::Open).to_string(),
+        "kept pieces do not close"
     );
     assert!(
         RebuildError::from(NumError::Degenerate)
             .to_string()
             .starts_with("pieces that cannot be rebuilt")
     );
+    assert_eq!(RebuildError::Broken.to_string(), "a rebuild lost a row");
 }
 
 #[test]
 fn a_small_budget_stops_the_rebuild() {
     let (polygons, carriers) = scene(&[A]);
-    let kept = select(&WindingTest::unite(), &classified(&polygons, LEAF_POLYGONS));
+    let kept = select(&WindingTest::unite(), &classified(&polygons, LEAF_POLYGONS)).unwrap();
     let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
     let got = rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut small);
-    assert!(matches!(got, Err(RebuildError::Stopped(_))));
+    assert!(matches!(
+        got,
+        Err(RebuildError::Merge(MergeError::Stopped(_)))
+    ));
 }
 
 /// A tetrahedron's faces, each the plane through three corners, outward.
@@ -390,7 +390,7 @@ fn tilted(solids: &[[[i64; 3]; 4]], test: &WindingTest, leaf: usize) -> Option<B
     for (entry, corners) in solids.iter().enumerate() {
         tetrahedron(*corners, entry as u32, &mut polygons, &mut carriers)?;
     }
-    let kept = select(test, &classified(&polygons, leaf));
+    let kept = select(test, &classified(&polygons, leaf)).unwrap();
     Some(rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()).unwrap())
 }
 

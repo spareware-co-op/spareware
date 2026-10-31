@@ -27,7 +27,7 @@
 //!
 //! Modules:
 //!
-//! - [`rebuild`]: the pieces a selection keeps, made into a body by canonical rules (G129).
+//! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
 //! Status: the rebuild built (G129); the rest by pieces G130, G131, G132, G133, G137, G138, G139,
 //! G144, G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.
