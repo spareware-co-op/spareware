@@ -26,7 +26,8 @@ use core::cmp::Ordering;
 use geom_num::grid::COORD_MAX;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
-use geom_poly::convex::{ConvexError, convex_pieces};
+use geom_poly::convex::{ConvexError, Piece, convex_pieces};
+use geom_poly::cut::{Clipped, clip};
 use geom_poly::order::{Line, Ray, along, around, normals_det, same_point, turn};
 use geom_poly::plane::{PlaneTable, canonical};
 use geom_run::{Budget, WorkMeter};
@@ -230,6 +231,23 @@ fn ray_laws(case: &Case, face: &Plane) -> Result<(), Finding> {
     Ok(())
 }
 
+/// Each piece clipped by each plane: the parts lie on their own sides of it.
+fn cut_laws(case: &Case, pieces: &[Piece], planes: &[Plane]) -> Result<(), Finding> {
+    for piece in pieces {
+        for plane in planes {
+            if let Ok(Clipped::Split(front, back)) = clip(piece, plane)
+                && (clip(&front, plane) != Ok(Clipped::Front)
+                    || clip(&back, plane) != Ok(Clipped::Back))
+            {
+                return Err(Finding::new("a clip's parts lie on their sides", || {
+                    format!("{case:?}")
+                }));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// The first plane as a face, ringed by the others: any ring is split or refused as a shape.
 fn convex_laws(case: &Case, face: &Plane, ring: &[Plane]) -> Result<(), Finding> {
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
@@ -238,7 +256,7 @@ fn convex_laws(case: &Case, face: &Plane, ring: &[Plane]) -> Result<(), Finding>
             let turned = |q: &Plane| q.n().map(i128::saturating_neg);
             let own = |q: &Plane| ring.iter().any(|s| s == q || s.n() == turned(q));
             if pieces.iter().all(|p| p.bounds.iter().all(own)) {
-                Ok(())
+                cut_laws(case, &pieces, ring)
             } else {
                 Err(Finding::new(
                     "a piece holds only the face's own planes",
