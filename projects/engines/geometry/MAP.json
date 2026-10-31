@@ -3250,6 +3250,31 @@
           "target": "lib"
         },
         {
+          "cost": "spans are halved, so a curve takes O(log(length/floor)) spans per foot, plus those near the distance's other turning points, each a bound on the point and two derivatives. A surface takes four such curves for its edges, then boxes in the same way, each a set of partials to the second order. All of it is charged to the meter. Recursion: none.",
+          "does": "[`project_curve`] and [`project_surface`] find every nearest point of a kind to a point. A line's foot and a plane's are closed forms. Everything else takes Ma and Hewitt's pruning, made certified: a work list of parameter spans, each dropped once a box around it lies further than the best distance so far, or once its distance's derivative cannot vanish, and the ends of a curve and the edges of a surface added as candidates, since a minimum on the boundary need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters of a point known to lie on a kind. A point on a round kind's axis has a continuum of nearest points, returned as a typed [`Continuum`] rather than found by search.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/project.rs",
+          "guarantees": [
+            "**The minimum is proven.** Every span dropped has a lower bound above the reported distance, or a derivative that cannot vanish, by certified bounds on the kind. Nothing is sampled.",
+            "**Ties are kept.** Candidates whose distance enclosures overlap are all returned, in parameter order; [`Projection::tie_broken`] says so, and the first is the lowest parameter.",
+            "**Nothing is guessed at the floor.** Spans at the floor that the test cannot decide join into runs. A run whose image is within twice the floor is one nearest point, since nothing in it can be told apart on the grid (a sphere's pole, a foot on a split); a longer one is [`Projection::NonIsolated`], never a foot.",
+            "**Enclosures, never numbers.** Each parameter, point and distance is an interval holding the exact value.",
+            "**Deterministic.** Midpoint splits, and a fixed work order, first half first."
+          ],
+          "job": "Projection and inversion: the nearest points of a curve or surface to a point, proven (12.4).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0167-8396(03",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "X. Ma and W. Hewitt, Point inversion and projection for NURBS curve and surface, Computer Aided Geometric Design 20 (2003), <https://doi.org/10.1016/S0167-8396(03)00021-9>, for the pruning, with convex-hull distance replaced by each kind's certified bound; chapter 12.4 (`projects/engines/geometry/architecture/12-intersections.md`). A span's convexity test is the sign of the second derivative of half the squared distance, an interval of the kind's certified derivative bounds, so a span it passes holds at most one foot, by Rolle's theorem. Circles, spheres, cylinders, cones and tori go through the same search: their certified bounds are their own closed forms, and the search adds what a closed form alone lacks, a trimmed domain."
+          },
+          "path": "geom_intersect::project",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(n log n) comparisons to order n items, then a sweep to prove them disjoint: for each item, one comparison per later item of its kind that starts before it ends in the first unknown, n²/2 at worst and each charged to the meter. Recursion: none.",
           "does": "an [`Intersection`] is the items of one pair in canonical order, with its [`Coverage`], its diagnostics and the work it took. An [`Item`] is a point, a curve, an overlap or a flagged region, each with its enclosure on the operands' parameters and in space. A [`ParamBox`] holds one interval per unknown of the pair, the canonical first operand's first, so [`Intersection::swapped`] gives the same items with the roles changed.",
           "family": [],
@@ -3278,7 +3303,7 @@
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the result types and canonical order built by piece G158; the methods come with G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162; the other methods come with G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {
