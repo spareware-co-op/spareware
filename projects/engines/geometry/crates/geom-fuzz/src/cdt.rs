@@ -142,9 +142,11 @@ fn reached(start: u32, edges: &BTreeMap<u32, Vec<u32>>) -> BTreeSet<u32> {
     let mut seen = BTreeSet::from([start]);
     let mut todo = vec![start];
     while let Some(v) = todo.pop() {
-        for &w in edges.get(&v).map_or(&[][..], Vec::as_slice) {
-            if seen.insert(w) {
-                todo.push(w);
+        if let Some(near) = edges.get(&v) {
+            for &w in near {
+                if seen.insert(w) {
+                    todo.push(w);
+                }
             }
         }
     }

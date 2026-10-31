@@ -17,7 +17,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU64;
 
-use geom_mesh::cdt::{Cdt, CdtError, Quality, Site, triangulate};
+use geom_mesh::cdt::{Cdt, CdtError, Quality, Site, morton, triangulate};
 use geom_num::Sign;
 use geom_num::grid::P2;
 use geom_num::predicate::{incircle, orient2d};
@@ -26,8 +26,10 @@ use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 use proptest::prelude::*;
 
+/// A budget far above what any case here needs, so a triangulation that stops advancing ends in a
+/// failed test, not a hang.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(1 << 20))
 }
 
 fn p(x: i64, y: i64) -> P2 {
@@ -495,4 +497,141 @@ fn a_small_input_angle_ends() {
     let s = sites(&[(0, 0), (6000, 0), (6000, 30), (0, 3000), (6000, 3000)]);
     let c = triangulate(&s, &[[0, 1], [0, 2]], Some(&FINE), &mut meter()).unwrap();
     assert_valid(&c, &[[0, 1], [0, 2]]);
+}
+
+#[test]
+fn errors_say_what_went_wrong() {
+    let errors = [
+        CdtError::DuplicateKey {
+            first: 1,
+            second: 2,
+        },
+        CdtError::DuplicatePoint {
+            first: 1,
+            second: 2,
+        },
+        CdtError::BadConstraint { index: 3 },
+        CdtError::Crossings,
+        CdtError::Full,
+        CdtError::Internal,
+    ];
+    let texts: BTreeSet<String> = errors.iter().map(ToString::to_string).collect();
+    assert_eq!(texts.len(), errors.len());
+    assert!(texts.iter().all(|t| !t.is_empty()));
+}
+
+#[test]
+fn morton_interleaves_the_shifted_bits() {
+    let seed = resolve("geom-mesh morton", Seed::DEFAULT).unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let reach = NonZeroU64::new(1 << 41).unwrap();
+    let edge = (1_i64 << 40) - 1;
+    let mut points = vec![(0, 0), (-1, 1), (edge, -edge), (-edge, edge), (edge, edge)];
+    points.extend((0..2000).map(|_| {
+        (
+            rng.below(reach) as i64 - (1 << 40),
+            rng.below(reach) as i64 - (1 << 40),
+        )
+    }));
+    for (x, y) in points {
+        let (Ok(at), u, v) = (
+            P2::new(x, y),
+            (x + (1 << 41)) as u64,
+            (y + (1 << 41)) as u64,
+        ) else {
+            continue;
+        };
+        let mut want = 0_u128;
+        for bit in 0..64 {
+            want |= u128::from((u >> bit) & 1) << (2 * bit);
+            want |= u128::from((v >> bit) & 1) << (2 * bit + 1);
+        }
+        assert_eq!(morton(at), want, "({x}, {y})");
+    }
+}
+
+#[test]
+fn a_point_on_a_hull_edge_splits_it() {
+    // In Morton order (4, 4) comes after both ends of the edge through it, seen from either side.
+    for third in [(0, 0), (8, 8)] {
+        let c = run(&sites(&[third, (7, 1), (1, 7), (4, 4)]), &[]);
+        assert_valid(&c, &[]);
+        assert_eq!(c.triangles.len(), 2);
+    }
+}
+
+#[test]
+fn a_constraint_along_a_line_of_points_stays_on_its_stretch() {
+    let points = [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)];
+    let c = run(&sites(&points), &[[3, 1]]);
+    assert_eq!(c.triangles, Vec::<[u32; 3]>::new());
+    assert_eq!(c.constraints, [[1, 2], [2, 3]]);
+}
+
+#[test]
+fn small_lattices_hold_every_law() {
+    let seed = resolve("geom-mesh cdt lattices", Seed::DEFAULT).unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
+    for _ in 0..3000 {
+        let mut taken = BTreeSet::new();
+        for _ in 0..3 + below(&mut rng, 14) {
+            let (x, y) = (below(&mut rng, 8) as i64, below(&mut rng, 8) as i64);
+            taken.insert((x, y));
+        }
+        let points: Vec<(i64, i64)> = taken.into_iter().collect();
+        let n = points.len() as u64;
+        let mut constraints = Vec::new();
+        for _ in 0..below(&mut rng, 6) {
+            let (a, b) = (below(&mut rng, n) as u32, below(&mut rng, n) as u32);
+            if a != b {
+                constraints.push([a, b]);
+            }
+        }
+        let c = run(&sites(&points), &constraints);
+        assert_valid(&c, &constraints);
+    }
+}
+
+/// The vertices a quality adds to the triangle (0, 0), (4, 0), (0, 3).
+fn added_to_the_right_triangle(quality: &Quality) -> usize {
+    let s = sites(&[(0, 0), (4, 0), (0, 3)]);
+    let c = triangulate(&s, &[], Some(quality), &mut meter()).unwrap();
+    c.vertices.len() - s.len()
+}
+
+#[test]
+fn a_triangle_exactly_at_a_limit_stays() {
+    // Its longest edge is 25 squared, and its radius over its shortest edge, squared, is
+    // 16 · 25 / (4 · 12²).
+    let at_the_limit = Quality {
+        ratio_squared: 400.0 / 576.0,
+        max_edge_squared: Some(25),
+        min_edge_squared: 0,
+    };
+    assert_eq!(added_to_the_right_triangle(&at_the_limit), 0);
+    let shorter = Quality {
+        max_edge_squared: Some(24),
+        ..at_the_limit
+    };
+    assert!(added_to_the_right_triangle(&shorter) > 0);
+    let sharper = Quality {
+        ratio_squared: 0.5,
+        ..at_the_limit
+    };
+    assert!(added_to_the_right_triangle(&sharper) > 0);
+}
+
+#[test]
+fn a_rounded_midpoint_outside_its_triangles_stays() {
+    // The apex (2, 0) encroaches on the segment, whose midpoint rounds to (1, 0): on the edge from
+    // (0, 0) to (2, 0), so in neither triangle, and splitting there would bend the segment.
+    let s = sites(&[(0, 0), (2, 0), (3, 1)]);
+    let quality = Quality {
+        ratio_squared: f64::INFINITY,
+        max_edge_squared: None,
+        min_edge_squared: 0,
+    };
+    let c = triangulate(&s, &[[0, 2]], Some(&quality), &mut meter()).unwrap();
+    assert_eq!(c.vertices.len(), 3);
 }

@@ -79,7 +79,8 @@ fn corpus() -> (Vec<u8>, u32) {
     let mut out = Vec::new();
     let mut runs = 0;
     let mut run = |out: &mut Vec<u8>, s: &[Site<u32>], c: &[[u32; 2]], q: Option<&Quality>| {
-        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        // Far above what the corpus needs: a triangulation that stops advancing fails, not hangs.
+        let mut meter = WorkMeter::new(Budget::of_work(1 << 20));
         write(out, &triangulate(s, c, q, &mut meter).unwrap());
         runs += 1;
     };

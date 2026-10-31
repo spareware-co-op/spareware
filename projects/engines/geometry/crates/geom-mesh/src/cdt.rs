@@ -252,15 +252,28 @@ fn put<T>(a: &mut [T; 3], i: usize, value: T) {
     }
 }
 
-/// Whether `q` is strictly between `a` and `b`, three collinear points: their order by (x, y) is
-/// their order along the line.
-fn between(a: P2, q: P2, b: P2) -> bool {
-    (a < q && q < b) || (b < q && q < a)
+/// Whether `x`, on the line through `u` and `b` and not at `u`, is on `b`'s side of `u`.
+fn ahead(u: P2, x: P2, b: P2) -> bool {
+    dot(x, b, u) > 0
 }
 
-/// The Morton code of a point: its coordinates' bits interleaved, for a curve that keeps near
-/// points near.
-fn morton(p: P2) -> u128 {
+/// A triangle's vertices turned to start at the lowest.
+fn lowest_first(v: [u32; 3]) -> [u32; 3] {
+    let [a, b, c] = v;
+    let low = a.min(b).min(c);
+    if low == a {
+        [a, b, c]
+    } else if low == b {
+        [b, c, a]
+    } else {
+        [c, a, b]
+    }
+}
+
+/// The Morton code of a point: the bits of its coordinates, shifted to be positive, interleaved,
+/// x in the even places. Sites go in by this code, so that each walk starts near its point.
+#[must_use]
+pub fn morton(p: P2) -> u128 {
     fn spread(v: u64) -> u128 {
         let mut x = u128::from(v);
         x = (x | (x << 32)) & 0x0000_0000_ffff_ffff_0000_0000_ffff_ffff;
@@ -439,34 +452,27 @@ impl Mesh {
         Ok((t, o))
     }
 
-    /// Where `q` is, walking from the last place.
-    fn locate(&mut self, q: u32) -> Result<Place, CdtError> {
+    /// Where `q` is, walking from the last place. A ghost hands on to the solid triangle across
+    /// its hull edge unless `q` is strictly beyond that edge, so a point on the hull is found on
+    /// a solid triangle's edge.
+    fn locate(&mut self, q: u32, meter: &mut WorkMeter<'_>) -> Result<Place, CdtError> {
         let p = self.p(q)?;
         let mut t = self.hint;
         let limit = self.tris.len().saturating_mul(4).saturating_add(16);
         for _ in 0..limit {
+            meter.charge(1)?;
             let tri = self.t(t)?;
-            self.spin = self.spin.wrapping_add(1);
+            self.spin = next(self.spin);
             if let Some(g) = tri.v.iter().position(|&v| v == GHOST) {
                 let (u, v) = (pick(&tri.v, next(g)), pick(&tri.v, prev(g)));
-                let (pu, pv) = (self.p(u)?, self.p(v)?);
-                match orient2d(pu, pv, p)? {
-                    Sign::Positive => {
-                        self.hint = t;
-                        return Ok(Place::In(t));
-                    }
-                    Sign::Negative => t = pick(&tri.n, g),
-                    Sign::Zero if between(pu, p, pv) => {
-                        self.hint = t;
-                        return Ok(Place::On(t, g));
-                    }
-                    // Past one end of the hull edge, along it: on to the ghost at that end.
-                    Sign::Zero if between(pu, pv, p) => t = pick(&tri.n, next(g)),
-                    Sign::Zero => t = pick(&tri.n, prev(g)),
+                if orient2d(self.p(u)?, self.p(v)?, p)? == Sign::Positive {
+                    self.hint = t;
+                    return Ok(Place::In(t));
                 }
+                t = pick(&tri.n, g);
                 continue;
             }
-            let first = self.spin % 3;
+            let first = self.spin;
             let mut slots = [first, next(first), prev(first)].into_iter();
             let mut on = None;
             let moved = loop {
@@ -588,7 +594,7 @@ impl Mesh {
     fn insert(&mut self, p: u32, meter: &mut WorkMeter<'_>) -> Result<(), CdtError> {
         meter.charge(1)?;
         let mut stack = core::mem::take(&mut self.stack);
-        match self.locate(p)? {
+        match self.locate(p, meter)? {
             Place::In(t) => stack.extend(self.split(t, p)?),
             Place::On(t, i) => stack.extend(self.split_edge(t, i, p)?),
         }
@@ -612,7 +618,6 @@ impl Mesh {
     /// The triangle and slot of the edge from `a` to `b`: slot `i` of the triangle holds the vertex
     /// opposite the edge.
     fn find_edge(&self, a: u32, b: u32) -> Result<Option<(u32, usize)>, CdtError> {
-        let (a, b) = if a == GHOST { (b, a) } else { (a, b) };
         let start = *at(&self.around, a)?;
         let mut t = start;
         for _ in 0..self.tris.len() {
@@ -637,7 +642,12 @@ impl Mesh {
     }
 
     /// From `u` towards `b`: the next vertex on the line and the edges crossed on the way there.
-    fn trace(&self, u: u32, b: u32) -> Result<(u32, Vec<[u32; 2]>), CdtError> {
+    fn trace(
+        &self,
+        u: u32,
+        b: u32,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<(u32, Vec<[u32; 2]>), CdtError> {
         let (pu, pb) = (self.p(u)?, self.p(b)?);
         let start = *at(&self.around, u)?;
         let mut t = start;
@@ -650,16 +660,13 @@ impl Mesh {
                 .position(|&v| v == u)
                 .ok_or(CdtError::Internal)?;
             let (x, y) = (pick(&tri.v, next(i)), pick(&tri.v, prev(i)));
-            if x == b || y == b {
-                return Ok((b, Vec::new()));
-            }
             if x != GHOST && y != GHOST {
                 let (px, py) = (self.p(x)?, self.p(y)?);
                 let (ox, oy) = (orient2d(pu, pb, px)?, orient2d(pu, pb, py)?);
-                if ox == Sign::Zero && (pu < px) == (pu < pb) {
+                if ox == Sign::Zero && ahead(pu, px, pb) {
                     return Ok((x, Vec::new()));
                 }
-                if oy == Sign::Zero && (pu < py) == (pu < pb) {
+                if oy == Sign::Zero && ahead(pu, py, pb) {
                     return Ok((y, Vec::new()));
                 }
                 if ox == Sign::Negative && oy == Sign::Positive {
@@ -672,10 +679,10 @@ impl Mesh {
                 break;
             }
         }
-        let (mut t, i) = fan.ok_or(CdtError::Internal)?;
-        let mut i = i;
+        let (mut t, mut i) = fan.ok_or(CdtError::Internal)?;
         let mut crossed = Vec::new();
-        loop {
+        for _ in 0..self.tris.len() {
+            meter.charge(1)?;
             let tri = self.t(t)?;
             let (x, y) = (pick(&tri.v, next(i)), pick(&tri.v, prev(i)));
             if pick(&tri.fixed, i) {
@@ -712,6 +719,7 @@ impl Mesh {
                 }
             }
         }
+        Err(CdtError::Internal)
     }
 
     /// Flips away every edge of `crossed` that crosses from `u` to `w`, Sloan's way: an edge
@@ -828,7 +836,7 @@ impl Mesh {
         let mut u = a;
         while u != b {
             meter.charge(1)?;
-            let (w, crossed) = self.trace(u, b)?;
+            let (w, crossed) = self.trace(u, b, meter)?;
             let check = if crossed.is_empty() {
                 Vec::new()
             } else {
@@ -850,14 +858,7 @@ impl Mesh {
             if tri.v.contains(&GHOST) {
                 continue;
             }
-            let [a, b, c] = tri.v;
-            triangles.push(if a < b && a < c {
-                [a, b, c]
-            } else if b < c {
-                [b, c, a]
-            } else {
-                [c, a, b]
-            });
+            triangles.push(lowest_first(tri.v));
             for i in 0..3 {
                 if pick(&tri.fixed, i) {
                     let (x, y) = (pick(&tri.v, next(i)), pick(&tri.v, prev(i)));
@@ -896,9 +897,7 @@ fn crossings(
                 continue;
             }
             let [c, d] = *at(segments, second)?;
-            if a == c || a == d || b == c || b == d {
-                continue;
-            }
+            // Constraints that share an end give that end `Zero`, so never count as crossing.
             let (pc, pd) = (*at(points, c)?, *at(points, d)?);
             let opposite = |x: Sign, y: Sign| {
                 matches!(
@@ -964,16 +963,19 @@ fn commit_crossings(
                 continue;
             };
             // Along the constraint from its lower point, the order of the cuts by (x, y).
-            let (pa, pb) = (*at(points, a)?, *at(points, b)?);
-            let (low, high) = if pa < pb { (a, b) } else { (b, a) };
-            let mut last = low;
-            for &(_, v) in along {
-                if v != last && v != high {
-                    cut.push([last.min(v), last.max(v)]);
-                    last = v;
+            let mut ends = [(*at(points, a)?, a), (*at(points, b)?, b)];
+            ends.sort_unstable();
+            let [(_, low), (_, high)] = ends;
+            let mut chain = Vec::with_capacity(along.len().saturating_add(2));
+            chain.push(low);
+            chain.extend(along.iter().map(|&(_, v)| v));
+            chain.push(high);
+            chain.dedup();
+            for pair in chain.windows(2) {
+                if let &[x, y] = pair {
+                    cut.push([x.min(y), x.max(y)]);
                 }
             }
-            cut.push([last.min(high), last.max(high)]);
         }
         segments = cut;
     }
@@ -1318,14 +1320,7 @@ impl Mesh {
             }
         }
         if is_bad(pa, pb, pc, quality) {
-            let low = if a < b && a < c {
-                [a, b, c]
-            } else if b < c {
-                [b, c, a]
-            } else {
-                [c, a, b]
-            };
-            work.triangles.insert(low);
+            work.triangles.insert(lowest_first(tri.v));
         }
         Ok(())
     }
@@ -1403,9 +1398,15 @@ impl Mesh {
 
     /// From `t`, walks towards `p`, stopping at the first segment in the way. The next edge is
     /// the least of those `p` is beyond, so the walk depends only on the triangles.
-    fn walk(&self, t: u32, p: P2) -> Result<Result<u32, [u32; 2]>, CdtError> {
+    fn walk(
+        &self,
+        t: u32,
+        p: P2,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Result<u32, [u32; 2]>, CdtError> {
         let mut t = t;
         for _ in 0..self.tris.len() {
+            meter.charge(1)?;
             let tri = self.t(t)?;
             let mut beyond: Option<([u32; 2], usize)> = None;
             for i in 0..3 {
@@ -1476,7 +1477,7 @@ fn refine(mesh: &mut Mesh, quality: &Quality, meter: &mut WorkMeter<'_>) -> Resu
         if known.contains_key(&centre) {
             continue;
         }
-        let found = mesh.walk(t, centre)?;
+        let found = mesh.walk(t, centre, meter)?;
         let blocking = match found {
             Err(edge) => Some(edge),
             Ok(there) => {
