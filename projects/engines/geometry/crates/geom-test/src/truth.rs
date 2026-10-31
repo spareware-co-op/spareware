@@ -272,16 +272,42 @@ fn circular(x: &Enclosed, even: bool) -> Enclosed {
     }
 }
 
+/// sin(π·q), for `q` a whole number of quarter turns, as (2q mod 4): 0, 1, 0 and −1. Exactly, since
+/// a kernel value there is exact too, and no enclosure with any width sits inside it.
+fn quarter_sine(q: &RBig) -> Option<RBig> {
+    let turns = q * whole(2);
+    if turns.denominator() != &UBig::ONE {
+        return None;
+    }
+    let whole_turns = turns.numerator().clone();
+    let four = IBig::from(4);
+    let left = ((&whole_turns % &four) + &four) % &four;
+    Some(RBig::from(if left == IBig::ONE {
+        IBig::ONE
+    } else if left == IBig::from(3) {
+        -IBig::ONE
+    } else {
+        IBig::ZERO
+    }))
+}
+
 /// sin(π·q), for a rational `q`.
 #[must_use]
 pub fn sinpi(q: &RBig) -> Enclosed {
-    circular(&pi().mul(&Enclosed::of(q)), false)
+    match quarter_sine(q) {
+        Some(exact) => Enclosed::of(&exact),
+        None => circular(&pi().mul(&Enclosed::of(q)), false),
+    }
 }
 
-/// cos(π·q), for a rational `q`.
+/// cos(π·q), for a rational `q`: sin(π·(q + 1/2)) at a whole number of quarter turns.
 #[must_use]
 pub fn cospi(q: &RBig) -> Enclosed {
-    circular(&pi().mul(&Enclosed::of(q)), true)
+    let half = RBig::ONE / whole(2);
+    match quarter_sine(&(q + half)) {
+        Some(exact) => Enclosed::of(&exact),
+        None => circular(&pi().mul(&Enclosed::of(q)), true),
+    }
 }
 
 /// ∫₀ˢ cos(k·u²) du and ∫₀ˢ sin(k·u²) du: the clothoid of curvature 2k·u from a straight start,
