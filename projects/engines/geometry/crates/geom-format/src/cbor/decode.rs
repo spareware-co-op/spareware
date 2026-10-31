@@ -204,8 +204,7 @@ impl<'a> Decoder<'a> {
             3 => {
                 let (content, end) = self.string(&head)?;
                 charge_scan(content.len(), start, meter)?;
-                let text =
-                    core::str::from_utf8(content).map_err(|_| fail(CborErrorKind::InvalidUtf8))?;
+                let text = utf8(content).ok_or_else(|| fail(CborErrorKind::InvalidUtf8))?;
                 self.complete(end)?;
                 Ok(Item::Text(text))
             }
@@ -365,11 +364,7 @@ impl<'a> Decoder<'a> {
                     if *key_next {
                         let key = (*key_start, end);
                         if let Some(before) = *previous {
-                            let order = self
-                                .bytes
-                                .get(before.0..before.1)
-                                .cmp(&self.bytes.get(key.0..key.1));
-                            let kind = match order {
+                            let kind = match key_order(self.bytes, before, key) {
                                 core::cmp::Ordering::Less => None,
                                 core::cmp::Ordering::Equal => Some(CborErrorKind::DuplicateKey),
                                 core::cmp::Ordering::Greater => Some(CborErrorKind::UnsortedKeys),
@@ -506,6 +501,16 @@ fn check_tagged(
     Ok(())
 }
 
+/// `content` as text, if it is UTF-8.
+fn utf8(content: &[u8]) -> Option<&str> {
+    core::str::from_utf8(content).ok()
+}
+
+/// How the bytes of the key at `before` compare with those of the key at `key`.
+fn key_order(bytes: &[u8], before: (usize, usize), key: (usize, usize)) -> core::cmp::Ordering {
+    bytes.get(before.0..before.1).cmp(&bytes.get(key.0..key.1))
+}
+
 /// Charges the meter for scanning `length` bytes: one unit per [`SCAN_BYTES_PER_CHARGE`] or part.
 fn charge_scan(length: usize, at: usize, meter: &mut WorkMeter<'_>) -> Result<(), CborError> {
     let units = length.div_ceil(SCAN_BYTES_PER_CHARGE);
@@ -553,4 +558,84 @@ pub fn item_len(bytes: &[u8], depth: usize, meter: &mut WorkMeter<'_>) -> Result
     let mut decoder = Decoder::new(bytes, depth);
     while decoder.next(meter)?.is_some() {}
     decoder.end()
+}
+
+/// Bounded proofs (chapter 28.7; piece G112), proven by `kernel-fuzz.yml`'s `kani-format` job.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+pub(crate) mod proofs {
+    use core::cmp::Ordering;
+
+    use geom_run::{Budget, WorkMeter};
+
+    use super::{CborError, CborErrorKind, Decoder, TagRule};
+
+    /// Stands in for `check_tagged`: the tagged columns' own checks, which are tested
+    /// (`tests/attack_g91.rs`), either way.
+    pub(crate) fn any_tagged(
+        _: TagRule,
+        _: usize,
+        _: usize,
+        _: &[u8],
+        _: &mut WorkMeter<'_>,
+    ) -> Result<(), CborError> {
+        if kani::any() {
+            Ok(())
+        } else {
+            Err(CborError {
+                offset: 0,
+                kind: CborErrorKind::TagContent,
+            })
+        }
+    }
+
+    /// Stands in for `key_order`: the standard library's comparison, any way.
+    pub(crate) fn any_order(_: &[u8], _: (usize, usize), _: (usize, usize)) -> Ordering {
+        match kani::any::<u8>() {
+            0 => Ordering::Less,
+            1 => Ordering::Equal,
+            _ => Ordering::Greater,
+        }
+    }
+
+    /// Stands in for `utf8`: the standard library's validation, either way.
+    pub(crate) fn any_text(_: &[u8]) -> Option<&str> {
+        if kani::any() { Some("") } else { None }
+    }
+
+    /// One head of any bytes up to the nine a head can take, at any nesting allowance up to 2:
+    /// an item that ends inside them, or a refusal, never a panic.
+    #[kani::proof]
+    #[kani::unwind(10)]
+    #[kani::stub(super::check_tagged, any_tagged)]
+    #[kani::stub(super::utf8, any_text)]
+    #[kani::stub(super::key_order, any_order)]
+    fn one_head_never_panics() {
+        let bytes: [u8; 9] = kani::any();
+        let depth: usize = kani::any();
+        kani::assume(depth <= 2);
+        let mut decoder = Decoder::new(&bytes, depth);
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let _ = decoder.next(&mut meter);
+        assert!(decoder.offset() <= bytes.len());
+    }
+
+    /// Two heads of any four bytes, the second under whatever the first opened (an array, a map
+    /// or a tag), never a panic.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    #[kani::stub(super::check_tagged, any_tagged)]
+    #[kani::stub(super::utf8, any_text)]
+    #[kani::stub(super::key_order, any_order)]
+    fn two_heads_never_panic() {
+        let bytes: [u8; 4] = kani::any();
+        let mut decoder = Decoder::new(&bytes, 2);
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let _ = decoder.next(&mut meter);
+        let _ = decoder.next(&mut meter);
+        assert!(decoder.offset() <= bytes.len());
+    }
 }

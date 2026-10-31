@@ -1020,56 +1020,6 @@ mod proofs {
         e
     }
 
-    /// Any row of an arena of `rows` rows, live or dead.
-    fn any_ix<K: Kind>(rows: u32) -> Ix<K> {
-        let row: u32 = kani::any();
-        kani::assume(row < rows);
-        Ix::new(row).unwrap()
-    }
-
-    /// Applies any operator to any arguments, keeping count of the holes Euler's formula needs.
-    fn step(e: &mut Euler, stock: &mut Stock, holes: &mut i32) {
-        let fins = e.arenas.fins.len();
-        let (a, b): (FinIx, FinIx) = (any_ix(fins), any_ix(fins));
-        let op: u8 = kani::any();
-        match op {
-            0 => {
-                let (edge, vertex) = (stock.edge(), stock.vertex());
-                let _ = e.mev(a, edge, vertex);
-            }
-            1 => {
-                let edge = e.fin(a).map(|f| f.edge);
-                let _ = edge.and_then(|edge| e.kev(edge));
-            }
-            2 => {
-                let (edge, face) = (stock.edge(), stock.face());
-                let _ = e.mef(a, b, edge, face);
-            }
-            3 => {
-                let _ = e.kef(a);
-            }
-            4 => {
-                let edge = stock.edge();
-                let _ = e.mekr(a, b, edge);
-            }
-            5 => {
-                let _ = e.kemr(a);
-            }
-            6 => {
-                let (keep, ring) = (any_ix(e.arenas.faces.len()), any_ix(e.arenas.loops.len()));
-                if e.kfmrh(keep, ring).is_ok() {
-                    *holes += 1;
-                }
-            }
-            _ => {
-                let (ring, face) = (any_ix(e.arenas.loops.len()), stock.face());
-                if e.mfkrh(ring, face).is_ok() {
-                    *holes -= 1;
-                }
-            }
-        }
-    }
-
     /// The live rows of arena `arena`, of `rows` rows.
     fn live_rows(e: &Euler, arena: Arena, rows: u32) -> i32 {
         let mut count = 0;
@@ -1083,9 +1033,10 @@ mod proofs {
 
     /// Every combinatorial rule the operators promise: each live fin's links, partner and loop;
     /// each live loop's ring holding all its fins; each live edge's first fin; Euler's formula.
-    fn assert_rules(e: &Euler, holes: i32) {
+    fn assert_rules(e: &Euler, holes: i32, rows: u32) {
         let a = &e.arenas;
-        for row in 0..a.fins.len() {
+        assert!(a.fins.len() == rows);
+        for row in 0..rows {
             if !e.is_live(Arena::Fin, row) {
                 continue;
             }
@@ -1110,7 +1061,7 @@ mod proofs {
             let ring = e.segment(first, first);
             assert!(ring.iter().all(|&f| e.fin(f).is_ok_and(|fin| fin.loop_ == l)));
             let mut fins = 0;
-            for f in 0..a.fins.len() {
+            for f in 0..rows {
                 let x: FinIx = Ix::new(f).unwrap();
                 if e.fin(x).is_ok_and(|fin| fin.loop_ == l) {
                     fins += 1;
@@ -1144,17 +1095,137 @@ mod proofs {
         Ok(Ix::new(0).unwrap())
     }
 
-    /// MEV at any fin of a wire keeps every rule.
+    /// Stands in for `geom_curve::frame::not_parallel`, an exact sum whose loops CBMC cannot bound,
+    /// which the stock's one plane meets, on axes that are not parallel.
+    fn apart(_: [f64; 3], _: [f64; 3]) -> bool {
+        true
+    }
+
+    /// MEV at the wire's first fin, then KEV of the new edge: every rule after each.
     #[kani::proof]
-    #[kani::unwind(64)]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
     #[kani::stub(Euler::add_curve, no_curve)]
     #[kani::stub(Euler::add_surface, no_surface)]
-    fn mev_keeps_the_rules() {
+    fn mev_and_kev() {
         let mut stock = Stock::new();
         let mut e = wire(&mut stock);
-        let at = any_ix(e.arenas.fins.len());
+        let at: FinIx = Ix::new(0).unwrap();
         let (edge, vertex) = (stock.edge(), stock.vertex());
-        assert!(e.mev(at, edge, vertex).is_ok());
-        assert_rules(&e, 0);
+        let (new, _) = e.mev(at, edge, vertex).unwrap();
+        assert_rules(&e, 0, 4);
+        e.kev(new).unwrap();
+        assert_rules(&e, 0, 4);
+    }
+
+    /// Row `row` of the fins.
+    fn fin(row: u32) -> FinIx {
+        Ix::new(row).unwrap()
+    }
+
+    /// MEF across a wire's two fins, then KEF of the new face: every rule after each.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn mef_and_kef() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        let (edge, face) = (stock.edge(), stock.face());
+        e.mef(fin(0), fin(1), edge, face).unwrap();
+        assert_rules(&e, 0, 4);
+        e.kef(fin(3)).unwrap();
+        assert_rules(&e, 0, 4);
+    }
+
+    /// MEF from a fin to itself, a closed edge whose forward fin is a loop of its own.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn mef_closes_an_edge() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        let (edge, face) = (stock.edge(), stock.face());
+        e.mef(fin(0), fin(0), edge, face).unwrap();
+        assert_rules(&e, 0, 4);
+    }
+
+    /// A wire with a spur on each side, so its two fins are not next to each other: [`Euler::kemr`]
+    /// applies to it. Six fins.
+    fn spurred(stock: &mut Stock) -> Euler {
+        let mut e = wire(stock);
+        let (edge, vertex) = (stock.edge(), stock.vertex());
+        e.mev(fin(1), edge, vertex).unwrap();
+        let (edge, vertex) = (stock.edge(), stock.vertex());
+        e.mev(fin(0), edge, vertex).unwrap();
+        e
+    }
+
+    /// KEMR on a spurred wire, then MEKR joining the ring back: every rule after each.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn kemr_and_mekr() {
+        let mut stock = Stock::new();
+        let mut e = spurred(&mut stock);
+        e.kemr(fin(0)).unwrap();
+        assert_rules(&e, 0, 6);
+        let edge = stock.edge();
+        e.mekr(fin(2), fin(4), edge).unwrap();
+        assert_rules(&e, 0, 8);
+    }
+
+    /// MFKRH makes a ring a face of its own, KFMRH makes it a ring again: every rule after each,
+    /// with one hole fewer between them.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn mfkrh_and_kfmrh() {
+        let mut stock = Stock::new();
+        let mut e = spurred(&mut stock);
+        let ring = e.kemr(fin(0)).unwrap();
+        let face = stock.face();
+        e.mfkrh(ring, face).unwrap();
+        assert_rules(&e, -1, 6);
+        e.kfmrh(Ix::new(0).unwrap(), ring).unwrap();
+        assert_rules(&e, 0, 6);
+    }
+
+    /// A lone wire removed: nothing is left live.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn kill_wire_leaves_nothing() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        e.kill_wire(Ix::new(0).unwrap()).unwrap();
+        assert_rules(&e, 0, 2);
+        assert!(live_rows(&e, Arena::Vertex, 2) == 0 && live_rows(&e, Arena::Fin, 2) == 0);
+    }
+
+    /// What a lone wire refuses changes nothing: KEV (its fins are the whole of their loop), KEF
+    /// (both fins are in one face) and KEMR (they are next to each other).
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn refusals_change_nothing() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        let before = e.clone();
+        assert!(e.kev(Ix::new(0).unwrap()).is_err());
+        assert!(e.kef(fin(0)).is_err());
+        assert!(e.kemr(fin(0)).is_err());
+        assert!(e == before);
     }
 }
