@@ -1,28 +1,25 @@
 //! The instruction-and-cache gate's verdict, read from Gungraun's machine-readable summaries:
 //! instructions and estimated cycles are gated at the gate's percentage on every benchmark, and
-//! each L1 and last-level miss count is gated at that percentage only where its merge-base count
-//! can resolve it; a smaller miss count is listed and judged through estimated cycles.
+//! every L1 and last-level miss count is listed when it changes and judged through estimated cycles.
 //!
-//! The rule (chapter 23.13, "Miss counts too small to resolve 5%"). Counts are whole events, so the
-//! smallest change a count of b can show is one event, 100/b percent of it. One event is within a
-//! limit of p percent exactly when 100 ≤ p · b, so a count resolves p% only from its floor,
-//! ⌈100 / p⌉, up ([`floor`]): 20 for the gate's 5%. Below the floor a limit of p% fails on any
-//! single event, and code layout alone moves miss counts by an event or two: a change that did not
-//! touch the code a benchmark runs can still shift which cache lines that code falls on (PR #212's
-//! aarch64 leg failed with I1mr and ILmr 2 → 3 on `exact_sum` benchmarks it did not touch, while
-//! estimated cycles held). So a miss count below the floor is not gated on its own: every change in
-//! it is listed, and it is judged through estimated cycles, which Gungraun computes as
-//! L1 hits + 5 · last-level hits + 35 · RAM hits, that is instructions and data accesses plus 4 per
-//! L1 miss and 30 more per last-level miss, and which stays gated at p% on every benchmark. A miss
-//! count at or above its floor stays gated at p%, as before. Instructions and estimated cycles are
-//! gated at p% whatever their size: they are what every miss is judged through. With p = 0 no count
-//! resolves the limit, so no miss count is gated on its own.
+//! The rule (chapter 23.13, "Miss counts are judged through estimated cycles"). Gungraun computes
+//! estimated cycles as L1 hits + 5 · last-level hits + 35 · RAM hits, that is instructions and data
+//! accesses plus 4 per L1 miss and 30 more per last-level miss, so every miss is priced in them, and
+//! they stay gated at p% on every benchmark: no rise in what the misses cost can pass unseen. A miss
+//! count is not gated on its own, at any size, because code layout alone moves it: a change that did
+//! not touch the code a benchmark runs can still shift which cache lines that code and its data fall
+//! on. PR #212's aarch64 leg failed with I1mr and ILmr 2 → 3 on `exact_sum` benchmarks it did not
+//! touch; G18a's first run raised L1 misses of 339 and 218 by 4.7% and 6.9%; and with the measured
+//! build in one codegen unit (#408), PRs #404, #408, #420 and #421 each failed on miss counts of 20
+//! to 700 (`exact_sum/add_slice/typical` D1mr 622 → 683 on #420, which changed only manifests;
+//! `newton/*_4` I1mr up to +135% on #421) while instructions held and estimated cycles moved by at
+//! most +0.29%. Every change in a miss count is listed in the report, beside its benchmark's
+//! estimated cycles. Instructions and estimated cycles are gated at p% whatever their size.
 //!
 //! Guarantees:
 //!
 //! - **Exact, for every count.** Every limit is tested in integers ([`Change::rose_over`]):
-//!   100 · head > (100 + p) · base, and a count resolves p% exactly when it is at least
-//!   ⌈100 / p⌉. Percentages are computed, as floating point, for display only.
+//!   100 · head > (100 + p) · base. Percentages are computed, as floating point, for display only.
 //! - **Every benchmark judged, or no verdict.** Every benchmark the run lists has exactly one
 //!   summary, every summary is a benchmark the run lists and of the schema version the gate's
 //!   Gungraun writes, and every summary carries a whole count
@@ -41,8 +38,8 @@
 //! (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126>);
 //! the percentage limit of Gungraun's soft limits
 //! (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>),
-//! applied exactly; the resolution floor is ours, derived above, because no source sets a floor
-//! for a percentage limit on small counts.
+//! applied exactly to instructions and estimated cycles; judging the miss counts through estimated
+//! cycles alone is the kernel owners' decision, from the evidence above (23.13).
 //! Consulted: Gungraun, Apache-2.0 OR MIT,
 //!   <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>,
 //!   for its summary files, its default output layout and its estimated-cycles formula. No code
@@ -62,8 +59,8 @@ use gungraun_runner::summary::model::{BenchmarkSummary, SCHEMA_VERSION, ToolMetr
 use crate::counts::Change;
 
 /// The miss counts, by Gungraun's event kinds and names: L1 and last-level misses of instruction
-/// reads, data reads and data writes. Each is gated only where its merge-base count resolves the
-/// gate's percentage ([`floor`]).
+/// reads, data reads and data writes. Each is listed when it changes and judged through estimated
+/// cycles, never gated on its own.
 pub const MISSES: [(EventKind, &str); 6] = [
     (EventKind::I1mr, "I1mr"),
     (EventKind::D1mr, "D1mr"),
@@ -87,35 +84,25 @@ pub const JUDGED: [(EventKind, &str); 8] = [
     MISSES[5],
 ];
 
-/// The smallest count that resolves a limit of `gate` percent: the least b with 100 ≤ gate · b,
-/// on which one event is within the limit, so ⌈100 / gate⌉; `None` for a limit of 0, which no
-/// count resolves. 20 for the gate's 5%.
-#[must_use]
-pub fn floor(gate: u64) -> Option<u64> {
-    (gate != 0).then(|| 100u64.div_ceil(gate))
-}
-
 /// What the rule says of one measure's change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verdict {
-    /// Within the limit, or a miss count below its floor that did not change.
+    /// Within the limit, or a miss count that did not change.
     Within,
-    /// A rise over the limit on a count that resolves it: it fails the gate.
+    /// A rise over the limit in instructions or estimated cycles: it fails the gate.
     Rose,
-    /// A miss count below its floor that changed: listed, and judged through estimated cycles.
-    Unresolved,
+    /// A miss count that changed: listed, and judged through estimated cycles.
+    Listed,
 }
 
 /// The rule for the measure `kind` changing by `change` under a limit of `gate` percent.
 #[must_use]
 pub fn verdict(kind: EventKind, change: &Change, gate: u64) -> Verdict {
-    let miss = MISSES.iter().any(|&(k, _)| k == kind);
-    let resolved = !miss || floor(gate).is_some_and(|f| change.base >= f);
-    if !resolved {
+    if MISSES.iter().any(|&(k, _)| k == kind) {
         if change.base == change.head {
             Verdict::Within
         } else {
-            Verdict::Unresolved
+            Verdict::Listed
         }
     } else if change.rose_over(gate) {
         Verdict::Rose
@@ -255,8 +242,7 @@ pub struct Measure {
     pub metric: &'static str,
     /// Its change; the change's name is the benchmark's.
     pub change: Change,
-    /// The same benchmark's estimated cycles, through which a miss count below its floor is
-    /// judged.
+    /// The same benchmark's estimated cycles, through which a miss count is judged.
     pub cycles: Change,
 }
 
@@ -265,12 +251,10 @@ pub struct Measure {
 pub struct Judgement {
     /// The limit, in percent.
     pub gate: u64,
-    /// The floor of the miss counts ([`floor`]).
-    pub floor: Option<u64>,
-    /// Rises over the limit on counts that resolve it: each one fails the gate.
+    /// Rises over the limit in instructions or estimated cycles: each one fails the gate.
     pub regressions: Vec<Measure>,
-    /// Miss counts below their floor that changed: listed, judged through estimated cycles.
-    pub unresolved: Vec<Measure>,
+    /// Miss counts that changed: listed, judged through estimated cycles.
+    pub listed: Vec<Measure>,
     /// Benchmarks the merge base lacks: recorded, not compared.
     pub new: Vec<String>,
     /// How many benchmarks were compared with the merge base.
@@ -307,9 +291,8 @@ pub fn judge(
     }
     let mut out = Judgement {
         gate,
-        floor: floor(gate),
         regressions: Vec::new(),
-        unresolved: Vec::new(),
+        listed: Vec::new(),
         new: Vec::new(),
         compared: 0,
     };
@@ -343,7 +326,7 @@ pub fn judge(
             match verdict(kind, &change, gate) {
                 Verdict::Within => {}
                 Verdict::Rose => out.regressions.push(measure(change)),
-                Verdict::Unresolved => out.unresolved.push(measure(change)),
+                Verdict::Listed => out.listed.push(measure(change)),
             }
         }
     }
@@ -351,7 +334,7 @@ pub fn judge(
 }
 
 impl Judgement {
-    /// Whether the gate passes: no rise over the limit on a count that resolves it.
+    /// Whether the gate passes: no rise over the limit in instructions or estimated cycles.
     #[must_use]
     pub fn passed(&self) -> bool {
         self.regressions.is_empty()
@@ -367,7 +350,7 @@ impl Judgement {
             let _ = writeln!(
                 out,
                 "**Passed.** {} benchmark(s) compared with the merge base; none rose by more than \
-                 {gate}% on a count that resolves it.\n",
+                 {gate}% in instructions or estimated cycles.\n",
                 self.compared
             );
         } else {
@@ -377,33 +360,21 @@ impl Judgement {
                 self.regressions.len()
             );
         }
-        let rule = match self.floor {
-            Some(floor) => format!(
-                "Instructions and estimated cycles are gated at {gate}% on every benchmark. A miss \
-                 count is gated at {gate}% when its merge-base count is {floor} or more; below \
-                 {floor}, one event is more than {gate}%, so the count cannot resolve the limit: \
-                 its changes are listed and judged through estimated cycles, which weight every \
-                 miss (chapter 23.13)."
-            ),
-            None => format!(
-                "Instructions and estimated cycles are gated at {gate}% on every benchmark. No \
-                 count resolves a limit of {gate}%, so every miss count's changes are listed and \
-                 judged through estimated cycles (chapter 23.13)."
-            ),
-        };
-        let _ = writeln!(out, "{rule}\n");
+        let _ = writeln!(
+            out,
+            "Instructions and estimated cycles are gated at {gate}% on every benchmark. Every miss \
+             count that changed is listed, and judged through estimated cycles, which price every \
+             miss: code layout alone moves miss counts (chapter 23.13).\n"
+        );
         measures(
             &mut out,
             &format!("Rises over {gate}% (they block the merge)"),
             &self.regressions,
         );
-        let below = self
-            .floor
-            .map_or_else(|| "every miss count".to_owned(), |f| format!("under {f}"));
         measures(
             &mut out,
-            &format!("Miss counts {below} that changed (judged through estimated cycles)"),
-            &self.unresolved,
+            "Miss counts that changed (judged through estimated cycles)",
+            &self.listed,
         );
         let _ = writeln!(out, "#### New (recorded, not compared)\n");
         if self.new.is_empty() {
