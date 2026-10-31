@@ -10737,6 +10737,31 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "`n` pieces cost O(n²) crossing tests and O(n²) for the rays, on rationals that grow with each cut; an offset repeats that for each piece. This reference accepts that, because it runs on small cases only. No recursion.",
+          "does": "a [`OneRoot`] is a real number a + b√k with a, b and k rational. A line with rational coefficients and a circle with a rational centre and squared radius are closed under crossing: every crossing is a [`Point`] whose two coordinates share one root. A [`Piece`] is an oriented stretch of a line or an arc monotone in x, and a [`Region`] is a set of pieces forming closed chains with the interior on their left.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/arc_reference.rs",
+          "guarantees": [
+            "**Exact.** Every value is exact, and every comparison is the sign of a + b√p + c√q, decided by squaring in rationals. Nothing rounds and there is no tolerance: tangency is a discriminant that is exactly zero.",
+            "**No nested roots.** A sample point on a piece has a rational x, or a rational y on an upright line, and its ray runs along that rational line, so every crossing with the ray is one-root again and is compared along the line.",
+            "**Independent of the kernel.** Written from the definitions below, without reading `geom_num::arc`, `geom_num::one_root` or `geom-2d`, sharing no code with the kernel and calling none (chapter 28.9: a different author, a different agent session).",
+            "**Refused, never guessed.** A negative root, a point off its circle, an open chain and an offset that would leave the one-root numbers are [`ReferenceError`]s.",
+            "**Regularised.** A boolean's result is the closure of its interior: a shared stretch of boundary with interior on both sides leaves nothing behind."
+          ],
+          "job": "The reference implementation of the 2D arrangement (chapter 28.9): lines and circular arcs, their arrangement, booleans, offsets and the boundary identity of chapter 28.3, in one-root numbers, by brute force, to check `geom-2d` against.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-17283-0",
+              "https://doi.org/10.1109/TC.1980.1675457"
+            ],
+            "text": "arcs split at their left and right extremes and comparison of one-root numbers by repeated squaring, from the published description of circle-segment arrangements by Fogel, Halperin and Wein, *CGAL Arrangements and Their Applications*, 2012, <https://doi.org/10.1007/978-3-642-17283-0>, whose source is not read (29.2); ray parity for location; Euler's formula for the faces; a boolean by selecting the boundary pieces each operator keeps, Tilove's boundary classification, \"Set membership classification\", IEEE Trans. Computers C-29(10), 1980, <https://doi.org/10.1109/TC.1980.1675457>; an offset as a Minkowski sum with a disc."
+          },
+          "path": "geom_test::arc_reference",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`check` reads every vendored byte once; `fetch` costs its downloads.",
           "does": null,
           "family": [],
