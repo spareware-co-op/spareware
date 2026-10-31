@@ -10,7 +10,7 @@
 use geom_name::{faces, roles_of};
 use geom_num::Exactness;
 use geom_op::history::{History, Origin, Record};
-use geom_op::{ErrorKind, NameId, NameSet, OpContext, OpId, OpPath, Role};
+use geom_op::{ErrorKind, NameId, NameSet, OpContext, OpId, OpPath, PieceKey, Role};
 use geom_run::{Budget, Stop, WorkMeter};
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{BodyKind, Builder, Face, Ix, Region, RegionKind, Sense, Shell, SurfaceKind};
@@ -121,6 +121,22 @@ fn a_merged_entity_has_every_role_sorted_and_without_repeats() {
 }
 
 #[test]
+fn a_split_piece_has_the_role_of_what_it_was_split_from() {
+    let made = history(vec![generated(1, "side")]);
+    let split = history(vec![Record {
+        output: id(2),
+        origin: Origin::Split {
+            of: id(1),
+            piece: PieceKey::ByTools {
+                tools: set(&[id(9)]),
+                side: geom_op::Side::Front,
+            },
+        },
+    }]);
+    assert_eq!(roles(2, &[&made, &split]), ["side"]);
+}
+
+#[test]
 fn every_entry_is_charged_and_visited_once() {
     let made = history(vec![generated(1, "side"), generated(2, "cap")]);
     let merged = history(vec![Record {
@@ -166,8 +182,8 @@ fn ix<K>(r: u32) -> Ix<K> {
     Ix::new(r).unwrap()
 }
 
-/// A body of two faces with no loops, named 1 and 2.
-fn named() -> geom_topo::Body {
+/// The rows of a body of two faces with no loops.
+fn two_faces() -> Builder {
     let mut b = Builder::new();
     let a = &mut b.arenas;
     a.regions
@@ -223,19 +239,25 @@ fn named() -> geom_topo::Body {
         )
     };
     a.surfaces.extend([plane(0.0), plane(1.0)]).unwrap();
+    b
+}
+
+/// A body of two faces with no loops, named 1 and 2.
+fn named() -> geom_topo::Body {
     let key = |n: u8| NameKey([n; 16]);
-    b.publish_named(
-        &Names {
-            regions: vec![key(10), key(11)],
-            faces: vec![key(1), key(2)],
-            edges: Vec::new(),
-            vertices: Vec::new(),
-        },
-        BodyKind::Sheet,
-        ix(1),
-        &mut meter(),
-    )
-    .unwrap()
+    two_faces()
+        .publish_named(
+            &Names {
+                regions: vec![key(10), key(11)],
+                faces: vec![key(1), key(2)],
+                edges: Vec::new(),
+                vertices: Vec::new(),
+            },
+            BodyKind::Sheet,
+            ix(1),
+            &mut meter(),
+        )
+        .unwrap()
 }
 
 fn ctx(budget: Budget) -> OpContext<'static> {
@@ -271,19 +293,14 @@ fn faces_are_listed_with_their_names_and_roles() {
 
 #[test]
 fn a_body_without_names_lists_no_names_and_no_roles() {
-    let mut b = Builder::new();
-    b.arenas
-        .regions
-        .push(Region {
-            kind: RegionKind::Void,
-            first_shell: None,
-        })
+    let body = two_faces()
+        .publish(BodyKind::Sheet, ix(1), &mut meter())
         .unwrap();
-    let empty = b
-        .publish(BodyKind::General, Ix::new(0).unwrap(), &mut meter())
-        .unwrap();
-    let out = faces(&ctx(Budget::UNLIMITED), &empty, &[], Exactness::Exact).unwrap();
-    assert_eq!(out.result.len(), 0);
+    let made = history(vec![generated(1, "bottom")]);
+    let out = faces(&ctx(Budget::UNLIMITED), &body, &[&made], Exactness::Exact).unwrap();
+    assert_eq!(out.result.len(), 2);
+    assert!(out.result.iter().all(|f| f.name.is_none()));
+    assert!(out.result.iter().all(|f| f.roles.is_empty()));
 }
 
 #[test]

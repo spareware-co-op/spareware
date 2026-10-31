@@ -73,9 +73,10 @@ fn signs(body: &Body, roles: &mut [u32], sink: &mut Sink<'_, '_>) -> Result<(), 
                 UNJUDGED
             }
         };
-        if let Some(slot) = roles.get_mut(s.to_usize()) {
-            *slot = word;
-        }
+        roles
+            .get_mut(s.to_usize())
+            .into_iter()
+            .for_each(|slot| *slot = word);
     }
     Ok(())
 }
@@ -116,9 +117,8 @@ fn side(
     sink: &mut Sink<'_, '_>,
 ) -> Result<Option<Side>, Stopped> {
     match shell_side(body, s, t, sink.meter()) {
-        Ok(found) => Ok(found),
         Err(QueryError::Stopped(stop)) => Err(stop),
-        Err(_) => Ok(None),
+        found => Ok(found.ok().flatten()),
     }
 }
 

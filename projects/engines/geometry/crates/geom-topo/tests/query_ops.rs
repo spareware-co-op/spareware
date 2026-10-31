@@ -4,6 +4,8 @@
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
+    clippy::panic,
+    clippy::many_single_char_names,
     reason = "test code: a failure should stop loudly"
 )]
 

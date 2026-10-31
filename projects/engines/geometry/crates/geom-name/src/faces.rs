@@ -31,7 +31,7 @@ use geom_op::history::{History, Origin};
 use geom_op::{NameId, OpContext, OpError, OpOutput, Role};
 use geom_run::{Stopped, WorkMeter};
 use geom_topo::Body as TopoBody;
-use geom_topo::query::{self, FaceRow};
+use geom_topo::query::{self, FaceRow, QueryError};
 use geom_topo::query_ops::failed;
 
 /// One face, as [`faces`] lists it.
@@ -87,6 +87,24 @@ pub fn roles_of(
     Ok(found.into_iter().collect())
 }
 
+/// Every face of `body` with its name and roles.
+fn rows(
+    body: &TopoBody,
+    histories: &[&History],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<NamedFace>, QueryError> {
+    let mut out = Vec::new();
+    for row in query::faces(body, meter)? {
+        let name = row.name.map(|key| NameId::from_bytes(key.0));
+        let roles = match name {
+            Some(id) => roles_of(id, histories, meter)?,
+            None => Vec::new(),
+        };
+        out.push(NamedFace { row, name, roles });
+    }
+    Ok(out)
+}
+
 /// `query.faces`: every face of `body`, recorded `exactness`, in arena order, with its name and the
 /// roles `histories`, oldest first, give it.
 ///
@@ -100,17 +118,7 @@ pub fn faces(
     exactness: Exactness,
 ) -> Result<OpOutput<Vec<NamedFace>>, OpError> {
     ctx.run(|meter| {
-        let rows = query::faces(body, meter).map_err(|e| failed(ctx, meter, e))?;
-        let mut out = Vec::new();
-        for row in rows {
-            let name = row.name.map(|key| NameId::from_bytes(key.0));
-            let roles = match name {
-                Some(id) => roles_of(id, histories, meter)
-                    .map_err(|s| failed(ctx, meter, query::QueryError::Stopped(s)))?,
-                None => Vec::new(),
-            };
-            out.push(NamedFace { row, name, roles });
-        }
-        Ok(OpOutput::new(out, exactness))
+        let listed = rows(body, histories, meter).map_err(|e| failed(ctx, meter, e))?;
+        Ok(OpOutput::new(listed, exactness))
     })
 }

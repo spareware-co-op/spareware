@@ -9,6 +9,7 @@
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
+    clippy::many_single_char_names,
     reason = "test code: a failure should stop loudly"
 )]
 
@@ -117,7 +118,7 @@ fn tetrahedron(scale: i64) -> [Vec<Corner>; 4] {
     let o = || Corner::Grid(p(0, 0, 0));
     let y = || Corner::Grid(p(0, scale, 0));
     let z = || Corner::Grid(p(0, 0, scale));
-    let x = || Corner::Tpi(x_axis.clone());
+    let x = || Corner::Tpi(x_axis);
     [
         vec![o(), y(), x()],
         vec![o(), x(), z()],
@@ -161,7 +162,7 @@ fn grid_corners_agree_with_the_exact_sums() {
         [c(0, 0, 0), c(0, 0, 2), c(0, 2, 2), c(0, 2, 0)],
         [c(2, 0, 0), c(2, 2, 0), c(2, 2, 2), c(2, 0, 2)],
     ];
-    let loops: Vec<&[Corner]> = cube.iter().map(|l| l.as_slice()).collect();
+    let loops: Vec<&[Corner]> = cube.iter().map(<[Corner; 4]>::as_slice).collect();
     let six = shell_volume(&loops, &mut meter()).unwrap();
     assert!(six.contains(48.0), "{six:?}");
     assert!(six.hi() - six.lo() < 1e-12);
