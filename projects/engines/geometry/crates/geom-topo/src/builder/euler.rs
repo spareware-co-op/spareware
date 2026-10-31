@@ -194,7 +194,7 @@ fn kill(mask: &mut [bool], row: u32) {
 
 /// For each of `count` rows, how many of `owners` name it.
 fn tally(owners: impl Iterator<Item = u32>, count: u32) -> Vec<u32> {
-    let mut counts: Vec<u32> = (0..count).map(|_| 0).collect();
+    let mut counts: Vec<u32> = (0..count).map(|_| 0_u32).collect();
     for owner in owners {
         recount(&mut counts, owner, |c| c.saturating_add(1));
     }
