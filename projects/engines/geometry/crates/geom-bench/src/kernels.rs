@@ -1226,7 +1226,10 @@ pub mod generated {
 
     /// `generated::carrier_order::filter` on each (normal, p, q).
     #[inline(never)]
-    pub fn carrier_order_filter(batch: &[([i128; 2], [i128; 3], [i128; 3])], out: &mut Vec<Option<Sign>>) {
+    pub fn carrier_order_filter(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<Sign>>,
+    ) {
         run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
             carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq)
         });
@@ -1234,7 +1237,10 @@ pub mod generated {
 
     /// `generated::carrier_order::value` on each (normal, p, q).
     #[inline(never)]
-    pub fn carrier_order_value(batch: &[([i128; 2], [i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
         run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
             carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
         });
@@ -1399,7 +1405,10 @@ pub mod plain {
 
     /// `generated::plain::carrier_order_value` on each (normal, p, q).
     #[inline(never)]
-    pub fn carrier_order_value(batch: &[([i128; 2], [i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
         run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
             plain::carrier_order_value(a, b, xp, yp, xq, yq, wp, wq)
         });
@@ -1548,7 +1557,10 @@ pub mod limbs {
 
     /// `generated::limbs::carrier_order_value` on each (normal, p, q).
     #[inline(never)]
-    pub fn carrier_order_value(batch: &[([i128; 2], [i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
         run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
             limbs::carrier_order_value(a, b, xp, yp, xq, yq, wp, wq)
         });

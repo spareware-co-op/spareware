@@ -1413,7 +1413,11 @@ pub fn generate_fptaylor_rational_cmp() -> Result<Vec<u8>, GenError> {
 ///
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_fptaylor_rational_orient() -> Result<Vec<u8>, GenError> {
-    certificate("rational_orient", "fptaylor-rational-orient", fptaylor_problem)
+    certificate(
+        "rational_orient",
+        "fptaylor-rational-orient",
+        fptaylor_problem,
+    )
 }
 
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.
