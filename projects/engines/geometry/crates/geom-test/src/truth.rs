@@ -54,6 +54,13 @@ fn step() -> RBig {
     RBig::from_parts(IBig::ONE, UBig::ONE << BITS)
 }
 
+/// Whether a series term of size `x` is small enough to stop at. Rounding outward holds a falling
+/// term at a step or two, never below, so the test is against the place it settles at; the term
+/// then bounds what is left, as for any term.
+fn spent(x: &RBig) -> bool {
+    *x <= step() * whole(4)
+}
+
 /// A whole number as a rational.
 fn whole(n: u64) -> RBig {
     RBig::from(UBig::from(n))
@@ -223,7 +230,7 @@ fn atan_inverse(x: u64) -> Enclosed {
         };
         power = up(&(&power / &square));
         k += 1;
-        if power < step() {
+        if spent(&power) {
             // The series alternates with falling terms: the next one bounds what is left.
             return sum.plus_or_minus(&power);
         }
@@ -259,7 +266,7 @@ fn circular(x: &Enclosed, even: bool) -> Enclosed {
         } else {
             sum.add(&term)
         };
-        if term.size() < step() && whole(k) > x.size() {
+        if spent(&term.size()) && whole(k) > x.size() {
             return sum.plus_or_minus(&term.size());
         }
     }
@@ -306,7 +313,7 @@ pub fn fresnel(k: &Enclosed, s: &RBig) -> [Enclosed; 2] {
         order += 1;
         factorial = factorial.mul(k).div_whole(order);
         power = power.mul(&s2);
-        if term.size() < step() && whole(order) > k.mul(&s2).size() {
+        if spent(&term.size()) && whole(order) > k.mul(&s2).size() {
             let left = term.size();
             return sums.map(|sum| sum.plus_or_minus(&left));
         }
