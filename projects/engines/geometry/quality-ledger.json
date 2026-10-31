@@ -5232,7 +5232,7 @@
       "line_text": "return u128::from(x | y);",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "One of x and y is 0 on this line."
+      "reason": "One of x and y is 0 on this line, so or and exclusive or give one number."
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
