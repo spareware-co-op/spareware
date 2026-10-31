@@ -290,15 +290,16 @@ pub fn cospi(q: &RBig) -> Enclosed {
 #[must_use]
 pub fn fresnel(k: &Enclosed, s: &RBig) -> [Enclosed; 2] {
     let s = Enclosed::of(s);
-    let s2 = s.square();
-    let mut power = s.clone();
+    let rate = k.mul(&s.square());
+    // k^order s^(2 order + 1) / order!, stepped as one number: its power of s and its factorial,
+    // apart, would pass and fall below what an enclosure holds.
+    let mut part = s;
     let mut sums = [Enclosed::of(&RBig::ZERO), Enclosed::of(&RBig::ZERO)];
     let mut order = 0_u64;
-    let mut factorial = Enclosed::from_whole(1);
     loop {
-        // The term k^order s^(2 order + 1) / (order! (2 order + 1)), to C for an even order and to S
-        // for an odd one, its sign changing every second order.
-        let term = power.mul(&factorial).div_whole(2 * order + 1);
+        // The term part / (2 order + 1), to C for an even order and to S for an odd one, its sign
+        // changing every second order.
+        let term = part.div_whole(2 * order + 1);
         let at = usize::from(order % 2 == 1);
         let negative = order % 4 >= 2;
         let sum = sums.get(at).cloned().unwrap_or_else(|| term.clone());
@@ -311,9 +312,8 @@ pub fn fresnel(k: &Enclosed, s: &RBig) -> [Enclosed; 2] {
             *slot = next;
         }
         order += 1;
-        factorial = factorial.mul(k).div_whole(order);
-        power = power.mul(&s2);
-        if spent(&term.size()) && whole(order) > k.mul(&s2).size() {
+        part = part.mul(&rate).div_whole(order);
+        if spent(&term.size()) && whole(order) > rate.size() {
             let left = term.size();
             return sums.map(|sum| sum.plus_or_minus(&left));
         }
