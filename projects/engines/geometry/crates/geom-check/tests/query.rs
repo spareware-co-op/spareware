@@ -57,7 +57,13 @@ fn a_curved_body_counts_what_is_curved_and_an_exact_record_on_it_fails() {
 #[test]
 fn the_validity_report_is_the_checks_at_the_level_asked() {
     let body = cube().body(BodyKind::Solid);
-    let full = validity(&ctx(Budget::UNLIMITED), &body, Exactness::Exact, Level::Full).unwrap();
+    let full = validity(
+        &ctx(Budget::UNLIMITED),
+        &body,
+        Exactness::Exact,
+        Level::Full,
+    )
+    .unwrap();
     assert_eq!(full.exactness, Exactness::Exact);
     let full = full.result;
     assert!(full.passed());
@@ -79,15 +85,21 @@ fn a_stop_is_the_contexts_error_and_gives_no_report() {
     }
     // Six faces, twelve edges, then the cheap groups: each pass can stop.
     assert_eq!(
-        exactness(&work(3), &body, Exactness::Exact).unwrap_err().kind(),
+        exactness(&work(3), &body, Exactness::Exact)
+            .unwrap_err()
+            .kind(),
         ErrorKind::BudgetExceeded
     );
     assert_eq!(
-        exactness(&work(10), &body, Exactness::Exact).unwrap_err().kind(),
+        exactness(&work(10), &body, Exactness::Exact)
+            .unwrap_err()
+            .kind(),
         ErrorKind::BudgetExceeded
     );
     assert_eq!(
-        exactness(&work(19), &body, Exactness::Exact).unwrap_err().kind(),
+        exactness(&work(19), &body, Exactness::Exact)
+            .unwrap_err()
+            .kind(),
         ErrorKind::BudgetExceeded
     );
     assert_eq!(

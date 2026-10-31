@@ -106,9 +106,8 @@ pub fn faces(
         for row in rows {
             let name = row.name.map(|key| NameId::from_bytes(key.0));
             let roles = match name {
-                Some(id) => roles_of(id, histories, meter).map_err(|s| {
-                    failed(ctx, meter, query::QueryError::Stopped(s))
-                })?,
+                Some(id) => roles_of(id, histories, meter)
+                    .map_err(|s| failed(ctx, meter, query::QueryError::Stopped(s)))?,
                 None => Vec::new(),
             };
             out.push(NamedFace { row, name, roles });

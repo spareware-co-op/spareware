@@ -17,7 +17,7 @@ mod common;
 
 use common::{
     CUBE_FACES, Rows, ball, certified, cube, face_of, faces_into, has, ix, kinds, meter, report,
-    round_cylinder, square_sheet,
+    round_cylinder,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_math::Box3;
@@ -113,8 +113,10 @@ fn a_shell_inside_out_is_found() {
     let found = exact(&r);
     assert_eq!(
         found.faults(),
-        [Fault::at(FaultKind::ShellInward, Entity::Region(ix(region)))
-            .with(Entity::Shell(ix(s)))]
+        [
+            Fault::at(FaultKind::ShellInward, Entity::Region(ix(region)))
+                .with(Entity::Shell(ix(s)))
+        ]
     );
     assert_eq!(FaultKind::ShellInward.group(), Group::SelfIntersection);
 }
@@ -146,10 +148,8 @@ fn a_cavity_inside_a_cavity_is_found() {
     let inner = add(&mut r, region, [10; 3], [20; 3], true);
     assert_eq!(
         exact(&r).faults(),
-        [
-            Fault::at(FaultKind::ShellNesting, Entity::Shell(ix(inner)))
-                .with(Entity::Shell(ix(outer)))
-        ]
+        [Fault::at(FaultKind::ShellNesting, Entity::Shell(ix(inner)))
+            .with(Entity::Shell(ix(outer)))]
     );
 }
 
@@ -280,10 +280,7 @@ fn a_faces_loops_are_one_outer_and_holes() {
     let f = face_of(&mut r, s, &[&outer, &hole]);
     let body = report(&r, BodyKind::Sheet, certified());
     assert!(
-        !body
-            .faults()
-            .iter()
-            .any(|x| x.kind == FaultKind::LoopSense),
+        !body.faults().iter().any(|x| x.kind == FaultKind::LoopSense),
         "{:?}",
         body.faults()
     );
@@ -314,38 +311,37 @@ fn a_faces_loops_are_one_outer_and_holes() {
     );
 }
 
-#[test]
-fn a_loop_enclosing_no_area_is_found() {
-    // An outer loop and a loop of two fins, out along an edge and back.
-    let mut plain = Rows::empty();
+/// A square sheet whose face has a second loop of two fins, out along an edge and back.
+fn spiked() -> Rows {
+    let mut r = Rows::empty();
     for p in [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]] {
-        plain.vertex(p);
+        r.vertex(p);
     }
-    let (a2, b2) = (plain.vertex([3, 3, 0]), plain.vertex([6, 3, 0]));
+    let (a, b) = (r.vertex([3, 3, 0]), r.vertex([6, 3, 0]));
     let sides: Vec<(u32, Sense)> = (0..4)
         .map(|k| {
             let (u, v) = (k, (k + 1) % 4);
-            let edge = plain.edge(Some((u.min(v), u.max(v))));
-            (
-                edge,
-                if u < v {
-                    Sense::Forward
-                } else {
-                    Sense::Reversed
-                },
-            )
+            let edge = r.edge(Some((u.min(v), u.max(v))));
+            let sense = if u < v {
+                Sense::Forward
+            } else {
+                Sense::Reversed
+            };
+            (edge, sense)
         })
         .collect();
-    let spike = plain.edge(Some((a2, b2)));
-    let s = plain.shell(0);
-    plain.face(
+    let spike = r.edge(Some((a, b)));
+    let s = r.shell(0);
+    r.face(
         s,
-        &[
-            &sides,
-            &[(spike, Sense::Forward), (spike, Sense::Reversed)],
-        ],
+        &[&sides, &[(spike, Sense::Forward), (spike, Sense::Reversed)]],
     );
-    let found = report(&plain, BodyKind::Sheet, certified());
+    r
+}
+
+#[test]
+fn a_loop_enclosing_no_area_is_found() {
+    let found = report(&spiked(), BodyKind::Sheet, certified());
     let want = Fault::at(FaultKind::LoopSense, Entity::Face(ix(0)))
         .with(Entity::Loop(ix(1)))
         .value(1);
@@ -363,11 +359,7 @@ fn a_stored_box_must_hold_every_vertex() {
     r.faces[0].bound = Box3::new(p(-5, -5, -5), p(50, 50, 50)).unwrap();
     passes(&r);
     // One step short along each axis finds the vertices it leaves out.
-    for (hi, corners_out) in [
-        (p(9, 10, 0), 2),
-        (p(10, 9, 0), 2),
-        (p(10, 10, -1), 4),
-    ] {
+    for (hi, corners_out) in [(p(9, 10, 0), 2), (p(10, 9, 0), 2), (p(10, 10, -1), 4)] {
         let mut r = cube();
         r.faces[0].bound = Box3::new(p(0, 0, -1), hi).unwrap();
         let found = exact(&r);
@@ -445,14 +437,10 @@ fn a_plane_given_by_doubles_is_judged_in_intervals() {
         Entity::Face(ix(0))
     ));
     // A loop of no area on such a plane cannot be told from a small one: it is unchecked.
-    let mut r = square_sheet();
-    let (a, b) = (r.vertex([3, 3, 0]), r.vertex([6, 3, 0]));
-    let spike = r.edge(Some((a, b)));
-    let s = r.shell(0);
-    r.face(s, &[&[(spike, Sense::Forward), (spike, Sense::Reversed)]]);
-    r.surfaces[1] = SurfaceKind::Plane(
+    let mut r = spiked();
+    r.surfaces[0] = SurfaceKind::Plane(
         Plane::new(
-            [3.5, 3.5, 0.0],
+            [0.5, 0.5, 0.0],
             [0.25, 0.0, 0.0],
             [0.0, 0.25, 0.0],
             ((0.0, 1.0), (0.0, 1.0)),
@@ -461,7 +449,7 @@ fn a_plane_given_by_doubles_is_judged_in_intervals() {
     );
     let found = report(&r, BodyKind::Sheet, certified());
     assert!(
-        has(found.faults(), FaultKind::Unchecked, Entity::Surface(ix(1))),
+        has(found.faults(), FaultKind::Unchecked, Entity::Surface(ix(0))),
         "{:?}",
         found.faults()
     );

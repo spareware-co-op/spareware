@@ -100,8 +100,8 @@ pub fn exactness(
                 curved_edges = curved_edges.saturating_add(1);
             }
         }
-        let report = check(body, recorded, Level::Cheap, meter)
-            .map_err(|s| ctx.stopped(meter, s, PHASE))?;
+        let report =
+            check(body, recorded, Level::Cheap, meter).map_err(|s| ctx.stopped(meter, s, PHASE))?;
         Ok(OpOutput::new(
             ExactnessReport {
                 recorded,

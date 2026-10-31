@@ -226,7 +226,7 @@ impl Rows {
                     edge.end
                 }?;
                 Some(xyz(
-                    self.points[self.vertices[v.row() as usize].point.row() as usize],
+                    self.points[self.vertices[v.row() as usize].point.row() as usize]
                 ))
             })
             .collect();

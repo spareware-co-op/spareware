@@ -194,7 +194,12 @@ fn next_loop(
     let Some(l) = walk.take(meter)? else {
         return Ok(None);
     };
-    walk.at = body.arenas().loops.get(l).ok_or(QueryError::NoSuchRow)?.next;
+    walk.at = body
+        .arenas()
+        .loops
+        .get(l)
+        .ok_or(QueryError::NoSuchRow)?
+        .next;
     Ok(Some(l))
 }
 
@@ -216,7 +221,12 @@ fn next_face(
     let Some(f) = walk.take(meter)? else {
         return Ok(None);
     };
-    walk.at = body.arenas().faces.get(f).ok_or(QueryError::NoSuchRow)?.next;
+    walk.at = body
+        .arenas()
+        .faces
+        .get(f)
+        .ok_or(QueryError::NoSuchRow)?
+        .next;
     Ok(Some(f))
 }
 
@@ -248,7 +258,12 @@ fn next_fin(
     let Some(fin) = ring.walk.take(meter)? else {
         return Ok(None);
     };
-    let next = body.arenas().fins.get(fin).ok_or(QueryError::NoSuchRow)?.next;
+    let next = body
+        .arenas()
+        .fins
+        .get(fin)
+        .ok_or(QueryError::NoSuchRow)?
+        .next;
     ring.walk.at = Some(next).filter(|&n| Some(n) != ring.first);
     Ok(Some(fin))
 }

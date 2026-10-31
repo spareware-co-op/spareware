@@ -94,7 +94,10 @@ fn each_failure_has_its_detail_kind_and_remedy() {
     let e = six_volume(&open(), &curved, Exactness::Exact).unwrap_err();
     assert!(matches!(detail(&e), QueryDetail::CurvedEdge { edge: 0 }));
     assert_eq!(e.kind(), ErrorKind::Unsupported);
-    assert_eq!(e.detail().remedies(), [Remedy::AwaitPiece { piece: "G177" }]);
+    assert_eq!(
+        e.detail().remedies(),
+        [Remedy::AwaitPiece { piece: "G177" }]
+    );
     let round = rebuilt(|b| {
         let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
         let s = Sphere::new([0.0; 3], 5.0, frame, ((0.0, 2.0), (-0.5, 0.5))).unwrap();

@@ -179,7 +179,14 @@ const AREA: OpSchema = OpSchema {
         doc: "Twice the area vector, in grid steps squared.",
     }],
     roles: &[],
-    errors: &[MALFORMED, CURVED_EDGE, CURVED_FACE, NO_LOOPS, OVERFLOW, BUDGET],
+    errors: &[
+        MALFORMED,
+        CURVED_EDGE,
+        CURVED_FACE,
+        NO_LOOPS,
+        OVERFLOW,
+        BUDGET,
+    ],
     diagnostics: &[],
     classes: ANY_CLASS,
     charges: &[

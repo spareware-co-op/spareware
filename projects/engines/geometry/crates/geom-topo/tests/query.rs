@@ -351,8 +351,14 @@ fn the_largest_box_on_the_grid_fits() {
 fn the_box_of_a_flat_body_is_its_vertices_and_tight() {
     let (b, tight) = bounding_box(&wall(), &mut meter()).unwrap().unwrap();
     assert!(tight);
-    assert_eq!([b.min().x.get(), b.min().y.get(), b.min().z.get()], [0, 0, 0]);
-    assert_eq!([b.max().x.get(), b.max().y.get(), b.max().z.get()], [X, Y, Z]);
+    assert_eq!(
+        [b.min().x.get(), b.min().y.get(), b.min().z.get()],
+        [0, 0, 0]
+    );
+    assert_eq!(
+        [b.max().x.get(), b.max().y.get(), b.max().z.get()],
+        [X, Y, Z]
+    );
     // Faces without loops add their stored boxes, and the box is no longer tight.
     let (b, tight) = bounding_box(&many_faces(3), &mut meter()).unwrap().unwrap();
     assert!(!tight);
@@ -697,10 +703,7 @@ fn a_ring_that_does_not_end_is_reported_never_followed() {
     let ring = rebuilt(|b| {
         b.arenas.fins.next.set(ix(1), ix(1)).unwrap();
     });
-    assert_eq!(
-        loop_area(&ring, ix(0), &mut meter()),
-        Err(QueryError::Ring)
-    );
+    assert_eq!(loop_area(&ring, ix(0), &mut meter()), Err(QueryError::Ring));
     // A list of faces that comes back on itself.
     let faces_ring = rebuilt(|b| {
         b.arenas.faces.next.set(ix(1), Some(ix(0))).unwrap();

@@ -33,7 +33,12 @@ fn p(x: i64, y: i64, z: i64) -> P3 {
 }
 
 fn plane(a: [i64; 3], b: [i64; 3], c: [i64; 3]) -> Plane {
-    Plane::through(p(a[0], a[1], a[2]), p(b[0], b[1], b[2]), p(c[0], c[1], c[2])).unwrap()
+    Plane::through(
+        p(a[0], a[1], a[2]),
+        p(b[0], b[1], b[2]),
+        p(c[0], c[1], c[2]),
+    )
+    .unwrap()
 }
 
 /// A corner's exact point.
@@ -130,7 +135,10 @@ fn a_tetrahedron_with_an_implicit_corner_holds_its_exact_volume() {
         let want = exact_six_volume(&loops);
         // 6V = x y z for corners on the axes, x = scale / 3.
         let s = BigRational::from_integer(BigInt::from(scale));
-        assert_eq!(want, &s * &s * &s / BigRational::from_integer(BigInt::from(3)));
+        assert_eq!(
+            want,
+            &s * &s * &s / BigRational::from_integer(BigInt::from(3))
+        );
         assert!(holds(six, &want), "{scale}: {six:?}");
         assert!(relative(six, &want) < 1e-14, "{scale}: {six:?}");
     }
@@ -176,9 +184,21 @@ fn every_kind_of_corner_is_held_on_random_shapes() {
         );
         let (h, i) = ([coord(), coord(), coord()], [coord(), coord(), coord()]);
         let (Ok(u), Ok(v), Ok(w)) = (
-            Plane::through(p(a[0], a[1], a[2]), p(b[0], b[1], b[2]), p(d[0], d[1], d[2])),
-            Plane::through(p(e[0], e[1], e[2]), p(f[0], f[1], f[2]), p(g[0], g[1], g[2])),
-            Plane::through(p(h[0], h[1], h[2]), p(i[0], i[1], i[2]), p(a[0], a[1], a[2])),
+            Plane::through(
+                p(a[0], a[1], a[2]),
+                p(b[0], b[1], b[2]),
+                p(d[0], d[1], d[2]),
+            ),
+            Plane::through(
+                p(e[0], e[1], e[2]),
+                p(f[0], f[1], f[2]),
+                p(g[0], g[1], g[2]),
+            ),
+            Plane::through(
+                p(h[0], h[1], h[2]),
+                p(i[0], i[1], i[2]),
+                p(a[0], a[1], a[2]),
+            ),
         ) else {
             continue;
         };

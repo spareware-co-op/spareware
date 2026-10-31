@@ -13,9 +13,7 @@ use geom_op::history::{History, Origin, Record};
 use geom_op::{ErrorKind, NameId, NameSet, OpContext, OpId, OpPath, Role};
 use geom_run::{Budget, Stop, WorkMeter};
 use geom_topo::order::{NameKey, Names};
-use geom_topo::{
-    BodyKind, Builder, Face, Ix, Region, RegionKind, Sense, Shell, SurfaceKind,
-};
+use geom_topo::{BodyKind, Builder, Face, Ix, Region, RegionKind, Sense, Shell, SurfaceKind};
 
 fn id(n: u8) -> NameId {
     NameId::from_bytes([n; 16])
@@ -69,7 +67,9 @@ fn a_modified_entity_carries_the_roles_of_what_it_carries_on() {
     let made = history(vec![generated(1, "top")]);
     let moved = history(vec![Record {
         output: id(1),
-        origin: Origin::Modified { from: set(&[id(1)]) },
+        origin: Origin::Modified {
+            from: set(&[id(1)]),
+        },
     }]);
     assert_eq!(roles(1, &[&made, &moved]), ["top"]);
     // And an entity that passed through unchanged: the walk looks further back.
@@ -81,7 +81,9 @@ fn a_modified_entity_carries_the_roles_of_what_it_carries_on() {
     // A modification with a new name goes back to the old one.
     let renamed = history(vec![Record {
         output: id(9),
-        origin: Origin::Modified { from: set(&[id(1)]) },
+        origin: Origin::Modified {
+            from: set(&[id(1)]),
+        },
     }]);
     assert_eq!(roles(9, &[&made, &renamed]), ["top"]);
 }
@@ -94,7 +96,9 @@ fn a_generated_entity_later_on_stops_the_walk_at_its_own_role() {
     // The earlier history alone is asked what happened before a step, not after it.
     let moved = history(vec![Record {
         output: id(1),
-        origin: Origin::Modified { from: set(&[id(1)]) },
+        origin: Origin::Modified {
+            from: set(&[id(1)]),
+        },
     }]);
     assert_eq!(roles(1, &[&first, &moved, &second]), ["new"]);
     assert_eq!(roles(1, &[&second, &moved, &first]), ["old"]);
@@ -138,7 +142,9 @@ fn every_entry_is_charged_and_visited_once() {
         },
         Record {
             output: id(6),
-            origin: Origin::Modified { from: set(&[id(1)]) },
+            origin: Origin::Modified {
+                from: set(&[id(1)]),
+            },
         },
     ]);
     let last = history(vec![Record {
@@ -155,9 +161,13 @@ fn every_entry_is_charged_and_visited_once() {
     assert!(matches!(stop.reason(), Stop::OverBudget(_)));
 }
 
+/// The index of row `r`.
+fn ix<K>(r: u32) -> Ix<K> {
+    Ix::new(r).unwrap()
+}
+
 /// A body of two faces with no loops, named 1 and 2.
 fn named() -> geom_topo::Body {
-    let ix = |r: u32| Ix::new(r).unwrap();
     let mut b = Builder::new();
     let a = &mut b.arenas;
     a.regions
@@ -236,13 +246,7 @@ fn ctx(budget: Budget) -> OpContext<'static> {
 fn faces_are_listed_with_their_names_and_roles() {
     let body = named();
     let made = history(vec![generated(1, "bottom"), generated(2, "top")]);
-    let out = faces(
-        &ctx(Budget::UNLIMITED),
-        &body,
-        &[&made],
-        Exactness::Exact,
-    )
-    .unwrap();
+    let out = faces(&ctx(Budget::UNLIMITED), &body, &[&made], Exactness::Exact).unwrap();
     assert_eq!(out.exactness, Exactness::Exact);
     let rows = out.result;
     let listed: Vec<(Option<NameId>, Vec<String>)> = rows
@@ -287,7 +291,13 @@ fn a_stop_is_the_contexts_error() {
     let body = named();
     let made = history(vec![generated(1, "bottom"), generated(2, "top")]);
     for work in 0..4 {
-        let e = faces(&ctx(Budget::of_work(work)), &body, &[&made], Exactness::Exact).unwrap_err();
+        let e = faces(
+            &ctx(Budget::of_work(work)),
+            &body,
+            &[&made],
+            Exactness::Exact,
+        )
+        .unwrap_err();
         assert_eq!(e.kind(), ErrorKind::BudgetExceeded);
     }
     assert!(faces(&ctx(Budget::of_work(4)), &body, &[&made], Exactness::Exact).is_ok());

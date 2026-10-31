@@ -59,13 +59,16 @@ fn record(out: &mut Vec<u8>, made: &OpOutput<Made>, histories: &[&History]) {
             f.row.surface.row(),
             f.row.sense,
             f.row.loops,
-            f.name.map(|n| hex(n.to_bytes())),
+            f.name.map(geom_op::NameId::to_bytes),
         ));
         if let Ok(area) = twice_area(&ctx(2), body, f.row.face, recorded) {
             line(format!("area {:?}", area.result));
         }
     }
-    let boxed = bounding_box(&ctx(3), body, recorded).unwrap().result.unwrap();
+    let boxed = bounding_box(&ctx(3), body, recorded)
+        .unwrap()
+        .result
+        .unwrap();
     let (lo, hi) = (boxed.bound.min(), boxed.bound.max());
     line(format!(
         "box {} {} {} to {} {} {} tight {}",
@@ -85,7 +88,9 @@ fn record(out: &mut Vec<u8>, made: &OpOutput<Made>, histories: &[&History]) {
         "exactness {:?} faces {} {} edges {} {}",
         e.recorded, e.flat_faces, e.curved_faces, e.straight_edges, e.curved_edges
     ));
-    let v = validity(&ctx(6), body, recorded, Level::Full).unwrap().result;
+    let v = validity(&ctx(6), body, recorded, Level::Full)
+        .unwrap()
+        .result;
     assert!(v.passed(), "{:?}", v.faults());
     line(format!("deferred {}", v.deferred()));
 }
@@ -114,7 +119,11 @@ fn corpus() -> Vec<u8> {
             [coord(-99, 99), coord(-99, 99), coord(-99, 99)],
         )
         .unwrap();
-        record(&mut out, &moved, &[&made.result.history, &moved.result.history]);
+        record(
+            &mut out,
+            &moved,
+            &[&made.result.history, &moved.result.history],
+        );
     }
     for _ in 0..32 {
         let (x, y, z) = (coord(-1000, 1000), coord(-1000, 1000), coord(-1000, 1000));
