@@ -153,9 +153,9 @@ use crate::wide::{I256, I384};
 
 use super::{decide, exact_f64, larger, largest_magnitude, rounded_f64, within};
 
-/// The filter's error constant: E · (1 + 2u)^5 with E = 160u + 772u^2 + 1184u^3 + 1138u^4 + 766u^5
-/// + 356u^6 + 112u^7 + 22u^8 + 2u^9, the result's unit error (header), rounded up to an `f64`:
-/// 5629499534213130 · 2^-98.
+/// The filter's error constant: E · (1 + 2u)^5 with E = 160u + 772u^2 + 1184u^3 + 1138u^4 +
+/// 766u^5 + 356u^6 + 112u^7 + 22u^8 + 2u^9, the result's unit error (header), rounded up to an
+/// `f64`: 5629499534213130 · 2^-98.
 const ERROR: f64 = f64::from_bits(0x3d14_0000_0000_000a);
 
 /// `round_rational`'s sign from its `f64` filter, or `None` when the filter's bound cannot certify

@@ -1337,7 +1337,10 @@ pub mod generated {
 
     /// `generated::round_rational::filter` on each (point, q, centre).
     #[inline(never)]
-    pub fn round_rational_filter(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<Sign>>) {
+    pub fn round_rational_filter(
+        batch: &[([i128; 3], P2, [i128; 3])],
+        out: &mut Vec<Option<Sign>>,
+    ) {
         run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
             round_rational::filter(x, y, v, q, cx, cy, w)
         });
@@ -1402,17 +1405,13 @@ pub mod generated {
     /// `generated::circle_gap::filter` on each (a, b, length).
     #[inline(never)]
     pub fn circle_gap_filter(batch: &[(P2, P2, i128)], out: &mut Vec<Option<Sign>>) {
-        run(batch, out, |&(a, b, t)| {
-            circle_gap::filter(a, b, t)
-        });
+        run(batch, out, |&(a, b, t)| circle_gap::filter(a, b, t));
     }
 
     /// `generated::circle_gap::value` on each (a, b, length).
     #[inline(never)]
     pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
-        run(batch, out, |&(a, b, t)| {
-            circle_gap::value(a, b, t)
-        });
+        run(batch, out, |&(a, b, t)| circle_gap::value(a, b, t));
     }
 }
 
@@ -1610,9 +1609,7 @@ pub mod plain {
     /// `generated::plain::circle_gap_value` on each (a, b, length).
     #[inline(never)]
     pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
-        run(batch, out, |&(a, b, t)| {
-            plain::circle_gap_value(a, b, t)
-        });
+        run(batch, out, |&(a, b, t)| plain::circle_gap_value(a, b, t));
     }
 }
 
@@ -1810,9 +1807,7 @@ pub mod limbs {
     /// `generated::limbs::circle_gap_value` on each (a, b, length).
     #[inline(never)]
     pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
-        run(batch, out, |&(a, b, t)| {
-            limbs::circle_gap_value(a, b, t)
-        });
+        run(batch, out, |&(a, b, t)| limbs::circle_gap_value(a, b, t));
     }
 }
 

@@ -1775,7 +1775,10 @@ fn matrix() -> Vec<Row> {
                 ),
                 (
                     OneStep,
-                    Test("attack_g188.rs", "order_along_an_arc_agrees_with_walking_it"),
+                    Test(
+                        "attack_g188.rs",
+                        "order_along_an_arc_agrees_with_walking_it",
+                    ),
                 ),
                 (
                     Boundary,
@@ -1792,7 +1795,10 @@ fn matrix() -> Vec<Row> {
                 ),
                 (
                     Laws,
-                    Test("attack_g188.rs", "order_along_an_arc_agrees_with_walking_it"),
+                    Test(
+                        "attack_g188.rs",
+                        "order_along_an_arc_agrees_with_walking_it",
+                    ),
                 ),
             ],
         },

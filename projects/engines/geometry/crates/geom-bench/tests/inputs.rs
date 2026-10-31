@@ -2524,11 +2524,31 @@ fn the_circle_classes_are_what_they_say() {
         assert_eq!(a::circle_side(class).len(), BATCH, "{class}");
         assert_eq!(a::circle_meets(class).len(), BATCH, "{class}");
     }
-    assert!(a::round_grid(Degenerate).iter().all(|(r, z)| r.side_of_grid(*z) == Ok(Sign::Zero)));
-    assert!(a::round_side(Degenerate).iter().all(|(r, z)| r.side(z) == Ok(Sign::Zero)));
-    assert!(a::round_meets(Degenerate).iter().all(|(r, l)| r.meets(l) == Ok(Contact::Tangent)));
-    assert!(a::circle_side(Degenerate).iter().all(|(c, z)| c.side(z) == Ok(Sign::Zero)));
-    assert!(a::circle_meets(Degenerate).iter().all(|(c, l)| c.meets(l) == Ok(Contact::Tangent)));
+    assert!(
+        a::round_grid(Degenerate)
+            .iter()
+            .all(|(r, z)| r.side_of_grid(*z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::round_side(Degenerate)
+            .iter()
+            .all(|(r, z)| r.side(z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::round_meets(Degenerate)
+            .iter()
+            .all(|(r, l)| r.meets(l) == Ok(Contact::Tangent))
+    );
+    assert!(
+        a::circle_side(Degenerate)
+            .iter()
+            .all(|(c, z)| c.side(z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::circle_meets(Degenerate)
+            .iter()
+            .all(|(c, l)| c.meets(l) == Ok(Contact::Tangent))
+    );
 
     assert!(
         i::round_grid_filter(Typical)

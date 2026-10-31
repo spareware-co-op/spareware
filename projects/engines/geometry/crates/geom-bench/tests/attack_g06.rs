@@ -1076,18 +1076,26 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|(r, z)| r.side_of_grid(*z)),
         ),
-        ("crossing", "round_side") => {
-            fold(inputs::arc::round_side(class).iter().map(|(r, z)| r.side(z)))
-        }
-        ("crossing", "round_meets") => {
-            fold(inputs::arc::round_meets(class).iter().map(|(r, l)| r.meets(l)))
-        }
-        ("crossing", "circle_side") => {
-            fold(inputs::arc::circle_side(class).iter().map(|(c, z)| c.side(z)))
-        }
-        ("crossing", "circle_meets") => {
-            fold(inputs::arc::circle_meets(class).iter().map(|(c, l)| c.meets(l)))
-        }
+        ("crossing", "round_side") => fold(
+            inputs::arc::round_side(class)
+                .iter()
+                .map(|(r, z)| r.side(z)),
+        ),
+        ("crossing", "round_meets") => fold(
+            inputs::arc::round_meets(class)
+                .iter()
+                .map(|(r, l)| r.meets(l)),
+        ),
+        ("crossing", "circle_side") => fold(
+            inputs::arc::circle_side(class)
+                .iter()
+                .map(|(c, z)| c.side(z)),
+        ),
+        ("crossing", "circle_meets") => fold(
+            inputs::arc::circle_meets(class)
+                .iter()
+                .map(|(c, l)| c.meets(l)),
+        ),
         ("crossing", "ssi_to_grid") => fold(
             inputs::crossing::ssi_to_grid(class)
                 .iter()
@@ -1752,12 +1760,16 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
         "round_rational_filter" => fold(
             i::round_rational_filter(class)
                 .into_iter()
-                .map(|([x, y, v], q, [cx, cy, w])| gp::round_rational::filter(x, y, v, q, cx, cy, w)),
+                .map(|([x, y, v], q, [cx, cy, w])| {
+                    gp::round_rational::filter(x, y, v, q, cx, cy, w)
+                }),
         ),
         "round_rational_value" => fold(
             i::round_rational_value(class)
                 .into_iter()
-                .map(|([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w)),
+                .map(|([x, y, v], q, [cx, cy, w])| {
+                    gp::round_rational::value(x, y, v, q, cx, cy, w)
+                }),
         ),
         "round_line_filter" => fold(
             i::round_line_filter(class)
@@ -1927,11 +1939,11 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|(z, p, [cx, cy, w])| gp::round_grid::value(z, p, cx, cy, w)),
         ),
-        "round_rational_value_plain" => fold(
-            i::round_rational_value_plain(class)
-                .into_iter()
-                .map(|([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w)),
-        ),
+        "round_rational_value_plain" => {
+            fold(i::round_rational_value_plain(class).into_iter().map(
+                |([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w),
+            ))
+        }
         "round_line_value_plain" => fold(
             i::round_line_value_plain(class)
                 .into_iter()
@@ -2054,11 +2066,11 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|(z, p, [cx, cy, w])| gp::round_grid::value(z, p, cx, cy, w)),
         ),
-        "round_rational_value_limbs" => fold(
-            i::round_rational_value_limbs(class)
-                .into_iter()
-                .map(|([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w)),
-        ),
+        "round_rational_value_limbs" => {
+            fold(i::round_rational_value_limbs(class).into_iter().map(
+                |([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w),
+            ))
+        }
         "round_line_value_limbs" => fold(
             i::round_line_value_limbs(class)
                 .into_iter()
