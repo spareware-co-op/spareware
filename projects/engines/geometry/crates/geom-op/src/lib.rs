@@ -75,6 +75,7 @@
 
 extern crate alloc;
 
+pub mod canonical;
 pub mod cbor;
 pub mod context;
 pub mod detail;
@@ -91,7 +92,7 @@ pub mod run;
 pub mod schema;
 
 pub use context::{OpContext, Precision};
-pub use detail::{NumDetail, OpErrorDetail, RunDetail};
+pub use detail::{MakeDetail, NumDetail, OpErrorDetail, RunDetail};
 pub use error::OpError;
 pub use evidence::{Evidence, Value};
 pub use geom_num::Exactness;
@@ -102,8 +103,8 @@ pub use history::{
 pub use id::{Label, NameId, OpId, OpPath};
 pub use kind::ErrorKind;
 pub use name::{
-    EdgeOrVertex, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal, PieceKey, Role,
-    RoleArg, Side, TopoName,
+    BLANK_OP, EdgeOrVertex, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal, PieceKey,
+    Role, RoleArg, Side, Stamp, TopoName,
 };
 pub use output::{Diagnostic, OpOutput};
 pub use remedy::{Bound, Remedy};

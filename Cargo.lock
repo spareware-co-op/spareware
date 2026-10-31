@@ -692,7 +692,16 @@ name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
  "cargo_metadata",
+ "geom-check",
+ "geom-curve",
+ "geom-make",
+ "geom-math",
+ "geom-num",
+ "geom-op",
  "geom-pool",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
  "kit-core",
  "proc-macro2",
  "serde_json",
@@ -856,6 +865,7 @@ dependencies = [
  "divan",
  "geom-bvh",
  "geom-curve",
+ "geom-format",
  "geom-linalg",
  "geom-math",
  "geom-name",
@@ -1095,9 +1105,11 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "geom-bench",
+ "geom-check",
  "geom-curve",
  "geom-format",
  "geom-gen",
+ "geom-make",
  "geom-math",
  "geom-name",
  "geom-num",
@@ -1115,9 +1127,11 @@ version = "0.0.0"
 dependencies = [
  "dashu-int",
  "dashu-ratio",
+ "engine-geometry",
  "geom-num",
  "geom-test",
  "proc-macro2",
+ "serde_json",
 ]
 
 [[package]]
@@ -1204,10 +1218,13 @@ dependencies = [
  "geom-curve",
  "geom-math",
  "geom-num",
+ "geom-nurbs",
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]
@@ -1531,12 +1548,16 @@ dependencies = [
  "dashu-int",
  "dashu-ratio",
  "geom-curve",
+ "geom-format",
+ "geom-make",
  "geom-math",
  "geom-num",
  "geom-nurbs",
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-topo",
+ "hex",
  "lcov",
  "num-rational",
  "petgraph",
@@ -1552,6 +1573,7 @@ dependencies = [
  "syn 3.0.9",
  "toml",
  "unicode-normalization",
+ "wait-timeout",
  "yaml-rust2",
 ]
 
@@ -2602,6 +2624,15 @@ name = "unty-next"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16062d030850f35054e37746427b9febb74a2f24c9c6dd6fa2d0c13c5f53221e"
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "wasip2"

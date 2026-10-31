@@ -45,7 +45,7 @@ pub use classes::{AttrError, Mover, Note, Step, apply, set};
 pub use graph::{GraphError, NameGraph, parents};
 pub use ordinal::{OrderError, WeakOrder, ordinals, reference, weak_names};
 pub use resolve::{
-    Body, CarrierIx, DocRef, ElementId, EntityKind, Lookup, Reference, Resolution, Signature, Step,
+    Body, CarrierIx, DocRef, ElementId, EntityKind, Lookup, Reference, Resolution, Signature,
     Target, UnresolvedReason, Want, resolve,
 };
 pub use unique::{DuplicateName, expect_unique, first_duplicate};

@@ -298,7 +298,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-skeleton",  9, Accepted,   Here, "base math 2d topo poly"),
     kernel("geom-sweep",     9, Accepted,   Here,
         "base topo surface name check poly intersect bool skeleton"),
-    kernel("geom-make",      9, Amended30, Here, "base math curve surface topo check"),
+    kernel("geom-make",      9, Amended30, Elsewhere("G101"), "base math curve surface topo check"),
     // 10. Operations.
     kernel("geom-blend",    10, Accepted,   Here, "base bool intersect surface topo check"),
     kernel("geom-offset",   10, Accepted,   Here, "base bool intersect surface skeleton topo"),
@@ -348,11 +348,14 @@ const ROWS: &[Row<'static>] = &[
     // Board exchange follows the two-program rule too (24.11), so it waits with the toolkits.
     kernel("geom-gerber",   12, Amended27, Deferred("G474"), "base format exchange 2d"),
     kernel("geom-ipc2581",  12, Amended27, Deferred("G475"), "base format exchange 2d"),
-    // 13. Facade. engine-geometry's row: every kernel crate it re-exports (none yet: G100 adds
-    // them), and geom-pool behind its `threads` feature. geom-pool was scaffolded here: G04 built
-    // only geom-run; G33 wrote its native pool (rayon), and G456 adds Web Workers.
+    // 13. Facade. engine-geometry's row: every kernel crate it re-exports (G100: the value types
+    // and the schema vocabulary; G101: the first operations and the transforms they take), and
+    // geom-pool behind its `threads` feature. geom-pool was
+    // scaffolded here: G04 built only geom-run; G33 wrote its native pool (rayon), and G456 adds
+    // Web Workers.
     Row { name: "engine-geometry", layer: Layer::N(13), kind: Kind::Facade, origin: Accepted,
-          state: Here, deps: Deps::Exact("pool"), external: "kit-core" },
+          state: Elsewhere("G100"), deps: Deps::Exact("pool num math curve surface topo run op make"),
+          external: "kit-core" },
     Row { name: "geom-pool", layer: Layer::N(13), kind: Kind::KernelStd, origin: Amended27,
           state: Elsewhere("G33"), deps: Deps::Exact("run"), external: "" },
     binding("engine-geometry-c",    "G453"),
@@ -424,8 +427,8 @@ const REGISTRY: &[(&str, &str)] = &[
     ("op", "sha2"),
     ("op", "unicode-normalization"),
     ("format", "sha2"),
-];
     ("format", "crc"),
+];
 
 /// The kernel's one lint posture is `geom-num`'s: the numbers layer set it first, with chapter 21's
 /// disallowed methods and types and chapter 27's denials, and every crate that ships is built with

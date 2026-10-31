@@ -21,8 +21,9 @@ name: Kernel nightly
 # seed. Piece G86 adds Python's cbor2, run the same way: geom-op's tests/cbor2_oracle.rs writes the
 # night's seeded values of SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by hash)
 # encodes each value in its canonical mode in a container pinned by digest and reads the kernel's
-# bytes back, and the test fails on any byte that differs. Later pieces add the rest of 28.17's
-# nightly list (hours of fuzzing, slow fixtures, the other outside oracles).
+# bytes back, and the test fails on any byte that differs. Piece G97 adds the slow fixtures (28.16):
+# geom-test's `fixture run --tier slow`. Later pieces add the rest of 28.17's nightly list (hours of
+# fuzzing, the other outside oracles).
 #
 # --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
 # guard).
@@ -48,6 +49,20 @@ env:
   RUST_TOOLCHAIN: "1.99.0"
 
 jobs:
+  slow-fixtures:
+    name: Slow fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Every slow fixture
+        run: cargo run --locked --release -p geom-test --bin fixture -- run --tier slow
+
   predicates:
     name: Predicates with a fresh seed
     runs-on: ubuntu-latest

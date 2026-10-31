@@ -219,10 +219,11 @@ impl Rows {
                     let (o, a, b) = (xyz(points[i]), xyz(points[j]), xyz(points[k]));
                     let u = [a[0] - o[0], a[1] - o[1], a[2] - o[2]];
                     let v = [b[0] - o[0], b[1] - o[1], b[2] - o[2]];
+                    let (p, q) = (u.map(i128::from), v.map(i128::from));
                     let cross = [
-                        u[1] * v[2] - u[2] * v[1],
-                        u[2] * v[0] - u[0] * v[2],
-                        u[0] * v[1] - u[1] * v[0],
+                        p[1] * q[2] - p[2] * q[1],
+                        p[2] * q[0] - p[0] * q[2],
+                        p[0] * q[1] - p[1] * q[0],
                     ];
                     if cross != [0; 3] {
                         let f = |w: [i64; 3]| w.map(|x| x as f64);

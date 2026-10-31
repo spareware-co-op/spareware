@@ -27,8 +27,13 @@ use core::fmt::Write as _;
 
 use geom_num::ladder;
 
+use crate::attributes::{ATTRIBUTES_SCHEMA, ATTRIBUTES_TAG};
 use crate::file::{END_TAG, HEADER_TAG};
 use crate::header::{Header, rung};
+use crate::history::{HISTORY_SCHEMA, HISTORY_TAG};
+use crate::names::{NAMES_SCHEMA, NAMES_TAG};
+use crate::operation::{OPERATION_SCHEMA, OPERATION_TAG};
+use crate::recipe::{RECIPE_SCHEMA, RECIPE_TAG};
 use crate::record::REQUIRED;
 use crate::{body, kinds};
 
@@ -225,6 +230,157 @@ pub const RECORDS: &[RecordType] = &[
                 name: "columns",
                 cddl: "[+ refs / i64-column / bstr / [+ surface] / [+ curve]]",
                 meaning: "the table's columns over those rows, in the table's order",
+            },
+        ],
+    },
+    RecordType {
+        tag: NAMES_TAG,
+        name: "names",
+        schemas: &[NAMES_SCHEMA],
+        flags: REQUIRED,
+        cddl: "names.cddl",
+        section: "12",
+        fields: &[Field {
+            name: "nodes",
+            cddl: "[* [id: name-id, name: topo-name]]",
+            meaning: "every name node the file keeps, in NameId order; each id is the first 16 bytes                       of the SHA-256 of the scheme's prefix and the name's canonical bytes (32.19)",
+        }],
+    },
+    RecordType {
+        tag: HISTORY_TAG,
+        name: "history",
+        schemas: &[HISTORY_SCHEMA],
+        flags: REQUIRED,
+        cddl: "history.cddl",
+        section: "13",
+        fields: &[
+            Field {
+                name: "op",
+                cddl: "op-path",
+                meaning: "the operation's path: its OpId and its labels",
+            },
+            Field {
+                name: "records",
+                cddl: "[* [output: name-id, origin]]",
+                meaning: "one per output, in output-name order: unchanged, modified, generated, split                           or merged (20.3)",
+            },
+            Field {
+                name: "deleted",
+                cddl: "[* name-id]",
+                meaning: "the inputs the operation deleted, a set",
+            },
+            Field {
+                name: "changes",
+                cddl: "[* topology-change]",
+                meaning: "the topology changes it made (13.14), in the history's order",
+            },
+        ],
+    },
+    RecordType {
+        tag: RECIPE_TAG,
+        name: "recipe",
+        schemas: &[RECIPE_SCHEMA],
+        flags: REQUIRED,
+        cddl: "recipe.cddl",
+        section: "14",
+        fields: &[
+            Field {
+                name: "owner",
+                cddl: "tstr",
+                meaning: "the owner's namespace, printable ASCII: `kit.geom` for kernel operations, \
+                          `kit.geom.ifc`, a plugin's ID",
+            },
+            Field {
+                name: "owner-schema",
+                cddl: "uint",
+                meaning: "the owner's schema version for the payload",
+            },
+            Field {
+                name: "op",
+                cddl: "op-path",
+                meaning: "the operation's path",
+            },
+            Field {
+                name: "version",
+                cddl: "uint",
+                meaning: "the operation's version (26.2)",
+            },
+            Field {
+                name: "inputs",
+                cddl: "[* ([0, content-id] / [1, name-id])]",
+                meaning: "the inputs in the owner's order: a body by content ID, an entity by name",
+            },
+            Field {
+                name: "payload",
+                cddl: "bstr",
+                meaning: "the owner's own encoding of the recipe, never decoded by the format",
+            },
+            Field {
+                name: "outputs",
+                cddl: "[* content-id]",
+                meaning: "the content IDs of the bodies the recipe produced",
+            },
+        ],
+    },
+    RecordType {
+        tag: ATTRIBUTES_TAG,
+        name: "attributes",
+        schemas: &[ATTRIBUTES_SCHEMA],
+        flags: REQUIRED,
+        cddl: "attributes.cddl",
+        section: "15",
+        fields: &[
+            Field {
+                name: "definitions",
+                cddl: "[* definition]",
+                meaning: "every attribute definition in attribute order: owner, name and version, the \
+                          kinds that may carry it, its value schema and its behaviour at 8.4's events",
+            },
+            Field {
+                name: "values",
+                cddl: "[* [attr-id, [* [name-id, carried]]]]",
+                meaning: "each attribute's values by name: the owner's opaque bytes, or the values a \
+                          merge combined",
+            },
+        ],
+    },
+    RecordType {
+        tag: OPERATION_TAG,
+        name: "operation",
+        schemas: &[OPERATION_SCHEMA],
+        flags: REQUIRED,
+        cddl: "operation.cddl",
+        section: "16",
+        fields: &[
+            Field {
+                name: "op",
+                cddl: "op-path",
+                meaning: "the operation's path: its permanent OpId from the log, and labels",
+            },
+            Field {
+                name: "name",
+                cddl: "tstr",
+                meaning: "its name in the operation schemas, printable ASCII",
+            },
+            Field {
+                name: "version",
+                cddl: "uint",
+                meaning: "its version, which fixes its results, charges and details (26.2)",
+            },
+            Field {
+                name: "inputs",
+                cddl: "[* ([0, content-id] / [1, name-id])]",
+                meaning: "its inputs in its schema's order: a body by content ID, an entity by name",
+            },
+            Field {
+                name: "params",
+                cddl: "bstr",
+                meaning: "its parameters: one item of SKG's canonical CBOR, as its schema writes them",
+            },
+            Field {
+                name: "budget",
+                cddl: "[work: uint, logical-bytes: uint]",
+                meaning: "the budget it runs under (23.10)",
             },
         ],
     },

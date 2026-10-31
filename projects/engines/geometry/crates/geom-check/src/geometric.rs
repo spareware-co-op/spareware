@@ -17,8 +17,11 @@
 //! - **Exact on flat faces.** A plane given by integer-valued doubles (its origin and two
 //!   spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and
 //!   a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for
-//!   b = 0 that is the orient test, n · p + d = 0. A plane not given by integers is unchecked in a
-//!   body recorded Exact, and measured in certified intervals otherwise.
+//!   b = 0 that is the orient test, n · p + d = 0. A line whose ends are grid points passes the
+//!   same way, end by end: a segment is never farther from a plane than its farther end, and no
+//!   double holds the squared normal of a long edge's plane, so an interval could not say 0. A
+//!   plane not given by integers is unchecked in a body recorded Exact, and measured in certified
+//!   intervals otherwise.
 //! - **Certified on lines and curved carriers.** Every other distance is a certified upper bound
 //!   (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the
 //!   doubles are), so a vertex exactly on the bound passes where the data are exact and one a step
@@ -50,7 +53,7 @@ use geom_topo::ix::Arena;
 use geom_topo::{Arenas, Body, CurveKind, Ix, SurfaceKind};
 
 use crate::combinatorial::{fin_edge, fin_ends, fin_face, rows};
-use crate::curved::{self, Carrier};
+use crate::curved::{self, Carrier, Pair};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
 
@@ -101,7 +104,7 @@ pub(crate) fn check(
         }
         // Every fin of a published body names its edge: the filter decides, not the lookup.
         fin_edge(a, n)
-            .filter(|&e| !edge_on(a, e, &on.carrier, limit))
+            .filter(|&e| !edge_on(a, e, &on, b, limit))
             .into_iter()
             .for_each(|e| {
                 sink.push(
@@ -184,6 +187,70 @@ impl Surface {
             None => self.carrier.holds_point(p, limit),
         }
     }
+
+    /// Whether every point of `line`'s segment lies within `b` steps (`limit` as a double) of the
+    /// surface: exactly, by its ends, on an integer plane when they are grid points; by a certified
+    /// bound otherwise.
+    fn holds_line(&self, line: &Line<3>, b: u64, limit: f64) -> bool {
+        let (lo, hi) = line.domain();
+        match (&self.grid, line_end(line, lo).zip(line_end(line, hi))) {
+            (Some(plane), Some((start, end))) => {
+                on_plane(plane, start, b) && on_plane(plane, end, b)
+            }
+            _ => self.carrier.holds_line(line, limit),
+        }
+    }
+
+    /// How this surface and `other` lie: exactly when both are integer planes, as far as group 3
+    /// can certify otherwise.
+    pub(crate) fn lies_with(&self, other: &Surface) -> Pair {
+        match (&self.grid, &other.grid) {
+            (Some(p), Some(q)) => planes_lie(p, q),
+            _ => curved::pair(&self.carrier, &other.carrier),
+        }
+    }
+}
+
+/// How two integer planes lie, exactly: crossing when their normals' cross product is not zero;
+/// parallel otherwise, and apart unless each is the other, which is left unknown. Every normal
+/// coordinate and offset is an `i128`, so each product and difference fits 320 bits.
+fn planes_lie(p: &GridPlane, q: &GridPlane) -> Pair {
+    let [px, py, pz] = p.n().map(I320::from_i128);
+    let [qx, qy, qz] = q.n().map(I320::from_i128);
+    let (pd, qd) = (I320::from_i128(p.d()), I320::from_i128(q.d()));
+    let zero = I320::from_i128(0);
+    let minus = |first: &I320, by: &I320, second: &I320, and: &I320| -> Option<I320> {
+        first
+            .checked_mul(by)?
+            .checked_sub(&second.checked_mul(and)?)
+    };
+    let turn = [
+        minus(&py, &qz, &pz, &qy),
+        minus(&pz, &qx, &px, &qz),
+        minus(&px, &qy, &py, &qx),
+    ];
+    let same = [(&px, &qx), (&py, &qy), (&pz, &qz)]
+        .into_iter()
+        .all(|(pn, qn)| minus(&pd, qn, &qd, pn) == Some(zero));
+    if turn.iter().any(|t| t.as_ref() != Some(&zero)) {
+        Pair::Crossing
+    } else if same {
+        Pair::Unknown
+    } else {
+        Pair::Apart
+    }
+}
+
+/// `line`'s point at parameter `t`, when it is exactly a grid point.
+fn line_end(line: &Line<3>, t: f64) -> Option<P3> {
+    let [ox, oy, oz] = line.origin();
+    let [dx, dy, dz] = line.direction();
+    let at = |start: f64, step: f64| -> Option<i64> {
+        let along = tight::mul(tight::point(t).ok()?, tight::point(step).ok()?).ok()?;
+        let end = tight::add(tight::point(start).ok()?, along).ok()?;
+        (end.lo() == end.hi()).then(|| grid(end.lo())).flatten()
+    };
+    P3::new(at(ox, dx)?, at(oy, dy)?, at(oz, dz)?).ok()
 }
 
 /// The surface of `face`, if group 2 has a certified check for it: not for a kind without a closed
@@ -200,12 +267,13 @@ pub(crate) fn surface(a: &Arenas, face: Ix<Face>, exact: bool) -> Option<Surface
     })
 }
 
-/// Whether edge `e`'s curve lies within `limit` steps of `on`: a line or a circle by its certified
-/// bound; any other curve is the edge rows' to report unchecked, so it is not reported again here.
-fn edge_on(a: &Arenas, e: Ix<Edge>, on: &Carrier, limit: f64) -> bool {
+/// Whether edge `e`'s curve lies within `b` steps (`limit` as a double) of `on`: a line as
+/// [`Surface::holds_line`] says, a circle by its certified bound; any other curve is the edge rows'
+/// to report unchecked, so it is not reported again here.
+fn edge_on(a: &Arenas, e: Ix<Edge>, on: &Surface, b: u64, limit: f64) -> bool {
     match Ends::of(a.edges.curve.get(e).and_then(|c| a.curves.get(*c))) {
-        Some(Ends::Line(line)) => on.holds_line(line, limit),
-        Some(Ends::Circle(circle)) => on.holds_circle(circle, limit),
+        Some(Ends::Line(line)) => on.holds_line(line, b, limit),
+        Some(Ends::Circle(circle)) => on.carrier.holds_circle(circle, limit),
         None => true,
     }
 }

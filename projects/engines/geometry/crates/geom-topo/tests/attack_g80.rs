@@ -424,13 +424,21 @@ fn no_container_iterates_by_hash_or_address() {
             "hashbrown",
             "IndexMap",
             "RandomState",
-            "ptr_eq",
             "as_ptr",
             "addr(",
             "thread_local",
         ] {
             assert!(!code.contains(banned), "{name} names {banned}");
         }
+        // One use of an address, in `Column::shares_chunk`: whether two handles are one chunk.
+        // It orders nothing, and it answers yes only for clones of one `Arc`, whatever the
+        // addresses, so the most a wrong "no" can cost is hashing a chunk again (23.8).
+        let allowed = usize::from(name == "column.rs");
+        assert_eq!(
+            code.matches("ptr_eq").count(),
+            allowed,
+            "{name} names ptr_eq"
+        );
         for line in code.lines().map(str::trim_start) {
             let item = line
                 .strip_prefix("pub(crate) ")

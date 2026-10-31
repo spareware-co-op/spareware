@@ -211,3 +211,84 @@ The surface kinds:
 | 10 | ruled | first profile, second profile, extent, sigma, placement |
 | 11 | offset | base, distance, domain, cached |
 <!-- end generated -->
+
+## 12. The names record
+
+Tag 16, schema 1, required. Its payload (CDDL `names` in [cddl/names.cddl](cddl/names.cddl)):
+
+<!-- generated: names -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `nodes` | `[* [id: name-id, name: topo-name]]` | every name node the file keeps, in NameId order; each id is the first 16 bytes                       of the SHA-256 of the scheme's prefix and the name's canonical bytes (32.19) |
+<!-- end generated -->
+
+Every face, edge and vertex `NameId` a file holds, and the name nodes reachable from live entities and stored references (architecture 24.4), as one array of `[id, name]` pairs in strictly increasing `NameId` order. Each name is a `TopoName` in its canonical encoding (32.19): a variant number (`Created` 0, `Split` 1, `Merged` 2, `Bounded` 3, `Weak` 4) and its fields, sets and sorted lists in byte order, role names in Normalization Form C. A reader:
+
+- refuses the record when the header's `name-scheme` is one it does not know;
+- checks each id: the first 16 bytes of the SHA-256 of the 17 ASCII bytes `SKG NameScheme v1`, a zero byte, and the name's bytes as stored; a node whose id differs is refused, never trusted;
+- decodes each name and encodes it again; bytes that differ are a second spelling and are refused;
+- refuses a node out of order, and a second node under one id.
+
+## 13. The history record
+
+Tag 17, schema 1, required. Its payload (CDDL `history` in [cddl/history.cddl](cddl/history.cddl), with names.cddl's rules):
+
+<!-- generated: history -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `op` | `op-path` | the operation's path: its OpId and its labels |
+| `records` | `[* [output: name-id, origin]]` | one per output, in output-name order: unchanged, modified, generated, split                           or merged (20.3) |
+| `deleted` | `[* name-id]` | the inputs the operation deleted, a set |
+| `changes` | `[* topology-change]` | the topology changes it made (13.14), in the history's order |
+<!-- end generated -->
+
+One operation's history (architecture 20.3): every output's origin and the inputs it deleted, with the topology changes of 13.14. An origin is `[0]` unchanged, `[1, from]` modified, `[2, from, role]` generated (from an empty set when made from nothing), `[3, of, piece]` split or `[4, of]` merged from at least two. A change is its class's number in 13.14's table order (vertex split 0, face vanished 1, self-overlap cut 2, clash trimmed 3, overshoot removed 4, faces merged 5, face added 6, loop changed 7, body split 8) with its fields; why a face vanished is collapsed 0 or inside out 1, and a loop change is hole closed 0 or face split 1. A reader refuses two records of one output, a modification from nothing, a merge of one, and any payload that is not the history's canonical encoding.
+
+## 14. The recipe record
+
+Tag 18, schema 1, required. Its payload (CDDL `recipe` in [cddl/recipe.cddl](cddl/recipe.cddl), with names.cddl's and record.cddl's rules):
+
+<!-- generated: recipe -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `owner` | `tstr` | the owner's namespace, printable ASCII: `kit.geom` for kernel operations, `kit.geom.ifc`, a plugin's ID |
+| `owner-schema` | `uint` | the owner's schema version for the payload |
+| `op` | `op-path` | the operation's path |
+| `version` | `uint` | the operation's version (26.2) |
+| `inputs` | `[* ([0, content-id] / [1, name-id])]` | the inputs in the owner's order: a body by content ID, an entity by name |
+| `payload` | `bstr` | the owner's own encoding of the recipe, never decoded by the format |
+| `outputs` | `[* content-id]` | the content IDs of the bodies the recipe produced |
+<!-- end generated -->
+
+How a shape was made, in one envelope every reader knows (architecture 24.4), whoever owns it. The format never decodes the payload; its owner does (the facade from operation schemas, `geom-ifc`, a plugin). A reader without the owner still opens the bodies the recipe produced, by their content IDs, keeps the recipe byte for byte, and refuses only what would re-run it, with `RecipeOwnerMissing`, naming the owner and its schema. A reader refuses an owner that is empty or not printable ASCII, and any payload that is not the recipe's canonical encoding.
+
+## 15. The attributes record
+
+Tag 19, schema 1, required. Its payload (CDDL `attributes` in [cddl/attributes.cddl](cddl/attributes.cddl), with names.cddl's rules):
+
+<!-- generated: attributes -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `definitions` | `[* definition]` | every attribute definition in attribute order: owner, name and version, the kinds that may carry it, its value schema and its behaviour at 8.4's events |
+| `values` | `[* [attr-id, [* [name-id, carried]]]]` | each attribute's values by name: the owner's opaque bytes, or the values a merge combined |
+<!-- end generated -->
+
+Every attribute definition a model holds, and every value keyed by the persistent name of the entity that carries it (architecture 24.4), so one program carries another's values through its own edits without understanding them. A definition gives the kinds of entity that may carry it (body 0, region 1, face 2, edge 3, vertex 4), its value schema (opaque 0 with the owner's schema ID, point 1, direction 2, frame 3, length 4, field 5) and its behaviour at section 8.4's events: changed (keep 0, delete 1); moved, rotated, mirrored and scaled (keep 0, transform 1, delete 2); split (propagate 0, delete 1); merged (keep if equal 0, combine 1, delete 2); copied (copy 0, delete 1). A value is the owner's bytes, `[0, value]`, or the values a merge combined, `[1, [name, value] ...]` in name order. A reader refuses a definition that may transform an opaque value or that no kind may carry, an attribute defined twice otherwise, a value whose attribute is not defined, and any payload that is not the canonical encoding.
+
+## 16. The operation record
+
+Tag 20, schema 1, required. Its payload (CDDL `operation` in [cddl/operation.cddl](cddl/operation.cddl), with names.cddl's and record.cddl's rules):
+
+<!-- generated: operation -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `op` | `op-path` | the operation's path: its permanent OpId from the log, and labels |
+| `name` | `tstr` | its name in the operation schemas, printable ASCII |
+| `version` | `uint` | its version, which fixes its results, charges and details (26.2) |
+| `inputs` | `[* ([0, content-id] / [1, name-id])]` | its inputs in its schema's order: a body by content ID, an entity by name |
+| `params` | `bstr` | its parameters: one item of SKG's canonical CBOR, as its schema writes them |
+| `budget` | `[work: uint, logical-bytes: uint]` | the budget it runs under (23.10) |
+<!-- end generated -->
+
+One entry of an operation log (architecture 21 and 28.13): everything a replay needs to run the operation again and get the same bits. The record type has its schema, and each record names the operation's own version, which fixes its results, its charge schedule and its error details (26.2). The parameters are one item of SKG's canonical CBOR, written by the operation's schema. The budget is recorded because a budget that can fail an operation in a shared model is fixed by its version or recorded in the log (23.10). Nothing timed and no precision is recorded: only final operations are logged, and a cancelled run writes nothing (10.1). A reader refuses a name that is empty or not printable ASCII, parameters that are not canonical CBOR, and any payload that is not the record's canonical encoding.
+

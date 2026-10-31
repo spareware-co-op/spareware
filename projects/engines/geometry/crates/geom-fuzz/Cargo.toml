@@ -15,21 +15,27 @@ geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
 # MPL-2.0; development only).
 geom-gen = { path = "../geom-gen" }
+# The make target (G101): geom-make's operations under test, and the kernel crates its inputs and
+# oracles come from (ours, MPL-2.0).
+geom-check = { path = "../geom-check", features = ["full"] }
+geom-make = { path = "../geom-make" }
+geom-math = { path = "../geom-math" }
+geom-op = { path = "../geom-op" }
+geom-run = { path = "../geom-run" }
+geom-topo = { path = "../geom-topo" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
 # The arenas target (G80): geom-topo's arenas and builder, under test, and the kernel crates
 # whose values fill them; the attributes target (G90): geom-name's attribute step and geom-topo's
 # definitions, under test, with geom-op's history records (ours, MPL-2.0).
-geom-curve = { path = "../geom-curve" }
-geom-math = { path = "../geom-math" }
-geom-name = { path = "../geom-name" }
-geom-op = { path = "../geom-op" }
-geom-run = { path = "../geom-run" }
-geom-surface = { path = "../geom-surface" }
-geom-topo = { path = "../geom-topo" }
-# The code under test of the cbor target (G91), and the work meter it is read with (MPL-2.0, ours).
+# The code under test of the cbor target (G91) and the cache target's memo store (G105) (MPL-2.0,
+# ours).
 geom-format = { path = "../geom-format" }
+# The arenas target (G80): the kernel crates whose values fill geom-topo's arenas (ours, MPL-2.0).
+geom-curve = { path = "../geom-curve" }
+geom-name = { path = "../geom-name" }
+geom-surface = { path = "../geom-surface" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under
