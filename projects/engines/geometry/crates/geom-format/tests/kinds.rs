@@ -239,9 +239,21 @@ fn the_two_dimensional_kinds_read_back() {
         &CurveKind::Transition(t.segment((10.0, 60.0), true).unwrap()),
     );
     let laws = [
+        CurvatureLaw::Helmert {
+            start: 0.0,
+            end: 0.01,
+        },
         CurvatureLaw::Bloss {
             start: 0.0,
             end: 0.002,
+        },
+        CurvatureLaw::Cosine {
+            start: 0.0,
+            end: 0.01,
+        },
+        CurvatureLaw::Sine {
+            start: 0.001,
+            end: 0.01,
         },
         CurvatureLaw::CantCoupled {
             start: 0.0,
@@ -250,21 +262,40 @@ fn the_two_dimensional_kinds_read_back() {
             cant: 0.1,
         },
         CurvatureLaw::Polynomial {
-            terms: [None, Some(0.0), Some(1.0e-4), None, None, None, None, None],
+            terms: [None, Some(200.0), Some(300.0), None, None, None, None, None],
+            from: 0.0,
+        },
+        CurvatureLaw::CosineSpiral {
+            constant: Some(1000.0),
+            cosine: 10.0,
+            length: 100.0,
+            from: 0.0,
+        },
+        CurvatureLaw::CosineSpiral {
+            constant: None,
+            cosine: 10.0,
+            length: 100.0,
+            from: 0.0,
+        },
+        CurvatureLaw::SineSpiral {
+            constant: Some(1000.0),
+            linear: Some(500.0),
+            sine: 10.0,
+            length: 100.0,
             from: 0.0,
         },
         CurvatureLaw::SineSpiral {
             constant: None,
-            linear: Some(0.0),
-            sine: 400.0,
+            linear: None,
+            sine: 10.0,
             length: 100.0,
             from: 0.0,
         },
     ];
     for law in laws {
-        if let Ok(t) = Transition::<2>::new([1.0, 2.0], [0.0, 1.0], 100.0, law, &mut meter()) {
-            curve_trip("transition law", &CurveKind::Transition(t));
-        }
+        let t = Transition::<2>::new([1.0, 2.0], [0.0, 1.0], 100.0, law, &mut meter())
+            .unwrap_or_else(|e| panic!("{law:?}: {e:?}"));
+        curve_trip("transition law", &CurveKind::Transition(t));
     }
     let line2 = Basis::Line(Line::new([0.0, 0.0], [1.0, 2.0], (0.0, 1.0)).unwrap());
     let offset = Offset::new(
@@ -630,4 +661,17 @@ fn write_the_kinds() {
         .1;
     let offset = geom_surface::Offset::new(plane, 0.5).unwrap();
     put("surface", surface_bytes(&SurfaceKind::Offset(offset)));
+}
+
+#[test]
+fn a_kind_error_says_what_was_wrong() {
+    assert_eq!(
+        KindError::Shape("an array expected").to_string(),
+        "not a stored kind: an array expected"
+    );
+    let curve = KindError::Curve(geom_curve::CurveError::NotFinite).to_string();
+    assert!(
+        curve.starts_with("the kind's values were refused"),
+        "{curve}"
+    );
 }

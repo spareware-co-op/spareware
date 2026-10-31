@@ -22,7 +22,7 @@ use geom_format::body::{
 };
 use geom_format::cbor::{Decoder, Item};
 use geom_format::content::ContentId;
-use geom_format::kinds::{write_curve, write_surface};
+use geom_format::kinds::{KindError, write_curve, write_surface};
 use geom_format::record::{COPY_ALWAYS, REQUIRED, Record};
 use geom_math::{Axis, Transform, TypedTransform};
 use geom_op::cbor::Encoder;
@@ -404,4 +404,83 @@ fn chunks_are_whole_runs_in_their_places() {
         read_body(&forge(1, 2, &t, 0, false), &mut meter()),
         Err(BodyError::Shape(_))
     ));
+}
+
+#[test]
+fn a_body_error_says_what_was_wrong() {
+    assert_eq!(
+        BodyError::Shape("an index of five fields").to_string(),
+        "not a body record: an index of five fields"
+    );
+    assert_eq!(
+        BodyError::Chunk { table: 3, chunk: 1 }.to_string(),
+        "chunk 1 of table 3 is missing or not the one listed"
+    );
+}
+
+#[test]
+fn a_body_with_pcurves_reads_back() {
+    let body = wall();
+    let mut arenas = body.arenas().clone();
+    let line = geom_curve::Line::new([0.0, 0.0], [1.0, 0.5], (0.0, 1.0)).unwrap();
+    let pcurve = arenas
+        .pcurves
+        .push(geom_curve::CurveKind::Line(line))
+        .unwrap();
+    arenas.fins.pcurve.set(ix(0), Some(pcurve)).unwrap();
+    let with = Builder { arenas }
+        .publish(body.kind(), body.outside(), &mut meter())
+        .unwrap();
+    let stored = store(&with);
+    assert_eq!(read_body(&stored, &mut meter()).unwrap(), with);
+    assert_ne!(stored.content_id(), store(&body).content_id());
+}
+
+#[test]
+fn a_surface_nested_past_a_chunks_depth_is_refused_by_the_decoder() {
+    let one = store(&many_faces(1));
+    // The surfaces table's one chunk, its surface eleven offsets deep around a plane.
+    let mut e = Encoder::new();
+    e.array(4).unwrap();
+    e.uint(9).unwrap();
+    e.uint(0).unwrap();
+    e.uint(1).unwrap();
+    e.array(1).unwrap();
+    e.array(1).unwrap();
+    let levels = 11;
+    for _ in 0..levels {
+        e.array(5).unwrap();
+        e.uint(geom_format::kinds::surface::OFFSET).unwrap();
+    }
+    let plane = geom_surface::Plane::new(
+        [0.0; 3],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        ((0.0, 1.0), (0.0, 1.0)),
+    );
+    write_surface(&mut e, &geom_surface::SurfaceKind::Plane(plane.unwrap())).unwrap();
+    for _ in 0..levels {
+        e.float(0.25).unwrap();
+        e.array(2).unwrap();
+        for _ in 0..2 {
+            e.array(2).unwrap();
+            e.float(0.0).unwrap();
+            e.float(1.0).unwrap();
+        }
+        e.uint(0).unwrap();
+    }
+    let chunk = Record {
+        tag: CHUNK_TAG,
+        flags: REQUIRED,
+        schema: SCHEMA,
+        depends: Vec::new(),
+        payload: e.finish().unwrap().into_bytes(),
+    };
+    let mut t = tables_of(&one, &many(1));
+    t[8] = (9, 1, vec![chunk]);
+    let read = read_body(&forge(1, 2, &t, 0, false), &mut meter());
+    assert!(
+        matches!(read, Err(BodyError::Kind(KindError::Cbor(_)))),
+        "{read:?}"
+    );
 }

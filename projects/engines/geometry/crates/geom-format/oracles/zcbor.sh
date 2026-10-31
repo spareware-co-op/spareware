@@ -29,7 +29,8 @@ for f in "$dir"/*.cbor; do
   rule=${f%.cbor}
   rule=${rule##*.}
   count=$((count + 1))
-  if "$venv/bin/zcbor" validate -c "$schema" -t "$rule" -i "$f" --input-as cbor > /dev/null 2> "$venv/err"; then
+  # On standard input: zcbor 0.9.1 opens an input file in binary mode with an encoding, which fails.
+  if "$venv/bin/zcbor" validate -c "$schema" -t "$rule" -i - --input-as cbor < "$f" > /dev/null 2> "$venv/err"; then
     echo "ok $(basename "$f")"
   else
     echo "FAILED $(basename "$f"): $(tail -n 3 "$venv/err" | tr '\n' ' ')"

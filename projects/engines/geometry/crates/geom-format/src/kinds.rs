@@ -23,6 +23,21 @@
 //!   `geom_surface::offset::MAX_NESTING` (4) times, over a swept surface whose profile is a conic
 //!   on axes on a frame.
 //!
+//! Recursion:
+//!
+//! - Cycle: `write_surface`, `write_offset_surface`.
+//!   Bound: 9.
+//!   Why: two frames per offset (the dispatch and the offset's writer, which writes its base one
+//!   level down), and `geom_surface::Offset::new` refuses a base already `MAX_NESTING` = 4
+//!   offsets deep; then the leaf's dispatch.
+//!   Test: `surfaces_write_and_read_at_their_bound`.
+//! - Cycle: `read_surface`, `read_offset_surface`.
+//!   Bound: 21.
+//!   Why: two frames per offset read, each inside its offset's array, and the decoder refuses an
+//!   item nested deeper than `DEPTH` = 10; then the leaf's dispatch. Past four offsets the
+//!   kind's constructor refuses what was read.
+//!   Test: `surfaces_write_and_read_at_their_bound`.
+//!
 //! Method: chapter 24.2 and 24.3 of the kernel architecture,
 //! `projects/engines/geometry/architecture/24-file-format-exchange.md`; the kinds are those of
 //! chapter 7, `07-curves-surfaces.md`.
@@ -586,7 +601,8 @@ pub fn write_curve<const D: usize>(e: &mut Encoder, c: &CurveKind<D>) -> Written
 fn placement(e: &mut Encoder, (c, l): ([f64; 3], [[f64; 3]; 3])) -> Written {
     e.array(2)?;
     floats(e, &c)?;
-    floats(e, &l.concat())
+    let l: Vec<f64> = l.iter().flatten().copied().collect();
+    floats(e, &l)
 }
 
 /// A frame-based surface's tail: frame, domain, axial sign.
@@ -612,8 +628,26 @@ fn fun(f: Fun) -> u64 {
 ///
 /// [`KindError::Encode`] for a value that is not finite where the item needs a double;
 /// [`KindError::Curve`] never (a swept surface holds its own shape).
-#[allow(clippy::too_many_lines, reason = "one short arm per surface kind")]
 pub fn write_surface(e: &mut Encoder, s: &SurfaceKind) -> Written {
+    match s {
+        SurfaceKind::Offset(o) => write_offset_surface(e, o),
+        _ => write_surface_leaf(e, s),
+    }
+}
+
+/// An offset surface: `[11, base, distance, domain, cached]`.
+fn write_offset_surface(e: &mut Encoder, o: &geom_surface::Offset) -> Written {
+    e.array(5)?;
+    e.uint(surface::OFFSET)?;
+    write_surface(e, o.base())?;
+    e.float(o.distance())?;
+    param_box(e, o.domain())?;
+    flag(e, o.cache().is_some())
+}
+
+/// Every surface kind but an offset, which [`write_surface`] hands to [`write_offset_surface`].
+#[allow(clippy::too_many_lines, reason = "one short arm per surface kind")]
+fn write_surface_leaf(e: &mut Encoder, s: &SurfaceKind) -> Written {
     match s {
         SurfaceKind::Nurbs(n) => {
             e.array(7)?;
@@ -719,14 +753,7 @@ pub fn write_surface(e: &mut Encoder, s: &SurfaceKind) -> Written {
             sign(e, sigma)?;
             placement(e, r.placement())
         }
-        SurfaceKind::Offset(o) => {
-            e.array(5)?;
-            e.uint(surface::OFFSET)?;
-            write_surface(e, o.base())?;
-            e.float(o.distance())?;
-            param_box(e, o.domain())?;
-            flag(e, o.cache().is_some())
-        }
+        SurfaceKind::Offset(_) => Err(KindError::Shape("an offset is written by write_surface")),
     }
 }
 
@@ -1249,10 +1276,44 @@ fn read_round_tail(
 /// [`KindError::Shape`] for an item that is not a surface kind's form, [`KindError::Curve`] or
 /// [`KindError::Nurbs`] for values its constructor refuses, and the decoder's and the meter's
 /// errors.
-#[allow(clippy::too_many_lines, reason = "one short arm per surface kind")]
 pub fn read_surface(d: &mut Decoder<'_>, m: &mut WorkMeter<'_>) -> Result<SurfaceKind, KindError> {
     let n = length(d, m)?;
-    let code = uint(d, m)?;
+    match uint(d, m)? {
+        surface::OFFSET => read_offset_surface(n, d, m),
+        code => read_surface_leaf(code, n, d, m),
+    }
+}
+
+/// An offset surface's fields, its code and length read.
+fn read_offset_surface(
+    n: u64,
+    d: &mut Decoder<'_>,
+    m: &mut WorkMeter<'_>,
+) -> Result<SurfaceKind, KindError> {
+    if n != 5 {
+        return Err(KindError::Shape(
+            "a surface kind with another number of fields",
+        ));
+    }
+    let base = read_surface(d, m)?;
+    let distance = float(d, m)?;
+    let domain = read_box(d, m)?;
+    let offset = geom_surface::Offset::new(base, distance)?.restricted(domain)?;
+    Ok(SurfaceKind::Offset(if read_flag(d, m)? {
+        offset.cached(m)?
+    } else {
+        offset
+    }))
+}
+
+/// The fields of every surface kind but an offset, its code and length read.
+#[allow(clippy::too_many_lines, reason = "one short arm per surface kind")]
+fn read_surface_leaf(
+    code: u64,
+    n: u64,
+    d: &mut Decoder<'_>,
+    m: &mut WorkMeter<'_>,
+) -> Result<SurfaceKind, KindError> {
     let want = |k: u64| {
         if n == k {
             Ok(())
@@ -1359,18 +1420,6 @@ pub fn read_surface(d: &mut Decoder<'_>, m: &mut WorkMeter<'_>) -> Result<Surfac
                     .with_sigma(sigma)?
                     .placed(c, l)?,
             )
-        }
-        surface::OFFSET => {
-            want(5)?;
-            let base = read_surface(d, m)?;
-            let distance = float(d, m)?;
-            let domain = read_box(d, m)?;
-            let offset = geom_surface::Offset::new(base, distance)?.restricted(domain)?;
-            SurfaceKind::Offset(if read_flag(d, m)? {
-                offset.cached(m)?
-            } else {
-                offset
-            })
         }
         _ => return Err(KindError::Shape("an unknown surface kind")),
     })

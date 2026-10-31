@@ -2201,6 +2201,12 @@ pub mod slice {
         pub fn chunks_mut(&mut self, chunk_size: usize) -> ChunksMut<T> {
             loop {}
         }
+        pub const fn as_chunks<const N: usize>(&self) -> (&[[T; N]], &[T]) {
+            loop {}
+        }
+        pub fn join(&self, sep: &str) -> crate::string::String {
+            loop {}
+        }
         pub fn chunks_exact(&self, chunk_size: usize) -> Chunks<T> {
             loop {}
         }
@@ -2625,6 +2631,14 @@ pub mod array {
         }
     }
     impl<A: PartialEq<B>, B, const N: usize> PartialEq<[B; N]> for [A; N] {
+        fn eq(&self, other: &[B; N]) -> bool {
+            let a: &A = crate::any();
+            let b: &B = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<A: PartialEq<B>, B, const N: usize> PartialEq<[B; N]> for &[A] {
         fn eq(&self, other: &[B; N]) -> bool {
             let a: &A = crate::any();
             let b: &B = crate::any();
@@ -3272,6 +3286,9 @@ pub mod str {
             loop {}
         }
         pub fn ends_with(&self, pat: &str) -> bool {
+            loop {}
+        }
+        pub fn trim_end_matches(&self, pat: char) -> &str {
             loop {}
         }
         pub fn contains(&self, pat: &str) -> bool {
@@ -5405,6 +5422,9 @@ pub mod primitives {
                     pub const fn ilog2(self) -> u32 {
                         loop {}
                     }
+                    pub const fn bit_width(self) -> u32 {
+                        loop {}
+                    }
                     pub const fn ilog10(self) -> u32 {
                         loop {}
                     }
@@ -5683,6 +5703,9 @@ pub mod primitives {
             loop {}
         }
         pub const fn is_ascii_digit(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii_hexdigit(&self) -> bool {
             loop {}
         }
         pub const fn is_ascii(&self) -> bool {

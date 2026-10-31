@@ -5324,6 +5324,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in end",
+      "line_text": "if x.is_infinite() && (x < 0.0) == low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison is reached only when x is infinite, and for ±∞ x < 0 and x <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in read_round_tail",
+      "line_text": "Ok((read_frame(d, m)?, read_box(d, m)?, read_sign(d, m)? < 0.0))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "read_sign returns only 1.0 or -1.0, never 0, so s < 0 and s <= 0 agree."
     }
   ],
   "coverage_off": [],
