@@ -220,7 +220,7 @@ fn sign_oracle(terms: [&IBig; 4], k: &IBig, l: &IBig) -> Option<Sign> {
 /// One coordinate of a crossing as whole numbers.
 fn coordinate(p: &Crossing2, axis: usize) -> (IBig, IBig, IBig, IBig) {
     let (a, b, k, w) = p.parts();
-    (big(&a[axis]), IBig::from(b[axis]), big(&k), big(&w))
+    (big(&a[axis]), big(&b[axis]), big(&k), big(&w))
 }
 
 fn compare_oracle(p: &Crossing2, q: &Crossing2, axis: usize) -> Option<Sign> {

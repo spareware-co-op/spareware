@@ -220,7 +220,7 @@ fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError> {
 #[derive(Clone, Copy, Debug)]
 pub struct Crossing2 {
     a: [I384; 2],
-    b: [i128; 2],
+    b: [I384; 2],
     k: I384,
     w: I384,
     /// Where it lies, certainly: the filter's whole answer.
@@ -237,15 +237,15 @@ struct Part {
 
 impl Crossing2 {
     /// Makes a crossing from its integers, its enclosure from theirs.
-    fn from_parts(a: [I384; 2], b: [i128; 2], k: I384, w: I384) -> Result<Crossing2, NumError> {
+    fn from_parts(a: [I384; 2], b: [I384; 2], k: I384, w: I384) -> Result<Crossing2, NumError> {
         let root = enclose(&k)?.sqrt()?;
         let weight = enclose(&w)?;
-        let coordinate = |a: &I384, b: i128| -> Result<Interval, NumError> {
-            let along = enclose(&I384::from_i128(b))?.mul(root)?;
+        let coordinate = |a: &I384, b: &I384| -> Result<Interval, NumError> {
+            let along = enclose(b)?.mul(root)?;
             enclose(a)?.add(along)?.div(weight)
         };
         let [ax, ay] = &a;
-        let [bx, by] = b;
+        let [bx, by] = &b;
         let at = [coordinate(ax, bx)?, coordinate(ay, by)?];
         Ok(Crossing2 { a, b, k, w, at })
     }
@@ -279,7 +279,8 @@ impl Crossing2 {
         let bs = match root {
             Root::First => [turned(ahead)?, across],
             Root::Second => [ahead, turned(across)?],
-        };
+        }
+        .map(I384::from_i128);
         Crossing2::from_parts([ax, ay], bs, stored(k)?, stored(mul(&cw, &n)?)?)
     }
 
@@ -320,7 +321,7 @@ impl Crossing2 {
         let ([x, y], w) = p.coordinates();
         Crossing2::from_parts(
             [I384::from_i128(x), I384::from_i128(y)],
-            [0, 0],
+            [I384::from_i64(0), I384::from_i64(0)],
             I384::from_i64(0),
             I384::from_i128(w),
         )
@@ -328,7 +329,7 @@ impl Crossing2 {
 
     /// Its homogeneous parts: `[aₓ, a_y]`, `[bₓ, b_y]`, k and w, w positive.
     #[must_use]
-    pub const fn parts(&self) -> ([I384; 2], [i128; 2], I384, I384) {
+    pub const fn parts(&self) -> ([I384; 2], [I384; 2], I384, I384) {
         (self.a, self.b, self.k, self.w)
     }
 
@@ -345,7 +346,7 @@ impl Crossing2 {
         };
         Ok(Part {
             a: big(a)?,
-            b: Big::from_i128(*b),
+            b: big(b)?,
             k: big(&self.k)?,
             w: big(&self.w)?,
         })
