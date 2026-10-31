@@ -187,7 +187,7 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 123] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 117] = [
     ("aho-corasick", "Unlicense OR MIT", "MIT"),
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
     ("anyhow", "MIT OR Apache-2.0", "MIT"),
@@ -200,6 +200,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 123] = [
     ("block-buffer", "MIT OR Apache-2.0", "MIT"),
     ("borsh", "MIT OR Apache-2.0", "MIT"),
     ("camino", "MIT OR Apache-2.0", "MIT"),
+    ("cap", "MIT OR Apache-2.0", "MIT"),
     ("cargo-platform", "MIT OR Apache-2.0", "MIT"),
     ("cc", "MIT OR Apache-2.0", "MIT"),
     ("cfg-if", "MIT OR Apache-2.0", "MIT"),

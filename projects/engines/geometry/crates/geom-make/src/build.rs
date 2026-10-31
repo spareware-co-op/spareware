@@ -118,11 +118,7 @@ pub(crate) fn fail(ctx: &OpContext<'_>, detail: MakeDetail) -> OpError {
 /// The error for rows that did not reach a body: the meter's stop, an allocation refused, or a
 /// defect.
 pub(crate) fn unbuilt(ctx: &OpContext<'_>, meter: &mut WorkMeter<'_>, e: TopoError) -> OpError {
-    let stop = match e {
-        TopoError::OutOfMemory => Some(meter.out_of_memory()),
-        _ => meter.check().err(),
-    };
-    match stop {
+    match e.stop(meter) {
         Some(stop) => ctx.stopped(meter, stop, PHASE),
         None => fail(ctx, MakeDetail::BuildFailed),
     }
