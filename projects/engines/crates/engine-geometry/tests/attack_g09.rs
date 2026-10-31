@@ -664,7 +664,7 @@ mod repository {
         ("geom-topo", 3, "base math curve surface"),
         ("geom-name", 3, "base topo"),
         ("geom-intersect", 4, "base math nurbs curve surface bvh"),
-        ("geom-check", 5, "base topo intersect"),
+        ("geom-check", 5, "base curve topo intersect"),
         ("geom-poly", 6, "base math topo"),
         ("geom-bool", 6, "base poly intersect topo name check bvh"),
         ("geom-2d", 6, "base math curve topo name intersect bvh"),

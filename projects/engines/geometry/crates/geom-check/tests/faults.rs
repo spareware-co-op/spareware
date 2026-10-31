@@ -447,18 +447,29 @@ fn an_exact_record_on_curved_geometry() {
             .faults()
             .to_vec()
     };
+    // Group 4 judges the record whatever group 2 finds first: the cube's corners and edges are
+    // not on a unit sphere, nor its edge's ends at a unit circle's.
+    let group = |faults: Vec<Fault>, g: Group| -> Vec<Fault> {
+        faults.into_iter().filter(|f| f.kind.group() == g).collect()
+    };
+    let unchecked = |at: Entity, with: Entity| Fault::at(FaultKind::Unchecked, at).with(with);
     let mut r = cube();
     r.surfaces[0] = sphere();
     assert_eq!(
-        exact(&r),
+        group(exact(&r), Group::Exactness),
         [Fault::at(FaultKind::NotFlat, Entity::Face(ix(0)))]
     );
+    assert!(group(exact(&r), Group::Geometric).iter().all(|f| matches!(
+        f.kind,
+        FaultKind::VertexOffSurface | FaultKind::EdgeOffSurface
+    ) && f.with
+        == Some(Entity::Face(ix(0)))));
     // Certified, the same geometry is the record's to bound, not group 4's to refuse.
-    assert_eq!(faults(&r, BodyKind::Solid), Vec::<Fault>::new());
+    assert_eq!(group(faults(&r, BodyKind::Solid), Group::Exactness), []);
     let mut r = cube();
     r.curves[0] = circle();
     assert_eq!(
-        exact(&r),
+        group(exact(&r), Group::Exactness),
         [Fault::at(FaultKind::NotStraight, Entity::Edge(ix(0)))]
     );
     let mut r = cube();
@@ -466,7 +477,10 @@ fn an_exact_record_on_curved_geometry() {
     r.fins[0].pcurve = Some(ix(0));
     assert_eq!(
         exact(&r),
-        [Fault::at(FaultKind::CurvedPcurve, Entity::Fin(ix(0)))]
+        [
+            unchecked(Entity::Pcurve(ix(0)), Entity::Fin(ix(0))),
+            Fault::at(FaultKind::CurvedPcurve, Entity::Fin(ix(0)))
+        ]
     );
 }
 
@@ -526,6 +540,13 @@ fn every_fault_says_what_is_wrong_in_its_group() {
         FaultKind::NotFlat,
         FaultKind::NotStraight,
         FaultKind::CurvedPcurve,
+        FaultKind::VertexOffSurface,
+        FaultKind::VertexOffCurve,
+        FaultKind::EdgeOffSurface,
+        FaultKind::Unchecked,
+        FaultKind::EdgesCross,
+        FaultKind::FacesCross,
+        FaultKind::PairUnchecked,
     ];
     let mut words: Vec<&str> = all.iter().map(|k| k.what()).collect();
     assert!(words.iter().all(|w| w.len() > 10));
@@ -537,13 +558,18 @@ fn every_fault_says_what_is_wrong_in_its_group() {
         "each kind says something of its own"
     );
     for kind in all {
-        let expected = if matches!(
-            kind,
-            FaultKind::NotFlat | FaultKind::NotStraight | FaultKind::CurvedPcurve
-        ) {
-            Group::Exactness
-        } else {
-            Group::Combinatorial
+        let expected = match kind {
+            FaultKind::NotFlat | FaultKind::NotStraight | FaultKind::CurvedPcurve => {
+                Group::Exactness
+            }
+            FaultKind::VertexOffSurface
+            | FaultKind::VertexOffCurve
+            | FaultKind::EdgeOffSurface
+            | FaultKind::Unchecked => Group::Geometric,
+            FaultKind::EdgesCross | FaultKind::FacesCross | FaultKind::PairUnchecked => {
+                Group::SelfIntersection
+            }
+            _ => Group::Combinatorial,
         };
         assert_eq!(kind.group(), expected, "{kind:?}");
     }

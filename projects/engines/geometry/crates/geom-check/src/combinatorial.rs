@@ -125,7 +125,7 @@ pub(crate) fn check(
 // names is never taken, and keeps the check free of branches no body can reach.
 
 /// Every row of an arena of `rows` rows, ascending.
-fn rows<K>(rows: u32) -> impl Iterator<Item = Ix<K>> {
+pub(crate) fn rows<K>(rows: u32) -> impl Iterator<Item = Ix<K>> {
     (0..rows).filter_map(Ix::new)
 }
 
@@ -135,7 +135,7 @@ fn link<K, T: Copy>(column: &Column<K, Option<T>>, at: Ix<K>) -> Option<T> {
 }
 
 /// A fin's next fin in its loop.
-fn next(a: &Arenas, f: FinIx) -> FinIx {
+pub(crate) fn next(a: &Arenas, f: FinIx) -> FinIx {
     a.fins.next.get(f).copied().unwrap_or(f)
 }
 
@@ -145,12 +145,12 @@ fn radial(a: &Arenas, f: FinIx) -> FinIx {
 }
 
 /// A fin's edge.
-fn fin_edge(a: &Arenas, f: FinIx) -> Option<EdgeIx> {
+pub(crate) fn fin_edge(a: &Arenas, f: FinIx) -> Option<EdgeIx> {
     a.fins.edge.get(f).copied()
 }
 
 /// The face a fin's loop belongs to.
-fn fin_face(a: &Arenas, f: FinIx) -> Option<FaceIx> {
+pub(crate) fn fin_face(a: &Arenas, f: FinIx) -> Option<FaceIx> {
     a.fins
         .loop_
         .get(f)
@@ -173,7 +173,7 @@ fn ends(a: &Arenas, e: Option<EdgeIx>) -> (Option<VertexIx>, Option<VertexIx>) {
 
 /// Where a fin starts and ends: its edge's start and end, swapped when the fin is `Reversed`;
 /// `None` for a closed edge without vertices.
-fn fin_ends(a: &Arenas, f: FinIx) -> Option<(VertexIx, VertexIx)> {
+pub(crate) fn fin_ends(a: &Arenas, f: FinIx) -> Option<(VertexIx, VertexIx)> {
     let (start, end) = ends(a, fin_edge(a, f));
     let reversed = a.fins.sense.get(f) == Some(&Sense::Reversed);
     start
@@ -195,17 +195,29 @@ fn ring(
 }
 
 /// The fins of a loop, from its first.
-fn loop_fins(a: &Arenas, l: LoopIx) -> impl Iterator<Item = FinIx> + '_ {
+pub(crate) fn loop_fins(a: &Arenas, l: LoopIx) -> impl Iterator<Item = FinIx> + '_ {
     link(&a.loops.first_fin, l)
         .into_iter()
         .flat_map(move |first| ring(a, first, next))
 }
 
 /// The fins of an edge, in radial order from its first.
-fn edge_fins(a: &Arenas, e: EdgeIx) -> impl Iterator<Item = FinIx> + '_ {
+pub(crate) fn edge_fins(a: &Arenas, e: EdgeIx) -> impl Iterator<Item = FinIx> + '_ {
     link(&a.edges.first_fin, e)
         .into_iter()
         .flat_map(move |first| ring(a, first, radial))
+}
+
+/// The loops of a face, from its first (lists the first stage found sound).
+pub(crate) fn face_loops(a: &Arenas, f: FaceIx) -> impl Iterator<Item = LoopIx> + '_ {
+    successors(link(&a.faces.first_loop, f), move |&l| {
+        link(&a.loops.next, l)
+    })
+}
+
+/// The fins of a face, loop by loop.
+pub(crate) fn face_fins(a: &Arenas, f: FaceIx) -> impl Iterator<Item = FinIx> + '_ {
+    face_loops(a, f).flat_map(move |l| loop_fins(a, l))
 }
 
 /// Sets `v[i]` to `value` and returns what it held.

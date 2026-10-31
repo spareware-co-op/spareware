@@ -35,6 +35,7 @@ use geom_topo::Body;
 use crate::report::{Group, Level, Report};
 use crate::sink::Sink;
 use crate::{combinatorial, exactness};
+use crate::{geometric, self_intersection};
 
 /// Checks `body`, recorded with `exactness`, at `level`.
 ///
@@ -56,7 +57,7 @@ pub fn check(
     }
     scratch.resize(words, 0);
     let mut ran = [false; 4];
-    let mut missing = [false; 4];
+    let missing = [false; 4];
     for (at, group) in Group::ALL.into_iter().enumerate() {
         if !level.runs(group) {
             continue;
@@ -70,7 +71,24 @@ pub fn check(
                 exactness::check(body, exactness, &mut sink)?;
                 &mut ran
             }
-            Group::Geometric | Group::SelfIntersection => &mut missing,
+            // Group 2 walks the rings group 1 proves finite, so it runs only on a body group 1
+            // passed; otherwise it is skipped, neither run nor missing.
+            Group::Geometric => {
+                if sink.found() > 0 {
+                    continue;
+                }
+                geometric::check(body, exactness, &mut sink)?;
+                &mut ran
+            }
+            // Group 3 compares the carriers group 2 certified, so it runs only on a body groups 1
+            // and 2 passed.
+            Group::SelfIntersection => {
+                if sink.found() > 0 {
+                    continue;
+                }
+                self_intersection::check(body, exactness, &mut sink)?;
+                &mut ran
+            }
         };
         done.get_mut(at).into_iter().for_each(|slot| *slot = true);
     }
