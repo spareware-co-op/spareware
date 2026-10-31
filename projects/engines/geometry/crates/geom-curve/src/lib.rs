@@ -54,11 +54,15 @@
 //! ([`transition::fresnel`]), and the clothoid's point by them
 //! ([`Transition::enclose_fresnel`]).
 //!
+//! Many points per call (piece G104): every kind evaluates N parameters into flat arrays through
+//! [`ParamCurve::points`], on [`flat::fill`], bit for bit as one call at a time.
+//!
 //! Status: the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61),
 //! the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind,
 //! its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic
-//! and transcendental enclosures (G67), and rational curves' higher derivative bounds started from
-//! their control points (G68) built; the other kinds to come in G175, G361 and G371.
+//! and transcendental enclosures (G67), rational curves' higher derivative bounds started from
+//! their control points (G68) and many points per call (G104) built; the other kinds to come in
+//! G175, G361 and G371.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -73,6 +77,7 @@ pub mod conic;
 pub mod contract;
 pub mod error;
 pub mod extent;
+pub mod flat;
 mod form;
 pub mod frame;
 pub mod helix;

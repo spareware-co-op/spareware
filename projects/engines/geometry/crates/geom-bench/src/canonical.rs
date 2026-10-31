@@ -778,6 +778,23 @@ impl<T: Canonical> Canonical for Result<T, geom_name::AttrError> {
     }
 }
 
+// `geom-op`'s error (decision 32.44's count benchmarks for piece G104).
+
+impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
 
 impl<const D: usize> Canonical for geom_bvh::Aabb<D> {

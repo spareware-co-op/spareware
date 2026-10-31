@@ -15,13 +15,15 @@ operation at every width, `I128` to the reserved 768 bits; `arenas` (`src/arenas
 other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives each
 output exactly what section 8.4's table gives; `cbor` (`src/cbor.rs`, G91), `geom-format`'s strict
 CBOR decoder and its text form never panic, refuse inside their input and convert both ways bit for
-bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to its bound, forgets the entry
-used longest ago first and answers only where the caller's budget covers the stored run; `make`
-(`src/make.rs`, G101), the primitives and transforms return only what the full checker passes, keep
-their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116), whole operation
-logs replay to the same hash and keep every law at every step. `src/adversarial.rs` holds the
-generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs succeed per
-family: `src/robustness.txt` records it, and a count may not fall.
+bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to its bound, forgets the
+entry used longest ago first and answers only where the caller's budget covers the stored run;
+`make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
+passes, keep their laws, and refuse with a typed error; `sequence` (`src/sequence.rs`, G116), whole
+operation logs replay to the same hash and keep every law at every step; and `batch`
+(`src/batch.rs`, G104), `geom-op`'s batch driver gives each item its own result, and the many-point
+calls give the single calls' bits. `src/adversarial.rs` holds the generators aimed at the hard
+cases, and `src/robustness.rs` counts how many plain designs succeed per family:
+`src/robustness.txt` records it, and a count may not fall.
 
 ## One law, four engines
 

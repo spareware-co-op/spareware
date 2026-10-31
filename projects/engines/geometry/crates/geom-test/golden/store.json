@@ -248,6 +248,12 @@
               "kind": "corpus",
               "piece": "G105",
               "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G104",
+              "why": "3 new count benchmarks on the batch runner (decision 32.44): batch/run_items, batch/curve_points and batch/surface_points; no existing digest moved"
             }
           ],
           "sha256": "4317728ecf9ac1024b3975b2d93bd840a2a5f301c21598506f7abf6b450fff1b"
@@ -562,6 +568,16 @@
             "function": "golden_hash_is_the_same_on_every_target"
           },
           "sha256": "6b400b80063ad59bfa4d6ea59a194596b2613a4854db06ad4ef1ad1aeb597cae"
+        },
+        {
+          "id": "geom-op/batch",
+          "what": "The batch driver of geom-op (piece G104): 60 batches of 0 to 300 items with random keys, work and failures, under random per-item budgets, half with a batch total, every one run on the serial executor and on pools of 1, 2, 3 and 8 threads that must agree; each item's result (its value, or its error's kind, path and detail) and each whole-batch refusal of a repeated key, as tests/batch_determinism.rs records them.",
+          "check": {
+            "crate": "geom-op",
+            "test": "batch_determinism",
+            "function": "batch_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "4b98bad9ee5cc99b1e4a64e7d1c1ccb208a8e9f79165bf8bf7bc08564ca63743"
         }
       ]
     }

@@ -36,6 +36,9 @@ geom-format = { path = "../geom-format" }
 geom-curve = { path = "../geom-curve" }
 geom-name = { path = "../geom-name" }
 geom-surface = { path = "../geom-surface" }
+# The batch target (G104): geom-op's batch driver and the curve and surface kinds' many-point
+# calls, under test, with the crates they need (ours, MPL-2.0).
+geom-nurbs = { path = "../geom-nurbs" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

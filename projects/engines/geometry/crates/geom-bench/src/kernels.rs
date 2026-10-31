@@ -1833,6 +1833,93 @@ pub mod attributes {
     }
 }
 
+/// The batch runner's hot paths (piece G104, decision 32.44): `geom-op`'s driver over a list of
+/// items, on the serial executor, and the flat arrays of a curve's and a surface's points.
+pub mod batch {
+    use geom_curve::{CurveError, ParamCurve};
+    use geom_nurbs::Limit;
+    use geom_op::{Batch, Key, OpContext, OpError, OpId, OpPath, RunDetail};
+    use geom_run::{BatchBudget, Budget, ChunkPlan, Exec, Phase};
+    use geom_surface::ParamSurface;
+
+    use super::run;
+
+    /// The phase an item over its budget would be reported under; no benchmark's item is.
+    const PHASE: Phase = Phase::new("items");
+
+    /// Item `n`'s key.
+    fn key(n: u64) -> Key {
+        let mut k = [0_u8; 16];
+        let (high, low) = k.split_at_mut(8);
+        high.copy_from_slice(&n.to_be_bytes());
+        low.copy_from_slice(&(!n).to_le_bytes());
+        k
+    }
+
+    /// [`Batch::run`] on each list of items: each item charges a little work and gives its
+    /// number times three; the exclusive or of what they give.
+    #[inline(never)]
+    pub fn run_items(batch: &[Vec<u64>], out: &mut Vec<Result<u64, OpError>>) {
+        let ctx = OpContext::new(OpPath::new(OpId::from_bytes([7; 16])), Budget::UNLIMITED);
+        let driver = Batch::new(
+            &ctx,
+            BatchBudget::new(Budget::of_work(64)),
+            PHASE,
+            ChunkPlan::fixed::<4>(),
+        );
+        run(batch, out, |items| {
+            let results = driver.run(
+                &Exec::serial(),
+                items,
+                |&n| key(n),
+                |item, &n, meter| {
+                    meter
+                        .charge(n % 16)
+                        .map_err(|_| OpError::new(item.path().clone(), RunDetail::Cancelled))?;
+                    Ok(n.wrapping_mul(3))
+                },
+            )?;
+            results
+                .into_iter()
+                .try_fold(0_u64, |all, result| Ok(all ^ result?))
+        });
+    }
+
+    /// `ParamCurve::points` on [`crate::inputs::curve::helix`] at each list of parameters.
+    #[inline(never)]
+    pub fn curve_points(batch: &[Vec<f64>], out: &mut Vec<Result<Vec<f64>, CurveError>>) {
+        let Some(h) = crate::inputs::curve::helix() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |t| {
+            let mut points = vec![0.0; 3 * t.len()];
+            let mut results = vec![Ok(()); t.len()];
+            h.points(t, Limit::FromRight, &mut points, &mut results)?;
+            results.into_iter().collect::<Result<Vec<()>, _>>()?;
+            Ok(points)
+        });
+    }
+
+    /// `ParamSurface::points` on [`crate::inputs::surface::torus`] at each list of pairs.
+    #[inline(never)]
+    pub fn surface_points(batch: &[Vec<f64>], out: &mut Vec<Result<Vec<f64>, CurveError>>) {
+        let Some(s) = crate::inputs::surface::torus() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |uv| {
+            let n = uv.len() / 2;
+            let mut points = vec![0.0; 3 * n];
+            let mut results = vec![Ok(()); n];
+            let sides = (Limit::FromRight, Limit::FromRight);
+            s.points(uv, sides, &mut points, &mut results)?;
+            results.into_iter().collect::<Result<Vec<()>, _>>()?;
+            Ok(points)
+        });
+    }
+}
+
 /// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
 /// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
 /// budget where it takes one.

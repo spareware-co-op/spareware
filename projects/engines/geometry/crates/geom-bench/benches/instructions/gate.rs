@@ -2612,6 +2612,37 @@ pub mod attributes {
     );
 }
 
+/// The batch runner's hot paths (piece G104; decision 32.44).
+pub mod batch {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/run_items/typical"))]
+    fn run_items(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/curve_points/typical"))]
+    fn curve_points(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/surface_points/typical"))]
+    fn surface_points(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = batch;
+        benchmarks = run_items, curve_points, surface_points
+    );
+}
+
 /// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
 pub mod nurbs {
     use super::*;

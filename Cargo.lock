@@ -1113,6 +1113,7 @@ dependencies = [
  "geom-math",
  "geom-name",
  "geom-num",
+ "geom-nurbs",
  "geom-op",
  "geom-run",
  "geom-surface",
