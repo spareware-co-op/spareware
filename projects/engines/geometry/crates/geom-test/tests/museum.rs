@@ -11,8 +11,17 @@
     reason = "test code: a failure should stop loudly"
 )]
 
-use geom_test::fixture::kernel::Kernel;
+use geom_format::operation::Operation;
+use geom_format::recipe::RecipeInput;
+use geom_make::{BoxInput, PrismInput, RoundInput, SphereInput, TorusInput};
+use geom_math::Axis;
+use geom_num::{GridStep, P3, Steps};
+use geom_op::{OpId, OpPath};
+use geom_run::Budget;
+use geom_test::fixture::calls::{Call, Input, Turn};
+use geom_test::fixture::kernel::{Kernel, id_of};
 use geom_test::fixture::log::OpLog;
+use geom_test::fixture::run::{Engine, Ran, Replayed, replay};
 use geom_test::golden::{self, hex, sha256};
 use geom_test::museum::{self, Catalogue, Exhibit, Kind, MuseumError, open, parse, stored, visit};
 
@@ -49,8 +58,107 @@ fn every_exhibit_opens_and_replays_on_this_target() {
 fn write_the_exhibits() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("museum/v1");
     std::fs::create_dir_all(&dir).unwrap();
-    let log = OpLog::new(Vec::new(), Vec::new()).encode().unwrap();
-    std::fs::write(dir.join("empty-log.skgf"), log).unwrap();
+    let empty = OpLog::new(Vec::new(), Vec::new());
+    for (name, log) in [
+        ("empty-log", empty),
+        ("every-primitive-log", every_primitive()),
+        ("moved-box-log", moved_box()),
+    ] {
+        std::fs::write(dir.join(format!("{name}.skgf")), log.encode().unwrap()).unwrap();
+        match replay(&mut Kernel::new(), &log) {
+            Replayed::Done { hash, .. } => println!("{name} {}", hex(hash.0)),
+            other => panic!("{name}: {other:?}"),
+        }
+    }
+}
+
+/// `call` as the log's operation number `at`.
+fn operation(at: u8, call: &Call, inputs: Vec<RecipeInput>) -> Operation {
+    Operation {
+        op: OpPath::new(OpId::from_bytes([at; 16])),
+        name: call.name().to_owned(),
+        version: 1,
+        inputs,
+        params: call.params().unwrap(),
+        budget: Budget::UNLIMITED,
+    }
+}
+
+fn p(x: i64, y: i64, z: i64) -> P3 {
+    P3::new(x, y, z).unwrap()
+}
+
+/// One of each primitive of chapter 10.2.
+fn every_primitive() -> OpLog {
+    let round = RoundInput {
+        base: p(5, 6, 7),
+        radius: Steps(400),
+        height: Steps(900),
+        step: GridStep::Q0,
+    };
+    let calls = [
+        Call::Box(BoxInput {
+            min: p(1, 2, 3),
+            size: [Steps(40), Steps(30), Steps(20)],
+        }),
+        Call::Prism(PrismInput {
+            base: vec![p(0, 0, 0), p(30, 0, 0), p(40, 20, 0), p(10, 20, 0)],
+            height: Steps(15),
+        }),
+        Call::Cylinder(round),
+        Call::Cone(round),
+        Call::Sphere(SphereInput {
+            center: p(-9, 8, -7),
+            radius: Steps(500),
+            step: GridStep::Q0,
+        }),
+        Call::Torus(TorusInput {
+            center: p(0, 0, 0),
+            major: Steps(900),
+            minor: Steps(300),
+            step: GridStep::Q0,
+        }),
+    ];
+    let operations = calls
+        .iter()
+        .zip(1_u8..)
+        .map(|(call, at)| operation(at, call, Vec::new()))
+        .collect();
+    OpLog::new(Vec::new(), operations)
+}
+
+/// A box moved, turned a quarter and mirrored, each step taking the one before's body.
+fn moved_box() -> OpLog {
+    let mut kernel = Kernel::new();
+    kernel.start(geom_num::ladder::HEAL_DEFAULT, &[]).unwrap();
+    let first = operation(
+        1,
+        &Call::Box(BoxInput {
+            min: p(0, 0, 0),
+            size: [Steps(10), Steps(20), Steps(30)],
+        }),
+        Vec::new(),
+    );
+    let Ran::Done(step) = kernel.run(&first) else {
+        panic!("the box");
+    };
+    let input = Input {
+        exactness: step.exactness,
+        accept: None,
+    };
+    let mut operations = vec![first];
+    let then = [
+        Call::Move(input, [5, -6, 7]),
+        Call::Rotate(input, Axis::Z, Turn::Quarter(1), p(1, 2, 3)),
+        Call::Mirror(input, Axis::X, p(4, 0, 0)),
+    ];
+    for (call, at) in then.iter().zip(2_u8..) {
+        let id = id_of(kernel.last().first().unwrap()).unwrap();
+        let next = operation(at, call, vec![RecipeInput::Body(id)]);
+        assert!(matches!(kernel.run(&next), Ran::Done(_)));
+        operations.push(next);
+    }
+    OpLog::new(Vec::new(), operations)
 }
 
 #[test]

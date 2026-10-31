@@ -58,8 +58,20 @@ const STORED: &[(&str, &[u8])] = &[
         include_bytes!("../museum/v1/empty-log.skgf"),
     ),
     (
+        "v1/every-primitive-log.skgf",
+        include_bytes!("../museum/v1/every-primitive-log.skgf"),
+    ),
+    (
         "v1/header-only.skgf",
         include_bytes!("../museum/v1/header-only.skgf"),
+    ),
+    (
+        "v1/moved-box-log.skgf",
+        include_bytes!("../museum/v1/moved-box-log.skgf"),
+    ),
+    (
+        "v1/wall-body.skgf",
+        include_bytes!("../museum/v1/wall-body.skgf"),
     ),
 ];
 
