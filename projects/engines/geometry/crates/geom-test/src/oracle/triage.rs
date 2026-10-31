@@ -33,7 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::fixture::run::Replayed;
-use crate::fixture::{Expect, Fixture, Key, Kind, Name, OpLog, Source, Speed, Status, Triage};
+use crate::fixture::{Fixture, Key, OpLog, Source, Speed, Status, Triage};
 
 /// The register's path, relative to the workspace root, one component per entry.
 pub const REGISTER_PATH: [&str; 7] = [
@@ -245,17 +245,12 @@ pub fn fixture(
     key: Key,
     replayed: &Replayed,
 ) -> Result<Fixture, String> {
-    let expect = match replayed {
-        Replayed::Done { hash, measures } => Expect::Ok {
-            hash: Some(*hash),
-            measures: measures.clone(),
-        },
-        Replayed::Failed { kind, entities, .. } => Expect::Err {
-            kind: Kind(*kind),
-            entities: entities.iter().copied().map(Name).collect(),
-        },
-        Replayed::Broken(why) => return Err(format!("the run is broken: {why}")),
-    };
+    if let Replayed::Broken(why) = replayed {
+        return Err(format!("the run is broken: {why}"));
+    }
+    let expect = replayed
+        .expectation()
+        .ok_or_else(|| "the run holds nothing to store".to_owned())?;
     let fixture = Fixture {
         id: record.fixture.clone(),
         source: Source::Oracle {

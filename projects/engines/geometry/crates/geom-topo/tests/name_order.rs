@@ -52,3 +52,11 @@ fn a_repeated_name_is_refused_not_ordered() {
         })
     );
 }
+
+#[test]
+fn a_permutation_of_no_rows_is_empty() {
+    assert!(Permutation::by_name(&[]).unwrap().is_empty());
+    let one = Permutation::by_name(&[NameKey([3; 16])]).unwrap();
+    assert!(!one.is_empty());
+    assert_eq!(one.len(), 1);
+}

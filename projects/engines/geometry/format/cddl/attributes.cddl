@@ -1,4 +1,4 @@
-; The attributes record's payload (tag 19, schema 1): format 1 (draft), SPEC.md section 13.
+; The attributes record's payload (tag 19, schema 1): format 1 (draft), SPEC.md section 15.
 ; CDDL by RFC 8610. The first rule is the one a payload is validated against; name-id is
 ; names.cddl's rule, read together with this file.
 attributes = [definitions: [* definition], values: [* attribute-values]]

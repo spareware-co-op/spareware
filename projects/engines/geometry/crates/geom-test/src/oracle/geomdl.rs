@@ -29,13 +29,20 @@
 use core::num::NonZeroU64;
 
 use dashu_ratio::RBig;
+use geom_format::operation::Operation;
+use geom_format::payload::Reader;
 use geom_nurbs::{Basis, Curve, Limit};
+use geom_op::cbor::Encoder;
+use geom_op::{Exactness, NameSet, OpId, OpPath};
 use geom_run::{Budget, WorkMeter};
 use serde::{Deserialize, Serialize};
 
 use super::compare::{Allowance, within};
 use super::exact::{float, read_float};
 use super::triage::Signature;
+use crate::fixture::Spend;
+use crate::fixture::run::{Ran, Step};
+use crate::golden::Sha256;
 use crate::nurbs_reference::Spline;
 use crate::rng::SplitMix64;
 use crate::seed::Seed;
@@ -264,14 +271,16 @@ fn kernel<const D: usize>(job: &Job, input: &Parsed) -> Option<(Vec<f64>, f64)> 
 }
 
 /// `γ_n` as a double, rounded up: n·u / (1 − n·u), u = 2^−53.
-fn gamma(n: usize) -> f64 {
+#[must_use]
+pub fn gamma(n: usize) -> f64 {
     #[allow(clippy::cast_precision_loss, reason = "a small count")]
     let nu = n as f64 * f64::EPSILON / 2.0;
     (nu / (1.0 - nu)).next_up()
 }
 
 /// The bound of a value of a job: `geom-nurbs`'s statement, measured on the largest coordinate.
-fn bound(job: &Job, size: f64) -> f64 {
+#[must_use]
+pub fn bound(job: &Job, size: f64) -> f64 {
     let p = job.degree;
     let steps = if job.weights.is_some() {
         p.saturating_mul(14).saturating_add(3)
@@ -288,6 +297,70 @@ fn bound(job: &Job, size: f64) -> f64 {
         most / least
     });
     (gamma(steps) * size * weights).next_up()
+}
+
+/// `job` as the one operation of a log: its operation's name, and its JSON as the parameters, so a
+/// triaged case replays through the kernel (`fixture::kernel`).
+///
+/// # Errors
+///
+/// A job with no encoding, which only a defect can cause.
+pub fn operation(job: &Job) -> Result<Operation, String> {
+    let json = serde_json::to_string(job).map_err(|e| e.to_string())?;
+    let mut e = Encoder::new();
+    e.text(&json).map_err(|e| e.to_string())?;
+    Ok(Operation {
+        op: OpPath::new(OpId::from_bytes([0x71; 16])),
+        name: job.op.name().to_owned(),
+        version: 1,
+        inputs: Vec::new(),
+        params: e.finish().map_err(|e| e.to_string())?.into_bytes(),
+        budget: Budget::UNLIMITED,
+    })
+}
+
+/// Runs an operation [`operation`] wrote; `None` for any other operation.
+#[must_use]
+pub fn replay(operation: &Operation) -> Option<Ran> {
+    if ![Op::Point, Op::Basis, Op::Insert]
+        .iter()
+        .any(|op| op.name() == operation.name)
+    {
+        return None;
+    }
+    Some(replayed(operation).unwrap_or_else(Ran::Refused))
+}
+
+fn replayed(operation: &Operation) -> Result<Ran, String> {
+    if operation.version != 1 {
+        return Err(format!("no version {}", operation.version));
+    }
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let mut reader = Reader::new(&operation.params);
+    let text = reader
+        .text(&mut meter, "a job")
+        .map_err(|e| e.to_string())?;
+    reader.end().map_err(|e| e.to_string())?;
+    let job: Job = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let input = parse(&job)?;
+    let values = if job.points.first().map_or(0, Vec::len) == 2 {
+        kernel::<2>(&job, &input)
+    } else {
+        kernel::<3>(&job, &input)
+    };
+    let (values, _) = values.ok_or_else(|| "the kernel refused the job".to_owned())?;
+    let mut sha = Sha256::new();
+    for value in values {
+        sha.write(&value.to_bits().to_be_bytes());
+    }
+    Ok(Ran::Done(Step {
+        bodies: vec![sha.finish()],
+        names: NameSet::default(),
+        history: None,
+        exactness: Exactness::Exact,
+        diagnostics: Vec::new(),
+        work: Spend::default(),
+    }))
 }
 
 /// What a job's comparison found.
@@ -347,15 +420,14 @@ fn reference(job: &Job, input: &Parsed) -> Result<Spline, String> {
     clippy::arithmetic_side_effects,
     reason = "exact rationals, which cannot overflow"
 )]
-/// Settles a point difference against the exact curve: which side is within the bound of the truth.
-fn settle(
-    job: &Job,
-    input: &Parsed,
-    ours: &[f64],
-    theirs: &[f64],
-    limit: f64,
-) -> Result<String, String> {
-    let spline = reference(job, input)?;
+/// Settles a point difference against the exact curve: which side is within `limit` of the truth.
+///
+/// # Errors
+///
+/// A job the exact reference cannot read.
+pub fn settle(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<String, String> {
+    let input = parse(job)?;
+    let spline = reference(job, &input)?;
     let truth = spline
         .point(&exact(input.at)?)
         .map_err(|e| format!("the reference: {e:?}"))?;
@@ -437,7 +509,7 @@ pub fn judge(job: &Job, answer: &Answer) -> Result<Compared, String> {
         return Ok(Compared::Agree);
     }
     let settled = if job.op == Op::Point {
-        settle(job, &input, &ours, &theirs, stated)?
+        settle(job, &ours, &theirs, stated)?
     } else {
         "beyond the allowance; the exact reference settles a point only".to_owned()
     };

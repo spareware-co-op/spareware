@@ -1603,3 +1603,479 @@ pub mod ball {
         });
     }
 }
+
+/// `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.44): the typed transforms, the
+/// rational rotation and its search, the frame-to-map conversion and the decimal reader. Each
+/// kernel builds its fixed transform, rotation or frame once per batch, as `geom-math`'s
+/// `benches/transform.rs` does; were one ever refused, the kernel returns no results, which the
+/// golden digests and `tests/inputs.rs` catch.
+pub mod math_types {
+    use geom_math::{
+        Axis, Decimal, DecimalError, F2, F3, GridTransform, MapPoint, MathError, RationalRotation,
+        RationalTransform, Rotation, Rounded, Transform, TypedTransform, WithinAngle,
+    };
+    use geom_num::NumError;
+    use geom_num::grid::P3;
+    use geom_num::ladder;
+
+    use super::run;
+
+    /// A rotation whose quaternion's squared norm passes 2^40, so it stays a rotation and is not
+    /// a rational transform (32.14).
+    pub const BIG_QUATERNION: [i64; 4] = [1_000_003, 400_009, 300_007, 200_011];
+
+    fn apply(
+        batch: &[P3],
+        out: &mut Vec<Result<Rounded<P3>, NumError>>,
+        t: Option<TypedTransform>,
+    ) {
+        let Some(t) = t else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&p| t.apply(p));
+    }
+
+    /// `TypedTransform::apply` on an exact transform: a quarter turn about z, then a translation.
+    #[inline(never)]
+    pub fn apply_exact(batch: &[P3], out: &mut Vec<Result<Rounded<P3>, NumError>>) {
+        let t = GridTransform::translation([12_345, -678, 9])
+            .ok()
+            .and_then(|s| GridTransform::quarter_turns(Axis::Z, 1).compose(&s).ok());
+        apply(batch, out, t.map(TypedTransform::Exact));
+    }
+
+    /// `TypedTransform::apply` on a rational transform: the Pythagorean rotation (3, 4) about z,
+    /// then a translation by half steps.
+    #[inline(never)]
+    pub fn apply_rational(batch: &[P3], out: &mut Vec<Result<Rounded<P3>, NumError>>) {
+        let t = Rotation::direction(3, 4)
+            .ok()
+            .and_then(|r| RationalTransform::rotation(Axis::Z, r).ok())
+            .and_then(|r| {
+                RationalTransform::translation([1, 2, 3], 2)
+                    .ok()
+                    .and_then(|s| r.compose(&s).ok())
+            });
+        apply(batch, out, t.map(TypedTransform::Rational));
+    }
+
+    /// `TypedTransform::apply` on a certified transform: a rotation by 60 degrees about z, then a
+    /// translation, rounded once.
+    #[inline(never)]
+    pub fn apply_certified(batch: &[P3], out: &mut Vec<Result<Rounded<P3>, NumError>>) {
+        let t = Transform::rotation(Axis::Z, 1.0 / 3.0)
+            .ok()
+            .and_then(|turn| {
+                F3::new(0.25, -1.0, 0.375)
+                    .ok()
+                    .and_then(|v| Transform::translation(v).compose(&turn).ok())
+            });
+        apply(batch, out, t.map(TypedTransform::Certified));
+    }
+
+    /// `RationalRotation::apply` on the rotation of [`BIG_QUATERNION`].
+    #[inline(never)]
+    pub fn rotation_apply(batch: &[P3], out: &mut Vec<Result<Rounded<P3>, NumError>>) {
+        let Ok(r) = RationalRotation::new(BIG_QUATERNION) else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&p| r.apply(p));
+    }
+
+    /// `RationalRotation::plane_within`: the closest rational rotation within the kernel's
+    /// angular bound, for each direction.
+    #[inline(never)]
+    pub fn plane_within(
+        batch: &[F2],
+        out: &mut Vec<Result<WithinAngle<RationalRotation>, MathError>>,
+    ) {
+        run(batch, out, |&d| {
+            RationalRotation::plane_within(d, ladder::ANGULAR)
+        });
+    }
+
+    /// `FrameRecord::to_map` on [`ground_frame`].
+    #[inline(never)]
+    pub fn to_map(batch: &[P3], out: &mut Vec<Result<Rounded<MapPoint>, NumError>>) {
+        let Some(frame) = crate::inputs::math_types::ground_frame() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&p| frame.to_map(p));
+    }
+
+    /// `Decimal::parse` on each text.
+    #[inline(never)]
+    pub fn decimal_parse(batch: &[String], out: &mut Vec<Result<Decimal, DecimalError>>) {
+        run(batch, out, |s| Decimal::parse(s));
+    }
+}
+
+/// `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.44): the column-pivoted QR
+/// factorisation and the one-sided Jacobi singular value decomposition, each under an unlimited
+/// budget.
+pub mod linalg {
+    use geom_linalg::{LinalgError, Matrix, PivotedQr, Svd, Work};
+
+    use super::run;
+
+    /// `PivotedQr::factor` on each matrix.
+    #[inline(never)]
+    pub fn pivoted_qr(batch: &[Matrix], out: &mut Vec<Result<PivotedQr, LinalgError>>) {
+        run(batch, out, |a| {
+            PivotedQr::factor(a, &mut Work::new(u64::MAX))
+        });
+    }
+
+    /// `Svd::jacobi` on each matrix.
+    #[inline(never)]
+    pub fn svd_jacobi(batch: &[Matrix], out: &mut Vec<Result<Svd, LinalgError>>) {
+        run(batch, out, |a| Svd::jacobi(a, &mut Work::new(u64::MAX)));
+    }
+}
+
+/// `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): building the box tree and the
+/// cell index of a scene and querying it, on the serial executor under an unlimited budget.
+pub mod bvh {
+    use geom_bvh::{Aabb, BoxTree, BvhError, CellIndex, Entry, Point};
+    use geom_num::grid::P3;
+    use geom_run::{Budget, Exec, WorkMeter};
+
+    use super::run;
+
+    /// `BoxTree::build` on each scene, then `BoxTree::overlapping` with its query box.
+    #[inline(never)]
+    pub fn tree_build_query(
+        batch: &[(Vec<Entry<3>>, Aabb<3>)],
+        out: &mut Vec<Result<Vec<u64>, BvhError>>,
+    ) {
+        run(batch, out, |(entries, query)| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            BoxTree::build(entries, &Exec::serial(), &mut meter)?.overlapping(query, &mut meter)
+        });
+    }
+
+    /// `CellIndex::build` on each scene, then `CellIndex::within` its centre and radius.
+    #[inline(never)]
+    pub fn cells_within(
+        batch: &[(Vec<Point>, P3, u64)],
+        out: &mut Vec<Result<Vec<u64>, BvhError>>,
+    ) {
+        run(batch, out, |(points, center, radius)| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            CellIndex::build(points, &Exec::serial(), &mut meter)?
+                .within(*center, *radius, &mut meter)
+        });
+    }
+}
+
+/// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
+/// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
+/// budget where it takes one.
+pub mod nurbs {
+    use geom_num::interval::Interval;
+    use geom_nurbs::{
+        BernsteinCurve, Bounds, Curve, CurveFit, FitVersion, Limit, NurbsError, Parametrization,
+    };
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+
+    /// `Curve::point` on [`cubic`] at each parameter.
+    #[inline(never)]
+    pub fn curve_point(batch: &[f64], out: &mut Vec<Result<[f64; 3], NurbsError>>) {
+        let Some(curve) = crate::inputs::nurbs::cubic() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&u| curve.point(u, Limit::FromRight));
+    }
+
+    /// `Curve::interpolate` of each point set: cubic, chord-length parameters, version 1.
+    #[inline(never)]
+    pub fn interpolate(batch: &[Vec<[f64; 3]>], out: &mut Vec<Result<CurveFit<3>, NurbsError>>) {
+        run(batch, out, |q| {
+            Curve::interpolate(
+                q,
+                3,
+                Parametrization::ChordLength,
+                FitVersion::V1,
+                &mut WorkMeter::new(Budget::UNLIMITED),
+            )
+        });
+    }
+
+    /// `BernsteinCurve::bound` of the cubic piece on [0, 1] with each set of control points.
+    #[inline(never)]
+    pub fn bernstein_bound(
+        batch: &[Vec<[Interval; 3]>],
+        out: &mut Vec<Result<Bounds<3>, NurbsError>>,
+    ) {
+        run(batch, out, |points| {
+            BernsteinCurve::new((0.0, 1.0), points.clone(), None)?
+                .bound(&mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+}
+
+/// `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44), through the kind contract
+/// (`ParamCurve`): an exact helix's point and certified enclosure, a bulge polyline's conversion
+/// to NURBS, and a clothoid transition's point and conversion to NURBS, each under an unlimited
+/// budget where it takes one. Were the helix or the transition ever refused, the kernel returns no
+/// results, which the golden digests and `tests/inputs.rs` catch.
+pub mod curve {
+    use geom_curve::{BulgePolyline, CurveError, CurveKind, NurbsForm, ParamCurve};
+    use geom_num::interval::Interval;
+    use geom_nurbs::{Changed, Limit};
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+
+    /// `CurveKind::point` on [`helix`] at each parameter.
+    #[inline(never)]
+    pub fn helix_point(batch: &[f64], out: &mut Vec<Result<[f64; 3], CurveError>>) {
+        let Some(h) = crate::inputs::curve::helix() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&t| h.point(t, Limit::FromRight));
+    }
+
+    /// `CurveKind::enclose` on [`helix`] at each parameter, with two derivatives.
+    #[inline(never)]
+    pub fn helix_enclose(batch: &[f64], out: &mut Vec<Result<Vec<[Interval; 3]>, CurveError>>) {
+        let Some(h) = crate::inputs::curve::helix() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&t| {
+            h.enclose(
+                t,
+                Limit::FromRight,
+                2,
+                &mut WorkMeter::new(Budget::UNLIMITED),
+            )
+        });
+    }
+
+    /// `CurveKind::to_nurbs` of each closed bulge polyline.
+    #[inline(never)]
+    pub fn bulge_to_nurbs(
+        batch: &[(Vec<[f64; 2]>, Vec<f64>)],
+        out: &mut Vec<Result<Changed<NurbsForm<2>>, CurveError>>,
+    ) {
+        run(batch, out, |(vertices, bulges)| {
+            CurveKind::Bulge(BulgePolyline::new(
+                vertices.clone(),
+                bulges.clone(),
+                None,
+                true,
+            )?)
+            .to_nurbs(&mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+
+    /// `Transition::point` on the transition of length 120 at each station.
+    #[inline(never)]
+    pub fn transition_point(batch: &[f64], out: &mut Vec<Result<[f64; 2], CurveError>>) {
+        let Ok(t) = crate::inputs::curve::transition(120.0) else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&s| t.point(s, Limit::FromRight));
+    }
+
+    /// `Transition::to_nurbs` of the transition of each length.
+    #[inline(never)]
+    pub fn transition_to_nurbs(
+        batch: &[f64],
+        out: &mut Vec<Result<Changed<NurbsForm<2>>, CurveError>>,
+    ) {
+        run(batch, out, |&length| {
+            crate::inputs::curve::transition(length)?
+                .to_nurbs(&mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+}
+
+/// `geom-surface`'s hot paths (pieces G65 to G67, decision 32.44), through the kind contract
+/// (`ParamSurface`): a torus's point and certified enclosure, and an offset cylinder's point. Were
+/// a surface ever refused, the kernel returns no results, which the golden digests and
+/// `tests/inputs.rs` catch.
+pub mod surface {
+    use geom_curve::CurveError;
+    use geom_curve::DerivativeBound;
+    use geom_num::interval::Interval;
+    use geom_nurbs::Limit;
+    use geom_run::{Budget, WorkMeter};
+    use geom_surface::{ParamBox, ParamSurface, SecondDerivativeBound, SurfaceKind};
+
+    use super::run;
+
+    /// Both parameters' limits from the right.
+    const SIDES: (Limit, Limit) = (Limit::FromRight, Limit::FromRight);
+
+    /// `SurfaceKind::point` on `surface` at each pair.
+    fn points(
+        batch: &[(f64, f64)],
+        out: &mut Vec<Result<[f64; 3], CurveError>>,
+        surface: Option<SurfaceKind>,
+    ) {
+        let Some(s) = surface else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&(u, v)| s.point(u, v, SIDES));
+    }
+
+    /// `SurfaceKind::point` on [`torus`].
+    #[inline(never)]
+    pub fn torus_point(batch: &[(f64, f64)], out: &mut Vec<Result<[f64; 3], CurveError>>) {
+        points(batch, out, crate::inputs::surface::torus());
+    }
+
+    /// `SurfaceKind::enclose` on [`torus`]: the point and both first partials, certified.
+    #[inline(never)]
+    pub fn torus_enclose(
+        batch: &[(f64, f64)],
+        out: &mut Vec<Result<[[Interval; 3]; 3], CurveError>>,
+    ) {
+        let Some(s) = crate::inputs::surface::torus() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&(u, v)| {
+            s.enclose(u, v, SIDES, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+
+    /// `ParamSurface::second_derivative_bound` on [`crate::inputs::surface::torus`] over each box
+    /// (piece G68): certified bounds on its second partials.
+    #[inline(never)]
+    pub fn torus_second_bound(
+        batch: &[ParamBox],
+        out: &mut Vec<Result<SecondDerivativeBound, CurveError>>,
+    ) {
+        let Some(s) = crate::inputs::surface::torus() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&region| {
+            s.second_derivative_bound(region, SIDES, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+
+    /// `ParamSurface::normal_derivative_bound` on [`crate::inputs::surface::torus`] over each box
+    /// (piece G68): certified bounds on its unit normal's partials.
+    #[inline(never)]
+    pub fn torus_normal_bound(
+        batch: &[ParamBox],
+        out: &mut Vec<Result<[DerivativeBound<3>; 2], CurveError>>,
+    ) {
+        let Some(s) = crate::inputs::surface::torus() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&region| {
+            s.normal_derivative_bound(region, SIDES, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+
+    /// `SurfaceKind::point` on [`offset_cylinder`].
+    #[inline(never)]
+    pub fn offset_point(batch: &[(f64, f64)], out: &mut Vec<Result<[f64; 3], CurveError>>) {
+        points(batch, out, crate::inputs::surface::offset_cylinder());
+    }
+}
+
+/// Root finding and quadrature (piece G51, decision 32.44): Brent's zero search on a fixed cubic
+/// and an eight-point Gauss-Legendre rule on a fixed quintic. The functions use the four basic
+/// operations only, so their cost is the methods' own plus a known number of evaluations.
+pub mod roots {
+
+    use geom_num::brent::{self, BrentError, Zero};
+    use geom_num::quadrature::{self, QuadError};
+    use geom_num::real::Real;
+
+    use super::run;
+
+    /// The search's tolerance, 10^−12, and its cap on evaluations.
+    const TOL: f64 = 1e-12;
+    const CAP: u32 = 100;
+
+    /// `brent::zero` of [`cubic`] in each bracket.
+    #[inline(never)]
+    pub fn zero(batch: &[(Real, Real)], out: &mut Vec<Result<Zero, BrentError>>) {
+        let Ok(tol) = Real::new(TOL) else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&(a, b)| {
+            brent::zero(crate::inputs::roots::cubic, a, b, tol, CAP)
+        });
+    }
+
+    /// `quadrature::gauss_legendre` of [`quintic`] over each interval, with eight nodes.
+    #[inline(never)]
+    pub fn gauss_legendre(batch: &[(Real, Real)], out: &mut Vec<Result<Real, QuadError>>) {
+        run(batch, out, |&(a, b)| {
+            quadrature::gauss_legendre(crate::inputs::roots::quintic, a, b, 8)
+        });
+    }
+}
+
+/// `geom-format`'s hot paths (piece G105; decision 32.44): a cache key, a lookup in a memo store,
+/// and a new version of a body, which hashes the one chunk that changed. The keys and versions a
+/// batch holds are built before the measured run; the store each lookup reads is built inside it,
+/// once, since a lookup changes it.
+pub mod format {
+    use geom_format::body::BodyVersion;
+    use geom_format::cache::CacheKey;
+    use geom_format::content::ContentId;
+    use geom_op::Precision;
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::Body;
+
+    use super::run;
+    use crate::inputs::format as inputs;
+
+    /// `CacheKey::new` on each call: one operation, one input.
+    #[inline(never)]
+    pub fn cache_key(batch: &[(u64, u64)], out: &mut Vec<Option<CacheKey>>) {
+        let path = inputs::path();
+        run(batch, out, |&(edition, seed)| {
+            let input = inputs::input(seed);
+            CacheKey::new(
+                edition,
+                &inputs::SCHEMA,
+                &path,
+                Precision::Final,
+                core::slice::from_ref(&input),
+            )
+            .ok()
+        });
+    }
+
+    /// `MemoStore::get` on each key, a hit under an unlimited budget.
+    #[inline(never)]
+    pub fn memo_get(batch: &[CacheKey], out: &mut Vec<Option<u64>>) {
+        let mut store = inputs::store();
+        run(batch, out, |key| match store.get(key, Budget::UNLIMITED) {
+            Some(Ok(answer)) => Some(answer.result),
+            _ => None,
+        });
+    }
+
+    /// `BodyVersion::next` on each pair: the IDs of a body one chunk from its first version.
+    #[inline(never)]
+    pub fn next_version(batch: &[(BodyVersion, Body)], out: &mut Vec<Option<ContentId>>) {
+        run(batch, out, |(first, body)| {
+            first
+                .next(body, &mut WorkMeter::new(Budget::UNLIMITED))
+                .ok()
+                .map(|version| version.content_id())
+        });
+    }
+}

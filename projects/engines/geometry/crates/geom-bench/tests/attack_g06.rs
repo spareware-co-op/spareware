@@ -1249,6 +1249,271 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("dd", _) => dd_digest(name, class)?,
         ("exact_sum", _) => exact_sum_digest(name, class)?,
         ("generated", _) => generated_digest(name, class)?,
+        ("math_types", _) => math_types_digest(name, class)?,
+        ("curve", _) => curve_digest(name, class)?,
+        ("brent", "zero") => {
+            let tol = Real::new(1e-12).unwrap();
+            fold(
+                inputs::roots::zero(class)
+                    .into_iter()
+                    .map(|(a, b)| geom_num::brent::zero(inputs::roots::cubic, a, b, tol, 100)),
+            )
+        }
+        ("quadrature", "gauss_legendre") => fold(
+            inputs::roots::gauss_legendre(class)
+                .into_iter()
+                .map(|(a, b)| {
+                    geom_num::quadrature::gauss_legendre(inputs::roots::quintic, a, b, 8)
+                }),
+        ),
+        ("surface", "torus_point" | "offset_point") => {
+            use geom_surface::ParamSurface;
+            let (surface, pairs) = if name == "torus_point" {
+                (
+                    inputs::surface::torus(),
+                    inputs::surface::torus_point(class),
+                )
+            } else {
+                (
+                    inputs::surface::offset_cylinder(),
+                    inputs::surface::offset_point(class),
+                )
+            };
+            let s = surface.unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(pairs.into_iter().map(|(u, v)| s.point(u, v, sides)))
+        }
+        ("format", "cache_key") => {
+            let path = inputs::format::path();
+            fold(
+                inputs::format::cache_key(class)
+                    .into_iter()
+                    .map(|(edition, seed)| {
+                        geom_format::cache::CacheKey::new(
+                            edition,
+                            &inputs::format::SCHEMA,
+                            &path,
+                            geom_op::Precision::Final,
+                            &[inputs::format::input(seed)],
+                        )
+                        .ok()
+                    }),
+            )
+        }
+        ("format", "memo_get") => {
+            let mut store = inputs::format::store();
+            fold(inputs::format::memo_get(class).into_iter().map(|key| {
+                match store.get(&key, geom_run::Budget::UNLIMITED) {
+                    Some(Ok(answer)) => Some(answer.result),
+                    _ => None,
+                }
+            }))
+        }
+        ("format", "next_version") => fold(inputs::format::next_version(class).into_iter().map(
+            |(_, body)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_format::body::write_body(&body, &mut meter)
+                    .ok()
+                    .map(|stored| stored.content_id())
+            },
+        )),
+        ("surface", "torus_second_bound") => {
+            use geom_surface::ParamSurface;
+            let s = inputs::surface::torus().unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(
+                inputs::surface::torus_second_bound(class)
+                    .into_iter()
+                    .map(|region| {
+                        s.second_derivative_bound(
+                            region,
+                            sides,
+                            &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                        )
+                    }),
+            )
+        }
+        ("surface", "torus_normal_bound") => {
+            use geom_surface::ParamSurface;
+            let s = inputs::surface::torus().unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(
+                inputs::surface::torus_normal_bound(class)
+                    .into_iter()
+                    .map(|region| {
+                        s.normal_derivative_bound(
+                            region,
+                            sides,
+                            &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                        )
+                    }),
+            )
+        }
+        ("surface", "torus_enclose") => {
+            use geom_surface::ParamSurface;
+            let s = inputs::surface::torus().unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(
+                inputs::surface::torus_enclose(class)
+                    .into_iter()
+                    .map(|(u, v)| {
+                        s.enclose(
+                            u,
+                            v,
+                            sides,
+                            &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                        )
+                    }),
+            )
+        }
+        ("nurbs", "curve_point") => {
+            let curve = inputs::nurbs::cubic().unwrap();
+            fold(
+                inputs::nurbs::curve_point(class)
+                    .into_iter()
+                    .map(|u| curve.point(u, geom_nurbs::Limit::FromRight)),
+            )
+        }
+        ("nurbs", "interpolate") => fold(inputs::nurbs::interpolate(class).iter().map(|q| {
+            geom_nurbs::Curve::interpolate(
+                q,
+                3,
+                geom_nurbs::Parametrization::ChordLength,
+                geom_nurbs::FitVersion::V1,
+                &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+            )
+        })),
+        ("nurbs", "bernstein_bound") => fold(
+            inputs::nurbs::bernstein_bound(class)
+                .into_iter()
+                .map(|points| {
+                    geom_nurbs::BernsteinCurve::new((0.0, 1.0), points, None)?
+                        .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
+                }),
+        ),
+        ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
+            |(entries, query)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let tree =
+                    geom_bvh::BoxTree::build(entries, &geom_run::Exec::serial(), &mut meter)?;
+                tree.overlapping(query, &mut meter)
+            },
+        )),
+        ("bvh", "cells_within") => fold(inputs::bvh::cells_within(class).iter().map(
+            |(points, center, radius)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let index =
+                    geom_bvh::CellIndex::build(points, &geom_run::Exec::serial(), &mut meter)?;
+                index.within(*center, *radius, &mut meter)
+            },
+        )),
+        ("linalg", "pivoted_qr") => fold(
+            inputs::linalg::pivoted_qr(class)
+                .iter()
+                .map(|a| geom_linalg::PivotedQr::factor(a, &mut geom_linalg::Work::new(u64::MAX))),
+        ),
+        ("linalg", "svd_jacobi") => fold(
+            inputs::linalg::svd_jacobi(class)
+                .iter()
+                .map(|a| geom_linalg::Svd::jacobi(a, &mut geom_linalg::Work::new(u64::MAX))),
+        ),
+        _ => return None,
+    })
+}
+
+/// The digest of the `geom-curve` benchmark `name` on `class` (decision 32.44), from direct calls
+/// on its inputs through the kind contract, with the kernels' helix and transition.
+fn curve_digest(name: &str, class: Class) -> Option<Digest> {
+    use geom_bench::inputs::curve as m;
+    use geom_curve::{BulgePolyline, CurveKind, ParamCurve};
+    use geom_nurbs::Limit;
+    let meter = || geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    Some(match name {
+        "helix_point" => {
+            let h = inputs::curve::helix().unwrap();
+            fold(
+                m::helix_point(class)
+                    .into_iter()
+                    .map(|t| h.point(t, Limit::FromRight)),
+            )
+        }
+        "helix_enclose" => {
+            let h = inputs::curve::helix().unwrap();
+            fold(
+                m::helix_enclose(class)
+                    .into_iter()
+                    .map(|t| h.enclose(t, Limit::FromRight, 2, &mut meter())),
+            )
+        }
+        "bulge_to_nurbs" => fold(m::bulge_to_nurbs(class).into_iter().map(|(v, b)| {
+            CurveKind::Bulge(BulgePolyline::new(v, b, None, true)?).to_nurbs(&mut meter())
+        })),
+        "transition_point" => {
+            let t = inputs::curve::transition(120.0).unwrap();
+            fold(
+                m::transition_point(class)
+                    .into_iter()
+                    .map(|s| t.point(s, Limit::FromRight)),
+            )
+        }
+        "transition_to_nurbs" => fold(
+            m::transition_to_nurbs(class)
+                .into_iter()
+                .map(|l| inputs::curve::transition(l)?.to_nurbs(&mut meter())),
+        ),
+        _ => return None,
+    })
+}
+
+/// The digest of the `geom-math` benchmark `name` on `class` (decision 32.44), from direct calls on
+/// its inputs: each transform built here as `geom-math`'s `benches/transform.rs` builds it, and
+/// the rotation and frame from the kernels' own definitions.
+fn math_types_digest(name: &str, class: Class) -> Option<Digest> {
+    use geom_bench::inputs::math_types as m;
+    use geom_math::{
+        Axis, Decimal, F3, GridTransform, RationalRotation, RationalTransform, Rotation, Transform,
+        TypedTransform,
+    };
+    let apply = |t: TypedTransform, points: Vec<P3>| fold(points.into_iter().map(|p| t.apply(p)));
+    Some(match name {
+        "apply_exact" => {
+            let shift = GridTransform::translation([12_345, -678, 9]).unwrap();
+            let t = GridTransform::quarter_turns(Axis::Z, 1)
+                .compose(&shift)
+                .unwrap();
+            apply(TypedTransform::Exact(t), m::apply_exact(class))
+        }
+        "apply_rational" => {
+            let turn =
+                RationalTransform::rotation(Axis::Z, Rotation::direction(3, 4).unwrap()).unwrap();
+            let shift = RationalTransform::translation([1, 2, 3], 2).unwrap();
+            apply(
+                TypedTransform::Rational(turn.compose(&shift).unwrap()),
+                m::apply_rational(class),
+            )
+        }
+        "apply_certified" => {
+            let turn = Transform::rotation(Axis::Z, 1.0 / 3.0).unwrap();
+            let shift = Transform::translation(F3::new(0.25, -1.0, 0.375).unwrap());
+            apply(
+                TypedTransform::Certified(shift.compose(&turn).unwrap()),
+                m::apply_certified(class),
+            )
+        }
+        "rotation_apply" => {
+            let r = RationalRotation::new(kernels::math_types::BIG_QUATERNION).unwrap();
+            fold(m::rotation_apply(class).into_iter().map(|p| r.apply(p)))
+        }
+        "plane_within" => fold(
+            m::plane_within(class)
+                .into_iter()
+                .map(|d| RationalRotation::plane_within(d, geom_num::ladder::ANGULAR)),
+        ),
+        "to_map" => {
+            let frame = inputs::math_types::ground_frame().unwrap();
+            fold(m::to_map(class).into_iter().map(|p| frame.to_map(p)))
+        }
+        "decimal_parse" => fold(m::decimal_parse(class).iter().map(|s| Decimal::parse(s))),
         _ => return None,
     })
 }
