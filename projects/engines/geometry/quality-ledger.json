@@ -2514,7 +2514,7 @@
       "occurrences": 1,
       "kind": "proved",
       "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
-      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's lower end is the high part times the low part with the bound, which only tests that fail, at no pair known to change a result. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's lower end is the high part times the low part with the bound, far from the upper end, so the test fails and the pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2532,7 +2532,7 @@
       "occurrences": 1,
       "kind": "proved",
       "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
-      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's upper end is the high part times the low part with the bound, which only tests that fail, at no pair known to change a result. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's upper end is the high part times the low part with the bound, far from the lower end, so the test fails and the pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
