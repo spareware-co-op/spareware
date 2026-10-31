@@ -58,6 +58,7 @@ pub mod kinds;
 pub mod names;
 pub mod operation;
 pub mod payload;
+pub mod pruned;
 pub mod range;
 pub mod recipe;
 pub mod record;

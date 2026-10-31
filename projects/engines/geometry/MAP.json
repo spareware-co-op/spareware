@@ -3437,6 +3437,40 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a pruned history record cannot be read or written.",
+          "file": "projects/engines/geometry/crates/geom-format/src/pruned.rs",
+          "kinds": [
+            {
+              "doc": "The payload's shape or encoding is wrong.",
+              "name": "Payload",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The operation's path or the held set is wrong.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A step is not a history record's canonical payload.",
+              "name": "Step",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The payload is not the record's one canonical encoding.",
+              "name": "NotCanonical",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder failed; only a defect can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::pruned",
+          "name": "PrunedError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a stored number cannot be used.",
           "file": "projects/engines/geometry/crates/geom-format/src/range.rs",
           "kinds": [
@@ -4167,6 +4201,27 @@
             "text": "SKG's canonical CBOR (`projects/engines/geometry/format/SPEC.md`, section 3) read with this crate's decoder, as the header record's reader reads its payload (chapter 24.3, `projects/engines/geometry/architecture/24-file-format-exchange.md`)."
           },
           "path": "geom_format::payload",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the record; each step is decoded and encoded once, and the whole once more.",
+          "does": "[`pruned_record`] writes the steps one `PruneHistory` operation cut (24.4; piece G109) as one required record (tag [`PRUNED_TAG`]): the operation's path, the set of names its references held, and each step's path and kept history in the history record's own encoding ([`History::encode`]), oldest first. [`read_pruned`] reads one back; the program makes each step a `geom_name::resolve::Step::Kept` with the operation and the set.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/pruned.rs",
+          "guarantees": [
+            "**What is read is what was written**: the payload is read and encoded again, and the bytes must be the stored ones, so a set out of order, a step in another spelling, or any second spelling is refused; each step is read as a history record is, so its own forms hold.",
+            "**The set is stored once**: every step of the record shares the operation and its set, so a file pays for the held names once per prune, not once per step."
+          ],
+          "job": "The pruned history record: the steps of one element's history a `PruneHistory` operation cut, stored so that a reloaded model resolves every reference exactly as the pruned model did.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.4's `PruneHistory` and names and history records (`projects/engines/geometry/architecture/24-file-format-exchange.md`), read by decoding and encoding again, as the history record is."
+          },
+          "path": "geom_format::pruned",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -6395,6 +6450,30 @@
           "target": "lib"
         },
         {
+          "cost": "for s steps, r records per step and k names kept at a step, O(s · r log k), searched by bisection, never with hashed sets. Recursion: none.",
+          "does": "names cost space, and the references that keep history alive live in programs, out of a save's sight, so history is pruned only on purpose and saving never prunes. [`prune`] takes an element's recorded history (its [`Step`]s, oldest first) and the set of names the program's references hold, in the context of the `PruneHistory` operation, whose path the log records with that set so every replica prunes alike. It returns the history with each step recorded since the last prune made a [`Step::Kept`]: it keeps its place and its path, and its history keeps only the records and deletions a walk from a held name can meet. A walk from any other name that meets such a step answers `HistoryPruned` with the operation's path. Each kept step names the operation and its set, so a program hands a reference the steps since it was made as it did before.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/prune.rs",
+          "guarantees": [
+            "**Every held reference resolves the same.** A walk follows a step's modified images of the names it holds and asks whether they were deleted, nothing else (see [`resolve`]). The set a walk from a held name can hold entering a step, made at any step of its history, lies in the set kept there: every held name, and the images of the set kept at the step before. Each kept step holds every record with an image of that set and every deletion in it, so the walk meets what the full history gives it and [`resolve`] answers as before. `tests/prune.rs` checks it on generated chains from every step and for every want.",
+            "**Pruned is never Deleted.** A walk from a name the set does not hold answers `HistoryPruned` with the operation's path as soon as it meets a kept step, whatever the step keeps (24.4).",
+            "**Inside its budget.** It charges [`CHARGES`], and a run stopped by its budget or by cancellation publishes nothing: the history stays as it was.",
+            "**Identical on every replica.** The result is a function of the history, the set and the path alone: every set is in name order and searched by bisection, and nothing depends on an address, a hash map's order or the machine.",
+            "**Pruning again prunes only what is new.** A step an earlier prune kept, and a step pruned in a linked version shared without its history, stay as they are, so a reference resolves through them as it did; only the steps recorded since are cut."
+          ],
+          "job": "The `PruneHistory` operation (24.4): an element's history cut down to what the references the program holds can reach.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.4's `PruneHistory` (`projects/engines/geometry/architecture/24-file-format-exchange.md`) with chapter 20.4's walk; the kept set is the forward closure of the held names under each step's modified images, the marking `FreeCAD`'s element map does for the names live entities and references reach (the evidence note `kit/notes/G01-evidence/07-persistent-naming.md`)."
+          },
+          "path": "geom_name::prune",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "for s recorded steps, r records per step and m names in the walk's vector, O(s · r log(r m)), searched by bisection, never with hashed sets; the weak checks visit the name graph's reachable nodes once per name asked about, and the base candidates scan the body's names once. Recursion: none.",
           "does": "a [`Reference`] holds the document it points into ([`DocRef`], or none for the reference's own document), the element, the entity's [`NameId`], its [`EntityKind`], what it wants ([`Want`]: one entity, every piece, or the carrier), and the stored [`Signature`]. [`resolve`] answers it from a [`Lookup`]: the element's [`Body`] as the program has it (its current names, the carrier of each face and edge that has one, the history recorded since the reference was made, oldest first, and the name graph), or why the element cannot be read. It takes 20.4's steps in order:",
           "family": [],
@@ -6402,7 +6481,7 @@
           "guarantees": [
             "**No geometric guessing (20.4 step 5).** [`resolve`] reads a reference's document, name and want, and never its signature, kind or element: the signature only suggests a repair in the interface, and an accepted repair is a new operation in the log. `tests/attack_g89.rs` changes each of them and finds every result unchanged, and checks that this module's code never reads the signature.",
             "**Model state, the same on every machine.** Every outcome is computed from names and recorded history alone, every set of names is in name order, and nothing depends on an address, a hash map's order or the machine.",
-            "**Pruned is never Deleted.** A walk that reaches a pruned step while it still has names to follow answers `HistoryPruned`, whatever the later steps hold (24.4).",
+            "**Pruned is never Deleted.** A walk that reaches a pruned step while it still has names to follow answers `HistoryPruned`, whatever the later steps hold, and so does a walk from a name that a step's `PruneHistory` operation did not hold (24.4).",
             "**Generated is not followed.** Only modified images are descendants: an entity generated from the referenced one is a new entity, not the referenced one in a new form.",
             "**Unknown is never guessed.** A name the graph cannot classify, or that no recorded step and not the body holds, is `Unresolved` with `NameUnknown`.",
             "**No recursion.** The walk is one loop over the steps, holding a sorted vector of names."
@@ -6445,7 +6524,7 @@
       "provenance": [],
       "sections": "8.4, 17.12, 20 and 24.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) Status: the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution ([`resolve`]) built (G89); the one shared attribute step, [`classes`], which applies attribute behaviours from an operation's history and sets a value as an operation of its own, built (G90); `PruneHistory` in G109 and placement references in G374.",
+      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); the one shared attribute step, [`classes`], which applies attribute behaviours from an operation's history and sets a value as an operation of its own, built (G90); references and their resolution ([`resolve`]) built (G89); `PruneHistory`, which cuts history down to what held references reach ([`prune`]), built (G109); placement references in G374.",
       "summary": "Spare Kit geometry kernel: persistent names and references."
     },
     {

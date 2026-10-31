@@ -1,0 +1,4 @@
+; The pruned history record's payload (tag 21, schema 1): format 1 (draft), SPEC.md section 15.
+; CDDL by RFC 8610. The first rule is the one a payload is validated against; op-path and name-id
+; are names.cddl's rules and history is history.cddl's, read together with this file.
+pruned = [pruned-by: op-path, held: [* name-id], steps: [* history]]

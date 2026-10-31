@@ -64,6 +64,9 @@ proptest = { version = "1.12.0", default-features = false, features = ["std", "b
 # The kernel development crate: the history laws kit (piece G88), a development dependency only
 # (chapter 28.1).
 geom-test = { path = "../geom-test" }
+# PruneHistory on real primitives (piece G109): geom-name sits beside this crate, and only this
+# test joins them.
+geom-name = { path = "../geom-name" }
 # The side a test reads a surface from at a break.
 geom-nurbs = { path = "../geom-nurbs" }
 # Every test build runs all four checker groups (chapter 28.4), release builds included.

@@ -322,3 +322,17 @@ The program states the trust of what it opens; a reader never infers it from the
 - **Unknown** (everything else): stamps are not read, and every body needs the full check.
 
 Every body is range-checked and rebuilt through the topology builder, and the cheap groups run on it, when it is opened. The full check runs later, body by body, within the caller's budget. A body whose records are missing or damaged opens with no geometry; one that fails a check opens read-only, with the checker's report; neither is ever an operation input, and the rest of the document opens normally. A body that passes its full check earns a stamp for the program to store.
+
+## 20. The pruned history record
+
+Tag 21, schema 1, required. Its payload (CDDL `pruned` in [cddl/pruned.cddl](cddl/pruned.cddl), with names.cddl's and history.cddl's rules):
+
+<!-- generated: pruned -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `pruned-by` | `op-path` | the `PruneHistory` operation's path |
+| `held` | `[* name-id]` | the names its references held, a set |
+| `steps` | `[* history]` | each step it cut, oldest first: its path and what it kept, as a history record's payload |
+<!-- end generated -->
+
+The steps of one element's history that one `PruneHistory` operation cut (architecture 24.4): the operation's path, the names the references it was told about held, and each step's path and what it kept, as a history record's payload, so a reloaded model resolves every reference as the pruned model did. A name in the set resolves as it did before the prune; a name outside it that meets one of these steps answers `HistoryPruned` with the operation's path, never `Deleted`. Each step keeps its place in the history, however little it keeps, and every step of the record shares the one set, so a file pays for the held names once per prune. A reader refuses a set out of order, a step that is not a history record's canonical payload, and any payload that is not the record's canonical encoding.
