@@ -123,10 +123,7 @@ fn a_pruned_step_keeps_what_held_walks_meet() {
             ),
         ],
         set(&[f]),
-        [TopologyChange::FaceAdded {
-            face: g,
-            role: cap,
-        }],
+        [TopologyChange::FaceAdded { face: g, role: cap }],
     )
     .unwrap();
     // Step 2 modifies b into d, deletes c, keeps e and g.
@@ -178,12 +175,18 @@ fn a_pruned_step_keeps_what_held_walks_meet() {
     );
     let body = set(&[d, e, g]);
     let carriers = [(d, CarrierIx(1)), (e, CarrierIx(2)), (g, CarrierIx(3))];
-    let before = |from: usize, name, want| resolved(&graph, &body, &carriers, &history[from..], name, want);
-    let after = |from: usize, name, want| resolved(&graph, &body, &carriers, &pruned[from..], name, want);
+    let before =
+        |from: usize, name, want| resolved(&graph, &body, &carriers, &history[from..], name, want);
+    let after =
+        |from: usize, name, want| resolved(&graph, &body, &carriers, &pruned[from..], name, want);
     // The held face resolves as it did, from either step.
     for want in WANTS {
         for from in 0..=2 {
-            assert_eq!(after(from, a, want), before(from, a, want), "{from} {want:?}");
+            assert_eq!(
+                after(from, a, want),
+                before(from, a, want),
+                "{from} {want:?}"
+            );
         }
     }
     assert_eq!(
@@ -206,7 +209,10 @@ fn a_pruned_step_keeps_what_held_walks_meet() {
     );
     // Nothing is held: every step keeps nothing, and every walk is pruned.
     let none = prune(&history, &NameSet::default(), &op(9));
-    assert!(none.iter().all(|s| matches!(s, Step::Kept { history, .. } if *history == History::default())));
+    assert!(
+        none.iter()
+            .all(|s| matches!(s, Step::Kept { history, .. } if *history == History::default()))
+    );
     assert_eq!(
         resolved(&graph, &body, &carriers, &none, a, Want::One),
         Resolution::HistoryPruned { by: Some(op(9)) }
@@ -222,7 +228,9 @@ fn a_pruned_step_keeps_what_held_walks_meet() {
     ];
     let again = prune(&linked, &set(&[b]), &op(10));
     assert_eq!(again[..2], linked[..2]);
-    assert!(matches!(&again[2], Step::Kept { by, pruned_by, .. } if *by == op(3) && *pruned_by == op(10)));
+    assert!(
+        matches!(&again[2], Step::Kept { by, pruned_by, .. } if *by == op(3) && *pruned_by == op(10))
+    );
 }
 
 fn config(cases: u32) -> Config {

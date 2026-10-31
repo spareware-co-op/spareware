@@ -33,6 +33,7 @@ use crate::header::{Header, rung};
 use crate::history::{HISTORY_SCHEMA, HISTORY_TAG};
 use crate::names::{NAMES_SCHEMA, NAMES_TAG};
 use crate::operation::{OPERATION_SCHEMA, OPERATION_TAG};
+use crate::pruned::{PRUNED_SCHEMA, PRUNED_TAG};
 use crate::recipe::{RECIPE_SCHEMA, RECIPE_TAG};
 use crate::record::REQUIRED;
 
@@ -315,6 +316,32 @@ pub const RECORDS: &[RecordType] = &[
                 name: "budget",
                 cddl: "[work: uint, logical-bytes: uint]",
                 meaning: "the budget it runs under (23.10)",
+            },
+        ],
+    },
+    RecordType {
+        tag: PRUNED_TAG,
+        name: "pruned",
+        schemas: &[PRUNED_SCHEMA],
+        flags: REQUIRED,
+        cddl: "pruned.cddl",
+        section: "15",
+        fields: &[
+            Field {
+                name: "pruned-by",
+                cddl: "op-path",
+                meaning: "the `PruneHistory` operation's path",
+            },
+            Field {
+                name: "held",
+                cddl: "[* name-id]",
+                meaning: "the names its references held, a set",
+            },
+            Field {
+                name: "steps",
+                cddl: "[* history]",
+                meaning: "each step it cut, oldest first: its path and what it kept, as a history \
+                          record's payload",
             },
         ],
     },

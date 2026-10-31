@@ -486,6 +486,16 @@
           "sha256": "47b93b32a27411ae3fe176d5fc19248cf2be0d553d1bcdc8aab1b62f9ad8357b"
         },
         {
+          "id": "geom-name/prune",
+          "what": "The PruneHistory operation (piece G109): 200 element histories of one to six steps, each step keeping, modifying, splitting, merging, deleting, or deleting while generating every name of the body before it; a held set of up to eight names, some never in the history; and every kept step's path, history, operation and held set, in the encoding of tests/prune_determinism.rs.",
+          "check": {
+            "crate": "geom-name",
+            "test": "prune_determinism",
+            "function": "prune_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "f04dd902446d1ee7162c648b8191dbdb359dd34ba7ab5e4bb4b8610e9354790c"
+        },
+        {
           "id": "geom-linalg/dense",
           "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
           "check": {

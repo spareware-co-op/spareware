@@ -197,3 +197,16 @@ Tag 20, schema 1, required. Its payload (CDDL `operation` in [cddl/operation.cdd
 
 One entry of an operation log (architecture 21 and 28.13): everything a replay needs to run the operation again and get the same bits. The record type has its schema, and each record names the operation's own version, which fixes its results, its charge schedule and its error details (26.2). The parameters are one item of SKG's canonical CBOR, written by the operation's schema. The budget is recorded because a budget that can fail an operation in a shared model is fixed by its version or recorded in the log (23.10). Nothing timed and no precision is recorded: only final operations are logged, and a cancelled run writes nothing (10.1). A reader refuses a name that is empty or not printable ASCII, parameters that are not canonical CBOR, and any payload that is not the record's canonical encoding.
 
+## 15. The pruned history record
+
+Tag 21, schema 1, required. Its payload (CDDL `pruned` in [cddl/pruned.cddl](cddl/pruned.cddl), with names.cddl's and history.cddl's rules):
+
+<!-- generated: pruned -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `pruned-by` | `op-path` | the `PruneHistory` operation's path |
+| `held` | `[* name-id]` | the names its references held, a set |
+| `steps` | `[* history]` | each step it cut, oldest first: its path and what it kept, as a history record's payload |
+<!-- end generated -->
+
+The steps of one element's history that one `PruneHistory` operation cut (architecture 24.4): the operation's path, the names the references it was told about held, and each step's path and what it kept, as a history record's payload, so a reloaded model resolves every reference as the pruned model did. A name in the set resolves as it did before the prune; a name outside it that meets one of these steps answers `HistoryPruned` with the operation's path, never `Deleted`. Each step keeps its place in the history, however little it keeps, and every step of the record shares the one set, so a file pays for the held names once per prune. A reader refuses a set out of order, a step that is not a history record's canonical payload, and any payload that is not the record's canonical encoding.
