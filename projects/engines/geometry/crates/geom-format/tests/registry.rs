@@ -23,11 +23,17 @@ use geom_format::file::{END_TAG, HEADER_TAG, read, write};
 use geom_format::header::{self, Header, rung};
 use geom_format::record::{REQUIRED, Record};
 use geom_format::registry::{
-    ENVELOPE, RECORDS, RUNGS, field_table, knows, registry_table, rung_table,
+    CURVES, ENVELOPE, RECORDS, RUNGS, SURFACES, TABLES, code_table, field_table, knows,
+    registry_table, rung_table,
 };
 use geom_format::source::SliceSource;
 use geom_num::grid::Steps;
 use geom_run::{Budget, WorkMeter};
+#[path = "../../geom-topo/tests/common/mod.rs"]
+#[allow(dead_code, reason = "geom-topo's fixtures; the archive uses the wall")]
+mod topo;
+
+use geom_format::body::{BODY_TAG, StoredBody, read_body, write_body};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -47,6 +53,19 @@ fn sections() -> Vec<(&'static str, &'static str, String)> {
         ("SPEC.md", "header", field_table(by_name("header"))),
         ("SPEC.md", "rungs", rung_table()),
         ("SPEC.md", "end", field_table(by_name("end"))),
+        ("SPEC.md", "body", field_table(by_name("body"))),
+        ("SPEC.md", "chunk", field_table(by_name("chunk"))),
+        (
+            "SPEC.md",
+            "tables",
+            code_table(("Table", "Columns"), TABLES),
+        ),
+        ("SPEC.md", "curves", code_table(("Kind", "Fields"), CURVES)),
+        (
+            "SPEC.md",
+            "surfaces",
+            code_table(("Kind", "Fields"), SURFACES),
+        ),
     ]
 }
 
@@ -99,7 +118,14 @@ fn the_registry_agrees_with_the_writers() {
         (HEADER_TAG, header::SCHEMA, REQUIRED)
     );
     assert!(knows(HEADER_TAG, 1) && knows(END_TAG, 1));
-    assert!(!knows(HEADER_TAG, 2) && !knows(3, 1));
+    assert!(!knows(HEADER_TAG, 2) && !knows(5, 1) && !knows(BODY_TAG, 2));
+    // The body writer's records are the registry's.
+    let stored = write_body(&named_wall(), &mut meter()).unwrap();
+    for r in stored.chunks.iter().chain([&stored.index]) {
+        let entry = RECORDS.iter().find(|e| e.tag == r.tag).unwrap();
+        assert!(knows(r.tag, r.schema));
+        assert_eq!(r.flags, entry.flags);
+    }
     let codes: Vec<u64> = RUNGS.iter().map(|r| r.0).collect();
     assert_eq!(
         codes,
@@ -125,10 +151,51 @@ fn the_registry_agrees_with_the_writers() {
 
 /// The archive: every file ever written as an example of a format version.
 fn archive() -> Vec<(&'static str, &'static [u8])> {
-    vec![(
-        "v1/header-only.skgf",
-        include_bytes!("archive/v1/header-only.skgf"),
-    )]
+    vec![
+        (
+            "v1/header-only.skgf",
+            include_bytes!("archive/v1/header-only.skgf"),
+        ),
+        (
+            "v1/wall-body.skgf",
+            include_bytes!("archive/v1/wall-body.skgf"),
+        ),
+    ]
+}
+
+/// geom-topo's wall (a box of 4,000 by 200 by 2,700 steps), published by name: one name per
+/// region, face, edge and vertex, the arena's code and the row.
+fn named_wall() -> geom_topo::Body {
+    let r = topo::wall_rows();
+    let key = |arena: u8, row: usize| {
+        let mut k = [0u8; 16];
+        k[0] = arena;
+        k[8..].copy_from_slice(&(row as u64).to_be_bytes());
+        geom_topo::order::NameKey(k)
+    };
+    let names = geom_topo::order::Names {
+        regions: (0..r.regions.len()).map(|i| key(1, i)).collect(),
+        faces: (0..r.faces.len()).map(|i| key(3, i)).collect(),
+        edges: (0..r.edges.len()).map(|i| key(6, i)).collect(),
+        vertices: (0..r.vertices.len()).map(|i| key(7, i)).collect(),
+    };
+    topo::wall_builder(true)
+        .publish_named(
+            &names,
+            geom_topo::BodyKind::Solid,
+            topo::wall_outside(),
+            &mut meter(),
+        )
+        .unwrap()
+}
+
+/// The archive's second file: the named wall's body records, its chunks and then its index.
+fn wall_body() -> Vec<u8> {
+    let h = Header::v1("geom-format archive v1", geom_num::ladder::HEAL_DEFAULT);
+    let stored = write_body(&named_wall(), &mut meter()).unwrap();
+    let mut records = stored.chunks;
+    records.push(stored.index);
+    write(&h.record().unwrap(), &records, &mut meter()).unwrap()
 }
 
 /// The archive's first file: format 1's header and nothing else.
@@ -143,6 +210,22 @@ fn write_the_archive() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/archive/v1");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("header-only.skgf"), header_only()).unwrap();
+    std::fs::write(dir.join("wall-body.skgf"), wall_body()).unwrap();
+}
+
+#[test]
+fn the_archived_body_reads_back_as_the_wall() {
+    let bytes = include_bytes!("archive/v1/wall-body.skgf");
+    let file = read(&mut SliceSource::new(bytes), knows, &mut meter()).unwrap();
+    let (index, chunks): (Vec<Record>, Vec<Record>) =
+        file.records.into_iter().partition(|r| r.tag == BODY_TAG);
+    let stored = StoredBody {
+        index: index.into_iter().next().unwrap(),
+        chunks,
+    };
+    assert_eq!(read_body(&stored, &mut meter()).unwrap(), named_wall());
+    // Today's writer writes the archived bytes exactly.
+    assert_eq!(wall_body(), bytes);
 }
 
 #[test]

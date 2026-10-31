@@ -1,0 +1,80 @@
+; Body records' payloads: the index (tag 3, schema 1) and a chunk (tag 4, schema 1), with every
+; geometry kind; format 1 (draft), SPEC.md sections 10 and 11.
+
+body = [
+  kind: 0..4,                 ; solid, sheet, wire, acorn, general
+  outside: uint,              ; the outside region's row plus one
+  tables: [* table-entry],    ; codes 1 to 11, then 12 to 15 when named
+  named: 0 / 1,
+  extensions: {},
+]
+table-entry = [table: 1..15, rows: uint, chunks: [* content-id]]
+content-id = [alg: uint, digest: bstr]
+
+chunk = [table: 1..15, chunk: uint, rows: 1..4096, columns: [* column]]
+column = refs / i64-column / names / [* surface] / [* curve]
+refs = [* uint]               ; a reference (row plus one, 0 for none), a sense or a kind code
+names = bstr                  ; 16 bytes per row
+
+i64-column = #6.79(bstr)      ; RFC 8746: little-endian int64
+f64-column = #6.86(bstr)      ; RFC 8746: little-endian float64, every value finite
+
+; Values.
+real = float
+bound = real / []             ; [] for the infinity on its own side
+interval = [start: bound, end: bound]
+param-box = [u: interval, v: interval]
+vec = [+ real]                ; two or three doubles
+option = [] / [real]
+optional-column = [] / [f64-column]
+flag = 0 / 1
+sign = 1 / -1
+frame = [x: vec, normal: [real, real, real]]
+axes = [0, frame, a: real, b: real] / [1, u: vec, v: vec]
+helix-axes = [0, frame, radius: real, pitch: real] / [1, u: vec, v: vec, w: vec]
+nurbs-fields = (degree: uint, knots: f64-column, points: f64-column, weights: optional-column)
+placement = [c: [real, real, real], l: [9*9 real]]
+
+; Curve kinds.
+curve = leaf / trimmed / composite / offset-curve / on-surface
+leaf = nurbs-curve / line / circle / ellipse / hyperbola / parabola / helix / polynomial
+     / involute / bulge / transition
+nurbs-curve = [1, nurbs-fields]
+line = [2, origin: vec, direction: vec, domain: interval]
+circle = [3, center: vec, radius: real, frame, domain: interval]
+ellipse = [4, center: vec, axes, domain: interval]
+hyperbola = [5, center: vec, axes, domain: interval]
+parabola = [6, vertex: vec, axes, domain: interval]
+helix = [7, center: vec, helix-axes, domain: interval]
+polynomial = [8, coefficients: f64-column, domain: interval]
+involute = [9, center: vec, axes, domain: interval]
+bulge = [10, vertices: f64-column, bulges: f64-column, widths: optional-column, closed: flag,
+         start: real]
+trimmed = [11, leaf, interval]
+composite = [12, segments: [+ trimmed], starts: f64-column]
+offset-curve = [13, basis: trimmed, law: offset-law, cached: flag]
+on-surface = [14, pcurve: trimmed, surface: uint, curve3d: [nurbs-fields], error: real]
+transition = [15, start: vec, direction: vec, length: real, law: curvature-law,
+              window: interval, reversed: flag]
+offset-law = [1, distance: real] / [2, distance: real, direction: [real, real, real]]
+           / [3, stations: f64-column]
+curvature-law = [1..5, start: real, end: real]
+              / [6, start: real, end: real, height: real, cant: real]
+              / [7, terms: [8*8 option], from: real]
+              / [8, constant: option, cosine: real, length: real, from: real]
+              / [9, constant: option, linear: option, sine: real, length: real, from: real]
+
+; Surface kinds.
+surface = [1, du: uint, ku: f64-column, dv: uint, kv: f64-column, points: f64-column,
+           weights: optional-column]
+        / [2, origin: vec, a: vec, b: vec, domain: param-box]
+        / [3, center: vec, radius: real, frame, domain: param-box, sign]
+        / [4, center: vec, radius: real, slope: real, frame, domain: param-box, sign]
+        / [5, center: vec, radius: real, frame, domain: param-box, sign]
+        / [6, center: vec, major: real, minor: real, frame, domain: param-box, sign]
+        / [7, center: vec, terms: [+ [u: 0..3, v: 0..3, w: vec]], domain: param-box,
+           angular-u: flag, angular-v: flag]
+        / [8, profile: trimmed, axis: vec, frame, angles: interval, placement]
+        / [9, profile: trimmed, direction: vec, extent: interval, placement]
+        / [10, first: trimmed, second: trimmed, extent: interval, sigma: sign, placement]
+        / [11, base: surface, distance: real, domain: param-box, cached: flag]
