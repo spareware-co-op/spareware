@@ -520,6 +520,8 @@ pub enum BoundDetail {
     OwnTermAstray,
     /// Two operands' bounds count different grid steps.
     MixedSteps,
+    /// A commit would change a decision the ideal shape makes for certain (`CommitFlip`, 13.2).
+    CommitFlip,
 }
 
 impl BoundDetail {
@@ -527,9 +529,9 @@ impl BoundDetail {
     #[must_use]
     pub const fn kind(&self) -> ErrorKind {
         match self {
-            BoundDetail::OverStep { .. } | BoundDetail::OverCeiling { .. } => {
-                ErrorKind::ExactnessNotAccepted
-            }
+            BoundDetail::OverStep { .. }
+            | BoundDetail::OverCeiling { .. }
+            | BoundDetail::CommitFlip => ErrorKind::ExactnessNotAccepted,
             BoundDetail::OwnTermAstray => ErrorKind::Internal,
             BoundDetail::MixedSteps => ErrorKind::InvalidInput,
         }
@@ -549,7 +551,9 @@ impl BoundDetail {
             } => vec![Remedy::Accept {
                 class: Exactness::Certified { bound, step },
             }],
-            BoundDetail::OwnTermAstray | BoundDetail::MixedSteps => Vec::new(),
+            BoundDetail::OwnTermAstray | BoundDetail::MixedSteps | BoundDetail::CommitFlip => {
+                Vec::new()
+            }
         }
     }
 }
@@ -576,6 +580,12 @@ impl fmt::Display for BoundDetail {
                 )
             }
             BoundDetail::MixedSteps => write!(f, "the operands' bounds count different grid steps"),
+            BoundDetail::CommitFlip => {
+                write!(
+                    f,
+                    "a commit would change a decision the ideal shape makes for certain"
+                )
+            }
         }
     }
 }

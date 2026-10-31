@@ -424,6 +424,16 @@ impl GridTransform {
         V3::new(out(r0)?, out(r1)?, out(r2)?)
     }
 
+    /// `v` under the signed permutation alone, by `negate` where the sign turns: what the transform
+    /// does to what is not on the grid, such as a plane's normal and its enclosures.
+    #[must_use]
+    pub fn apply_signed<T: Copy>(&self, v: [T; 3], negate: impl Fn(T) -> T) -> [T; 3] {
+        self.rows.map(|row| {
+            let x = row.source.pick(v);
+            if row.negate { negate(x) } else { x }
+        })
+    }
+
     /// The composition `self ∘ first`: the transform that applies `first`, then `self`.
     ///
     /// Row i of the result reads `first`'s row `source[i]`: its source axis, the product of the two

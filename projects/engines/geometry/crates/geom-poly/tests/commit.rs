@@ -14,10 +14,20 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
+use geom_math::{Axis, GridTransform};
 use geom_num::interval::Interval;
 use geom_num::plane::Plane;
+use geom_num::plane::Tpi;
+use geom_num::{Exactness, GridStep, Steps};
 use geom_num::{NumError, P3, Sign};
-use geom_poly::commit::{CommitError, Ideal, check_flip, moved_along, through_edge, vertex_slide};
+use geom_op::{
+    Bounds, ErrorKind, History, Limits, NameId, NameSet, OpError, OpErrorDetail, OpId, OpPath,
+    Origin, Record,
+};
+use geom_poly::commit::{
+    CommitError, Committed, Ideal, PlaneClass, check_flip, moved_along, through_edge, vertex_slide,
+};
+use num_bigint::BigInt;
 use proptest::prelude::*;
 
 fn p(x: i64, y: i64, z: i64) -> P3 {
@@ -221,4 +231,222 @@ proptest! {
         let got = moved_along(direction, at, distance, &[at]).unwrap();
         prop_assert!(got.deviation < 1.0, "{}", got.deviation);
     }
+}
+
+/// Whether `a` is the nearest whole number to √`square`.
+fn nearest_root(a: &BigInt, square: &BigInt) -> bool {
+    let two = BigInt::from(2);
+    let low = &two * a - 1;
+    let high = &two * a + 1;
+    let four = square * 4;
+    &low * &low <= four && four <= &high * &high
+}
+
+#[test]
+fn a_moved_plane_takes_the_nearest_whole_offset() {
+    let point = p(10, -20, 30);
+    let cases: [([f64; 3], i64); 6] = [
+        ([1.0, 1.0, 0.0], 1),
+        ([1.0, 2.0, 3.0], 7),
+        ([-3.0, 5.0, 7.0], -12_345),
+        ([0.3, -0.4, 0.5], 1 << 40),
+        ([0.3, -0.4, 0.5], -(1 << 40)),
+        ([1.0, 1.0, 1.0], 3),
+    ];
+    for (direction, distance) in cases {
+        let c = moved_along(direction, point, distance, &[point]).unwrap();
+        let n = c.plane.n().map(BigInt::from);
+        let on_point = &n[0] * 10 + &n[1] * -20 + &n[2] * 30;
+        let moved = -(BigInt::from(c.plane.d()) + on_point);
+        let square = (&n[0] * &n[0] + &n[1] * &n[1] + &n[2] * &n[2]) * distance * distance;
+        assert!(
+            nearest_root(&moved.magnitude().clone().into(), &square),
+            "{direction:?}"
+        );
+        assert_eq!(
+            moved.sign() == num_bigint::Sign::Minus,
+            distance < 0,
+            "{direction:?}"
+        );
+    }
+}
+
+#[test]
+fn a_move_past_the_budget_is_refused() {
+    let point = p(0, 0, 0);
+    assert_eq!(
+        moved_along([1.0, 1.0, 1.0], point, i64::MAX, &[point]),
+        Err(CommitError::Num(NumError::BudgetExceeded))
+    );
+}
+
+#[test]
+fn a_whole_length_move_is_exact() {
+    // |(3, 4, 0)| is whole, so the offset is too: 5·k·δ on a normal of (3k, 4k, 0).
+    let c = moved_along([3.0, 4.0, 0.0], p(0, 0, 0), 1_000, &[p(0, 0, 0)]).unwrap();
+    let [x, y, z] = c.plane.n();
+    assert_eq!(z, 0);
+    assert_eq!(x * 4, y * 3);
+    assert_eq!(c.plane.d(), -(x / 3 * 5 * 1_000));
+}
+
+#[test]
+fn a_class_is_one_normal_for_every_plane_in_it() {
+    let class = PlaneClass::holding([1_000, 0, 0], [0.0, 0.8, 0.6]).unwrap();
+    let (a, b) = (p(0, 0, 0), p(5, 900, 7));
+    let extent = [p(0, 0, 0), p(1_000, 0, 0)];
+    let (one, two) = (
+        class.plane(a, 0, &extent).unwrap(),
+        class.plane(b, 0, &extent).unwrap(),
+    );
+    assert_eq!(one.plane.n(), class.normal());
+    assert_eq!(two.plane.n(), class.normal());
+    // Each holds its own eave exactly, however long.
+    assert_eq!(one.plane.side(p(1_000_000, 0, 0)).unwrap(), Sign::Zero);
+    assert_eq!(two.plane.side(p(1_000_005, 900, 7)).unwrap(), Sign::Zero);
+    assert_ne!(one.plane.side(b).unwrap(), Sign::Zero);
+}
+
+#[test]
+fn a_hip_roof_keeps_its_apex_under_the_footprints_symmetries() {
+    // A 30 degree slope on a square footprint: four planes, one apex, which only a shared commit
+    // makes a true tie.
+    let h = METRE;
+    let slope = [0.0, 3.0_f64.sqrt() / 2.0, 0.5];
+    let class = PlaneClass::holding([1_000, 0, 0], slope).unwrap();
+    let turn = GridTransform::quarter_turns(Axis::Z, 1);
+    let mut corner = p(-h, -h, 0);
+    let mut side = class;
+    let mut planes = Vec::new();
+    for _ in 0..4 {
+        planes.push(side.plane(corner, 0, &[corner]).unwrap());
+        side = side.image(&turn);
+        corner = turn.apply(corner).unwrap();
+    }
+    let apex = Tpi::new(planes[0].plane, planes[1].plane, planes[2].plane).unwrap();
+    assert_eq!(planes[3].plane.side_of_tpi(&apex).unwrap(), Sign::Zero);
+    // Each image's normal is the last one's, turned: nothing rounded again.
+    let [x, y, z] = class.normal();
+    assert_eq!(class.image(&turn).normal(), [-y, x, z]);
+    // A mirror carries the second plane onto the fourth, its reflection.
+    let mirror = GridTransform::mirror(Axis::X);
+    let second = class.image(&turn);
+    let fourth = second.image(&turn).image(&turn);
+    assert_eq!(second.image(&mirror).normal(), fourth.normal());
+}
+
+#[test]
+fn an_image_strays_from_its_ideal_as_far_as_the_plane_it_came_from() {
+    let class = PlaneClass::holding([1_000, 0, 0], [0.0, 0.8, 0.6]).unwrap();
+    let extent = [
+        p(0, 0, 0),
+        p(1_000, 0, 0),
+        p(0, 800, 600),
+        p(1_000, 800, 600),
+    ];
+    let base = class.plane(extent[0], 0, &extent).unwrap();
+    for symmetry in [
+        GridTransform::quarter_turns(Axis::Z, 1),
+        GridTransform::quarter_turns(Axis::X, 3),
+        GridTransform::mirror(Axis::Y),
+    ] {
+        let moved: Vec<P3> = extent.iter().map(|q| symmetry.apply(*q).unwrap()).collect();
+        let image = class.image(&symmetry).plane(moved[0], 0, &moved).unwrap();
+        assert!(
+            image.deviation <= base.deviation * 2.0 + 1e-3,
+            "{}",
+            image.deviation
+        );
+        for q in &moved {
+            assert_eq!(
+                image.plane.side(*q).unwrap(),
+                base.plane.side(extent[0]).unwrap()
+            );
+        }
+    }
+}
+
+#[test]
+fn a_commit_is_certified_however_small_its_deviation() {
+    let c = Committed {
+        plane: Plane::new([1, 0, 0], 0).unwrap(),
+        deviation: 1e-6,
+    };
+    assert_eq!(c.term(), Steps(1));
+    assert_eq!(
+        c.class(GridStep::Q1),
+        Exactness::Certified {
+            bound: Steps(1),
+            step: GridStep::Q1
+        }
+    );
+    let wide = Committed {
+        deviation: 3.0,
+        ..c
+    };
+    assert_eq!(wide.term(), Steps(3));
+    let wider = Committed {
+        deviation: 3.25,
+        ..c
+    };
+    assert_eq!(wider.term(), Steps(4));
+}
+
+#[test]
+fn a_flip_is_exactness_not_accepted_by_the_name_of_commit_flip() {
+    let error = OpError::new(
+        OpPath::new(OpId::from_bytes([1; 16])),
+        OpErrorDetail::from(CommitError::Flip),
+    );
+    assert_eq!(error.kind(), ErrorKind::ExactnessNotAccepted);
+    assert_eq!(
+        OpErrorDetail::from(CommitError::Num(NumError::Degenerate)).kind(),
+        ErrorKind::Degenerate
+    );
+}
+
+#[test]
+fn a_commits_term_adds_along_the_face_it_made() {
+    let (a, b, extent) = hinge();
+    let committed = through_edge(a, b, [0.0, 0.7, 0.7], &extent).unwrap();
+    let face = NameId::from_bytes([1; 16]);
+    let step = OpPath::new(OpId::from_bytes([2; 16]));
+    let empty = NameSet::new([]).unwrap();
+    let made = History::new(
+        [Record {
+            output: face,
+            origin: Origin::Unchanged,
+        }],
+        empty.clone(),
+        [],
+    )
+    .unwrap();
+    let start = Bounds::new(GridStep::Q0);
+    // Passed through unchanged, a term is a defect: it has to be a modified or a new face.
+    assert!(
+        start
+            .after(&step, &made, &[(face, committed.term())], Limits::DEFAULT)
+            .is_err()
+    );
+    let drafted = History::new(
+        [Record {
+            output: face,
+            origin: Origin::Modified {
+                from: NameSet::new([face]).unwrap(),
+            },
+        }],
+        empty,
+        [],
+    )
+    .unwrap();
+    let bounds = start
+        .after(
+            &step,
+            &drafted,
+            &[(face, committed.term())],
+            Limits::DEFAULT,
+        )
+        .unwrap();
+    assert_eq!(bounds.of(face), committed.term());
+    assert_eq!(bounds.class(), committed.class(GridStep::Q0));
 }

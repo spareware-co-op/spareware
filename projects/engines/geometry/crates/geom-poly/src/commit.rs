@@ -42,7 +42,7 @@ use core::fmt;
 use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
 use geom_num::plane::Plane;
-use geom_num::{I256, NumError, P3, Sign};
+use geom_num::{I256, NumError, P3, Real, Sign};
 
 /// Why a plane could not be committed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,9 +131,8 @@ fn unit(v: &[Interval; 3]) -> Result<[Interval; 3], NumError> {
 }
 
 /// The largest magnitude in `v`.
-fn magnitude(v: Interval) -> f64 {
-    let (low, high) = (v.lo().abs(), v.hi().abs());
-    if low > high { low } else { high }
+fn magnitude(v: Interval) -> Result<Real, NumError> {
+    Ok(Real::new(v.lo().abs())?.total_max(Real::new(v.hi().abs())?))
 }
 
 impl Ideal {
@@ -183,15 +182,11 @@ impl Ideal {
 /// `direction` scaled by a power of two so that its largest component fills `bits` bits, each
 /// component rounded to a whole number. A double's product by a power of two is exact.
 fn scaled(direction: [f64; 3], bits: u32) -> Result<[i128; 3], NumError> {
-    let mut largest = 0.0f64;
+    let mut largest = Real::new(0.0)?;
     for v in direction {
-        if !v.is_finite() {
-            return Err(NumError::NotFinite);
-        }
-        if v.abs() > largest {
-            largest = v.abs();
-        }
+        largest = largest.total_max(Real::new(v.abs())?);
     }
+    let largest = largest.get();
     if largest == 0.0 {
         return Err(NumError::Degenerate);
     }
@@ -238,7 +233,7 @@ fn offset_through(n: &[i128; 3], p: P3, extra: i128) -> Result<i128, NumError> {
 fn integer_root(square: &I256) -> Option<i128> {
     let mut root = 0i128;
     for bit in (0..=84u32).rev() {
-        let trial = root | 1i128.checked_shl(bit)?;
+        let trial = root.checked_add(1i128.checked_shl(bit)?)?;
         let wide = I256::from_i128(trial);
         if !square.checked_sub(&wide.checked_mul(&wide)?)?.is_negative() {
             root = trial;
@@ -257,15 +252,12 @@ fn deviation(plane: &Plane, ideal: &Ideal, extent: &[P3]) -> Result<f64, NumErro
     if extent.is_empty() {
         return Err(NumError::Degenerate);
     }
-    let mut worst = 0.0f64;
+    let mut worst = Real::new(0.0)?;
     for p in extent {
         let own = dot(&n, &enclosed_point(*p)?)?.add(offset)?.div(length)?;
-        let far = magnitude(own.sub(ideal.reading(*p)?)?);
-        if far > worst {
-            worst = far;
-        }
+        worst = worst.total_max(magnitude(own.sub(ideal.reading(*p)?)?)?);
     }
-    Ok(worst)
+    Ok(worst.get())
 }
 
 /// A plane through the edge from `a` to `b` that holds the direction `tilt`, as near as the budget
@@ -362,7 +354,7 @@ pub fn vertex_slide(planes: [&Plane; 3], errors: [f64; 3]) -> Result<f64, Commit
         .mul(e0?)?
         .add(Interval::norm(&ca)?.mul(e1?)?)?
         .add(Interval::norm(&ab)?.mul(e2?)?)?;
-    Ok(magnitude(sum.div(weight)?))
+    Ok(magnitude(sum.div(weight)?)?.get())
 }
 
 /// Holds a decision made on committed planes to the same decision on the ideal ones (13.2).

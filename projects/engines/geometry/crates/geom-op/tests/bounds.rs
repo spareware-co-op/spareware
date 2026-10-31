@@ -476,6 +476,7 @@ fn every_detail_says_what_it_is() {
         ),
         (BoundDetail::OwnTermAstray, "term"),
         (BoundDetail::MixedSteps, "grid step"),
+        (BoundDetail::CommitFlip, "commit"),
     ];
     for (detail, word) in cases {
         let words = detail.to_string();
