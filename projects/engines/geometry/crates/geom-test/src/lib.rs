@@ -14,6 +14,8 @@
 //! The first piece (G11) holds the parts every later test leans on, G15 adds the map, G16 the
 //! source ledger and the banned-source scan, and G19 the golden store and the determinism matrix:
 //!
+//! - [`second_mesh`]: 19.2's rules again for exact meshes, in exact rationals, sharing no code with
+//!   `geom-mesh`'s checker (chapter 28.4; G135).
 //! - [`seed`]: the seed discipline. Every seeded test prints `seed: <hex>` before it draws anything,
 //!   and the environment variable `SPAREKIT_SEED` replays any printed seed exactly (28.5, 28.17).
 //! - [`rng`]: `SplitMix64`, the small, specified, test-only generator behind every seeded test
@@ -226,6 +228,7 @@ pub mod recursion;
 pub mod rng;
 pub mod rust_source;
 pub mod scan;
+pub mod second_mesh;
 pub mod seed;
 pub mod trip;
 
