@@ -41,5 +41,7 @@ pub mod cdt;
 pub mod classify;
 pub mod contact;
 pub mod exact;
+pub mod hull;
+pub mod slice;
 
 pub use cdt::{Cdt, CdtError, Quality, Site, Vertex, triangulate};

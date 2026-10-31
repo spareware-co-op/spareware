@@ -366,6 +366,8 @@ pub enum MeshError {
     Full,
     /// Inside and outside are undefined for an open mesh.
     NotClosed,
+    /// Planes to slice by must be parallel and rise along their normal.
+    SlicesOutOfOrder,
     /// The box tree refused.
     Bvh(BvhError),
     /// The numbers layer refused: a plane over budget, or a fault of its own.
@@ -392,6 +394,9 @@ impl fmt::Display for MeshError {
             }
             MeshError::Full => f.write_str("more items than 32-bit indices can name"),
             MeshError::NotClosed => f.write_str("an open mesh has no inside"),
+            MeshError::SlicesOutOfOrder => {
+                f.write_str("planes to slice by must be parallel and rise along their normal")
+            }
             MeshError::Bvh(e) => write!(f, "{e}"),
             MeshError::Num(e) => write!(f, "{e}"),
             MeshError::Stopped(e) => write!(f, "the mesh stopped: {e}"),

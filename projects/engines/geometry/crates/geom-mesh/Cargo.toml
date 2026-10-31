@@ -44,6 +44,11 @@ harness = false
 name = "classify"
 harness = false
 
+# Slicing's timing (piece G149), at 1 and 8 threads.
+[[bench]]
+name = "slice"
+harness = false
+
 # The triangle contact test's timing (piece G151).
 [[bench]]
 name = "contact"
