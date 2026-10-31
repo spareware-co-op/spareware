@@ -2575,7 +2575,7 @@
           "file": "projects/engines/geometry/crates/geom-fuzz/src/planes.rs",
           "guarantees": [
             "**Any bytes are a case**, and [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
-            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a canonical form that moves, a plane given two entries or two planes one, a flip that does not say which way a plane faced; an order that is not antisymmetric or not transitive; a turn that changes when its sides swap; a point that is not the point it was made as. No law may panic or return `BudgetExceeded`: every plane here is within budget."
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a canonical form that moves, a plane given two entries or two planes one, a flip that does not say which way a plane faced; an order that is not antisymmetric or not transitive; a turn that changes when its sides swap; a point that is not the point it was made as; a face split into pieces with a plane it did not have, or refused for anything but a shape. No law may panic or return `BudgetExceeded`: every plane here is within budget."
           ],
           "job": "Fuzz target: `geom-poly`'s canonical planes and arrangement predicates, on any bytes, give one entry to one plane and one order to any points, rays or flaps.",
           "method": {
@@ -7916,6 +7916,25 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a face could not be split.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused: a side parallel to the face, two adjacent sides on one line, or rings that leave a piece without an end.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_poly::convex",
+          "name": "ConvexError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a plane could not join a table.",
           "file": "projects/engines/geometry/crates/geom-poly/src/plane.rs",
           "kinds": [
@@ -7938,6 +7957,59 @@
           "module": "geom_poly::plane",
           "name": "TableError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a box could not be classified.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused: a plane over budget, or a piece that is no polygon.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A winding vector could not hold a crossing.",
+              "name": "Winding",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_poly::trace",
+          "name": "TraceError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a winding vector or a test could not be made.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/winding.rs",
+          "kinds": [
+            {
+              "doc": "A count left `i32`.",
+              "name": "Overflow",
+              "shape": "unit"
+            },
+            {
+              "doc": "The allocator refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "A test's terms do not leave one answer.",
+              "name": "BadTest",
+              "shape": "unit"
+            },
+            {
+              "doc": "A test is deeper than 64.",
+              "name": "TooDeep",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_poly::winding",
+          "name": "WindingError",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -7954,6 +8026,60 @@
       "kind": "kernel",
       "layer": "6",
       "modules": [
+        {
+          "cost": "for n edges, at most n cuts, each classifying the edges left in its cell: O(n²) exact predicates at worst, and a piece of k bounds takes O(k²) more to put in order. Charges the meter one unit per edge classified and per bound ordered.",
+          "does": "EMBER takes convex polygons, each a supporting plane and one bounding plane per edge. [`convex_pieces`] takes a face as its plane and its rings, each ring a cycle of [`Side`]s, and splits it along its own edges' planes only: a binary space partition of the face, by each edge in the order given, which a caller makes name order. Every piece is a [`Piece`]: the face's plane and its bounding planes in turn around it, each with the interior on its positive side.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
+          "guarantees": [
+            "**Nothing new.** Every plane of a piece is the face's or one of its sides': each edge of a piece lies on an existing plane, and each corner is the meeting of three, so 6.2's budget holds, as EMBER's section 3.2 needs.",
+            "**A partition of the face.** The pieces are convex, cover the face and overlap nowhere, each side of the partition being a half-plane of the cut (tested against exact areas).",
+            "**The same pieces every time.** Pieces depend only on the planes and the order of the sides; nothing is hashed, and every decision is an exact predicate.",
+            "**No recursion.** The tree is an explicit stack, so its depth never threatens a WebAssembly stack (principle 13).",
+            "**Refused, never guessed.** A side parallel to the face is `Degenerate`; so are two adjacent sides on one line, which leave a corner undefined. Merge such sides first: the corner they share is no corner. So are rings that leave a piece without an end, such as a hole with no outline around it."
+          ],
+          "job": "Plane-based faces into convex polygons: the autopartition of 11.3, which lets a face with notches and holes enter the arrangement without one number growing.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181",
+              "https://doi.org/10.1145/800250.807481",
+              "https://doi.org/10.1145/37402.37430"
+            ],
+            "text": "chapter 11.3's \"How faces enter\" (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's sections 3.2 and 4.3 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); the binary space partition is Fuchs, Kedem and Naylor 1980, <https://doi.org/10.1145/800250.807481>, with the leaves read as in Thibault and Naylor 1987, <https://doi.org/10.1145/37402.37430>."
+          },
+          "path": "geom_poly::convex",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs of polygons at worst, in a box the subdivision keeps small. Charges the meter one unit per pair of pieces compared.",
+          "does": "[`clip`] splits a convex [`Piece`] by a plane. [`crosses`] says whether two pieces on different planes truly pass through each other: each has points on both sides of the other's plane, and their stretches of the line the planes share overlap by a length. [`local_cuts`] takes the polygons of one box and cuts each by every polygon that crosses it or ends on it, keeping each as a list of convex pieces of the polygon, the leaves of the small tree of EMBER's section 4.3.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/cut.rs",
+          "guarantees": [
+            "**Nothing new.** A cut adds the cutting plane to a piece's bounds, and every corner stays the meeting of three planes the input holds, so 6.2's budget holds however many cuts run.",
+            "**A partition.** [`clip`]'s two parts cover the piece and overlap only along the cut, each convex, each still in turn around its face (tested against exact areas).",
+            "**No piece crosses another.** After [`local_cuts`], [`crosses`] is false of any two pieces (tested), so step 3 can classify each piece as a whole. A polygon that ends on a piece, as one clipped by a box does where it left the box, cuts it too: the winding can change across it on the side it stands on.",
+            "**A plane through a piece's corner cuts only what it passes.** A piece that only touches the plane, or lies in it, is left whole: [`Clipped::Front`], [`Clipped::Back`], [`Clipped::On`].",
+            "**An overlap on one plane is a piece of each.** Polygons on one plane never cross, but where they overlap, each is cut by the other's bounds, so a piece lies wholly inside the other or wholly outside it (11.5), and [`crate::trace`] can count it as one.",
+            "**The same cuts every time.** Polygons are cut in the order given, which a caller makes (operand key, name) (11.3), and nothing depends on addresses or threads."
+          ],
+          "job": "Polygon clipping and local cuts: step 2 of 11.3, after which no piece crosses another.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181",
+              "https://doi.org/10.1145/360767.360802"
+            ],
+            "text": "chapter 11.3's \"Local cuts\" (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's section 4.3 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); [`clip`] is Sutherland and Hodgman's clip of a convex polygon by one plane, 1974, <https://doi.org/10.1145/360767.360802>, on implicit corners."
+          },
+          "path": "geom_poly::cut",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant and no allocation. [`along`] is two three-plane determinants and one classify; the others are at most three determinants or seven cross products of normals.",
           "does": "a [`Line`] is where two planes meet. [`along`] orders two points of a line, each the meeting of the line with a third plane. [`same_point`] says whether two three-plane points are one point: 11.3's test, that one lies on all three planes of the other. Within a plane, a [`Ray`] runs from a vertex along the line where that plane meets another, and [`turn`] and [`around`] order rays. About a line, a [`Flap`] is a half-plane bounded by the line, and [`turn_about`] and [`about`] order flaps.",
@@ -8000,13 +8126,64 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "at most five segments per piece, each testing each polygon: one or two sign evaluations, and one per bound of a polygon the segment's line crosses. Charges the meter one unit per polygon a segment tests.",
+          "does": "[`classify`] takes the polygons of one box, the box and the winding vector at its reference point, and gives every piece of those polygons its two vectors. The vector just off a piece comes from a path to the reference point, adding up the signed crossings of the polygons on the way. No piece is crossed by another (11.3, step 2), so one path answers for a whole piece.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+          "guarantees": [
+            "**Exact, within 6.2's budget.** Every sign is a 4 × 4 determinant of plane coefficients, at most 384 bits, or a 3 × 3 determinant of normals, at most 252. Nothing is rounded, and the path's points are never computed.",
+            "**Ties are settled by moving the path, never by a tolerance.** Every plane of the path is moved by its own infinitesimal, in a fixed order, so the path misses every edge and corner of every polygon, and each sign that would be zero is decided by the determinant's first term in those infinitesimals (Edelsbrunner and Mücke's Simulation of Simplicity, in the order of `Rank`). Real ties, faces on one plane, are counted, not moved apart: a piece's two vectors differ by every coincident face over it, whichever way that face looks (11.5).",
+            "**One emission of an overlap.** Where polygons on one plane overlap, [`Classified::first`] marks the copy of the lowest polygon in the order given, which a caller makes (operand key, name).",
+            "**Cutters change nothing.** A polygon with no entry cuts but counts no crossing (11.1).",
+            "**No recursion, the same answer every time.** Polygons and pieces are taken in the order given; nothing depends on addresses or threads."
+          ],
+          "job": "Tracing: each piece's front and back winding vectors, step 3 of 11.3.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181",
+              "https://doi.org/10.1145/77635.77639"
+            ],
+            "text": "chapter 11.3's \"Classification\" (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's section 4.4 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); ties after Edelsbrunner and Mücke 1990, <https://doi.org/10.1145/77635.77639>."
+          },
+          "path": "geom_poly::trace",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Winding::count`] is a binary search; [`Winding::add`] that and a shift of the list; [`WindingTest::holds`] one step per term, with a look-up for each [`Term::Inside`].",
+          "does": "a [`Winding`] holds one winding number per entry of an arrangement, as a sorted list of (entry, count) pairs without zeros, so the outside is the empty list and the length of a list follows how many elements overlap at a point, not how many operands there are. A [`WindingTest`] is the small expression of 11.1: inside an entry, inside at least n entries, and their combinations. [`kept`] reads a piece's front and back vectors through a test: a piece is kept exactly when the test differs across it. [`WindingTest::decided`] reads a test with some entries unknown, which is how a box is found to hold nothing of the result (11.3, step 4).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/winding.rs",
+          "guarantees": [
+            "**One vector, one list.** The pairs stay sorted, with no zero and no repeated entry, whatever order the crossings came in, so equal vectors compare equal (tested).",
+            "**Nothing wraps, nothing aborts.** A count that would leave `i32` is [`WindingError::Overflow`], and memory refused is [`WindingError::OutOfMemory`].",
+            "**No recursion.** A test is held in postfix and evaluated on a stack of 64 answers, so its depth never threatens a WebAssembly stack (principle 13); a test deeper than that is refused when it is made.",
+            "**A settled test is settled.** [`WindingTest::decided`] answers only where every count of its open entries gives that answer, so a box it settles holds no boundary of the result."
+          ],
+          "job": "Sparse winding vectors and the tests that select pieces: chapter 11.2.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3528223.3530181",
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/2461912.2461916"
+            ],
+            "text": "winding-number vectors after EMBER's section 4 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>), sparse as chapter 11.2 sets out (`projects/engines/geometry/architecture/11-booleans.md`); signed crossings after Jacobson, Kavan and Sorkine-Hornung 2013, <https://doi.org/10.1145/2461912.2461916>."
+          },
+          "path": "geom_poly::winding",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-poly",
       "provenance": [],
       "sections": "6.2, 11.3, 11.12, 11.14, 13.2, 19.5 and 23.2; open questions OQ-11.2 and OQ-19.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); the rest by pieces G124, G125, G126, G127, G128, G142.",
+      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); faces into convex pieces ([`convex`]) built (G125); clipping and local cuts ([`cut`]) built (G126); winding vectors ([`winding`]) and tracing ([`trace`]) built (G127); the rest by pieces G124, G128, G142.",
       "summary": "Spare Kit geometry kernel: exact plane-based polyhedra."
     },
     {
