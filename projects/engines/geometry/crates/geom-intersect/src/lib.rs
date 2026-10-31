@@ -29,6 +29,7 @@
 //! - [`result`]: what an intersection returns, its items and contact types, in canonical order.
 //! - [`order`]: the canonical operand order, and pairs run one by one or as a batch.
 //! - [`error`]: why an intersection could not be computed.
+//! - [`solve`] and [`curve`] (piece G163): the interval engine, and where two curves meet.
 //! - [`closed`] (piece G159): exact decisions for a line with a quadric or torus, and the special
 //!   positions of two quadrics.
 //!
@@ -41,9 +42,11 @@
 extern crate alloc;
 
 pub mod closed;
+pub mod curve;
 pub mod error;
 pub mod order;
 pub mod result;
+pub mod solve;
 
 pub use error::IntersectError;
 pub use order::{CanonicalKey, Geom, Operand, PLAN, pair, pairs, share};
