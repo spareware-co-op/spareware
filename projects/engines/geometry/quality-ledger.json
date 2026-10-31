@@ -2228,11 +2228,19 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace log_fast -> (f64, f64) with (0.0, 0.0)",
+      "mutant": "replace log_fast -> Option<(f64, f64)> with None",
       "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With h = l = 0, left = -ERR and right = +ERR differ, so every input other than 1 (returned before) goes to log_accurate, which gives the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+      "reason": "ln_checked turns None into the NaN pair, so left and right are NaN, left == right fails, and every input other than 1 (returned before) goes to log_accurate, which starts again from x and gives the same correctly rounded value: only the time changes. The powers of two, which the fast path alone answers in the original, go there too, the one way they reach Dint::add's equal-magnitude arms: the unit test the_accurate_path_alone_gives_ln_at_every_power_of_two checks each against ln bit for bit. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace log_fast -> Option<(f64, f64)> with Some((0.0, 0.0))",
+      "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With h = l = 0, left = -ERR and right = +ERR differ, so every input other than 1 (returned before) goes to log_accurate, which gives the same correctly rounded value: only the time changes. The powers of two, which the fast path alone answers in the original, go there too, the one way they reach Dint::add's equal-magnitude arms: the unit test the_accurate_path_alone_gives_ln_at_every_power_of_two checks each against ln bit for bit. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2292,27 +2300,27 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace || with && in ln",
+      "mutant": "replace || with && in ln_checked",
       "line_text": "if x.is_nan() || x < 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The public ln (math::ln, Interval::ln) passes only finite x >= 0 (or -0) to the port, so x.is_nan() and x < 0.0 are both false here and || and && agree."
+      "reason": "ln_checked is reached only through the port log::ln, and the crate's only calls of that outside tests, math::ln (through log_argument) and Interval::ln (positive bounds only), pass finite x >= 0 or -0 at most, so x.is_nan() and x < 0.0 are both false here and || and && agree."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace < with == in ln",
+      "mutant": "replace < with == in ln_checked",
       "line_text": "if x.is_nan() || x < 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The port sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
+      "reason": "ln_checked is reached only through the port log::ln, which sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace < with <= in ln",
+      "mutant": "replace < with <= in ln_checked",
       "line_text": "if x.is_nan() || x < 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The port sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
+      "reason": "ln_checked is reached only through the port log::ln, which sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -2348,7 +2356,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "mutant": "replace > with >= in refine",
+      "mutant": "replace > with >= in hard_case",
       "line_text": "let sgn = if iq > 2048 { -1.0 } else { 1.0 };",
       "occurrences": 1,
       "kind": "equivalent",
@@ -2460,30 +2468,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace + with * in atan2",
-      "line_text": "let lb = rh + (rl - eps);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace - with / in atan2",
-      "line_text": "let lb = rh + (rl - eps);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0, where H is z and e about 2^-90) the low part is the cubic term, about H^3/3 in size with |H| > 2^-53, so |l/e| is again more than 2^34 ulps of H: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace + with * in atan2",
-      "line_text": "let ub = rh + (rl + eps);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
       "mutant": "replace - with + in atan2",
       "line_text": "fast_two_sum(dt, (y - y1) - nl)",
       "occurrences": 1,
@@ -2516,19 +2500,39 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace + with * in atan2",
+      "mutant": "replace agreed -> Option<f64> with None",
       "line_text": "let lb = fh + (fl - eps);",
       "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+      "kind": "proved",
+      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant never answers, so every pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace + with * in atan2",
+      "mutant": "replace + with * in agreed",
+      "line_text": "let lb = fh + (fl - eps);",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's lower end is the high part times the low part with the bound, far from the upper end, so the test fails and the pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with / in agreed",
+      "line_text": "let lb = fh + (fl - eps);",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant loosens the test, and it changes real results: for a pair with |y/x| in (2^-53, 2^-47.7) and y/x within 2^-154 relative of zh + zh^3/3 + eps^2, about 80 should exist, the second fast path would answer fh + eps, about 20 ulps off. None is known; finding one needs a lattice search. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in agreed",
       "line_text": "let ub = fh + (fl + eps);",
       "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+      "kind": "proved",
+      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's upper end is the high part times the low part with the bound, far from the lower end, so the test fails and the pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -2967,11 +2971,20 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "mutant": "replace + with - in refine",
-      "line_text": "return sgn * h.r + sgn * h.d;",
+      "mutant": "replace + with - in hard_case",
+      "line_text": "return Some(sgn * h.r + sgn * h.d);",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Every listed hard case's offset d is below half an ulp of its r: 2^-110 or 2^-109 for the small r of SINPI_HARD, and 2^-55 against r in [1/2, 1) (half an ulp 2^-54) for the others. So sgn·r + sgn·d and sgn·r - sgn·d both round to sgn·r (C writes the sum for the inexact flag): the same double for every listed case."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace && with || in hard_case",
+      "line_text": "if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs",
+      "reason": "Caught by math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs and its twin cospi_hard_case_answers_exactly_the_listed_pairs, proofs of hard_case's own contract: for every double x and every index iq, the answer is the listed result, with the sign of the fold, exactly where an entry or its mirror image matches in both remainder and folded index. This key's mutant in the mirror's condition, x == -h.x || the mirrored index, answers where only one of the two matches. With this change applied both harnesses report VERIFICATION:- FAILED (Kani 0.68.0, off CI). No input is known to show it through sinpi or cospi: the scan runs only when the low part's significand is all ones or all zeros. The key's other mutant, in the entry's own condition, is caught by tests."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -3060,54 +3073,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The forms differ only at b = 0, which mul_int returns ZERO for on its first line, before this test."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace & with | in Dint::mul_int",
-      "line_text": "t = t.checked_add(t & 1)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace & with ^ in Dint::mul_int",
-      "line_text": "t = t.checked_add(t & 1)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace | with & in Dint::mul_int",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace | with ^ in Dint::mul_int",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace << with >> in Dint::mul_int",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace >> with << in Dint::mul_int",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -5126,7 +5091,22 @@
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
     }
   ],
-  "coverage_off": [],
+  "coverage_off": [
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "item": "const fn step(v: Option<i64>) -> i64 {",
+      "proof": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs::step_never_returns_none",
+      "tool": "kani",
+      "reason": "step asserts that its checked step gave Some before it matches, so its None arm could run only after the assertion had failed. Kani proves step(None) panics at that assertion; the reader runs only in const blocks, where that panic is a build error."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
+      "item": "const fn step_u128(v: Option<u128>) -> u128 {",
+      "proof": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs::step_u128_never_returns_none",
+      "tool": "kani",
+      "reason": "step_u128 asserts that its checked step gave Some before it matches, so its None arm could run only after the assertion had failed. Kani proves step_u128(None) panics at that assertion; the reader runs only in const blocks, where that panic is a build error."
+    }
+  ],
   "awaiting_proof": [
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
@@ -5393,475 +5373,6 @@
       "occurrences": 2,
       "piece": "G41",
       "reason": "The grid's budget arm: a checked step that the tests' inputs never overflow. G41 proves it unreachable, or a test reaches it with inputs at the budget."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "let (Some((p_top, p_rest)), Some((q_top, q_rest))) = (P.split_last(), Q.split_last()) else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "return None;",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "let (Some((my, ey)), Some((mx, ex))) = (odd_parts(y), odd_parts(x)) else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "return super::NAN;",
-      "occurrences": 2,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "let Some(d) = ey.checked_sub(ex) else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "let Some(k) = my.checked_div(mx) else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "return super::NAN; // never: mx ≠ 0 here",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "if k >= 1 << 53 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "return t; // not reachable: q would be a midpoint of the normal range",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "_ => Wide192 { hi: 0, lo: 0 },",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "if self.is_zero() {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "return if b.is_zero() {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "Ordering::Equal",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "Ordering::Less",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "if self.sgn ^ b.sgn != 0 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "}",
-      "occurrences": 2,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "ex: self.ex.checked_add(1)?,",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "..*self",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "if self.ex >= 1025 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "return Some(s * f64::INFINITY); // |a| ≥ 2^1024",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "if self.ex <= -1074 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "if self.ex < -1074 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "return Some(s * 0.0);",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "let mid = self.h == 1 << 63 && self.m == 0 && self.l == 0;",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "return Some(if mid { s * 0.0 } else { s * f64::from_bits(1) });",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "} else if low > 0x400 || mm != 0 || ll != 0 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "line_text": "0.5 // exactly the midpoint: ties to even",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In atan2's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign Wide192 operands, a result outside atan2's range or below the subnormal range) that atan2's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
-      "line_text": "let Some((last, rest)) = c.split_last() else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "The polynomial table is a non-empty constant, so the empty-table arm never runs. G47, which proves exp's error bound, proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
-      "line_text": "return (0.0, 0.0);",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "The polynomial table is a non-empty constant, so the empty-table arm never runs. G47, which proves exp's error bound, proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "None => 0,",
-      "occurrences": 2,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "if let [_, _, tail @ ..] = rest {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "}",
-      "occurrences": 2,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "None => None,",
-      "occurrences": 2,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "if let [_, tail @ ..] = rest {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "let kept = if drop > 0 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "assert!(drop < 128, \"hex float underflows binary64\");",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "let lost = significand & !(u128::MAX << drop);",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "assert!(lost == 0, \"hex float is not exactly a binary64 number\");",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs",
-      "line_text": "significand >> drop",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "hexf reads the kernel's hex float constants, which are all well formed and exact, so its arms for malformed, underflowing or inexact literals never run in the tests. G47 proves them unreachable, or tests the parser with such literals."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let Some(e) = e.checked_add(i64::from(above)) else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "return (super::NAN, super::NAN);",
-      "occurrences": 2,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let Some(k) = i.checked_sub(362) else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let Some(mut e) = signed(bits >> 52).checked_sub(0x3ff) else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "return super::NAN;",
-      "occurrences": 2,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let Some(scaled) = signed(bits >> 52).checked_sub(0x3ff + 52) else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "None => super::NAN,",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "if self.sgn ^ b.sgn != 0 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "return Some(ZERO);",
-      "occurrences": 4,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "}",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "ex: self.ex.checked_add(1)?,",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "..self",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "if sh < 128 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "None => shl128(1, 128u64.abs_diff(sh)),",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "big_b = 0;",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "if c == 0 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "if carry {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "t = t.checked_add(t & 1)?;",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "m = m.checked_sub(1)?;",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let (Some(&inverse), Some(&log_inverse)) = (",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "return None; // never: k is in range, as above",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let Some((first, rest)) = P2_COEFFS.split_first() else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "line_text": "let Some((first, rest)) = LOG1P_TAYLOR.split_first() else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In ln's port: an empty-table, exponent-overflow or helper case (zero or opposite-sign operands of its extended-precision helper, a carry its inputs never make) that ln's own inputs never produce. G47 proves it unreachable, or tests it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "let Some((last, rest)) = c.split_last() else {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "return (l, 0.0);",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "if t & MANTISSA == 0 && (t << 1) != 0 {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "line_text": "if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {",
-      "occurrences": 1,
-      "piece": "G47",
-      "reason": "In sinpi and cospi's port: the empty-table arm, and the nudge and hard-case branches that only inputs of the exceptional list reach. G47 proves them unreachable, or tests them."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
