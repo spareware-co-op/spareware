@@ -5417,6 +5417,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Interval bounds are finite with lo <= hi and a zero bound stored as +0. Where hi is not zero, lo / hi has the sign of lo * hi; where hi is zero, lo <= 0, so lo / hi is -inf or NaN and lo * hi is 0, and none of them is above 0. So the comparison with 0 is the same for every interval."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in end",
+      "line_text": "if x.is_infinite() && (x < 0.0) == low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison is reached only when x is infinite, and for ±∞ x < 0 and x <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in read_round_tail",
+      "line_text": "Ok((read_frame(d, m)?, read_box(d, m)?, read_sign(d, m)? < 0.0))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "read_sign returns only 1.0 or -1.0, never 0, so s < 0 and s <= 0 agree."
     }
   ],
   "coverage_off": [
