@@ -554,6 +554,13 @@ pub fn prepare_named(name: &str) -> Option<Prepared> {
 /// `tests/coverage.rs` checks that each constant still refuses, so its entry cannot outlive it.
 #[rustfmt::skip]
 pub static UNMEASURED: &[(&str, &str)] = &[
+    ("predicate::orient2d_step", "predicate::orient2d's path, with its step beside the sign"),
+    ("predicate::orient2d_narrow", "a step of predicate::orient2d, measured there on the targets that take it"),
+    ("predicate::orient3d_step", "predicate::orient3d's path, with its step beside the sign"),
+    ("predicate::incircle_step", "predicate::incircle's path, with its step beside the sign"),
+    ("Plane::side_of_tpi_step", "Plane::side_of_tpi's path, with its step beside the sign"),
+    ("Step::name", "a table of names"),
+    ("Step::route", "a table of the steps, for the twins that count"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),

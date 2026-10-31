@@ -33,8 +33,8 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use geom_math::gcd_u128;
-use geom_num::NumError;
-use geom_num::plane::Plane;
+use geom_num::plane::{Plane, Tpi};
+use geom_num::{NumError, P3, Sign, Step};
 
 /// A plane in canonical form, and whether the sign turned on the way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,6 +94,14 @@ pub struct Facing {
     pub plane: PlaneIx,
     /// Whether the plane given faces the other way from its entry.
     pub flipped: bool,
+}
+
+/// A vertex of an arrangement: the meeting of three planes of a table, held by their entries, so
+/// that a question it can answer from them takes no arithmetic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Corner {
+    /// The three planes' entries.
+    pub planes: [PlaneIx; 3],
 }
 
 /// Why a plane could not join a table.
@@ -233,6 +241,49 @@ impl PlaneTable {
             Stored::Wide(row) => *self.wide.get(usize::try_from(row).ok()?)?,
         };
         Plane::new([x, y, z], d).ok()
+    }
+
+    /// Which side of the plane at `plane` the grid point `p` lies on, along the table's own facing,
+    /// and the [`Step`] that settled it: a plane square to a frame axis has a unit normal here, so
+    /// it reads one coordinate, chapter 23.2's axis step, and any other takes [`Plane::side`].
+    ///
+    /// # Errors
+    ///
+    /// [`TableError::Num`]: `Degenerate` for an entry past the table.
+    pub fn side_of_point(&self, plane: PlaneIx, p: P3) -> Result<(Sign, Step), TableError> {
+        let held = self.plane(plane).ok_or(NumError::Degenerate)?;
+        let along = match held.n() {
+            [1, 0, 0] => p.x,
+            [0, 1, 0] => p.y,
+            [0, 0, 1] => p.z,
+            _ => return Ok((held.side(p)?, Step::Exact)),
+        };
+        let value = i128::from(along.get())
+            .checked_add(held.d())
+            .ok_or(NumError::BudgetExceeded)?;
+        Ok((Sign::of_i128(value), Step::Axis))
+    }
+
+    /// Which side of the plane at `plane` `corner` lies on, along the table's own facing, and the
+    /// [`Step`] that settled it: a corner on one of its own planes takes one comparison of
+    /// entries, the first step of chapter 23.2, and any other falls to [`Plane::side_of_tpi_step`].
+    ///
+    /// # Errors
+    ///
+    /// [`TableError::Num`]: `Degenerate` for an entry past the table, or planes that do not meet in
+    /// one point.
+    pub fn side_of_corner(
+        &self,
+        corner: &Corner,
+        plane: PlaneIx,
+    ) -> Result<(Sign, Step), TableError> {
+        if corner.planes.contains(&plane) {
+            return Ok((Sign::Zero, Step::Identity));
+        }
+        let row = |ix: PlaneIx| self.plane(ix).ok_or(NumError::Degenerate);
+        let [p, q, r] = corner.planes;
+        let point = Tpi::new(row(p)?, row(q)?, row(r)?)?;
+        Ok(row(plane)?.side_of_tpi_step(&point)?)
     }
 
     /// How many planes fit `i64` and how many need `i128`.

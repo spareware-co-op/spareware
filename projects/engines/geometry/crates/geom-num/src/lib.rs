@@ -118,6 +118,7 @@ pub mod real;
 pub mod rng;
 pub mod scalar;
 pub mod sign;
+pub mod step;
 pub mod wide;
 pub mod wide32;
 
@@ -128,5 +129,6 @@ pub use exactness::Exactness;
 pub use grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 pub use real::Real;
 pub use sign::Sign;
+pub use step::Step;
 pub use wide::{I256, I320, I384, I512, Wide};
 pub use wide32::Wide32;

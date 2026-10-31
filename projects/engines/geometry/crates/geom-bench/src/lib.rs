@@ -21,6 +21,8 @@
 //! chapter 23.3 names (Avnaim et al.'s signs), which lives here because no kernel crate ships it.
 //! Public functions of `geom-num` without a benchmark of their own
 //! are listed with the reason in [`catalogue::UNMEASURED`], and a test keeps that list complete.
+//! Beside the gates, [`steps`] tallies which step of chapter 23.2's ladder settled each call, per
+//! corpus.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which
@@ -287,6 +289,7 @@ pub mod inputs;
 pub mod kernels;
 pub mod rng;
 pub mod sha256;
+pub mod steps;
 
 /// The gate: the largest rise, in percent, that any gated measure of any benchmark may show
 /// against the merge base. Principle 12 of the kernel architecture sets it at 5.
