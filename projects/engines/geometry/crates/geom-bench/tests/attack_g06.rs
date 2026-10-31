@@ -1357,6 +1357,62 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                         .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
                 }),
         ),
+        ("batch", "run_items") => fold(inputs::batch::run_items(class).iter().map(
+            |items| -> Result<u64, geom_op::OpError> {
+                // Each item alone, as a call made one by one gives it.
+                let path = geom_op::OpPath::new(geom_op::OpId::from_bytes([7; 16]));
+                let ctx = geom_op::OpContext::new(path, geom_run::Budget::UNLIMITED);
+                let driver = geom_op::Batch::new(
+                    &ctx,
+                    geom_run::BatchBudget::new(geom_run::Budget::of_work(64)),
+                    geom_run::Phase::new("items"),
+                    geom_run::ChunkPlan::fixed::<4>(),
+                );
+                items.iter().try_fold(0_u64, |all, n| {
+                    let mut key = [0_u8; 16];
+                    key[..8].copy_from_slice(&n.to_be_bytes());
+                    key[8..].copy_from_slice(&(!n).to_le_bytes());
+                    let one = driver.single(key, n, |_, &n, meter| {
+                        meter.charge(n % 16).unwrap();
+                        Ok(n.wrapping_mul(3))
+                    })?;
+                    Ok(all ^ one)
+                })
+            },
+        )),
+        ("batch", "curve_points") => {
+            let helix = inputs::curve::helix().unwrap();
+            fold(inputs::batch::curve_points(class).iter().map(
+                |t| -> Result<Vec<f64>, geom_curve::CurveError> {
+                    let points = t
+                        .iter()
+                        .map(|&x| {
+                            geom_curve::ParamCurve::point(&helix, x, geom_nurbs::Limit::FromRight)
+                        })
+                        .collect::<Result<Vec<[f64; 3]>, _>>()?;
+                    Ok((0..3)
+                        .flat_map(|k| points.iter().map(move |p| p[k]))
+                        .collect())
+                },
+            ))
+        }
+        ("batch", "surface_points") => {
+            let torus = inputs::surface::torus().unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(inputs::batch::surface_points(class).iter().map(
+                |uv| -> Result<Vec<f64>, geom_curve::CurveError> {
+                    let (us, vs) = uv.split_at(uv.len() / 2);
+                    let points = us
+                        .iter()
+                        .zip(vs)
+                        .map(|(&u, &v)| geom_surface::ParamSurface::point(&torus, u, v, sides))
+                        .collect::<Result<Vec<[f64; 3]>, _>>()?;
+                    Ok((0..3)
+                        .flat_map(|k| points.iter().map(move |p| p[k]))
+                        .collect())
+                },
+            ))
+        }
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
             |(entries, query)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
