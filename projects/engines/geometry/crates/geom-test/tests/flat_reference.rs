@@ -753,7 +753,7 @@ fn a_section_faces_the_way_its_plane_does() {
     ] {
         let plane = Plane::new(normal, int(offset)).unwrap();
         let pieces = section(&cube, &plane).unwrap();
-        assert!(!pieces.is_empty());
+        assert_ne!(pieces.len(), 0);
         for piece in &pieces {
             assert_eq!(piece.plane().side(&far), plane.side(&far), "{plane:?}");
         }
