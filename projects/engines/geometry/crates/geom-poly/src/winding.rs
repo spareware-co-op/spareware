@@ -86,6 +86,17 @@ impl Winding {
             .map_or(0, |(_, count)| *count)
     }
 
+    /// Room for `more` entries.
+    ///
+    /// # Errors
+    ///
+    /// [`WindingError::OutOfMemory`] if the allocator refuses; the vector is unchanged.
+    pub fn reserve(&mut self, more: usize) -> Result<(), WindingError> {
+        self.pairs
+            .try_reserve(more)
+            .map_err(|_| WindingError::OutOfMemory)
+    }
+
     /// Adds `by` to the winding number of `entry`.
     ///
     /// # Errors
@@ -95,20 +106,16 @@ impl Winding {
     pub fn add(&mut self, entry: Entry, by: i32) -> Result<(), WindingError> {
         match self.pairs.binary_search_by_key(&entry, |(e, _)| *e) {
             Ok(at) => {
-                let Some((_, count)) = self.pairs.get_mut(at) else {
-                    return Ok(());
-                };
-                let sum = count.checked_add(by).ok_or(WindingError::Overflow)?;
-                *count = sum;
-                if sum == 0 {
-                    self.pairs.remove(at);
+                let sum = self.count(entry).checked_add(by);
+                let sum = sum.ok_or(WindingError::Overflow)?;
+                self.pairs.remove(at);
+                if sum != 0 {
+                    self.pairs.insert(at, (entry, sum));
                 }
             }
             Err(at) => {
                 if by != 0 {
-                    self.pairs
-                        .try_reserve(1)
-                        .map_err(|_| WindingError::OutOfMemory)?;
+                    self.reserve(1)?;
                     self.pairs.insert(at, (entry, by));
                 }
             }

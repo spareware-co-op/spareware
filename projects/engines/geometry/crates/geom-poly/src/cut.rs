@@ -184,17 +184,11 @@ pub fn crosses(a: &Piece, b: &Piece) -> Result<bool, NumError> {
         && along(&line, &b_in, &a_out)? == Ordering::Less)
 }
 
-/// Whether `other` meets the inside of `piece` along a length: `piece` has corners on both sides of
-/// `other`'s plane, and `other`, which crosses `piece`'s plane or ends on it, holds a length of the
-/// line the planes share that overlaps `piece`'s stretch by a length.
+/// Whether `other`, whose plane passes through `piece`, meets the inside of `piece` along a length:
+/// it crosses `piece`'s plane or ends on it, and holds a length of the line the planes share that
+/// overlaps `piece`'s stretch by a length.
 fn reaches(piece: &Piece, other: &Piece) -> Result<bool, NumError> {
-    let Ok(line) = Line::new(piece.face, other.face) else {
-        return Ok(false);
-    };
-    let signs = corners(piece, &other.face)?;
-    if !signs.contains(&Sign::Positive) || !signs.contains(&Sign::Negative) {
-        return Ok(false);
-    }
+    let line = Line::new(piece.face, other.face)?;
     let on = corners(other, &piece.face)?;
     if !on.contains(&Sign::Zero) && (!on.contains(&Sign::Positive) || !on.contains(&Sign::Negative))
     {

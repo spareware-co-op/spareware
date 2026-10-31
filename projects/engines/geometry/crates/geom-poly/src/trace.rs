@@ -190,15 +190,12 @@ fn moved_determinant(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign,
         .unwrap_or(Sign::Zero))
 }
 
-/// What plane `s` reads at the point where `p`, `q` and `r` meet, or `None` if they do not meet in
-/// one point. The reading of a homogeneous point is n · X + d · w over w, and n · X + d · w is
-/// the determinant (6.3).
-fn read(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Option<Sign>, NumError> {
+/// What plane `s` reads at the point where `p`, `q` and `r` meet, which the callers know they do.
+/// The reading of a homogeneous point is n · X + d · w over w, and n · X + d · w is the determinant
+/// (6.3).
+fn read(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign, NumError> {
     let weight = normals_det(&p.plane, &q.plane, &r.plane)?;
-    if weight == Sign::Zero {
-        return Ok(None);
-    }
-    Ok(Some(moved_determinant(p, q, r, s)?.mul(weight)))
+    Ok(moved_determinant(p, q, r, s)?.mul(weight))
 }
 
 /// A stretch of the line where `p` and `q` meet, from plane `from` to plane `to`.
@@ -227,11 +224,11 @@ fn count_crossing(
         return Ok(());
     }
     for bound in &polygon.piece.bounds {
-        if read(p, q, &face, &Moved::fixed(*bound))? != Some(Sign::Positive) {
+        if read(p, q, &face, &Moved::fixed(*bound))? != Sign::Positive {
             return Ok(());
         }
     }
-    let by = if end == Some(Sign::Positive) { 1 } else { -1 };
+    let by = if end == Sign::Positive { 1 } else { -1 };
     Ok(winding.add(entry, by)?)
 }
 
@@ -273,7 +270,7 @@ fn exit(p: &Moved, q: &Moved, faces: &[[Moved; 2]; 3]) -> Result<(usize, usize),
                 continue;
             }
             let earlier = match first.and_then(|(a, e)| faces.get(a)?.get(e)) {
-                Some(held) => read(p, q, held, face)? != Some(Sign::Positive),
+                Some(held) => read(p, q, held, face)? != Sign::Positive,
                 None => true,
             };
             if earlier {
@@ -350,7 +347,7 @@ fn path(
 /// Whether `polygon` covers the point where `p`, `q` and `r` meet.
 fn covers(polygon: &Polygon, p: &Moved, q: &Moved, r: &Moved) -> Result<bool, NumError> {
     for bound in &polygon.piece.bounds {
-        if read(p, q, r, &Moved::fixed(*bound))? != Some(Sign::Positive) {
+        if read(p, q, r, &Moved::fixed(*bound))? != Sign::Positive {
             return Ok(false);
         }
     }

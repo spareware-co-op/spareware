@@ -51,6 +51,14 @@ fn a_count_past_its_range_changes_nothing() {
 }
 
 #[test]
+fn a_vector_refuses_room_no_allocator_can_give() {
+    let mut w = vector(&[(1, 1)]);
+    assert_eq!(w.reserve(usize::MAX), Err(WindingError::OutOfMemory));
+    assert_eq!(w.reserve(4), Ok(()));
+    assert_eq!(w.pairs(), [(1, 1)]);
+}
+
+#[test]
 fn a_winding_error_says_what_was_wrong() {
     for (error, text) in [
         (WindingError::Overflow, "a winding number left its range"),

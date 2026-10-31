@@ -4,6 +4,7 @@
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::disallowed_methods,
     clippy::indexing_slicing,
@@ -13,8 +14,8 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
-use geom_num::NumError;
 use geom_num::plane::{Plane, Tpi};
+use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::Piece;
 use geom_poly::cut::{Clipped, clip, local_cuts};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError, classify};
@@ -453,6 +454,106 @@ fn a_piece_that_is_no_polygon_is_refused() {
     assert!(got.to_string().starts_with("a box that cannot be traced"));
 }
 
+/// A tetrahedron's outward planes: each is the face opposite that corner.
+fn outward(corner: [[i64; 3]; 4]) -> Option<[Plane; 4]> {
+    let at = |p: [i64; 3]| P3::new(p[0], p[1], p[2]).unwrap();
+    let mut planes = Vec::new();
+    for i in 0..4 {
+        let [a, b, c] = [(i + 1) % 4, (i + 2) % 4, (i + 3) % 4].map(|k| at(corner[k]));
+        let plane = Plane::through(a, b, c).ok()?;
+        planes.push(match plane.side(at(corner[i])).unwrap() {
+            Sign::Zero => return None,
+            Sign::Negative => plane,
+            Sign::Positive => turned(&plane),
+        });
+    }
+    planes.try_into().ok()
+}
+
+fn turned(plane: &Plane) -> Plane {
+    Plane::new(plane.n().map(|v| -v), -plane.d()).unwrap()
+}
+
+/// A tetrahedron's four faces, outward.
+fn wedge(planes: &[Plane; 4], entry: u32) -> Vec<Polygon> {
+    (0..4)
+        .map(|i| Polygon {
+            piece: Piece {
+                face: planes[i],
+                bounds: (1..4).map(|k| turned(&planes[(i + k) % 4])).collect(),
+            },
+            entry: Some(entry),
+        })
+        .collect()
+}
+
+fn inside(planes: &[Plane; 4], p: [f64; 3]) -> bool {
+    planes.iter().all(|q| {
+        let n = q.n();
+        (0..3).map(|i| n[i] as f64 * p[i]).sum::<f64>() + (q.d() as f64) < 0.0
+    })
+}
+
+/// The vector at a point, by asking each tetrahedron.
+fn wedges_at(solids: &[[Plane; 4]], p: [f64; 3]) -> Winding {
+    let mut w = Winding::new();
+    for (entry, solid) in solids.iter().enumerate() {
+        if inside(solid, p) {
+            w.add(entry as u32, 1).unwrap();
+        }
+    }
+    w
+}
+
+/// A point just off the middle of a piece, on the side `by` of it.
+fn off_middle(piece: &Piece, by: f64) -> [f64; 3] {
+    let k = piece.bounds.len();
+    let mut middle = [0.0f64; 3];
+    for i in 0..k {
+        let t = Tpi::new(piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]).unwrap();
+        let (x, w) = t.homogeneous().unwrap();
+        let w = w.to_i128().unwrap() as f64;
+        for axis in 0..3 {
+            middle[axis] += x[axis].to_i128().unwrap() as f64 / w / k as f64;
+        }
+    }
+    let n = piece.face.n().map(|v| v as f64);
+    let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+    [0, 1, 2].map(|axis| middle[axis] + by * n[axis] / length)
+}
+
+fn wedges_agree(solids: &[[Plane; 4]]) {
+    let polygons: Vec<Polygon> = solids
+        .iter()
+        .enumerate()
+        .flat_map(|(i, s)| wedge(s, i as u32))
+        .collect();
+    let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    for c in classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap() {
+        let (front, back) = (off_middle(&c.piece, 1e-7), off_middle(&c.piece, -1e-7));
+        assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
+        assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);
+    }
+}
+
+#[test]
+fn tilted_faces_are_crossed_where_a_path_leaves_them_by_either_of_two_walls() {
+    let a = outward([[0, 0, 0], [9, 1, 0], [1, 8, 1], [2, 1, 7]]).unwrap();
+    let b = outward([[1, 1, 1], [8, 3, 2], [3, 9, 4], [4, 2, 9]]).unwrap();
+    wedges_agree(&[a]);
+    wedges_agree(&[a, b]);
+    wedges_agree(&[b, a]);
+}
+
+fn any_wedge() -> impl Strategy<Value = [Plane; 4]> {
+    let corner = || [-8i64..=8, -8i64..=8, -8i64..=8];
+    [corner(), corner(), corner(), corner()].prop_filter_map("flat", outward)
+}
+
 fn any_block() -> impl Strategy<Value = Block> {
     ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
         low,
@@ -462,6 +563,13 @@ fn any_block() -> impl Strategy<Value = Block> {
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(160))]
+
+    #[test]
+    fn every_tilted_piece_agrees_with_the_solids(
+        solids in prop::collection::vec(any_wedge(), 1..4)
+    ) {
+        wedges_agree(&solids);
+    }
 
     #[test]
     fn every_piece_agrees_with_the_blocks(blocks in prop::collection::vec(any_block(), 1..5)) {
