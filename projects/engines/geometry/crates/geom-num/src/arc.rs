@@ -140,6 +140,10 @@ impl Round {
     /// # Errors
     ///
     /// As for [`Round::side_of_grid`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "x, y and v are the point's, p the point on the circle, w the centre's weight"
+    )]
     pub fn side(&self, z: &Rational2) -> Result<Sign, NumError> {
         let p = self.on;
         let ([x, y], v) = z.coordinates();
@@ -155,6 +159,10 @@ impl Round {
     /// # Errors
     ///
     /// As for [`Round::side_of_grid`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b and c are the line's, p the point on the circle, w the centre's weight"
+    )]
     pub fn meets(&self, l: &Carrier) -> Result<Contact, NumError> {
         let p = self.on;
         let ([a, b], c) = l.coefficients();

@@ -1,7 +1,9 @@
-//! One-root numbers in 2D, exact: where a line meets a circle, and every question about such points.
+//! One-root numbers in 2D, exact: where a line meets a circle or two circles meet, and every
+//! question about such points.
 //!
 //! A line and a circle or ellipse meet where a quadratic with whole-number coefficients has its
-//! roots, so the two coordinates of a crossing are (a + b√k) / w with one square root shared by both (chapter
+//! roots, and two circles on their radical line, so the two coordinates of a crossing are
+//! (a + b√k) / w with one square root shared by both (chapter
 //! 14.2). [`Crossing2`] holds that form and the [`Root`] it stands for, and is never rounded. Every
 //! question about it is the sign of a + b√k, or of a + b√k₁ + c√k₂ + d√(k₁k₂) when two crossings
 //! are compared, decided by squaring in fixed-width integers. So order along a line or an arc,
@@ -19,16 +21,16 @@
 //!   [`crate::carrier`]'s budgets and are asserted when the crate compiles; every width is reached
 //!   at the extreme values in `tests/attack_g189.rs`.
 //!
-//!   | Quantity | Bits | Where |
-//!   | --- | --- | --- |
-//!   | a, of a crossing | 209, or 252 with an ellipse | cx · N + a · h |
-//!   | b, of a crossing | 42, or 147 with an ellipse | the carrier's own coefficients |
-//!   | k, of a crossing | 336, or 209 with an ellipse | rr · N − h² |
-//!   | w, of a crossing | 166, or 209 with an ellipse | cw · N |
-//!   | Side of a carrier | 505 | E² − F²k, E = a · x + b · y − c · w |
-//!   | Against a circle | 1,010 | E² − F²k, E and F from (Z − P) · (Z + P − 2C) |
-//!   | Two crossings' coordinates | 1,506 | A² − B²k₁, A and B from the first squaring |
-//!   | The turn of a grid point and two crossings | 2,024 | the same, with the fourth term |
+//!   | Quantity | Carrier and circle | Carrier and ellipse | Two circles | Where |
+//!   | --- | --- | --- | --- | --- |
+//!   | a, of a crossing | 209 | 252 | 628 | cx · N + a · h; 2D · x₁ · w₂ + h · Aₓ |
+//!   | b, of a crossing | 42 | 147 | 209 | the carrier's own coefficients; A, turned |
+//!   | k, of a crossing | 336 | 209 | 837 | rr · N − h²; 4D · ρ₁ · w₂² − h² |
+//!   | w, of a crossing | 166 | 209 | 585 | cw · N; 2D · w₁ · w₂ |
+//!   | Side of a carrier | 505 | 505 | 1,343 | E² − F²k, E = a · x + b · y − c · w |
+//!   | Against a circle | 1,010 | 1,264 | 2,689 | E² − F²k, E and F from (Z − P) · (Z + P − 2C) |
+//!   | Two crossings' coordinates | 1,506 | 1,850 | 4,857 | A² − B²k₁, A, B from the first squaring |
+//!   | The turn of a grid point and two | 1,688 | 2,024 | 5,041 | the same, with the fourth term |
 //!
 //!   The last sets [`BIG_LIMBS`]. Rendering these by the description language of `geom-gen` would
 //!   take inputs wider than its `i128`, and a filter of `f64`s past 2^1023, which is why this one
@@ -42,7 +44,7 @@
 //! <https://doi.org/10.1007/978-3-642-17283-0>), from their book; CGAL's source not read (29.2).
 //!
 //! Cost: constant time and no allocation: a square root and a few dozen interval operations to make
-//! a crossing, two subtractions for a filtered comparison, and at worst about thirty products of 32
+//! a crossing, two subtractions for a filtered comparison, and at worst about thirty products of 80
 //! limbs on the exact path.
 
 use crate::arc::{Arc2, Circle2, Round};
@@ -51,21 +53,23 @@ use crate::conic::Ellipse2;
 use crate::error::NumError;
 use crate::interval::Interval;
 use crate::sign::Sign;
-use crate::wide::{I384, Wide};
+use crate::wide::Wide;
 
-/// Limbs of the widest exact step: the turn of a grid point and two crossings of an ellipse, 2,024
-/// bits.
-pub const BIG_LIMBS: usize = 32;
+/// Limbs of the widest exact step: the turn of a grid point and two crossings, 5,041 bits.
+pub const BIG_LIMBS: usize = 80;
 
-const _: () = assert!(2_010 < BIG_LIMBS * 64);
+const _: () = assert!(5_041 < BIG_LIMBS * 64);
 
 /// Integers wide enough for every step here.
 type Big = Wide<BIG_LIMBS>;
 
-/// The limbs of a crossing's stored integers: k, the widest, is 336 bits.
-const STORED_LIMBS: usize = 6;
+/// The limbs of a crossing's stored integers: k of two circles, the widest, is 837 bits.
+const STORED_LIMBS: usize = 14;
 
-const _: () = assert!(336 < STORED_LIMBS * 64);
+const _: () = assert!(837 < STORED_LIMBS * 64);
+
+/// The integers a crossing stores.
+pub type Stored = Wide<STORED_LIMBS>;
 
 /// Which of a carrier's two crossings with a circle, by their order along the way it runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -228,16 +232,37 @@ fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError> {
     Ok(if negative { sum.neg() } else { sum })
 }
 
-/// A point of the plane at ((aₓ + bₓ√k) / w, (a_y + b_y√k) / w): a crossing of a carrier and a
+/// A point of the plane at ((a₀ + b₀√k) / w, (a₁ + b₁√k) / w): a crossing of a carrier and a
 /// circle, or a rational point, whose b's and k are zero. One root, shared by both coordinates.
 #[derive(Clone, Copy, Debug)]
 pub struct Crossing2 {
-    a: [I384; 2],
-    b: [I384; 2],
-    k: I384,
-    w: I384,
+    a: [Stored; 2],
+    b: [Stored; 2],
+    k: Stored,
+    w: Stored,
     /// Where it lies, certainly: the filter's whole answer.
     at: [Interval; 2],
+}
+
+/// A circle's centre's x, y and w, and its squared radius over w².
+fn circle_parts(c: &Circle2) -> Result<[Big; 4], NumError> {
+    let (at, r) = (c.centre(), Big::from_i128(c.radius()));
+    Ok([
+        Big::from_i64(at.x.get()),
+        Big::from_i64(at.y.get()),
+        Big::from_i64(1),
+        mul(&r, &r)?,
+    ])
+}
+
+/// As [`circle_parts`], of a circle about a rational point.
+fn round_parts(c: &Round) -> Result<[Big; 4], NumError> {
+    let ([x, y], w) = c.centre().coordinates();
+    let (x, y, w) = (Big::from_i128(x), Big::from_i128(y), Big::from_i128(w));
+    let on = c.on();
+    let dx = sub(&mul(&Big::from_i64(on.x.get()), &w)?, &x)?;
+    let dy = sub(&mul(&Big::from_i64(on.y.get()), &w)?, &y)?;
+    Ok([x, y, w, add(&mul(&dx, &dx)?, &mul(&dy, &dy)?)?])
 }
 
 /// One coordinate of a [`Crossing2`], as the exact paths take it.
@@ -250,10 +275,10 @@ struct Part {
 
 impl Crossing2 {
     /// Makes a crossing from its integers, its enclosure from theirs.
-    fn from_parts(a: [I384; 2], b: [I384; 2], k: I384, w: I384) -> Result<Crossing2, NumError> {
+    fn from_parts(a: [Stored; 2], b: [Stored; 2], k: Stored, w: Stored) -> Result<Crossing2, NumError> {
         let root = enclose(&k)?.sqrt()?;
         let weight = enclose(&w)?;
-        let coordinate = |a: &I384, b: &I384| -> Result<Interval, NumError> {
+        let coordinate = |a: &Stored, b: &Stored| -> Result<Interval, NumError> {
             let along = enclose(b)?.mul(root)?;
             enclose(a)?.add(along)?.div(weight)
         };
@@ -266,24 +291,28 @@ impl Crossing2 {
     /// Where carrier `l` meets the circle about (cx, cy) / cw, of squared radius rr / cw².
     /// N = a² + b², h = c · cw − a · cx − b · cy and k = rr · N − h², so the crossing is
     /// (C · N + n · h ± d√k) / (cw · N), d = (b, −a) the way the carrier runs.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, c, h, k and n are the formula's, l the carrier"
+    )]
     fn on_circle(
         l: &Carrier,
-        centre: [Big; 2],
-        cw: Big,
+        centre: &[Big; 2],
+        cw: &Big,
         rr: &Big,
         root: Root,
     ) -> Result<Crossing2, NumError> {
         let ([a, b], c) = l.coefficients();
         let (a, b, c) = (Big::from_i128(a), Big::from_i128(b), Big::from_i128(c));
-        let [cx, cy] = &centre;
+        let [cx, cy] = centre;
         let n = add(&mul(&a, &a)?, &mul(&b, &b)?)?;
-        let h = sub(&sub(&mul(&c, &cw)?, &mul(&a, cx)?)?, &mul(&b, cy)?)?;
+        let h = sub(&sub(&mul(&c, cw)?, &mul(&a, cx)?)?, &mul(&b, cy)?)?;
         let k = sub(&mul(rr, &n)?, &mul(&h, &h)?)?;
         if k.is_negative() {
             return Err(NumError::Degenerate);
         }
         let stored =
-            |v: Big| -> Result<I384, NumError> { v.resize().ok_or(NumError::BudgetExceeded) };
+            |v: Big| -> Result<Stored, NumError> { v.resize().ok_or(NumError::BudgetExceeded) };
         let ax = stored(add(&mul(cx, &n)?, &mul(&a, &h)?)?)?;
         let ay = stored(add(&mul(cy, &n)?, &mul(&b, &h)?)?)?;
         let ([da, db], _) = l.coefficients();
@@ -293,8 +322,8 @@ impl Crossing2 {
             Root::First => [turned(ahead)?, across],
             Root::Second => [ahead, turned(across)?],
         }
-        .map(I384::from_i128);
-        Crossing2::from_parts([ax, ay], bs, stored(k)?, stored(mul(&cw, &n)?)?)
+        .map(Stored::from_i128);
+        Crossing2::from_parts([ax, ay], bs, stored(k)?, stored(mul(cw, &n)?)?)
     }
 
     /// Where the carrier `l` meets the circle `round`, `root` choosing which.
@@ -310,7 +339,7 @@ impl Crossing2 {
         let dx = sub(&mul(&Big::from_i64(on.x.get()), &cw)?, &cx)?;
         let dy = sub(&mul(&Big::from_i64(on.y.get()), &cw)?, &cy)?;
         let rr = add(&mul(&dx, &dx)?, &mul(&dy, &dy)?)?;
-        Crossing2::on_circle(l, [cx, cy], cw, &rr, root)
+        Crossing2::on_circle(l, &[cx, cy], &cw, &rr, root)
     }
 
     /// Where the carrier `l` meets the circle `circle`, `root` choosing which.
@@ -322,7 +351,81 @@ impl Crossing2 {
         let c = circle.centre();
         let r = Big::from_i128(circle.radius());
         let centre = [Big::from_i64(c.x.get()), Big::from_i64(c.y.get())];
-        Crossing2::on_circle(l, centre, Big::from_i64(1), &mul(&r, &r)?, root)
+        Crossing2::on_circle(l, &centre, &Big::from_i64(1), &mul(&r, &r)?, root)
+    }
+
+    /// Where circles about (x₁, y₁) / w₁ and (x₂, y₂) / w₂, of squared radii ρ₁ / w₁² and ρ₂ / w₂²,
+    /// meet. With A the second centre less the first over w₁ · w₂, D = ‖A‖², h = D + ρ₁ · w₂² −
+    /// ρ₂ · w₁² and k = 4D · ρ₁ · w₂² − h², the crossing is C₁ + (h · A ± √k · A⊥) / (2D · w₁ · w₂).
+    fn between(first: &[Big; 4], second: &[Big; 4], root: Root) -> Result<Crossing2, NumError> {
+        let [x1, y1, w1, rho1] = first;
+        let [x2, y2, w2, rho2] = second;
+        let ax = sub(&mul(x2, w1)?, &mul(x1, w2)?)?;
+        let ay = sub(&mul(y2, w1)?, &mul(y1, w2)?)?;
+        let d = add(&mul(&ax, &ax)?, &mul(&ay, &ay)?)?;
+        if d.is_zero() {
+            return Err(NumError::Degenerate);
+        }
+        let near = mul(rho1, &mul(w2, w2)?)?;
+        let h = sub(&add(&d, &near)?, &mul(rho2, &mul(w1, w1)?)?)?;
+        let twice = add(&d, &d)?;
+        let k = sub(&mul(&add(&twice, &twice)?, &near)?, &mul(&h, &h)?)?;
+        if k.is_negative() {
+            return Err(NumError::Degenerate);
+        }
+        let stored =
+            |v: Big| -> Result<Stored, NumError> { v.resize().ok_or(NumError::BudgetExceeded) };
+        let lead_x = add(&mul(&mul(&twice, x1)?, w2)?, &mul(&h, &ax)?)?;
+        let lead_y = add(&mul(&mul(&twice, y1)?, w2)?, &mul(&h, &ay)?)?;
+        let bs = match root {
+            Root::First => [neg(&ay)?, ax],
+            Root::Second => [ay, neg(&ax)?],
+        };
+        let [bx, by] = bs;
+        Crossing2::from_parts(
+            [stored(lead_x)?, stored(lead_y)?],
+            [stored(bx)?, stored(by)?],
+            stored(k)?,
+            stored(mul(&mul(&twice, w1)?, w2)?)?,
+        )
+    }
+
+    /// Where the circles `first` and `second` meet: [`Root::First`] is the one to the left of the
+    /// way from the first centre to the second, the first reached going counter-clockwise round
+    /// `first` from the point of it nearest `second`'s centre, and [`Root::Second`] the other.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] when they do not meet, or have one centre;
+    /// [`NumError::BudgetExceeded`] if a step did not fit, which no input in the budget can reach.
+    pub fn of_circles(
+        first: &Circle2,
+        second: &Circle2,
+        root: Root,
+    ) -> Result<Crossing2, NumError> {
+        Crossing2::between(&circle_parts(first)?, &circle_parts(second)?, root)
+    }
+
+    /// Where the circles `first` and `second` meet, as for [`Crossing2::of_circles`].
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::of_circles`].
+    pub fn of_round_and_circle(
+        first: &Round,
+        second: &Circle2,
+        root: Root,
+    ) -> Result<Crossing2, NumError> {
+        Crossing2::between(&round_parts(first)?, &circle_parts(second)?, root)
+    }
+
+    /// Where the circles `first` and `second` meet, as for [`Crossing2::of_circles`].
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::of_circles`].
+    pub fn of_rounds(first: &Round, second: &Round, root: Root) -> Result<Crossing2, NumError> {
+        Crossing2::between(&round_parts(first)?, &round_parts(second)?, root)
     }
 
     /// A rational point in this form, b and k zero, so that it can be compared with a crossing.
@@ -333,16 +436,16 @@ impl Crossing2 {
     pub fn of_point(p: &Rational2) -> Result<Crossing2, NumError> {
         let ([x, y], w) = p.coordinates();
         Crossing2::from_parts(
-            [I384::from_i128(x), I384::from_i128(y)],
-            [I384::from_i64(0), I384::from_i64(0)],
-            I384::from_i64(0),
-            I384::from_i128(w),
+            [Stored::from_i128(x), Stored::from_i128(y)],
+            [Stored::from_i64(0), Stored::from_i64(0)],
+            Stored::from_i64(0),
+            Stored::from_i128(w),
         )
     }
 
-    /// Its homogeneous parts: `[aₓ, a_y]`, `[bₓ, b_y]`, k and w, w positive.
+    /// Its homogeneous parts: `[a₀, a₁]`, `[b₀, b₁]`, k and w, w positive.
     #[must_use]
-    pub const fn parts(&self) -> ([I384; 2], [I384; 2], I384, I384) {
+    pub const fn parts(&self) -> ([Stored; 2], [Stored; 2], Stored, Stored) {
         (self.a, self.b, self.k, self.w)
     }
 
@@ -423,14 +526,18 @@ impl Crossing2 {
     }
 
     /// Which side of the carrier `l` it lies on, as [`Carrier::side`] says of a rational point: the
-    /// sign of E + F√k with E = a · aₓ + b · a_y − c · w and F = a · bₓ + b · b_y.
+    /// sign of E + F√k with E = a · a₀ + b · a₁ − c · w and F = a · b₀ + b · b₁.
     ///
     /// # Errors
     ///
     /// As for [`Crossing2::cmp_x`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b and c are the carrier's, x and y the coordinates, l the carrier"
+    )]
     pub fn side(&self, l: &Carrier) -> Result<Sign, NumError> {
         let ([a, b], c) = l.coefficients();
-        let exact = |v: i128| enclose(&I384::from_i128(v));
+        let exact = |v: i128| enclose(&Stored::from_i128(v));
         let [at_x, at_y] = self.at;
         let value = exact(a)?
             .mul(at_x)?
@@ -454,6 +561,10 @@ impl Crossing2 {
     /// # Errors
     ///
     /// As for [`Crossing2::cmp_x`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "b, c, p, t, u, x and y are the formula's"
+    )]
     pub fn against_round(&self, round: &Round) -> Result<Sign, NumError> {
         let ([cx, cy], cw) = round.centre().coordinates();
         let on = round.on();
@@ -488,6 +599,10 @@ impl Crossing2 {
     /// # Errors
     ///
     /// As for [`Crossing2::cmp_x`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "b, c, r, u, x and y are the formula's"
+    )]
     pub fn against_circle(&self, circle: &Circle2) -> Result<Sign, NumError> {
         let (x, y) = (self.part(0)?, self.part(1)?);
         let c = circle.centre();
@@ -544,7 +659,7 @@ impl Crossing2 {
         let [mx, my] = ellipse.major().map(Big::from_i64);
         let length = add(&mul(&mx, &mx)?, &mul(&my, &my)?)?;
         let scale = twice(&mul(&p, &length)?)?;
-        let stored = |v: Big| -> Result<I384, NumError> {
+        let stored = |v: Big| -> Result<Stored, NumError> {
             v.resize().ok_or(NumError::BudgetExceeded)
         };
         let weight = twice(&e)?;

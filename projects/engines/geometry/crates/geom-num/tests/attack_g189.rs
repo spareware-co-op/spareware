@@ -556,6 +556,85 @@ fn comparison_side_and_order_keep_their_laws() {
 }
 
 #[test]
+fn two_circles_meet_on_both_and_their_order_is_the_one_stated() {
+    // (3, 4) on the circle of radius 5 about the origin and on the circle of radius 5 about (6, 0);
+    // (3, −4) is the other, to the right of the way from the first centre to the second.
+    let (a, b) = (
+        Circle2::new(p2(0, 0), 5).unwrap(),
+        Circle2::new(p2(6, 0), 5).unwrap(),
+    );
+    let left = Crossing2::of_circles(&a, &b, Root::First).unwrap();
+    let right = Crossing2::of_circles(&a, &b, Root::Second).unwrap();
+    assert!(left.same(&Crossing2::of_point(&p2(3, 4).into()).unwrap()).unwrap());
+    assert!(right.same(&Crossing2::of_point(&p2(3, -4).into()).unwrap()).unwrap());
+    // The same two as rounds, a way along their own circles.
+    let (r, s) = (
+        Round::new(p2(5, 0), p2(0, 0).into()),
+        Round::new(p2(11, 0), p2(6, 0).into()),
+    );
+    assert!(left.same(&Crossing2::of_rounds(&r, &s, Root::First).unwrap()).unwrap());
+    assert!(right.same(&Crossing2::of_rounds(&s, &r, Root::First).unwrap()).unwrap());
+    assert!(left.same(&Crossing2::of_round_and_circle(&r, &b, Root::First).unwrap()).unwrap());
+    // Tangent, apart, and one centre.
+    let touching = Circle2::new(p2(10, 0), 5).unwrap();
+    let t = Crossing2::of_circles(&a, &touching, Root::First).unwrap();
+    assert!(t.parts().2.is_zero());
+    assert!(t.same(&Crossing2::of_point(&p2(5, 0).into()).unwrap()).unwrap());
+    let apart = Circle2::new(p2(11, 0), 5).unwrap();
+    assert_eq!(
+        Crossing2::of_circles(&a, &apart, Root::First).err(),
+        Some(NumError::Degenerate)
+    );
+    assert_eq!(
+        Crossing2::of_circles(&a, &a, Root::First).err(),
+        Some(NumError::Degenerate)
+    );
+    // Random rounds, at every scale: each crossing lies on both.
+    let mut rng = Rng::new();
+    let mut made = 0;
+    for _ in 0..cases(4_000) {
+        let (on, near) = (rng.grid(), rng.grid());
+        let (x, y) = (
+            i128::from(on.x.get()) + rng.signed(30),
+            i128::from(on.y.get()) + rng.signed(30),
+        );
+        let w = 1 + rng.signed(40).abs();
+        let first = Round::new(on, Rational2::new(x * w, y * w + 1, w).unwrap());
+        let second = Round::new(on, Rational2::new(i128::from(near.x.get()), i128::from(near.y.get()), 1).unwrap());
+        let (Ok(p), Ok(q)) = (
+            Crossing2::of_rounds(&first, &second, Root::First),
+            Crossing2::of_rounds(&first, &second, Root::Second),
+        ) else {
+            continue;
+        };
+        made += 1;
+        for point in [&p, &q] {
+            assert_eq!(point.against_round(&first).unwrap(), Sign::Zero);
+            assert_eq!(point.against_round(&second).unwrap(), Sign::Zero);
+        }
+        // Each passes through `on`, so that is one of the two.
+        let at = Crossing2::of_point(&on.into()).unwrap();
+        assert!(p.same(&at).unwrap() || q.same(&at).unwrap());
+    }
+    assert!(made > 10, "only {made} pairs met");
+    // At the budget: centres at the largest numerators and weights, and every width reached.
+    let (top, weight) = ((1_i128 << 124) - 1, (1_i128 << 83) - 1);
+    let (near, far) = (
+        Rational2::new(top, -top, weight).unwrap(),
+        Rational2::new(-top, top, weight - 2).unwrap(),
+    );
+    let (r, s) = (Round::new(p2(-M, M), near), Round::new(p2(M, -M), far));
+    let p = Crossing2::of_rounds(&r, &s, Root::First).unwrap();
+    let q = Crossing2::of_rounds(&r, &s, Root::Second).unwrap();
+    assert_eq!(p.against_round(&r).unwrap(), Sign::Zero);
+    assert_eq!(p.against_round(&s).unwrap(), Sign::Zero);
+    assert!(p.cmp_x(&q).is_ok());
+    let arc = Arc2::new(p2(M, M), p2(-M, M), p2(0, 0).into()).unwrap();
+    assert!(arc.order_crossings(&p, &q).is_ok());
+    assert!(BIG_LIMBS * 64 > 5_041);
+}
+
+#[test]
 fn a_crossing_lies_exactly_on_its_carrier_and_its_circle() {
     let mut rng = Rng::new();
     let mut made = 0;
