@@ -10939,6 +10939,29 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "a few thousand big-number operations a value; the rationals are trimmed to [`BITS`] bits at every step, so they do not grow. Recursion: none.",
+          "does": "an [`Enclosed`] is a real number held between two binary fractions of [`BITS`] bits, in exact rational arithmetic that rounds outward. [`pi`], [`sinpi`] and [`cospi`] and [`fresnel`] are computed from their series with their remainders bounded, and the closed forms are built on them: [`box_volume`], [`steinmetz`], [`sphere`], [`sphere_cap`], [`torus`], [`pappus`], [`capsule`] and [`villarceau`], the last a grid point on a circle a plane through a torus's centre cuts from it. [`judge`] holds one certified result to one truth: each result must contain the truth, and a bound more than [`LOOSE`] times the real error is reported. [`CORPUS`] lists every family, what checks it today and the board piece that brings the operation still missing; `tests/truth.rs` runs what exists, so the corpus grows with each curved family.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/truth.rs",
+          "guarantees": [
+            "**Shares nothing with the kernel.** Every value comes from rational arithmetic on dashu's big integers here, from the definitions; no kernel number type and no double takes part.",
+            "**The truth is enclosed, never approximated.** Every step rounds outward and every series carries its remainder, so an [`Enclosed`] holds its exact value, and [`Enclosed::width`] says how tightly: below 2^-280 for every value in the corpus's range.",
+            "**A broken bound is named.** [`judge`] says [`Verdict::Broken`] whenever a result does not hold the whole truth, and never rounds in the result's favour."
+          ],
+          "job": "The closed-form truth corpus: shapes whose answers are known in closed form, computed once in arbitrary precision, to hold the Certified paths to their bounds (chapter 28.9; piece G179).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "https://dlmf.nist.gov/7.6"
+            ],
+            "text": "chapter 28.9's closed-form truth (`projects/engines/geometry/architecture/28-testing.md`); π by Machin's formula (W. Jones, *Synopsis Palmariorum Matheseos*, 1706), sine and cosine by their Taylor series, and the Fresnel integrals by their term-by-term integrated series (DLMF 7.6.4, 7.6.6, <https://dlmf.nist.gov/7.6>), each alternating with terms that fall, so the first term left out bounds the remainder."
+          },
+          "path": "geom_test::truth",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-test",

@@ -83,6 +83,9 @@
 //!
 //! Gate 1 (piece G43) adds:
 //!
+//! - [`truth`]: the closed-form truth corpus (28.9; G179): boxes, Steinmetz solids, caps, tori,
+//!   Pappus revolves, capsules, Villarceau circles and Fresnel tables in arbitrary precision, and
+//!   the judge that holds each Certified result to its bound.
 //! - [`trip`]: one planted violation for each gate whose verdict is an outside tool's (rustfmt,
 //!   Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun, Wasmtime's fuel, Gappa with Rocq, and
 //!   HOL Light). The binary `trip` plants it, runs the gate's own command and requires the tool's
@@ -219,6 +222,7 @@ pub mod rust_source;
 pub mod scan;
 pub mod seed;
 pub mod trip;
+pub mod truth;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};
 pub use seed::Seed;
