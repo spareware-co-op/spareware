@@ -964,7 +964,9 @@ fn the_layout_is_fixed() {
             V::Big(true, vec![1, 0, 0, 0, 0, 0, 0, 0, 0]),
         ),
     ]);
-    let text = to_text(&bytes_of(&v), 3, &mut meter()).unwrap();
+    // A small budget: a writer that stops advancing indents without end, far past `meter()`.
+    let mut small = WorkMeter::new(Budget::of_work(1_000));
+    let text = to_text(&bytes_of(&v), 3, &mut small).unwrap();
     assert_eq!(
         text,
         "{\n  1: [\n    0x1.8p+0,\n    {\n      \"k\": null\n    }\n  ],\n  \"a\\\"\\\\\\n\\u007f\": 3(h'010000000000000000')\n}"
