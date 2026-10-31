@@ -5105,6 +5105,126 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace > with >= in ahead",
+      "line_text": "dot(x, b, u) > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and b are on one line through u and neither is u, so (x − u) · (b − u) is never 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 32)) & 0x0000_0000_ffff_ffff_0000_0000_ffff_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 16)) & 0x0000_ffff_0000_ffff_0000_ffff_0000_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 8)) & 0x00ff_00ff_00ff_00ff_00ff_00ff_00ff_00ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 4)) & 0x0f0f_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 2)) & 0x3333_3333_3333_3333_3333_3333_3333_3333;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "(x | (x << 1)) & 0x5555_5555_5555_5555_5555_5555_5555_5555",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton",
+      "line_text": "spread(shift(p.x.get())) | (spread(shift(p.y.get())) << 1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The first term holds only even places and the second only odd ones, so no bit is set in both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with == in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The walk still ends at a segment in the way or at the triangle holding the centre, and either is a valid next step of refinement: a different edge first changes which valid mesh comes out for this input, the same on every target, and never its quality or its validity."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with > in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The walk still ends at a segment in the way or at the triangle holding the centre, and either is a valid next step of refinement: a different edge first changes which valid mesh comes out for this input, the same on every target, and never its quality or its validity."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The edges of one triangle are distinct, so an edge never equals the least so far."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in refine",
+      "line_text": "&& dot(mesh.p(x)?, mesh.p(y)?, centre) < 0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A centre exactly on a segment's diametral circle counts as encroaching, so that segment is split instead of the centre going in: a valid step either way, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with == in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Which encroached segment is split first changes the order of the splits: each split is a valid step and every encroached segment is still split, so the result is still valid and refined, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with > in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Which encroached segment is split first changes the order of the splits: each split is a valid step and every encroached segment is still split, so the result is still valid and refined, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The edges of one triangle are distinct, so an edge never equals the least so far."
     }
   ],
   "coverage_off": [
