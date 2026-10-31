@@ -10,6 +10,10 @@
 //!   whole-step translation, though each moves it exactly (chapter 7). Now a grid transform that
 //!   moves the centre exactly states deviation 0, and one that rounds the centre, or a transform
 //!   that is not of the grid, still states its rounding.
+//! - **The contract kit steps past huge ends.** Testing that a kind refuses outside its domain, the
+//!   kit stepped one unit before the start, which beyond 2^53 in magnitude rounds back to the
+//!   start itself, inside: `geom-fuzz`'s `surfaces` target found it reporting kinds that rightly
+//!   accepted it. Now each step is at least one double.
 #![allow(
     clippy::unwrap_used,
     clippy::float_cmp,
@@ -109,5 +113,23 @@ fn rounding_moves_of_analytic_surfaces_state_their_rounding() {
     }
     for k in kinds([0.0, 0.0, 0.0]) {
         assert!(k.transformed(&r, m).unwrap().deviation > 0.0, "{k:?}");
+    }
+}
+
+#[test]
+fn the_contract_kit_steps_past_huge_domain_ends() {
+    let m = &mut meter();
+    let huge = 1_152_921_504_606_846_976.0; // 2^60
+    let t = TypedTransform::Exact(GridTransform::quarter_turns(Axis::Z, 1));
+    for u in [(-huge, 0.0), (0.0, huge), (-huge, huge)] {
+        let p =
+            geom_surface::Plane::new([0.0; 3], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0], (u, (0.0, 1.0)))
+                .unwrap();
+        let params = [(u.0, 0.0), (u.0 / 2.0, 0.5), (u.1 / 2.0, 0.25), (u.1, 1.0)];
+        assert_eq!(
+            geom_surface::contract::check(&p, &params, &t, m),
+            Ok(()),
+            "{u:?}"
+        );
     }
 }

@@ -3,6 +3,22 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/rotation.rs",
+      "mutant": "replace < with <= in givens",
+      "line_text": "if y.abs() < TINY && z.abs() < TINY {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either < becomes <=: the forms differ only when that input is exactly 2^-1021. The pair is then scaled by 2^100 and r scaled back, both exact there since r is at least 2^-1021, a normal number, and y/r and z/r are unchanged by a common power of two: the same c, s and r either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace < with <= in Svd::jacobi",
+      "line_text": "let (up, length) = if sigma < TINY {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when sigma is exactly 2^-1021, a normal number. UP is a power of two and x*UP is exact, so norm takes the same ratios, the same sum and the same root, and its product rounds to 53 bits on both paths: length is exactly sigma*UP, and x*UP/length rounds the same quotient as x/sigma. The column comes out the same to the bit."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
       "mutant": "replace || with && in Matrix::row_pair",
       "line_text": "if i == j || i >= self.rows || j >= self.rows {",
@@ -547,14 +563,6 @@
       "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "let outside = beyond + 1.0;",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
       "mutant": "replace <= with > in check",
       "line_text": "let side = if t <= mid {",
@@ -641,30 +649,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The search keeps a piece only if it also holds t (`inside && a <= t && t <= b`), so the side test only chooses among pieces holding t: inside a piece there is one, and at a break the piece ending at t comes first in the search and passes the original test from the left (a < t, t <= b), as it passes the mutant's."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "past_end + 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace - with + in check",
-      "line_text": "before_start - 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace - with / in check",
-      "line_text": "before_start - 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
     },
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/polynomial.rs",
