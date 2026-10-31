@@ -2295,6 +2295,12 @@ fn mesh_typical_batches_all_succeed() {
     let mut built = Vec::new();
     k::exact_build(&polygons, &mut built);
     assert!(built.iter().flatten().all(|mesh| mesh.faces() == m::FACES));
+    all_ok("point_point", k::point_point, &m::point_point(Typical));
+    all_ok("point_line", k::point_line, &m::point_line(Typical));
+    all_ok("point_plane", k::point_plane, &m::point_plane(Typical));
+    all_ok("line_line", k::line_line, &m::line_line(Typical));
+    all_ok("closest_dots", k::closest_dots, &m::closest_dots(Typical));
+    all_ok("triangles", k::triangles, &m::triangles(Typical));
 }
 
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
