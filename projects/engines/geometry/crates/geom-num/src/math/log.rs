@@ -1909,4 +1909,58 @@ mod tests {
         );
         assert!(le(&worst, &p2(-101)));
     }
+
+    /// `mul_int`'s carry branch is never taken. Its only call is `mul_int(E, LOG2)`, with `E` the
+    /// input's binary exponent (`|E| ≤ 1075`), and for every `|E| ≤ 2000` the sum `l + t` that
+    /// could carry out of 128 bits fits: `mul_int`'s own steps up to that sum, repeated here.
+    #[test]
+    fn mul_int_never_carries_for_ln() {
+        for b in (-2000i64..=2000).filter(|&b| b != 0) {
+            let c = u128::from(b.unsigned_abs());
+            let mut t = u128::from(LOG2.hi) * c;
+            let hi = hi64(t);
+            let m = if hi != 0 { hi.leading_zeros() } else { 64 };
+            t <<= m;
+            let l = shl128(u128::from(LOG2.lo) * c, u64::from(m - 1)) >> 63;
+            assert!(l.checked_add(t).is_some(), "E = {b}");
+        }
+    }
+
+    /// No power of two reaches the accurate path: for every `2^k`, `k` from −1074 to 1023 (`ln 1`
+    /// returns before), the fast path's two bounds round alike, so `ln` returns from it. The
+    /// accurate path's equal-magnitude additions would need one (`Dint::add`).
+    #[test]
+    fn no_power_of_two_reaches_the_accurate_path() {
+        for k in (-1074i64..=1023).filter(|&k| k != 0) {
+            let (h, l) = log_fast(k, 1.0);
+            assert_eq!(
+                (h + (l - ERR)).to_bits(),
+                (h + (l + ERR)).to_bits(),
+                "2^{k}"
+            );
+        }
+    }
+}
+
+/// Bounded proofs (chapter 28.7): [`Dint::is_zero`]'s own contract, for every bit pattern.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `is_zero` holds exactly when both significand words are zero, whatever the exponent and
+    /// sign.
+    #[kani::proof]
+    fn is_zero_reads_both_words() {
+        let a = Dint {
+            hi: kani::any(),
+            lo: kani::any(),
+            ex: kani::any(),
+            sgn: kani::any(),
+        };
+        assert_eq!(a.is_zero(), a.hi == 0 && a.lo == 0);
+    }
 }
