@@ -599,6 +599,22 @@ pub fn cone() -> Rows {
     r
 }
 
+/// The same cone without its apex vertex and seam: a base disc and a side joined by the rim, a
+/// full circle without vertices.
+pub fn bare_cone() -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let rim = r.edge(None);
+    let s = r.shell(solid);
+    r.face(s, &[&[(rim, Sense::Forward)]]);
+    r.face(s, &[&[(rim, Sense::Reversed)]]);
+    r.curves[rim as usize] = parallel(0.0, 6.0);
+    let side = cone().surfaces[1].clone();
+    r.surfaces[0] = level(0.0);
+    r.surfaces[1] = side;
+    r
+}
+
 /// The sphere of radius 5 about the origin, its northern half.
 pub fn dome_surface() -> SurfaceKind {
     SurfaceKind::Sphere(

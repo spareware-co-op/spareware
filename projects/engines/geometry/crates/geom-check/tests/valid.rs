@@ -14,8 +14,8 @@
 mod common;
 
 use common::{
-    Rows, acorn, ball, certified, cone, cube, disc_sheet, hemisphere, holed_sheet, meter, report,
-    ring_torus, round_cylinder, seamed_cylinder, square_sheet, wire,
+    Rows, acorn, ball, bare_cone, certified, cone, cube, disc_sheet, hemisphere, holed_sheet,
+    meter, report, ring_torus, round_cylinder, seamed_cylinder, square_sheet, wire,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_num::{Exactness, GridStep, Steps};
@@ -29,6 +29,7 @@ fn every_kind_of_valid_body_passes() {
         ("cylinder", round_cylinder(), BodyKind::Solid),
         ("cylinder with a seam", seamed_cylinder(), BodyKind::Solid),
         ("cone with its apex", cone(), BodyKind::Solid),
+        ("cone without its apex", bare_cone(), BodyKind::Solid),
         ("hemisphere", hemisphere(), BodyKind::Solid),
         ("ball", ball(), BodyKind::Solid),
         ("ring torus", ring_torus(), BodyKind::Solid),
