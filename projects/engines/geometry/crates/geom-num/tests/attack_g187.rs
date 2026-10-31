@@ -241,7 +241,7 @@ fn the_largest_value_each_expression_can_take_is_inside_its_width() {
     let (x, y, w) = (P, P, W);
     assert_eq!(carrier_side::exact(a, b, c, x, y, w), Some(Sign::Positive));
     assert_eq!(
-        carrier_order::exact(N, -N, P, -P, -P, P, W, W),
+        carrier_order::exact(N, N, P, -P, -P, P, W, W),
         Some(Sign::Negative)
     );
     assert_eq!(rational_cmp::exact(P, -P, W, W), Some(Sign::Positive));
