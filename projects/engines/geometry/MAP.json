@@ -11152,7 +11152,10 @@
           ],
           "job": "Why an arena could not change, or arenas could not be published as a body.",
           "method": {
-            "none": "an error enum and its conversions, with `geom-run`'s stops (chapter 23.10)."
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "an error enum and its conversions, with `geom-run`'s stops (`projects/engines/geometry/architecture/23-performance.md`, 23.10)."
           },
           "path": "geom_topo::error",
           "provenance": [],
