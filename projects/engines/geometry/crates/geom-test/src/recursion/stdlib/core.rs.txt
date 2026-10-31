@@ -2204,6 +2204,12 @@ pub mod slice {
         pub fn chunks_exact(&self, chunk_size: usize) -> Chunks<T> {
             loop {}
         }
+        pub const fn as_chunks<const N: usize>(&self) -> (&[[T; N]], &[T]) {
+            loop {}
+        }
+        pub const fn as_rchunks<const N: usize>(&self) -> (&[T], &[[T; N]]) {
+            loop {}
+        }
         pub fn chunks_exact_mut(&mut self, chunk_size: usize) -> ChunksMut<T> {
             loop {}
         }
@@ -2379,6 +2385,22 @@ pub mod slice {
             let a: &A = crate::any();
             let b: &B = crate::any();
             a.eq(b);
+            loop {}
+        }
+    }
+    impl<A: PartialEq<B>, B, const N: usize> PartialEq<[B; N]> for &[A] {
+        fn eq(&self, other: &[B; N]) -> bool {
+            let a: &A = crate::any();
+            let b: &B = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<S: crate::borrow::Borrow<str>> [S] {
+        pub fn join(&self, sep: &str) -> crate::string::String {
+            loop {}
+        }
+        pub fn concat(&self) -> crate::string::String {
             loop {}
         }
     }
@@ -3265,6 +3287,12 @@ pub mod str {
         pub fn bytes(&self) -> Bytes {
             loop {}
         }
+        pub fn trim_end_matches<P>(&self, pat: P) -> &str {
+            loop {}
+        }
+        pub fn trim_start_matches<P>(&self, pat: P) -> &str {
+            loop {}
+        }
         pub fn trim(&self) -> &str {
             loop {}
         }
@@ -3806,28 +3834,36 @@ pub mod collections {
         }
     }
     impl crate::error::Error for TryReserveError {}
-
-    // `BTreeMap` and `BTreeSet`: every method that finds or places a key compares keys with
-    // `Ord::cmp`, as the library's search does; the trait implementations call the keys' and
-    // values' own, as the library's do (https://doc.rust-lang.org/alloc/collections/).
+    pub use btree_map::BTreeMap;
+    pub use btree_set::BTreeSet;
+    // `BTreeMap` and `BTreeSet` as their documented signatures give them: every method that orders
+    // keys calls `Ord::cmp` on them; `Clone`, `Debug`, `PartialEq` and `Hash` call the keys' and
+    // values' own; the closures they are handed are called.
     pub mod btree_map {
-        use crate::marker::PhantomData;
-
+        use crate::borrow::Borrow;
+        use crate::ops::{Index, RangeBounds};
         pub struct BTreeMap<K, V> {
-            k: PhantomData<K>,
-            v: PhantomData<V>,
+            node: crate::boxed::Box<[(K, V)]>,
+            len: usize,
+        }
+        fn order<K: Ord>() {
+            let k: &K = crate::any();
+            k.cmp(k);
+        }
+        fn order_q<Q: ?Sized + Ord>(key: &Q) {
+            key.cmp(key);
         }
         impl<K, V> BTreeMap<K, V> {
             pub const fn new() -> BTreeMap<K, V> {
                 loop {}
             }
-            pub fn len(&self) -> usize {
-                loop {}
-            }
-            pub fn is_empty(&self) -> bool {
-                loop {}
-            }
             pub fn clear(&mut self) {}
+            pub const fn len(&self) -> usize {
+                loop {}
+            }
+            pub const fn is_empty(&self) -> bool {
+                loop {}
+            }
             pub fn iter(&self) -> Iter<K, V> {
                 loop {}
             }
@@ -3843,6 +3879,12 @@ pub mod collections {
             pub fn values_mut(&mut self) -> ValuesMut<K, V> {
                 loop {}
             }
+            pub fn into_keys(self) -> IntoKeys<K, V> {
+                loop {}
+            }
+            pub fn into_values(self) -> IntoValues<K, V> {
+                loop {}
+            }
             pub fn first_key_value(&self) -> Option<(&K, &V)> {
                 loop {}
             }
@@ -3851,28 +3893,96 @@ pub mod collections {
             }
         }
         impl<K: Ord, V> BTreeMap<K, V> {
-            pub fn get(&self, key: &K) -> Option<&V> {
-                key.cmp(key);
+            pub fn get<Q: ?Sized + Ord>(&self, key: &Q) -> Option<&V>
+            where
+                K: Borrow<Q>,
+            {
+                order_q(key);
                 loop {}
             }
-            pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
-                key.cmp(key);
+            pub fn get_key_value<Q: ?Sized + Ord>(&self, key: &Q) -> Option<(&K, &V)>
+            where
+                K: Borrow<Q>,
+            {
+                order_q(key);
                 loop {}
             }
-            pub fn contains_key(&self, key: &K) -> bool {
-                key.cmp(key);
+            pub fn get_mut<Q: ?Sized + Ord>(&mut self, key: &Q) -> Option<&mut V>
+            where
+                K: Borrow<Q>,
+            {
+                order_q(key);
+                loop {}
+            }
+            pub fn contains_key<Q: ?Sized + Ord>(&self, key: &Q) -> bool
+            where
+                K: Borrow<Q>,
+            {
+                order_q(key);
                 loop {}
             }
             pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-                key.cmp(&key);
+                order::<K>();
                 loop {}
             }
-            pub fn remove(&mut self, key: &K) -> Option<V> {
-                key.cmp(key);
+            pub fn remove<Q: ?Sized + Ord>(&mut self, key: &Q) -> Option<V>
+            where
+                K: Borrow<Q>,
+            {
+                order_q(key);
+                loop {}
+            }
+            pub fn remove_entry<Q: ?Sized + Ord>(&mut self, key: &Q) -> Option<(K, V)>
+            where
+                K: Borrow<Q>,
+            {
+                order_q(key);
                 loop {}
             }
             pub fn entry(&mut self, key: K) -> Entry<K, V> {
-                key.cmp(&key);
+                order::<K>();
+                loop {}
+            }
+            pub fn first_entry(&mut self) -> Option<OccupiedEntry<K, V>> {
+                loop {}
+            }
+            pub fn last_entry(&mut self) -> Option<OccupiedEntry<K, V>> {
+                loop {}
+            }
+            pub fn pop_first(&mut self) -> Option<(K, V)> {
+                loop {}
+            }
+            pub fn pop_last(&mut self) -> Option<(K, V)> {
+                loop {}
+            }
+            pub fn append(&mut self, other: &mut BTreeMap<K, V>) {
+                order::<K>();
+            }
+            pub fn split_off<Q: ?Sized + Ord>(&mut self, key: &Q) -> BTreeMap<K, V>
+            where
+                K: Borrow<Q>,
+            {
+                order_q(key);
+                loop {}
+            }
+            pub fn range<T: ?Sized + Ord, R: RangeBounds<T>>(&self, range: R) -> Range<K, V>
+            where
+                K: Borrow<T>,
+            {
+                // The bound type is not inferable from the range alone, and is the key's own type
+                // or a borrowed form of it: compare keys.
+                let k: &K = crate::any();
+                k.cmp(k);
+                loop {}
+            }
+            pub fn range_mut<T: ?Sized + Ord, R: RangeBounds<T>>(&mut self, range: R) -> RangeMut<K, V>
+            where
+                K: Borrow<T>,
+            {
+                // The bound type is not inferable from the range alone, and is the key's own type
+                // or a borrowed form of it: compare keys.
+                let k: &K = crate::any();
+                k.cmp(k);
                 loop {}
             }
             pub fn retain<F: FnMut(&K, &mut V) -> bool>(&mut self, f: F) {
@@ -3881,38 +3991,12 @@ pub mod collections {
                 let v: &mut V = crate::any();
                 f(k, v);
             }
-            pub fn append(&mut self, other: &mut BTreeMap<K, V>) {
-                let k: &K = crate::any();
-                k.cmp(k);
-            }
-        }
-        pub struct Entry<K, V> {
-            k: PhantomData<K>,
-            v: PhantomData<V>,
-        }
-        impl<K: Ord, V> Entry<K, V> {
-            pub fn or_insert(self, default: V) -> &mut V {
-                loop {}
-            }
-            pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &mut V {
-                default();
-                loop {}
-            }
-            pub fn key(&self) -> &K {
-                loop {}
-            }
-        }
-        impl<K: Ord, V: Default> Entry<K, V> {
-            pub fn or_default(self) -> &mut V {
-                V::default();
-                loop {}
-            }
         }
         impl<K: Clone, V: Clone> Clone for BTreeMap<K, V> {
             fn clone(&self) -> BTreeMap<K, V> {
                 let k: &K = crate::any();
-                let v: &V = crate::any();
                 k.clone();
+                let v: &V = crate::any();
                 v.clone();
                 loop {}
             }
@@ -3920,8 +4004,8 @@ pub mod collections {
         impl<K: crate::fmt::Debug, V: crate::fmt::Debug> crate::fmt::Debug for BTreeMap<K, V> {
             fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
                 let k: &K = crate::any();
-                let v: &V = crate::any();
                 crate::fmt::Debug::fmt(k, f);
+                let v: &V = crate::any();
                 crate::fmt::Debug::fmt(v, f)
             }
         }
@@ -3933,8 +4017,8 @@ pub mod collections {
         impl<K: PartialEq, V: PartialEq> PartialEq for BTreeMap<K, V> {
             fn eq(&self, other: &BTreeMap<K, V>) -> bool {
                 let k: &K = crate::any();
-                let v: &V = crate::any();
                 k.eq(k);
+                let v: &V = crate::any();
                 v.eq(v);
                 loop {}
             }
@@ -3943,8 +4027,8 @@ pub mod collections {
         impl<K: PartialOrd, V: PartialOrd> PartialOrd for BTreeMap<K, V> {
             fn partial_cmp(&self, other: &BTreeMap<K, V>) -> Option<crate::cmp::Ordering> {
                 let k: &K = crate::any();
-                let v: &V = crate::any();
                 k.partial_cmp(k);
+                let v: &V = crate::any();
                 v.partial_cmp(v);
                 loop {}
             }
@@ -3952,17 +4036,48 @@ pub mod collections {
         impl<K: Ord, V: Ord> Ord for BTreeMap<K, V> {
             fn cmp(&self, other: &BTreeMap<K, V>) -> crate::cmp::Ordering {
                 let k: &K = crate::any();
-                let v: &V = crate::any();
                 k.cmp(k);
+                let v: &V = crate::any();
                 v.cmp(v)
             }
         }
         impl<K: crate::hash::Hash, V: crate::hash::Hash> crate::hash::Hash for BTreeMap<K, V> {
             fn hash<H: crate::hash::Hasher>(&self, state: &mut H) {
                 let k: &K = crate::any();
-                let v: &V = crate::any();
                 k.hash(state);
+                let v: &V = crate::any();
                 v.hash(state);
+            }
+        }
+        impl<K: Ord, Q: ?Sized + Ord, V> Index<&Q> for BTreeMap<K, V>
+        where
+            K: Borrow<Q>,
+        {
+            type Output = V;
+            fn index(&self, key: &Q) -> &V {
+                order_q(key);
+                loop {}
+            }
+        }
+        impl<K: Ord, V> FromIterator<(K, V)> for BTreeMap<K, V> {
+            fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> BTreeMap<K, V> {
+                order::<K>();
+                let mut it = iter.into_iter();
+                while let Some(_x) = it.next() {}
+                loop {}
+            }
+        }
+        impl<K: Ord, V> Extend<(K, V)> for BTreeMap<K, V> {
+            fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
+                order::<K>();
+                let mut it = iter.into_iter();
+                while let Some(_x) = it.next() {}
+            }
+        }
+        impl<K: Ord, V, const N: usize> From<[(K, V); N]> for BTreeMap<K, V> {
+            fn from(arr: [(K, V); N]) -> BTreeMap<K, V> {
+                order::<K>();
+                loop {}
             }
         }
         impl<K, V> IntoIterator for BTreeMap<K, V> {
@@ -3986,33 +4101,83 @@ pub mod collections {
                 loop {}
             }
         }
-        impl<K: Ord, V> FromIterator<(K, V)> for BTreeMap<K, V> {
-            fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> BTreeMap<K, V> {
-                let mut it = iter.into_iter();
-                while let Some(x) = it.next() {
-                    x.0.cmp(&x.0);
-                }
+        pub enum Entry<K, V> {
+            Vacant(VacantEntry<K, V>),
+            Occupied(OccupiedEntry<K, V>),
+        }
+        pub struct VacantEntry<K, V> {
+            key: K,
+            v: crate::marker::PhantomData<V>,
+        }
+        pub struct OccupiedEntry<K, V> {
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
+        }
+        impl<K: Ord, V> Entry<K, V> {
+            pub fn or_insert(self, default: V) -> &mut V {
+                loop {}
+            }
+            pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &mut V {
+                default();
+                loop {}
+            }
+            pub fn or_insert_with_key<F: FnOnce(&K) -> V>(self, default: F) -> &mut V {
+                let k: &K = crate::any();
+                default(k);
+                loop {}
+            }
+            pub fn key(&self) -> &K {
+                loop {}
+            }
+            pub fn and_modify<F: FnOnce(&mut V)>(self, f: F) -> Entry<K, V> {
+                let v: &mut V = crate::any();
+                f(v);
                 loop {}
             }
         }
-        impl<K: Ord, V> Extend<(K, V)> for BTreeMap<K, V> {
-            fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
-                let mut it = iter.into_iter();
-                while let Some(x) = it.next() {
-                    x.0.cmp(&x.0);
-                }
+        impl<K: Ord, V: Default> Entry<K, V> {
+            pub fn or_default(self) -> &mut V {
+                V::default();
+                loop {}
             }
         }
-        impl<K: Ord, V, const N: usize> From<[(K, V); N]> for BTreeMap<K, V> {
-            fn from(arr: [(K, V); N]) -> BTreeMap<K, V> {
-                let k: &K = crate::any();
-                k.cmp(k);
+        impl<K: Ord, V> VacantEntry<K, V> {
+            pub fn key(&self) -> &K {
+                loop {}
+            }
+            pub fn into_key(self) -> K {
+                loop {}
+            }
+            pub fn insert(self, value: V) -> &mut V {
+                loop {}
+            }
+        }
+        impl<K: Ord, V> OccupiedEntry<K, V> {
+            pub fn key(&self) -> &K {
+                loop {}
+            }
+            pub fn get(&self) -> &V {
+                loop {}
+            }
+            pub fn get_mut(&mut self) -> &mut V {
+                loop {}
+            }
+            pub fn into_mut(self) -> &mut V {
+                loop {}
+            }
+            pub fn insert(&mut self, value: V) -> V {
+                loop {}
+            }
+            pub fn remove(self) -> V {
+                loop {}
+            }
+            pub fn remove_entry(self) -> (K, V) {
                 loop {}
             }
         }
         pub struct Iter<K, V> {
-            k: PhantomData<K>,
-            v: PhantomData<V>,
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
         }
         impl<K, V> Iterator for Iter<K, V> {
             type Item = (&K, &V);
@@ -4027,13 +4192,13 @@ pub mod collections {
         }
         impl<K, V> ExactSizeIterator for Iter<K, V> {}
         impl<K, V> Clone for Iter<K, V> {
-            fn clone(&self) -> Self {
+            fn clone(&self) -> Iter<K, V> {
                 loop {}
             }
         }
         pub struct IterMut<K, V> {
-            k: PhantomData<K>,
-            v: PhantomData<V>,
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
         }
         impl<K, V> Iterator for IterMut<K, V> {
             type Item = (&K, &mut V);
@@ -4048,8 +4213,8 @@ pub mod collections {
         }
         impl<K, V> ExactSizeIterator for IterMut<K, V> {}
         pub struct IntoIter<K, V> {
-            k: PhantomData<K>,
-            v: PhantomData<V>,
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
         }
         impl<K, V> Iterator for IntoIter<K, V> {
             type Item = (K, V);
@@ -4064,8 +4229,8 @@ pub mod collections {
         }
         impl<K, V> ExactSizeIterator for IntoIter<K, V> {}
         pub struct Keys<K, V> {
-            k: PhantomData<K>,
-            v: PhantomData<V>,
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
         }
         impl<K, V> Iterator for Keys<K, V> {
             type Item = &K;
@@ -4079,9 +4244,14 @@ pub mod collections {
             }
         }
         impl<K, V> ExactSizeIterator for Keys<K, V> {}
+        impl<K, V> Clone for Keys<K, V> {
+            fn clone(&self) -> Keys<K, V> {
+                loop {}
+            }
+        }
         pub struct Values<K, V> {
-            k: PhantomData<K>,
-            v: PhantomData<V>,
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
         }
         impl<K, V> Iterator for Values<K, V> {
             type Item = &V;
@@ -4095,9 +4265,14 @@ pub mod collections {
             }
         }
         impl<K, V> ExactSizeIterator for Values<K, V> {}
+        impl<K, V> Clone for Values<K, V> {
+            fn clone(&self) -> Values<K, V> {
+                loop {}
+            }
+        }
         pub struct ValuesMut<K, V> {
-            k: PhantomData<K>,
-            v: PhantomData<V>,
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
         }
         impl<K, V> Iterator for ValuesMut<K, V> {
             type Item = &mut V;
@@ -4105,26 +4280,73 @@ pub mod collections {
                 loop {}
             }
         }
-        impl<K, V> ExactSizeIterator for ValuesMut<K, V> {}
+        pub struct IntoKeys<K, V> {
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
+        }
+        impl<K, V> Iterator for IntoKeys<K, V> {
+            type Item = K;
+            fn next(&mut self) -> Option<K> {
+                loop {}
+            }
+        }
+        pub struct IntoValues<K, V> {
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
+        }
+        impl<K, V> Iterator for IntoValues<K, V> {
+            type Item = V;
+            fn next(&mut self) -> Option<V> {
+                loop {}
+            }
+        }
+        pub struct Range<K, V> {
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
+        }
+        impl<K, V> Iterator for Range<K, V> {
+            type Item = (&K, &V);
+            fn next(&mut self) -> Option<(&K, &V)> {
+                loop {}
+            }
+        }
+        impl<K, V> DoubleEndedIterator for Range<K, V> {
+            fn next_back(&mut self) -> Option<(&K, &V)> {
+                loop {}
+            }
+        }
+        pub struct RangeMut<K, V> {
+            k: crate::marker::PhantomData<K>,
+            v: crate::marker::PhantomData<V>,
+        }
+        impl<K, V> Iterator for RangeMut<K, V> {
+            type Item = (&K, &mut V);
+            fn next(&mut self) -> Option<(&K, &mut V)> {
+                loop {}
+            }
+        }
     }
-
     pub mod btree_set {
-        use crate::marker::PhantomData;
-
+        use crate::borrow::Borrow;
+        use crate::ops::RangeBounds;
         pub struct BTreeSet<T> {
-            t: PhantomData<T>,
+            map: super::btree_map::BTreeMap<T, ()>,
+        }
+        fn order<T: Ord>() {
+            let t: &T = crate::any();
+            t.cmp(t);
         }
         impl<T> BTreeSet<T> {
             pub const fn new() -> BTreeSet<T> {
                 loop {}
             }
-            pub fn len(&self) -> usize {
-                loop {}
-            }
-            pub fn is_empty(&self) -> bool {
-                loop {}
-            }
             pub fn clear(&mut self) {}
+            pub const fn len(&self) -> usize {
+                loop {}
+            }
+            pub const fn is_empty(&self) -> bool {
+                loop {}
+            }
             pub fn iter(&self) -> Iter<T> {
                 loop {}
             }
@@ -4136,48 +4358,112 @@ pub mod collections {
             }
         }
         impl<T: Ord> BTreeSet<T> {
-            pub fn contains(&self, value: &T) -> bool {
+            pub fn contains<Q: ?Sized + Ord>(&self, value: &Q) -> bool
+            where
+                T: Borrow<Q>,
+            {
                 value.cmp(value);
                 loop {}
             }
-            pub fn get(&self, value: &T) -> Option<&T> {
+            pub fn get<Q: ?Sized + Ord>(&self, value: &Q) -> Option<&T>
+            where
+                T: Borrow<Q>,
+            {
                 value.cmp(value);
                 loop {}
             }
             pub fn insert(&mut self, value: T) -> bool {
-                value.cmp(&value);
+                order::<T>();
                 loop {}
             }
-            pub fn remove(&mut self, value: &T) -> bool {
+            pub fn replace(&mut self, value: T) -> Option<T> {
+                order::<T>();
+                loop {}
+            }
+            pub fn remove<Q: ?Sized + Ord>(&mut self, value: &Q) -> bool
+            where
+                T: Borrow<Q>,
+            {
                 value.cmp(value);
+                loop {}
+            }
+            pub fn take<Q: ?Sized + Ord>(&mut self, value: &Q) -> Option<T>
+            where
+                T: Borrow<Q>,
+            {
+                value.cmp(value);
+                loop {}
+            }
+            pub fn pop_first(&mut self) -> Option<T> {
+                loop {}
+            }
+            pub fn pop_last(&mut self) -> Option<T> {
+                loop {}
+            }
+            pub fn append(&mut self, other: &mut BTreeSet<T>) {
+                order::<T>();
+            }
+            pub fn split_off<Q: ?Sized + Ord>(&mut self, value: &Q) -> BTreeSet<T>
+            where
+                T: Borrow<Q>,
+            {
+                value.cmp(value);
+                loop {}
+            }
+            pub fn range<K: ?Sized + Ord, R: RangeBounds<K>>(&self, range: R) -> Range<T>
+            where
+                T: Borrow<K>,
+            {
+                // As BTreeMap::range: compare the set's own values.
+                let a: &T = crate::any();
+                a.cmp(a);
                 loop {}
             }
             pub fn retain<F: FnMut(&T) -> bool>(&mut self, f: F) {
                 let mut f = f;
-                let a: &T = crate::any();
-                f(a);
+                let t: &T = crate::any();
+                f(t);
             }
             pub fn is_subset(&self, other: &BTreeSet<T>) -> bool {
-                let a: &T = crate::any();
-                a.cmp(a);
+                order::<T>();
                 loop {}
             }
-            pub fn append(&mut self, other: &mut BTreeSet<T>) {
-                let a: &T = crate::any();
-                a.cmp(a);
+            pub fn is_superset(&self, other: &BTreeSet<T>) -> bool {
+                order::<T>();
+                loop {}
+            }
+            pub fn is_disjoint(&self, other: &BTreeSet<T>) -> bool {
+                order::<T>();
+                loop {}
+            }
+            pub fn union(&self, other: &BTreeSet<T>) -> Union<T> {
+                order::<T>();
+                loop {}
+            }
+            pub fn intersection(&self, other: &BTreeSet<T>) -> Intersection<T> {
+                order::<T>();
+                loop {}
+            }
+            pub fn difference(&self, other: &BTreeSet<T>) -> Difference<T> {
+                order::<T>();
+                loop {}
+            }
+            pub fn symmetric_difference(&self, other: &BTreeSet<T>) -> SymmetricDifference<T> {
+                order::<T>();
+                loop {}
             }
         }
         impl<T: Clone> Clone for BTreeSet<T> {
             fn clone(&self) -> BTreeSet<T> {
-                let a: &T = crate::any();
-                a.clone();
+                let t: &T = crate::any();
+                t.clone();
                 loop {}
             }
         }
         impl<T: crate::fmt::Debug> crate::fmt::Debug for BTreeSet<T> {
             fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
-                let a: &T = crate::any();
-                crate::fmt::Debug::fmt(a, f)
+                let t: &T = crate::any();
+                crate::fmt::Debug::fmt(t, f)
             }
         }
         impl<T> Default for BTreeSet<T> {
@@ -4187,29 +4473,50 @@ pub mod collections {
         }
         impl<T: PartialEq> PartialEq for BTreeSet<T> {
             fn eq(&self, other: &BTreeSet<T>) -> bool {
-                let a: &T = crate::any();
-                a.eq(a);
+                let t: &T = crate::any();
+                t.eq(t);
                 loop {}
             }
         }
         impl<T: Eq> Eq for BTreeSet<T> {}
         impl<T: PartialOrd> PartialOrd for BTreeSet<T> {
             fn partial_cmp(&self, other: &BTreeSet<T>) -> Option<crate::cmp::Ordering> {
-                let a: &T = crate::any();
-                a.partial_cmp(a);
+                let t: &T = crate::any();
+                t.partial_cmp(t);
                 loop {}
             }
         }
         impl<T: Ord> Ord for BTreeSet<T> {
             fn cmp(&self, other: &BTreeSet<T>) -> crate::cmp::Ordering {
-                let a: &T = crate::any();
-                a.cmp(a)
+                let t: &T = crate::any();
+                t.cmp(t)
             }
         }
         impl<T: crate::hash::Hash> crate::hash::Hash for BTreeSet<T> {
             fn hash<H: crate::hash::Hasher>(&self, state: &mut H) {
-                let a: &T = crate::any();
-                a.hash(state);
+                let t: &T = crate::any();
+                t.hash(state);
+            }
+        }
+        impl<T: Ord> FromIterator<T> for BTreeSet<T> {
+            fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> BTreeSet<T> {
+                order::<T>();
+                let mut it = iter.into_iter();
+                while let Some(_x) = it.next() {}
+                loop {}
+            }
+        }
+        impl<T: Ord> Extend<T> for BTreeSet<T> {
+            fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+                order::<T>();
+                let mut it = iter.into_iter();
+                while let Some(_x) = it.next() {}
+            }
+        }
+        impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
+            fn from(arr: [T; N]) -> BTreeSet<T> {
+                order::<T>();
+                loop {}
             }
         }
         impl<T> IntoIterator for BTreeSet<T> {
@@ -4226,32 +4533,8 @@ pub mod collections {
                 loop {}
             }
         }
-        impl<T: Ord> FromIterator<T> for BTreeSet<T> {
-            fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> BTreeSet<T> {
-                let mut it = iter.into_iter();
-                while let Some(x) = it.next() {
-                    x.cmp(&x);
-                }
-                loop {}
-            }
-        }
-        impl<T: Ord> Extend<T> for BTreeSet<T> {
-            fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-                let mut it = iter.into_iter();
-                while let Some(x) = it.next() {
-                    x.cmp(&x);
-                }
-            }
-        }
-        impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
-            fn from(arr: [T; N]) -> BTreeSet<T> {
-                let a: &T = crate::any();
-                a.cmp(a);
-                loop {}
-            }
-        }
         pub struct Iter<T> {
-            t: PhantomData<T>,
+            t: crate::marker::PhantomData<T>,
         }
         impl<T> Iterator for Iter<T> {
             type Item = &T;
@@ -4266,12 +4549,12 @@ pub mod collections {
         }
         impl<T> ExactSizeIterator for Iter<T> {}
         impl<T> Clone for Iter<T> {
-            fn clone(&self) -> Self {
+            fn clone(&self) -> Iter<T> {
                 loop {}
             }
         }
         pub struct IntoIter<T> {
-            t: PhantomData<T>,
+            t: crate::marker::PhantomData<T>,
         }
         impl<T> Iterator for IntoIter<T> {
             type Item = T;
@@ -4285,10 +4568,52 @@ pub mod collections {
             }
         }
         impl<T> ExactSizeIterator for IntoIter<T> {}
+        pub struct Range<T> {
+            t: crate::marker::PhantomData<T>,
+        }
+        impl<T> Iterator for Range<T> {
+            type Item = &T;
+            fn next(&mut self) -> Option<&T> {
+                loop {}
+            }
+        }
+        pub struct Union<T> {
+            t: crate::marker::PhantomData<T>,
+        }
+        impl<T> Iterator for Union<T> {
+            type Item = &T;
+            fn next(&mut self) -> Option<&T> {
+                loop {}
+            }
+        }
+        pub struct Intersection<T> {
+            t: crate::marker::PhantomData<T>,
+        }
+        impl<T> Iterator for Intersection<T> {
+            type Item = &T;
+            fn next(&mut self) -> Option<&T> {
+                loop {}
+            }
+        }
+        pub struct Difference<T> {
+            t: crate::marker::PhantomData<T>,
+        }
+        impl<T> Iterator for Difference<T> {
+            type Item = &T;
+            fn next(&mut self) -> Option<&T> {
+                loop {}
+            }
+        }
+        pub struct SymmetricDifference<T> {
+            t: crate::marker::PhantomData<T>,
+        }
+        impl<T> Iterator for SymmetricDifference<T> {
+            type Item = &T;
+            fn next(&mut self) -> Option<&T> {
+                loop {}
+            }
+        }
     }
-
-    pub use btree_map::BTreeMap;
-    pub use btree_set::BTreeSet;
 }
 
 pub mod sync {
@@ -5221,6 +5546,9 @@ pub mod primitives {
                     pub const fn is_power_of_two(self) -> bool {
                         loop {}
                     }
+                    pub const fn bit_width(self) -> u32 {
+                        loop {}
+                    }
                     pub const fn next_power_of_two(self) -> $t {
                         loop {}
                     }
@@ -5466,6 +5794,9 @@ pub mod primitives {
             loop {}
         }
         pub const fn is_ascii_digit(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii_hexdigit(&self) -> bool {
             loop {}
         }
         pub const fn is_ascii(&self) -> bool {
