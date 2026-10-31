@@ -1,0 +1,30 @@
+{
+  "exhibits": [
+    {
+      "id": "1/empty-log",
+      "what": "An operation log of format 1 with no inputs and no operations: the replay's own framing, the hash of nothing run.",
+      "format": 1,
+      "edition": "pre-edition",
+      "file": "v1/empty-log.skgf",
+      "sha256": "3902d607ec57ad67d71db51444eab84edee49f3de75dda58aa48aa00d25cb932",
+      "kind": {
+        "log": {
+          "replays_to": "964f0996b5ed24d186d1cb43f3c8d7b6dc1476c86070d02d2f9d5a05423ac7de"
+        }
+      }
+    },
+    {
+      "id": "1/header-only",
+      "what": "Format 1's header and nothing else, geom-format's first archived file.",
+      "format": 1,
+      "edition": "pre-edition",
+      "file": "v1/header-only.skgf",
+      "sha256": "6a98b9784afd14919297f84dd92a954fe6e4ba43eec0813df055fc7e80edbed7",
+      "kind": {
+        "file": {
+          "records": 0
+        }
+      }
+    }
+  ]
+}
