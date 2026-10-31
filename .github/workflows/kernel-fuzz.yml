@@ -240,10 +240,10 @@ jobs:
           - eft::proofs::two_prod_with_minus_a_tenth
           - eft::proofs::two_prod_with_the_largest_double
           - eft::proofs::two_prod_with_the_smallest_subnormal
-          - distance::proofs::line_line_has_the_sign_of_its_gap
+          - distance::proofs::cross_is_the_cross_product
           - distance::proofs::point_line_has_the_sign_of_its_gap
-          - distance::proofs::point_plane_has_the_sign_of_its_gap
           - distance::proofs::point_point_has_the_sign_of_its_gap
+          - distance::proofs::triple_has_the_sign_of_its_gap
           - eft::proofs::two_prod_with_the_splitter
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
