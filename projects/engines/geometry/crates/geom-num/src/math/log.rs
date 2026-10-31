@@ -1980,6 +1980,22 @@ mod tests {
         assert!(close(power, Dint { sgn: 1, ..ones }).is_zero());
     }
 
+    /// The accurate path alone gives `ln` at every power of two, `k` from −1074 to 1023. The fast
+    /// path answers all of these (the test below), so this is the one place they reach
+    /// `log_accurate` and `Dint::add`'s equal-magnitude arms. The ledger's `log_fast` entries, whose
+    /// mutants send every input other than 1 down this path, rest on it.
+    #[test]
+    fn the_accurate_path_alone_gives_ln_at_every_power_of_two() {
+        for k in (-1074i64..=1023).filter(|&k| k != 0) {
+            let x = if k < -1022 {
+                f64::from_bits(1 << (k + 1074))
+            } else {
+                f64::from_bits(((k + 1023) as u64) << 52)
+            };
+            assert_eq!(log_accurate(x).to_bits(), super::ln(x).to_bits(), "2^{k}");
+        }
+    }
+
     /// No power of two reaches the accurate path: for every `2^k`, `k` from −1074 to 1023 (`ln 1`
     /// returns before), the fast path's two bounds round alike, so `ln` returns from it. The
     /// accurate path's equal-magnitude additions would need one (`Dint::add`).

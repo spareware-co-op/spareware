@@ -1760,3 +1760,50 @@ mod tests {
         }
     }
 }
+
+/// Bounded proofs (chapter 28.7): [`hard_case`]'s own contract, for every remainder and index.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `hard_case(x, iq, hard)` for any `x` and `iq`: the entry whose remainder and index both
+    /// match, or whose mirror image's do, with the sign of the fold, and `None` where no entry
+    /// matches in both. Tests cannot show this through `sinpi` and `cospi`: the scan runs only
+    /// when the low part's significand is all ones or all zeros, and no input known reaches it
+    /// with one half of a pair matching and the other not.
+    fn answers_exactly_the_listed_pairs(hard: &[HardCase]) {
+        let x: f64 = kani::any();
+        let iq: u64 = kani::any();
+        let folded = iq & 0x7ff;
+        let listed = hard.iter().find(|h| {
+            let here = x == h.x && folded == h.iq;
+            let mirror = x == -h.x && folded + h.iq == 2048;
+            here || mirror
+        });
+        let got = hard_case(x, iq, hard);
+        assert_eq!(got.is_some(), listed.is_some());
+        if let (Some(got), Some(h)) = (got, listed) {
+            let sum = h.r + h.d;
+            let want = if iq > 2048 { -sum } else { sum };
+            assert_eq!(got.to_bits(), want.to_bits());
+        }
+    }
+
+    /// [`SINPI_HARD`]: see [`answers_exactly_the_listed_pairs`].
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn sinpi_hard_case_answers_exactly_the_listed_pairs() {
+        answers_exactly_the_listed_pairs(&SINPI_HARD);
+    }
+
+    /// [`COSPI_HARD`]: see [`answers_exactly_the_listed_pairs`].
+    #[kani::proof]
+    #[kani::unwind(10)]
+    fn cospi_hard_case_answers_exactly_the_listed_pairs() {
+        answers_exactly_the_listed_pairs(&COSPI_HARD);
+    }
+}

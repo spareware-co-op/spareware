@@ -352,10 +352,8 @@ pub fn atan2(y0: f64, x0: f64) -> f64 {
     let eps = z.abs() * EPS1_REL + EPS1_ABS;
     let (rh, z) = fast_two_sum(fh, z);
     let rl = (fl + dz) + z;
-    let lb = rh + (rl - eps);
-    let ub = rh + (rl + eps);
-    if lb == ub {
-        return ub;
+    if let Some(r) = agreed(rh, rl, eps) {
+        return r;
     }
 
     // Second fast path: the reduced quotient in double-double.
@@ -381,12 +379,18 @@ pub fn atan2(y0: f64, x0: f64) -> f64 {
     let zl = zl * sgn;
     let eps = EPS2_REL * (zh.abs() * z2 + EPS2_ABS);
     let (fh, fl) = fast_sum(fh, fl, zh, zl);
+    agreed(fh, fl, eps).unwrap_or_else(|| atan2_accurate(y0, x0))
+}
+
+/// The fast paths' rounding test (Lemma 1): the double that both ends of `fh + fl ± eps` round to,
+/// `None` if they round apart. On its own so that Kani can hold its contract: no input is known to
+/// show a loosened test through [`atan2`] (it needs `y/x` within 2^−154 of a value only a lattice
+/// search could find).
+#[inline]
+fn agreed(fh: f64, fl: f64, eps: f64) -> Option<f64> {
     let lb = fh + (fl - eps);
     let ub = fh + (fl + eps);
-    if lb != ub {
-        return atan2_accurate(y0, x0);
-    }
-    ub
+    (lb == ub).then_some(ub)
 }
 
 /// The accurate path (C: `atan2_accurate`): `y/x` or `x/y` and a degree-[29, 29] rational
@@ -1848,6 +1852,21 @@ mod tests {
 #[cfg_attr(test, mutants::skip)]
 mod proofs {
     use super::*;
+
+    /// `agreed` answers exactly when the lower and upper ends, each rounded once as the enclosure
+    /// is, are the same double, and it answers that double. For the fast paths' values: an angle,
+    /// its low part and a small positive bound.
+    #[kani::proof]
+    fn agreed_answers_exactly_when_both_ends_round_alike() {
+        let (fh, fl, eps): (f64, f64, f64) = (kani::any(), kani::any(), kani::any());
+        kani::assume(fh.abs() <= 4.0 && fl.abs() <= 1.0 && eps > 0.0 && eps <= 1.0);
+        let lower = fh + (fl - eps);
+        let upper = fh + (fl + eps);
+        match agreed(fh, fl, eps) {
+            Some(r) => assert!(lower == upper && r.to_bits() == upper.to_bits()),
+            None => assert!(lower != upper),
+        }
+    }
 
     /// The bits of the double nearest `(−1)^s·(h·2^128 + m·2^64 + l)·2^(ex − 192)` (`s` = 1 when
     /// `sgn ≠ 0`), for `h ≥ 2^63`: rounded to nearest with ties to even, overflowing to infinity
