@@ -165,6 +165,46 @@ fn a_comb_of_many_notches_adds_up() {
 }
 
 #[test]
+fn a_cut_ends_each_part_of_an_edge_it_crosses_where_it_crosses() {
+    // In each star a long edge crosses an early cut, and a later cut passes through the part of
+    // that edge's line the other side of the first: a part still holding the end it had would
+    // follow that later cut into a cell it never reaches.
+    let stars: [&[(i64, i64)]; 4] = [
+        &[
+            (0, 4),
+            (-17, -12),
+            (-9, -10),
+            (-1, -7),
+            (0, -7),
+            (1, -3),
+            (4, -8),
+        ],
+        &[
+            (19, 17),
+            (4, 9),
+            (2, 9),
+            (-1, 7),
+            (-2, 4),
+            (-10, 2),
+            (0, -4),
+        ],
+        &[
+            (0, 4),
+            (-16, -12),
+            (-9, -10),
+            (-1, -7),
+            (0, -7),
+            (1, -3),
+            (3, -8),
+        ],
+        &[(18, 9), (4, 4), (3, 13), (-9, 0), (6, -1)],
+    ];
+    for corners in stars {
+        assert_eq!(total(&split(&[ring(corners)])), shoelace(corners));
+    }
+}
+
+#[test]
 fn the_same_sides_give_the_same_pieces() {
     let l = [(0, 0), (6, 0), (6, 2), (2, 2), (2, 6), (0, 6)];
     let rings = [ring(&l)];
