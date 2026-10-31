@@ -41,6 +41,7 @@
 
 extern crate alloc;
 
+pub mod attributes;
 pub mod cbor;
 pub mod checksum;
 pub mod chunk;

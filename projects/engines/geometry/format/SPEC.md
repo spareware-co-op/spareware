@@ -167,3 +167,16 @@ Tag 18, schema 1, required. Its payload (CDDL `recipe` in [cddl/recipe.cddl](cdd
 
 How a shape was made, in one envelope every reader knows (architecture 24.4), whoever owns it. The format never decodes the payload; its owner does (the facade from operation schemas, `geom-ifc`, a plugin). A reader without the owner still opens the bodies the recipe produced, by their content IDs, keeps the recipe byte for byte, and refuses only what would re-run it, with `RecipeOwnerMissing`, naming the owner and its schema. A reader refuses an owner that is empty or not printable ASCII, and any payload that is not the recipe's canonical encoding.
 
+## 13. The attributes record
+
+Tag 19, schema 1, required. Its payload (CDDL `attributes` in [cddl/attributes.cddl](cddl/attributes.cddl), with names.cddl's rules):
+
+<!-- generated: attributes -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `definitions` | `[* definition]` | every attribute definition in attribute order: owner, name and version, the kinds that may carry it, its value schema and its behaviour at 8.4's events |
+| `values` | `[* [attr-id, [* [name-id, carried]]]]` | each attribute's values by name: the owner's opaque bytes, or the values a merge combined |
+<!-- end generated -->
+
+Every attribute definition a model holds, and every value keyed by the persistent name of the entity that carries it (architecture 24.4), so one program carries another's values through its own edits without understanding them. A definition gives the kinds of entity that may carry it (body 0, region 1, face 2, edge 3, vertex 4), its value schema (opaque 0 with the owner's schema ID, point 1, direction 2, frame 3, length 4, field 5) and its behaviour at section 8.4's events: changed (keep 0, delete 1); moved, rotated, mirrored and scaled (keep 0, transform 1, delete 2); split (propagate 0, delete 1); merged (keep if equal 0, combine 1, delete 2); copied (copy 0, delete 1). A value is the owner's bytes, `[0, value]`, or the values a merge combined, `[1, [name, value] ...]` in name order. A reader refuses a definition that may transform an opaque value or that no kind may carry, an attribute defined twice otherwise, a value whose attribute is not defined, and any payload that is not the canonical encoding.
+

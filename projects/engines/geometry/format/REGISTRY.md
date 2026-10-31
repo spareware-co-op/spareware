@@ -10,6 +10,7 @@
 | 16 | `names` | 1 | required | `cddl/names.cddl` | SPEC.md, section 10 |
 | 17 | `history` | 1 | required | `cddl/history.cddl` | SPEC.md, section 11 |
 | 18 | `recipe` | 1 | required | `cddl/recipe.cddl` | SPEC.md, section 12 |
+| 19 | `attributes` | 1 | required | `cddl/attributes.cddl` | SPEC.md, section 13 |
 <!-- end generated -->
 
 Format 1 is a draft (see [SPEC.md](SPEC.md)): the pieces that store each family add their record types here as they land (body records, G94; names, history, recipes and attributes, G95). The protocol tag 0x534B4746 is requested from IANA (32.18).

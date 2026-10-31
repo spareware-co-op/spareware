@@ -27,6 +27,7 @@ use core::fmt::Write as _;
 
 use geom_num::ladder;
 
+use crate::attributes::{ATTRIBUTES_SCHEMA, ATTRIBUTES_TAG};
 use crate::file::{END_TAG, HEADER_TAG};
 use crate::header::{Header, rung};
 use crate::history::{HISTORY_SCHEMA, HISTORY_TAG};
@@ -251,6 +252,28 @@ pub const RECORDS: &[RecordType] = &[
                 name: "outputs",
                 cddl: "[* content-id]",
                 meaning: "the content IDs of the bodies the recipe produced",
+            },
+        ],
+    },
+    RecordType {
+        tag: ATTRIBUTES_TAG,
+        name: "attributes",
+        schemas: &[ATTRIBUTES_SCHEMA],
+        flags: REQUIRED,
+        cddl: "attributes.cddl",
+        section: "13",
+        fields: &[
+            Field {
+                name: "definitions",
+                cddl: "[* definition]",
+                meaning: "every attribute definition in attribute order: owner, name and version, the \
+                          kinds that may carry it, its value schema and its behaviour at 8.4's events",
+            },
+            Field {
+                name: "values",
+                cddl: "[* [attr-id, [* [name-id, carried]]]]",
+                meaning: "each attribute's values by name: the owner's opaque bytes, or the values a \
+                          merge combined",
             },
         ],
     },
