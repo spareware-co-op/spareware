@@ -2095,3 +2095,60 @@ pub mod intersect {
         });
     }
 }
+
+/// The exact decisions on lines and quadrics (piece G159, decision 32.44): each discriminant through
+/// its filter, a torus's roots, and the tangent sphere of a cylinder and a cone.
+pub mod quadric {
+    use geom_num::quadric::{
+        Cone, Cylinder, Line, Sphere, Surface, Torus, axis_gap, line_cone, line_cylinder,
+        line_sphere, parallel, roots, tangent_cylinder_cone,
+    };
+    use geom_num::sturm::Roots;
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `line_sphere` on each pair.
+    #[inline(never)]
+    pub fn spheres(batch: &[(Line, Sphere)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, s)| line_sphere(l, s));
+    }
+
+    /// `line_cylinder` on each pair.
+    #[inline(never)]
+    pub fn cylinders(batch: &[(Line, Cylinder)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, c)| line_cylinder(l, c));
+    }
+
+    /// `line_cone` on each pair.
+    #[inline(never)]
+    pub fn cones(batch: &[(Line, Cone)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, c)| line_cone(l, c));
+    }
+
+    /// `roots` on each line and torus.
+    #[inline(never)]
+    pub fn tori(batch: &[(Line, Torus)], out: &mut Vec<Result<Roots, NumError>>) {
+        run(batch, out, |(l, t)| roots(l, &Surface::Torus(*t)));
+    }
+
+    /// `parallel` on each pair of directions.
+    #[inline(never)]
+    pub fn directions(batch: &[(Line, Line)], out: &mut Vec<Result<bool, NumError>>) {
+        run(batch, out, |(u, v)| parallel(u.a, u.b, v.a, v.b));
+    }
+
+    /// `axis_gap` on each line's points and the other's first.
+    #[inline(never)]
+    pub fn gaps(batch: &[(Line, Line)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(u, v)| {
+            axis_gap(u.a, u.b, v.a, geom_num::grid::Steps(1024))
+        });
+    }
+
+    /// `tangent_cylinder_cone` on each pair.
+    #[inline(never)]
+    pub fn tangents(batch: &[(Cylinder, Cone)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(c, k)| tangent_cylinder_cone(c, k));
+    }
+}

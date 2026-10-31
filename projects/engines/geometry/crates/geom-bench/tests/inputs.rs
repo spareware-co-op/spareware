@@ -2386,3 +2386,17 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("key_circle", k::keys, &m::circles(Typical));
     all_ok("pair_lines", k::paired, &m::lines(Typical));
 }
+
+/// Every typical batch of the decisions on lines and quadrics (decision 32.44) is decided.
+#[test]
+fn quadric_typical_batches_all_succeed() {
+    use geom_bench::inputs::quadric as m;
+    use geom_bench::kernels::quadric as k;
+    all_ok("line_sphere", k::spheres, &m::spheres(Typical));
+    all_ok("line_cylinder", k::cylinders, &m::cylinders(Typical));
+    all_ok("line_cone", k::cones, &m::cones(Typical));
+    all_ok("line_torus", k::tori, &m::tori(Typical));
+    all_ok("parallel", k::directions, &m::directions(Typical));
+    all_ok("axis_gap", k::gaps, &m::directions(Typical));
+    all_ok("tangent", k::tangents, &m::tangents(Typical));
+}

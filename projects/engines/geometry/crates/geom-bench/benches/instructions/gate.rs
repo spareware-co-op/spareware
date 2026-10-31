@@ -2756,3 +2756,62 @@ pub mod intersect {
         benchmarks = sort_items, key_circle, pair_lines
     );
 }
+
+/// The exact decisions on lines and quadrics (piece G159; decision 32.44).
+pub mod quadric {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/line_sphere/typical"))]
+    fn line_sphere(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/line_cylinder/typical"))]
+    fn line_cylinder(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/line_cone/typical"))]
+    fn line_cone(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/line_torus/typical"))]
+    fn line_torus(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/parallel/typical"))]
+    fn parallel(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/axis_gap/typical"))]
+    fn axis_gap(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/tangent/typical"))]
+    fn tangent(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = quadric;
+        benchmarks = line_sphere, line_cylinder, line_cone, line_torus, parallel, axis_gap, tangent
+    );
+}

@@ -55,6 +55,7 @@ pub mod plane;
 pub mod predicate;
 pub mod real;
 pub mod rng;
+pub mod quadric;
 pub mod roots;
 pub mod sign;
 pub mod surface;
