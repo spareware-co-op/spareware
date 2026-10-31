@@ -635,6 +635,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/intersect.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-intersect`'s hot paths (piece G158, decision 32.44): a list of items put in canonical order, a circle's canonical key, and a pair of lines put in canonical order.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the calls of `geom-intersect`'s attack tests (`tests/attack_g158.rs`), under an unlimited budget. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::intersect",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -2456,6 +2476,29 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "at most [`MAX_ITEMS`] items, compared pairwise by the oracle; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_ITEMS`] items whose enclosures sit on a coarse lattice, so ties, touches and overlaps are common, a coverage, and two operands, each a line, a circle, a plane or a sphere. [`check`] builds the intersection and holds it to the laws below, with an all-pairs oracle that shares nothing with the sweep it judges. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/intersect.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a set of items accepted or refused against the oracle, an order that is not 12.15's, an answer that depends on the order of the items given, swaps that do not undo, a budget that changes an answer instead of stopping it, or two operand orders that make different calls."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s result types keep their invariants and its operand order is one order, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12's result rules and canonical order (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::intersect",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
@@ -3108,7 +3151,47 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an intersection could not be computed.",
+          "file": "projects/engines/geometry/crates/geom-intersect/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The caller asked to stop.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "The pair's own budget ran out, or an allocation was refused.",
+              "name": "BudgetExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "The operands do not fit the finer frame's range (12.1).",
+              "name": "FrameRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "The pair needs a maths function that has no proven error bound yet (12.3).",
+              "name": "UnprovenMaths",
+              "shape": "unit"
+            },
+            {
+              "doc": "A broken precondition, such as an operand with no domain. The checker should already have caught it.",
+              "name": "InvalidInput",
+              "shape": "unit"
+            },
+            {
+              "doc": "A proof did not close, a derived cap was hit, or an invariant failed. A bug, never a success.",
+              "name": "Internal",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_intersect::error",
+          "name": "IntersectError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-intersect/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-intersect",
@@ -3122,12 +3205,80 @@
       "job": "Certified curve-curve, curve-surface and surface-surface intersection; level curves, isoclines and contour generators; closed-form distances.",
       "kind": "kernel",
       "layer": "4",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant.",
+          "does": "[`IntersectError`] names each failure of a pair. Every pair of kinds is supported, so there is no \"unsupported\" error. A flagged region is not one of these: it is part of a complete, honest answer.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/error.rs",
+          "guarantees": [
+            "**Never a partial answer.** A failure returns no items: every error replaces the whole result.",
+            "**A stop keeps its reason.** A meter's stop is [`IntersectError::Cancelled`] or [`IntersectError::BudgetExceeded`], so a caller can tell a request from a limit."
+          ],
+          "job": "Why an intersection could not be computed (12.16).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.16's error kinds, with `geom-run`'s stops (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a key is one conversion to NURBS, charged to the meter; ordering a pair compares two keys, linear in their lengths. Recursion: none.",
+          "does": "a [`CanonicalKey`] orders operands by kind, then by a kernel-internal encoding of their defining data: each kind's NURBS form, which is a function of that data alone, or, for a line or plane that has no such form because it may be unbounded, the data itself. [`pair`] puts two [`Operand`]s in that order, runs a method on them and gives its answer back in the caller's roles. [`pairs`] does so for many pairs on the kernel's parallel helper, each under an equal share of the budget, in canonical pair order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/order.rs",
+          "guarantees": [
+            "**The same items with the roles swapped.** A method only ever sees the canonical order, so `pair(a, b)` and `pair(b, a)` make the same call, and differ only in which operand's unknowns come first in each item's enclosure.",
+            "**No address and no file format.** The key reads the defining data's values and nothing else, so it never depends on memory addresses, nor on file-format bytes, whose version can change independently (12.15). It is versioned with the kernel edition (26.2).",
+            "**The same answers on any thread count.** Pairs run in chunks fixed by [`PLAN`], each under its own budget, and come back in the caller's order. A pair's budget never depends on the others' costs, only on how many pairs there are, so the shares of 12.15 are the same in any order."
+          ],
+          "job": "The canonical order of a pair: which operand goes first, and how a batch of pairs runs (12.15).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.15's canonical operand order and per-pair budgets (`projects/engines/geometry/architecture/12-intersections.md`), on `geom-run`'s batch rule."
+          },
+          "path": "geom_intersect::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) comparisons to order n items, then a sweep to prove them disjoint: for each item, one comparison per later item of its kind that starts before it ends in the first unknown, n²/2 at worst and each charged to the meter. Recursion: none.",
+          "does": "an [`Intersection`] is the items of one pair in canonical order, with its [`Coverage`], its diagnostics and the work it took. An [`Item`] is a point, a curve, an overlap or a flagged region, each with its enclosure on the operands' parameters and in space. A [`ParamBox`] holds one interval per unknown of the pair, the canonical first operand's first, so [`Intersection::swapped`] gives the same items with the roles changed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/result.rs",
+          "guarantees": [
+            "**One order.** [`Intersection::new`] sorts the items by kind, then by their enclosure on the parameters: lower corner, then upper corner, coordinate by coordinate, compared exactly (12.15). Two items of one kind whose enclosures overlap are refused: distinct items are disjoint, so the order is total.",
+            "**Nothing unproven is called certified.** [`Coverage::TopologyCertified`] with a flagged item is refused: a flagged region is what such a result does not have.",
+            "**One shape of box.** Every item of an intersection has as many unknowns as the pair, and a [`ParamBox`] has two, three or four.",
+            "**Flagged items carry no class.** The type gives them none (12.2).",
+            "**Swapping twice is nothing.** [`Intersection::swapped`] moves the unknowns and keeps the items' order, the order of the canonical pair, whichever way round the caller asked."
+          ],
+          "job": "What an intersection returns: its items, how each pair meets, and how much of the answer is proven (12.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.2's result types and 12.15's output order (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::result",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-intersect",
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G158, G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158; the methods come with G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {

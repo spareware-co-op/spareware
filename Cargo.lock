@@ -757,6 +757,7 @@ dependencies = [
  "divan",
  "geom-bvh",
  "geom-curve",
+ "geom-intersect",
  "geom-linalg",
  "geom-math",
  "geom-num",
@@ -984,8 +985,13 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "geom-bench",
+ "geom-curve",
  "geom-gen",
+ "geom-intersect",
+ "geom-math",
  "geom-num",
+ "geom-run",
+ "geom-surface",
  "geom-test",
  "num-bigint",
 ]
@@ -1051,6 +1057,7 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
 ]
 
 [[package]]
