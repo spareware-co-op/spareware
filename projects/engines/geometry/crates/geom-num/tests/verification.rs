@@ -1444,7 +1444,8 @@ struct Row {
 }
 
 /// Every test file the matrix names, read when the test is built.
-const FILES: [(&str, &str); 8] = [
+const FILES: [(&str, &str); 9] = [
+    ("attack_g189.rs", include_str!("attack_g189.rs")),
     ("attack_g188.rs", include_str!("attack_g188.rs")),
     ("attack_g187.rs", include_str!("attack_g187.rs")),
     ("attack_g28.rs", include_str!("attack_g28.rs")),
@@ -1456,9 +1457,10 @@ const FILES: [(&str, &str); 8] = [
 ];
 
 /// The sources whose public predicates the matrix must list.
-const SOURCES: [(&str, &str); 6] = [
+const SOURCES: [(&str, &str); 7] = [
     ("arc", include_str!("../src/arc.rs")),
     ("carrier", include_str!("../src/carrier.rs")),
+    ("one_root", include_str!("../src/one_root.rs")),
     ("predicate", include_str!("../src/predicate.rs")),
     ("plane", include_str!("../src/plane.rs")),
     ("crossing", include_str!("../src/crossing.rs")),
@@ -1584,6 +1586,46 @@ fn on_carrier(
                 Test(
                     "attack_g187.rs",
                     "order_and_turn_change_sign_as_they_should",
+                ),
+            ),
+        ],
+    }
+}
+
+/// A predicate of `one_root`: every class in `attack_g189.rs`.
+fn on_root(
+    predicate: &'static str,
+    call: &'static str,
+    random: &'static str,
+    boundary: Where,
+) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (Random, Test("attack_g189.rs", random)),
+            (
+                OneStep,
+                Test(
+                    "attack_g189.rs",
+                    "one_step_from_a_crossing_is_decided_by_the_exact_path",
+                ),
+            ),
+            (Boundary, boundary),
+            (
+                Corners,
+                Test(
+                    "attack_g189.rs",
+                    "the_extreme_values_reach_every_width_and_every_step_fits",
+                ),
+            ),
+            (
+                Laws,
+                Test(
+                    "attack_g189.rs",
+                    "comparison_side_and_order_keep_their_laws",
                 ),
             ),
         ],
@@ -1746,6 +1788,69 @@ fn matrix() -> Vec<Row> {
             "Rational2::orient",
             "one_step_along_a_carrier_is_decided_by_the_exact_path",
             "orient_filter_boundary_crossed_both_ways",
+        ),
+        on_root(
+            "one_root::sign_of_root",
+            "sign_of_root",
+            "random_rounds_orders_and_roots_match_the_oracle",
+            Where::NotApplicable("no filter: it is what the exact paths call"),
+        ),
+        on_root(
+            "one_root::sign_of_two_roots",
+            "sign_of_two_roots",
+            "two_roots_match_the_oracle_at_every_scale",
+            Where::NotApplicable("no filter: it is what the exact paths call"),
+        ),
+        on_root(
+            "one_root::Crossing2::cmp_x",
+            ".cmp_x",
+            "random_crossings_match_the_oracle",
+            Where::Test(
+                "attack_g189.rs",
+                "filters_cross_their_boundary_both_ways",
+            ),
+        ),
+        on_root(
+            "one_root::Crossing2::cmp_y",
+            ".cmp_y",
+            "random_crossings_match_the_oracle",
+            Where::Test(
+                "attack_g189.rs",
+                "filters_cross_their_boundary_both_ways",
+            ),
+        ),
+        on_root(
+            "one_root::Crossing2::side",
+            ".side",
+            "random_crossings_match_the_oracle",
+            Where::Test(
+                "attack_g189.rs",
+                "filters_cross_their_boundary_both_ways",
+            ),
+        ),
+        on_root(
+            "one_root::Crossing2::against_round",
+            ".against_round",
+            "random_rounds_orders_and_roots_match_the_oracle",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+        ),
+        on_root(
+            "one_root::Crossing2::against_circle",
+            ".against_circle",
+            "random_crossings_match_the_oracle",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+        ),
+        on_root(
+            "one_root::Crossing2::order",
+            ".order",
+            "random_rounds_orders_and_roots_match_the_oracle",
+            Where::NotApplicable("defers to cmp_x's and cmp_y's filter"),
+        ),
+        on_root(
+            "one_root::Arc2::order_crossings",
+            ".order_crossings",
+            "random_rounds_orders_and_roots_match_the_oracle",
+            Where::NotApplicable("no filter: every call takes the exact path"),
         ),
         on_circle(
             "arc::Round::side_of_grid",

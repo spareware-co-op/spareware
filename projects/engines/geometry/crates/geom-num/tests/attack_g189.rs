@@ -293,6 +293,268 @@ fn random_crossings_match_the_oracle() {
     assert!(made > 100, "only {made} pairs met");
 }
 
+/// The turn of the grid point `s` and two crossings, by the oracle.
+fn turn_oracle(s: P2, p: &Crossing2, q: &Crossing2) -> Option<Sign> {
+    let (sx, sy) = (IBig::from(s.x.get()), IBig::from(s.y.get()));
+    let relative = |c: &Crossing2| {
+        let (xa, xb, k, w) = coordinate(c, 0);
+        let (ya, yb, _, _) = coordinate(c, 1);
+        (&xa - &sx * &w, &ya - &sy * &w, xb, yb, k)
+    };
+    let (ux, uy, bx, by, k) = relative(p);
+    let (vx, vy, cx, cy, l) = relative(q);
+    let alpha = &ux * &vy - &uy * &vx;
+    let beta = &bx * &vy - &by * &vx;
+    let gamma = &ux * &cy - &uy * &cx;
+    let delta = &bx * &cy - &by * &cx;
+    sign_oracle([&alpha, &beta, &gamma, &delta], &k, &l)
+}
+
+#[test]
+fn random_rounds_orders_and_roots_match_the_oracle() {
+    let mut rng = Rng::new();
+    let (mut made, mut turned) = (0, 0);
+    for _ in 0..cases(4_000) {
+        let circle = rng.circle();
+        let (l, m) = (rng.carrier_near(&circle), rng.carrier_near(&circle));
+        let (Ok(p), Ok(q)) = (
+            Crossing2::of_circle(&l, &circle, Root::First),
+            Crossing2::of_circle(&l, &circle, Root::Second),
+        ) else {
+            continue;
+        };
+        made += 1;
+        // Along the carrier: compared by the coordinate it moves in, by the oracle.
+        let [dx, dy] = l.direction();
+        let (axis, way) = if dx == 0 { (1, dy) } else { (0, dx) };
+        let forward = if way > 0 {
+            Sign::Positive
+        } else {
+            Sign::Negative
+        };
+        if let Some(sign) = compare_oracle(&q, &p, axis) {
+            assert_eq!(p.order(&l, &q).unwrap(), sign.mul(forward));
+        }
+        // Against a round about a rational centre.
+        let (x, y, w) = (rng.signed(100), rng.signed(100), rng.signed(60).abs() + 1);
+        let centre = Rational2::new(x, y, w).unwrap();
+        let on = rng.grid();
+        let (cx, cy, cw) = (IBig::from(x), IBig::from(y), IBig::from(w));
+        let across = IBig::from(on.x.get()) * &cw - &cx;
+        let up = IBig::from(on.y.get()) * &cw - &cy;
+        let rr = &across * &across + &up * &up;
+        if let Some(sign) = circle_oracle(&p, &cx, &cy, &cw, &rr) {
+            assert_eq!(p.against_round(&Round::new(on, centre)).unwrap(), sign);
+        }
+        // Two crossings of an arc, from its start.
+        let (s, e) = (rng.grid(), rng.grid());
+        let arc = Arc2::bisector(s, e)
+            .and_then(|b| b.meet(&m))
+            .and_then(|c| Arc2::new(s, e, c));
+        let Ok(arc) = arc else {
+            continue;
+        };
+        let (Ok(u), Ok(v)) = (
+            Crossing2::of_round(&l, &arc.round(), Root::First),
+            Crossing2::of_round(&m, &arc.round(), Root::Second),
+        ) else {
+            continue;
+        };
+        turned += 1;
+        if let Some(sign) = turn_oracle(s, &u, &v) {
+            assert_eq!(arc.order_crossings(&u, &v).unwrap(), sign);
+        }
+    }
+    assert!(made > 100, "only {made} carriers met");
+    assert!(turned > 0, "no arc met both carriers");
+    for _ in 0..cases(20_000) {
+        let (a, b, k) = (rng.signed(120), rng.signed(60), rng.signed(110).abs());
+        let w = |v: i128| Wide::<8>::from_i128(v);
+        let answer = sign_of_root(&w(a), &w(b), &w(k)).unwrap();
+        let (ia, ib, ik, zero) = (IBig::from(a), IBig::from(b), IBig::from(k), IBig::from(0));
+        if let Some(sign) = sign_oracle([&ia, &ib, &zero, &zero], &ik, &zero) {
+            assert_eq!(answer, sign, "{a} {b} {k}");
+        } else {
+            assert_eq!(answer, Sign::Zero, "{a} {b} {k}");
+        }
+    }
+}
+
+#[test]
+fn one_step_from_a_crossing_is_decided_by_the_exact_path() {
+    // (3, 4) · 2^30 on the circle of radius 5 · 2^30 about the origin, on y = 4 · 2^30, and the
+    // points a step of 2^−82 from it, far inside any enclosure of it.
+    let s = 1_i128 << 30;
+    let circle = Circle2::new(p2(0, 0), 5 * s).unwrap();
+    let l = Carrier::new(0, 1, 4 * s).unwrap();
+    let p = Crossing2::of_circle(&l, &circle, Root::Second).unwrap();
+    let w = 1_i128 << 82;
+    let at = |dx: i128, dy: i128| {
+        let z = Rational2::new(3 * s * w + dx, 4 * s * w + dy, w).unwrap();
+        Crossing2::of_point(&z).unwrap()
+    };
+    for (step, sign) in [(0, Sign::Zero), (1, Sign::Negative), (-1, Sign::Positive)] {
+        assert_eq!(p.cmp_x(&at(step, 0)).unwrap(), sign);
+        assert_eq!(p.cmp_y(&at(0, step)).unwrap(), sign);
+        assert_eq!(p.cmp_x_filter(&at(step, 0)), None);
+        assert_eq!(p.order(&l, &at(step, 0)).unwrap(), sign.negate());
+    }
+    // A carrier through it, and a step of its offset either way, at 2^−73 of that offset.
+    let (a, b, c) = (3 << 38, 4 << 38, 25 * (1_i128 << 68));
+    for (step, sign) in [(0, Sign::Zero), (1, Sign::Negative), (-1, Sign::Positive)] {
+        let through = Carrier::new(a, b, c + step).unwrap();
+        assert_eq!(p.side(&through).unwrap(), sign);
+    }
+    // A step of the radius, and of the point a round passes through.
+    let origin: Rational2 = p2(0, 0).into();
+    let far = 5 << 30;
+    for (step, sign) in [(0, Sign::Zero), (1, Sign::Negative), (-1, Sign::Positive)] {
+        let wider = Circle2::new(p2(0, 0), 5 * s + step).unwrap();
+        assert_eq!(p.against_circle(&wider).unwrap(), sign);
+        let round = Round::new(p2(far + step as i64, 0), origin);
+        assert_eq!(p.against_round(&round).unwrap(), sign);
+    }
+    // Along an arc: the lines y = 4 · 2^30 and a step either side of it.
+    let arc = Arc2::new(p2(far, 0), p2(-far, 0), origin).unwrap();
+    let reach = |dy: i128| {
+        let line = Carrier::new(0, 1, 4 * s + dy).unwrap();
+        Crossing2::of_round(&line, &arc.round(), Root::Second).unwrap()
+    };
+    let here = reach(0);
+    for (step, sign) in [(0, Sign::Zero), (1, Sign::Positive), (-1, Sign::Negative)] {
+        assert_eq!(arc.order_crossings(&here, &reach(step)).unwrap(), sign);
+    }
+    // A root, and a step of the term beside it.
+    let word = |v: i128| Wide::<8>::from_i128(v);
+    let top = 1_i128 << 100;
+    let squared = word(top).checked_mul(&word(top)).unwrap();
+    for (step, sign) in [(0, Sign::Zero), (1, Sign::Positive), (-1, Sign::Negative)] {
+        assert_eq!(
+            sign_of_root(&word(top + step), &word(-1), &squared).unwrap(),
+            sign
+        );
+        assert_eq!(
+            sign_of_two_roots(
+                &word(6 + step),
+                &word(0),
+                &word(0),
+                &word(-1),
+                &word(4),
+                &word(9)
+            )
+            .unwrap(),
+            sign
+        );
+    }
+}
+
+#[test]
+fn filters_cross_their_boundary_both_ways() {
+    // (√24, 1) and (1, √24) on the circle of radius 5, against the dyadic points just below and
+    // just above them, at every size of step: the filter decides while it can, says nothing after,
+    // and the answer never changes.
+    let circle = Circle2::new(p2(0, 0), 5).unwrap();
+    let east = Crossing2::of_circle(&Carrier::new(0, 1, 1).unwrap(), &circle, Root::Second).unwrap();
+    let north = Crossing2::of_circle(&Carrier::new(1, 0, 1).unwrap(), &circle, Root::First).unwrap();
+    let (mut decided, mut undecided) = (0, 0);
+    for e in 1..=80_u32 {
+        let w = 1_i128 << e;
+        let below = i128::try_from(isqrt(&(IBig::from(24) << (2 * e as usize)))).unwrap();
+        for (near, sign) in [(below, Sign::Positive), (below + 1, Sign::Negative)] {
+            let (x, y) = (
+                Crossing2::of_point(&Rational2::new(near, 0, w).unwrap()).unwrap(),
+                Crossing2::of_point(&Rational2::new(0, near, w).unwrap()).unwrap(),
+            );
+            match east.cmp_x_filter(&x) {
+                Some(answer) => {
+                    decided += 1;
+                    assert_eq!(answer, sign);
+                }
+                None => undecided += 1,
+            }
+            assert_eq!(east.cmp_x(&x).unwrap(), sign);
+            assert_eq!(north.cmp_y(&y).unwrap(), sign);
+            if e <= 40 {
+                let line = Carrier::new(w, 0, near).unwrap();
+                assert_eq!(east.side(&line).unwrap(), sign);
+            }
+        }
+    }
+    assert!(decided > 0 && undecided > 0, "{decided} {undecided}");
+}
+
+#[test]
+fn comparison_side_and_order_keep_their_laws() {
+    let mut rng = Rng::new();
+    let (mut made, mut arcs) = (0, 0);
+    for _ in 0..cases(2_000) {
+        let circle = rng.circle();
+        let (l, m) = (rng.carrier_near(&circle), rng.carrier_near(&circle));
+        let (Ok(p), Ok(q)) = (
+            Crossing2::of_circle(&l, &circle, Root::First),
+            Crossing2::of_circle(&m, &circle, Root::Second),
+        ) else {
+            continue;
+        };
+        made += 1;
+        assert_eq!(p.cmp_x(&q).unwrap(), q.cmp_x(&p).unwrap().negate());
+        assert_eq!(p.cmp_y(&q).unwrap(), q.cmp_y(&p).unwrap().negate());
+        assert_eq!(p.order(&l, &q).unwrap(), q.order(&l, &p).unwrap().negate());
+        // A carrier turned has its sides swapped.
+        let ([a, b], c) = m.coefficients();
+        let turned = Carrier::new(-a, -b, -c).unwrap();
+        assert_eq!(p.side(&turned).unwrap(), p.side(&m).unwrap().negate());
+        // A circle and the round of the same circle give one answer.
+        let other = rng.circle();
+        let (centre, r) = (other.centre(), other.radius() as i64);
+        if let Ok(on) = P2::new(centre.x.get() + r, centre.y.get()) {
+            let round = Round::new(on, centre.into());
+            assert_eq!(
+                p.against_circle(&other).unwrap(),
+                p.against_round(&round).unwrap()
+            );
+        }
+        // Two crossings of an arc, each way.
+        let (s, e) = (rng.grid(), rng.grid());
+        let arc = Arc2::bisector(s, e)
+            .and_then(|b| b.meet(&m))
+            .and_then(|c| Arc2::new(s, e, c));
+        if let Ok(arc) = arc {
+            if let (Ok(u), Ok(v)) = (
+                Crossing2::of_round(&m, &arc.round(), Root::First),
+                Crossing2::of_round(&m, &arc.round(), Root::Second),
+            ) {
+                arcs += 1;
+                assert_eq!(
+                    arc.order_crossings(&u, &v).unwrap(),
+                    arc.order_crossings(&v, &u).unwrap().negate()
+                );
+            }
+        }
+        // The value turned has its sign turned.
+        let w = |v: i128| Wide::<8>::from_i128(v);
+        let [a, b, c, d] = [
+            rng.signed(100),
+            rng.signed(60),
+            rng.signed(60),
+            rng.signed(30),
+        ];
+        let (k, n) = (rng.signed(110).abs(), rng.signed(110).abs());
+        assert_eq!(
+            sign_of_root(&w(a), &w(b), &w(k)).unwrap(),
+            sign_of_root(&w(-a), &w(-b), &w(k)).unwrap().negate()
+        );
+        assert_eq!(
+            sign_of_two_roots(&w(a), &w(b), &w(c), &w(d), &w(k), &w(n)).unwrap(),
+            sign_of_two_roots(&w(-a), &w(-b), &w(-c), &w(-d), &w(k), &w(n))
+                .unwrap()
+                .negate()
+        );
+    }
+    assert!(made > 100, "only {made} carriers met");
+    assert!(arcs > 0, "no arc met both carriers");
+}
+
 #[test]
 fn a_crossing_lies_exactly_on_its_carrier_and_its_circle() {
     let mut rng = Rng::new();
@@ -408,12 +670,25 @@ fn the_extreme_values_reach_every_width_and_every_step_fits() {
             assert_eq!(p.side(&l).unwrap(), Sign::Zero);
             assert_eq!(p.against_circle(&circle).unwrap(), Sign::Zero);
             assert!(p.cmp_x(&q).is_ok());
+            assert!(p.cmp_y(&q).is_ok());
+            assert!(p.order(&l, &q).is_ok());
             let other = Carrier::new(b, -a, 0).unwrap();
             assert!(p.side(&other).is_ok());
             let far = Circle2::new(p2(-x, -y), R).unwrap();
             assert!(p.against_circle(&far).is_ok());
         }
     }
+    // The turn of a grid point and two crossings of a round, at the budget.
+    let arc = Arc2::new(p2(M, M), p2(-M, M), p2(0, 0).into()).unwrap();
+    let round = arc.round();
+    let (up, across) = (
+        Carrier::new(N, N - 1, 1).unwrap(),
+        Carrier::new(N - 1, -N, 1).unwrap(),
+    );
+    let a = Crossing2::of_round(&up, &round, Root::First).unwrap();
+    let b = Crossing2::of_round(&across, &round, Root::Second).unwrap();
+    assert!(arc.order_crossings(&a, &b).is_ok());
+    assert_eq!(a.against_round(&round).unwrap(), Sign::Zero);
     // 1,688 bits: the two-root form at the widths the turn of two crossings gives.
     let limit = 1_i128 << 126;
     let wide = |v: i128, by: u32| -> Wide<8> {
@@ -428,6 +703,7 @@ fn the_extreme_values_reach_every_width_and_every_step_fits() {
     );
     let (k, l) = (wide(limit, 209), wide(limit, 209));
     assert!(sign_of_two_roots(&a, &b, &c, &d, &k, &l).is_ok());
+    assert!(sign_of_root(&a, &b, &k).is_ok());
     assert!(BIG_LIMBS * 64 > 1_688);
 }
 
