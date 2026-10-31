@@ -1147,7 +1147,7 @@ fn an_error_says_what_is_wrong() {
             .contains("does not fail")
     );
     let refused = OpLog::decode(&[0; 4]).unwrap_err();
-    assert!(!refused.to_string().is_empty());
+    assert_ne!(refused.to_string(), "");
     assert!(
         geom_test::fixture::log::LogError::NotCanonical
             .to_string()
