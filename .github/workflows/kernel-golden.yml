@@ -218,6 +218,16 @@ jobs:
       - name: No oracle is linked
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin oracle -- check
+      # The corpus register (28.12; piece G114): no unlicensed or non-commercial file is vendored,
+      # no credit is missing, and every stored corpus is byte for byte what the register pins.
+      - name: Every corpus holds its rules, and every vendored file its register entry
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --bin corpus -- check
+      # The corpus register (28.12; piece G114): no unlicensed or non-commercial file is vendored,
+      # no credit is missing, and every stored corpus is byte for byte what the register pins.
+      - name: Every corpus holds its rules, and every vendored file its register entry
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --bin corpus -- check
       - name: The fast fixtures pass
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin fixture -- run --tier fast

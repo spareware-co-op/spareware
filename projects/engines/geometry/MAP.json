@@ -9595,6 +9595,23 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "`check` reads every vendored byte once; `fetch` costs its downloads.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/corpus.rs",
+          "guarantees": [
+            "only `fetch` and `digest` write, and only under the folder given. Exit codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file or command that cannot be read or run."
+          ],
+          "job": "`corpus`: the corpus register's tool: list it, check it and the corpora folder, fetch what it lists, and print the digest a new entry needs.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::corpus`], whose header carries the method."
+          },
+          "path": "corpus",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "`run` replays each fixture of the tier twice per key of the edition; the others read the fixtures once.",
           "does": null,
           "family": [],
@@ -9782,6 +9799,29 @@
             "text": "chapter 28.13's canonical output (`projects/engines/geometry/architecture/28-testing.md`), hashed with SHA-256 (FIPS 180-4) as every golden is, through [`crate::golden::sha256`]."
           },
           "path": "geom_test::canonical",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the register to parse; [`tree_digest`] reads every byte of the tree; [`fetch`] costs the download.",
+          "does": "[`Manifest::parse`] reads the register (`corpora/manifest.json`, [`MANIFEST_PATH`]) into typed records and checks the rules below. [`tree_digest`] gives a folder's one digest. [`fetch`] brings a corpus into a cache, from its pinned source, unmodified, and refuses it unless its digest is the register's. [`check_vendored`] holds the corpora folder itself to the register. The binary `corpus` lists the register, checks it in CI (`-- check`), fetches (`-- fetch`) and prints the digest a new entry needs (`-- digest`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/corpus.rs",
+          "guarantees": [
+            "**Nothing ambiguous parses**: unknown fields, a missing field, a malformed id or digest, or two entries with one id are each a [`CorpusError`].",
+            "**One digest per tree**: [`tree_digest`] depends only on each file's path and bytes, in byte order of path, never on a machine, a clock or an archive's layout.",
+            "**A hash-checked fetch or none.**"
+          ],
+          "job": "The corpus register and its fetcher: every outside collection of models the tests run over, with its source, version, SHA-256, licence, and whether we may store it (chapter 28.12; piece G114).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/29-sources-licences.md"
+            ],
+            "text": "chapters 28.12 and 29.15, rule (i) of decision 32.11 (`projects/engines/geometry/architecture/28-testing.md`, `projects/engines/geometry/architecture/29-sources-licences.md`). A folder's digest is SHA-256 over one line per file, `<sha256> <size> <path>\\n`, as `sha256sum` lists a tree. Downloads run `curl` and `git` as programs, with their standard flags; the register adds no network code of its own."
+          },
+          "path": "geom_test::corpus",
           "provenance": [],
           "spdx": null,
           "target": "lib"

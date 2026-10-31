@@ -57,6 +57,9 @@
 //!   exact-input writer, exact and bounded comparisons, signatures and the four-outcome triage, and
 //!   the first oracle, geomdl, on NURBS. The binary `oracle` writes the jobs and judges the answers;
 //!   every harness lives in the oracle repository.
+//! - [`corpus`]: the corpus register of 28.12 (G114): every outside corpus with its source, version,
+//!   SHA-256, licence and whether we may store it, the licence rules of 29.15 and 32.11, and the
+//!   hash-checked fetcher. The binary `corpus` lists, checks and fetches.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -213,6 +216,7 @@
 #![forbid(unsafe_code)]
 
 pub mod canonical;
+pub mod corpus;
 pub mod coverage;
 pub mod deps;
 pub mod fixture;
