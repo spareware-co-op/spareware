@@ -11,14 +11,15 @@
 //! - **Stops keep their reason.** A meter's stop (budget, cancellation, memory) keeps `geom-run`'s
 //!   own record of it.
 //!
-//! Method: none; an error enum and its conversions, with `geom-run`'s stops (chapter 23.10).
+//! Method: an error enum and its conversions, with `geom-run`'s stops
+//! (`projects/engines/geometry/architecture/23-performance.md`, 23.10).
 //!
 //! Cost: constant.
 
 use core::fmt;
 
 use alloc::collections::TryReserveError;
-use geom_run::{Stop, Stopped};
+use geom_run::{Stop, Stopped, WorkMeter};
 
 use crate::entity::Link;
 use crate::ix::Arena;
@@ -175,6 +176,19 @@ impl fmt::Display for TopoError {
             TopoError::Unused { arena, row } => {
                 write!(f, "no entity uses row {row} of the {arena} pool")
             }
+        }
+    }
+}
+
+impl TopoError {
+    /// The stop of `meter` this error stands for: the meter's own for [`TopoError::Stopped`], and
+    /// out of memory, recorded on the meter, for [`TopoError::OutOfMemory`]; `None` for any other
+    /// error, which no budget or allocator caused.
+    pub fn stop(&self, meter: &mut WorkMeter<'_>) -> Option<Stopped> {
+        match self {
+            TopoError::OutOfMemory => Some(meter.out_of_memory()),
+            TopoError::Stopped(_) => meter.check().err(),
+            _ => None,
         }
     }
 }
