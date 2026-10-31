@@ -29,8 +29,8 @@ use geom_format::registry::{
 use geom_format::source::SliceSource;
 use geom_num::grid::Steps;
 use geom_run::{Budget, WorkMeter};
+// geom-topo's fixtures, whose module allows the ones the archive does not use.
 #[path = "../../geom-topo/tests/common/mod.rs"]
-#[allow(dead_code, reason = "geom-topo's fixtures; the archive uses the wall")]
 mod topo;
 
 use geom_format::body::{BODY_TAG, CHUNK_TAG, StoredBody, read_body, write_body};
@@ -55,6 +55,7 @@ fn sections() -> Vec<(&'static str, &'static str, String)> {
         ("SPEC.md", "end", field_table(by_name("end"))),
         ("SPEC.md", "body", field_table(by_name("body"))),
         ("SPEC.md", "chunk", field_table(by_name("chunk"))),
+        ("SPEC.md", "stamp", field_table(by_name("stamp"))),
         (
             "SPEC.md",
             "tables",

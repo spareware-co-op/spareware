@@ -771,6 +771,42 @@ fn grid(x: i64, y: i64, z: i64) -> Result<P3, BodyError> {
     P3::new(x, y, z).map_err(|_| BodyError::Shape("a point outside the grid"))
 }
 
+/// The content IDs an index lists, table by table, each table's chunks in order: the order the
+/// body writer gives its chunks, which a container keeps when it writes the file again (24.5).
+///
+/// # Errors
+///
+/// [`BodyError::Shape`] for a record that is not a body index of schema 1 or whose tables and IDs
+/// do not read; the decoder's and the meter's errors. Nothing is checked against the chunks.
+pub fn chunk_ids(index: &Record, meter: &mut WorkMeter<'_>) -> Result<Vec<ContentId>, BodyError> {
+    if index.tag != BODY_TAG || index.schema != SCHEMA {
+        return Err(BodyError::Shape("not a body index of schema 1"));
+    }
+    let mut d = Decoder::new(&index.payload, DEPTH);
+    if array(&mut d, meter, "the index")? != 5 {
+        return Err(BodyError::Shape("an index of five fields"));
+    }
+    uint(&mut d, meter, "the body kind")?;
+    uint(&mut d, meter, "the outside region")?;
+    let mut ids = Vec::new();
+    for _ in 0..array(&mut d, meter, "the tables")? {
+        if array(&mut d, meter, "a table")? != 3 {
+            return Err(BodyError::Shape("a table of three fields"));
+        }
+        uint(&mut d, meter, "a table code")?;
+        uint(&mut d, meter, "a table's rows")?;
+        for _ in 0..array(&mut d, meter, "a table's chunks")? {
+            if array(&mut d, meter, "a content ID")? != 2 {
+                return Err(BodyError::Shape("a content ID of two fields"));
+            }
+            let alg = uint(&mut d, meter, "an algorithm")?;
+            let digest = bytes(&mut d, meter, "a digest")?;
+            ids.push(ContentId::new(alg, digest).ok_or(BodyError::Shape("a content ID"))?);
+        }
+    }
+    Ok(ids)
+}
+
 /// Reads a body back from its index record and its chunks, given in any order.
 ///
 /// # Errors

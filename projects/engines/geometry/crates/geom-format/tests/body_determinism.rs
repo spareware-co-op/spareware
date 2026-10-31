@@ -13,11 +13,8 @@
     reason = "a test corpus, and chapter 21's thread-count test spawns threads"
 )]
 
+// geom-topo's fixtures, whose module allows the ones the corpus does not use.
 #[path = "../../geom-topo/tests/common/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "geom-topo's fixtures; the corpus uses some of them"
-)]
 mod topo;
 
 use geom_curve::{

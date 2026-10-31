@@ -127,6 +127,16 @@ impl RangeSource for [u8] {
     }
 }
 
+impl<S: RangeSource + ?Sized> RangeSource for &S {
+    fn len(&self) -> u64 {
+        (**self).len()
+    }
+
+    fn read_at(&self, at: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
+        (**self).read_at(at, buf)
+    }
+}
+
 /// Fills `buf` from `source`, however it splits its reads.
 ///
 /// # Errors

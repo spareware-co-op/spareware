@@ -30,7 +30,7 @@ use geom_num::ladder;
 use crate::file::{END_TAG, HEADER_TAG};
 use crate::header::{Header, rung};
 use crate::record::REQUIRED;
-use crate::{body, kinds};
+use crate::{body, kinds, stamp};
 
 /// One field of a record or payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -225,6 +225,36 @@ pub const RECORDS: &[RecordType] = &[
                 name: "columns",
                 cddl: "[* column]",
                 meaning: "the table's columns over those rows, in the table's order",
+            },
+        ],
+    },
+    RecordType {
+        tag: stamp::STAMP_TAG,
+        name: "stamp",
+        schemas: &[stamp::SCHEMA],
+        flags: stamp::FLAGS,
+        cddl: "stamp.cddl",
+        section: "12",
+        fields: &[
+            Field {
+                name: "body",
+                cddl: "content-id",
+                meaning: "the body index the stamp is about, also its one dependency",
+            },
+            Field {
+                name: "checker",
+                cddl: "uint",
+                meaning: "the version of the checker that passed the body",
+            },
+            Field {
+                name: "groups",
+                cddl: "[* uint]",
+                meaning: "the groups of chapter 8.3 it passed, by number, strictly ascending",
+            },
+            Field {
+                name: "edition",
+                cddl: "uint",
+                meaning: "the kernel edition the check ran under",
             },
         ],
     },
