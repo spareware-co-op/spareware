@@ -1076,11 +1076,15 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "geom-bench",
+ "geom-curve",
  "geom-format",
  "geom-gen",
+ "geom-math",
  "geom-num",
  "geom-run",
+ "geom-surface",
  "geom-test",
+ "geom-topo",
  "num-bigint",
 ]
 

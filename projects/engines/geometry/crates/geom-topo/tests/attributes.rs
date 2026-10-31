@@ -56,6 +56,13 @@ fn a_value_needs_a_definition_and_a_definition_never_changes() {
     let a = a.set(&id("rating"), n(1), v(9)).unwrap();
     assert_eq!(a.get(&id("rating"), n(1)), Some(&Carried::One(v(9))));
     assert_eq!(a.remove(&id("rating"), n(1)).get(&id("rating"), n(1)), None);
+    // Removing one value keeps the others and every definition.
+    let b = a.set(&id("rating"), n(2), v(7)).unwrap();
+    let removed = b.remove(&id("rating"), n(1));
+    assert_eq!(removed.get(&id("rating"), n(2)), Some(&Carried::One(v(7))));
+    assert_eq!(removed.class(&id("rating")), Some(class));
+    // Removing what is not there changes nothing.
+    assert_eq!(b.remove(&id("other"), n(1)), b);
 }
 
 #[test]
