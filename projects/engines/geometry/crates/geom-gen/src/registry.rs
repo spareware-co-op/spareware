@@ -22,6 +22,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::facade;
 use crate::files::{Folder, Registry};
 use crate::generator::{GenError, Generate, Generator};
 use crate::grid_steps;
@@ -29,7 +30,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 55] = [
+pub const GENERATORS: [Generator; 57] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -360,11 +361,23 @@ pub const GENERATORS: [Generator; 55] = [
         about: "the Gauss-Legendre and Gauss-Kronrod rules on [-1, 1], every node and weight correctly rounded from an exact enclosure",
         generate: Generate::Plain(quadrature::generate),
     },
+    Generator {
+        name: facade::API_NAME,
+        output: facade::API_OUTPUT,
+        about: "the facade's API documentation, from every operation's schema in engine-geometry",
+        generate: Generate::Plain(facade::generate_api),
+    },
+    Generator {
+        name: facade::MCP_NAME,
+        output: facade::MCP_OUTPUT,
+        about: "the facade's MCP tool descriptions, from every operation's schema in engine-geometry",
+        generate: Generate::Plain(facade::generate_mcp),
+    },
 ];
 
 /// Every folder only generators write into. A folder stays listed while any file in it remains,
 /// so an orphan left by a removed generator is reported, not forgotten.
-pub const FOLDERS: [Folder; 4] = [
+pub const FOLDERS: [Folder; 5] = [
     Folder {
         path: "projects/engines/geometry/crates/geom-gen/generated",
         // Turns off git's line-ending conversion for the outputs, which `check` compares byte for
@@ -384,6 +397,11 @@ pub const FOLDERS: [Folder; 4] = [
     Folder {
         path: quadrature::OUTPUT_DIR,
         // The same, for geom-num's quadrature rules.
+        keep: &[".gitattributes"],
+    },
+    Folder {
+        path: facade::OUTPUT_DIR,
+        // The same, for the facade's API documentation and MCP tool descriptions.
         keep: &[".gitattributes"],
     },
 ];

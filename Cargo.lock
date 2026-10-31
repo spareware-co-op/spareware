@@ -272,6 +272,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ciborium-io"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05afea1e0a06c9be33d539b876f1ce3692f4afea2cb41f740e7743225ed1c757"
+
+[[package]]
+name = "ciborium-ll"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57663b653d948a338bfb3eeba9bb2fd5fcfaecb9e199e87e1eda4d9e8b240fd9"
+dependencies = [
+ "ciborium-io",
+ "half",
+]
+
+[[package]]
 name = "clap"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -488,6 +504,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
+name = "crunchy"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
+
+[[package]]
 name = "crypto-common"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -611,7 +633,12 @@ name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
  "cargo_metadata",
+ "geom-curve",
+ "geom-num",
+ "geom-op",
  "geom-pool",
+ "geom-surface",
+ "geom-topo",
  "kit-core",
  "proc-macro2",
  "serde_json",
@@ -1000,9 +1027,11 @@ version = "0.0.0"
 dependencies = [
  "dashu-int",
  "dashu-ratio",
+ "engine-geometry",
  "geom-num",
  "geom-test",
  "proc-macro2",
+ "serde_json",
 ]
 
 [[package]]
@@ -1149,7 +1178,9 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]
@@ -1202,11 +1233,16 @@ dependencies = [
 name = "geom-op"
 version = "0.0.0"
 dependencies = [
+ "ciborium-io",
+ "ciborium-ll",
  "geom-num",
  "geom-run",
  "geom-test",
+ "half",
  "proptest",
  "serde_json",
+ "sha2",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -1409,6 +1445,7 @@ dependencies = [
  "dashu-ratio",
  "geom-num",
  "geom-nurbs",
+ "geom-op",
  "geom-run",
  "lcov",
  "num-rational",
@@ -1439,6 +1476,7 @@ dependencies = [
  "geom-run",
  "geom-surface",
  "geom-test",
+ "proptest",
 ]
 
 [[package]]
@@ -1510,6 +1548,17 @@ dependencies = [
  "indexmap",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "half"
+version = "2.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
+dependencies = [
+ "cfg-if",
+ "crunchy",
+ "zerocopy",
 ]
 
 [[package]]

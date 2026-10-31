@@ -1251,7 +1251,6 @@ mod repository {
              G302 G303 G304 G305 G306 G319 G341 G350 G411",
         ),
         ("geom-meshio", "G354 G434 G435"),
-        ("geom-name", "G87 G89 G90 G109 G374"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
         ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
@@ -1270,7 +1269,6 @@ mod repository {
             "geom-terrain",
             "G362 G363 G364 G365 G366 G367 G368 G369 G370 G374 G377 G380",
         ),
-        ("engine-geometry", "G100 G482"),
     ];
 
     #[test]
