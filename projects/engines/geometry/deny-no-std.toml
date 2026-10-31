@@ -134,11 +134,30 @@ audited: projects/kit/notes/G86-sha2-audit.md, the written audit of sha2 0.11.0 
 it brings, at the releases these entries pin (29.20, rule 3); pinned: 0.11.0, by Cargo.lock and \
 this entry: geom-op asks for ^0.11.0, so a lock that moves past it fails the gate until a new \
 record is written""" },
+  { crate = "tinyvec@1.13.3", reason = """\
+deterministic: a vector stored inline until it outgrows its array, then on the heap; it does no \
+arithmetic on the values it holds, so its contents are the values pushed, in order, on every \
+target; no_std: yes, the crate is #![no_std] without its std feature, and \
+unicode-normalization names it with only its alloc feature; it builds for wasm32v1-none in the \
+gate's build of geom-op; audited: projects/kit/notes/G87-unicode-normalization-audit.md, the \
+written audit of unicode-normalization 0.1.26 and the crate it brings, at the releases these \
+entries pin (29.20, rule 3); pinned: 1.13.3, by Cargo.lock and this entry: \
+unicode-normalization 0.1.26 asks for ^1""" },
   { crate = "typenum@1.20.1", reason = """\
 deterministic: numbers in the type system, worked out at compile time to size arrays; no code of \
 it runs; no_std: yes, the crate is #![no_std]; audited: projects/kit/notes/G86-sha2-audit.md, the \
 written audit of sha2 0.11.0 and every crate it brings, at the releases these entries pin (29.20, \
 rule 3); pinned: 1.20.1, by Cargo.lock and this entry: hybrid-array 0.4.15 asks for ^1.20""" },
+  { crate = "unicode-normalization@0.1.26", reason = """\
+deterministic: the Normalization Form C check is table lookups and integer arithmetic on code \
+points, the same on every target, with Unicode 18.0.0's tables (its UNICODE_VERSION), the version \
+NameScheme v1 fixes (owner action G78, 32.19); geom-op's tests check NFC and non-NFC text on \
+every leg of kernel.yml, natively and in WebAssembly; no_std: yes, the crate is #![no_std] \
+without its std feature, which geom-op leaves off; it builds for wasm32v1-none in the gate's \
+build of geom-op; audited: projects/kit/notes/G87-unicode-normalization-audit.md, the written \
+audit of 0.1.26 and the crate it brings, at the releases these entries pin (29.20, rule 3); \
+pinned: 0.1.26, by Cargo.lock and this entry: geom-op asks for =0.1.26, and moving it within \
+NameScheme v1 is refused unless its tables are still Unicode 18.0.0 (32.19)""" },
 ]
 allow-workspace = true
 wildcards = "deny"

@@ -24,6 +24,18 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G87, G89, G90, G109, G374.
+//! Status: the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`])
+//! and the duplicate-name detector ([`unique`]) built (G87); references and their resolution in
+//! G89, attribute classes in G90, `PruneHistory` in G109 and placement references in G374.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod graph;
+pub mod ordinal;
+pub mod unique;
+
+pub use graph::{GraphError, NameGraph, parents};
+pub use ordinal::{OrderError, WeakOrder, ordinals, reference, weak_names};
+pub use unique::{DuplicateName, expect_unique, first_duplicate};

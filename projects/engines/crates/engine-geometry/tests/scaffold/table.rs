@@ -268,7 +268,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-run",       1, Amended27, Elsewhere("G04"), ""),
     kernel("geom-num",       1, Accepted,   Elsewhere("G02"), "run"),
     kernel("geom-linalg",    1, Amended27, Elsewhere("G49"), "num"),
-    kernel("geom-op",        1, Amended27, Elsewhere("G86"), "run num"),
+    kernel("geom-op",        1, Amended27, Elsewhere("G82"), "run num"),
     // 2. Geometry.
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
     kernel("geom-bvh",       2, Amended27, Elsewhere("G54"), "run num math"),
@@ -277,7 +277,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-surface",   2, Accepted,   Elsewhere("G60"), "base math nurbs curve"),
     // 3. Topology.
     kernel("geom-topo",      3, Accepted,   Here, "base math curve surface"),
-    kernel("geom-name",      3, Accepted,   Here, "base topo"),
+    kernel("geom-name",      3, Accepted,   Elsewhere("G87"), "base topo"),
     // 4. Intersections.
     kernel("geom-intersect", 4, Accepted,   Here, "base math nurbs curve surface bvh"),
     // 5. Checker.
@@ -422,6 +422,7 @@ const HEADER_GAPS: &[HeaderGap<'static>] = &[];
 const REGISTRY: &[(&str, &str)] = &[
     ("num", "libm"),
     ("op", "sha2"),
+    ("op", "unicode-normalization"),
     ("format", "sha2"),
     ("format", "crc"),
 ];
