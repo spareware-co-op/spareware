@@ -94,13 +94,11 @@ fn crossing_bytes(out: &mut Vec<u8>, p: &Result<Crossing2, NumError>) {
         return;
     };
     let ([ax, ay], [bx, by], k, w) = p.parts();
-    for word in [ax, ay, k, w] {
+    for word in [ax, ay, bx, by, k, w] {
         for limb in word.to_le_limbs() {
             out.extend_from_slice(&limb.to_le_bytes());
         }
     }
-    out.extend_from_slice(&bx.to_le_bytes());
-    out.extend_from_slice(&by.to_le_bytes());
 }
 
 fn corpus() -> Vec<u8> {
