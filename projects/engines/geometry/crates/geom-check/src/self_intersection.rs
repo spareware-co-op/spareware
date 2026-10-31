@@ -38,8 +38,8 @@
 //! J. R. Shewchuk's exact orientation predicates ("Adaptive precision floating-point arithmetic and
 //! fast robust geometric predicates", Discrete & Computational Geometry 18 (1997),
 //! <https://doi.org/10.1007/PL00009321>) and the segment and convex-polygon tests built on them
-//! (J. O'Rourke, *Computational Geometry in C*, 2nd ed., Cambridge University Press 1998, sections
-//! 1.5 and 7.3, <https://doi.org/10.1017/CBO9780511804120>).
+//! (J. O'Rourke, *Computational Geometry in C*, 2nd ed., Cambridge University Press 1998,
+//! <https://doi.org/10.1017/CBO9780511804120>).
 //!
 //! Cost: one meter unit per face, per pair of a face's edges, per pair of faces and per edge tested
 //! against a face; quadratic in a face's edges and in the faces, as primitives have few. Nothing
