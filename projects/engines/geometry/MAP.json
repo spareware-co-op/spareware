@@ -9006,7 +9006,7 @@
         },
         {
           "cost": "three more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
-          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from their documented signatures, which [`sources`] gives the loader as three crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]), `libm` and `rayon` (`geom-pool`, the one kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its closure and `Scope::spawn` its body). A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
+          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from their documented signatures, which [`sources`] gives the loader as crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]), `libm`, `rayon` (`geom-pool`, the one kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its closure and `Scope::spawn` its body), and the parts of `sha2` (`geom-op`'s hash), `unicode-normalization` (`geom-op`'s names) and `crc` (`geom-format`'s checksum) the kernel calls. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/recursion/stdlib.rs",
           "guarantees": [
@@ -9328,10 +9328,54 @@
               "doc": "A large allocation (a chunk of rows, or a column's list of chunks) was refused.",
               "name": "OutOfMemory",
               "shape": "unit"
+            },
+            {
+              "doc": "The names given for a named arena are not one per row.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two rows of a named arena have the same name: the first such pair in name order.",
+              "name": "DuplicateName",
+              "shape": "struct"
+            },
+            {
+              "doc": "Two rows of an arena with no names (shells, loops, fins) or of a geometry pool get the same key from what they join, so name order cannot place them: the first such pair.",
+              "name": "Unordered",
+              "shape": "struct"
+            },
+            {
+              "doc": "An Euler operator refused its arguments.",
+              "name": "Euler",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A row of a geometry pool that no entity uses, so name order cannot place it.",
+              "name": "Unused",
+              "shape": "struct"
             }
           ],
           "module": "geom_topo::error",
           "name": "TopoError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why an arena's rows could not be put in name order.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/order.rs",
+          "kinds": [
+            {
+              "doc": "Two rows carry the same name: the first such pair in name order, the lower row first.",
+              "name": "DuplicateName",
+              "shape": "struct"
+            },
+            {
+              "doc": "More rows than a 32-bit index addresses.",
+              "name": "TooManyRows",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_topo::order",
+          "name": "OrderError",
           "non_exhaustive": false
         }
       ],
@@ -9369,6 +9413,30 @@
             "text": "one arena per entity kind and one pool per kind of geometry, addressed by typed 32-bit indices, as chapter 8.2 and evidence report 03 lay out (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 5)."
           },
           "path": "geom_topo::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a lookup or an insert is `O(log n)` in the number of values; a split or a merge visits the values of its inputs only. Nothing recurses.",
+          "does": "an [`Attributes`] holds each attribute's [`Class`] and every value, keyed by the entity's [`NameKey`] and the attribute's [`AttrId`]. Values are canonical bytes ([`Value`]), carried whether or not this kernel understands them. [`Attributes::split`] and [`Attributes::merge`] give the values an operation's split and merged entities carry, by each attribute's class; the other events of section 8.4 (changed, transformed, copied, generated) come with the history records (pieces G88 and G90).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/attributes.rs",
+          "guarantees": [
+            "**Keyed by name, never by index.** Values follow names, so they survive every re-indexing a publish makes (8.2), and only named entities carry them (8.4).",
+            "**Ordered.** Every map iterates by key: attribute ids, then names, as bytes, the same on every machine (8.2, 21).",
+            "**Values are bytes.** Two values are equal exactly when their bytes are (8.4); a merge that keeps a value only when every input carries an equal one compares bytes.",
+            "**Immutable.** Every operation returns a new [`Attributes`]; nothing is changed in place, as for bodies (8.2)."
+          ],
+          "job": "Attributes: data hung on a body or on one of its named entities, keyed by persistent name, with the class that says what a value does when its entity is split or merged (8.4).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
+            ],
+            "text": "Parasolid's published attribute classes, taken as a concept only and rebuilt on persistent names (`projects/engines/geometry/architecture/08-topology.md`, 8.4; `projects/kit/notes/G01-evidence/07-persistent-naming.md`, section 5)."
+          },
+          "path": "geom_topo::attributes",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -9417,6 +9485,56 @@
             "text": "Parasolid's model structure, made immutable after building (chapter 8.2; `projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), with the validation layer evidence report 03 recommends copying from Fornjot, every object checked as it enters (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 2)."
           },
           "path": "geom_topo::builder",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each operator is constant time but for the fins it moves to another loop, which it visits once; [`Euler::publish`] is linear in the rows, then [`Builder::publish_named`]'s cost. Nothing recurses.",
+          "does": "an [`Euler`] editor holds arenas, one name per region, face, edge and vertex, and which rows are live. It starts empty ([`Euler::new`]) or from a body published by name ([`Euler::edit`]). The operators come in pairs, each undoing the other:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder/euler.rs",
+          "guarantees": [
+            "**Euler's formula is kept.** Each operator changes the counts by its row of the table above, so V − E + F − R = 2 (S − H) holds after it when it held before; `R` is loops less faces, and `H` is the count the model of `tests/euler_model.rs` keeps.",
+            "**Loops stay closed and rings stay paired.** Every operator leaves each loop's fins one cycle by `next` and `prev`, each the inverse of the other, each fin's start the end of the fin before it, and each edge it makes with two fins, each the other's radial neighbour.",
+            "**A refusal changes nothing.** Every operator checks its arguments before it changes a row; one it cannot apply is a [`TopoError::Euler`] with the [`Refusal`]. An arena that is full or an allocation refused part-way leaves the editor part-way, to be dropped.",
+            "**Rows only grow while editing.** A killed row is marked dead, so every handle the editor gave stays the row it named; [`Euler::publish`] drops dead rows and the geometry no live entity uses, then assigns every index in name order.",
+            "**Lists are made when publishing.** The editor keeps no list of a region's shells, a shell's faces or a face's loops ([`Builder::publish_named`] rebuilds them from the owner links), only each loop's and each edge's first fin."
+          ],
+          "job": "Euler operators (piece G81): edits that change a body's topology one step at a time, each keeping Euler's formula, on an editor whose rows are removed by marking them dead.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/MCG.1982.1674396"
+            ],
+            "text": "Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and their inverses; \"GWB: a solid modeler with Euler operators\", IEEE Computer Graphics and Applications 2(7), 17-31, 1982, <https://doi.org/10.1109/MCG.1982.1674396>), with fins as half-edges. A fin needs an edge here (8.1), so the first operator makes a wire of one edge and two vertices, Mäntylä's MVFS followed by MEV, and no operator leaves a loop without a fin."
+          },
+          "path": "geom_topo::builder::euler",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one sort of each arena's keys, `O(n log n)` in its rows, and one pass that copies every row once into new chunks, and one more pass over the owner links to rebuild the lists. Nothing recurses.",
+          "does": "[`Builder::publish_named`] takes one name per region, face, edge and vertex, checks the arenas as [`Builder::publish`] does, moves every named arena's rows into name order, places the arenas without names (shells, loops, fins) and the geometry pools by a fixed rule from those names, rewrites every link through the moves, rebuilds every list from the back-links, and publishes the result, carrying its names in name order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder/named.rs",
+          "guarantees": [
+            "**Index order is name order.** Every named arena's rows are in name order, and every other arena's rows are in the order of their keys above; so any order of the same rows, with their links moved to match, publishes the same body (32.17).",
+            "**Every link follows its row.** A link that pointed at a row points at that row's new place, so the body joins the same entities as the arenas given.",
+            "**Lists follow the back-links, in name order.** Each region's shells, each shell's faces and each face's loops are chained from the least row up, and each loop's and each edge's first fin is its least fin, all read from the links each entity holds to its owner (a shell's region, a face's shell, a loop's face, a fin's loop and edge). What the lists given held is replaced, so they never depend on the order a body was built in either. A loop's cycle of fins and an edge's radial ring are kept as given: their order is the shape's.",
+            "**Checked as published.** The arenas pass [`Builder::publish`]'s checks before anything is read, and the moved arenas pass them again as they are published.",
+            "**One answer, the first fault.** Faults are reported in a fixed order: [`Builder::publish`]'s checks; then, for regions, faces, edges and vertices in turn, a count of names other than one per row or two rows of one name; then equal keys among shells, loops and fins in turn; then an unused row of the surface, curve, pcurve and point pools in turn.",
+            "**Metered.** Besides what [`Builder::publish`] charges, twice (on the arenas given and on the moved ones), publishing by name charges one unit for every chunk of rows it moves."
+          ],
+          "job": "Publishing in name order (piece G81): a body's arena indices assigned in persistent-name order, so its arenas depend only on what it contains, never on how it was built (8.2, 32.17).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "the boolean rebuild's renumbering in name order (`projects/engines/geometry/architecture/ 11-booleans.md`, 11.3), done for every body by the builder, as decided in `projects/engines/geometry/architecture/32-decisions.md`, 32.17, and laid out in `projects/engines/geometry/architecture/08-topology.md`, 8.2."
+          },
+          "path": "geom_topo::builder::named",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -9509,6 +9627,29 @@
             "text": "one arena per entity kind addressed by a `u32` newtype index, never by address, the design Fornjot ended on after losing determinism to address identity (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, sections 2 and 5); the free value for `None` is `core::num::NonZeroU32`'s niche (<https://doc.rust-lang.org/core/num/type.NonZeroU32.html>)."
           },
           "path": "geom_topo::ix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "`O(n log n)` comparisons of 16 bytes and two vectors of `n` indices; nothing recurses.",
+          "does": "[`NameKey`] is a persistent name's 16 bytes as the caller supplies them (this crate never makes names; `geom-name` does, 20.1). [`Permutation::by_name`] sorts one arena's rows by their keys and gives, for every row, the row it moves to, so that the builder can move the arena and rewrite every index that points into it before a body is published.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/order.rs",
+          "guarantees": [
+            "**Index order is name order.** After [`Permutation::apply`], row `i` holds the entity with the `i`-th smallest key, compared as bytes, so a body's arenas depend only on the names it holds, never on the order an operation produced them in (32.17).",
+            "**Names are unique per arena.** Two rows with the same key are refused with [`OrderError::DuplicateName`], naming the two rows that come first in name order, never ordered by a guess (20.2: a duplicate the contract does not expect is a bug).",
+            "**A bijection.** [`Permutation::new_of`] maps `0..len` onto `0..len`, one to one, and [`Permutation::old_of`] is its inverse."
+          ],
+          "job": "Name order: the key every named entity is sorted by, and the permutation that moves an arena's rows into that order (8.2, accepted in 32.17).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "a sort by key, then by row to keep the order total, as section 23.4's builder sorts its scratch arrays before publishing (`projects/engines/geometry/architecture/08-topology.md`, 8.2; `projects/engines/geometry/architecture/32-decisions.md`, 32.17)."
+          },
+          "path": "geom_topo::order",
           "provenance": [],
           "spdx": null,
           "target": "lib"
