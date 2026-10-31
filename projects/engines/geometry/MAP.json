@@ -13075,7 +13075,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/ssi/place.rs",
           "guarantees": [
-            "**`ε_fit`**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale.",
+            "**`ε_fit`**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale: [`place`] starts there.",
             "**The range**: every coordinate is inside the grid's range.",
             "**The truth is still on the surfaces**: every truth sample is within the tolerance of each analytic surface as placed, by its closed form. A NURBS surface cannot move further than its furthest control point did, since a point on it is a convex combination of its net with the same weights; that bound is the surface's `moved`.",
             "**The answer did not move past the tolerance**: where a case states how far a residual moves the answer, `moved` × that factor is within the tolerance the scorer applies to that case, which widens with the same factor ([`effective`]).",

@@ -564,6 +564,16 @@
           "sha256": "24ff775319022741d62b771ab3c5e33beba0ff2da29bb39b005f30778c7c73e1"
         },
         {
+          "id": "geom-test/ssi-catalogue",
+          "what": "The failure catalogue of the intersection harness (piece G160): every case, its surfaces and its closed-form truth, as the JSON the corpus's scorer reads.",
+          "check": {
+            "crate": "geom-test",
+            "test": "ssi",
+            "function": "the_catalogue_is_pinned"
+          },
+          "sha256": "72833e2e0e317cd26acba70110f485d2ad8a6bc8b8ed6f2cdcf04beadc0031db"
+        },
+        {
           "id": "geom-test/replay-corpus",
           "what": "The replay corpus (piece G98): every stored fixture and the seeded logs of the box, make, transform and budget families, each by its id, log hash, work units and logical bytes.",
           "check": {
