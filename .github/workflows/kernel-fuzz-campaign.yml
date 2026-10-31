@@ -70,7 +70,7 @@ jobs:
       fail-fast: false
       matrix:
         # Nightly and on a release: every target, one shard each. On demand: wide_fuzz in five.
-        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v')) && '["cdt_fuzz", "orient2d_fuzz", "predicates_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
+        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v')) && '["cdt_fuzz", "orient2d_fuzz", "planes_fuzz", "predicates_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
         shard: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v')) && '[1]' || '[1, 2, 3, 4, 5]') }}
     defaults:
       run:
