@@ -122,7 +122,10 @@ fn step(rng: &mut SplitMix64, body: &[NameId], fresh: &mut u64) -> (History, Vec
 }
 
 fn corpus() -> (Vec<u8>, usize) {
-    let mut rng = SplitMix64::new(geom_test::seed::fixed("geom-name prune golden", Seed::DEFAULT));
+    let mut rng = SplitMix64::new(geom_test::seed::fixed(
+        "geom-name prune golden",
+        Seed::DEFAULT,
+    ));
     let mut bytes = Vec::new();
     let mut kept_records = 0;
     for round in 0..200u64 {

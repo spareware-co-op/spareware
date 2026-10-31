@@ -214,11 +214,7 @@ fn a_broken_pruned_history_is_refused() {
         PrunedError::Payload(PayloadError::Shape { offset: 0, .. })
     ));
     // A step that is not a history: its four-item head made a three-item one.
-    let first_step = payload
-        .windows(2)
-        .rposition(|w| w == [0x82, 0x84])
-        .unwrap()
-        + 1;
+    let first_step = payload.windows(2).rposition(|w| w == [0x82, 0x84]).unwrap() + 1;
     let mut bad = payload.clone();
     bad[first_step] = 0x83;
     assert!(matches!(
@@ -355,7 +351,10 @@ fn every_held_reference_resolves_identically_after_prune_save_and_reload() {
         Resolution::Deleted { by: op("cut") }
     );
     assert_eq!(resolved(&w.graph, &pruned, w.cap, Want::One), pruned_answer);
-    assert_eq!(resolved(&graph_back, &reloaded, w.cap, Want::One), pruned_answer);
+    assert_eq!(
+        resolved(&graph_back, &reloaded, w.cap, Want::One),
+        pruned_answer
+    );
     assert_eq!(
         resolved(&graph_back, &reloaded, w.top, Want::One),
         resolved(&w.graph, &w.history, w.top, Want::One)
