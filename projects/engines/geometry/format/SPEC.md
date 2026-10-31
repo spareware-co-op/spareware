@@ -180,3 +180,20 @@ Tag 19, schema 1, required. Its payload (CDDL `attributes` in [cddl/attributes.c
 
 Every attribute definition a model holds, and every value keyed by the persistent name of the entity that carries it (architecture 24.4), so one program carries another's values through its own edits without understanding them. A definition gives the kinds of entity that may carry it (body 0, region 1, face 2, edge 3, vertex 4), its value schema (opaque 0 with the owner's schema ID, point 1, direction 2, frame 3, length 4, field 5) and its behaviour at section 8.4's events: changed (keep 0, delete 1); moved, rotated, mirrored and scaled (keep 0, transform 1, delete 2); split (propagate 0, delete 1); merged (keep if equal 0, combine 1, delete 2); copied (copy 0, delete 1). A value is the owner's bytes, `[0, value]`, or the values a merge combined, `[1, [name, value] ...]` in name order. A reader refuses a definition that may transform an opaque value or that no kind may carry, an attribute defined twice otherwise, a value whose attribute is not defined, and any payload that is not the canonical encoding.
 
+## 14. The operation record
+
+Tag 20, schema 1, required. Its payload (CDDL `operation` in [cddl/operation.cddl](cddl/operation.cddl), with names.cddl's and record.cddl's rules):
+
+<!-- generated: operation -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `op` | `op-path` | the operation's path: its permanent OpId from the log, and labels |
+| `name` | `tstr` | its name in the operation schemas, printable ASCII |
+| `version` | `uint` | its version, which fixes its results, charges and details (26.2) |
+| `inputs` | `[* ([0, content-id] / [1, name-id])]` | its inputs in its schema's order: a body by content ID, an entity by name |
+| `params` | `bstr` | its parameters: one item of SKG's canonical CBOR, as its schema writes them |
+| `budget` | `[work: uint, logical-bytes: uint]` | the budget it runs under (23.10) |
+<!-- end generated -->
+
+One entry of an operation log (architecture 21 and 28.13): everything a replay needs to run the operation again and get the same bits. The record type has its schema, and each record names the operation's own version, which fixes its results, its charge schedule and its error details (26.2). The parameters are one item of SKG's canonical CBOR, written by the operation's schema. The budget is recorded because a budget that can fail an operation in a shared model is fixed by its version or recorded in the log (23.10). Nothing timed and no precision is recorded: only final operations are logged, and a cancelled run writes nothing (10.1). A reader refuses a name that is empty or not printable ASCII, parameters that are not canonical CBOR, and any payload that is not the record's canonical encoding.
+

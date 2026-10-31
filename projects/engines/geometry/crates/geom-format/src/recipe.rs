@@ -229,7 +229,7 @@ pub fn recipe_record(recipe: &Recipe) -> Result<Record, RecipeError> {
 }
 
 /// Reads a content ID: `[alg, digest]`.
-fn read_content_id(
+pub(crate) fn read_content_id(
     r: &mut Reader<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<ContentId, RecipeError> {

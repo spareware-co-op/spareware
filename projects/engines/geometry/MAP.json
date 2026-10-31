@@ -2624,6 +2624,50 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why an operation record cannot be read or written.",
+          "file": "projects/engines/geometry/crates/geom-format/src/operation.rs",
+          "kinds": [
+            {
+              "doc": "The payload's shape or encoding is wrong.",
+              "name": "Payload",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The path inside is wrong.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An input is wrong.",
+              "name": "Input",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An operation name that is empty or not printable ASCII.",
+              "name": "Name",
+              "shape": "unit"
+            },
+            {
+              "doc": "Parameters that are not one item of SKG's canonical CBOR.",
+              "name": "Params",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The payload is not the record's one canonical encoding.",
+              "name": "NotCanonical",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder failed; only a defect can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::operation",
+          "name": "OperationError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a payload does not have the shape its record needs.",
           "file": "projects/engines/geometry/crates/geom-format/src/payload.rs",
           "kinds": [
@@ -3150,6 +3194,30 @@
             "text": "chapter 24.4's names record and decision 32.19's canonical encoding and hash (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/32-decisions.md`), read by re-encoding, the way RFC 8949 section 4.2's deterministic encoding is checked: decode, encode, compare (<https://www.rfc-editor.org/rfc/rfc8949#section-4.2>)."
           },
           "path": "geom_format::names",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the record; the parameters are checked once and copied once.",
+          "does": "an [`Operation`] is one authored operation (piece G96): its path (the permanent `OpId` from the log, and labels), its name and version in the operation schemas, its inputs by content ID and `NameId`, its parameters in SKG's canonical CBOR as its schema writes them, and the work and logical-memory budget it runs under (23.10: a budget that can fail an operation in a shared model is fixed by its version or recorded in the log). [`operation_record`] writes one as a required record (tag [`OPERATION_TAG`]); [`read_operation`] reads it back.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/operation.rs",
+          "guarantees": [
+            "**Versioned twice**: the record type has its schema, and every record names the operation's own version, which fixes its results, its charge schedule and its error details (26.2).",
+            "**Parameters are canonical**: they are one item of SKG's canonical CBOR, checked on writing and on reading, so equal parameters are equal bytes and a log replays to the same bits.",
+            "**One encoding**: a record is read and encoded again, and the bytes must be the stored ones.",
+            "**No clock, no preview**: nothing timed and no precision is recorded; only final operations are logged, and a cancelled run writes nothing (10.1, 23.10)."
+          ],
+          "job": "The operation record: one entry of an operation log, everything a replay needs to run the operation again and get the same bits.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/21-determinism.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 21's replay and chapter 28.13's operation logs, with the recipe envelope's inputs (24.4) (`projects/engines/geometry/architecture/21-determinism.md`, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_format::operation",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -8028,6 +8096,28 @@
       "layer": "1",
       "modules": [
         {
+          "cost": "linear in what is encoded; one allocation for the encoding.",
+          "does": "[`encode_exactness`], [`encode_evidence`], [`encode_diagnostic`] and [`encode_error`] write each in SKG's canonical CBOR (24.3), the parts chapter 28.13's canonical output hashes: an output's exactness class and diagnostics, or an error's kind, entities and evidence. `geom-test`'s canonical-output hasher combines them with the bodies, names and history (piece G96).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/canonical.rs",
+          "guarantees": [
+            "**Values, never words.** A warning is its code, entities and evidence; an error its base kind, entities and evidence (28.13). Messages are plain words that may be reworded or translated, so they are never hashed, and two runs that fail the same way hash the same.",
+            "**One encoding per value**: integers in the shortest form, doubles as the shortest finite float that holds them, lists in the order the operation gave them (a deterministic operation fixes it), and names as 16-byte strings."
+          ],
+          "job": "Canonical encodings of what an operation reports besides its bodies: exactness classes, evidence, warnings and errors, so a result and a failure hash the same on every machine.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 28.13's canonical output and 24.3's canonical CBOR (`projects/engines/geometry/architecture/28-testing.md`, `projects/engines/geometry/architecture/24-file-format-exchange.md`)."
+          },
+          "path": "geom_op::canonical",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the bytes written, with one amortised `Vec` growth; [`Encoder::set`] and [`Encoder::sorted`] sort their elements, O(n log n) comparisons of their encodings. Memory is the output plus one small frame per open array or map. No recursion: open containers are an explicit stack.",
           "does": "an [`Encoder`] writes exactly one CBOR data item (RFC 8949) from SKG's subset of values, in the core deterministic encoding of RFC 8949 section 4.2.1 with chapter 24.3's rules on top, and [`Encoder::finish`] hands it back as an [`Item`]. The subset is what chapter 24.3 stores: unsigned and signed integers (big ones as bignums), finite doubles, byte strings, UTF-8 text, arrays, maps keyed by unsigned integers (24.3's extension maps), sets and sorted lists (arrays sorted by the bytes of each element's encoding, 32.19), and coordinate columns as RFC 8746 typed arrays of little-endian `i64` (tag 79) and `f64` (tag 86). An [`Item`] can only be made by an encoder, so an item placed inside another ([`Encoder::item`], [`Encoder::set`], [`Encoder::sorted`]) is canonical by construction. Persistent names (G87) and the native format's records and decoder (G91, G92) are built on it, and never encode a value a second way.",
           "family": [],
@@ -9616,6 +9706,27 @@
           "provenance": [],
           "spdx": null,
           "target": "bin"
+        },
+        {
+          "cost": "linear in the outcome; one encoding and one hash.",
+          "does": "[`canonical_output`] encodes one operation's [`Outcome`], a success or a failure, in SKG's canonical CBOR and hashes it with SHA-256 after the domain prefix [`PREFIX`]. A success is its result bodies (each by the SHA-256 of its native canonical encoding, in the operation's order), its new names (a set), its history with the operation's path, its exactness class and its diagnostics; a failure is its error's base kind, entities and evidence. [`canonical_bytes`] gives the encoding the hash is taken over, for a test that needs to see the difference.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/canonical.rs",
+          "guarantees": [
+            "**Errors hash as deterministically as results**: an error is encoded from values only (kind, entities, evidence), never from its words, so the same failure hashes the same on every target, as 28.13 asks: AI agents replay errors.",
+            "**One hash per outcome**: every part has one encoding (`geom-op`'s canonical encodings and `History::encode`), names are a set, and the prefix keeps these hashes apart from names' (32.19) and content IDs (24.2)."
+          ],
+          "job": "The canonical output of one case and its SHA-256: what a fixture's golden hash is taken over (chapter 28.13; piece G96).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.13's canonical output (`projects/engines/geometry/architecture/28-testing.md`), hashed with SHA-256 (FIPS 180-4) as every golden is, through [`crate::golden::sha256`]."
+          },
+          "path": "geom_test::canonical",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         },
         {
           "cost": "linear in the size of the LCOV files and the crates' sources.",

@@ -32,6 +32,7 @@ use crate::file::{END_TAG, HEADER_TAG};
 use crate::header::{Header, rung};
 use crate::history::{HISTORY_SCHEMA, HISTORY_TAG};
 use crate::names::{NAMES_SCHEMA, NAMES_TAG};
+use crate::operation::{OPERATION_SCHEMA, OPERATION_TAG};
 use crate::recipe::{RECIPE_SCHEMA, RECIPE_TAG};
 use crate::record::REQUIRED;
 
@@ -274,6 +275,46 @@ pub const RECORDS: &[RecordType] = &[
                 cddl: "[* [attr-id, [* [name-id, carried]]]]",
                 meaning: "each attribute's values by name: the owner's opaque bytes, or the values a \
                           merge combined",
+            },
+        ],
+    },
+    RecordType {
+        tag: OPERATION_TAG,
+        name: "operation",
+        schemas: &[OPERATION_SCHEMA],
+        flags: REQUIRED,
+        cddl: "operation.cddl",
+        section: "14",
+        fields: &[
+            Field {
+                name: "op",
+                cddl: "op-path",
+                meaning: "the operation's path: its permanent OpId from the log, and labels",
+            },
+            Field {
+                name: "name",
+                cddl: "tstr",
+                meaning: "its name in the operation schemas, printable ASCII",
+            },
+            Field {
+                name: "version",
+                cddl: "uint",
+                meaning: "its version, which fixes its results, charges and details (26.2)",
+            },
+            Field {
+                name: "inputs",
+                cddl: "[* ([0, content-id] / [1, name-id])]",
+                meaning: "its inputs in its schema's order: a body by content ID, an entity by name",
+            },
+            Field {
+                name: "params",
+                cddl: "bstr",
+                meaning: "its parameters: one item of SKG's canonical CBOR, as its schema writes them",
+            },
+            Field {
+                name: "budget",
+                cddl: "[work: uint, logical-bytes: uint]",
+                meaning: "the budget it runs under (23.10)",
             },
         ],
     },

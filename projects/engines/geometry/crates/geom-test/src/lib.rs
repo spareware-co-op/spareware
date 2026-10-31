@@ -45,6 +45,9 @@
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
 //!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
 //!   proptest generators of valid histories and chains.
+//! - [`canonical`]: the canonical output of one case and its SHA-256, a fixture's golden hash
+//!   (28.13; G96): bodies, names, history, exactness and diagnostics, or an error's kind, entities
+//!   and evidence.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -198,6 +201,7 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod canonical;
 pub mod coverage;
 pub mod deps;
 pub mod foundation;

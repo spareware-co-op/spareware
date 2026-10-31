@@ -50,6 +50,7 @@ pub mod file;
 pub mod header;
 pub mod history;
 pub mod names;
+pub mod operation;
 pub mod payload;
 pub mod range;
 pub mod recipe;
