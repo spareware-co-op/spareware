@@ -275,8 +275,8 @@
 //!
 //! Chapter 23.13's other gates measure what later pieces build: logical bytes and golden work
 //! counts need the work meter (G23), reference mode needs caches and filters to switch off, and
-//! scenario benchmarks need the operations above the numbers layer. The nightly wall-clock gate
-//! on the reference runner is G107.
+//! scenario benchmarks need the operations above the numbers layer. The wall-clock gate is G452:
+//! the reference runner's nightly timings it will judge are [`timings`] (piece G107).
 
 #![forbid(unsafe_code)]
 
@@ -295,6 +295,12 @@ pub mod inputs;
 pub mod kernels;
 pub mod rng;
 pub mod sha256;
+// Unix and Windows only, with the `reference` feature (on by default): the reference runner's
+// nightly records and report (piece G107), which run where the runner does. Like the judge, it is
+// left out of the WebAssembly guest, whose fuel the gate measures, and out of the gate's measured
+// runs, which build without default features, so no measured binary changes with it (Cargo.toml).
+#[cfg(all(feature = "reference", any(unix, windows)))]
+pub mod timings;
 
 /// The gate: the largest rise, in percent, that any gated measure of any benchmark may show
 /// against the merge base. Principle 12 of the kernel architecture sets it at 5.

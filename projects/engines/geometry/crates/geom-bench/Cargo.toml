@@ -26,6 +26,14 @@ name = "geom-bench-counts"
 test = false
 bench = false
 
+# The reference runner's records and report (piece G107): assembling a night, checking records,
+# writing the report from the history.
+[[bin]]
+name = "geom-bench-timings"
+test = false
+bench = false
+required-features = ["reference"]
+
 [dependencies]
 geom-num = { path = "../geom-num" }
 # The work meter the root-isolation engine runs under (its benchmarks, G53).
@@ -70,12 +78,17 @@ gungraun-runner = { version = "=0.20.0", default-features = false, features = ["
 serde_json = { version = "1.0.154", optional = true }
 
 [features]
-default = ["judge"]
+default = ["judge", "reference"]
 # The judge of the instruction-and-cache gate (`geom_bench::callgrind`), on by default. The gate's
 # measured runs build without it (`cargo bench --no-default-features`): Gungraun's runner crate is
 # also a dependency of the benchmark binary, so turning on its summary model would change the
 # binary being measured, and a measurement must not change with the tool that judges it.
 judge = ["dep:gungraun-runner", "dep:serde_json"]
+# The reference runner's nightly records and report (`geom_bench::timings`, piece G107), on by
+# default, on Unix and Windows only. Like the judge, the measured runs leave it out
+# (`--no-default-features`) and the WebAssembly guest never has it, so no measured binary changes
+# with it. It needs no dependency.
+reference = []
 
 [dev-dependencies]
 geom-test = { path = "../geom-test" }
