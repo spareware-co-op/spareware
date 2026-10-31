@@ -155,7 +155,7 @@ pub fn frustum() -> Polygons {
         side((2, 2), (-2, 2)),
         side((-2, 2), (-2, -2)),
     );
-    let vertices = vec![
+    let corners = vec![
         bottom(-2, -2),
         bottom(2, -2),
         bottom(2, 2),
@@ -165,6 +165,56 @@ pub fn frustum() -> Polygons {
         Corner::Planes([top, n, e]),
         Corner::Planes([top, n, w]),
     ];
+    hexahedron(corners, &[base, top, s, e, n, w])
+}
+
+/// Both sets of polygons in one, the second's indices moved past the first's.
+pub fn join(mut a: Polygons, b: &Polygons) -> Polygons {
+    let vertices = a.vertices.len() as u32;
+    let corners = a.corners.len() as u32;
+    let loops = a.loop_start.len() as u32 - 1;
+    a.vertices.extend(b.vertices.iter().copied());
+    a.corners.extend(b.corners.iter().map(|c| c + vertices));
+    a.loop_start
+        .extend(b.loop_start.iter().skip(1).map(|l| l + corners));
+    a.face_loops
+        .extend(b.face_loops.iter().skip(1).map(|l| l + loops));
+    a.face_run.extend(b.face_run.iter().copied());
+    a.face_plane.extend(b.face_plane.iter().copied());
+    a.edge_plane.extend(b.edge_plane.iter().copied());
+    a
+}
+
+/// A slab 16 steps square from x = `x`, one part in 7 · 2^20 thick, between planes whose offsets
+/// grow with `x` and differ by 1. Its coefficients in x, y and z are multiples of 7 and its offsets
+/// are not, so no corner is on the grid.
+pub fn slab(x: i64) -> Polygons {
+    let n = [7 << 20, 14, 7];
+    let upper = -(n[0] * i128::from(x)) - 6;
+    let top = Plane::new(n, upper).unwrap();
+    let base = Plane::new(n.map(|c| -c), -(upper + 1)).unwrap();
+    let plane = |n: [i128; 3], d: i64| Plane::new(n, i128::from(d)).unwrap();
+    let (s, e) = (plane([0, -1, 0], 0), plane([1, 0, 0], -(x + 16)));
+    let (north, w) = (plane([0, 1, 0], -16), plane([-1, 0, 0], x));
+    let at = |p: Plane, q: Plane| Corner::Planes([p, q, north]);
+    let south = |p: Plane, q: Plane| Corner::Planes([p, q, s]);
+    let corners = vec![
+        south(base, w),
+        south(base, e),
+        at(base, e),
+        at(base, w),
+        south(top, w),
+        south(top, e),
+        at(top, e),
+        at(top, w),
+    ];
+    hexahedron(corners, &[base, top, s, e, north, w])
+}
+
+/// A solid of six faces on these outward planes (under, over, then its four sides in turn), from its
+/// corners, the four under it in turn and then the four over them.
+fn hexahedron(vertices: Vec<Corner>, planes: &[Plane; 6]) -> Polygons {
+    let &[base, top, s, e, n, w] = planes;
     let faces: [&[u32]; 6] = [
         &[0, 3, 2, 1],
         &[4, 5, 6, 7],

@@ -446,14 +446,8 @@ fn corner_plane(
 /// magnitude's width, then its top 56 bits, so that offsets of any size stay apart.
 fn rank(v: i128) -> u64 {
     let magnitude = v.unsigned_abs();
-    let (width, top) = match u64::try_from(magnitude) {
-        Ok(small) if small < 1 << 56 => (u64::BITS.saturating_sub(small.leading_zeros()), small),
-        _ => {
-            let width = u128::BITS.saturating_sub(magnitude.leading_zeros());
-            let top = u64::try_from(magnitude >> width.saturating_sub(56)).unwrap_or(0);
-            (width, top & ((1 << 56) - 1))
-        }
-    };
+    let width = u128::BITS.saturating_sub(magnitude.leading_zeros());
+    let top = u64::try_from(magnitude >> width.saturating_sub(56)).unwrap_or(0);
     let key = (u64::from(width) << 56) | top;
     if v.is_negative() {
         i64::MAX.cast_unsigned().saturating_sub(key)
@@ -479,15 +473,7 @@ fn pool(
         exec.sort_stable(meter, SORT_PLANES, SORT_PLAN, &ranks, |r| *r);
     let mut order = phase(order)?;
     let whole = |i: usize| plain.get(i).map(|t| (t.n, t.d));
-    // Ranks are exact below 2^56, so equal ranks of such planes are one plane.
-    let small = |i: usize| {
-        plain.get(i).is_some_and(|t| {
-            let ([x, y, z], d) = (t.n, t.d);
-            [x, y, z, d].iter().all(|v| v.unsigned_abs() < 1 << 56)
-        })
-    };
-
-    // Equal ranks are rare but for repeated planes, so most ties need no sort.
+    // Equal ranks are rare but for repeated planes, so most runs are one plane.
     let tied: Result<Vec<bool>, RunError<MeshError>> =
         exec.try_map(meter, PLANE_RUNS, PLAN, &order, |j, &i, _| {
             let before = j.checked_sub(1).and_then(|b| order.get(b)).copied();
@@ -495,26 +481,18 @@ fn pool(
         });
     let tied = phase(tied)?;
     let mut start = 0;
-    while start < order.len() {
-        let rest = tied.get(start.saturating_add(1)..).unwrap_or(&[]);
-        let run = rest.iter().take_while(|same| **same).count();
-        if run > 0 {
-            let end = start.saturating_add(run).saturating_add(1);
+    for end in 1..=order.len() {
+        if tied.get(end) != Some(&true) {
             let group = order.get_mut(start..end).ok_or(MeshFault::Shape)?;
-            if !group.iter().all(|&i| small(i)) {
-                group.sort_unstable_by_key(|&i| whole(i));
-            }
+            group.sort_unstable_by_key(|&i| whole(i));
+            start = end;
         }
-        start = start.saturating_add(run).saturating_add(1);
     }
 
     let fresh: Result<Vec<bool>, RunError<MeshError>> =
         exec.try_map(meter, PLANE_RUNS, PLAN, &order, |j, &i, _| {
-            if tied.get(j) != Some(&true) {
-                return Ok(true);
-            }
             let before = j.checked_sub(1).and_then(|b| order.get(b)).copied();
-            Ok(before.is_none_or(|b| !(small(b) && small(i)) && whole(b) != whole(i)))
+            Ok(before.is_none_or(|b| whole(b) != whole(i)))
         });
     let fresh = phase(fresh)?;
     let mut rows = alloc::vec![0_u32; plain.len()];
@@ -873,7 +851,7 @@ fn pair(parts: &mut Parts, meter: &mut WorkMeter<'_>) -> Result<(), MeshError> {
             meter.charge(1)?;
             match *group {
                 [_] => boundary = true,
-                [a, b] if a.forward != b.forward => {
+                [a, b] => {
                     *pairs
                         .get_mut(a.half_edge as usize)
                         .ok_or(MeshFault::Shape)? = b.half_edge;
