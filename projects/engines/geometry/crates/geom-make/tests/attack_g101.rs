@@ -589,7 +589,11 @@ fn bad_input_is_refused_with_a_typed_error_and_its_remedy() {
             vec![p(0, 0, 0), p(9, 0, 0), p(0, 9, 1)],
             MakeDetail::BaseNotLevel,
         ),
-        // Clockwise, a dent, and a star that winds twice.
+        // Three corners in a line, clockwise, a dent, and a star that winds twice.
+        (
+            vec![p(0, 0, 0), p(5, 0, 0), p(10, 0, 0), p(0, 9, 0)],
+            MakeDetail::BaseNotConvex,
+        ),
         (
             vec![p(0, 0, 0), p(0, 9, 0), p(9, 0, 0)],
             MakeDetail::BaseNotConvex,
@@ -1154,6 +1158,198 @@ fn a_long_prism_keeps_every_face_edge_and_corner() {
         names(&made.body).len(),
         (n + 2 + 3 * n + 2 * n + 2) as usize
     );
+}
+
+#[test]
+fn a_cones_side_narrows_to_its_apex() {
+    // Nothing else pins the slope: the apex has no entity for the checker to measure.
+    let input = RoundInput {
+        base: p(1, 2, 3),
+        radius: Steps(6),
+        height: Steps(12),
+        step: GridStep::Q0,
+    };
+    let out = cone(&ctx(), &input).unwrap();
+    let a = out.result.body.arenas();
+    let side = a
+        .surfaces
+        .iter()
+        .find(|s| matches!(s, geom_surface::SurfaceKind::Cone(_)))
+        .unwrap();
+    let ((_, _), (_, top)) = side.domain();
+    let sides = (Limit::FromRight, Limit::FromRight);
+    for u in [0.0, 0.25, 0.5, 1.0, 1.5] {
+        let [x, y, z] = side.point(u, top, sides).unwrap();
+        let far = [x - 1.0, y - 2.0, z - 15.0].map(f64::abs);
+        assert!(far.into_iter().all(|d| d < 1e-9), "{u}: {x} {y} {z}");
+        let [x, y, z] = side.point(u, 0.0, sides).unwrap();
+        let radius = ((x - 1.0) * (x - 1.0) + (y - 2.0) * (y - 2.0)).sqrt();
+        assert!((radius - 6.0).abs() < 1e-9 && (z - 3.0).abs() < 1e-9, "{u}");
+    }
+}
+
+#[test]
+fn a_scale_that_is_not_uniform_waits_for_every_curved_kind() {
+    let stretched = [Scale::new(2, 1).unwrap(), Scale::ONE, Scale::ONE];
+    for (name, out) in primitives() {
+        let moved = Moved {
+            body: &out.result.body,
+            exactness: out.exactness,
+            accept: Some(certified(64)),
+        };
+        let result = scale(&ctx(), moved, stretched, p(0, 0, 0));
+        if matches!(name, "box" | "prism") {
+            assert!(result.is_ok(), "{name}");
+        } else {
+            assert_eq!(
+                *result.unwrap_err().detail(),
+                OpErrorDetail::Make(MakeDetail::KindNotCertified),
+                "{name}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_rigid_motion_stretches_nothing_and_one_in_doubles_by_at_most_its_angle() {
+    let ball = primitives().swap_remove(4).1;
+    let moved = Moved {
+        body: &ball.result.body,
+        exactness: certified(100),
+        accept: Some(certified(1000)),
+    };
+    let turn = Rotation::direction(4, 3).unwrap();
+    let exact = rotate(&ctx(), moved, Axis::Z, turn, p(0, 0, 0)).unwrap();
+    assert_eq!(exact.exactness, certified(101));
+    let at = Instance {
+        key: [1; 16],
+        transform: TypedTransform::from(Transform::rotation(Axis::Z, 2.0 / 3.0).unwrap()),
+    };
+    let in_doubles = pattern(&ctx(), moved, &[at]).unwrap();
+    assert_eq!(in_doubles.exactness, certified(102));
+}
+
+#[test]
+fn a_rounded_corner_adds_a_step() {
+    // Corners at odd coordinates halved: each rounds once, the planes stay true.
+    let b = make_box(
+        &ctx(),
+        &BoxInput {
+            min: p(1, 1, 1),
+            size: [Steps(2); 3],
+        },
+    )
+    .unwrap();
+    let moved = Moved {
+        body: &b.result.body,
+        exactness: b.exactness,
+        accept: None,
+    };
+    let half = [Scale::new(1, 2).unwrap(); 3];
+    assert_eq!(
+        *scale(&ctx(), moved, half, p(0, 0, 0)).unwrap_err().detail(),
+        OpErrorDetail::Make(MakeDetail::NotAccepted {
+            would: certified(2)
+        })
+    );
+}
+
+#[test]
+fn an_invalid_body_moved_exactly_is_a_defect_not_a_gap_in_the_checker() {
+    let b = a_box();
+    let mut builder = Builder::edit(&b.result.body);
+    let f = Ix::new(0).unwrap();
+    let sense = *builder.arenas.fins.sense.get(f).unwrap();
+    let flipped = match sense {
+        Sense::Forward => Sense::Reversed,
+        Sense::Reversed => Sense::Forward,
+    };
+    builder.arenas.fins.sense.set(f, flipped).unwrap();
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let body = builder
+        .publish_named(
+            b.result.body.names().unwrap(),
+            b.result.body.kind(),
+            b.result.body.outside(),
+            &mut meter,
+        )
+        .unwrap();
+    let moved = Moved {
+        body: &body,
+        exactness: Exactness::Exact,
+        accept: None,
+    };
+    let e = move_by(&ctx(), moved, [1, 0, 0]).unwrap_err();
+    assert_eq!(*e.detail(), OpErrorDetail::Make(MakeDetail::ResultInvalid));
+    assert_eq!(e.kind(), ErrorKind::Internal);
+}
+
+/// Every vertex of every face of `body`, with the face's box.
+fn face_corners(body: &Body) -> Vec<(geom_math::Box3, Vec<P3>)> {
+    let a = body.arenas();
+    (0..a.rows(Arena::Face))
+        .map(|row| {
+            let f = Ix::new(row).unwrap();
+            let mut corners = Vec::new();
+            for l in 0..a.rows(Arena::Loop) {
+                let l = Ix::new(l).unwrap();
+                if *a.loops.face.get(l).unwrap() != f {
+                    continue;
+                }
+                let first = a.loops.first_fin.get(l).copied().flatten().unwrap();
+                let mut at = first;
+                loop {
+                    let e = *a.fins.edge.get(at).unwrap();
+                    let ends = if *a.fins.sense.get(at).unwrap() == Sense::Forward {
+                        &a.edges.start
+                    } else {
+                        &a.edges.end
+                    };
+                    let v = ends.get(e).copied().flatten().unwrap();
+                    corners.push(*a.points.get(*a.vertices.point.get(v).unwrap()).unwrap());
+                    at = *a.fins.next.get(at).unwrap();
+                    if at == first {
+                        break;
+                    }
+                }
+            }
+            (*a.faces.bound.get(f).unwrap(), corners)
+        })
+        .collect()
+}
+
+#[test]
+fn a_moved_faces_box_holds_its_corners_and_no_more() {
+    let b = a_box();
+    let moved = Moved {
+        body: &b.result.body,
+        exactness: b.exactness,
+        accept: Some(certified(64)),
+    };
+    let c = ctx();
+    let turn = Rotation::direction(4, 3).unwrap();
+    for (how, out) in [
+        (
+            "quarter",
+            rotate(&c, moved, Axis::Z, Rotation::quarter_turns(1), p(3, 4, 5)),
+        ),
+        ("rotated", rotate(&c, moved, Axis::Y, turn, p(0, 0, 0))),
+        ("mirrored", mirror(&c, moved, Axis::X, p(7, 0, 0))),
+    ] {
+        for (bound, corners) in face_corners(&out.unwrap().result.body) {
+            let (lo, hi) = (bound.min(), bound.max());
+            for (low, high, get) in [
+                (lo.x, hi.x, (|q: &P3| q.x) as fn(&P3) -> geom_num::Coord),
+                (lo.y, hi.y, |q: &P3| q.y),
+                (lo.z, hi.z, |q: &P3| q.z),
+            ] {
+                let values: Vec<i64> = corners.iter().map(|q| get(q).get()).collect();
+                let (least, most) = (*values.iter().min().unwrap(), *values.iter().max().unwrap());
+                assert!(low.get() <= least && most <= high.get(), "{how}");
+                assert!(least - low.get() <= 1 && high.get() - most <= 1, "{how}");
+            }
+        }
+    }
 }
 
 proptest! {

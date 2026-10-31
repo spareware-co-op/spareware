@@ -44,8 +44,7 @@ use alloc::vec::Vec;
 
 use geom_curve::{CurveError, CurveKind, ParamCurve};
 use geom_math::{
-    Axis, Box3, GridTransform, MathError, RationalTransform, Rotation, Scale, TransformKind,
-    TypedTransform,
+    Axis, Box3, GridTransform, RationalTransform, Rotation, Scale, TransformKind, TypedTransform,
 };
 use geom_num::interval::Interval;
 use geom_num::{Exactness, GridStep, NumError, P3, Steps};
@@ -181,10 +180,9 @@ fn about(ctx: &OpContext<'_>, center: P3, t: TypedTransform) -> Result<TypedTran
     let composed = t
         .compose(&to)
         .and_then(|inner| back.compose(&inner))
-        .map_err(|e| match e {
-            MathError::Num(n) => num(n),
-            _ => fail(ctx, MakeDetail::BuildFailed),
-        })?;
+        // A defect: a grid point moved to the origin and back stays within every transform's
+        // bound, at most 2^103 for a rational's translation against its 2^126.
+        .map_err(|_| fail(ctx, MakeDetail::BuildFailed))?;
     Ok(composed.simplified())
 }
 
@@ -558,22 +556,19 @@ fn moved_box(t: &TypedTransform, bound: Box3) -> Result<Box3, NumError> {
     let mut min = [i64::MAX; 3];
     let mut max = [i64::MIN; 3];
     let mut widen = 0i64;
-    for i in 0u8..8 {
-        let pick =
-            |bit: u8, a: geom_num::Coord, b: geom_num::Coord| if i & bit == 0 { a } else { b };
-        let corner = P3 {
-            x: pick(1, lo.x, hi.x),
-            y: pick(2, lo.y, hi.y),
-            z: pick(4, lo.z, hi.z),
-        };
-        let image = t.apply(corner)?;
-        if !image.is_exact() {
-            widen = 1;
-        }
-        let p = image.value();
-        for ((low, high), c) in min.iter_mut().zip(&mut max).zip([p.x, p.y, p.z]) {
-            *low = (*low).min(c.get());
-            *high = (*high).max(c.get());
+    for x in [lo.x, hi.x] {
+        for y in [lo.y, hi.y] {
+            for z in [lo.z, hi.z] {
+                let image = t.apply(P3 { x, y, z })?;
+                if !image.is_exact() {
+                    widen = 1;
+                }
+                let p = image.value();
+                for ((low, high), c) in min.iter_mut().zip(&mut max).zip([p.x, p.y, p.z]) {
+                    *low = (*low).min(c.get());
+                    *high = (*high).max(c.get());
+                }
+            }
         }
     }
     let [ax, ay, az] = min.map(|v| v.saturating_sub(widen));
@@ -601,14 +596,14 @@ fn record(
         .and_then(|x| x.checked_add(u128::from(den).checked_sub(1)?))
         .and_then(|x| x.checked_div(u128::from(den)))
         .ok_or_else(defect)?;
-    if !(deviation.is_finite() && (0.0..9.0e15).contains(&deviation)) {
+    if !(0.0..9.0e15).contains(&deviation) {
         return Err(fail(ctx, MakeDetail::KindNotCertified));
     }
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         clippy::cast_precision_loss,
-        reason = "the deviation is finite, not negative and below 2^53, checked just before: its whole part is a u64 the double holds exactly"
+        reason = "the deviation is not negative and below 2^53, checked just before: its whole part is a u64 the double holds exactly"
     )]
     let (whole, back) = {
         let whole = deviation as u64;
