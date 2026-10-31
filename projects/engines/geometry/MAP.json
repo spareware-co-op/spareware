@@ -1880,7 +1880,7 @@
         },
         {
           "cost": "an enclosure or bound runs Bezier extraction in intervals, O(s·p²·D) for s spans, plus O(p²·D) per piece and derivative order; a split O(n·D); a reversal or transform O(n·D).",
-          "does": "implements [`ParamCurve`] for [`Curve`]. Points and derivatives are A3.1, A3.2 and A4.2 (`geom-nurbs`). Enclosures, bounds and derivative bounds come from the curve's Bernstein forms in interval arithmetic (piece G59): the piece holding the parameter, or each piece meeting the span cut down to it by de Casteljau subdivision at interval parameters, its box from the convex hull; derivatives from hodographs, and for a rational curve by Leibniz's rule on W·C = A, C^(k) = (A^(k) − Σ C(k, i)·W^(i)·C^(k−i)) / W, in interval boxes. Conversion to NURBS is the curve itself, exactly. A split inserts the parameter until its multiplicity is the degree (A5.1) and parts the control points there. Reversal negates and reverses the knots, which is exact. A transform maps the control points (affine invariance) with the weights kept.",
+          "does": "implements [`ParamCurve`] for [`Curve`]. Points and derivatives are A3.1, A3.2 and A4.2 (`geom-nurbs`). Enclosures, bounds and derivative bounds come from the curve's Bernstein forms in interval arithmetic (piece G59): the piece holding the parameter, or each piece meeting the span cut down to it by de Casteljau subdivision at interval parameters, its box from the convex hull; derivatives from hodographs, and for a rational curve by Leibniz's rule on W·C = A, C^(k) = (A^(k) − Σ C(k, i)·W^(i)·C^(k−i)) / W, in interval boxes, with C over a span taken from the piece's convex hull rather than from the boxes of A and W, which are far wider when the weights spread (chapter 19.3, piece G68). Conversion to NURBS is the curve itself, exactly. A split inserts the parameter until its multiplicity is the degree (A5.1) and parts the control points there. Reversal negates and reverses the knots, which is exact. A transform maps the control points (affine invariance) with the weights kept.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
           "guarantees": [
@@ -2034,7 +2034,7 @@
         },
         {
           "cost": "a few floating-point operations per call more than the interval operation.",
-          "does": "each function is the `geom-num` interval operation of the same name, except that when both operands are single doubles and the exact result is a double too, it returns that double as a point interval instead of widening it. So a circle of integer radius on a grid center, evaluated at a quarter turn, is enclosed by its exact point, and two constructions of one exact value compare equal: a conversion or transform that is exact reports a deviation of 0, which widened intervals never could.",
+          "does": "each function is the `geom-num` interval operation of the same name, except that when both operands are single doubles and the exact result is a double too, it returns that double as a point interval instead of widening it. So a circle of integer radius on a grid center, evaluated at a quarter turn, is enclosed by its exact point, and two constructions of one exact value compare equal: a conversion or transform that is exact reports a deviation of 0, which widened intervals never could. [`meet`] intersects two enclosures of one value.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/tight.rs",
           "guarantees": [
@@ -2143,7 +2143,7 @@
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), and the analytic and transcendental enclosures (G67) built; the other kinds to come in G68, G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic and transcendental enclosures (G67), and rational curves' higher derivative bounds started from their control points (G68) built; the other kinds to come in G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {
@@ -5619,7 +5619,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/math/exp.rs",
           "guarantees": [
-            "correctly rounded, resting on CORE-MATH's worst-case searches, whose completeness its list does not claim (step A of the proof). For every binary64 input checked the result is the binary64 number nearest the exact `e^x` (ties to even), so the error is at most half an ulp, including in the subnormal range. Proven outright: every input whose result has fewer than 48 identical bits after its round bit (fewer than 33 for results below 2^−1059), and every input in CORE-MATH's exp.wc (1 129 427, all checked), is correctly rounded; an input outside the list with more identical bits, which no proof here excludes, would still have an error below `½ + 2^−49.2` ulp (`½ + 2^−34` ulp below 2^−1059). Domain: every `x`. `exp(x)` is `+∞` for `x ≥ 0x1.62e42fefa39fp+9` (overflow) and `+0` for `x ≤ −0x1.74910d52d3052p+9` (underflow), as the correctly rounded results; `exp(−∞) = +0`, `exp(+∞) = +∞`, and NaN gives the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation."
+            "correctly rounded, resting on CORE-MATH's worst-case searches, whose completeness its list does not claim (step A of the proof), except for results below 2^−1059, which rest on no list. For every binary64 input checked the result is the binary64 number nearest the exact `e^x` (ties to even), so the error is at most half an ulp, including in the subnormal range. Proven outright: every input whose result has fewer than 48 identical bits after its round bit, every input whose result is below 2^−1059 (the 25 358 of them within 2^−33 ulp of a midpoint, found by an exhaustive search, are all checked; step F3), and every input in CORE-MATH's exp.wc (1 129 427, all checked), is correctly rounded; an input outside the list with more identical bits, which no proof here excludes, would still have an error below `½ + 2^−49.2` ulp. Domain: every `x`. `exp(x)` is `+∞` for `x ≥ 0x1.62e42fefa39fp+9` (overflow) and `+0` for `x ≤ −0x1.74910d52d3052p+9` (underflow), as the correctly rounded results; `exp(−∞) = +0`, `exp(+∞) = +∞`, and NaN gives the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the end of this documentation."
           ],
           "job": "Correctly rounded `exp(x) = e^x`: a port of CORE-MATH.",
           "method": {
@@ -8148,7 +8148,7 @@
         },
         {
           "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform.",
-          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
+          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
           "guarantees": [
@@ -8163,6 +8163,30 @@
             "text": "as `geom-curve`'s contract (chapter 28.2's contract laws, applied to the behaviour of chapter 7), on the inclusion property of interval arithmetic (Moore, Kearfott and Cloud, <https://doi.org/10.1137/1.9780898717716>)."
           },
           "path": "geom_surface::contract",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one call of the kind's partials to order 2 over the box, then a fixed number of interval operations: O(1).",
+          "does": "[`second_partials`] reads `S_uu`, `S_uv` and `S_vv` over a box from a kind's partials to order 2 ([`crate::ParamSurface::partials_over`]) as boxes, and [`SecondPartials::chord`] gives chapter 19.3's M = max(`M_uu`, `M_vv`) + `M_uv`, each M an upper bound on its box's Euclidean norm: M bounds ‖`d_u`²·`S_uu` + 2·`d_u`·`d_v`·`S_uv` + `d_v`²·`S_vv`‖ for every unit direction (`d_u`, `d_v`), because 2·|`d_u`·`d_v`| ≤ 1, and so the chord bound ½·M·r² of tessellation. [`normal_partials`] bounds the partials `N_u` and `N_v` of the unit normal N = n/|n|, n = `S_u` × `S_v`: from the partials to order 2, the jets of `S_u` and `S_v` (order 1), their cross product's jet, its length's by the root recurrence and N's by the quotient recurrence, N's value cut to [−1, 1] in each coordinate since N is a unit vector. Each of `N_u` and `N_v` is then cut to the box ±|`n_u`|/|n| (or ±|`n_v`|/|n|): `N_u` = (`n_u` − (N·`n_u`)·N)/|n|, the part of `n_u` across N divided by |n|, is no longer than |`n_u`|/|n|.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/derivative.rs",
+          "guarantees": [
+            "**Certified.** Each box holds the exact partial at every point of the box, from both sides of a break inside it, as the kind's partials do: every step is interval arithmetic rounded outward on enclosures of exact values (inclusion isotonicity), and every cut intersects two enclosures of one value.",
+            "**Unbounded, never a guess.** Where n may vanish over the box (a pole, an apex, a degenerate point), N has no derivative to bound there, and the result is `Unbounded`; so it is for a kind whose partials cannot be bounded over the box (an offset where its base normal vanishes, a swept kind on an unbounded profile).",
+            "**Deterministic.** A fixed sequence of operations."
+          ],
+          "job": "Certified bounds on a surface's second partials and on its unit normal's partials over a parameter box, for every kind, from the kind's partials there (piece G68).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "https://doi.org/10.1137/1.9780898717761",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "the second-derivative bound and the chord bound of chapter 19.3 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`); the derivative of a normalised vector, (n/|n|)′ = (n′ − (N·n′)·N)/|n| (M. P. do Carmo, *Differential Geometry of Curves and Surfaces*, 2nd ed., Dover (2016), section 3-2, the differential of the Gauss map), in two-variable interval jets (A. Griewank and A. Walther, *Evaluating Derivatives*, 2nd ed., SIAM (2008), chapter 13, <https://doi.org/10.1137/1.9780898717761>; R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_surface::derivative",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -8212,7 +8236,7 @@
         },
         {
           "cost": "O(K²) for a sum; O(K⁴) for a product, quotient or root (each coefficient sums over the coefficients below it); K is at most a few in the kernel's uses.",
-          "does": "a [`Jet`] of total order K holds enclosures of the Taylor coefficients f^(i, j)/(i!·j!), where f^(i, j) = ∂^{i+j}f/∂u^i∂v^j and i + j ≤ K, at every point of a box (a point, for an enclosure; a box, for a bound), listed as [`crate::param::partial_index`] lists partials. Sums, products, quotients and square roots of jets are the jets of the sums, products, quotients and roots, by the two-variable recurrences of automatic differentiation; [`Jet::du`] and [`Jet::dv`] differentiate. So the jet of an offset surface's formula, S + d·(`S_u` × `S_v`)/|`S_u` × `S_v`|, gives all of its partials to order K from the base's partials to order K + 1: its higher derivatives come from the formula's exact rules (Leibniz's rule and the quotient and root recurrences), never from a finite difference.",
+          "does": "a [`Jet`] of total order K holds enclosures of the Taylor coefficients f^(i, j)/(i!·j!), where f^(i, j) = ∂^{i+j}f/∂u^i∂v^j and i + j ≤ K, at every point of a box (a point, for an enclosure; a box, for a bound), listed as [`crate::param::partial_index`] lists partials. Sums, products, quotients and square roots of jets are the jets of the sums, products, quotients and roots, by the two-variable recurrences of automatic differentiation; [`Jet::du`] and [`Jet::dv`] differentiate. A quotient whose value is known from elsewhere (a rational patch's convex hull, a unit vector's [−1, 1]) starts from that value ([`Jet::div_valued`], piece G68), so its derivatives do not inherit the width of the value's quotient of boxes. So the jet of an offset surface's formula, S + d·(`S_u` × `S_v`)/|`S_u` × `S_v`|, gives all of its partials to order K from the base's partials to order K + 1: its higher derivatives come from the formula's exact rules (Leibniz's rule and the quotient and root recurrences), never from a finite difference.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/jet.rs",
           "guarantees": [
@@ -8282,7 +8306,7 @@
         },
         {
           "cost": "none here; each kind's implementation states its own.",
-          "does": "[`ParamSurface`] is the trait chapter 12.1 names: evaluation, first partial derivatives, certified enclosures, conservative bounds on the value and the partials over any parameter box, a bound on the normals' directions (the Gauss map), conversion to NURBS with an error, split, reverse and transform; with every partial derivative of any order enclosed at a point or over a box ([`ParamSurface::partials_over`], listed by [`partial_index`]) and the parameters where a kind may not be smooth ([`ParamSurface::breaks`]), which chapter 13's offsets and Class-A blends need (piece G66). [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s [`Changed`], with a certified bound on their distance from the exact result. Errors are `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).",
+          "does": "[`ParamSurface`] is the trait chapter 12.1 names: evaluation, first partial derivatives, certified enclosures, conservative bounds on the value and the partials over any parameter box, a bound on the normals' directions (the Gauss map), conversion to NURBS with an error, split, reverse and transform; with every partial derivative of any order enclosed at a point or over a box ([`ParamSurface::partials_over`], listed by [`partial_index`]) and the parameters where a kind may not be smooth ([`ParamSurface::breaks`]), which chapter 13's offsets and Class-A blends need (piece G66), and, from those partials, bounds on the second partials and on the unit normal's partials over any box ([`ParamSurface::second_derivative_bound`], [`ParamSurface::normal_derivative_bound`], piece G68), which tessellation's chord and normal-angle bounds rest on (chapter 19.3). [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s [`Changed`], with a certified bound on their distance from the exact result. Errors are `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/param.rs",
           "guarantees": [
@@ -8352,7 +8376,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); the other kinds to come in G68, G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); the other kinds to come in G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
@@ -9442,7 +9466,7 @@
           "guarantees": [
             "**A gate that cannot see everything fails.** A run that did not finish, a failed or missing baseline, a mutant with no outcome or two, totals that disagree with the outcomes, a shard missing from the full run or two shards that overlap are each a failure or a [`RunError`], never a smaller set of mutants judged.",
             "**Untested is never caught.** An unviable mutant counts only when its log shows a compiler error at a source location; any other failed build fails the gate.",
-            "**28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`; elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a timeout only as `hangs`. A ledger entry that matches more mutants than it counts, or a caught or unviable one, or (in the full run) fewer, fails as stale.",
+            "**28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`; elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a timeout only as `hangs`. A ledger entry that matches more survivors than it counts, or (in the full run) fewer, fails; one whose matched mutants are all caught or unviable fails as stale.",
             "**Reasons follow the code.** Entries are keyed by the mutated line's text, so editing that line puts the mutant before the gate again."
           ],
           "job": "The mutation gate: judges cargo-mutants' results against the quality ledger.",
@@ -9471,7 +9495,7 @@
         },
         {
           "cost": "a blossom is O(p²·d) rational operations for dimension d; a point one blossom; insertion and refinement one blossom per new control point; elevation C(p + t, p) blossoms per new control point, which this reference accepts because it runs on small cases only. The rationals grow with the knots' and points' binary expansions; no recursion.",
-          "does": "a [`Spline`] holds a degree, a knot vector and control points as exact rationals, in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a kernel curve holds: every finite double is a binary fraction, so nothing rounds. Everything else comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at (u, …, u); [`Spline::point`] divides by the weight. A new knot vector over the same domain, finer or of higher degree, gets its control points from the dual functional property: control point i of a spline of degree q is the blossom of any of its pieces in that point's support, at the q knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces' blossoms that way. [`Spline::elevate`] reads the blossom of each piece seen as a polynomial of degree p + t, which is the mean of the original blossom over every choice of p of its p + t arguments, on the knot vector with each distinct knot repeated t more times.",
+          "does": "a [`Spline`] holds a degree, a knot vector and control points as exact rationals, in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a kernel curve holds: every finite double is a binary fraction, so nothing rounds. Everything else comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at (u, …, u); [`Spline::point`] divides by the weight. [`Spline::homogeneous_derivative`] is the blossom with k of its arguments the unit direction (u + 1) − u, times p!/(p − k)!: the k-th derivative of the homogeneous curve (piece G68). A new knot vector over the same domain, finer or of higher degree, gets its control points from the dual functional property: control point i of a spline of degree q is the blossom of any of its pieces in that point's support, at the q knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces' blossoms that way. [`Spline::elevate`] reads the blossom of each piece seen as a polynomial of degree p + t, which is the mean of the original blossom over every choice of p of its p + t arguments, on the knot vector with each distinct knot repeated t more times.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/nurbs_reference.rs",
           "guarantees": [

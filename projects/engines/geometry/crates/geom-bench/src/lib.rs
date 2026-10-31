@@ -131,6 +131,10 @@
 //!    The gate's build aligns every function to a 64-byte cache line
 //!    (`-C llvm-args=-align-all-functions=6`), so the little code run only once, the returns at the
 //!    end, sits on lines already fetched.
+//!    It also builds every crate as one codegen unit (`CARGO_PROFILE_BENCH_CODEGEN_UNITS=1`, and
+//!    `CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1` for the fuel guest). In Cargo's default 16, how
+//!    rustc splits this crate into units moves whenever a benchmark module is added, and which
+//!    functions are inlined moves with it, in benchmarks the change never touched (chapter 23.13).
 //! 4. **Fixed addresses and environment.** Gungraun runs Valgrind with address-space randomisation
 //!    off and the environment cleared.
 //! 5. **Only the kernel is counted.** Building the inputs, hashing the results and freeing memory
@@ -184,7 +188,8 @@
 //! checked on wasm32 for every benchmark, and the growth check reads the counts:
 //!
 //! ```text
-//! cargo build --release -p geom-bench --bin geom-bench-guest --target wasm32-wasip1
+//! CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 cargo build --release -p geom-bench --bin geom-bench-guest \
+//!     --target wasm32-wasip1
 //! cargo run --release --manifest-path projects/engines/geometry/crates/geom-bench/fuel/Cargo.toml -- target/wasm32-wasip1/release/geom-bench-guest.wasm > fuel.txt
 //! cargo run --release -p geom-bench --bin geom-bench-counts -- growth fuel.txt
 //! ```
@@ -197,7 +202,8 @@
 //! ```text
 //! sudo apt-get install valgrind
 //! cargo install --locked gungraun-runner --version 0.20.0
-//! RUSTFLAGS="-C llvm-args=-align-all-functions=6" cargo bench -p geom-bench --bench instructions
+//! RUSTFLAGS="-C llvm-args=-align-all-functions=6" CARGO_PROFILE_BENCH_CODEGEN_UNITS=1 \
+//!     cargo bench -p geom-bench --bench instructions
 //! ```
 //!
 //! To compare a change with `main` as CI does, save a baseline on `main` and compare the branch
@@ -209,6 +215,7 @@
 //!
 //! ```text
 //! export RUSTFLAGS="-C llvm-args=-align-all-functions=6"
+//! export CARGO_PROFILE_BENCH_CODEGEN_UNITS=1
 //! git switch main
 //! rm -rf target/gungraun
 //! cargo bench --no-default-features -p geom-bench --bench instructions -- --save-baseline=main

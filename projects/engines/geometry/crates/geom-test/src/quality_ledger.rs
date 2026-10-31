@@ -17,6 +17,9 @@
 //! - `occurrences`: how many mutants share this key (the same change on identical lines of one
 //!   function), at least 1;
 //! - `kind`: [`Kind`];
+//! - `proof`: for a `proved` entry only, the Kani harness that catches the mutant,
+//!   `<module path>::proofs::<name>` in the file's crate, a `#[kani::proof]` function of the
+//!   mutated file itself;
 //! - `reason`: why, judged through the crate's public interface, at least [`MIN_REASON`]
 //!   characters.
 //!
@@ -72,6 +75,12 @@ pub enum Kind {
     /// The mutant makes the tests hang, and cargo-mutants' timeout is how it is caught: the reason
     /// says what never terminates. Allowed everywhere, because a hang is a failure CI reports.
     Hangs,
+    /// A Kani proof of the mutated function's own contract fails on the mutant: the mutant is
+    /// caught by the proof rather than by a test (28.8; owner decision of 2026-10-30). The entry's
+    /// `proof` names the harness, which kernel-fuzz.yml proves on every run; the reason says what
+    /// the contract is and that the harness was shown to fail with the mutant's change applied.
+    /// Allowed everywhere, for a missed mutant.
+    Proved,
     /// A survivor recorded but not yet explained, outside the foundation set only: an old gap the
     /// weekly run found, so that pull requests fail only on new survivors (28.8, "Elsewhere, no new
     /// unexplained survivor may merge").
@@ -87,13 +96,20 @@ impl Kind {
             Kind::Harmless => "harmless",
             Kind::Hangs => "hangs",
             Kind::Known => "known",
+            Kind::Proved => "proved",
         }
     }
 
     fn parse(text: &str) -> Option<Kind> {
-        [Kind::Equivalent, Kind::Harmless, Kind::Hangs, Kind::Known]
-            .into_iter()
-            .find(|k| k.name() == text)
+        [
+            Kind::Equivalent,
+            Kind::Harmless,
+            Kind::Hangs,
+            Kind::Known,
+            Kind::Proved,
+        ]
+        .into_iter()
+        .find(|k| k.name() == text)
     }
 }
 
@@ -110,6 +126,8 @@ pub struct Survivor {
     pub occurrences: u64,
     /// Why it is kept.
     pub kind: Kind,
+    /// For [`Kind::Proved`] only: the Kani harness that catches it, `<path>::<name>`.
+    pub proof: Option<String>,
     /// The written reason.
     pub reason: String,
 }
@@ -322,6 +340,7 @@ fn survivor(value: &Value, at: &str) -> Result<Survivor, LedgerError> {
             "line_text",
             "occurrences",
             "kind",
+            "proof",
             "reason",
         ],
     )?;
@@ -330,17 +349,42 @@ fn survivor(value: &Value, at: &str) -> Result<Survivor, LedgerError> {
     let kind = Kind::parse(&kind_text).ok_or_else(|| {
         err(
             &format!("{at}.kind"),
-            format!("{kind_text:?} is not equivalent, harmless, hangs or known"),
+            format!("{kind_text:?} is not equivalent, harmless, hangs, known or proved"),
         )
     })?;
+    let proof = match (kind, map.contains_key("proof")) {
+        (Kind::Proved, true) => Some(proof_path(map, at)?),
+        (Kind::Proved, false) => return Err(err(&format!("{at}.proof"), "is missing")),
+        (_, true) => {
+            return Err(err(
+                &format!("{at}.proof"),
+                "is given, but only a proved entry names a proof",
+            ));
+        }
+        (_, false) => None,
+    };
     Ok(Survivor {
         file: path(map, at, "file")?,
         mutant: string(map, at, "mutant")?,
         line_text: string(map, at, "line_text")?,
         occurrences,
         kind,
+        proof,
         reason: reason(map, at)?,
     })
+}
+
+/// A `proof` field: `<path>::<name>`, the name an identifier.
+fn proof_path(map: &Map<String, Value>, at: &str) -> Result<String, LedgerError> {
+    let proof = string(map, at, "proof")?;
+    let Some((file, name)) = proof.rsplit_once("::") else {
+        return Err(err(&format!("{at}.proof"), "is not <path>::<name>"));
+    };
+    if file.is_empty() || name.is_empty() || !name.chars().all(|c| c == '_' || c.is_alphanumeric())
+    {
+        return Err(err(&format!("{at}.proof"), "is not <path>::<name>"));
+    }
+    Ok(proof)
 }
 
 fn coverage_off(value: &Value, at: &str) -> Result<CoverageOffEntry, LedgerError> {
@@ -356,14 +400,7 @@ fn coverage_off(value: &Value, at: &str) -> Result<CoverageOffEntry, LedgerError
             ));
         }
     };
-    let proof = string(map, at, "proof")?;
-    let Some((file, name)) = proof.rsplit_once("::") else {
-        return Err(err(&format!("{at}.proof"), "is not <path>::<name>"));
-    };
-    if file.is_empty() || name.is_empty() || !name.chars().all(|c| c == '_' || c.is_alphanumeric())
-    {
-        return Err(err(&format!("{at}.proof"), "is not <path>::<name>"));
-    }
+    let proof = proof_path(map, at)?;
     Ok(CoverageOffEntry {
         file: path(map, at, "file")?,
         item: string(map, at, "item")?,
@@ -502,6 +539,20 @@ mod tests {
     }
 
     #[test]
+    fn a_proved_entry_names_its_harness() {
+        let fields = good_fields().replace(
+            "\"kind\": \"equivalent\"",
+            "\"kind\": \"proved\", \"proof\": \"math::f::proofs::f_is_exact\"",
+        );
+        let ledger = Ledger::parse(&with_survivor(&fields)).unwrap();
+        assert_eq!(ledger.survivors[0].kind, Kind::Proved);
+        assert_eq!(
+            ledger.survivors[0].proof.as_deref(),
+            Some("math::f::proofs::f_is_exact")
+        );
+    }
+
+    #[test]
     fn every_malformation_is_an_error() {
         let good = good_fields();
         let cases = [
@@ -515,6 +566,20 @@ mod tests {
             good.replace("\"line_text\"", "\"line\""),
             format!("{good}, \"extra\": 1"),
             good.replace("\"mutant\": \"replace > with >= in f\", ", ""),
+            // A proof only on a proved entry, and always on one.
+            good.replace(
+                "\"kind\": \"equivalent\"",
+                "\"kind\": \"equivalent\", \"proof\": \"m::proofs::p\"",
+            ),
+            good.replace("equivalent", "proved"),
+            good.replace(
+                "\"kind\": \"equivalent\"",
+                "\"kind\": \"proved\", \"proof\": \"p\"",
+            ),
+            good.replace(
+                "\"kind\": \"equivalent\"",
+                "\"kind\": \"proved\", \"proof\": \"m::proofs::\"",
+            ),
         ];
         for case in cases {
             assert!(Ledger::parse(&with_survivor(&case)).is_err(), "{case}");

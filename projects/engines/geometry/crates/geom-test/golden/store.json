@@ -218,9 +218,15 @@
               "kind": "corpus",
               "piece": "G53",
               "why": "6 new benchmarks in two new groups: isolate (the root-isolation engine on a cubic in one unknown and on a circle and a line) and ball (a cubic evaluated in double-double balls), each on typical and extreme inputs; no existing digest moved"
+            },
+            {
+              "sha256": "c52cb535ddfc80e66dbcac7dc95fc0b542fd912357820c9afb7e49aee1058e8d",
+              "kind": "corpus",
+              "piece": "G43",
+              "why": "ExactSum's Debug text, by which canonical.rs encodes a sum, now writes the sum's value only (its digits after a carry propagation, its special values and its lost flag, and `..` for the rest), not the raw chunks and the additions left before a propagation (chapter 28.8; Gate 1's ledger review): the 12 exact_sum digests moved, the results of add, add_slice and add_iter, the inputs of round and round_ieee, and both of merge; no result changed, and every other benchmark's digests are the same; merged after G53's 6 isolate and ball benchmarks, whose rows are kept unchanged"
             }
           ],
-          "sha256": "c52cb535ddfc80e66dbcac7dc95fc0b542fd912357820c9afb7e49aee1058e8d"
+          "sha256": "a333cd51bc9ab310418e88347fcc516abf6e9822dda90aa44ed998df9b1bf96b"
         },
         {
           "id": "geom-nurbs/operations",
@@ -342,15 +348,32 @@
             "test": "offset_determinism",
             "function": "offset_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "5db0b17f229440b5a05b6605630a24563c485cf383bf4cb5dc969563127c0fc9",
+          "sha256": "0a84316b9ba89bd537d18c1c017a9acf8680cbaec57ec8612342702abad14906",
           "history": [
             {
               "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00",
               "kind": "improvement",
               "piece": "G67",
               "why": "An offset bounds itself and builds its certified cache from its base's bounds and partials over boxes, which for the analytic bases are their closed-form extents now (piece G67): the records that rest on them moved. The offset kind's own code did not change; the result count (314) and the refusals (4) are unchanged."
+            },
+            {
+              "sha256": "5db0b17f229440b5a05b6605630a24563c485cf383bf4cb5dc969563127c0fc9",
+              "kind": "improvement",
+              "piece": "G68",
+              "why": "A rational NURBS patch's partials over a box now start from the hull of its Euclidean control points (chapter 19.3's interval quotient rule, piece G68) rather than from the quotient of the boxes of its numerator and weight. The second round's offset is of a rational patch, and an offset bounds itself and builds its certified cache from its base's partials over boxes, so the records that rest on them moved. The offset kind's own code did not change; the result count (314) and the refusals (4) are unchanged."
             }
           ]
+        },
+        {
+          "id": "geom-surface/derivative-bounds",
+          "what": "Every surface kind's second-derivative and normal-derivative bounds (piece G68): 6 rounds of a rational bicubic NURBS patch with an interior knot each way and weights from 2^-10 to 2^10 (with 1e-3 and 1e3 among them) and a nonrational biquadratic one, each over its whole domain, a quarter of it, a box of a hundredth of each side and a box across its interior knots; and a plane, a cylinder, a cone (at its apex and away from it), a sphere (at its pole and away from it), a torus and an affine image of a torus on random frames, over one box each. For every box the partials to order 2, the second-derivative bound with its chord constant M, and the normal-derivative bound; and 2 refusals: 386 results in the canonical encoding of tests/derivative_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "derivative_determinism",
+            "function": "derivative_bounds_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
+          "history": []
         },
         {
           "id": "geom-bvh/tree",
@@ -441,6 +464,16 @@
             "function": "golden_hash_is_the_same_on_every_target"
           },
           "sha256": "601faa6494c0ad3f9b1d7dd7b8a1e78724066b90ac4a998057959dae37206886"
+        },
+        {
+          "id": "geom-linalg/dense",
+          "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
+          "check": {
+            "crate": "geom-linalg",
+            "test": "dense_determinism",
+            "function": "dense_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
         }
       ]
     }
