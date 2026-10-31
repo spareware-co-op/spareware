@@ -28,8 +28,15 @@ fn coefficients(points: &[P3], surface: &Surface) -> Vec<I320> {
 
 fn surfaces() -> [Surface; 3] {
     [
-        Surface::Sphere(Sphere { centre: p(1, 2, 3), radius: Steps(9) }),
-        Surface::Cylinder(Cylinder { base: p(0, 0, 0), along: p(1, 1, 7), radius: Steps(4) }),
+        Surface::Sphere(Sphere {
+            centre: p(1, 2, 3),
+            radius: Steps(9),
+        }),
+        Surface::Cylinder(Cylinder {
+            base: p(0, 0, 0),
+            along: p(1, 1, 7),
+            radius: Steps(4),
+        }),
         Surface::Cone(Cone {
             apex: p(4, 0, 0),
             along: p(4, 0, 5),
@@ -64,7 +71,10 @@ fn the_coefficients_are_the_equation() {
 
 #[test]
 fn the_signs_say_where_a_curve_can_be() {
-    let ball = Surface::Sphere(Sphere { centre: p(0, 0, 0), radius: Steps(5) });
+    let ball = Surface::Sphere(Sphere {
+        centre: p(0, 0, 0),
+        radius: Steps(5),
+    });
     // All outside, and control points all outside: no crossing.
     let out = signs_of(&coefficients(&[p(9, 0, 0), p(9, 9, 0)], &ball));
     assert!(out.excludes_zero());
@@ -96,7 +106,10 @@ fn what_it_cannot_do_is_refused() {
         major: Steps(10),
         minor: Steps(3),
     });
-    assert_eq!(run(&[p(0, 0, 0), p(1, 0, 0)], &torus), Err(NurbsError::Defect));
+    assert_eq!(
+        run(&[p(0, 0, 0), p(1, 0, 0)], &torus),
+        Err(NurbsError::Defect)
+    );
     assert_eq!(run(&[p(0, 0, 0); 30], &ball), Err(NurbsError::Defect));
     // The charge comes before the work.
     let mut meter = WorkMeter::new(Budget::new(3, u64::MAX));
@@ -109,21 +122,31 @@ fn what_it_cannot_do_is_refused() {
 fn the_budget_holds_at_degree_28() {
     let corners: Vec<P3> = (0..29)
         .map(|i| {
-            if i % 2 == 0 { p(M, M, M) } else { p(-M, -M, -M) }
+            if i % 2 == 0 {
+                p(M, M, M)
+            } else {
+                p(-M, -M, -M)
+            }
         })
         .collect();
     let big = (1 << 40) - 1;
     let cone = Surface::Cone(Cone {
         apex: p(-M, M, -M),
         along: p(M, -M, M),
-        slope: Slope { rise: big, run: big },
+        slope: Slope {
+            rise: big,
+            run: big,
+        },
     });
     let cylinder = Surface::Cylinder(Cylinder {
         base: p(-M, M, -M),
         along: p(M, -M, M),
         radius: Steps((1 << 41) - 1),
     });
-    let sphere = Surface::Sphere(Sphere { centre: p(-M, M, -M), radius: Steps((1 << 41) - 1) });
+    let sphere = Surface::Sphere(Sphere {
+        centre: p(-M, M, -M),
+        radius: Steps((1 << 41) - 1),
+    });
     for s in [cone, cylinder, sphere] {
         assert_eq!(coefficients(&corners, &s).len(), 57);
     }

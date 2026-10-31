@@ -26,8 +26,8 @@ use geom_num::grid::{COORD_MAX, P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::quadric::{
     Cone, Cylinder, Line, Slope, Sphere, Surface, Torus, axis_gap, line_cone, line_cone_steep,
-    line_cylinder, line_sphere, parallel, polynomial, roots, roots_between, tangent_cone_cone,
-    tangent_cylinder_cone,
+    line_cylinder, line_sphere, parallel, polar, polynomial, roots, roots_between,
+    tangent_cone_cone, tangent_cylinder_cone,
 };
 use geom_num::sturm::{Big, Chain, MAX_COEFFICIENT_BITS, Point, Roots, div_exact, filtered};
 use geom_num::wide::{I320, Wide};
@@ -676,4 +676,66 @@ fn a_size_past_the_budget_is_refused() {
     };
     assert_eq!(line_cone(&l, &cone), refused);
     assert_eq!(line_cone_steep(&l, &cone), refused);
+}
+
+fn at(x: i64, y: i64, z: i64) -> P3 {
+    P3::new(x, y, z).unwrap()
+}
+
+#[test]
+fn the_polar_form_is_each_quadric_on_the_diagonal() {
+    let q = |v: i128| Some(I320::from_i128(v));
+    let sphere = Surface::Sphere(Sphere {
+        centre: at(1, 0, 0),
+        radius: Steps(5),
+    });
+    assert_eq!(polar(&sphere, at(4, 4, 0), at(4, 4, 0)), q(0));
+    assert_eq!(polar(&sphere, at(1, 0, 0), at(2, 3, 0)), q(-25));
+    assert_eq!(polar(&sphere, at(2, 0, 0), at(3, 1, 1)), q(-23));
+    assert_eq!(polar(&sphere, at(3, 1, 1), at(2, 0, 0)), q(-23));
+    let cylinder = Surface::Cylinder(Cylinder {
+        base: at(0, 0, 0),
+        along: at(0, 0, 2),
+        radius: Steps(3),
+    });
+    assert_eq!(polar(&cylinder, at(3, 0, 9), at(3, 0, 9)), q(0));
+    assert_eq!(polar(&cylinder, at(1, 0, 0), at(0, 1, 0)), q(-36));
+    let cone = Surface::Cone(Cone {
+        apex: at(0, 0, 0),
+        along: at(0, 0, 1),
+        slope: Slope { rise: 1, run: 1 },
+    });
+    assert_eq!(polar(&cone, at(1, 0, 1), at(1, 0, 1)), q(0));
+    assert_eq!(polar(&cone, at(2, 0, 1), at(2, 0, 1)), q(3));
+    let torus = Surface::Torus(Torus {
+        centre: at(0, 0, 0),
+        along: at(0, 0, 1),
+        major: Steps(5),
+        minor: Steps(1),
+    });
+    assert_eq!(polar(&torus, at(1, 0, 0), at(1, 0, 0)), None);
+}
+
+#[test]
+fn a_bound_no_double_holds_goes_to_the_exact_chain() {
+    let sphere = Surface::Sphere(Sphere {
+        centre: at(0, 0, 0),
+        radius: Steps(5),
+    });
+    let line = Line {
+        a: at(-9, 0, 0),
+        b: at(9, 0, 0),
+    };
+    let far = (1_i64 << 53) + 1;
+    let found = roots_between(&line, &sphere, Point::whole(-far), Point::whole(far));
+    assert_eq!(found, Ok(2));
+    let tiny = Point { num: -1, den: far };
+    assert_eq!(roots_between(&line, &sphere, tiny, Point::whole(1)), Ok(2));
+    // Within the doubles the filter answers, and a bound with no positive denominator is refused
+    // whichever path it takes.
+    let near = roots_between(&line, &sphere, Point::whole(-1), Point::whole(1));
+    assert_eq!(near, Ok(2));
+    let wrong = Point { num: 1, den: -1 };
+    let refused = roots_between(&line, &sphere, wrong, Point::whole(1));
+    assert_eq!(refused, Err(geom_num::NumError::Degenerate));
 }

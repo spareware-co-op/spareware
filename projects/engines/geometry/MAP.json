@@ -880,6 +880,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/quadric.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the exact decisions on lines and quadrics (piece G159, decision 32.44): lines against a sphere, a cylinder, a cone and a torus, parallel axes, and pairs whose axes meet.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the calls of `geom-num`'s attack test, under no budget. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::quadric",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -2572,6 +2592,28 @@
           "target": "lib"
         },
         {
+          "cost": "a handful of predicates and two Sturm chains per case; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a line, a sphere, a cylinder and a cone at small sizes or at the grid's edge, a torus, and four factors of a quartic. [`check`] holds each discriminant to the same polynomial's discriminant in `num-bigint`, each filter to its exact path, the torus's filter to its chain, and a chain to the roots of the factors it was built from.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/quadric.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-num`'s exact decisions on lines and quadrics agree with big integers, and its Sturm chains count the roots a polynomial was built from, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`), with `num-bigint` as the exact oracle of 29.3, sharing no code with `geom-num`'s wide integers."
+          },
+          "path": "geom_fuzz::quadric",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`cases` runs of the harness, plus one `SplitMix64` word per eight bytes drawn and one or two words per length.",
           "does": "[`run`] resolves a seed with `geom_test::seed::resolve` (the test's default, or `SPAREKIT_SEED`; printed as `seed: <hex>`), then for each case draws a length in `0..=max_len` and that many bytes from `geom-test`'s `SplitMix64`, and runs the harness on them.",
           "family": [],
@@ -3005,7 +3047,7 @@
             "**The same formulas as `predicate.rs`, `plane.rs` and `crossing.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term; `tpi_weight` and `tpi_side` evaluate the three-plane point's weight and its classification as `Tpi::homogeneous` and `Plane::side_of_tpi` do, except that the classification subtracts n · (−X) where `plane.rs` adds n · X, the same value; and the line-plane and crossing descriptions evaluate what `plane.rs` and `crossing.rs` document for them, step for step.",
             "**Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every target."
           ],
-          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`, `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`, `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`, `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`, `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that machine-check the filters' error bounds ([`crate::predicate_certificates`]).",
+          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-line-sphere`, `predicate-line-cylinder`, `predicate-line-cone`, `predicate-line-cone-lead`, `predicate-cross-norm`, `predicate-axis-gap`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`, `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`, `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`, `fptaylor-line-sphere`, `fptaylor-line-cylinder`, `fptaylor-line-cone`, `fptaylor-line-cone-lead`, `fptaylor-cross-norm`, `fptaylor-axis-gap`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`, `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`, `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that machine-check the filters' error bounds ([`crate::predicate_certificates`]).",
           "method": {
             "links": [
               "https://doi.org/10.1016/j.cad.2015.10.004",
@@ -3206,6 +3248,30 @@
       "kind": "kernel",
       "layer": "4",
       "modules": [
+        {
+          "cost": "a few predicates per call, each one filter and at most one exact path. [`line_torus`] and [`between`] add at most one Sturm chain. [`collapsed`] is linear. No allocation. Recursion: none.",
+          "does": "on the exact data of 12.7, [`line_sphere`], [`line_cylinder`] and [`line_cone`] say how a line meets a quadric as a [`Meeting`], with no square root anywhere, and [`line_torus`] counts its real points on a torus. [`between`] counts them on a stretch of the line. [`position`] decides which of Goldman and Miller's special positions two natural quadrics stand in. [`collapsed`] decides whether the control points along a patch's edge are one point.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/closed.rs",
+          "guarantees": [
+            "**Exact on exact data.** Every decision here is a sign from `geom-num`'s `quadric` and `sturm` modules, each with its budget written there: no double decides anything.",
+            "**Every degenerate case named.** A line along a cylinder or a cone's ruling is [`Meeting::Within`], one through a cone's apex and nothing else is [`Meeting::Apex`], and a line parallel to a ruling that crosses once is [`Meeting::Once`]. A shape with no size is [`IntersectError::InvalidInput`], never an answer.",
+            "**Positions in order of how much they share.** [`position`] reports the strongest position the pair holds: one axis, then a shared apex, parallel axes, axes meeting with a tangent sphere, and axes meeting."
+          ],
+          "job": "Exact decisions in closed form: how a line meets a quadric or a torus, where two natural quadrics stand, and whether a patch's edge collapses (12.6, 12.7, 12.10).",
+          "method": {
+            "links": [
+              "doi:10.1145/112515.112545",
+              "doi:10.1006/gmip.1995.1006",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the closed forms of 12.6 and 12.7, on Goldman and Miller's geometric conditions (SMA '91, doi:10.1145/112515.112545; GMIP 57(1), 1995, doi:10.1006/gmip.1995.1006), whose planar sections are the two quadrics' rotational symmetry and a sphere tangent to both about the meeting of their axes. `projects/engines/geometry/architecture/12-intersections.md` holds the table."
+          },
+          "path": "geom_intersect::closed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant.",
           "does": "[`IntersectError`] names each failure of a pair. Every pair of kinds is supported, so there is no \"unsupported\" error. A flagged region is not one of these: it is part of a complete, honest answer.",
@@ -4660,6 +4726,46 @@
           "target": "lib"
         },
         {
+          "cost": "the filter is 28 `f64` operations, after 1 rounded input(s) converted to `f64`, then 7 magnitudes and their maxima and the bound's 19 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/axis_gap.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-axis-gap.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-axis-gap` (seed: none, it uses no randomness), from the description `AXIS_GAP` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::axis_gap",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 20 `f64` operations, then 6 magnitudes and their maxima and the bound's 10 multiplication(s); the exact path, run only when the filter cannot decide, is 20 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/cross_norm.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-cross-norm.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-cross-norm` (seed: none, it uses no randomness), from the description `CROSS_NORM` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::cross_norm",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the filter is 29 `f64` operations, then 6 magnitudes and their maxima and the bound's 5 multiplication(s); the exact path, run only when the filter cannot decide, is 29 checked integer operations.",
           "does": null,
           "family": [],
@@ -4715,6 +4821,86 @@
             "text": "each predicate's steps as its module's certificate derives them, each held in as many 32-bit limbs as its operands' certified bits need, chapter 23.3's width-aware limbs, `projects/engines/geometry/architecture/23-performance.md`, with the schoolbook limb arithmetic of `crate::wide32`."
           },
           "path": "geom_num::generated::limbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 41 `f64` operations, after 2 rounded input(s) converted to `f64`, then 11 magnitudes and their maxima and the bound's 38 multiplication(s); the exact path, run only when the filter cannot decide, is 41 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/line_cone.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-line-cone.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-line-cone` (seed: none, it uses no randomness), from the description `LINE_CONE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::line_cone",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 31 `f64` operations, after 2 rounded input(s) converted to `f64`, then 8 magnitudes and their maxima and the bound's 21 multiplication(s); the exact path, run only when the filter cannot decide, is 31 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/line_cone_lead.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-line-cone-lead.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-line-cone-lead` (seed: none, it uses no randomness), from the description `LINE_CONE_LEAD` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::line_cone_lead",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 32 `f64` operations, after 1 rounded input(s) converted to `f64`, then 10 magnitudes and their maxima and the bound's 21 multiplication(s); the exact path, run only when the filter cannot decide, is 32 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/line_cylinder.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-line-cylinder.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-line-cylinder` (seed: none, it uses no randomness), from the description `LINE_CYLINDER` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::line_cylinder",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 28 `f64` operations, after 1 rounded input(s) converted to `f64`, then 7 magnitudes and their maxima and the bound's 19 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/line_sphere.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-line-sphere.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-line-sphere` (seed: none, it uses no randomness), from the description `LINE_SPHERE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::line_sphere",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5506,6 +5692,31 @@
           "target": "lib"
         },
         {
+          "cost": "each predicate is one filter, and one exact path where the filter cannot tell. [`roots`] is at most 60 interval operations, and a [`crate::sturm::Chain`] where those cannot tell. No allocation. Recursion: none.",
+          "does": "a [`Line`] runs through two grid points; a [`Sphere`], [`Cylinder`], [`Cone`] or [`Torus`] is held by grid points and whole numbers of steps, which is what chapter 12.7 calls exact data. [`line_sphere`], [`line_cylinder`] and [`line_cone`] give the sign of a line's discriminant with each, in a form with no square root and no division, through generated filters and exact paths. [`polynomial`] writes a line's equation with a surface as whole-number coefficients of a degree-2 or degree-4 polynomial in the line's parameter, and [`roots`] and [`roots_between`] count its real roots with [`crate::sturm`]. [`parallel`], [`axis_gap`], [`tangent_cylinder_cone`] and [`tangent_cone_cone`] are the tests of Goldman and Miller's special positions.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/quadric.rs",
+          "guarantees": [
+            "**Discriminants within their budgets.** Each generated module carries the bound of every step: line with sphere 169 bits, with cylinder 253, with cone 334. `None` from a generated path can only mean an input outside its declared range, and is [`NumError::BudgetExceeded`].",
+            "**The tangent spheres' budgets.** |u|² is below 2^170 and each L below 2^170, for sizes of at most 2^41 and slopes of at most 2^40: a cylinder and a cone are below 2^(82+81+340) = 2^503, in `Wide<8>`, and two cones below 2^(80+81+84+340) = 2^585, in `Wide<10>`. Both are past chapter 6.2's 384 bits and wait for an owner's acceptance for these rows (31.7), with [`crate::sturm`]'s `Wide<54>`.",
+            "**A line with a torus has B = 256.** With D = d·d, H = d·w, W = w·w, E = e·e, all below 2^84, and k = R² − r² below 2^82 in size: E·P(t)² has coefficients below 2^84·2^171 = 2^255, for P = D·t² + 2H·t + W + k, whose square's largest coefficient is H² + ... below 2^171; and 4R²·M(t) has coefficients below 2^84·2^170 = 2^254, for M = E·|x|² − (x·e)². So every coefficient of [`polynomial`] is below 2^256, as [`crate::sturm`]'s budget asks, and each step fits an `I320`.",
+            "**The same polynomial in two arithmetics.** [`polynomial`] is one generic function over [`Ring`], so the interval filter's coefficients enclose the exact path's by construction.",
+            "**Decided or refused.** A filter's answer is proven (each generated module says how, and an interval's sign is proven by outward rounding); otherwise the exact path answers."
+          ],
+          "job": "Exact decisions about lines and the surfaces of revolution on grid data: how a line meets a sphere, cylinder, cone or torus, and the positions of two axes (chapter 12.6 and 12.7).",
+          "method": {
+            "links": [
+              "doi:10.1145/112515.112545",
+              "doi:10.1006/gmip.1995.1006"
+            ],
+            "text": "Lagrange's identity for each discriminant, written out in the descriptions in `crates/geom-gen/src/predicates.rs`, with no square root or division; the torus's implicit equation (|x|² + R² − r²)² = 4R²(|x|² − (x·ê)²) with the axis cleared of its length; the special positions of Goldman and Miller (SMA '91, doi:10.1145/112515.112545; GMIP 57(1), 1995, doi:10.1006/gmip.1995.1006), including the sphere tangent to both quadrics about the point where their axes meet."
+          },
+          "path": "geom_num::quadric",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant: one finiteness check to make a `Real`, and one comparison of bits to compare two.",
           "does": null,
           "family": [],
@@ -5611,6 +5822,31 @@
             "text": "the sign of an exactly computed quantity, as chapter 6.2's exact predicates return it (`projects/engines/geometry/architecture/06-numbers.md`): a comparison with zero, and the sign rules of negation and multiplication of the reals."
           },
           "path": "geom_num::sign",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a chain is at most 24 products and 15 exact divisions of [`LIMBS`]-limb integers, on the stack, each O(`LIMBS`²). The filter is at most 60 interval operations. Recursion: none.",
+          "does": "[`Chain::of`] builds the Sturm chain of an integer polynomial as a subresultant chain, whose coefficients stay near the size of determinants of the polynomial's own. From it [`Chain::roots`] counts the distinct real roots and says whether any is repeated, and [`Chain::roots_between`] counts them between two rational points, ends excluded. [`filtered`] and [`filtered_between`] give the same answers in `f64` intervals where those decide, so that the wide path only runs near a repeated root (chapter 12.6).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+          "guarantees": [
+            "**A Sturm chain.** Each element after the first two is a positive multiple of minus the remainder of the two before it, so Sturm's theorem counts the real roots: the multiplier of each pseudo-remainder is |lc|^(δ+1), and each exact divisor is a magnitude. Every multiple being positive is what lets the classical algorithm's quotients be read as Sturm's.",
+            "**The budget, B ≤ 256.** By Hadamard's bound, on subresultants as determinants of 3, 5 and 7 rows of coefficients below 2^(B+2), the chain's coefficients stay below 2^(3B+9), 2^(5B+17) and 2^(7B+27). The largest value computed is a pseudo-remainder of the last step, at most 8·lc²·|u|·... ≤ 2^(13B+50) = 2^3378 at B = 256, inside [`Big`]'s limit of 2^3455: [`LIMBS`] holds it, and every step is checked, so a wrong budget is `None`, never a wrong count. A line with a torus has B = 256 ([`crate::quadric`]'s derivation).",
+            "**Exact division, proven at each use.** [`div_exact`] multiplies its quotient back by the divisor and compares, so a value that was not divisible is refused, never rounded.",
+            "**The filter never guesses.** [`filtered`] returns `None` unless every leading coefficient of its chain has a certain sign, each proven by outward rounding, and then the chain has full length, so no root is repeated.",
+            "**Ends excluded.** [`Chain::roots_between`] takes each element's sign just inside each end, so a root at an end is not counted, however often it repeats."
+          ],
+          "job": "How many real roots a polynomial of degree at most four has, exactly, by Sturm's method.",
+          "method": {
+            "links": [
+              "doi:10.1145/321662.321664",
+              "doi:10.1006/jsco.1993.1017"
+            ],
+            "text": "Sturm's theorem (Basu, Pollack and Roy, *Algorithms in Real Algebraic Geometry*, 2006, chapter 2) on the subresultant polynomial remainder sequence (Brown and Traub 1971, doi:10.1145/321662.321664; Cohen, *A Course in Computational Algebraic Number Theory*, algorithm 3.3.1), with Hadamard's bound for the budget. Exact division digit by digit from the low end (Jebelean 1993, doi:10.1006/jsco.1993.1017). The filter is the same chain in [`crate::interval`]: a chain branches on its degrees, so it has no straight-line form for `geom-gen`, and outward rounding proves each sign with no constant to derive."
+          },
+          "path": "geom_num::sturm",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -6224,6 +6460,7 @@
           "file": "projects/engines/geometry/crates/geom-nurbs/src/exact.rs",
           "guarantees": [
             "**Plane coefficients within 2^126.** [`Plane`] holds |`n_i`| < 2^83 and |d| < 2^125 (checked at construction). Each |`n_i`·`x_i`| < 2^83·2^40 = 2^123, the sum of three below 3·2^123 < 2^125, and with d below 2^126: in `i128` (limit 2^127), every step checked.",
+            "**Quadric coefficients within 2^305.** [`geom_num::quadric::polar`] holds |Q| below 2^249, and Σ C(p, i)·C(p, j) over i + j = k is C(2p, k), at most 2^(2p) ≤ 2^56 for p ≤ 28 ([`crate::MAX_DEGREE`]): in [`I320`] (limit 2^319), every step checked. The sign of a scaled coefficient is the sign of the true one, since the binomial C(2p, k) it is scaled by is positive.",
             "**Normal coefficients within 2^193.** In scaled form the partial derivatives' coefficients are C(p − 1, i)·C(q, j)·(`P_(i+1,j)` − `P_ij`) and C(p, i)·C(q − 1, j)·(`P_(i,j+1)` − `P_ij`), differences of at most 2M < 2^41. Products of scaled forms are plain convolutions (the binomials are already inside), and a cross product's component is a difference of two products, so coefficient (a, b) is at most 2·(2M)²·Σ C(p − 1, i1)·C(p, i2)·C(q, j1)·C(q − 1, j2) = 2·(2M)²·C(2p − 1, a)·C(2q − 1, b) < 2^83·2^(2p−1)·2^(2q−1) = 2^(81+2p+2q) ≤ 2^193 for p, q ≤ 28 ([`crate::MAX_DEGREE`]), and every partial sum below the same bound: in `geom-num`'s [`I256`] (limit 2^255), every step checked. A check that fails would be a defect in this derivation, reported as [`NurbsError::Defect`], never a wrong sign.",
             "**Collapsed edges, exactly.** An edge counts only when its grid points are equal; then the normal patch's row along it is zero (checked), and in scaled form dividing by the factor that vanishes there is dropping that row: f = Σ `c_k`·t^k·(1 − t)^(n−k) with `c_0` = 0 is t·Σ `c_(k+1)`·t^k·(1 − t)^(n−1−k), and with `c_n` = 0 it is (1 − t)·Σ `c_k`·t^k·(1 − t)^(n−1−k).",
             "**Deterministic.** Integer arithmetic only."

@@ -978,9 +978,46 @@ fn growth_digest(name: &str, limbs: usize) -> Option<Digest> {
 /// The digest of the catalogued benchmark `group/name/class`, computed by calling the `geom-num`
 /// operation directly, or `None` for an operation this table does not know.
 fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
+    use geom_num::quadric;
+    use inputs::quadric as iv;
     use inputs::{eft as ie, grid as ig, interval as ii, plane as ip, predicate as iq};
     use inputs::{exactness as ix, real as ir, sign as is};
     Some(match (group, name) {
+        ("quadric", "line_sphere") => fold(
+            iv::spheres(class)
+                .iter()
+                .map(|(l, s)| quadric::line_sphere(l, s)),
+        ),
+        ("quadric", "line_cylinder") => fold(
+            iv::cylinders(class)
+                .iter()
+                .map(|(l, c)| quadric::line_cylinder(l, c)),
+        ),
+        ("quadric", "line_cone") => fold(
+            iv::cones(class)
+                .iter()
+                .map(|(l, c)| quadric::line_cone(l, c)),
+        ),
+        ("quadric", "line_torus") => fold(
+            iv::tori(class)
+                .iter()
+                .map(|(l, t)| quadric::roots(l, &quadric::Surface::Torus(*t))),
+        ),
+        ("quadric", "parallel") => fold(
+            iv::directions(class)
+                .iter()
+                .map(|(u, v)| quadric::parallel(u.a, u.b, v.a, v.b)),
+        ),
+        ("quadric", "axis_gap") => fold(
+            iv::gaps(class)
+                .iter()
+                .map(|(u, v)| quadric::axis_gap(u.a, u.b, v.a, geom_num::grid::Steps(1024))),
+        ),
+        ("quadric", "tangent") => fold(
+            iv::tangents(class)
+                .iter()
+                .map(|(c, k)| quadric::tangent_cylinder_cone(c, k)),
+        ),
         ("predicate", "orient2d") => fold(
             iq::orient2d(class)
                 .into_iter()

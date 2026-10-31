@@ -120,6 +120,12 @@ pub fn directions(class: Class) -> Vec<(Line, Line)> {
     typical(class, "quadric::directions", |g| (line(g), line(g)))
 }
 
+/// Two points of an axis and a point beside it, as the first line's ends and the second's first.
+#[must_use]
+pub fn gaps(class: Class) -> Vec<(Line, Line)> {
+    typical(class, "quadric::gaps", |g| (line(g), line(g)))
+}
+
 /// Cylinders and cones.
 #[must_use]
 pub fn tangents(class: Class) -> Vec<(Cylinder, Cone)> {
