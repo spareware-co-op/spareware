@@ -217,4 +217,17 @@ fn attributes_rebuild_with_their_classes_and_take_a_checked_class() {
         Attributes::new().defined_as(a.clone(), c).class(&a),
         Some(c)
     );
+    // Removing one entity's value keeps the classes and every other value.
+    let two = held
+        .set(&a, NameKey([1; 16]), Value(vec![1]))
+        .unwrap()
+        .set(&a, NameKey([2; 16]), Value(vec![2]))
+        .unwrap();
+    let one = two.remove(&a, NameKey([1; 16]));
+    assert_eq!(one.class(&a), Some(b.class()));
+    assert_eq!(one.get(&a, NameKey([1; 16])), None);
+    assert_eq!(
+        one.get(&a, NameKey([2; 16])),
+        Some(&Carried::One(Value(vec![2])))
+    );
 }
