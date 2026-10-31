@@ -167,7 +167,7 @@ fn solid(r: &mut SplitMix64) -> Option<ExactMesh> {
         .iter()
         .map(|corner| match corner {
             Corner::Grid(at) => P3::new(at.x.get(), at.y.get(), -4096).map(Corner::Grid),
-            other => Ok(other.clone()),
+            other => Ok(*other),
         })
         .collect::<Result<_, _>>()
         .ok()?;
