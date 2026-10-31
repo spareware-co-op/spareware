@@ -677,14 +677,14 @@ fn the_nightly_campaign_fuzzes_every_target() {
     assert_eq!(campaign_violations(&campaign, &fuzz), Vec::<String>::new());
 
     // Seeded violations: each must be reported.
-    let dropped = campaign.replacen("'[\"attributes_fuzz\", ", "'[", 1);
+    let dropped = campaign.replacen("'[\"arenas_fuzz\", ", "'[", 1);
     assert_ne!(dropped, campaign);
     assert!(
         campaign_violations(&dropped, &fuzz)
             .iter()
             .any(|v| v.contains("not kernel-fuzz.yml's targets"))
     );
-    let added = fuzz.replacen("[attributes_fuzz, ", "[attributes_fuzz, extra_fuzz, ", 1);
+    let added = fuzz.replacen("[arenas_fuzz, ", "[arenas_fuzz, extra_fuzz, ", 1);
     assert_ne!(added, fuzz);
     assert!(
         campaign_violations(&campaign, &added)

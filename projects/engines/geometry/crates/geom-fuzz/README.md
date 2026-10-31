@@ -10,9 +10,10 @@ how each engine runs a target, on your machine and in CI. The first target built
 agree with the exact determinant of orient2d's definition, computed from scratch. The others:
 `predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
 flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
-every operation at every width, `I128` to the reserved 768 bits; and `attributes`
-(`src/attributes.rs`, G90), `geom-name`'s attribute step gives each output exactly what section
-8.4's table gives.
+every operation at every width, `I128` to the reserved 768 bits; `arenas` (`src/arenas.rs`, G80),
+`geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see each
+other's edits; and `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives each
+output exactly what section 8.4's table gives.
 
 ## One law, four engines
 

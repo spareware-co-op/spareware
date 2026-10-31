@@ -41,13 +41,15 @@
 //! ```
 //!
 //! Guarantees: correctly rounded, resting on CORE-MATH's worst-case searches, whose
-//! completeness its list does not claim (step A of the proof). For every binary64 input checked
-//! the result is the binary64 number nearest the exact `e^x` (ties to even), so the error is at
-//! most half an ulp, including in the subnormal range. Proven outright: every input whose result
-//! has fewer than 48 identical bits after its round bit (fewer than 33 for results below
-//! 2^−1059), and every input in CORE-MATH's exp.wc (1 129 427, all checked), is correctly rounded;
-//! an input outside the list with more identical bits, which no proof here excludes, would still
-//! have an error below `½ + 2^−49.2` ulp (`½ + 2^−34` ulp below 2^−1059). Domain: every `x`.
+//! completeness its list does not claim (step A of the proof), except for results below
+//! 2^−1059, which rest on no list. For every binary64 input checked the result is the binary64
+//! number nearest the exact `e^x` (ties to even), so the error is at most half an ulp, including
+//! in the subnormal range. Proven outright: every input whose result has fewer than 48 identical
+//! bits after its round bit, every input whose result is below 2^−1059 (the 25 358 of them within
+//! 2^−33 ulp of a midpoint, found by an exhaustive search, are all checked; step F3), and every
+//! input in CORE-MATH's exp.wc (1 129 427, all checked), is correctly rounded; an input outside
+//! the list with more identical bits, which no proof here excludes, would still have an error
+//! below `½ + 2^−49.2` ulp. Domain: every `x`.
 //! `exp(x)` is `+∞` for `x ≥ 0x1.62e42fefa39fp+9` (overflow) and `+0` for
 //! `x ≤ −0x1.74910d52d3052p+9` (underflow), as the correctly rounded results; `exp(−∞) = +0`,
 //! `exp(+∞) = +∞`, and NaN gives the canonical NaN (`0x7ff8_0000_0000_0000`). The proof is at the
@@ -112,14 +114,18 @@
 //! `fast_polynomial`]. (F3) With `p = Pe(dx)·(1 + θ)`, `|θ| ≤ 2.001u`, and `tx = RN(th·dx)`, the
 //! error of `th + fl` is at most `τ_e·T·e^r + T·ε_p + |tl|·|r|·Pe + th·(|r − dx|·Pe +
 //! |dx|·|r − dx|/2 + 5u·|dx|·Pe) + u·|tx·p| + u·|fl|`, which with Lemma 1's `u·|fl|` is at most
-//! 2^−62.01; CORE-MATH's bound `EPS·(1 − u) = 2^−61.80` covers it, so its fast path is proven as it
-//! stands (*checked*: `fast_path_bound`). For results in the subnormal range the code adds
+//! 2^−62.005; CORE-MATH's bound `EPS·(1 − u) = 2^−61.795` covers it, so its fast path is proven as
+//! it stands (*checked*: `fast_path_bound`). For results in the subnormal range the code adds
 //! `2^(−1022−ie)` to `th` (an exact fast two-sum by Dekker's exponent condition) so that the sum's
 //! last place is the result's; the extra rounding of `fl + e` is at most `u·ulp(fh)`. For
 //! `ie ≥ −1060` that is below 2^−67 and Lemma 1 still applies; below, `ulp(fh) ≥ 2^−13`, and the
 //! value that is rounded, `fh + RN(RN(fl + e) ± EPS)`, is within the error bound plus `EPS` plus
-//! the two low-part roundings of the exact one, below `2^−34·ulp`, so Lemma 2 applies with the list
-//! of subnormal results (`t = 33`) (*checked*).
+//! the two low-part roundings of the exact one, below `2^−34·ulp` (*checked*). There the result
+//! has at most 15 bits, so every double whose `e^x` lies within `2^−33·ulp` of a midpoint can be
+//! found from the 2^15 midpoints, walking the doubles on each side until `e^x` leaves that
+//! distance (`e^x` is increasing): 25 358 of them, all correctly rounded by both paths (*checked*:
+//! `deep_subnormal_results_near_a_midpoint`). So below 2^−1059 both paths round every input
+//! correctly, with no list (exp.wc lists 10 582 of those 25 358).
 //!
 //! **A. The accurate path** has no rounding test. Its relative error is at most 2^−102.54 (A1 and
 //! A2 below), below `2^−49.5·ulp`, and below `2^−49.2·ulp` for subnormal results with the extra
@@ -131,7 +137,7 @@
 //! several separate searches, so whether an unlisted input has 48 or more identical bits is not
 //! proven, here or in CORE-MATH (exp.c claims no completeness either); such an input would be
 //! rounded from a value within `2^−49.2·ulp` of the exact one, an error below `½ + 2^−49.2` ulp.
-//! The same holds below 2^−1059 (step F3) with 33 bits and `½ + 2^−34` ulp.
+//! Below 2^−1059 no list is needed (step F3).
 //! (A1) The table as in F1. (A2) The reduction
 //! `dxh + dxl` is within 2^−118 of `r` (its fast two-sum is exact by Lemma 3(i): `d` is a multiple
 //! of `2^−67`, hence of `ulp(dxl) ≤ 2^−76`); the degree-7 double-double polynomial has
@@ -337,8 +343,9 @@ fn exp_accurate(x: f64) -> f64 {
 /// e to the power x, correctly rounded.
 ///
 /// Error at most half an ulp for every input checked, subnormal results included, and proven
-/// below `½ + 2^−49.2` ulp for every input (`½ + 2^−34` ulp for results below 2^−1059); see the
-/// module documentation for the method, the source, the proof and what correct rounding rests on.
+/// below `½ + 2^−49.2` ulp for every input, and correctly rounded for every result below 2^−1059;
+/// see the module documentation for the method, the source, the proof and what correct rounding
+/// rests on.
 /// `exp(±0) = 1`, `exp(−∞) = +0`, `exp(+∞) = +∞`; overflow gives `+∞` and underflow `+0`, as
 /// correct rounding requires; NaN gives the canonical NaN, `0x7ff8_0000_0000_0000`.
 #[must_use]
@@ -778,6 +785,120 @@ mod tests {
         let near = e.add(&Dy::from_f64(EPS)).add(&u.mul(&ulp_min).scale(1));
         let rel = Dy::div(&near, &ulp_min, P, true).add(&u.scale(1));
         assert!(le(&rel, &p2(-34)), "F3, deep subnormal");
+    }
+
+    /// Step F3 below 2^−1059, with no list: every double whose `e^x` lies within 2^−33 of a
+    /// midpoint `(m + ½)·2^−1074`, `m < 2^15` (all the results below 2^−1059), found exhaustively,
+    /// and each correctly rounded by `exp` (its fast path wherever that decides) and by
+    /// `exp_accurate`. From each midpoint the walk visits the doubles on both sides until `e^x`
+    /// is farther than 2^−33·2^−1074 from it; `e^x` is increasing, so no double beyond the last
+    /// visited one comes closer. Both paths err by less than 2^−34 ulp there (steps F3 and A), so
+    /// they round every other input with such a result correctly too.
+    #[test]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "exact-arithmetic proof check: seconds in release, minutes in a debug build"
+    )]
+    fn deep_subnormal_results_near_a_midpoint() {
+        use num_traits::ToPrimitive;
+        // e^x·2^1074 enclosed within far less than 2^−33 (it is below 2^15): math_reference's exp.
+        let scaled_exp = |x: f64| -> Iv {
+            let d = Dy::from_f64(x);
+            let k = Dy::div(&d, &ln2().lo, 64, false).round_to_int();
+            let r = Iv::point(d).sub(&ln2().mul(&Iv::point(Dy::big(k.clone())), 224), 224);
+            exp_small_iv(&r, 112).scale(k.to_i64().unwrap() + 1074)
+        };
+        let width = p2(-33);
+        let step = hf!("0x1p-43"); // the spacing of the doubles in [−1024, −512), where x lies
+        let mut near = 0u32;
+        for m in 0..1i64 << 15 {
+            let h = Dy::int(2 * m + 1).scale(-1);
+            let (below, above) = (h.sub(&width), h.add(&width));
+            // x for which e^x = h·2^−1074, within a few steps; only the walk's length depends on it.
+            let start = crate::math::log::ln((2 * m + 1) as f64) - 1075.0 * core::f64::consts::LN_2;
+            for dir in [-1.0, 1.0] {
+                let mut x = if dir < 0.0 { start } else { start + step };
+                let mut left = false;
+                for _ in 0..1 << 14 {
+                    let e = scaled_exp(x);
+                    if (dir < 0.0 && le(&e.hi, &below)) || (dir > 0.0 && le(&above, &e.lo)) {
+                        left = true;
+                        break;
+                    }
+                    if le(&e.lo, &above) && le(&below, &e.hi) {
+                        near += 1;
+                        let want = crate::math::reference::exp(x).to_bits();
+                        assert_eq!(super::exp(x).to_bits(), want, "exp({x:e})");
+                        assert_eq!(exp_accurate(x).to_bits(), want, "exp_accurate({x:e})");
+                    }
+                    x += dir * step;
+                }
+                assert!(left, "the walk from m = {m} did not leave the window");
+            }
+        }
+        eprintln!("{near} doubles within 2^-33 ulp of a midpoint below 2^-1059");
+        assert!(near >= 25_358, "{near}");
+    }
+
+    /// The subnormal branch's rounding test keeps its bound above the value it returns. With an
+    /// upper bound `fh + fl·EPS` instead (within a rounding of `fh`), the test would return `fh`
+    /// whenever `fh + (fl − EPS)` rounds to `fh`; where the original refuses, that is wrong only
+    /// for an `x` whose `e^x` lies above the midpoint `M = (fh − 2^s + u/2)·2^ie` next to `fh`
+    /// (`s = −1022 − ie`, `u` the ulp of `fh`) by at most `(2·EPS + 2^−68)·2^ie < 2^(ie − 60)`,
+    /// the fast path's error and the bound with the rounding of `fl − EPS`; below `M` the original
+    /// accepts too, with the same `fh`. For every reduction index of the branch (`x` from
+    /// −0x1.74910d52d3052p+9 to −0x1.6232bdd7abcd2p+9), this walks the doubles from `ln M` and
+    /// checks that none has `e^x` in `(M, M + 2^(ie − 60)]`: `e^x` is increasing, so the first
+    /// double above `M` decides it.
+    #[test]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "exact-arithmetic proof check: seconds in release, minutes in a debug build"
+    )]
+    fn no_subnormal_result_just_above_the_midpoint_next_to_its_table_value() {
+        use num_traits::ToPrimitive;
+        // e^x·2^1074 enclosed within far less than 2^−60 of it: as in the test above.
+        let scaled_exp = |x: f64| -> Iv {
+            let d = Dy::from_f64(x);
+            let k = Dy::div(&d, &ln2().lo, 64, false).round_to_int();
+            let r = Iv::point(d).sub(&ln2().mul(&Iv::point(Dy::big(k.clone())), 224), 224);
+            exp_small_iv(&r, 112).scale(k.to_i64().unwrap() + 1074)
+        };
+        let step = hf!("0x1p-43"); // the spacing of the doubles in [−1024, −512), where x lies
+        let first = libm::rint(hf!("-0x1.74910d52d3052p+9") * S) as i64;
+        let last = libm::rint(hf!("-0x1.6232bdd7abcd2p+9") * S) as i64;
+        let mut indices = 0u32;
+        for jt in first..=last {
+            let (t, ie, th, _) = reduce(jt as f64 / S);
+            assert_eq!(t, jt as f64);
+            let offset = pow2((-1022i64).checked_sub(ie));
+            let (fh, _) = fast_two_sum(offset, th);
+            let u = fh.next_up() - fh;
+            // (fh − 2^s) + u/2 is exact: fh − 2^s is in [1, 2) on a grid of u ≥ 2^−51.
+            let mid = (fh - offset) + u / 2.0;
+            let m = Dy::from_f64(mid).scale(ie + 1074);
+            let top = m.add(&p2(ie + 1074 - 60));
+            let mut x = crate::math::log::ln(mid) + ie as f64 * core::f64::consts::LN_2;
+            // Down to the last double with e^x below M, then up to the first above it.
+            while !le(&scaled_exp(x).hi, &m) {
+                x -= step;
+            }
+            loop {
+                let e = scaled_exp(x);
+                if le(&e.hi, &m) {
+                    x += step;
+                    continue;
+                }
+                assert!(
+                    le(&m, &e.lo) && le(&top, &e.lo),
+                    "e^x for x = {x:e} lies within 2^(ie - 60) above the midpoint for jt = {jt}"
+                );
+                break;
+            }
+            indices += 1;
+        }
+        eprintln!("{indices} reduction indices, none within 2^(ie - 60) above its midpoint");
+        assert!(indices > 200_000, "{indices}");
     }
 
     /// Step A2: the accurate polynomial and reduction are accurate to far below 2^−95.

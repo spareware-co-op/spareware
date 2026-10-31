@@ -13,6 +13,9 @@
 //!   401 × 401 grid of samples (an interval extension over the box would miss by a few per cent).
 //! - **Edges**: whole spheres and tori bounded by their radii, a cone through its apex, boxes of
 //!   one point and of one line, and the affine torus's pieces route.
+//! - **Only angles are cut into pieces**: a cylinder's and a cone's second parameter is a length,
+//!   so their normal bounds, and their affine images', cost the same over a long span of it as
+//!   over a short one.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -544,4 +547,32 @@ fn the_last_route_cuts_the_v_span_into_even_pieces() {
             "coordinate {d}: {b:?} against [{min:?}, {max:?}]"
         );
     }
+}
+
+#[test]
+fn only_angles_are_cut_into_pieces() {
+    // A cylinder's and a cone's second parameter is a length: their normal bounds, and their
+    // affine images', cost the same work over 4 of it as over a tenth. A sphere's is an angle,
+    // cut into more pieces over a longer span.
+    let f = Frame::new([1.0, 0.3, 0.2], [0.1, -0.4, 1.0]).unwrap();
+    let t = TypedTransform::from(Transform::scale(1.0, 2.0, 0.5).unwrap());
+    let us = (0.1, 0.4);
+    let work = |s: &SurfaceKind, vs: (f64, f64)| {
+        let mut m = meter();
+        s.normal_bound((us, vs), &mut m).unwrap();
+        m.used().work
+    };
+    for s in [
+        SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 2.0, f, ((0.0, 2.0), (0.0, 4.0))).unwrap()),
+        SurfaceKind::Cone(Cone::new([0.0; 3], 1.0, 0.5, f, ((0.0, 2.0), (0.0, 4.0))).unwrap()),
+    ] {
+        let affine = s.transformed(&t, &mut meter()).unwrap().value;
+        assert!(matches!(affine, SurfaceKind::Affine(_)));
+        for k in [&s, &affine] {
+            assert_eq!(work(k, (0.0, 0.1)), work(k, (0.0, 4.0)), "{k:?}");
+        }
+    }
+    let sphere =
+        SurfaceKind::Sphere(Sphere::new([0.0; 3], 2.0, f, ((0.0, 2.0), (-0.5, 0.5))).unwrap());
+    assert!(work(&sphere, (-0.5, -0.4)) < work(&sphere, (-0.5, 0.5)));
 }

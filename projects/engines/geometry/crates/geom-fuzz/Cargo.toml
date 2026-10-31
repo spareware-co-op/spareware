@@ -18,10 +18,15 @@ geom-gen = { path = "../geom-gen" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
-# The attributes target (G90): geom-name's attribute step and geom-topo's definitions, under
-# test, with geom-op's history records (ours, MPL-2.0).
+# The arenas target (G80): geom-topo's arenas and builder, under test, and the kernel crates
+# whose values fill them; the attributes target (G90): geom-name's attribute step and geom-topo's
+# definitions, under test, with geom-op's history records (ours, MPL-2.0).
+geom-curve = { path = "../geom-curve" }
+geom-math = { path = "../geom-math" }
 geom-name = { path = "../geom-name" }
 geom-op = { path = "../geom-op" }
+geom-run = { path = "../geom-run" }
+geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
 
 [dev-dependencies]
