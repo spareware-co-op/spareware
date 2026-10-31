@@ -1,0 +1,25 @@
+// The recursion check's model of the `sha2` crate (MIT OR Apache-2.0,
+// https://github.com/RustCrypto/hashes), read in place of its source (src/recursion/stdlib.rs):
+// the part geom-op's hash calls, written from its documentation
+// (https://docs.rs/sha2/0.11.0/sha2/). `Sha256`'s `new`, `update` and `finalize` are the
+// `Digest` trait's; the digest it returns, `Output<Sha256>`, is written as the 32-byte array it
+// converts into. Nothing calls back into kernel code, so every body is `loop {}`. Never compiled.
+
+pub trait Digest {}
+
+#[derive(Clone, Debug, Default)]
+pub struct Sha256 {
+    state: [u32; 8],
+}
+
+impl Digest for Sha256 {}
+
+impl Sha256 {
+    pub fn new() -> Sha256 {
+        loop {}
+    }
+    pub fn update(&mut self, data: &[u8]) {}
+    pub fn finalize(self) -> [u8; 32] {
+        loop {}
+    }
+}
