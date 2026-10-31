@@ -96,6 +96,16 @@
 //!   with it on every pull request: knot vectors exactly, points and changed curves within the
 //!   bounds `geom-nurbs` states.
 //!
+//! Piece G69 adds the law catalogue of section 28.3 for NURBS and the curve and surface kinds:
+//!
+//! - [`fixed`]: fixed-point numbers of 400 fractional bits with π, cos, sin, exp and square roots,
+//!   the higher precision of the catalogue's dense refutation sampler.
+//! - [`nurbs_reference::Patch`]: NURBS surfaces in exact rationals, the tensor product of two bases.
+//! - `tests/laws_nurbs.rs`, `tests/laws_curves.rs` and `tests/laws_surfaces.rs`: each law of 28.3's
+//!   NURBS and kinds rows as a seeded property test, every stated bound refuted, if it is wrong, by
+//!   a dense sample of exact or 400-bit values (`tests/truth`, each kind's definition written from
+//!   its documentation); fixed seeds on pull requests, fresh ones nightly (`kernel-nightly.yml`).
+//!
 //! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
@@ -166,9 +176,11 @@
 //! - `yaml-rust2` 0.13, a development dependency (G21), which reads
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
-//!   rationals of [`nurbs_reference`].
+//!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
 //! - `geom-nurbs` and `geom-run` (MPL-2.0, ours), development dependencies (G57): the curves
 //!   `tests/nurbs_reference.rs` compares with the reference, and the work meter they take.
+//! - `geom-curve`, `geom-surface` and `geom-math` (MPL-2.0, ours), development dependencies (G69):
+//!   the kinds and transforms the law catalogue checks.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -197,6 +209,7 @@
 
 pub mod coverage;
 pub mod deps;
+pub mod fixed;
 pub mod foundation;
 pub mod golden;
 pub mod grid;

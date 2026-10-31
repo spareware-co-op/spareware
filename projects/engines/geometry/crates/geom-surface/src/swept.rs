@@ -2,8 +2,9 @@
 //! on `geom-curve`'s trimmed curves and stored as itself.
 //!
 //! What it does: each kind is a placement c + L·X(u, v) of an unplaced shape X, with L a stored
-//! 3 × 3 matrix (the identity when built), so every affine transform keeps the kind on the same
-//! parameters (c′ = M·c + t, L′ = M·L):
+//! 3 × 3 matrix (the identity when built) and c a stored point (when built, the origin, or a
+//! revolution's axis point a, about which X turns), so every affine transform keeps the kind on
+//! the same parameters (c′ = M·c + t, L′ = M·L):
 //!
 //! | Kind | X(u, v) | Parameters |
 //! | --- | --- | --- |
@@ -1228,7 +1229,13 @@ impl Revolution {
                 axis,
                 frame,
             },
-            place: IDENTITY,
+            // X turns w = P − a about the axis, so the surface is a + X: placed at the axis
+            // point (piece G69's law catalogue found it placed at the origin, the profile moved
+            // by −a).
+            place: Placement {
+                c: axis,
+                l: IDENTITY.l,
+            },
             domain,
         };
         inner.check()?;
