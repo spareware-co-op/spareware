@@ -2571,6 +2571,30 @@ pub mod bvh {
     );
 }
 
+/// geom-topo's hot paths (piece G80; decision 32.44).
+pub mod topo {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("topo/column_edit/typical"))]
+    fn column_edit(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("topo/publish/typical"))]
+    fn publish(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = topo;
+        benchmarks = column_edit, publish
+    );
+}
+
 /// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
 pub mod nurbs {
     use super::*;

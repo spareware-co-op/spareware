@@ -27,7 +27,8 @@ name: Kernel fuzzing and proofs
 #   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-gen, geom-num, geom-run and geom-test today;
+# every crate of the workspace it depends on (geom-bench, geom-curve, geom-gen, geom-linalg,
+# geom-math, geom-num, geom-nurbs, geom-op, geom-run, geom-surface, geom-test and geom-topo today;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
 # ClusterFuzzLite files and this workflow.
@@ -60,6 +61,7 @@ on:
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -83,6 +85,7 @@ on:
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -117,7 +120,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

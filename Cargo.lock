@@ -764,6 +764,7 @@ dependencies = [
  "geom-run",
  "geom-surface",
  "geom-test",
+ "geom-topo",
  "gungraun",
  "gungraun-runner",
  "hex",
@@ -984,9 +985,14 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "geom-bench",
+ "geom-curve",
  "geom-gen",
+ "geom-math",
  "geom-num",
+ "geom-run",
+ "geom-surface",
  "geom-test",
+ "geom-topo",
  "num-bigint",
 ]
 
@@ -1435,6 +1441,7 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
 ]
 
 [[package]]
