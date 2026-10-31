@@ -6531,6 +6531,25 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a plane could not be committed.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/commit.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused: a direction of no length, a tilt along the edge, or an extent with no corners.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The commit changed a decision the ideal shape makes for certain (`CommitFlip`, section 22).",
+              "name": "Flip",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_poly::commit",
+          "name": "CommitError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a plane could not join a table.",
           "file": "projects/engines/geometry/crates/geom-poly/src/plane.rs",
           "kinds": [
@@ -6569,6 +6588,31 @@
       "kind": "kernel",
       "layer": "6",
       "modules": [
+        {
+          "cost": "a constant number of wide products per plane, 85 of them for the square root in [`moved_along`], and a dozen interval operations per corner of an extent.",
+          "does": "a 1.5° draft, a 30° roof or a face moved along a sloping normal needs a plane whose ideal coefficients are irrational. [`through_edge`] commits a plane that must hold an exact edge: its normal is the edge crossed with the integer vector nearest the ideal tilt, and its offset comes from a point of the edge, so the edge lies on it exactly. [`moved_along`] commits a free plane moved a whole number of steps along its normal. Each proves how far the committed plane strays from the ideal one over the face's extent. [`vertex_slide`] bounds how far a vertex moves when its three planes move, and [`check_flip`] compares a decision on the committed planes with the same decision on the ideal ones.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/commit.rs",
+          "guarantees": [
+            "**Within budget, or refused.** A committed plane is a [`Plane`], so its normal is below 2^83 and its offset below 2^125. A tilt along the edge, or a direction of no length, is `Degenerate`; a direction with a non-finite component, or too large to normalise, is `NotFinite`.",
+            "**The edge lies on the plane.** [`through_edge`]'s plane holds both ends of its edge exactly (tested): the normal is a cross product with the edge, and the offset is exact.",
+            "**A proven deviation.** [`Committed::deviation`] bounds in grid steps the distance between the two planes over the convex hull of the extent. The signed distance between two planes is affine, so its largest magnitude over a hull lies at a corner of it, and each is evaluated in outward-rounded intervals. Nothing rounds again after a commit (6.3).",
+            "**The same plane on every target.** Scaling by a power of two and rounding ties to even are exact in IEEE 754, and the rest is integer arithmetic.",
+            "**A commit that changes the shape fails.** [`check_flip`] is [`CommitError::Flip`] when the ideal sign is certain and the committed sign differs. If the ideal sign cannot be certified, a designed tie, the committed sign stands (13.2)."
+          ],
+          "job": "Committing planes: a flat construction with irrational coefficients, taken once to integers within 6.2's budget (chapter 13.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "chapter 13.2's \"Committed planes\" and decision 32.21 (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`). The bound on a vertex is Cramer's rule on the three plane errors; the integer square root is the binary method of Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, exercise 4.3.3; intervals are Moore's, 1966, as in `geom_num::interval`, <https://doi.org/10.1137/1.9780898717716>."
+          },
+          "path": "geom_poly::commit",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant and no allocation. [`along`] is two three-plane determinants and one classify; the others are at most three determinants or seven cross products of normals.",
           "does": "a [`Line`] is where two planes meet. [`along`] orders two points of a line, each the meeting of the line with a third plane. [`same_point`] says whether two three-plane points are one point: 11.3's test, that one lies on all three planes of the other. Within a plane, a [`Ray`] runs from a vertex along the line where that plane meets another, and [`turn`] and [`around`] order rays. About a line, a [`Flap`] is a half-plane bounded by the line, and [`turn_about`] and [`about`] order flaps.",
@@ -6621,7 +6665,7 @@
       "provenance": [],
       "sections": "6.2, 11.3, 11.12, 11.14, 13.2, 19.5 and 23.2; open questions OQ-11.2 and OQ-19.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); the rest by pieces G124, G125, G126, G127, G128, G142.",
+      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); committed planes ([`commit`]) built (G142); the rest by pieces G124, G125, G126, G127, G128.",
       "summary": "Spare Kit geometry kernel: exact plane-based polyhedra."
     },
     {
