@@ -23,6 +23,8 @@
 )]
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
+use core::cmp::Ordering;
+
 use geom_test::flat_reference::{
     Cell, Op, Plane, Point, Polygon, Q, ReferenceError, Relation, Solid, Where, arrangement,
     boolean, clash, clashes, first_contact, imprint, int, labelled_cells, point, ratio, region,
@@ -617,6 +619,167 @@ fn first_contact_is_exact() {
     );
     cases += 1;
     assert!(cases >= 50, "{cases}");
+}
+
+/// A tetrahedron with one edge along y at height `z` and the other along x, two below it.
+fn roof(z: i64) -> Solid {
+    Solid::tetrahedron([
+        point(0, -3, z),
+        point(0, 3, z),
+        point(-3, 0, z - 2),
+        point(3, 0, z - 2),
+    ])
+    .unwrap()
+}
+
+/// The same with its edges turned over: x at height `z`, y two above it.
+fn trough(z: i64) -> Solid {
+    Solid::tetrahedron([
+        point(-3, 0, z),
+        point(3, 0, z),
+        point(0, -3, z + 2),
+        point(0, 3, z + 2),
+    ])
+    .unwrap()
+}
+
+#[test]
+fn edges_meet_when_no_corner_is_near_a_face() {
+    // The moving solid's lowest edge runs along x and the still one's highest along y, so they
+    // first touch at one point in the middle of both: no corner reaches a face at that moment.
+    let (still, moving) = (roof(0), trough(1));
+    for (by, want) in [
+        (point(0, 0, -2), Some(ratio(1, 2))),
+        (point(0, 0, -4), Some(ratio(1, 4))),
+        (point(0, 0, -1), Some(int(1))),
+        (point(1, 1, -2), Some(ratio(1, 2))),
+        (point(-2, 3, -3), Some(ratio(1, 3))),
+        (point(0, 0, 2), None),
+    ] {
+        assert_eq!(first_contact(&moving, &still, &by).unwrap(), want, "{by:?}");
+    }
+    // Slide along x past the end of the edge: at that height it has gone by, and never touches.
+    assert_eq!(
+        first_contact(&moving, &still, &point(14, 0, -2)).unwrap(),
+        None
+    );
+    // Short of reaching, it is still in the air at the end of its travel.
+    assert_eq!(
+        first_contact(&trough(3), &still, &point(0, 0, -1)).unwrap(),
+        None
+    );
+}
+
+#[test]
+fn a_still_corner_reaches_a_moving_face() {
+    // The still solid's apex meets the moving box's underside, and no corner of the box is near.
+    let still = Solid::tetrahedron([
+        point(0, 0, 0),
+        point(-1, -1, -2),
+        point(3, -1, -2),
+        point(-1, 3, -2),
+    ])
+    .unwrap();
+    let moving = cuboid([-5, -5, 2], [5, 5, 3]);
+    for (by, want) in [
+        (point(0, 0, -4), Some(ratio(1, 2))),
+        (point(0, 0, -8), Some(ratio(1, 4))),
+        (point(1, 0, -4), Some(ratio(1, 2))),
+        (point(0, 0, -1), None),
+        (point(0, 0, 4), None),
+    ] {
+        assert_eq!(first_contact(&moving, &still, &by).unwrap(), want, "{by:?}");
+    }
+}
+
+#[test]
+fn a_tetrahedron_faces_out_however_its_corners_are_given() {
+    let corners = [
+        point(0, 0, 0),
+        point(2, 0, 0),
+        point(0, 2, 0),
+        point(0, 0, 2),
+    ];
+    let inner = [ratio(1, 2), ratio(1, 2), ratio(1, 2)];
+    for order in [[0, 1, 2, 3], [1, 0, 2, 3], [0, 2, 3, 1], [3, 2, 1, 0]] {
+        let tet = Solid::tetrahedron(order.map(|i: usize| corners[i].clone())).unwrap();
+        for face in tet.faces() {
+            assert_eq!(face.plane().side(&inner), Ordering::Less, "{order:?}");
+        }
+    }
+}
+
+#[test]
+fn a_region_holds_its_cells() {
+    let cube = cuboid([0, 0, 0], [2, 2, 2]);
+    let whole = region(&cube).unwrap();
+    assert_eq!(whole.cells().len(), 1);
+    assert_eq!(whole.cells()[0].volume(), int(8));
+    let other = cuboid([1, 1, 1], [3, 3, 3]);
+    let both = boolean(&cube, &other, Op::Intersection).unwrap();
+    assert_eq!(both.cells().len(), 1);
+    assert_eq!(both.cells()[0].volume(), int(1));
+    let cut = boolean(&cube, &other, Op::Difference).unwrap();
+    assert_eq!(cut.cells().len(), 7);
+}
+
+#[test]
+fn a_slanted_face_counts_along_its_canonical_normal() {
+    let tet = Solid::tetrahedron([
+        point(0, 0, 0),
+        point(2, 0, 0),
+        point(0, 2, 0),
+        point(0, 0, 2),
+    ])
+    .unwrap();
+    let areas = region(&tet).unwrap().areas();
+    assert_eq!(areas.len(), 4);
+    // Its area vector is (4, 4, 4), and the canonical normal (1, 1, 1): four of them.
+    let slanted = Plane::new(point(2, 2, 2), int(4)).unwrap();
+    assert_eq!(areas[&slanted.canonical()], int(4));
+    let floor = Plane::new(point(0, 0, 1), int(0)).unwrap();
+    assert_eq!(areas[&floor.canonical()], int(4));
+}
+
+#[test]
+fn a_section_faces_the_way_its_plane_does() {
+    let cube = cuboid([0, 0, 0], [4, 4, 4]);
+    let far = point(100, 100, 100);
+    for (normal, offset, area) in [
+        (point(0, 0, 1), 2, 32),
+        (point(0, 0, -1), -2, 32),
+        (point(1, 1, 0), 4, 32),
+        (point(-1, -1, 0), -4, 32),
+    ] {
+        let plane = Plane::new(normal, int(offset)).unwrap();
+        let pieces = section(&cube, &plane).unwrap();
+        assert!(!pieces.is_empty());
+        for piece in &pieces {
+            assert_eq!(piece.plane().side(&far), plane.side(&far), "{plane:?}");
+        }
+        assert_eq!(twice_area(&pieces, &plane), int(area), "{plane:?}");
+        let turned: Vec<Polygon> = pieces.iter().map(Polygon::flipped).collect();
+        assert_eq!(twice_area(&turned, &plane), int(area), "{plane:?}");
+    }
+}
+
+#[test]
+fn an_imprint_is_sorted_joined_and_has_length() {
+    // A plate across an L: its face runs under the notch's edge lines, one stretch from end to end.
+    let base = [(0, 0), (4, 0), (4, 2), (2, 2), (2, 4), (0, 4)].map(|(x, y)| (int(x), int(y)));
+    let ell = Solid::prism(&base, &int(0), &int(2)).unwrap();
+    let plate = cuboid([-1, 1, 1], [5, 3, 3]);
+    let segments = imprint(&ell, &plate);
+    assert!(
+        segments.contains(&(point(0, 1, 2), point(4, 1, 2))),
+        "{segments:?}"
+    );
+    assert!(segments.iter().all(|(x, y)| x < y), "{segments:?}");
+    // Two faces whose stretches of one line meet at a point: nothing of no length.
+    let cube = cuboid([0, 0, 0], [2, 2, 2]);
+    let touching = cuboid([2, 1, 1], [4, 3, 3]);
+    let segments = imprint(&cube, &touching);
+    assert!(segments.iter().all(|(x, y)| x < y), "{segments:?}");
 }
 
 #[test]

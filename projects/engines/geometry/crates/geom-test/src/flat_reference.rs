@@ -951,15 +951,8 @@ fn line_in_polygon(polygon: &Polygon, from: &Point, along: &Point) -> Vec<(Q, Q)
     for (a, b) in edges(polygon.corners()) {
         let edge = minus(b, a);
         let denominator = at(along, u) * at(&edge, v) - at(along, v) * at(&edge, u);
+        // An edge along the line adds no stop: the edges either side of its run cross there.
         if denominator == Q::ZERO {
-            // An edge along the line: its ends are stops, if they are on it.
-            let from_a = minus(a, from);
-            if at(&from_a, u) * at(along, v) == at(&from_a, v) * at(along, u) {
-                for end in [a, b] {
-                    let gap = minus(end, from);
-                    stops.insert(dot(&gap, along) / dot(along, along));
-                }
-            }
             continue;
         }
         let gap = minus(a, from);
@@ -1179,4 +1172,172 @@ pub fn first_contact(
         }
     }
     Ok(best)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "test cases; the rules are for kernel code"
+)]
+mod tests {
+    use super::*;
+
+    /// A point of the plane z = 7, off the origin so that no coordinate cancels.
+    fn flat(x: i64, y: i64) -> Point {
+        point(x, y, 7)
+    }
+
+    /// Whether the two segments of that plane meet.
+    fn meet(a: [(i64, i64); 2], b: [(i64, i64); 2]) -> bool {
+        let end = |(x, y): (i64, i64)| flat(x, y);
+        segments_meet(
+            &(end(a[0]), end(a[1])),
+            &(end(b[0]), end(b[1])),
+            &point(0, 0, 1),
+        )
+    }
+
+    #[test]
+    fn a_point_is_in_on_or_out_of_a_polygon() {
+        let triangle = Polygon::new(vec![flat(1, 1), flat(5, 1), flat(1, 5)]).expect("a triangle");
+        let cases = [
+            (flat(2, 2), Where::In),
+            (flat(3, 3), Where::On),
+            (flat(3, 1), Where::On),
+            (flat(1, 3), Where::On),
+            (flat(1, 1), Where::On),
+            (flat(5, 1), Where::On),
+            (flat(1, 5), Where::On),
+            (flat(4, 4), Where::Out),
+            (flat(6, 0), Where::Out),
+            (flat(0, 1), Where::Out),
+            (flat(6, 1), Where::Out),
+            (flat(1, 6), Where::Out),
+            (flat(1, 0), Where::Out),
+        ];
+        for (p, want) in cases {
+            assert_eq!(triangle.locate_in_plane(&p), want, "{p:?}");
+        }
+        // A notch: a point in it is out, whichever way the parity runs.
+        let notched = Polygon::new(vec![
+            flat(1, 1),
+            flat(5, 1),
+            flat(5, 3),
+            flat(3, 3),
+            flat(3, 5),
+            flat(1, 5),
+        ])
+        .expect("an L");
+        assert_eq!(notched.locate_in_plane(&flat(4, 4)), Where::Out);
+        assert_eq!(notched.locate_in_plane(&flat(2, 4)), Where::In);
+        assert_eq!(notched.locate_in_plane(&flat(4, 2)), Where::In);
+        assert_eq!(notched.locate_in_plane(&flat(4, 3)), Where::On);
+    }
+
+    #[test]
+    fn segments_meet_where_they_should() {
+        // Crossing, and crossing lines whose segments stop short, each way round.
+        assert!(meet([(1, 1), (5, 5)], [(1, 5), (5, 1)]));
+        assert!(!meet([(1, 1), (2, 2)], [(1, 5), (5, 1)]));
+        assert!(!meet([(1, 5), (5, 1)], [(1, 1), (2, 2)]));
+        assert!(!meet([(1, 1), (5, 5)], [(5, 2), (7, 0)]));
+        assert!(!meet([(5, 2), (7, 0)], [(1, 1), (5, 5)]));
+        // An end of one on the other, each of the four ends in turn.
+        assert!(meet([(3, 3), (5, 8)], [(1, 1), (5, 5)]));
+        assert!(meet([(5, 8), (3, 3)], [(1, 1), (5, 5)]));
+        assert!(meet([(1, 1), (5, 5)], [(3, 3), (5, 8)]));
+        assert!(meet([(1, 1), (5, 5)], [(5, 8), (3, 3)]));
+        // The same ends past the other's end, on its line.
+        assert!(!meet([(7, 7), (9, 2)], [(1, 1), (5, 5)]));
+        assert!(!meet([(9, 2), (7, 7)], [(1, 1), (5, 5)]));
+        assert!(!meet([(1, 1), (5, 5)], [(7, 7), (9, 2)]));
+        assert!(!meet([(1, 1), (5, 5)], [(9, 2), (7, 7)]));
+        // And off the other side, along each axis.
+        assert!(!meet([(0, 0), (-1, 4)], [(1, 1), (5, 5)]));
+        assert!(!meet([(1, 1), (5, 5)], [(0, 0), (-1, 4)]));
+        // On one line: apart, end to end, one inside the other.
+        assert!(!meet([(1, 1), (2, 2)], [(3, 3), (4, 4)]));
+        assert!(meet([(1, 1), (3, 3)], [(3, 3), (4, 4)]));
+        assert!(meet([(1, 1), (4, 4)], [(2, 2), (3, 3)]));
+        assert!(meet([(2, 2), (3, 3)], [(1, 1), (4, 4)]));
+        // Side by side, and a level pair, whose slopes hide nothing.
+        assert!(!meet([(1, 1), (4, 4)], [(1, 2), (4, 5)]));
+        assert!(meet([(1, 3), (5, 3)], [(3, 1), (3, 5)]));
+        assert!(!meet([(1, 3), (2, 3)], [(3, 1), (3, 5)]));
+    }
+
+    #[test]
+    fn an_outline_keeps_the_strict_corners_in_order() {
+        // A square with its edges' midpoints, its middle and a repeat, in no order.
+        let points = vec![
+            flat(3, 1),
+            flat(1, 1),
+            flat(5, 5),
+            flat(3, 3),
+            flat(5, 1),
+            flat(1, 3),
+            flat(1, 5),
+            flat(5, 3),
+            flat(3, 5),
+            flat(1, 1),
+        ];
+        for n in [point(0, 0, 1), point(0, 0, -1)] {
+            let mut hull = outline(&points, &n);
+            assert_eq!(hull.len(), 4, "{hull:?}");
+            assert!(dot(&area_vector(&hull), &n) > Q::ZERO);
+            hull.sort();
+            assert_eq!(hull, [flat(1, 1), flat(1, 5), flat(5, 1), flat(5, 5)]);
+        }
+        // A triangle of the plane x + y + z = 6, with its edges' midpoints and a point inside.
+        let tilted = vec![
+            point(3, 3, 0),
+            point(5, 1, 0),
+            point(2, 2, 2),
+            point(1, 1, 4),
+            point(1, 3, 2),
+            point(3, 1, 2),
+            point(1, 5, 0),
+        ];
+        for n in [point(1, 1, 1), point(-1, -1, -1), point(2, 2, 2)] {
+            let mut hull = outline(&tilted, &n);
+            assert_eq!(hull.len(), 3, "{hull:?}");
+            assert!(dot(&area_vector(&hull), &n) > Q::ZERO);
+            hull.sort();
+            assert_eq!(hull, [point(1, 1, 4), point(1, 5, 0), point(5, 1, 0)]);
+        }
+    }
+
+    #[test]
+    fn a_clip_drops_a_side_with_no_area() {
+        // Three corners in a line, on the plane, and the last above it.
+        let face = Polygon {
+            corners: vec![flat(1, 1), flat(3, 1), flat(5, 1), flat(1, 5)],
+        };
+        let plane = Plane::new(point(0, 1, 0), int(1)).expect("a plane");
+        let (low, high, on) = clip(&face, &plane);
+        assert_eq!(low, None);
+        assert_eq!(high, Some(face));
+        assert_eq!(on, [flat(1, 1), flat(3, 1), flat(5, 1)]);
+    }
+
+    #[test]
+    fn a_solid_lists_each_edge_once() {
+        let cube = Solid::cuboid(&point(1, 2, 3), &point(4, 6, 8)).expect("a box");
+        let edges = cube.edges();
+        assert_eq!(edges.len(), 12);
+        assert!(edges.iter().all(|(a, b)| a < b));
+        let along_one_axis =
+            |(a, b): &(Point, Point)| a.iter().zip(b).filter(|(x, y)| x != y).count() == 1;
+        assert!(edges.iter().all(along_one_axis));
+        let tet = Solid::tetrahedron([
+            point(1, 1, 1),
+            point(3, 1, 1),
+            point(1, 3, 1),
+            point(1, 1, 3),
+        ])
+        .expect("a tetrahedron");
+        assert_eq!(tet.edges().len(), 6);
+    }
 }
