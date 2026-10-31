@@ -1,5 +1,6 @@
-//! The recursion check's model of the standard library, of `libm` and of the part of `rayon`
-//! that `geom-pool` calls: Rust source the check reads in place of theirs, so a call into them is
+//! The recursion check's model of the standard library, of `libm`, of the part of `rayon`
+//! that `geom-pool` calls, and of the parts of `sha2` and `unicode-normalization` that `geom-op`
+//! calls: Rust source the check reads in place of theirs, so a call into them is
 //! checked as any other call is.
 //!
 //! What it does: the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm`
