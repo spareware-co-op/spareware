@@ -50,6 +50,7 @@ pub mod linalg;
 pub mod math;
 pub mod math_types;
 pub mod newton;
+pub mod one_root;
 pub mod nurbs;
 pub mod perturb;
 pub mod plane;

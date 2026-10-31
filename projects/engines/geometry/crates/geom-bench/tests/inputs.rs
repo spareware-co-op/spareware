@@ -2524,11 +2524,31 @@ fn the_circle_classes_are_what_they_say() {
         assert_eq!(a::circle_side(class).len(), BATCH, "{class}");
         assert_eq!(a::circle_meets(class).len(), BATCH, "{class}");
     }
-    assert!(a::round_grid(Degenerate).iter().all(|(r, z)| r.side_of_grid(*z) == Ok(Sign::Zero)));
-    assert!(a::round_side(Degenerate).iter().all(|(r, z)| r.side(z) == Ok(Sign::Zero)));
-    assert!(a::round_meets(Degenerate).iter().all(|(r, l)| r.meets(l) == Ok(Contact::Tangent)));
-    assert!(a::circle_side(Degenerate).iter().all(|(c, z)| c.side(z) == Ok(Sign::Zero)));
-    assert!(a::circle_meets(Degenerate).iter().all(|(c, l)| c.meets(l) == Ok(Contact::Tangent)));
+    assert!(
+        a::round_grid(Degenerate)
+            .iter()
+            .all(|(r, z)| r.side_of_grid(*z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::round_side(Degenerate)
+            .iter()
+            .all(|(r, z)| r.side(z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::round_meets(Degenerate)
+            .iter()
+            .all(|(r, l)| r.meets(l) == Ok(Contact::Tangent))
+    );
+    assert!(
+        a::circle_side(Degenerate)
+            .iter()
+            .all(|(c, z)| c.side(z) == Ok(Sign::Zero))
+    );
+    assert!(
+        a::circle_meets(Degenerate)
+            .iter()
+            .all(|(c, l)| c.meets(l) == Ok(Contact::Tangent))
+    );
 
     assert!(
         i::round_grid_filter(Typical)
@@ -2550,4 +2570,55 @@ fn the_circle_classes_are_what_they_say() {
             .iter()
             .all(|&(a, b, t)| gp::circle_gap::exact(a, b, t) == Some(Sign::Zero))
     );
+}
+
+/// The one-root batches are what their classes claim (piece G189).
+#[test]
+fn the_one_root_classes_are_what_they_say() {
+    use geom_bench::inputs::one_root as r;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(r::cmp_x(class).len(), BATCH, "{class}");
+        assert_eq!(r::side(class).len(), BATCH, "{class}");
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        assert_eq!(r::of_circle(class).len(), BATCH, "{class}");
+        assert_eq!(r::against_circle(class).len(), BATCH, "{class}");
+    }
+    assert_eq!(r::of_round(Typical).len(), BATCH);
+    assert_eq!(r::of_round(Degenerate).len(), BATCH);
+    assert_eq!(r::order_crossings(Typical).len(), BATCH);
+    assert!(
+        r::cmp_x(Typical)
+            .iter()
+            .all(|(p, q)| p.cmp_x_filter(q).is_some())
+    );
+    assert!(
+        r::cmp_x(NearlyDegenerate)
+            .iter()
+            .all(|(p, q)| p.cmp_x_filter(q).is_none())
+    );
+    assert!(
+        r::cmp_x(Degenerate)
+            .iter()
+            .all(|(p, q)| p.same(q) == Ok(true))
+    );
+    assert!(
+        r::side(Degenerate)
+            .iter()
+            .all(|(p, l)| p.side(l) == Ok(Sign::Zero))
+    );
+    assert!(
+        r::side(NearlyDegenerate)
+            .iter()
+            .all(|(p, l)| p.side(l) != Ok(Sign::Zero))
+    );
+    assert!(
+        r::against_circle(Degenerate)
+            .iter()
+            .all(|(p, c)| p.against_circle(c) == Ok(Sign::Zero))
+    );
+    assert!(r::of_circle(Degenerate).iter().all(|(l, c)| {
+        geom_num::one_root::Crossing2::of_circle(l, c, geom_num::one_root::Root::First)
+            .is_ok_and(|p| p.parts().2.is_zero())
+    }));
 }

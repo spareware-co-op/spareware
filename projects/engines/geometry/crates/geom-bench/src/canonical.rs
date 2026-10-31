@@ -25,8 +25,9 @@
 
 use core::cmp::Ordering;
 
-use geom_num::arc::{Circle2, Contact, Round};
+use geom_num::arc::{Arc2, Circle2, Contact, Round};
 use geom_num::carrier::{Carrier, Rational2};
+use geom_num::one_root::Crossing2;
 use geom_num::crossing::Ssi;
 use geom_num::dd::DD;
 use geom_num::exact_sum::ExactSum;
@@ -263,6 +264,27 @@ impl Canonical for Contact {
             Contact::Crossing => 2,
         };
         tag.encode(h);
+    }
+}
+
+impl Canonical for Arc2 {
+    // An arc is exactly its circle and its end.
+    fn encode(&self, h: &mut Sha256) {
+        self.round().encode(h);
+        self.end().encode(h);
+    }
+}
+
+impl Canonical for Crossing2 {
+    // A crossing is exactly its integers; its enclosure follows from them.
+    fn encode(&self, h: &mut Sha256) {
+        let ([ax, ay], [bx, by], k, w) = self.parts();
+        ax.encode(h);
+        ay.encode(h);
+        bx.encode(h);
+        by.encode(h);
+        k.encode(h);
+        w.encode(h);
     }
 }
 

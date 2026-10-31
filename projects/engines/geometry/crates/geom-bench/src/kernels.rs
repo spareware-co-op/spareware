@@ -397,6 +397,52 @@ pub mod arc {
     }
 }
 
+/// One-root numbers: `geom_num::one_root` (G189).
+pub mod one_root {
+    use geom_num::arc::{Arc2, Circle2, Round};
+    use geom_num::carrier::Carrier;
+    use geom_num::one_root::{Crossing2, Root};
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `Crossing2::of_circle` on each pair.
+    #[inline(never)]
+    pub fn of_circle(batch: &[(Carrier, Circle2)], out: &mut Vec<Result<Crossing2, NumError>>) {
+        run(batch, out, |(l, c)| Crossing2::of_circle(l, c, Root::First));
+    }
+
+    /// `Crossing2::of_round` on each pair.
+    #[inline(never)]
+    pub fn of_round(batch: &[(Carrier, Round)], out: &mut Vec<Result<Crossing2, NumError>>) {
+        run(batch, out, |(l, r)| Crossing2::of_round(l, r, Root::First));
+    }
+
+    /// `Crossing2::cmp_x` on each pair.
+    #[inline(never)]
+    pub fn cmp_x(batch: &[(Crossing2, Crossing2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, q)| p.cmp_x(q));
+    }
+
+    /// `Crossing2::side` on each pair.
+    #[inline(never)]
+    pub fn side(batch: &[(Crossing2, Carrier)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, l)| p.side(l));
+    }
+
+    /// `Crossing2::against_circle` on each pair.
+    #[inline(never)]
+    pub fn against_circle(batch: &[(Crossing2, Circle2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, c)| p.against_circle(c));
+    }
+
+    /// `Arc2::order_crossings` on each pair.
+    #[inline(never)]
+    pub fn order_crossings(batch: &[(Arc2, Crossing2, Crossing2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(arc, a, b)| arc.order_crossings(a, b));
+    }
+}
+
 /// Where two lines cross in the plane: `geom_num::crossing` (G29).
 pub mod crossing {
     use geom_num::crossing::Ssi;

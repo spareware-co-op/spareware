@@ -66,6 +66,7 @@ use geom_bench::rng::{SplitMix64, fnv1a, seed_for};
 use geom_bench::sha256::{Digest, Sha256};
 use geom_num::carrier::Rational2;
 use geom_num::crossing::Ssi;
+use geom_num::one_root::{Crossing2, Root};
 use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
@@ -1088,6 +1089,36 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("crossing", "circle_meets") => {
             fold(inputs::arc::circle_meets(class).iter().map(|(c, l)| c.meets(l)))
         }
+        ("crossing", "crossing_of_circle") => fold(
+            inputs::one_root::of_circle(class)
+                .iter()
+                .map(|(l, c)| Crossing2::of_circle(l, c, Root::First)),
+        ),
+        ("crossing", "crossing_of_round") => fold(
+            inputs::one_root::of_round(class)
+                .iter()
+                .map(|(l, r)| Crossing2::of_round(l, r, Root::First)),
+        ),
+        ("crossing", "crossing_cmp_x") => fold(
+            inputs::one_root::cmp_x(class)
+                .iter()
+                .map(|(p, q)| p.cmp_x(q)),
+        ),
+        ("crossing", "crossing_side") => fold(
+            inputs::one_root::side(class)
+                .iter()
+                .map(|(p, l)| p.side(l)),
+        ),
+        ("crossing", "crossing_against_circle") => fold(
+            inputs::one_root::against_circle(class)
+                .iter()
+                .map(|(p, c)| p.against_circle(c)),
+        ),
+        ("crossing", "arc_order_crossings") => fold(
+            inputs::one_root::order_crossings(class)
+                .iter()
+                .map(|(arc, a, b)| arc.order_crossings(a, b)),
+        ),
         ("crossing", "ssi_to_grid") => fold(
             inputs::crossing::ssi_to_grid(class)
                 .iter()

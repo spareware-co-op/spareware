@@ -34,7 +34,10 @@ fn typical_pair(g: &mut SplitMix64) -> Option<(Carrier, Circle2)> {
     let centre = typical2(g);
     let radius = i128::from(g.range(1 << 20, 1 << 30));
     let circle = Circle2::new(centre, radius).ok()?;
-    let near = p2(centre.x.get() + g.range(-9, 9), centre.y.get() + g.range(-9, 9));
+    let near = p2(
+        centre.x.get() + g.range(-9, 9),
+        centre.y.get() + g.range(-9, 9),
+    );
     let l = Carrier::through(near, typical2(g)).ok()?;
     Crossing2::of_circle(&l, &circle, Root::First).ok()?;
     Some((l, circle))
@@ -106,7 +109,10 @@ pub fn cmp_x(class: Class) -> Vec<(Crossing2, Crossing2)> {
             // (3k, 4k) from the centre, on two carriers.
             let (l, c) = tangent(&mut g, 0)?;
             let (p, _) = both(&l, &c)?;
-            let (x, y) = (i128::from(c.centre().x.get()), i128::from(c.centre().y.get()));
+            let (x, y) = (
+                i128::from(c.centre().x.get()),
+                i128::from(c.centre().y.get()),
+            );
             let m = Carrier::new(4, -3, 4 * x - 3 * y).ok()?;
             let q = Crossing2::of_circle(&m, &c, Root::First).ok()?;
             let r = Crossing2::of_circle(&m, &c, Root::Second).ok()?;
@@ -133,7 +139,10 @@ pub fn side(class: Class) -> Vec<(Crossing2, Carrier)> {
         Class::Typical => batch_of(|_| {
             let (l, c) = typical_pair(&mut g)?;
             let (p, _) = both(&l, &c)?;
-            Some((p, Carrier::through(typical2(&mut g), typical2(&mut g)).ok()?))
+            Some((
+                p,
+                Carrier::through(typical2(&mut g), typical2(&mut g)).ok()?,
+            ))
         }),
         Class::Degenerate => batch_of(|_| {
             let (l, c) = typical_pair(&mut g)?;
@@ -149,7 +158,10 @@ pub fn side(class: Class) -> Vec<(Crossing2, Carrier)> {
         Class::Extreme => batch_of(|_| {
             let (l, c) = extreme_pair(&mut g)?;
             let (p, _) = both(&l, &c)?;
-            Some((p, Carrier::through(extreme2(&mut g), extreme2(&mut g)).ok()?))
+            Some((
+                p,
+                Carrier::through(extreme2(&mut g), extreme2(&mut g)).ok()?,
+            ))
         }),
         Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
     }
@@ -196,7 +208,11 @@ pub fn order_crossings(class: Class) -> Vec<(Arc2, Crossing2, Crossing2)> {
                 let l = Carrier::new(a, b, a * cx + b * cy + d * i128::from(k)).ok()?;
                 Crossing2::of_round(&l, &round, root).ok()
             };
-            Some((arc, cross(0, 1, 1, Root::First)?, cross(1, 0, 1, Root::First)?))
+            Some((
+                arc,
+                cross(0, 1, 1, Root::First)?,
+                cross(1, 0, 1, Root::First)?,
+            ))
         }),
         _ => Vec::new(),
     }
