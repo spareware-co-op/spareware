@@ -281,8 +281,9 @@ impl Canonical for DD {
 
 impl Canonical for ExactSum {
     // Its fields are private to geom-num, whose only readers of them are the roundings, which lose
-    // the state. Its `Debug` text writes every field (the chunks, the additions left, the special
-    // flags and the NaN payload), so the encoding is that text's length and bytes.
+    // the value. Its `Debug` text writes the whole value and nothing else (the exact sum's digits
+    // after a carry propagation, the special values and the lost flag), so the encoding is that
+    // text's length and bytes, and two sums encode alike exactly when they hold the same value.
     fn encode(&self, h: &mut Sha256) {
         let text = format!("{self:?}");
         (text.len() as u64).encode(h);
