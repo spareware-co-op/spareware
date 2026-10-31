@@ -664,7 +664,7 @@ mod repository {
         ("geom-topo", 3, "base math curve surface"),
         ("geom-name", 3, "base topo"),
         ("geom-intersect", 4, "base math nurbs curve surface bvh"),
-        ("geom-check", 5, "base topo intersect"),
+        ("geom-check", 5, "base curve topo intersect"),
         ("geom-poly", 6, "base math topo"),
         ("geom-bool", 6, "base poly intersect topo name check bvh"),
         ("geom-2d", 6, "base math curve topo name intersect bvh"),
@@ -1216,7 +1216,6 @@ mod repository {
             "G129 G130 G131 G132 G133 G137 G138 G139 G144 G242 G243 G244 G245 G246 G247 G248 \
              G249 G250 G324",
         ),
-        ("geom-check", "G84 G85 G102 G134 G177 G322"),
         ("geom-cloud", "G350 G379 G380 G436"),
         ("geom-combine", "G336 G337"),
         (
@@ -1245,16 +1244,13 @@ mod repository {
              G176 G292 G320 G321 G372 G390 G392 G393 G466 G467 G468",
         ),
         ("geom-landxml", "G437"),
-        ("geom-make", "G101"),
         (
             "geom-mesh",
             "G146 G147 G148 G149 G150 G151 G152 G153 G288 G289 G290 G291 G298 G299 G300 G301 \
              G302 G303 G304 G305 G306 G319 G341 G350 G411",
         ),
         ("geom-meshio", "G354 G434 G435"),
-        ("geom-name", "G87 G89 G90 G109 G374"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
-        ("geom-op", "G82 G83 G86 G87 G88 G104 G143 G144 G459"),
         ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-profile", "G229 G230"),
@@ -1271,11 +1267,6 @@ mod repository {
             "geom-terrain",
             "G362 G363 G364 G365 G366 G367 G368 G369 G370 G374 G377 G380",
         ),
-        (
-            "geom-topo",
-            "G80 G81 G90 G102 G111 G112 G143 G145 G247 G398",
-        ),
-        ("engine-geometry", "G100 G482"),
     ];
 
     #[test]
@@ -1352,7 +1343,6 @@ mod repository {
         ),
         ("geom-landxml", &[(17, "G437"), (24, "G437")]),
         ("geom-linalg", &[(15, "G49 G50 G215"), (16, "G49 G50 G215")]),
-        ("geom-make", &[(10, "G101")]),
         (
             "geom-mesh",
             &[(16, "G341"), (17, "G153"), (19, "G146-G306"), (23, "G291")],

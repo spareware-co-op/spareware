@@ -580,6 +580,364 @@ impl<A: Canonical, B: Canonical, C: Canonical, D: Canonical> Canonical for (A, B
     }
 }
 
+// `geom-math`'s types (decision 32.44's count benchmarks for pieces G45, G46 and G48).
+
+impl<T: Canonical + Copy> Canonical for geom_math::Rounded<T> {
+    // The value, then whether it is exact (the fields are private to geom-math; these are its
+    // getters).
+    fn encode(&self, h: &mut Sha256) {
+        self.value().encode(h);
+        self.is_exact().encode(h);
+    }
+}
+
+impl Canonical for geom_math::F2 {
+    fn encode(&self, h: &mut Sha256) {
+        self.to_array().encode(h);
+    }
+}
+
+impl Canonical for geom_math::MapPoint {
+    fn encode(&self, h: &mut Sha256) {
+        self.easting.encode(h);
+        self.northing.encode(h);
+        self.height.encode(h);
+    }
+}
+
+impl Canonical for geom_math::RationalRotation {
+    // The quaternion is the rotation: every other field is derived from it.
+    fn encode(&self, h: &mut Sha256) {
+        self.quaternion().encode(h);
+    }
+}
+
+impl<T: Canonical + Copy> Canonical for geom_math::WithinAngle<T> {
+    // The value, then the angle it is from the one asked for.
+    fn encode(&self, h: &mut Sha256) {
+        self.value().encode(h);
+        self.angle().encode(h);
+    }
+}
+
+impl Canonical for String {
+    // The length, then the bytes, so a sequence of texts splits back one way.
+    fn encode(&self, h: &mut Sha256) {
+        (self.len() as u64).encode(h);
+        h.update(self.as_bytes());
+    }
+}
+
+/// The length and bytes of a value's `Debug` text: the encoding of a type whose fields are private
+/// to its crate and whose `Debug` writes every one of them (as for `ExactSum`).
+fn debug_text<T: core::fmt::Debug>(v: &T, h: &mut Sha256) {
+    let text = format!("{v:?}");
+    (text.len() as u64).encode(h);
+    h.update(text.as_bytes());
+}
+
+impl Canonical for geom_math::Decimal {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_math::MathError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_math::DecimalError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-linalg`'s types (decision 32.44's count benchmarks for pieces G49 and G50).
+
+impl Canonical for geom_linalg::Matrix {
+    // The shape, then every entry row by row (its getter refuses no index inside the shape).
+    fn encode(&self, h: &mut Sha256) {
+        (self.rows() as u64).encode(h);
+        (self.cols() as u64).encode(h);
+        for i in 0..self.rows() {
+            for j in 0..self.cols() {
+                self.get(i, j).unwrap_or(f64::NAN).encode(h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_linalg::PivotedQr {
+    // The column permutation, then R's diagonal in order: what the factorisation exposes.
+    fn encode(&self, h: &mut Sha256) {
+        let p = self.permutation();
+        (p.len() as u64).encode(h);
+        for &i in p {
+            (i as u64).encode(h);
+        }
+        let mut k = 0;
+        while let Some(d) = self.r_diagonal(k) {
+            d.encode(h);
+            k += 1;
+        }
+        (k as u64).encode(h);
+    }
+}
+
+impl Canonical for geom_linalg::Svd {
+    // The singular values, then U and V.
+    fn encode(&self, h: &mut Sha256) {
+        let s = self.singular_values();
+        (s.len() as u64).encode(h);
+        for &x in s {
+            x.encode(h);
+        }
+        self.u().encode(h);
+        self.v().encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_linalg::LinalgError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
+
+impl<const D: usize> Canonical for geom_bvh::Aabb<D> {
+    fn encode(&self, h: &mut Sha256) {
+        self.lo().encode(h);
+        self.hi().encode(h);
+    }
+}
+
+impl<const D: usize> Canonical for geom_bvh::Entry<D> {
+    fn encode(&self, h: &mut Sha256) {
+        self.key.encode(h);
+        self.bbox.encode(h);
+    }
+}
+
+impl Canonical for geom_bvh::Point {
+    fn encode(&self, h: &mut Sha256) {
+        self.key.encode(h);
+        self.at.encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_bvh::BvhError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-nurbs`'s types (decision 32.44's count benchmarks for pieces G56, G58 and G59).
+
+impl<const D: usize> Canonical for geom_nurbs::Bounds<D> {
+    fn encode(&self, h: &mut Sha256) {
+        self.lo.encode(h);
+        self.hi.encode(h);
+    }
+}
+
+impl<const D: usize> Canonical for geom_curve::DerivativeBound<D> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            geom_curve::DerivativeBound::Bounded(b) => {
+                h.update(&[0]);
+                b.encode(h);
+            }
+            geom_curve::DerivativeBound::Unbounded => h.update(&[1]),
+        }
+    }
+}
+
+impl Canonical for geom_surface::SecondDerivativeBound {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            geom_surface::SecondDerivativeBound::Bounded(p) => {
+                h.update(&[0]);
+                p.uu.encode(h);
+                p.uv.encode(h);
+                p.vv.encode(h);
+            }
+            geom_surface::SecondDerivativeBound::Unbounded => h.update(&[1]),
+        }
+    }
+}
+
+impl<const D: usize> Canonical for geom_nurbs::CurveFit<D> {
+    // Its curve's basis and coefficients, its parameters and its stated error, all in its `Debug`
+    // text, which prints each double in the shortest form that reads back to the same bits.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_nurbs::NurbsError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-curve`'s types (decision 32.44's count benchmarks for pieces G60 to G64 and G67).
+
+impl<const D: usize> Canonical for geom_nurbs::Changed<geom_curve::NurbsForm<D>> {
+    // The converted curve and whether the conversion changed it, all in its `Debug` text, which
+    // prints each double in the shortest form that reads back to the same bits.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_curve::CurveError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-make`'s operations (decision 32.44's count benchmarks for piece G101).
+
+impl Canonical for geom_make::BoxInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.min.encode(h);
+        self.size.map(geom_num::Steps::get).encode(h);
+    }
+}
+
+impl Canonical for geom_make::RoundInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.base.encode(h);
+        self.radius.get().encode(h);
+        self.height.get().encode(h);
+        self.step.rung().encode(h);
+    }
+}
+
+impl Canonical for geom_op::OpOutput<geom_make::Made> {
+    // A built body, as a transform's input: its corners, then its class's rank.
+    fn encode(&self, h: &mut Sha256) {
+        for point in self.result.body.arenas().points.iter() {
+            if let Some(p) = point.grid() {
+                p.encode(h);
+            }
+        }
+        u32::from(self.exactness.rank()).encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// Root finding and quadrature (decision 32.44's count benchmark for piece G51).
+
+impl Canonical for geom_num::brent::Zero {
+    // Its fields (the zero's bracket and the evaluations used) are all in its `Debug` text, which
+    // prints each double in the shortest form that reads back to the same bits.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_num::brent::BrentError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_num::quadrature::QuadError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
