@@ -128,7 +128,10 @@ impl<const D: usize> Composite<D> {
     ///
     /// [`CurveError::Degenerate`] unless there is a segment and one more start than segments,
     /// increasing and finite; the errors of enclosing a segment's ends.
-    pub fn from_starts(segments: Vec<Trimmed<D>>, starts: Vec<f64>) -> Result<Composite<D>, CurveError> {
+    pub fn from_starts(
+        segments: Vec<Trimmed<D>>,
+        starts: Vec<f64>,
+    ) -> Result<Composite<D>, CurveError> {
         Composite::assemble(segments, starts, f64::INFINITY)
     }
 

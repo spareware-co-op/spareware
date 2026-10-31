@@ -127,7 +127,6 @@ impl<const D: usize> BulgePolyline<D> {
         self.start
     }
 
-
     fn with_start(
         vertices: Vec<[f64; D]>,
         bulges: Vec<f64>,

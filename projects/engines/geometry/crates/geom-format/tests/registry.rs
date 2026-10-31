@@ -9,6 +9,7 @@
 //! dependency only.
 
 #![allow(
+    dead_code,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
@@ -30,7 +31,6 @@ use geom_format::source::SliceSource;
 use geom_num::grid::Steps;
 use geom_run::{Budget, WorkMeter};
 #[path = "../../geom-topo/tests/common/mod.rs"]
-#[allow(dead_code, reason = "geom-topo's fixtures; the archive uses the wall")]
 mod topo;
 
 use geom_format::body::{BODY_TAG, CHUNK_TAG, StoredBody, read_body, write_body};

@@ -3,6 +3,7 @@
 //! same bits, and records that are not the body's are refused (G94).
 
 #![allow(
+    dead_code,
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::indexing_slicing,
@@ -12,10 +13,6 @@
 )]
 
 #[path = "../../geom-topo/tests/common/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "geom-topo's fixtures; these tests use some of them"
-)]
 mod topo;
 
 use std::collections::BTreeSet;
@@ -306,7 +303,7 @@ fn tables_of(s: &StoredBody, rows: &[(u64, u64)]) -> Vec<(u64, u64, Vec<Record>)
         .collect()
 }
 
-/// many_faces(n)'s tables: one solid and one void region, one shell, n faces, two surfaces.
+/// `many_faces(n)`'s tables: one solid and one void region, one shell, n faces, two surfaces.
 fn many(n: u64) -> [(u64, u64); 11] {
     [
         (1, 2),

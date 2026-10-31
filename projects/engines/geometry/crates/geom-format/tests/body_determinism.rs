@@ -4,6 +4,7 @@
 //! written again, hashed into one golden digest.
 
 #![allow(
+    dead_code,
     clippy::unwrap_used,
     clippy::panic,
     clippy::indexing_slicing,
@@ -14,10 +15,6 @@
 )]
 
 #[path = "../../geom-topo/tests/common/mod.rs"]
-#[allow(
-    dead_code,
-    reason = "geom-topo's fixtures; the corpus uses some of them"
-)]
 mod topo;
 
 use geom_curve::{
