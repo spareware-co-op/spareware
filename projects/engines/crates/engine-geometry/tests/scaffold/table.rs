@@ -413,11 +413,12 @@ const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
 /// Layer line, the last gap.
 const HEADER_GAPS: &[HeaderGap<'static>] = &[];
 
-/// Inside kernel crates the only published crate used as it is, is `libm` (29.1), and every maths
-/// function reaches the kernel through `geom_num::math` (21), so only `geom-num` names it. The
-/// `std` crates (`geom-pool`, with rayon, and the facade) and the development crates are left to
-/// the merge gate's dependency rules (G12).
-const REGISTRY: &[(&str, &str)] = &[("num", "libm")];
+/// Inside kernel crates the published crates used as they are, are `libm` (29.1) and `sha2`
+/// (owner action G79, 32.20). Every maths function reaches the kernel through `geom_num::math`
+/// (21), so only `geom-num` names `libm`; SHA-256 hashes names in `geom-op` and content in
+/// `geom-format`, so those two name `sha2` (32.20). The `std` crates (`geom-pool`, with rayon, and
+/// the facade) and the development crates are left to the merge gate's dependency rules (G12).
+const REGISTRY: &[(&str, &str)] = &[("num", "libm"), ("op", "sha2"), ("format", "sha2")];
 
 /// The kernel's one lint posture is `geom-num`'s: the numbers layer set it first, with chapter 21's
 /// disallowed methods and types and chapter 27's denials, and every crate that ships is built with

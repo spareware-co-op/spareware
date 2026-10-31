@@ -354,7 +354,7 @@
               "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd",
               "kind": "improvement",
               "piece": "G67",
-              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r·cos πv)·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
+              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r\u00b7cos \u03c0v)\u00b7G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
             },
             {
               "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
@@ -494,6 +494,16 @@
             "function": "arenas_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
+        },
+        {
+          "id": "geom-op/determinism",
+          "what": "geom-op's canonical CBOR and SHA-256 corpus (piece G86): every power of two and the edges of each float width and integer head, 3,000 nested values of SKG's subset drawn from a fixed SplitMix64 stream, and the SHA-256 and 128-bit cut of each encoding and of seeded messages of every length to 300 bytes: 22,369 records in the encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-op",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
         }
       ]
     }

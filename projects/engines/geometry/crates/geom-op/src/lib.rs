@@ -55,22 +55,30 @@
 //! kernel architecture (`projects/engines/geometry/architecture/`).
 //!
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
-//! scaffold test in `engine-geometry` (`tests/scaffold`).
+//! scaffold test in `engine-geometry` (`tests/scaffold`), and `sha2`, the one hash 32.20 approves.
+//!
+//! Licences of the published crates this crate depends on (DEPEND, chapter 29.1), as each one's
+//! manifest at the version in `Cargo.lock` states it:
+//!
+//! - MIT OR Apache-2.0: `sha2`.
 //!
 //! Status: the context, the error base and its details for the parallel helper and the numbers
 //! layer, the exactness class and warnings of an output, operation identity and the schema types
 //! built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the
-//! canonical encoder to come in G86, names in G87, history in G88, the batch runner in G104,
-//! per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.
+//! canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); names to come in G87,
+//! history in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver
+//! in G144 and preview precision in G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
+pub mod cbor;
 pub mod context;
 pub mod detail;
 pub mod error;
 pub mod evidence;
+pub mod hash;
 pub mod id;
 pub mod kind;
 pub mod output;

@@ -12,19 +12,34 @@ geom-run = { path = "../geom-run", default-features = false }
 # in engine-geometry (tests/scaffold).
 
 geom-num = { path = "../geom-num" }
+# SHA-256 (FIPS 180-4), the kernel's one hash for content IDs and names (owner action G79, 32.20):
+# RustCrypto's sha2, MIT OR Apache-2.0, without its default alloc and oid features. On the vetted
+# allow-list in deny-no-std.toml, with its audit (projects/kit/notes/G86-sha2-audit.md).
+sha2 = { version = "0.11.0", default-features = false }
 
 [dev-dependencies]
 # Property tests only, never linked into the kernel (chapter 29: a development dependency).
 # MIT OR Apache-2.0. Without its default fork and timeout features, which pull in code that has no
-# WebAssembly (WASI) build, so the tests also run on wasm32-wasip1, as geom-run's do.
+# WebAssembly (WASI) build, so the tests also run on wasm32-wasip1.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
-# The kernel's development crate, a development dependency only (chapter 28.1): its Rust lexer, so
-# the attack test reads this crate's code as rustc does, and its map, whose error catalogue the
+# The kernel's development crate, a development dependency only (chapter 28.1): the golden store,
+# its one SHA-256 and the seed every property test prints (pieces G19 and G28); its Rust lexer, so
+# the attack test reads this crate's code as rustc does; and its map, whose error catalogue the
 # attack test checks against the code.
 geom-test = { path = "../geom-test" }
-# JSON, so the attack test reads MAP.json's error catalogue. MIT OR Apache-2.0; the version
-# geom-test uses.
+# Oracles for the CBOR encoder, tests only: ciborium-ll's head and float encoding (Apache-2.0) and
+# half's binary16 conversions (MIT OR Apache-2.0).
+ciborium-ll = { version = "=0.2.2", default-features = false }
+ciborium-io = { version = "=0.2.2", default-features = false, features = ["alloc"] }
+half = { version = "=2.7.1", default-features = false }
+# The JSON form of the values the cbor2 oracle reads and writes (oracles/cbor2.py). MIT OR
+# Apache-2.0.
 serde_json = "1.0.149"
+
+# The encoder and hash benchmarks (piece G86), with the standard library's clock only.
+[[bench]]
+name = "encode"
+harness = false
 
 # The contract's own costs, with the standard library's clock only: `cargo bench -p geom-op`.
 [[bench]]
