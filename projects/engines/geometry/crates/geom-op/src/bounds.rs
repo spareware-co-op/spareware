@@ -190,13 +190,10 @@ impl Bounds {
         let mut rows = Vec::with_capacity(self.rows.len().saturating_add(other.rows.len()));
         rows.extend(self.rows.iter().cloned());
         for row in &other.rows {
-            match self.of(row.entity) {
-                Steps(0) => rows.push(row.clone()),
-                held if held < row.total => {
-                    rows.retain(|r: &Row| r.entity != row.entity);
-                    rows.push(row.clone());
-                }
-                _ => {}
+            // An entity `self` has no row for has a bound of zero, and a row's total is at least one.
+            if self.of(row.entity) < row.total {
+                rows.retain(|r: &Row| r.entity != row.entity);
+                rows.push(row.clone());
             }
         }
         rows.sort_unstable_by_key(|row| row.entity);
