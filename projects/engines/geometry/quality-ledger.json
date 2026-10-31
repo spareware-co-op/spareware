@@ -3399,14 +3399,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "mutant": "delete - in DD::round_shifted",
-      "line_text": "let exact = te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "F = d_h + d_l is never +-1 for a pair in the invariant: if |hi| < 2^52 then |lo| <= ulp(hi)/2 <= 1/4, so |F| <= 1/2 + 1/4; if |hi| >= 2^52 then d_h = 0 and |F| = |d_l| <= 1/2. So t (F rounded) is never 1 or -1, both clauses are false whatever their sign, and exact is te == 0 && t == 0 under the mutant as under the original."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
       "mutant": "replace | with ^ in whole",
       "line_text": "let significand = i128::from((bits & FRACTION_BITS) | (1 << 52));",
       "occurrences": 1,
@@ -4377,9 +4369,9 @@
       "file": "projects/engines/geometry/crates/geom-math/src/transform.rs",
       "mutant": "replace + with * in filtered_row",
       "line_text": "let sigma = size(p0.hi())? + size(p1.hi())? + size(p2.hi())? + size(t)?;",
-      "occurrences": 2,
+      "occurrences": 3,
       "kind": "equivalent",
-      "reason": "The two survivors form |p0|*|p1| + |p2| + |t| or (|p0| + |p1|)*|p2| + |t|. The additions err by at most 6u^2(|S1| + |S2|) + 3u^2|V| (S1 = p0 + p1, S2 = S1 + p2 = V - t, |V| < 2^41), and both partial sums stay within 2^41 of the mutant's sigma: |S2| <= 2^41 + |t|, and |S1| = |V - t - p2| <= 2^41 + |t| + |p2|, where |p2| is in the first sigma as it stands and in the second as (|p0| + |p1|)*|p2| unless |p0| + |p1| < 1, when |S1| < 1. So 2^-98*sigma + 2^-52 still exceeds the error, and the filter accepts only values whose rounding the double-double value decides: the same answers."
+      "reason": "The three survivors form |p0|*|p1| + |p2| + |t|, (|p0| + |p1|)*|p2| + |t| or |p0| + |p1| + |p2|*|t|. The additions err by at most 6u^2(|S1| + |S2|) + 3u^2|V| (S1 = p0 + p1, S2 = S1 + p2 = V - t, |V| < 2^41), and both partial sums stay within 2^41 of the mutant's sigma. In the first two, |S2| <= 2^41 + |t|, and |S1| = |V - t - p2| <= 2^41 + |t| + |p2|, where |p2| is in the first sigma as it stands and in the second as (|p0| + |p1|)*|p2| unless |p0| + |p1| < 1, when |S1| < 1. In the third, |S1| <= |p0| + |p1|, and |S2| <= 2^41 + |t|, where |t| is in sigma as |p2|*|t| unless |p2| < 1, when |S2| <= |S1| + 1 instead. So 2^-98*sigma + 2^-52 still exceeds the error, and the filter accepts only values whose rounding the double-double value decides: the same answers. A sigma that overflows to infinity makes err infinite, and the filter declines every value to the exact stage."
     },
     {
       "file": "projects/engines/geometry/crates/geom-math/src/transform.rs",
@@ -4496,7 +4488,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
       "mutant": "replace || with && in certified_as_grid",
-      "line_text": "if s != math::round_ties_even(s).ok()?.get() || s > TWO_POW_84 || s < -TWO_POW_84 {",
+      "line_text": "if s > TWO_POW_84 || s < -TWO_POW_84 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The range test only ends early. A whole translation the mutant lets through at or beyond 2^84 goes on to RationalTransform::new (refused at 2^126, and saturated casts beyond 2^127 with it) and to_grid, which refuses any translation beyond 2^41 - 2: None either way. One it refuses at exactly +-2^84 would be refused by to_grid too."
@@ -4504,7 +4496,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
       "mutant": "replace > with == in certified_as_grid",
-      "line_text": "if s != math::round_ties_even(s).ok()?.get() || s > TWO_POW_84 || s < -TWO_POW_84 {",
+      "line_text": "if s > TWO_POW_84 || s < -TWO_POW_84 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The range test only ends early. A whole translation the mutant lets through at or beyond 2^84 goes on to RationalTransform::new (refused at 2^126, and saturated casts beyond 2^127 with it) and to_grid, which refuses any translation beyond 2^41 - 2: None either way. One it refuses at exactly +-2^84 would be refused by to_grid too."
@@ -4512,7 +4504,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
       "mutant": "replace > with >= in certified_as_grid",
-      "line_text": "if s != math::round_ties_even(s).ok()?.get() || s > TWO_POW_84 || s < -TWO_POW_84 {",
+      "line_text": "if s > TWO_POW_84 || s < -TWO_POW_84 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The range test only ends early. A whole translation the mutant lets through at or beyond 2^84 goes on to RationalTransform::new (refused at 2^126, and saturated casts beyond 2^127 with it) and to_grid, which refuses any translation beyond 2^41 - 2: None either way. One it refuses at exactly +-2^84 would be refused by to_grid too."
@@ -4520,7 +4512,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
       "mutant": "replace < with == in certified_as_grid",
-      "line_text": "if s != math::round_ties_even(s).ok()?.get() || s > TWO_POW_84 || s < -TWO_POW_84 {",
+      "line_text": "if s > TWO_POW_84 || s < -TWO_POW_84 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The range test only ends early. A whole translation the mutant lets through at or beyond 2^84 goes on to RationalTransform::new (refused at 2^126, and saturated casts beyond 2^127 with it) and to_grid, which refuses any translation beyond 2^41 - 2: None either way. One it refuses at exactly +-2^84 would be refused by to_grid too."
@@ -4528,7 +4520,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-math/src/typed.rs",
       "mutant": "replace < with <= in certified_as_grid",
-      "line_text": "if s != math::round_ties_even(s).ok()?.get() || s > TWO_POW_84 || s < -TWO_POW_84 {",
+      "line_text": "if s > TWO_POW_84 || s < -TWO_POW_84 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The range test only ends early. A whole translation the mutant lets through at or beyond 2^84 goes on to RationalTransform::new (refused at 2^126, and saturated casts beyond 2^127 with it) and to_grid, which refuses any translation beyond 2^41 - 2: None either way. One it refuses at exactly +-2^84 would be refused by to_grid too."
@@ -5197,13 +5189,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
       "line_text": "if hi.is_finite() && lo.is_finite() {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "line_text": "let exact = te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0);",
       "occurrences": 1,
       "piece": "G41",
       "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."

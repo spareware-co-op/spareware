@@ -5,7 +5,7 @@
 //! double as a point interval instead of widening it. So a circle of integer radius on a grid
 //! center, evaluated at a quarter turn, is enclosed by its exact point, and two constructions of
 //! one exact value compare equal: a conversion or transform that is exact reports a deviation of
-//! 0, which widened intervals never could.
+//! 0, which widened intervals never could. [`meet`] intersects two enclosures of one value.
 //!
 //! Guarantees:
 //!
@@ -29,6 +29,22 @@ use geom_num::interval::Interval;
 use geom_num::math;
 
 use crate::error::CurveError;
+
+/// The intersection of two enclosures of one value: each holds the value, so the intersection
+/// does, its ends taken as they are (piece G68). Two such enclosures always meet; if they ever did
+/// not, the first is kept.
+///
+/// # Errors
+///
+/// None in practice; [`CurveError::NotFinite`] if an end is not finite.
+pub fn meet(a: Interval, b: Interval) -> Result<Interval, CurveError> {
+    let (lo, hi) = (larger(a.lo(), b.lo()), smaller(a.hi(), b.hi()));
+    if lo <= hi {
+        Ok(Interval::new(lo, hi)?)
+    } else {
+        Ok(a)
+    }
+}
 
 /// The single double an interval holds, if it is a point.
 fn single(a: Interval) -> Option<f64> {
