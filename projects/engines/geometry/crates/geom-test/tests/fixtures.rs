@@ -551,6 +551,9 @@ fn a_panic_and_a_refusal_are_broken_under_every_status() {
             panic!()
         };
         assert!(why.contains(name), "{why}");
+        if name == "boom" {
+            assert!(why.contains("a planted panic"), "{why}");
+        }
         let mut f = known();
         f.log = log.clone();
         let want = f.expect.pop_first().unwrap().1;
@@ -1119,4 +1122,83 @@ fn every_stored_fixture_holds_and_passes() {
             fixture.id
         );
     }
+}
+
+#[test]
+fn an_error_says_what_is_wrong() {
+    let cases: [(FixtureError, &str); 4] = [
+        (FixtureError::Json("j".to_owned()), "not a fixture: j"),
+        (FixtureError::Format(9), "format 9"),
+        (FixtureError::Log("l".to_owned()), "log: l"),
+        (
+            FixtureError::Rule {
+                id: "a".to_owned(),
+                what: "w".to_owned(),
+            },
+            "fixture a: w",
+        ),
+    ];
+    for (error, words) in cases {
+        assert!(error.to_string().contains(words), "{error}");
+    }
+    assert!(
+        MinimiseError::NotFailing
+            .to_string()
+            .contains("does not fail")
+    );
+    let refused = OpLog::decode(&[0; 4]).unwrap_err();
+    assert!(!refused.to_string().is_empty());
+    assert!(
+        geom_test::fixture::log::LogError::NotCanonical
+            .to_string()
+            .contains("one encoding")
+    );
+    assert!(
+        geom_test::fixture::log::LogError::Shape("a shape")
+            .to_string()
+            .contains("a shape")
+    );
+}
+
+#[test]
+fn a_box_may_be_flat() {
+    // A sheet or a point has a box with equal corners on an axis; only inside out is wrong.
+    let mut m = measures();
+    m.bounds = Some([[0, 0, 5], [1, 1, 5]]);
+    let mut f = fixture(vec![op("good", 1)]);
+    f.expect.insert(
+        key(&f.log),
+        Expect::Ok {
+            hash: Some(Hash([0; 32])),
+            work: Some(1),
+            measures: m,
+        },
+    );
+    assert_eq!(f.check(), Ok(()));
+}
+
+#[test]
+fn a_removal_that_opens_another_is_found_on_the_next_pass() {
+    // `good` can go only once the input has gone, and the sweep of operations comes first, so
+    // only a second pass finds it.
+    let holds_input = |l: &OpLog| {
+        l.operations
+            .iter()
+            .any(|o| o.name == "typed" && !o.inputs.is_empty())
+    };
+    let has = |l: &OpLog, name: &str| l.operations.iter().any(|o| o.name == name);
+    let mut typed = op("typed", 1);
+    typed.inputs = vec![RecipeInput::Entity(NameId::from_bytes([1; 16]))];
+    let log = OpLog::new(Vec::new(), vec![op("good", 1), typed.clone()]);
+    let fails = |l: &OpLog| has(l, "typed") && (has(l, "good") || !holds_input(l));
+    let small = minimise(&log, fails).unwrap();
+    assert_eq!(small.operations.len(), 1);
+    assert_eq!(small.operations[0].name, "typed");
+    assert_eq!(small.operations[0].inputs.len(), 0);
+    // The same through the stored inputs, the last sweep.
+    let log = OpLog::new(vec![body(1)], vec![op("good", 1), op("typed", 1)]);
+    let fails = |l: &OpLog| has(l, "typed") && (has(l, "good") || l.inputs.is_empty());
+    let small = minimise(&log, fails).unwrap();
+    assert_eq!(small.operations.len(), 1);
+    assert_eq!(small.inputs.len(), 0);
 }
