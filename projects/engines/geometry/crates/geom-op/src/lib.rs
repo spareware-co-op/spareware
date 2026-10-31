@@ -8,6 +8,33 @@
 //!
 //! Layer: 1, Numbers and the contract (chapter 27's proposed layer table).
 //!
+//! Every operation has chapter 10.1's shape:
+//!
+//! ```text
+//! fn operation(ctx: &OpContext, input: &OpInput) -> Result<OpOutput<R>, OpError>
+//! ```
+//!
+//! An [`OpContext`] says which operation runs ([`OpPath`]), inside which budget, under whose
+//! cancellation and at which [`Precision`]. A success is an [`OpOutput`]: the operation's own
+//! result with its exactness class and its warnings ([`Diagnostic`]). A failure is an [`OpError`]:
+//! a base [`ErrorKind`] from chapter 22's closed set, read from the operation's own typed
+//! [`OpErrorDetail`], with the entities involved, the [`Evidence`], plain words and the
+//! [`Remedy`]s that would make it succeed. Every operation is also described as data by an
+//! [`OpSchema`].
+//!
+//! ```
+//! use geom_num::NumError;
+//! use geom_op::{ErrorKind, NumDetail, OpError, OpId, OpPath, Remedy};
+//!
+//! let path = OpPath::new(OpId::from_bytes([7; 16])).step("cut").unwrap();
+//! // A coordinate past the frame's range, from the numbers layer, wrapped by meaning.
+//! let error = OpError::new(path, NumError::OutOfRange { value: 1 << 41 });
+//! assert_eq!(error.kind(), ErrorKind::FrameRangeExceeded);
+//! assert_eq!(error.remedies(), [Remedy::ChangeFrame]);
+//! // An exact computation over its proven bit budget is a defect, never a budget failure.
+//! assert_eq!(NumDetail::from(NumError::BudgetExceeded).kind(), ErrorKind::Internal);
+//! ```
+//!
 //! Invariants this crate keeps:
 //!
 //! - `OpContext` holds no randomness and no clock that can affect a result (10.1).
@@ -34,12 +61,35 @@
 //!
 //! - MIT OR Apache-2.0: `sha2`.
 //!
-//! Status: the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) are built (G86); the rest
-//! is built by pieces G82, G83, G87, G88, G104, G143, G144, G459.
+//! Status: the context, the error base and its details for the parallel helper and the numbers
+//! layer, the exactness class and warnings of an output, operation identity and the schema types
+//! built (G82); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); budgets
+//! in the contract to come in G83, names in G87, history in G88, the batch runner in G104,
+//! per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
 pub mod cbor;
+pub mod context;
+pub mod detail;
+pub mod error;
+pub mod evidence;
 pub mod hash;
+pub mod id;
+pub mod kind;
+pub mod output;
+pub mod remedy;
+pub mod schema;
+
+pub use context::{OpContext, Precision};
+pub use detail::{NumDetail, OpErrorDetail, RunDetail};
+pub use error::OpError;
+pub use evidence::{Evidence, Value};
+pub use geom_num::Exactness;
+pub use id::{Label, NameId, OpId, OpPath};
+pub use kind::ErrorKind;
+pub use output::{Diagnostic, OpOutput};
+pub use remedy::{Bound, Remedy};
+pub use schema::{Class, DiagnosticSpec, ErrorSpec, Family, Field, OpSchema, RoleSpec, Unit};

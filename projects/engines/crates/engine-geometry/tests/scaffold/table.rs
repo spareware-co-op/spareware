@@ -268,7 +268,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-run",       1, Amended27, Elsewhere("G04"), ""),
     kernel("geom-num",       1, Accepted,   Elsewhere("G02"), "run"),
     kernel("geom-linalg",    1, Amended27, Elsewhere("G49"), "num"),
-    kernel("geom-op",        1, Amended27, Elsewhere("G86"), "run num"),
+    kernel("geom-op",        1, Amended27, Elsewhere("G82"), "run num"),
     // 2. Geometry.
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
     kernel("geom-bvh",       2, Amended27, Elsewhere("G54"), "run num math"),
@@ -281,7 +281,7 @@ const ROWS: &[Row<'static>] = &[
     // 4. Intersections.
     kernel("geom-intersect", 4, Accepted,   Here, "base math nurbs curve surface bvh"),
     // 5. Checker.
-    kernel("geom-check",     5, Accepted,   Here, "base topo intersect"),
+    kernel("geom-check",     5, Accepted,   Elsewhere("G84"), "base topo intersect"),
     // 6. Arrangements.
     kernel("geom-poly",      6, Accepted,   Here, "base math topo"),
     kernel("geom-bool",      6, Accepted,   Here, "base poly intersect topo name check bvh"),

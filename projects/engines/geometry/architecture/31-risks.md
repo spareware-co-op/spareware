@@ -701,6 +701,10 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | --- | --- | --- |
 | Can geom-topo's arenas hold 2D arrangements efficiently, with fins as half-edges, or is a planar specialisation needed? | 14 | Piece "2D-09 Arrangement of lines, arcs and conics" |
 | Re-check 8.1's "the structure Parasolid documents publicly" against Siemens's own pages and cite Weiler, Mäntylä and Jackson, because the evidence read a third-party copy | 29 | Editorial fix to 8.1 |
+| Euler's formula for general, non-manifold bodies: the checker holds solids and sheets to it, shell by shell, and a general body only to the first stage of group 1; the non-manifold form (radial-edge counts) is to be chosen | G84 build | Kernel owners, with the first operation that makes a general body |
+| Where a body's exactness record lives: the checker takes it beside the body, from the operation's `OpOutput`; whether `Body` itself carries it, as the native format's body index stores it (24.2) | G84 build | Piece "Body records" |
+| The full checker in release test builds: `geom-check`'s `full` feature runs every group at `Level::of_build()`; which test builds turn it on, beside the shipped leg of the determinism matrix (28.4) | G84 build | Piece "Determinism matrix for operation logs" |
+| Regions when each face names one shell: a solid body's shells belong to its solid regions and the outside void has none, as G80's wall body is built, so a void cavity has no shell of its own; whether faces need a shell on each side, as Parasolid's do, for cellular models (rooms as regions, 8.1) | G84 build | Pieces "Builder, Euler operators and attributes" and "Cells, rooms and space boundaries" |
 
 ### Chapter 9: Representations and exactness
 
@@ -854,7 +858,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | --- | --- | --- |
 | Confirm the new error kinds: ExactnessNotAccepted, NotRepresentable, OutOfRange and UnboundedResult; Degenerate added to the base; RootChoiceUndetermined refining Ambiguous; BranchLost and CommitFlip | 14, 15 | The chapter 22 error catalogue, generated from the code |
 | The output shape of the model-diff query used to review a proposed change (22) | 22 | The piece that builds the diff query |
-| How `geom-num`'s `NotFinite`, `OutsideDomain`, `WrongDirection`, `DivisorContainsZero`, `NegativeSqrt` and `EmptyInterval` map to base kinds; whether `NumError::BudgetExceeded` (a defect, so `Internal`) and `ToleranceExceeded` (a certified bound, so `ExactnessNotAccepted`) are renamed so their names stop inviting the wrong kind; and a `geom-math` error for its own defects, which now carry `geom-num`'s message (22) | G02, G03 and G05 builds | Piece "Operation contract and error types" |
+| How `geom-num`'s `NotFinite`, `OutsideDomain`, `WrongDirection`, `DivisorContainsZero`, `NegativeSqrt` and `EmptyInterval` map to base kinds; whether `NumError::BudgetExceeded` (a defect, so `Internal`) and `ToleranceExceeded` (a certified bound, so `ExactnessNotAccepted`) are renamed so their names stop inviting the wrong kind; and a `geom-math` error for its own defects, which now carry `geom-num`'s message (22) | G02, G03 and G05 builds | Answered by G82: `NotFinite` is `Degenerate`, `OutsideDomain` `NoSolution`, `DivisorContainsZero` and `NegativeSqrt` `Undecided`, `EmptyInterval` and `WrongDirection` `Internal`, each with its reason on `geom-op`'s `NumDetail` and in 22. No rename in `geom-num`: `geom-op` wraps every `NumError` into a `NumDetail` named by its meaning (`BitBudget`, `BoundOverCeiling`), and a crate's own error never reaches a caller (22). No `geom-math` error type: its defects wrapped are `Internal` with the operation's path and message |
 
 ### Chapter 23: Performance
 
