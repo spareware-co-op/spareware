@@ -396,6 +396,10 @@ pub static OPS: &[Op] = &[
     // each built for a scene and queried.
     Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // The batch runner's hot paths (piece G104; decision 32.44): the driver and the flat arrays.
+    Op { group: "batch", name: "run_items", measures: "geom_op::Batch::run", classes: T, prepare: |c| bind(inputs::batch::run_items(c), kernels::batch::run_items) },
+    Op { group: "batch", name: "curve_points", measures: "geom_curve::ParamCurve::points", classes: T, prepare: |c| bind(inputs::batch::curve_points(c), kernels::batch::curve_points) },
+    Op { group: "batch", name: "surface_points", measures: "geom_surface::ParamSurface::points", classes: T, prepare: |c| bind(inputs::batch::surface_points(c), kernels::batch::surface_points) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -423,7 +427,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 30] = [
+pub const GROUPS: [&str; 31] = [
     "predicate",
     "sign",
     "wide",
@@ -448,6 +452,7 @@ pub const GROUPS: [&str; 30] = [
     "ball",
     "math_types",
     "bvh",
+    "batch",
     "nurbs",
     "curve",
     "surface",

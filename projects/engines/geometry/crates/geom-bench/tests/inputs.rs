@@ -2276,6 +2276,21 @@ fn bvh_typical_batches_all_succeed() {
     all_ok("cells_within", k::cells_within, &m::cells_within(Typical));
 }
 
+/// Every typical batch of the batch runner's benchmarks (decision 32.44) runs every item and
+/// gives every point, and each list of items has distinct keys.
+#[test]
+fn batch_typical_batches_all_succeed() {
+    use geom_bench::inputs::batch as m;
+    use geom_bench::kernels::batch as k;
+    all_ok("run_items", k::run_items, &m::run_items(Typical));
+    all_ok("curve_points", k::curve_points, &m::curve_points(Typical));
+    all_ok(
+        "surface_points",
+        k::surface_points,
+        &m::surface_points(Typical),
+    );
+}
+
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
 /// bounds every input.
 #[test]

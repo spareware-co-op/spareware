@@ -432,6 +432,26 @@
           "target": "lib"
         },
         {
+          "cost": "[`ITEMS`] or [`POINTS`] draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/batch.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the batch runner's hot paths (piece G104, decision 32.44): `geom-op`'s driver over a list of items, and the flat arrays of a curve's and a surface's points.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the batches of `geom-op`'s tests (`tests/batch.rs`) and of the flat arrays' tests, at one size, measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::batch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "about a hundred draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
