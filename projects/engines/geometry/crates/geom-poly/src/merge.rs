@@ -383,6 +383,8 @@ struct RunFin {
 /// A stretch of one line with the same fins all along.
 #[derive(Clone)]
 struct Run {
+    /// Which line it is on: the place of the line's first side.
+    line: usize,
     low: usize,
     high: usize,
     fins: Vec<RunFin>,
@@ -418,6 +420,7 @@ type Holding<'s> = (i32, Option<&'s Side>, Option<&'s Side>);
 /// Sweeps the sides of one line: pieces of one sheet on both sides of a stretch join, and the rest
 /// are runs.
 fn sweep(
+    line: usize,
     sides: &[Side],
     sheets: &[Sheet],
     parents: &mut [usize],
@@ -434,7 +437,6 @@ fn sweep(
     let mut waiting: Vec<&Side> = sides.iter().collect();
     waiting.sort_by_key(|s| Reverse(s.low));
     let mut active: Vec<&Side> = Vec::new();
-    let opening = runs.len();
     for (low, high) in marks.iter().copied().zip(marks.iter().copied().skip(1)) {
         while waiting.last().is_some_and(|s| s.low <= low) {
             active.extend(waiting.pop());
@@ -465,23 +467,37 @@ fn sweep(
                 _ => return Err(MergeError::Overlap),
             }
         }
-        if fins.is_empty() {
-            continue;
-        }
-        let key = |fin: &RunFin| (fin.sheet, fin.rising);
-        match runs.get_mut(opening..).and_then(<[Run]>::last_mut) {
-            Some(run) if run.high == low && run.fins.iter().map(key).eq(fins.iter().map(key)) => {
-                run.high = high;
-            }
-            _ => runs.push(Run {
+        if !fins.is_empty() {
+            runs.push(Run {
+                line,
                 low,
                 high,
                 fins,
                 on,
-            }),
+            });
         }
     }
     Ok(())
+}
+
+/// `runs` with stretches joined where the same faces run on along one line. Faces are known only
+/// once every line is swept: two of one sheet can lie in a line and touch at a vertex.
+fn whole_runs(runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
+    let key = |fin: &RunFin| (fin.sheet, fin.rising, root(parents, fin.held));
+    let mut whole: Vec<Run> = Vec::with_capacity(runs.len());
+    for run in runs {
+        match whole.last_mut() {
+            Some(last)
+                if last.line == run.line
+                    && last.high == run.low
+                    && last.fins.iter().map(key).eq(run.fins.iter().map(key)) =>
+            {
+                last.high = run.high;
+            }
+            _ => whole.push(run),
+        }
+    }
+    whole
 }
 
 /// The sheets of `pieces`, sorted by exact keys so the input's order counts for nothing, and each
@@ -843,11 +859,11 @@ pub fn merge(
         let next = sides.get(end).zip(sides.get(start));
         if next.is_none_or(|(b, a)| line_order(&a.key, &b.key) != Some(Ordering::Equal)) {
             let group = sides.get(start..end).ok_or(MergeError::Open)?;
-            sweep(group, &sheets, &mut same_piece, &mut runs)?;
+            sweep(start, group, &sheets, &mut same_piece, &mut runs)?;
             start = end;
         }
     }
-    let runs = cut_at_ends(runs, &points)?;
+    let runs = cut_at_ends(whole_runs(runs, &same_piece), &points)?;
 
     // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
     // only one face of a sheet can hold.
