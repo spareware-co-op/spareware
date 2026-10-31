@@ -29,11 +29,11 @@ option = [] / [real]
 optional-column = [] / [f64-column]
 flag = 0 / 1
 sign = 1 / -1
-frame = [x: vec, normal: [real, real, real]]
+frame = [x: vec, normal: [3*3 real]]
 axes = [0, frame, a: real, b: real] / [1, u: vec, v: vec]
 helix-axes = [0, frame, radius: real, pitch: real] / [1, u: vec, v: vec, w: vec]
 nurbs-fields = (degree: uint, knots: f64-column, points: f64-column, weights: optional-column)
-placement = [c: [real, real, real], l: [9*9 real]]
+placement = [c: [3*3 real], l: [9*9 real]]
 
 ; Curve kinds.
 curve = leaf / trimmed / composite / offset-curve / on-surface
@@ -56,7 +56,7 @@ offset-curve = [13, basis: trimmed, law: offset-law, cached: flag]
 on-surface = [14, pcurve: trimmed, surface-ref: uint, curve3d: [nurbs-fields], error: real]
 transition = [15, start: vec, direction: vec, length: real, law: curvature-law,
               window: interval, reversed: flag]
-offset-law = [1, distance: real] / [2, distance: real, direction: [real, real, real]]
+offset-law = [1, distance: real] / [2, distance: real, direction: [3*3 real]]
            / [3, stations: f64-column]
 curvature-law = [1..5, start: real, end: real]
               / [6, start: real, end: real, height: real, cant: real]
