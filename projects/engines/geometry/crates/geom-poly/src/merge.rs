@@ -36,7 +36,6 @@
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use core::cell::Cell as Once;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
 
@@ -352,8 +351,8 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
 }
 
 /// `order`, with a failure written down: a sort's comparison cannot return one.
-fn noted(order: Option<Ordering>, failed: &Once<bool>) -> Ordering {
-    failed.set(failed.get().max(order.is_none()));
+fn noted(order: Option<Ordering>, failed: &mut bool) -> Ordering {
+    *failed = (*failed).max(order.is_none());
     order.unwrap_or(Ordering::Equal)
 }
 
@@ -555,15 +554,13 @@ fn numbered(
         }
     }
     let mut order: Vec<usize> = (0..corners.len()).collect();
-    let failed = Once::new(false);
+    let mut failed = false;
     let at = |i: &usize| corners.get(*i).and_then(Option::as_ref);
     order.sort_by(|a, b| {
         let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
-        noted(found, &failed)
+        noted(found, &mut failed)
     });
-    (!failed.get())
-        .then_some(())
-        .ok_or(NumError::BudgetExceeded)?;
+    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
     for i in order {
@@ -610,11 +607,9 @@ fn sides_of(
         }
         base = base.saturating_add(k);
     }
-    let failed = Once::new(false);
-    sides.sort_by(|a, b| noted(line_order(&a.key, &b.key), &failed));
-    (!failed.get())
-        .then_some(())
-        .ok_or(NumError::BudgetExceeded)?;
+    let mut failed = false;
+    sides.sort_by(|a, b| noted(line_order(&a.key, &b.key), &mut failed));
+    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
     Ok(sides)
 }
 
@@ -777,7 +772,7 @@ fn nest(
                 (Some(at) == chosen)
                     .then(|| p.piece.clone())
                     .into_iter()
-                    .collect()
+                    .collect::<Vec<Piece>>()
             })
             .collect();
         let found = classify(&cell, &Winding::new(), &polygons, &lists, meter)?;
