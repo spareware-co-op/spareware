@@ -48,10 +48,17 @@ on:
   pull_request:
     paths:
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-linalg/**"
+      - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-num/**"
+      - "projects/engines/geometry/crates/geom-nurbs/**"
+      - "projects/engines/geometry/crates/geom-op/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -64,10 +71,17 @@ on:
     branches: [main]
     paths:
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-linalg/**"
+      - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-num/**"
+      - "projects/engines/geometry/crates/geom-nurbs/**"
+      - "projects/engines/geometry/crates/geom-op/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -256,15 +270,20 @@ jobs:
           - math::atan2::proofs::add_of_like_signs_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_at_equal_exponents_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_one_apart_is_within_two_ulps
+          - math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike
           - math::atan2::proofs::is_zero_holds_exactly_for_zero
           - math::atan2::proofs::mul_keeps_every_carry
           - math::atan2::proofs::shl_moves_every_bit_up
           - math::atan2::proofs::to_f64_rounds_to_nearest
           - math::log::proofs::is_zero_reads_both_words
+          - math::hexf::proofs::step_never_returns_none
+          - math::hexf::proofs::step_u128_never_returns_none
           - math::proofs::abs_is_exact
           - math::proofs::ceil_is_exact
           - math::proofs::floor_is_exact
           - math::proofs::round_ties_even_is_exact
+          - math::sincospi::proofs::cospi_hard_case_answers_exactly_the_listed_pairs
+          - math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs
           - perturb::proofs::bit_of_covers_exactly_a_mask_of_32
           - perturb::proofs::distinct_refuses_exactly_repeated_keys
           - perturb::proofs::the_lift_of_every_frame_point_fits
