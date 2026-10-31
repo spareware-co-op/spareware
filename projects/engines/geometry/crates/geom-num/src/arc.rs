@@ -338,13 +338,15 @@ impl Circle2 {
         let (Some(sum), Some(difference)) = (sum, difference) else {
             return Err(NumError::BudgetExceeded);
         };
-        Ok(match (self.gap(other, sum)?, self.gap(other, difference)?) {
-            (Sign::Positive, _) => Pair::Apart,
-            (Sign::Zero, _) => Pair::TouchingOutside,
-            (_, Sign::Positive) => Pair::Crossing,
-            (_, Sign::Zero) if difference == 0 => Pair::Same,
-            (_, Sign::Zero) => Pair::TouchingInside,
-            (_, Sign::Negative) => Pair::Nested,
-        })
+        Ok(
+            match (self.gap(other, sum)?, self.gap(other, difference)?) {
+                (Sign::Positive, _) => Pair::Apart,
+                (Sign::Zero, _) => Pair::TouchingOutside,
+                (_, Sign::Positive) => Pair::Crossing,
+                (_, Sign::Zero) if difference == 0 => Pair::Same,
+                (_, Sign::Zero) => Pair::TouchingInside,
+                (_, Sign::Negative) => Pair::Nested,
+            },
+        )
     }
 }

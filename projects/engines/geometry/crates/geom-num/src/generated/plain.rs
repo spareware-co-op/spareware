@@ -696,3 +696,229 @@ pub fn rational_orient_value(
     let det = det_3.checked_add(&det_4)?;
     Some(det)
 }
+
+/// `round_grid`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn round_grid_value(z: P2, p: P2, cx: i128, cy: i128, w: i128) -> Option<I256> {
+    let ux = i128::from(z.x.get()).checked_sub(i128::from(p.x.get()))?;
+    let uy = i128::from(z.y.get()).checked_sub(i128::from(p.y.get()))?;
+    let w = within(w, 83)?;
+    let z_x = i128::from(z.x.get());
+    let tx_1 = w.checked_mul(z_x)?;
+    let p_x = i128::from(p.x.get());
+    let tx_2 = w.checked_mul(p_x)?;
+    let tx_3 = tx_1.checked_add(tx_2)?;
+    let cx = within(cx, 124)?;
+    let tx_4 = tx_3.checked_sub(cx)?;
+    let tx = tx_4.checked_sub(cx)?;
+    let z_y = i128::from(z.y.get());
+    let ty_1 = w.checked_mul(z_y)?;
+    let p_y = i128::from(p.y.get());
+    let ty_2 = w.checked_mul(p_y)?;
+    let ty_3 = ty_1.checked_add(ty_2)?;
+    let cy = within(cy, 124)?;
+    let ty_4 = ty_3.checked_sub(cy)?;
+    let ty = ty_4.checked_sub(cy)?;
+    let s_1 = I256::from_i128(ux).checked_mul(&I256::from_i128(tx))?;
+    let s_2 = I256::from_i128(uy).checked_mul(&I256::from_i128(ty))?;
+    let s = s_1.checked_add(&s_2)?;
+    Some(s)
+}
+
+/// `round_rational`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn round_rational_value(
+    x: i128,
+    y: i128,
+    v: i128,
+    q: P2,
+    cx: i128,
+    cy: i128,
+    w: i128,
+) -> Option<I384> {
+    let x = within(x, 124)?;
+    let v = within(v, 83)?;
+    let q_x = i128::from(q.x.get());
+    let ux_1 = v.checked_mul(q_x)?;
+    let ux = x.checked_sub(ux_1)?;
+    let y = within(y, 124)?;
+    let q_y = i128::from(q.y.get());
+    let uy_1 = v.checked_mul(q_y)?;
+    let uy = y.checked_sub(uy_1)?;
+    let w = within(w, 83)?;
+    let tx_1 = I256::from_i128(w).checked_mul(&I256::from_i128(x))?;
+    let tx_2 = I256::from_i128(w).checked_mul(&I256::from_i128(v))?;
+    let tx_3 = tx_2.checked_mul(&I256::from_i128(q_x))?;
+    let tx_4 = tx_1.checked_add(&tx_3)?;
+    let cx = within(cx, 124)?;
+    let tx_5 = I256::from_i128(v).checked_mul(&I256::from_i128(cx))?;
+    let tx_6 = tx_4.checked_sub(&tx_5)?;
+    let tx_7 = I256::from_i128(v).checked_mul(&I256::from_i128(cx))?;
+    let tx = tx_6.checked_sub(&tx_7)?;
+    let ty_1 = I256::from_i128(w).checked_mul(&I256::from_i128(y))?;
+    let ty_2 = I256::from_i128(w).checked_mul(&I256::from_i128(v))?;
+    let ty_3 = ty_2.checked_mul(&I256::from_i128(q_y))?;
+    let ty_4 = ty_1.checked_add(&ty_3)?;
+    let cy = within(cy, 124)?;
+    let ty_5 = I256::from_i128(v).checked_mul(&I256::from_i128(cy))?;
+    let ty_6 = ty_4.checked_sub(&ty_5)?;
+    let ty_7 = I256::from_i128(v).checked_mul(&I256::from_i128(cy))?;
+    let ty = ty_6.checked_sub(&ty_7)?;
+    let s_1 = I384::from_i128(ux).checked_mul(&tx.resize::<6>()?)?;
+    let s_2 = I384::from_i128(uy).checked_mul(&ty.resize::<6>()?)?;
+    let s = s_1.checked_add(&s_2)?;
+    Some(s)
+}
+
+/// `round_line`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn round_line_value(
+    a: i128,
+    b: i128,
+    d: i128,
+    p: P2,
+    cx: i128,
+    cy: i128,
+    w: i128,
+) -> Option<I384> {
+    let a = within(a, 41)?;
+    let cx = within(cx, 124)?;
+    let h_1 = I256::from_i128(a).checked_mul(&I256::from_i128(cx))?;
+    let b = within(b, 41)?;
+    let cy = within(cy, 124)?;
+    let h_2 = I256::from_i128(b).checked_mul(&I256::from_i128(cy))?;
+    let h_3 = h_1.checked_add(&h_2)?;
+    let d = within(d, 82)?;
+    let w = within(w, 83)?;
+    let h_4 = I256::from_i128(d).checked_mul(&I256::from_i128(w))?;
+    let h = h_3.checked_sub(&h_4)?;
+    let p_x = i128::from(p.x.get());
+    let dx_1 = w.checked_mul(p_x)?;
+    let dx = dx_1.checked_sub(cx)?;
+    let p_y = i128::from(p.y.get());
+    let dy_1 = w.checked_mul(p_y)?;
+    let dy = dy_1.checked_sub(cy)?;
+    let rr_1 = I256::from_i128(dx).checked_mul(&I256::from_i128(dx))?;
+    let rr_2 = I256::from_i128(dy).checked_mul(&I256::from_i128(dy))?;
+    let rr = rr_1.checked_add(&rr_2)?;
+    let nn_1 = a.checked_mul(a)?;
+    let nn_2 = b.checked_mul(b)?;
+    let nn = nn_1.checked_add(nn_2)?;
+    let s_1 = h.resize::<6>()?.checked_mul(&h.resize::<6>()?)?;
+    let s_2 = rr.resize::<6>()?.checked_mul(&I384::from_i128(nn))?;
+    let s = s_1.checked_sub(&s_2)?;
+    Some(s)
+}
+
+/// `circle_side`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn circle_side_value(x: i128, y: i128, v: i128, k: P2, r: i128) -> Option<I256> {
+    let x = within(x, 124)?;
+    let v = within(v, 83)?;
+    let k_x = i128::from(k.x.get());
+    let ux_1 = v.checked_mul(k_x)?;
+    let ux = x.checked_sub(ux_1)?;
+    let y = within(y, 124)?;
+    let k_y = i128::from(k.y.get());
+    let uy_1 = v.checked_mul(k_y)?;
+    let uy = y.checked_sub(uy_1)?;
+    let r = within(r, 41)?;
+    let rv = r.checked_mul(v)?;
+    let s_1 = I256::from_i128(ux).checked_mul(&I256::from_i128(ux))?;
+    let s_2 = I256::from_i128(uy).checked_mul(&I256::from_i128(uy))?;
+    let s_3 = s_1.checked_add(&s_2)?;
+    let s_4 = I256::from_i128(rv).checked_mul(&I256::from_i128(rv))?;
+    let s = s_3.checked_sub(&s_4)?;
+    Some(s)
+}
+
+/// `circle_line`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn circle_line_value(a: i128, b: i128, d: i128, k: P2, r: i128) -> Option<I256> {
+    let a = within(a, 41)?;
+    let k_x = i128::from(k.x.get());
+    let h_1 = a.checked_mul(k_x)?;
+    let b = within(b, 41)?;
+    let k_y = i128::from(k.y.get());
+    let h_2 = b.checked_mul(k_y)?;
+    let h_3 = h_1.checked_add(h_2)?;
+    let d = within(d, 82)?;
+    let h = h_3.checked_sub(d)?;
+    let nn_1 = a.checked_mul(a)?;
+    let nn_2 = b.checked_mul(b)?;
+    let nn = nn_1.checked_add(nn_2)?;
+    let r = within(r, 41)?;
+    let rr = r.checked_mul(r)?;
+    let s_1 = I256::from_i128(h).checked_mul(&I256::from_i128(h))?;
+    let s_2 = I256::from_i128(rr).checked_mul(&I256::from_i128(nn))?;
+    let s = s_1.checked_sub(&s_2)?;
+    Some(s)
+}
+
+/// `circle_gap`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn circle_gap_value(a: P2, b: P2, t: i128) -> Option<i128> {
+    let dx = i128::from(a.x.get()).checked_sub(i128::from(b.x.get()))?;
+    let dy = i128::from(a.y.get()).checked_sub(i128::from(b.y.get()))?;
+    let s_1 = dx.checked_mul(dx)?;
+    let s_2 = dy.checked_mul(dy)?;
+    let s_3 = s_1.checked_add(s_2)?;
+    let t = within(t, 42)?;
+    let s_4 = t.checked_mul(t)?;
+    let s = s_3.checked_sub(s_4)?;
+    Some(s)
+}

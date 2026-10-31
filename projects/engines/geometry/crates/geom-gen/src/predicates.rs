@@ -16,7 +16,8 @@
 //! `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`,
 //! `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`,
 //! `gappa-carrier-side-n-p`, `gappa-carrier-side-d-w`, `gappa-carrier-order`, `gappa-rational-cmp`,
-//! `gappa-rational-orient`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
+//! `gappa-rational-orient`, `gappa-circle-gap-x`, `gappa-circle-gap-y`, `gappa-circle-gap-t`,
+//! `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
 //! `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`,
 //! `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-carrier-side`,
 //! `fptaylor-carrier-order`, `fptaylor-rational-cmp`, `fptaylor-rational-orient`,
@@ -1545,6 +1546,36 @@ pub fn generate_gappa_rational_cmp() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_gappa_rational_orient() -> Result<Vec<u8>, GenError> {
     certificate("rational_orient", "gappa-rational-orient", gappa_problem)
+}
+
+/// Generator `gappa-circle-gap-x`: `circle_gap`'s filter for Gappa in the case where `m_x` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_circle_gap_x() -> Result<Vec<u8>, GenError> {
+    case_certificate("circle_gap", "gappa-circle-gap-x", "x")
+}
+
+/// Generator `gappa-circle-gap-y`: `circle_gap`'s filter for Gappa in the case where `m_y` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_circle_gap_y() -> Result<Vec<u8>, GenError> {
+    case_certificate("circle_gap", "gappa-circle-gap-y", "y")
+}
+
+/// Generator `gappa-circle-gap-t`: `circle_gap`'s filter for Gappa in the case where `m_t` is the
+/// largest maximum.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_circle_gap_t() -> Result<Vec<u8>, GenError> {
+    case_certificate("circle_gap", "gappa-circle-gap-t", "t")
 }
 
 /// Generator `gappa-lpi-weight-z-n`: `lpi_weight`'s filter for Gappa in the case where `m_z * m_n` is

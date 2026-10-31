@@ -1444,7 +1444,8 @@ struct Row {
 }
 
 /// Every test file the matrix names, read when the test is built.
-const FILES: [(&str, &str); 7] = [
+const FILES: [(&str, &str); 8] = [
+    ("attack_g188.rs", include_str!("attack_g188.rs")),
     ("attack_g187.rs", include_str!("attack_g187.rs")),
     ("attack_g28.rs", include_str!("attack_g28.rs")),
     ("attack_g29.rs", include_str!("attack_g29.rs")),
@@ -1455,7 +1456,8 @@ const FILES: [(&str, &str); 7] = [
 ];
 
 /// The sources whose public predicates the matrix must list.
-const SOURCES: [(&str, &str); 5] = [
+const SOURCES: [(&str, &str); 6] = [
+    ("arc", include_str!("../src/arc.rs")),
     ("carrier", include_str!("../src/carrier.rs")),
     ("predicate", include_str!("../src/predicate.rs")),
     ("plane", include_str!("../src/plane.rs")),
@@ -1588,6 +1590,47 @@ fn on_carrier(
     }
 }
 
+/// A predicate of `arc` on a circle: every class in `attack_g188.rs`.
+fn on_circle(predicate: &'static str, call: &'static str, boundary: &'static str) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (
+                Random,
+                Test(
+                    "attack_g188.rs",
+                    "random_inputs_at_every_scale_match_the_oracle",
+                ),
+            ),
+            (
+                OneStep,
+                Test(
+                    "attack_g188.rs",
+                    "one_step_from_a_circle_is_decided_by_the_exact_path",
+                ),
+            ),
+            (Boundary, Test("attack_g188.rs", boundary)),
+            (
+                Corners,
+                Test(
+                    "attack_g188.rs",
+                    "the_extreme_values_reach_every_width_and_every_step_fits",
+                ),
+            ),
+            (
+                Laws,
+                Test(
+                    "attack_g188.rs",
+                    "circles_keep_their_answers_under_a_move_and_any_weight",
+                ),
+            ),
+        ],
+    }
+}
+
 fn perturbed(
     predicate: &'static str,
     call: &'static str,
@@ -1704,6 +1747,52 @@ fn matrix() -> Vec<Row> {
             "one_step_along_a_carrier_is_decided_by_the_exact_path",
             "orient_filter_boundary_crossed_both_ways",
         ),
+        on_circle(
+            "arc::Round::side_of_grid",
+            ".side_of_grid",
+            "round_filters_cross_their_boundary_both_ways",
+        ),
+        on_circle(
+            "arc::Round::side",
+            ".side",
+            "round_filters_cross_their_boundary_both_ways",
+        ),
+        on_circle(
+            "arc::Circle2::side",
+            ".side",
+            "circle_filters_cross_their_boundary_both_ways",
+        ),
+        Row {
+            predicate: "arc::Arc2::order",
+            call: ".order",
+            classes: [
+                (
+                    Random,
+                    NotApplicable(
+                        "it is `Rational2::orient` of the arc's start and two points, whose row \
+                         covers random inputs",
+                    ),
+                ),
+                (
+                    OneStep,
+                    Test("attack_g188.rs", "order_along_an_arc_agrees_with_walking_it"),
+                ),
+                (
+                    Boundary,
+                    NotApplicable(
+                        "it has no filter of its own: `Rational2::orient`'s boundary is its",
+                    ),
+                ),
+                (
+                    Corners,
+                    NotApplicable("`Rational2::orient`'s corners are its"),
+                ),
+                (
+                    Laws,
+                    Test("attack_g188.rs", "order_along_an_arc_agrees_with_walking_it"),
+                ),
+            ],
+        },
         perturbed(
             "perturb::orient2d",
             "perturb::orient2d",
