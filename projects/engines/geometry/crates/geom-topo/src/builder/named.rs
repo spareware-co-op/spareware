@@ -160,15 +160,15 @@ fn share(new: &mut Arenas, old: &Arenas, moves: &Moves<Permutation>) {
     new.edges.curve.share_with(&old.edges.curve, equal);
     new.vertices.point.share_with(&old.vertices.point, equal);
     new.points.share_with(&old.points, equal);
-    new.surfaces
-        .share_with(&old.surfaces, |place, mine, theirs| {
-            mine.len() == theirs.len() && unmoved(&moves.surfaces, place, mine.len())
-        });
-    new.curves.share_with(&old.curves, |place, mine, theirs| {
-        mine.len() == theirs.len() && unmoved(&moves.curves, place, mine.len())
+    // A permutation moves every row, so both columns have the same rows and the same chunks.
+    new.surfaces.share_with(&old.surfaces, |place, mine, _| {
+        unmoved(&moves.surfaces, place, mine.len())
     });
-    new.pcurves.share_with(&old.pcurves, |place, mine, theirs| {
-        mine.len() == theirs.len() && unmoved(&moves.pcurves, place, mine.len())
+    new.curves.share_with(&old.curves, |place, mine, _| {
+        unmoved(&moves.curves, place, mine.len())
+    });
+    new.pcurves.share_with(&old.pcurves, |place, mine, _| {
+        unmoved(&moves.pcurves, place, mine.len())
     });
 }
 
