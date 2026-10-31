@@ -8,9 +8,11 @@
 //! edits is `kit-sync`'s job. The log entry is a published format, read forever (`FORMAT.md` in
 //! `kit-store`, and the recorded samples in `tests/samples`).
 
+pub mod access;
 pub mod entry;
 pub mod id;
 
+pub use access::{Decider, Question};
 pub use entry::{
     Change, Claim, ClaimChange, ENTRY_FORMAT, Edit, Entry, FormatError, content_id, sha256_hex,
 };

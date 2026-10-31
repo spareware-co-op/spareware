@@ -19,6 +19,6 @@ pub mod kv;
 pub mod memory;
 pub mod row;
 
-pub use key::{FORMAT, Key, Place, Prefix, Scope};
+pub use key::{FORMAT, Key, Place, Prefix, Scope, table, table_prefix};
 pub use kv::{FileStore, Kv, Pair, Reader, StoreError, Txn};
 pub use row::{from_row, read_row, scan_rows, to_row};

@@ -73,10 +73,10 @@ impl Commands<Memory> for Notes {
         {
             return Ok(Err(format!("{} is working on this.", claim.name)));
         }
-        let place = Place::Element {
+        let place = Place::Piece {
             project: project.clone(),
-            model: edit.target.clone(),
-            element: piece.clone(),
+            document: edit.target.clone(),
+            piece: piece.clone(),
         };
         let before: Option<String> = read_row(txn, &place.key()).await?;
         let record =
@@ -173,11 +173,7 @@ pub fn value_text(value: &Value) -> String {
 
 pub async fn stored_text(store: &Memory, note: &str) -> Option<String> {
     let mut snapshot = store.snapshot().await.unwrap();
-    let place = Place::Element {
-        project: i("project"),
-        model: i("model"),
-        element: i(note),
-    };
+    let place = Place::Piece { project: i("project"), document: i("model"), piece: i(note) };
     let hash: String = read_row(&mut snapshot, &place.key()).await.unwrap()?;
     let record_place = Place::Record {
         project: i("project"),

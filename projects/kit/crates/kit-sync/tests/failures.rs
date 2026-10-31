@@ -367,11 +367,7 @@ async fn verify_finds_a_piece_the_log_doesnt_explain() {
         .run(&project(), edit("anna", "tab", 1, "a", "x"))
         .await
         .unwrap();
-    let extra = kit_store::Place::Element {
-        project: i("project"),
-        model: i("model"),
-        element: i("b"),
-    };
+    let extra = kit_store::Place::Piece { project: i("project"), document: i("model"), piece: i("b") };
     store.tamper(&extra.key(), Some(kit_store::to_row(&"cc").unwrap()));
     assert!(
         verify(&store, &project())

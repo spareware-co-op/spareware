@@ -2,11 +2,15 @@
 //! file is the reference for code. Published: a key written under this layout must stay readable
 //! forever, so a change here is a new format version, never an edit.
 //!
-//! A key starts with its scope, so one project's pieces sit side by side in TiKV and a scan of
+//! A key starts with its scope, so one project's pieces sit side by side and a scan of
 //! `p:<project>/` finds them all. Every part is a checked [`Id`] or a number, so no part can hold
 //! a `/` and one project's prefix can never reach into another's: `p:ab/` is not a prefix of
-//! `p:abc/...`. [`Place`] is the one list of what can be stored: every key is built from a place,
-//! and parsing a key gives that place back or nothing. The fuzz target holds the two together.
+//! `p:abc/...`.
+//!
+//! The kit lists only what every program has: logs, content-addressed records, pieces, claims and
+//! people. A program adds tables of its own with [`Scope::table`] and [`table`], and keeps its own
+//! list of them. [`Place`] is the kit's list: every key here is built from a place, and parsing
+//! a key gives that place back or nothing. The fuzz target holds the two together.
 
 use kit_core::Id;
 use std::fmt;
@@ -38,7 +42,8 @@ impl Key {
         self.0.as_bytes()
     }
 
-    /// Reads a key back into the place it names. `None` for anything else, never a panic.
+    /// Reads a key back into the place it names. `None` for a key that isn't the kit's, such as a
+    /// program's own table, and never a panic.
     #[must_use]
     pub fn parse(&self) -> Option<Place> {
         Place::parse(&self.0)
@@ -70,7 +75,7 @@ impl Prefix {
     /// The first key in the range, and the first key past it.
     #[must_use]
     pub fn bounds(&self) -> (Vec<u8>, Vec<u8>) {
-        let mut start = self.0.as_bytes().to_vec();
+        let start = self.0.as_bytes().to_vec();
         if start.is_empty() {
             return (b"!".to_vec(), b"~".to_vec());
         }
@@ -78,7 +83,6 @@ impl Prefix {
         if let Some(last) = end.last_mut() {
             *last += 1;
         }
-        start.shrink_to_fit();
         (start, end)
     }
 
@@ -92,9 +96,9 @@ impl Prefix {
 /// What a log belongs to.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Scope {
-    /// People, hubs and who belongs where.
+    /// Who exists and who belongs where.
     Directory,
-    /// One project's model and files.
+    /// One project's documents and files.
     Project(Id),
 }
 
@@ -123,9 +127,42 @@ impl Scope {
     pub fn client(&self, person: &Id, client: &Id) -> Key {
         Key(format!("{}/client/{person}/{client}", self.root()))
     }
+
+    /// A key in a table of a program's own, in this scope.
+    #[must_use]
+    pub fn table(&self, table: &str, parts: &[&str]) -> Key {
+        Key(join(&self.root(), table, parts))
+    }
+
+    /// A range in a table of a program's own, in this scope.
+    #[must_use]
+    pub fn table_prefix(&self, table: &str, parts: &[&str]) -> Prefix {
+        Prefix(format!("{}/", join(&self.root(), table, parts)))
+    }
 }
 
-/// Everything that can be stored, one variant to a kind of key.
+fn join(root: &str, table: &str, parts: &[&str]) -> String {
+    let mut key = format!("{root}/{table}");
+    for part in parts {
+        key.push('/');
+        key.push_str(part);
+    }
+    key
+}
+
+/// A key in a program's own top-level table, outside any scope, such as its access rows.
+#[must_use]
+pub fn table(root: &str, table: &str, parts: &[&str]) -> Key {
+    Key(join(root, table, parts))
+}
+
+/// A range in a program's own top-level table.
+#[must_use]
+pub fn table_prefix(root: &str, table: &str, parts: &[&str]) -> Prefix {
+    Prefix(format!("{}/", join(root, table, parts)))
+}
+
+/// Everything the kit itself stores, one variant to a kind of key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Place {
     /// The store's format version: `meta/format`.
@@ -133,103 +170,19 @@ pub enum Place {
     Head(Scope),
     Log(Scope, u64),
     Client(Scope, Id, Id),
-    /// An element's data, named by the hash of its bytes, so a version is never rewritten.
-    Record {
-        project: Id,
-        hash: Id,
-    },
-    /// A shape, named by hash too: every door of one type shares it.
-    Shape {
-        project: Id,
-        hash: Id,
-    },
-    /// Which record is an element's current version.
-    Element {
-        project: Id,
-        model: Id,
-        element: Id,
-    },
-    /// Which elements touch a 5 m cell of a level, so a browser loads only what is in view.
-    Area {
-        project: Id,
-        model: Id,
-        level: i32,
-        x: i64,
-        y: i64,
-        element: Id,
-    },
-    /// Who is working on an element.
-    Claim {
-        project: Id,
-        model: Id,
-        element: Id,
-    },
-    Model {
-        project: Id,
-        model: Id,
-    },
-    Team {
-        project: Id,
-        team: Id,
-    },
-    /// A package in a team's Shared or Consumed folder.
-    Item {
-        project: Id,
-        team: Id,
-        folder: Id,
-        item: Id,
-    },
-    /// The last package number of a model.
-    Version {
-        project: Id,
-        model: Id,
-    },
-    /// A package bridged in and waiting for the team to take it.
-    Incoming {
-        project: Id,
-        id: Id,
-    },
-    Link {
-        project: Id,
-        model: Id,
-        link: Id,
-    },
+    /// A piece's data, named by the hash of its bytes, so a version is never rewritten.
+    Record { project: Id, hash: Id },
+    /// Which record is a piece's current version, in one document of a project.
+    Piece { project: Id, document: Id, piece: Id },
+    /// Who is working on a piece.
+    Claim { project: Id, document: Id, piece: Id },
     Person(Id),
     /// Who an address belongs to, under the hash of the address.
     Email(Id),
     /// Who a login belongs to, under the hash of its issuer and subject.
     Login(Id),
-    Hub(Id),
-    HubProject {
-        hub: Id,
-        project: Id,
-    },
-    Project(Id),
     /// Someone who may change the directory.
     Admin(Id),
-    MemberOfHub {
-        person: Id,
-        hub: Id,
-    },
-    MemberOfProject {
-        person: Id,
-        project: Id,
-    },
-    MemberOfTeam {
-        person: Id,
-        project: Id,
-        team: Id,
-    },
-    /// The same hub membership looked up from the hub's side.
-    HubUser {
-        hub: Id,
-        person: Id,
-    },
-    /// `hub` permits bridges with `other`. A bridge needs this row from both sides.
-    Bridge {
-        hub: Id,
-        other: Id,
-    },
     /// A signed-in browser, under the hash of its cookie.
     Session(Id),
     /// A sign-in on its way to the provider and back.
@@ -238,12 +191,6 @@ pub enum Place {
 
 fn id(text: &str) -> Option<Id> {
     Id::parse(text).ok()
-}
-
-/// A number, only in the one way this layout writes it: no `+`, no leading zeros, no `-0`.
-fn number<T: std::str::FromStr + ToString>(text: &str) -> Option<T> {
-    let value = text.parse::<T>().ok()?;
-    (value.to_string() == text).then_some(value)
 }
 
 fn log_number(text: &str) -> Option<u64> {
@@ -261,68 +208,16 @@ impl Place {
             Self::Log(scope, seq) => return scope.log(*seq),
             Self::Client(scope, person, client) => return scope.client(person, client),
             Self::Record { project, hash } => format!("p:{project}/record/{hash}"),
-            Self::Shape { project, hash } => format!("p:{project}/shape/{hash}"),
-            Self::Element {
-                project,
-                model,
-                element,
-            } => {
-                format!("p:{project}/elem/{model}/{element}")
+            Self::Piece { project, document, piece } => {
+                format!("p:{project}/piece/{document}/{piece}")
             }
-            Self::Area {
-                project,
-                model,
-                level,
-                x,
-                y,
-                element,
-            } => {
-                format!("p:{project}/area/{model}/{level}/{x}/{y}/{element}")
+            Self::Claim { project, document, piece } => {
+                format!("p:{project}/claim/{document}/{piece}")
             }
-            Self::Claim {
-                project,
-                model,
-                element,
-            } => {
-                format!("p:{project}/claim/{model}/{element}")
-            }
-            Self::Model { project, model } => format!("p:{project}/model/{model}"),
-            Self::Team { project, team } => format!("p:{project}/team/{team}"),
-            Self::Item {
-                project,
-                team,
-                folder,
-                item,
-            } => {
-                format!("p:{project}/item/{team}/{folder}/{item}")
-            }
-            Self::Version { project, model } => format!("p:{project}/version/{model}"),
-            Self::Incoming { project, id } => format!("p:{project}/incoming/{id}"),
-            Self::Link {
-                project,
-                model,
-                link,
-            } => format!("p:{project}/link/{model}/{link}"),
             Self::Person(id) => format!("dir/person/{id}"),
             Self::Email(hash) => format!("dir/email/{hash}"),
             Self::Login(hash) => format!("dir/login/{hash}"),
-            Self::Hub(id) => format!("dir/hub/{id}"),
-            Self::HubProject { hub, project } => format!("dir/hub/{hub}/project/{project}"),
-            Self::Project(id) => format!("dir/project/{id}"),
             Self::Admin(person) => format!("acl/admin/{person}"),
-            Self::MemberOfHub { person, hub } => format!("acl/person/{person}/hub/{hub}"),
-            Self::MemberOfProject { person, project } => {
-                format!("acl/person/{person}/project/{project}")
-            }
-            Self::MemberOfTeam {
-                person,
-                project,
-                team,
-            } => {
-                format!("acl/person/{person}/team/{project}/{team}")
-            }
-            Self::HubUser { hub, person } => format!("acl/hub/{hub}/user/{person}"),
-            Self::Bridge { hub, other } => format!("acl/hub/{hub}/bridge/{other}"),
             Self::Session(hash) => format!("auth/session/{hash}"),
             Self::Pending(state) => format!("auth/pending/{state}"),
         })
@@ -330,60 +225,21 @@ impl Place {
 
     fn parse(text: &str) -> Option<Self> {
         let parts: Vec<&str> = text.split('/').collect();
-        match parts.as_slice() {
-            ["meta", "format"] => Some(Self::Format),
-            ["dir", rest @ ..] => Self::parse_directory(rest),
-            ["acl", rest @ ..] => Self::parse_access(rest),
-            ["auth", "session", hash] => Some(Self::Session(id(hash)?)),
-            ["auth", "pending", state] => Some(Self::Pending(id(state)?)),
-            [scope, rest @ ..] => Self::parse_project(id(scope.strip_prefix("p:")?)?, rest),
-            [] => None,
-        }
-    }
-
-    fn parse_directory(parts: &[&str]) -> Option<Self> {
-        Some(match parts {
-            ["head"] => Self::Head(Scope::Directory),
-            ["log", seq] => Self::Log(Scope::Directory, log_number(seq)?),
-            ["client", person, client] => Self::Client(Scope::Directory, id(person)?, id(client)?),
-            ["person", person] => Self::Person(id(person)?),
-            ["email", hash] => Self::Email(id(hash)?),
-            ["login", hash] => Self::Login(id(hash)?),
-            ["hub", hub] => Self::Hub(id(hub)?),
-            ["hub", hub, "project", project] => Self::HubProject {
-                hub: id(hub)?,
-                project: id(project)?,
-            },
-            ["project", project] => Self::Project(id(project)?),
-            _ => return None,
-        })
-    }
-
-    fn parse_access(parts: &[&str]) -> Option<Self> {
-        Some(match parts {
-            ["admin", person] => Self::Admin(id(person)?),
-            ["person", person, "hub", hub] => Self::MemberOfHub {
-                person: id(person)?,
-                hub: id(hub)?,
-            },
-            ["person", person, "project", project] => Self::MemberOfProject {
-                person: id(person)?,
-                project: id(project)?,
-            },
-            ["person", person, "team", project, team] => Self::MemberOfTeam {
-                person: id(person)?,
-                project: id(project)?,
-                team: id(team)?,
-            },
-            ["hub", hub, "user", person] => Self::HubUser {
-                hub: id(hub)?,
-                person: id(person)?,
-            },
-            ["hub", hub, "bridge", other] => Self::Bridge {
-                hub: id(hub)?,
-                other: id(other)?,
-            },
-            _ => return None,
+        Some(match parts.as_slice() {
+            ["meta", "format"] => Self::Format,
+            ["acl", "admin", person] => Self::Admin(id(person)?),
+            ["auth", "session", hash] => Self::Session(id(hash)?),
+            ["auth", "pending", state] => Self::Pending(id(state)?),
+            ["dir", "head"] => Self::Head(Scope::Directory),
+            ["dir", "log", seq] => Self::Log(Scope::Directory, log_number(seq)?),
+            ["dir", "client", person, client] => {
+                Self::Client(Scope::Directory, id(person)?, id(client)?)
+            }
+            ["dir", "person", person] => Self::Person(id(person)?),
+            ["dir", "email", hash] => Self::Email(id(hash)?),
+            ["dir", "login", hash] => Self::Login(id(hash)?),
+            [scope, rest @ ..] => return Self::parse_project(id(scope.strip_prefix("p:")?)?, rest),
+            [] => return None,
         })
     }
 
@@ -393,65 +249,19 @@ impl Place {
             ["head"] => Self::Head(scope()),
             ["log", seq] => Self::Log(scope(), log_number(seq)?),
             ["client", person, client] => Self::Client(scope(), id(person)?, id(client)?),
-            ["record", hash] => Self::Record {
-                project,
-                hash: id(hash)?,
-            },
-            ["shape", hash] => Self::Shape {
-                project,
-                hash: id(hash)?,
-            },
-            ["elem", model, element] => Self::Element {
-                project,
-                model: id(model)?,
-                element: id(element)?,
-            },
-            ["area", model, level, x, y, element] => Self::Area {
-                project,
-                model: id(model)?,
-                level: number(level)?,
-                x: number(x)?,
-                y: number(y)?,
-                element: id(element)?,
-            },
-            ["claim", model, element] => Self::Claim {
-                project,
-                model: id(model)?,
-                element: id(element)?,
-            },
-            ["model", model] => Self::Model {
-                project,
-                model: id(model)?,
-            },
-            ["team", team] => Self::Team {
-                project,
-                team: id(team)?,
-            },
-            ["item", team, folder, item] => Self::Item {
-                project,
-                team: id(team)?,
-                folder: id(folder)?,
-                item: id(item)?,
-            },
-            ["version", model] => Self::Version {
-                project,
-                model: id(model)?,
-            },
-            ["incoming", incoming] => Self::Incoming {
-                project,
-                id: id(incoming)?,
-            },
-            ["link", model, link] => Self::Link {
-                project,
-                model: id(model)?,
-                link: id(link)?,
-            },
+            ["record", hash] => Self::Record { project, hash: id(hash)? },
+            ["piece", document, piece] => {
+                Self::Piece { project, document: id(document)?, piece: id(piece)? }
+            }
+            ["claim", document, piece] => {
+                Self::Claim { project, document: id(document)?, piece: id(piece)? }
+            }
             _ => return None,
         })
     }
 }
 
-/// The ranges scanned for lists. Each ends in `/`, so no prefix runs into a longer name.
+/// The ranges the kit scans. Each ends in `/`, so no prefix runs into a longer name.
 pub mod list {
     use super::{Id, Prefix, Scope};
 
@@ -464,69 +274,16 @@ pub mod list {
         Prefix(format!("p:{project}/"))
     }
     #[must_use]
-    pub fn elements(project: &Id, model: &Id) -> Prefix {
-        Prefix(format!("p:{project}/elem/{model}/"))
+    pub fn pieces(project: &Id, document: &Id) -> Prefix {
+        Prefix(format!("p:{project}/piece/{document}/"))
     }
     #[must_use]
-    pub fn all_elements(project: &Id) -> Prefix {
-        Prefix(format!("p:{project}/elem/"))
+    pub fn all_pieces(project: &Id) -> Prefix {
+        Prefix(format!("p:{project}/piece/"))
     }
     #[must_use]
-    pub fn cell(project: &Id, model: &Id, level: i32, x: i64, y: i64) -> Prefix {
-        Prefix(format!("p:{project}/area/{model}/{level}/{x}/{y}/"))
-    }
-    #[must_use]
-    pub fn claims(project: &Id, model: &Id) -> Prefix {
-        Prefix(format!("p:{project}/claim/{model}/"))
-    }
-    #[must_use]
-    pub fn models(project: &Id) -> Prefix {
-        Prefix(format!("p:{project}/model/"))
-    }
-    #[must_use]
-    pub fn teams(project: &Id) -> Prefix {
-        Prefix(format!("p:{project}/team/"))
-    }
-    #[must_use]
-    pub fn items(project: &Id, team: &Id, folder: &Id) -> Prefix {
-        Prefix(format!("p:{project}/item/{team}/{folder}/"))
-    }
-    #[must_use]
-    pub fn incoming(project: &Id) -> Prefix {
-        Prefix(format!("p:{project}/incoming/"))
-    }
-    #[must_use]
-    pub fn links(project: &Id, model: &Id) -> Prefix {
-        Prefix(format!("p:{project}/link/{model}/"))
-    }
-    #[must_use]
-    pub fn projects() -> Prefix {
-        Prefix("dir/project/".to_owned())
-    }
-    #[must_use]
-    pub fn hub_projects(hub: &Id) -> Prefix {
-        Prefix(format!("dir/hub/{hub}/project/"))
-    }
-    /// Everything a person belongs to.
-    #[must_use]
-    pub fn memberships(person: &Id) -> Prefix {
-        Prefix(format!("acl/person/{person}/"))
-    }
-    #[must_use]
-    pub fn hubs_of(person: &Id) -> Prefix {
-        Prefix(format!("acl/person/{person}/hub/"))
-    }
-    #[must_use]
-    pub fn teams_of(person: &Id, project: &Id) -> Prefix {
-        Prefix(format!("acl/person/{person}/team/{project}/"))
-    }
-    #[must_use]
-    pub fn hub_users(hub: &Id) -> Prefix {
-        Prefix(format!("acl/hub/{hub}/user/"))
-    }
-    #[must_use]
-    pub fn bridges(hub: &Id) -> Prefix {
-        Prefix(format!("acl/hub/{hub}/bridge/"))
+    pub fn claims(project: &Id, document: &Id) -> Prefix {
+        Prefix(format!("p:{project}/claim/{document}/"))
     }
 }
 
@@ -561,41 +318,27 @@ mod tests {
     }
 
     #[test]
-    fn numbers_are_read_in_one_spelling_only() {
-        for bad in [
-            "p:x/area/m/1/007/0/e",
-            "p:x/area/m/1/+7/0/e",
-            "p:x/area/m/-0/7/0/e",
-            "p:x/log/7",
-            "p:x/log/0000000000000000000a",
-            "dir/log/99999999999999999999",
-        ] {
+    fn log_numbers_are_read_in_one_spelling_only() {
+        for bad in ["p:x/log/7", "p:x/log/0000000000000000000a", "dir/log/99999999999999999999"] {
             assert_eq!(Key::from_stored(bad.to_owned()).parse(), None, "{bad}");
         }
-        let negative = Key::from_stored("p:x/area/m/-1/-7/0/e".to_owned());
-        assert!(matches!(
-            negative.parse(),
-            Some(Place::Area {
-                level: -1,
-                x: -7,
-                ..
-            })
-        ));
+    }
+
+    #[test]
+    fn a_programs_table_keeps_to_its_scope() {
+        let scope = Scope::Project(i("x"));
+        let key = scope.table("thing", &["a", "b"]);
+        assert_eq!(key.as_str(), "p:x/thing/a/b");
+        let (start, end) = scope.table_prefix("thing", &["a"]).bounds();
+        assert!(key.as_bytes() >= &start[..] && key.as_bytes() < &end[..]);
+        assert_eq!(key.parse(), None, "the kit doesn't read a program's tables");
     }
 
     #[test]
     fn nothing_outside_the_list_parses() {
-        for bad in [
-            "",
-            "/",
-            "dir",
-            "dir/",
-            "p:/head",
-            "p:a/b/head",
-            "p:a/nope/b",
-            "meta/other",
-            "x/y",
-        ] {
+        for bad in
+            ["", "/", "dir", "dir/", "p:/head", "p:a/b/head", "p:a/nope/b", "meta/other", "x/y"]
+        {
             assert_eq!(Key::from_stored(bad.to_owned()).parse(), None, "{bad}");
         }
     }

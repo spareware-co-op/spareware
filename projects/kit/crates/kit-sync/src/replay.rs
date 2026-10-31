@@ -28,11 +28,11 @@ pub async fn read_log<R: Reader>(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LogCheck {
     pub entries: u64,
-    pub elements: usize,
+    pub pieces: usize,
 }
 
 /// Checks a scope: no gaps in the numbers, every content ID right, each change following from the
-/// one before, and, for a project, replaying the log gives exactly the elements stored, each
+/// one before, and, for a project, replaying the log gives exactly the pieces stored, each
 /// record matching its hash.
 pub async fn verify_log<R: Reader>(reader: &mut R, scope: &Scope) -> Result<LogCheck, String> {
     let fault = |e: StoreError| e.to_string();
@@ -69,39 +69,39 @@ pub async fn verify_log<R: Reader>(reader: &mut R, scope: &Scope) -> Result<LogC
     let Scope::Project(project) = scope else {
         return Ok(LogCheck {
             entries: head,
-            elements: 0,
+            pieces: 0,
         });
     };
 
     let mut stored = BTreeMap::new();
     for (key, value) in reader
-        .scan(&list::all_elements(project))
+        .scan(&list::all_pieces(project))
         .await
         .map_err(fault)?
     {
-        let Some(Place::Element { model, element, .. }) = key.parse() else {
-            return Err(format!("{key} isn't an element key"));
+        let Some(Place::Piece { document, piece, .. }) = key.parse() else {
+            return Err(format!("{key} isn't a piece key"));
         };
         let hash: String = from_row(&value).map_err(fault)?;
         let hash = Id::parse(&hash).map_err(|e| e.to_string())?;
-        stored.insert((model, element), hash);
+        stored.insert((document, piece), hash);
     }
     if stored != replayed {
-        return Err("the stored elements differ from the replayed log".to_owned());
+        return Err("the stored pieces differ from the replayed log".to_owned());
     }
-    for ((_, element), hash) in &stored {
+    for ((_, piece), hash) in &stored {
         let place = Place::Record {
             project: project.clone(),
             hash: hash.clone(),
         };
         let bytes = reader.get(&place.key()).await.map_err(fault)?;
-        let bytes = bytes.ok_or_else(|| format!("the record of {element} is missing"))?;
+        let bytes = bytes.ok_or_else(|| format!("the record of {piece} is missing"))?;
         if sha256_hex(&bytes) != hash.as_str() {
-            return Err(format!("the record of {element} doesn't match its hash"));
+            return Err(format!("the record of {piece} doesn't match its hash"));
         }
     }
     Ok(LogCheck {
         entries: head,
-        elements: stored.len(),
+        pieces: stored.len(),
     })
 }

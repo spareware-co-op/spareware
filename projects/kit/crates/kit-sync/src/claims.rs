@@ -1,5 +1,5 @@
-//! Claims, not files: starting to work on an element takes a light, automatic claim on it, and
-//! conflicts are caught per element. A claim ends when its holder lets go or when its time runs
+//! Claims, not files: starting to work on a piece takes a light, automatic claim on it, and
+//! conflicts are caught per piece. A claim ends when its holder lets go or when its time runs
 //! out, so someone who walks away can't lock anyone out. Taking one is part of the edit's own
 //! transaction, and its time comes from the log, never from a machine's clock.
 
@@ -7,11 +7,11 @@ use kit_core::Id;
 use kit_ops::{Claim, ClaimChange};
 use kit_store::{Place, Reader, StoreError, Txn, read_row, to_row};
 
-fn place(project: &Id, model: &Id, piece: &Id) -> Place {
+fn place(project: &Id, document: &Id, piece: &Id) -> Place {
     Place::Claim {
         project: project.clone(),
-        model: model.clone(),
-        element: piece.clone(),
+        document: document.clone(),
+        piece: piece.clone(),
     }
 }
 
@@ -19,12 +19,12 @@ fn place(project: &Id, model: &Id, piece: &Id) -> Place {
 pub async fn held_by_another<R: Reader>(
     reader: &mut R,
     project: &Id,
-    model: &Id,
+    document: &Id,
     piece: &Id,
     person: &Id,
     now_ms: u64,
 ) -> Result<Option<Claim>, StoreError> {
-    let claim: Option<Claim> = read_row(reader, &place(project, model, piece).key()).await?;
+    let claim: Option<Claim> = read_row(reader, &place(project, document, piece).key()).await?;
     Ok(claim.filter(|claim| claim.person != *person && claim.until_ms > now_ms))
 }
 
@@ -32,11 +32,11 @@ pub async fn held_by_another<R: Reader>(
 pub async fn take<T: Txn>(
     txn: &mut T,
     project: &Id,
-    model: &Id,
+    document: &Id,
     piece: &Id,
     claim: Claim,
 ) -> Result<ClaimChange, StoreError> {
-    txn.put(place(project, model, piece).key(), to_row(&claim)?)
+    txn.put(place(project, document, piece).key(), to_row(&claim)?)
         .await?;
     Ok(ClaimChange {
         piece: piece.clone(),
@@ -48,10 +48,10 @@ pub async fn take<T: Txn>(
 pub async fn release<T: Txn>(
     txn: &mut T,
     project: &Id,
-    model: &Id,
+    document: &Id,
     piece: &Id,
 ) -> Result<ClaimChange, StoreError> {
-    txn.delete(place(project, model, piece).key()).await?;
+    txn.delete(place(project, document, piece).key()).await?;
     Ok(ClaimChange {
         piece: piece.clone(),
         claim: None,
