@@ -17,9 +17,8 @@
 //!   `a`, `b`, `c` keeps what is behind (b − a) × (c − a).
 //! - **Refused, never guessed.** Three points on one line are [`RebuildError::Num`].
 //!
-//! Method: chapter 11.1 (`projects/engines/geometry/architecture/11-booleans.md`), and the IFC
-//! entities it cites
-//! ([IfcBoxedHalfSpace](https://github.com/buildingSMART/IFC4.3.x-development/blob/5d08761e63557bd3ded140139eede665ec31511c/docs/schemas/resource/IfcGeometricModelResource/Entities/IfcBoxedHalfSpace.md)).
+//! Method: chapter 11.1 (`projects/engines/geometry/architecture/11-booleans.md`), which cites the
+//! IFC half-space entities.
 //!
 //! Cost: constant, and what [`rebuild`] costs on seven pieces.
 
