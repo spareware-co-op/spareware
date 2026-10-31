@@ -5433,6 +5433,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "read_sign returns only 1.0 or -1.0, never 0, so s < 0 and s <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
+      "mutant": "replace > with >= in less_exact",
+      "line_text": "if key(b) > key(a) { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
     }
   ],
   "coverage_off": [

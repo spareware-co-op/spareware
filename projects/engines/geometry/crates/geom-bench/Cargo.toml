@@ -57,6 +57,9 @@ geom-surface = { path = "../geom-surface" }
 geom-linalg = { path = "../geom-linalg" }
 # The attribute step of phase 3 (piece G90) and the types it takes, for the same count benchmarks.
 geom-name = { path = "../geom-name" }
+# The primitives and transforms of phase 3 (piece G101), and the context and output they take and
+# give, for the same count benchmarks.
+geom-make = { path = "../geom-make" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
 # crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
 # sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which

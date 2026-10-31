@@ -867,6 +867,7 @@ dependencies = [
  "geom-curve",
  "geom-format",
  "geom-linalg",
+ "geom-make",
  "geom-math",
  "geom-name",
  "geom-num",
@@ -1216,6 +1217,7 @@ dependencies = [
 name = "geom-make"
 version = "0.0.0"
 dependencies = [
+ "cap",
  "geom-check",
  "geom-curve",
  "geom-math",

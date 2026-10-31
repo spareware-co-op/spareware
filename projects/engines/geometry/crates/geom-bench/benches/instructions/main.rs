@@ -26,7 +26,7 @@ use gate::{
     attributes::attributes, ball::ball, batch::batch, brent::brent, bvh::bvh, crossing::crossing,
     curve::curve, dd::dd, dual::dual, eft::eft, exact_sum::exact_sum, exactness::exactness,
     format::format, generated::generated, grid::grid, growth::growth, interval::interval,
-    isolate::isolate, linalg::linalg, math::math,
+    isolate::isolate, linalg::linalg, make::make, math::math,
     math_types::math_types, newton::newton, nurbs::nurbs, perturb::perturb, plane::plane,
     predicate::predicate, quadrature::quadrature, real::real, rng::rng, sign::sign,
     surface::surface, topo::topo, unproven::unproven, wide::wide, wide32::wide32,
@@ -36,7 +36,7 @@ use gate::{
 gungraun::main!(
     config = gate::config();
     library_benchmark_groups = predicate, sign, wide, wide32, plane, crossing, eft, interval, grid, real, exactness,
-        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, batch, attributes, topo, nurbs, curve, surface, format, brent, quadrature, growth
+        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, batch, attributes, topo, nurbs, curve, surface, format, brent, quadrature, growth, make
 );
 
 /// Off Linux: explain where the gate runs, and succeed.

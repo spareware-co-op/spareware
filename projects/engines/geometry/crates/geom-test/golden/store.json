@@ -254,6 +254,12 @@
               "kind": "corpus",
               "piece": "G104",
               "why": "3 new count benchmarks on the batch runner (decision 32.44): batch/run_items, batch/curve_points and batch/surface_points; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
           "sha256": "4317728ecf9ac1024b3975b2d93bd840a2a5f301c21598506f7abf6b450fff1b"

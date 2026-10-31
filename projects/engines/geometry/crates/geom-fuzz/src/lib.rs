@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has eleven targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has twelve targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -20,12 +20,13 @@
 //! primitives and transforms return only what the full checker passes, keep their laws, and refuse
 //! with a typed error; [`sequence`] (G116), whole operation logs replay to the same hash and keep
 //! every law at every step; [`batch`] (G104), `geom-op`'s batch driver gives each item its own
-//! result, and the curve and surface kinds' many-point calls give the single calls' bits; and
-//! [`cbor`] (G91), `geom-format`'s strict CBOR decoder and its text form never panic, refuse
-//! inside their input and convert both ways bit for bit. [`adversarial`] holds the generators
-//! aimed at chapter 28.5's hard cases, and [`robustness`] counts how many plain designs succeed.
-//! The layout every target follows, and how each engine runs it locally and in CI, is in this
-//! crate's `README.md`.
+//! result, and the curve and surface kinds' many-point calls give the single calls' bits; [`cbor`]
+//! (G91), `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their
+//! input and convert both ways bit for bit; and [`make`] (G101), the primitives and transforms
+//! return only what the full checker passes, keep their laws, and refuse with a typed error.
+//! [`adversarial`] holds the generators aimed at chapter 28.5's hard cases, and [`robustness`]
+//! counts how many plain designs succeed. The layout every target follows, and how each engine
+//! runs it locally and in CI, is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -138,6 +139,8 @@
 //!   code under test of the [`batch`] target.
 //! - `geom-format` (MPL-2.0, ours), the code under test of the [`cbor`] target, which reads with
 //!   `geom-run`'s work meter.
+//! - `geom-make`, `geom-check` and `geom-op` (MPL-2.0, ours), with the crates above, the code under
+//!   test of the [`make`] target and the checker it judges them by.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
