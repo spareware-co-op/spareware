@@ -12,7 +12,8 @@
 //! - **A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a
 //!   canonical form that moves, a plane given two entries or two planes one, a flip that does not
 //!   say which way a plane faced; an order that is not antisymmetric or not transitive; a turn that
-//!   changes when its sides swap; a point that is not the point it was made as. No law may panic
+//!   changes when its sides swap; a point that is not the point it was made as; a face split into
+//!   pieces with a plane it did not have, or refused for anything but a shape. No law may panic
 //!   or return `BudgetExceeded`: every plane here is within budget.
 //!
 //! Method: chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`),
@@ -25,8 +26,10 @@ use core::cmp::Ordering;
 use geom_num::grid::COORD_MAX;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
+use geom_poly::convex::{ConvexError, convex_pieces};
 use geom_poly::order::{Line, Ray, along, around, normals_det, same_point, turn};
 use geom_poly::plane::{PlaneTable, canonical};
+use geom_run::{Budget, WorkMeter};
 use geom_test::{ByteSource, Entropy};
 
 use crate::Finding;
@@ -227,6 +230,29 @@ fn ray_laws(case: &Case, face: &Plane) -> Result<(), Finding> {
     Ok(())
 }
 
+/// The first plane as a face, ringed by the others: any ring is split or refused as a shape.
+fn convex_laws(case: &Case, face: &Plane, ring: &[Plane]) -> Result<(), Finding> {
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    match convex_pieces(face, &[ring.to_vec()], &mut meter) {
+        Ok(pieces) => {
+            let turned = |q: &Plane| q.n().map(i128::saturating_neg);
+            let own = |q: &Plane| ring.iter().any(|s| s == q || s.n() == turned(q));
+            if pieces.iter().all(|p| p.bounds.iter().all(own)) {
+                Ok(())
+            } else {
+                Err(Finding::new(
+                    "a piece holds only the face's own planes",
+                    || format!("{case:?}"),
+                ))
+            }
+        }
+        Err(ConvexError::Num(NumError::Degenerate)) => Ok(()),
+        Err(e) => Err(Finding::new("only a shape refuses a split", || {
+            format!("{e}: {case:?}")
+        })),
+    }
+}
+
 /// Holds the case to the laws.
 ///
 /// # Errors
@@ -237,6 +263,7 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     let Some((first, rest)) = case.planes.split_first() else {
         return Ok(());
     };
+    convex_laws(case, first, rest)?;
     ray_laws(case, first)?;
     for other in rest {
         if let Ok(line) = Line::new(*first, *other) {

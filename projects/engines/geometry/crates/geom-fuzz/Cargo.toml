@@ -17,6 +17,8 @@ geom-bench = { path = "../geom-bench", default-features = false }
 geom-gen = { path = "../geom-gen" }
 # The planes target (G123): geom-poly's planes and orders, under test (ours, MPL-2.0).
 geom-poly = { path = "../geom-poly" }
+# The meter geom-poly's splits run under (ours, MPL-2.0).
+geom-run = { path = "../geom-run" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
