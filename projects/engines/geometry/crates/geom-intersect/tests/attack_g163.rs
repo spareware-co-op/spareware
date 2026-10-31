@@ -550,6 +550,27 @@ fn a_closed_form_that_cannot_decide_says_so() {
 }
 
 #[test]
+fn a_meeting_on_a_closed_curves_join_is_one_proven_point() {
+    // A cubic that crosses the circle at t = 0 and only there: the join is no boundary.
+    let c = circle([0.0, 0.0], 500.0);
+    let across = bezier(&[[300.0, 40.0], [450.0, 20.0], [550.0, -20.0], [700.0, -40.0]]);
+    let r = meet(&c, &across);
+    assert_eq!(contacts(&r), [PointContact::Crossing], "{:?}", r.items());
+    let (s, _) = points(&r)[0];
+    assert!(s < 1e-6 || s > 2.0 - 1e-6 || (s - 0.0).abs() < 1e-3, "{s}");
+    let e = ellipse([0.0, 0.0], 500.0, 300.0);
+    assert_eq!(contacts(&meet(&e, &across)), [PointContact::Crossing]);
+    // Past the join, on the far side of the turn.
+    let up = bezier(&[
+        [-700.0, -30.0],
+        [-550.0, -10.0],
+        [-450.0, 10.0],
+        [-300.0, 30.0],
+    ]);
+    assert_eq!(contacts(&meet(&c, &up)), [PointContact::Crossing]);
+}
+
+#[test]
 fn a_tangency_without_a_sign_change_is_not_lost() {
     // y = 4x(1 − x) under a roof at y = 1 touches once and changes no sign: sample-and-bisect misses
     // it, and a Bézier line keeps the pair away from the closed forms.

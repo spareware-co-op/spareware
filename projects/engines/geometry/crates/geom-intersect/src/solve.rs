@@ -306,7 +306,7 @@ fn widened<const N: usize>(
 
 /// `y` grown by an eighth of its width on each side, and at least [`GROW`] of the domain's, inside
 /// `domain`.
-fn grown<const N: usize>(
+pub(crate) fn grown<const N: usize>(
     y: &[Interval; N],
     domain: &[Interval; N],
 ) -> Result<[Interval; N], IntersectError> {
@@ -362,10 +362,14 @@ fn refined<F: Field<N>, const N: usize>(
             break;
         }
         meter.charge(1)?;
-        match step(field, &x, meter)? {
-            Step::Unique(next) | Step::Narrowed(next, _) if next != x => x = next,
-            _ => break,
+        let next = match step(field, &x, meter)? {
+            Step::Unique(next) | Step::Narrowed(next, _) => next,
+            Step::Empty | Step::Stuck(_) => break,
+        };
+        if next == x {
+            break;
         }
+        x = next;
     }
     Ok(x)
 }
@@ -442,9 +446,8 @@ where
         if zeros.iter().any(known) || !keep(&x, meter)? {
             continue;
         }
-        if let Some(range) = field.over(&x, meter)?
-            && range.iter().any(|r| r.lo() > 0.0 || r.hi() < 0.0)
-        {
+        let range = field.over(&x, meter)?;
+        if range.is_some_and(|r| r.iter().any(|v| v.lo() > 0.0 || v.hi() < 0.0)) {
             continue;
         }
         // The operator first: a clip can take a box below what the rounding of the kinds lets the

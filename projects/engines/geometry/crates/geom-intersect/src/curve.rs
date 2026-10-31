@@ -60,7 +60,7 @@ use crate::result::{
     Coincidence, Coverage, Diag, Intersection, Item, OverlapRegion, ParamBox, PointContact, Test,
     Unresolved,
 };
-use crate::solve::{Field, Reason, Solved, runs, solve};
+use crate::solve::{Field, Reason, Solved, grown, runs, solve};
 
 /// The diagnostic of a pair a closed form could not decide, sent on to the engine.
 pub const ROUTE: &str = "closed-form-to-engine";
@@ -189,10 +189,151 @@ fn pieces<const D: usize>(
     }
 }
 
+/// A parameter's domain, and whether the kind closes on itself over it. A closed kind's join is no
+/// boundary: the search runs a little past it, so that a meeting on the join stands inside a box,
+/// and evaluates the far side on the near one.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Seam {
+    domain: (f64, f64),
+    closed: bool,
+}
+
+impl Seam {
+    /// A domain that ends where it ends.
+    pub(crate) const fn open(domain: (f64, f64)) -> Seam {
+        Seam {
+            domain,
+            closed: false,
+        }
+    }
+
+    /// A domain in half-turns, closed if it is a whole turn.
+    pub(crate) fn turns(domain: (f64, f64)) -> Seam {
+        Seam {
+            domain,
+            closed: domain.1 - domain.0 >= 2.0,
+        }
+    }
+
+    fn period(self) -> f64 {
+        self.domain.1 - self.domain.0
+    }
+
+    /// The domain.
+    pub(crate) fn whole(self) -> Result<Interval, IntersectError> {
+        Ok(Interval::new(self.domain.0, self.domain.1)?)
+    }
+
+    /// The side to search.
+    pub(crate) fn side(self) -> Result<Interval, IntersectError> {
+        let (lo, hi) = self.domain;
+        let pad = if self.closed {
+            self.period() / 1024.0
+        } else {
+            0.0
+        };
+        Ok(Interval::new(lo - pad, hi + pad)?)
+    }
+
+    /// `t` on the domain.
+    pub(crate) fn wrapped(self, t: f64) -> f64 {
+        let (lo, hi) = self.domain;
+        if self.closed && t < lo {
+            t + self.period()
+        } else if self.closed && t > hi {
+            t - self.period()
+        } else {
+            t
+        }
+    }
+
+    /// The stretches of the domain that `x` covers: one, or one each side of the join.
+    pub(crate) fn spans(self, x: Interval) -> [Option<(f64, f64)>; 2] {
+        if !self.closed {
+            return [Some(span(x)), None];
+        }
+        let (lo, hi) = self.domain;
+        let p = self.period();
+        let cut = |shift: f64| {
+            let (a, b) = (
+                tight::larger(x.lo() + shift, lo),
+                tight::smaller(x.hi() + shift, hi),
+            );
+            (a < b).then_some((a, b))
+        };
+        let mut parts = [cut(0.0), cut(p), cut(-p)].into_iter().flatten();
+        // A box of one point on the join has no length to cut.
+        let point = self.wrapped(x.lo());
+        [parts.next().or(Some((point, point))), parts.next()]
+    }
+
+    /// `x` as the domain writes it, a box across the join held to its near side.
+    pub(crate) fn onto(self, x: Interval) -> Result<Interval, IntersectError> {
+        let (lo, hi) = self.domain;
+        let shift = Interval::point(self.period())?;
+        let moved = if self.closed && x.hi() > hi {
+            x.sub(shift)?
+        } else if self.closed && x.hi() < lo {
+            x.add(shift)?
+        } else {
+            x
+        };
+        held(moved, (lo, hi))
+    }
+}
+
+/// `curve`'s seam over `domain`.
+fn seam_of<const D: usize>(curve: &CurveKind<D>, domain: (f64, f64)) -> Seam {
+    match curve {
+        CurveKind::Circle(_) | CurveKind::Ellipse(_) => Seam::turns(domain),
+        _ => Seam::open(domain),
+    }
+}
+
+/// A box around `curve` over `x`, across its join if `x` is.
+fn bound_over<const D: usize>(
+    curve: &CurveKind<D>,
+    seam: Seam,
+    x: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Bounds<D>, IntersectError> {
+    let [first, second] = seam.spans(x);
+    let first = first.ok_or(IntersectError::Internal)?;
+    let mut out = curve.bound(first, meter)?;
+    if let Some(part) = second {
+        out = out
+            .union(&curve.bound(part, meter)?)
+            .map_err(CurveError::from)?;
+    }
+    Ok(out)
+}
+
+/// A box around `curve`'s first derivative over `x`, across its join if `x` is; `None` where it has
+/// none.
+fn slope_over<const D: usize>(
+    curve: &CurveKind<D>,
+    seam: Seam,
+    x: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Bounds<D>>, IntersectError> {
+    let mut out: Option<Bounds<D>> = None;
+    for part in seam.spans(x).into_iter().flatten() {
+        let DerivativeBound::Bounded(b) = curve.derivative_bound(part, 1, meter)? else {
+            return Ok(None);
+        };
+        out = Some(match out {
+            Some(a) => a.union(&b).map_err(CurveError::from)?,
+            None => b,
+        });
+    }
+    Ok(out)
+}
+
 /// A(s) − B(t) in two coordinates.
 struct Gap<'a, const D: usize> {
     a: &'a CurveKind<D>,
     b: &'a CurveKind<D>,
+    seams: [Seam; 2],
     axes: [usize; 2],
     coplanar: bool,
     pieces_a: Vec<BernsteinCurve<D>>,
@@ -240,8 +381,13 @@ impl<const D: usize> Field<2> for Gap<'_, D> {
         [s, t]: [f64; 2],
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; 2], IntersectError> {
-        let x = self.a.enclose(s, Limit::FromRight, 0, meter)?;
-        let y = self.b.enclose(t, Limit::FromRight, 0, meter)?;
+        let [first, second] = self.seams;
+        let x = self
+            .a
+            .enclose(first.wrapped(s), Limit::FromRight, 0, meter)?;
+        let y = self
+            .b
+            .enclose(second.wrapped(t), Limit::FromRight, 0, meter)?;
         let [i, j] = self.axes;
         Ok([
             coordinate(&x, 0, i)?.sub(coordinate(&y, 0, i)?)?,
@@ -254,8 +400,9 @@ impl<const D: usize> Field<2> for Gap<'_, D> {
         [s, t]: &[Interval; 2],
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<[Interval; 2]>, IntersectError> {
-        let a = picked(&self.a.bound(span(*s), meter)?, self.axes)?;
-        let b = picked(&self.b.bound(span(*t), meter)?, self.axes)?;
+        let [first, second] = self.seams;
+        let a = picked(&bound_over(self.a, first, *s, meter)?, self.axes)?;
+        let b = picked(&bound_over(self.b, second, *t, meter)?, self.axes)?;
         let [a0, a1] = a;
         let [b0, b1] = b;
         Ok(Some([a0.sub(b0)?, a1.sub(b1)?]))
@@ -266,9 +413,10 @@ impl<const D: usize> Field<2> for Gap<'_, D> {
         [s, t]: &[Interval; 2],
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<[[Interval; 2]; 2]>, IntersectError> {
-        let (DerivativeBound::Bounded(da), DerivativeBound::Bounded(db)) = (
-            self.a.derivative_bound(span(*s), 1, meter)?,
-            self.b.derivative_bound(span(*t), 1, meter)?,
+        let [first, second] = self.seams;
+        let (Some(da), Some(db)) = (
+            slope_over(self.a, first, *s, meter)?,
+            slope_over(self.b, second, *t, meter)?,
         ) else {
             return Ok(None);
         };
@@ -282,8 +430,9 @@ impl<const D: usize> Field<2> for Gap<'_, D> {
         [s, t]: &[Interval; 2],
         meter: &mut WorkMeter<'_>,
     ) -> Result<f64, IntersectError> {
-        let a = widest(&self.a.bound(span(*s), meter)?);
-        let b = widest(&self.b.bound(span(*t), meter)?);
+        let [first, second] = self.seams;
+        let a = widest(&bound_over(self.a, first, *s, meter)?);
+        let b = widest(&bound_over(self.b, second, *t, meter)?);
         Ok(if a > b { a } else { b })
     }
 
@@ -317,22 +466,34 @@ fn items_of<const D: usize>(
     solved: Solved<2>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Item>, IntersectError> {
-    let runs = runs(solved.flagged)?;
+    let [first, second] = gap.seams;
+    // Written on the domains, where two runs either side of a join are one.
+    let mut flagged = solved.flagged;
+    for f in &mut flagged {
+        let [s, t] = f.region;
+        f.region = [first.onto(s)?, second.onto(t)?];
+    }
+    let runs = runs(flagged)?;
     let mut items = Vec::new();
+    let mut seen: Vec<[Interval; 2]> = Vec::new();
     let others: Vec<usize> = (0..D)
         .filter(|k| !gap.axes.contains(k) && !gap.coplanar)
         .collect();
     for z in solved.zeros {
         let [s, t] = z.enclosure;
-        // A zero inside a run is part of what the run could not tell apart.
-        let covered = runs.iter().any(|(hull, _)| {
+        let enclosure = [first.onto(s)?, second.onto(t)?];
+        let [s, t] = enclosure;
+        // A zero inside a run is part of what the run could not tell apart, and one on a join is
+        // found from both sides of it.
+        let meeting = |hull: &[Interval; 2]| {
             hull.iter()
-                .zip(&z.enclosure)
+                .zip(&enclosure)
                 .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
-        });
-        if covered {
+        };
+        if runs.iter().any(|(hull, _)| meeting(hull)) || seen.iter().any(meeting) {
             continue;
         }
+        seen.push(enclosure);
         let (a, b) = (gap.a.bound(span(s), meter)?, gap.b.bound(span(t), meter)?);
         let mut apart = false;
         let mut unsure = None;
@@ -403,6 +564,9 @@ fn second_order<const D: usize>(
     let not_smooth = Unresolved::NonSmooth {
         at: crate::result::Degeneracy::Crease,
     };
+    // Over a run grown past where rounding swamps second derivatives, and on the domains.
+    let [first, second] = gap.seams;
+    let [s, t] = grown(&[s, t], &[first.whole()?, second.whole()?])?;
     let mut parts = [[Interval::point(0.0)?; 2]; 4];
     let wanted = [(gap.a, s, 1), (gap.a, s, 2), (gap.b, t, 1), (gap.b, t, 2)];
     for (slot, (curve, x, order)) in parts.iter_mut().zip(wanted) {
@@ -425,11 +589,11 @@ fn second_order<const D: usize>(
     let curvature = |[x, y]: [Interval; 2], [u, v]: [Interval; 2], speed: Interval| {
         x.mul(v)?.sub(y.mul(u)?)?.div(speed.mul(speed.sqrt()?)?)
     };
-    let (first, second) = (curvature(a1, a2, speed_a)?, curvature(b1, b2, speed_b)?);
+    let (bent_a, bent_b) = (curvature(a1, a2, speed_a)?, curvature(b1, b2, speed_b)?);
     let difference = if along.lo() > 0.0 {
-        first.sub(second)?
+        bent_a.sub(bent_b)?
     } else {
-        first.add(second)?
+        bent_a.add(bent_b)?
     };
     if difference.contains(0.0) {
         return Ok(Unresolved::HigherOrderContact);
@@ -1414,17 +1578,22 @@ pub fn curves<const D: usize>(
     if let Some(answer) = closed_form(a, b, meter)? {
         return Ok(answer);
     }
-    if matches!(b, CurveKind::Line(_))
-        && !matches!(a, CurveKind::Line(_))
-        && let Some(answer) = closed_form(b, a, meter)?
-    {
+    let turned = matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_));
+    let answer = if turned {
+        closed_form(b, a, meter)?
+    } else {
+        None
+    };
+    if let Some(answer) = answer {
         return Ok(answer.swapped(1));
     }
     let (s, t) = (finite(a)?, finite(b)?);
     let shared = if D == 3 { shared_plane(a, b) } else { None };
+    let seams = [seam_of(a, s), seam_of(b, t)];
     let gap = Gap {
         a,
         b,
+        seams,
         axes: match shared {
             Some(n) => across(n),
             None => plane(a, b, (s, t), meter)?,
@@ -1433,7 +1602,8 @@ pub fn curves<const D: usize>(
         pieces_a: pieces(a, meter)?,
         pieces_b: pieces(b, meter)?,
     };
-    let domain = [Interval::new(s.0, s.1)?, Interval::new(t.0, t.1)?];
+    let [first, second] = seams;
+    let domain = [first.side()?, second.side()?];
     let solved = solve(&gap, domain, |_, _| Ok(true), meter)?;
     // 12.7: every change of route is on the record. A pair with a closed form that could not decide
     // came here for that reason.
@@ -1483,7 +1653,7 @@ fn heading<const D: usize>(
 ) -> Result<[f64; D], IntersectError> {
     let at = curve.enclose(t, Limit::FromRight, 1, meter)?;
     let tangent = at.get(1).ok_or(IntersectError::Internal)?;
-    Ok(tangent.map(|c| c.lo() * 0.5 + c.hi() * 0.5))
+    Ok(tangent.map(tight::middle))
 }
 
 /// Whether `curve` runs along `direction` everywhere on `x`, so it cannot return there.
@@ -1517,6 +1687,7 @@ pub fn self_crossings<const D: usize>(
     let gap = Gap {
         a: curve,
         b: curve,
+        seams: [Seam::open((lo, hi)); 2],
         axes: plane(curve, curve, ((lo, hi), (lo, hi)), meter)?,
         coplanar: false,
         pieces_a: Vec::new(),

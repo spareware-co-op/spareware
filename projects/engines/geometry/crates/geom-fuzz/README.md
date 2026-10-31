@@ -15,7 +15,7 @@ every operation at every width, `I128` to the reserved 768 bits; `intersect`
 oracle, and a pair asked either way round makes one call; `quadric` (`src/quadric.rs`, G159), every
 exact decision on a line and a quadric agrees with big integers, and a Sturm chain counts the roots
 a polynomial was built from; `project` (`src/project.rs`, G162), a nearest point is never beaten
-by a sample of the kind; and `curves` (`src/curves.rs`, G163), every point of any two curves lies
+by a sample of the kind; and `crossings` (`src/crossings.rs`, G163), every point of any two curves lies
 on both, and two cubic graphs that change sides have an item between them.
 
 ## One law, four engines
