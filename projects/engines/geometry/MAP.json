@@ -22,12 +22,66 @@
       "job": "The stable facade: schemas, stable value types, re-exports; no kernel logic.",
       "kind": "facade",
       "layer": "13",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "none at run time.",
+          "does": "[`OPERATIONS`] lists one [`Operation`] per operation, in name order: its schema and its tier. `geom-gen` writes the API documentation (`generated/api.md`) and the MCP tool descriptions (`generated/mcp-tools.json`) from this list, and CI fails if a committed file has not been regenerated after the list changed, so the interfaces never drift from the kernel and no AI tool is written by hand (22; EXTENDING.md, section 2.2).",
+          "family": [],
+          "file": "projects/engines/crates/engine-geometry/src/operations.rs",
+          "guarantees": [
+            "**One entry per operation, in name order.** `tests/attack_g100.rs` checks the names are unique, ascending, and valid MCP tool names, that each schema's version is at least 1, and that every preview's date is a real date."
+          ],
+          "job": "Every operation the kernel offers, its schema held as data (chapter 22, \"Every operation is described as data\").",
+          "method": {
+            "none": "a list of constants (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "engine_geometry::operations",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time: entries are constants.",
+          "does": "re-exports `geom-op`'s schema vocabulary ([`OpSchema`] and its parts), and defines [`Operation`], one entry of [`crate::operations::OPERATIONS`]: an operation's schema and its [`Tier`]. A Stable operation keeps its schema under semantic versioning; a Preview one is being tried, may change, is not usable by published plugins, and graduates or is dropped within 12 months of the day it was added (25), which its tier records.",
+          "family": [],
+          "file": "projects/engines/crates/engine-geometry/src/schema.rs",
+          "guarantees": [
+            "**Data only.** [`Operation`] and [`Tier`] are constants made of `&'static` data, with no method and no trait implementation beyond derived ones.",
+            "**A preview's age is recorded.** [`Tier::Preview`] holds the day the operation entered the facade, `YYYY-MM-DD`, so a release check can find any preview older than 12 months."
+          ],
+          "job": "The schema types of chapter 22, and the entry that places one operation's schema in a stability tier of chapter 25.",
+          "method": {
+            "none": "types for chapter 22's operation schemas and chapter 25's tiers (`projects/engines/geometry/architecture/22-errors-queries-ai.md`, `projects/engines/geometry/architecture/25-public-interface.md`)."
+          },
+          "path": "engine_geometry::schema",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time.",
+          "does": "re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]), bodies ([`body`]), names and history ([`name`]), errors ([`error`]), and an operation's context and output ([`op`]). Anything not re-exported here is internal.",
+          "family": [],
+          "file": "projects/engines/crates/engine-geometry/src/value.rs",
+          "guarantees": [
+            "**Only re-exports.** Every item is a `pub use` of a kernel crate's public item, so the types are the kernel's own and a value passes between the facade and the kernel unchanged.",
+            "**One name each.** No type is re-exported under two paths, and the two kinds named `Offset` keep their own modules ([`curve::Offset`], [`surface::Offset`])."
+          ],
+          "job": "The stable value types: what a program holds, passes to an operation and reads back. Each is a kernel crate's own type, re-exported here, so a program names it from this crate and never from a `geom-*` crate (25).",
+          "method": {
+            "none": "re-exports only, as chapter 25 sets the Stable tier's value types (`projects/engines/geometry/architecture/25-public-interface.md`)."
+          },
+          "path": "engine_geometry::value",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "engine-geometry",
       "provenance": [],
       "sections": "5, 22, 25 and 27 of the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G100 and G482, and every operation piece adds its schema here (chapter 30.1, the standard bar).",
+      "status": null,
       "summary": "Shared engine: geometry core, the stable public facade of the Spare Kit geometry kernel."
     },
     {
@@ -2570,6 +2624,41 @@
           },
           "path": "geom_gen::exact",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the schemas' fields.",
+          "does": "[`api`] writes Markdown, one section per operation of `engine_geometry::operations::OPERATIONS`: its name, version, family and tier, what it does, its inputs and outputs (each with its type, unit and whether it may be left out), the roles it names, the errors it can return (each detail with its base kind and its data), the warnings it can give, the exactness classes it can return, whether it has a batch entry, and its example. [`mcp`] writes JSON: the MCP protocol version the descriptions follow ([`MCP_VERSION`]) and one `Tool` per operation, as MCP's `tools/list` describes a tool: its `name`, `title` and `description`, an `inputSchema` and an `outputSchema` in JSON Schema 2020-12 (MCP's default dialect) built from its fields, `annotations` (a kernel operation is pure, 10.1: it reads nothing outside its inputs and changes nothing, so it is read-only, idempotent and closed-world to the program that calls it), and the kernel's own data under `_meta` (`org.spareware/kernel`: version, family, tier, exactness classes, errors with base kinds, warnings, batch entry, roles). The command layer that serves the tools adds the program's side (sign-in scopes, the program's units), as EXTENDING.md, section 2.2, sets out.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-gen/src/facade.rs",
+          "guarantees": [
+            "**From the schemas, never by hand.** Both files hold only what the operation list says, so the documentation and the tools cannot drift from the kernel; CI fails until the committed files are regenerated after the list changes.",
+            "**Valid tool descriptions.** Every tool's `name` is the operation's name, which `engine-geometry`'s tests hold to MCP's rule for tool names; every `inputSchema` is an object schema, which MCP requires, closed to fields the schema does not name.",
+            "**Deterministic.** Operations in the list's order (name order); JSON objects with their keys sorted (`serde_json`'s ordered map); `\\n` line ends; nothing read from the world."
+          ],
+          "job": "Generators `facade-api` and `facade-mcp`: the facade's API documentation and its MCP tool descriptions, from every operation's schema (piece G100; chapter 22, \"Every operation is described as data\").",
+          "method": {
+            "links": [
+              "https://modelcontextprotocol.io/specification/2026-07-28/server/tools",
+              "https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts",
+              "https://json-schema.org/draft/2020-12/json-schema-core"
+            ],
+            "text": "MCP's tool description, version 2026-07-28 (<https://modelcontextprotocol.io/specification/2026-07-28/server/tools>; the `Tool` interface in <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts>), with JSON Schema 2020-12 (<https://json-schema.org/draft/2020-12/json-schema-core>) for the inputs and outputs, written with `serde_json`."
+          },
+          "path": "geom_gen::facade",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 AND MIT",
+              "link": "https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts",
+              "method_note": null,
+              "name": "the Model Context Protocol specification",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the fields of a tool description and their rules. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -10894,6 +10983,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-fuzz/src/lib.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0 AND MIT",
+      "link": "https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts",
+      "method_note": null,
+      "name": "the Model Context Protocol specification",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-gen/src/facade.rs"
       ]
     },
     {

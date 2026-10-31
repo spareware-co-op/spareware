@@ -40,6 +40,9 @@
 //! in <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts>),
 //! with JSON Schema 2020-12 (<https://json-schema.org/draft/2020-12/json-schema-core>) for the
 //! inputs and outputs, written with `serde_json`.
+//! Consulted: the Model Context Protocol specification, Apache-2.0 AND MIT,
+//!   <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts>,
+//!   for the fields of a tool description and their rules. No code copied.
 //!
 //! Cost: linear in the schemas' fields.
 
