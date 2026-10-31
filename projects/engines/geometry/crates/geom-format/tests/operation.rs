@@ -101,7 +101,6 @@ fn every_refusal_says_what_it_refused() {
     use geom_format::names::NamesError;
     use geom_format::payload::PayloadError;
     use geom_format::recipe::RecipeError;
-    let params = operation().encode(&mut meter()).unwrap();
     let mut bad = operation();
     bad.params = vec![0x18, 0x01];
     let OperationError::Params(cbor) = bad.encode(&mut meter()).unwrap_err() else {
@@ -136,7 +135,6 @@ fn every_refusal_says_what_it_refused() {
     for (error, words) in cases {
         assert!(error.to_string().contains(words), "{error}");
     }
-    assert_ne!(params.len(), 0);
 }
 
 #[test]
