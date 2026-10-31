@@ -42,6 +42,9 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
+//!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
+//!   proptest generators of valid histories and chains.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -201,6 +204,7 @@ pub mod foundation;
 pub mod golden;
 pub mod grid;
 pub mod guard;
+pub mod history;
 pub mod ledger;
 pub mod licence;
 pub mod map;
