@@ -190,6 +190,7 @@ fn a_rotation_goes_through_a_body_made_once_and_checked() {
     assert!(library.is_empty());
     let six = library.six_volume(&ctx(), &shared, &instance).unwrap();
     assert_eq!(library.len(), 1);
+    assert!(!library.is_empty());
     // The second question makes nothing.
     let side = library
         .side_of_shell(&ctx(), &shared, &instance, Ix::new(0).unwrap(), p(1, 3, 20))

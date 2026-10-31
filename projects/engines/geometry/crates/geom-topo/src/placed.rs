@@ -61,7 +61,7 @@ pub enum Placement {
     Exact {
         /// The shift, in steps.
         shift: [i64; 3],
-        /// The permutation: 8 × the arrangement of the source axes + the three sign bits.
+        /// The permutation: 8 × the arrangement of the source axes + the choice of signs.
         axes: u8,
     },
     /// An index into the document's side table of general transforms.
@@ -119,6 +119,18 @@ const ARRANGEMENTS: [[Axis; 3]; 6] = [
     [Axis::Z, Axis::Y, Axis::X],
 ];
 
+/// The eight choices of which axes are negated, in the order `axes` counts them.
+const SIGNS: [[bool; 3]; 8] = [
+    [false, false, false],
+    [true, false, false],
+    [false, true, false],
+    [true, true, false],
+    [false, false, true],
+    [true, false, true],
+    [false, true, true],
+    [true, true, true],
+];
+
 impl Placement {
     /// The packed form of `t`.
     #[must_use]
@@ -129,11 +141,12 @@ impl Placement {
             .zip(0_u8..)
             .find_map(|(a, n)| (*a == source).then_some(n))
             .unwrap_or(0);
-        let signs = t
-            .negate()
+        let negate = t.negate();
+        let signs = SIGNS
             .iter()
             .zip(0_u8..)
-            .fold(0_u8, |bits, (&n, at)| bits | (u8::from(n) << at));
+            .find_map(|(s, n)| (*s == negate).then_some(n))
+            .unwrap_or(0);
         Placement::Exact {
             shift: t.translation_part(),
             axes: arrangement.saturating_mul(8).saturating_add(signs),
@@ -153,8 +166,10 @@ impl Placement {
         let source = ARRANGEMENTS
             .get(usize::from(axes >> 3))
             .ok_or(PlacedError::Permutation(axes))?;
-        let negate = [axes & 1 != 0, axes & 2 != 0, axes & 4 != 0];
-        Ok(GridTransform::from_parts(*source, negate, shift)?)
+        let negate = SIGNS
+            .get(usize::from(axes & 7))
+            .ok_or(PlacedError::Permutation(axes))?;
+        Ok(GridTransform::from_parts(*source, *negate, shift)?)
     }
 }
 
@@ -207,19 +222,13 @@ impl Placed {
             return Err(PlacedError::NotRigid);
         }
         let (lo, hi) = (shared.min(), shared.max());
-        let corners = [0_u8, 1, 2, 3, 4, 5, 6, 7].map(|bits| {
-            let pick = |bit: u8, low: Coord, high: Coord| {
-                if bits & bit == 0 { low } else { high }
-            };
-            P3 {
-                x: pick(1, lo.x, hi.x),
-                y: pick(2, lo.y, hi.y),
-                z: pick(4, lo.z, hi.z),
-            }
-        });
         let mut bound: Option<Box3> = None;
-        for corner in corners {
-            let image = t.apply(corner)?.value();
+        for (x, y, z) in [lo.x, hi.x].into_iter().flat_map(|x| {
+            [lo.y, hi.y]
+                .into_iter()
+                .flat_map(move |y| [lo.z, hi.z].map(|z| (x, y, z)))
+        }) {
+            let image = t.apply(P3 { x, y, z })?.value();
             for d in [-1, 1] {
                 let moved = |c: Coord| c.get().saturating_add(d);
                 let far = P3::new(moved(image.x), moved(image.y), moved(image.z))?;
