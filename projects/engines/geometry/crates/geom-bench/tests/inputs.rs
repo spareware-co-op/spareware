@@ -2509,3 +2509,45 @@ fn the_carrier_classes_are_what_they_say() {
         }
     ));
 }
+
+/// The circle batches are what their classes claim, for the module and for the generated functions
+/// it calls (piece G188).
+#[test]
+fn the_circle_classes_are_what_they_say() {
+    use geom_bench::inputs::{arc as a, generated as i};
+    use geom_num::arc::Contact;
+    use geom_num::generated as gp;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(a::round_grid(class).len(), BATCH, "{class}");
+        assert_eq!(a::round_side(class).len(), BATCH, "{class}");
+        assert_eq!(a::round_meets(class).len(), BATCH, "{class}");
+        assert_eq!(a::circle_side(class).len(), BATCH, "{class}");
+        assert_eq!(a::circle_meets(class).len(), BATCH, "{class}");
+    }
+    assert!(a::round_grid(Degenerate).iter().all(|(r, z)| r.side_of_grid(*z) == Ok(Sign::Zero)));
+    assert!(a::round_side(Degenerate).iter().all(|(r, z)| r.side(z) == Ok(Sign::Zero)));
+    assert!(a::round_meets(Degenerate).iter().all(|(r, l)| r.meets(l) == Ok(Contact::Tangent)));
+    assert!(a::circle_side(Degenerate).iter().all(|(c, z)| c.side(z) == Ok(Sign::Zero)));
+    assert!(a::circle_meets(Degenerate).iter().all(|(c, l)| c.meets(l) == Ok(Contact::Tangent)));
+
+    assert!(
+        i::round_grid_filter(Typical)
+            .iter()
+            .all(|&(z, p, [cx, cy, w])| gp::round_grid::filter(z, p, cx, cy, w).is_some())
+    );
+    assert!(
+        i::round_grid_filter(NearlyDegenerate)
+            .iter()
+            .all(|&(z, p, [cx, cy, w])| gp::round_grid::filter(z, p, cx, cy, w).is_none())
+    );
+    assert!(
+        i::circle_gap_filter(NearlyDegenerate)
+            .iter()
+            .all(|&(a, b, t)| gp::circle_gap::filter(a, b, t).is_none())
+    );
+    assert!(
+        i::circle_gap_value(Degenerate)
+            .iter()
+            .all(|&(a, b, t)| gp::circle_gap::exact(a, b, t) == Some(Sign::Zero))
+    );
+}

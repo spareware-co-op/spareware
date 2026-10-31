@@ -22,7 +22,7 @@
 
 use geom_num::grid::{P2, P3};
 
-use super::{Class, carrier, crossing, plane, predicate};
+use super::{Class, arc, carrier, crossing, plane, predicate};
 
 /// Point triples for `generated::orient2d::filter`.
 #[must_use]
@@ -543,4 +543,198 @@ pub fn rational_orient_value_plain(class: Class) -> Vec<[[i128; 3]; 3]> {
 #[must_use]
 pub fn rational_orient_value_limbs(class: Class) -> Vec<[[i128; 3]; 3]> {
     rational_orient("generated::limbs::rational_orient_value", class)
+}
+
+/// A rational centre's X, Y and W.
+fn centre(r: &geom_num::arc::Round) -> [i128; 3] {
+    point(&r.centre())
+}
+
+/// [`arc::round_grid_from`]'s batch as the predicate's integers.
+fn round_grid(op: &str, class: Class) -> Vec<(P2, P2, [i128; 3])> {
+    arc::round_grid_from(op, class)
+        .iter()
+        .map(|(r, z)| (*z, r.on(), centre(r)))
+        .collect()
+}
+
+/// [`arc::round_side_from`]'s batch as the predicate's integers.
+fn round_rational(op: &str, class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    arc::round_side_from(op, class)
+        .iter()
+        .map(|(r, z)| (point(z), r.on(), centre(r)))
+        .collect()
+}
+
+/// [`arc::round_meets_from`]'s batch as the predicate's integers.
+fn round_line(op: &str, class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    arc::round_meets_from(op, class)
+        .iter()
+        .map(|(r, l)| (line(l), r.on(), centre(r)))
+        .collect()
+}
+
+/// [`arc::circle_side_from`]'s batch as the predicate's integers.
+fn circle_side(op: &str, class: Class) -> Vec<([i128; 3], P2, i128)> {
+    arc::circle_side_from(op, class)
+        .iter()
+        .map(|(c, z)| (point(z), c.centre(), c.radius()))
+        .collect()
+}
+
+/// [`arc::circle_meets_from`]'s batch as the predicate's integers.
+fn circle_line(op: &str, class: Class) -> Vec<([i128; 3], P2, i128)> {
+    arc::circle_meets_from(op, class)
+        .iter()
+        .map(|(c, l)| (line(l), c.centre(), c.radius()))
+        .collect()
+}
+
+/// [`arc::gap_from`]'s batch.
+fn circle_gap(op: &str, class: Class) -> Vec<(P2, P2, i128)> {
+    arc::gap_from(op, class)
+}
+
+/// Inputs for `generated::round_grid::filter`.
+#[must_use]
+pub fn round_grid_filter(class: Class) -> Vec<(P2, P2, [i128; 3])> {
+    round_grid("generated::round_grid::filter", class)
+}
+
+/// Inputs for `generated::round_grid::value`.
+#[must_use]
+pub fn round_grid_value(class: Class) -> Vec<(P2, P2, [i128; 3])> {
+    round_grid("generated::round_grid::value", class)
+}
+
+/// Inputs for `generated::plain::round_grid_value`.
+#[must_use]
+pub fn round_grid_value_plain(class: Class) -> Vec<(P2, P2, [i128; 3])> {
+    round_grid("generated::plain::round_grid_value", class)
+}
+
+/// Inputs for `generated::limbs::round_grid_value`.
+#[must_use]
+pub fn round_grid_value_limbs(class: Class) -> Vec<(P2, P2, [i128; 3])> {
+    round_grid("generated::limbs::round_grid_value", class)
+}
+
+/// Inputs for `generated::round_rational::filter`.
+#[must_use]
+pub fn round_rational_filter(class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    round_rational("generated::round_rational::filter", class)
+}
+
+/// Inputs for `generated::round_rational::value`.
+#[must_use]
+pub fn round_rational_value(class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    round_rational("generated::round_rational::value", class)
+}
+
+/// Inputs for `generated::plain::round_rational_value`.
+#[must_use]
+pub fn round_rational_value_plain(class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    round_rational("generated::plain::round_rational_value", class)
+}
+
+/// Inputs for `generated::limbs::round_rational_value`.
+#[must_use]
+pub fn round_rational_value_limbs(class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    round_rational("generated::limbs::round_rational_value", class)
+}
+
+/// Inputs for `generated::round_line::filter`.
+#[must_use]
+pub fn round_line_filter(class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    round_line("generated::round_line::filter", class)
+}
+
+/// Inputs for `generated::round_line::value`.
+#[must_use]
+pub fn round_line_value(class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    round_line("generated::round_line::value", class)
+}
+
+/// Inputs for `generated::plain::round_line_value`.
+#[must_use]
+pub fn round_line_value_plain(class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    round_line("generated::plain::round_line_value", class)
+}
+
+/// Inputs for `generated::limbs::round_line_value`.
+#[must_use]
+pub fn round_line_value_limbs(class: Class) -> Vec<([i128; 3], P2, [i128; 3])> {
+    round_line("generated::limbs::round_line_value", class)
+}
+
+/// Inputs for `generated::circle_side::filter`.
+#[must_use]
+pub fn circle_side_filter(class: Class) -> Vec<([i128; 3], P2, i128)> {
+    circle_side("generated::circle_side::filter", class)
+}
+
+/// Inputs for `generated::circle_side::value`.
+#[must_use]
+pub fn circle_side_value(class: Class) -> Vec<([i128; 3], P2, i128)> {
+    circle_side("generated::circle_side::value", class)
+}
+
+/// Inputs for `generated::plain::circle_side_value`.
+#[must_use]
+pub fn circle_side_value_plain(class: Class) -> Vec<([i128; 3], P2, i128)> {
+    circle_side("generated::plain::circle_side_value", class)
+}
+
+/// Inputs for `generated::limbs::circle_side_value`.
+#[must_use]
+pub fn circle_side_value_limbs(class: Class) -> Vec<([i128; 3], P2, i128)> {
+    circle_side("generated::limbs::circle_side_value", class)
+}
+
+/// Inputs for `generated::circle_line::filter`.
+#[must_use]
+pub fn circle_line_filter(class: Class) -> Vec<([i128; 3], P2, i128)> {
+    circle_line("generated::circle_line::filter", class)
+}
+
+/// Inputs for `generated::circle_line::value`.
+#[must_use]
+pub fn circle_line_value(class: Class) -> Vec<([i128; 3], P2, i128)> {
+    circle_line("generated::circle_line::value", class)
+}
+
+/// Inputs for `generated::plain::circle_line_value`.
+#[must_use]
+pub fn circle_line_value_plain(class: Class) -> Vec<([i128; 3], P2, i128)> {
+    circle_line("generated::plain::circle_line_value", class)
+}
+
+/// Inputs for `generated::limbs::circle_line_value`.
+#[must_use]
+pub fn circle_line_value_limbs(class: Class) -> Vec<([i128; 3], P2, i128)> {
+    circle_line("generated::limbs::circle_line_value", class)
+}
+
+/// Inputs for `generated::circle_gap::filter`.
+#[must_use]
+pub fn circle_gap_filter(class: Class) -> Vec<(P2, P2, i128)> {
+    circle_gap("generated::circle_gap::filter", class)
+}
+
+/// Inputs for `generated::circle_gap::value`.
+#[must_use]
+pub fn circle_gap_value(class: Class) -> Vec<(P2, P2, i128)> {
+    circle_gap("generated::circle_gap::value", class)
+}
+
+/// Inputs for `generated::plain::circle_gap_value`.
+#[must_use]
+pub fn circle_gap_value_plain(class: Class) -> Vec<(P2, P2, i128)> {
+    circle_gap("generated::plain::circle_gap_value", class)
+}
+
+/// Inputs for `generated::limbs::circle_gap_value`.
+#[must_use]
+pub fn circle_gap_value_limbs(class: Class) -> Vec<(P2, P2, i128)> {
+    circle_gap("generated::limbs::circle_gap_value", class)
 }

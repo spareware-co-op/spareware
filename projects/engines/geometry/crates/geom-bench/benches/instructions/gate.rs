@@ -969,10 +969,61 @@ pub mod crossing {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/round_side_of_grid/typical"))]
+    #[bench::degenerate(leak("crossing/round_side_of_grid/degenerate"))]
+    #[bench::nearly_degenerate(leak("crossing/round_side_of_grid/nearly_degenerate"))]
+    #[bench::extreme(leak("crossing/round_side_of_grid/extreme"))]
+    fn round_side_of_grid(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/round_side/typical"))]
+    #[bench::degenerate(leak("crossing/round_side/degenerate"))]
+    #[bench::nearly_degenerate(leak("crossing/round_side/nearly_degenerate"))]
+    #[bench::extreme(leak("crossing/round_side/extreme"))]
+    fn round_side(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/round_meets/typical"))]
+    #[bench::degenerate(leak("crossing/round_meets/degenerate"))]
+    #[bench::nearly_degenerate(leak("crossing/round_meets/nearly_degenerate"))]
+    #[bench::extreme(leak("crossing/round_meets/extreme"))]
+    fn round_meets(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/circle_side/typical"))]
+    #[bench::degenerate(leak("crossing/circle_side/degenerate"))]
+    #[bench::nearly_degenerate(leak("crossing/circle_side/nearly_degenerate"))]
+    #[bench::extreme(leak("crossing/circle_side/extreme"))]
+    fn circle_side(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/circle_meets/typical"))]
+    #[bench::degenerate(leak("crossing/circle_meets/degenerate"))]
+    #[bench::nearly_degenerate(leak("crossing/circle_meets/nearly_degenerate"))]
+    #[bench::extreme(leak("crossing/circle_meets/extreme"))]
+    fn circle_meets(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = crossing;
         benchmarks = ssi_new, ssi_homogeneous, ssi_orient2d, ssi_to_grid, carrier_side,
-            carrier_order, carrier_meet, rational_cmp_x, rational_orient
+            carrier_order, carrier_meet, rational_cmp_x, rational_orient,
+            round_side_of_grid, round_side, round_meets, circle_side, circle_meets
     );
 }
 
@@ -2456,13 +2507,254 @@ pub mod generated {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_grid_filter/typical"))]
+    #[bench::degenerate(leak("generated/round_grid_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_grid_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_grid_filter/extreme"))]
+    fn round_grid_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_grid_value/typical"))]
+    #[bench::degenerate(leak("generated/round_grid_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_grid_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_grid_value/extreme"))]
+    fn round_grid_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_grid_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/round_grid_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_grid_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_grid_value_plain/extreme"))]
+    fn round_grid_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_grid_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/round_grid_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_grid_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_grid_value_limbs/extreme"))]
+    fn round_grid_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_rational_filter/typical"))]
+    #[bench::degenerate(leak("generated/round_rational_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_rational_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_rational_filter/extreme"))]
+    fn round_rational_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_rational_value/typical"))]
+    #[bench::degenerate(leak("generated/round_rational_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_rational_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_rational_value/extreme"))]
+    fn round_rational_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_rational_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/round_rational_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_rational_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_rational_value_plain/extreme"))]
+    fn round_rational_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_rational_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/round_rational_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_rational_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_rational_value_limbs/extreme"))]
+    fn round_rational_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_line_filter/typical"))]
+    #[bench::degenerate(leak("generated/round_line_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_line_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_line_filter/extreme"))]
+    fn round_line_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_line_value/typical"))]
+    #[bench::degenerate(leak("generated/round_line_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_line_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_line_value/extreme"))]
+    fn round_line_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_line_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/round_line_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_line_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_line_value_plain/extreme"))]
+    fn round_line_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/round_line_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/round_line_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/round_line_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/round_line_value_limbs/extreme"))]
+    fn round_line_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_side_filter/typical"))]
+    #[bench::degenerate(leak("generated/circle_side_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_side_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_side_filter/extreme"))]
+    fn circle_side_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_side_value/typical"))]
+    #[bench::degenerate(leak("generated/circle_side_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_side_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_side_value/extreme"))]
+    fn circle_side_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_side_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/circle_side_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_side_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_side_value_plain/extreme"))]
+    fn circle_side_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_side_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/circle_side_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_side_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_side_value_limbs/extreme"))]
+    fn circle_side_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_line_filter/typical"))]
+    #[bench::degenerate(leak("generated/circle_line_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_line_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_line_filter/extreme"))]
+    fn circle_line_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_line_value/typical"))]
+    #[bench::degenerate(leak("generated/circle_line_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_line_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_line_value/extreme"))]
+    fn circle_line_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_line_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/circle_line_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_line_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_line_value_plain/extreme"))]
+    fn circle_line_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_line_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/circle_line_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_line_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_line_value_limbs/extreme"))]
+    fn circle_line_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_gap_filter/typical"))]
+    #[bench::degenerate(leak("generated/circle_gap_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_gap_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_gap_filter/extreme"))]
+    fn circle_gap_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_gap_value/typical"))]
+    #[bench::degenerate(leak("generated/circle_gap_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_gap_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_gap_value/extreme"))]
+    fn circle_gap_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_gap_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/circle_gap_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_gap_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_gap_value_plain/extreme"))]
+    fn circle_gap_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/circle_gap_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/circle_gap_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/circle_gap_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/circle_gap_value_limbs/extreme"))]
+    fn circle_gap_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = generated;
         benchmarks = orient2d_filter, orient2d_value, orient3d_filter, orient3d_value, incircle_filter, incircle_value, insphere_filter, insphere_value, plane_side_filter, plane_side_value,
             tpi_weight_filter, tpi_weight_value, tpi_side_filter, tpi_side_value, lpi_weight_filter, lpi_weight_value, lpi_side_filter, lpi_side_value, ssi_weight_filter, ssi_weight_value, ssi_side_filter, ssi_side_value,
             orient2d_value_plain, orient3d_value_plain, incircle_value_plain, insphere_value_plain, plane_side_value_plain, tpi_weight_value_plain, tpi_side_value_plain, lpi_weight_value_plain, lpi_side_value_plain, ssi_weight_value_plain, ssi_side_value_plain,
             orient2d_avnaim, orient3d_avnaim, orient2d_value_limbs, orient3d_value_limbs, incircle_value_limbs, insphere_value_limbs, plane_side_value_limbs, tpi_weight_value_limbs, tpi_side_value_limbs, lpi_weight_value_limbs, lpi_side_value_limbs, ssi_weight_value_limbs, ssi_side_value_limbs,
-            carrier_side_filter, carrier_side_value, carrier_side_value_plain, carrier_side_value_limbs, carrier_order_filter, carrier_order_value, carrier_order_value_plain, carrier_order_value_limbs, rational_cmp_filter, rational_cmp_value, rational_cmp_value_plain, rational_cmp_value_limbs, rational_orient_filter, rational_orient_value, rational_orient_value_plain, rational_orient_value_limbs
+            carrier_side_filter, carrier_side_value, carrier_side_value_plain, carrier_side_value_limbs, carrier_order_filter, carrier_order_value, carrier_order_value_plain, carrier_order_value_limbs, rational_cmp_filter, rational_cmp_value, rational_cmp_value_plain, rational_cmp_value_limbs, rational_orient_filter, rational_orient_value, rational_orient_value_plain, rational_orient_value_limbs,
+            round_grid_filter, round_grid_value, round_grid_value_plain, round_grid_value_limbs, round_rational_filter, round_rational_value, round_rational_value_plain, round_rational_value_limbs, round_line_filter, round_line_value, round_line_value_plain, round_line_value_limbs, circle_side_filter, circle_side_value, circle_side_value_plain, circle_side_value_limbs, circle_line_filter, circle_line_value, circle_line_value_plain, circle_line_value_limbs, circle_gap_filter, circle_gap_value, circle_gap_value_plain, circle_gap_value_limbs
     );
 }
 

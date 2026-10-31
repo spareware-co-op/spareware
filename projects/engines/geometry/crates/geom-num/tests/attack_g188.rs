@@ -385,19 +385,6 @@ fn tangency_is_exactly_zero_and_one_step_is_not() {
     );
 }
 
-/// A point's angle about `c` as (quadrant, tangent), so that comparing two needs no maths function.
-fn angle_key(p: &[RBig; 2], c: &[RBig; 2]) -> (u8, RBig) {
-    let (x, y) = (&p[0] - &c[0], &p[1] - &c[1]);
-    let zero = RBig::ZERO;
-    match (x > zero, y >= zero, x < zero) {
-        (true, true, _) => (0, y / x),
-        (false, true, true) => (1, (-x) / y.clone() + RBig::ZERO),
-        (false, true, false) => (1, RBig::ZERO),
-        (_, false, true) => (2, y / x),
-        _ => (3, x.clone() / (-y)),
-    }
-}
-
 #[test]
 fn order_along_an_arc_agrees_with_walking_it() {
     // Points of the circle of radius 65k about the origin, from its Pythagorean triples.
@@ -442,7 +429,6 @@ fn order_along_an_arc_agrees_with_walking_it() {
     let k = 1_000;
     let at = |t: [i64; 2]| p2(t[0] * k, t[1] * k);
     let centre: Rational2 = p2(0, 0).into();
-    let origin = [RBig::ZERO, RBig::ZERO];
     let count = triples.len();
     for start in 0..count {
         for sweep in [3, 9, 18, 25, 35] {
@@ -470,11 +456,6 @@ fn order_along_an_arc_agrees_with_walking_it() {
                     assert_eq!(arc.order(&p.into(), &q.into()).unwrap(), want);
                 }
             }
-            // The walk agrees with the angles, read off directly.
-            let keys: Vec<_> = (0..=sweep)
-                .map(|i| angle_key(&grid(at(triples[(start + i) % count])), &origin))
-                .collect();
-            assert_eq!(keys.len(), sweep + 1);
         }
     }
 }
@@ -569,12 +550,13 @@ fn round_filters_cross_their_boundary_both_ways() {
 
 #[test]
 fn circle_filters_cross_their_boundary_both_ways() {
+    // A tiny circle a long way out, so that a step is small beside the coordinates.
     let centre = p2(1 << 38, -(1 << 37));
-    let radius = 1_i128 << 39;
+    let radius = 1_i128 << 9;
     let circle = Circle2::new(centre, radius).unwrap();
-    let on = p2(centre.x.get() + (1 << 39), centre.y.get());
+    let on = p2(centre.x.get() + (1 << 9), centre.y.get());
     crossed(|step| {
-        let q: Rational2 = p2(on.x.get() - (1 << step), on.y.get()).into();
+        let q: Rational2 = p2(on.x.get() + (1 << step), on.y.get()).into();
         let ([x, y], v) = q.coordinates();
         (
             circle_side::filter(x, y, v, centre, radius),
@@ -582,24 +564,27 @@ fn circle_filters_cross_their_boundary_both_ways() {
             circle_oracle(&circle, &fractions(&q)),
         )
     });
+    let as_sign = |contact: Contact| match contact {
+        Contact::Apart => Sign::Positive,
+        Contact::Tangent => Sign::Zero,
+        Contact::Crossing => Sign::Negative,
+    };
     crossed(|step| {
-        let l = Carrier::new(1, 0, i128::from(on.x.get()) - (1 << step)).unwrap();
+        let l = Carrier::new(1, 0, i128::from(on.x.get()) + (1 << step)).unwrap();
         let ([a, b], c) = l.coefficients();
         (
             circle_line::filter(a, b, c, centre, radius),
-            Sign::Negative,
-            match circle_contact_oracle(&circle, &l) {
-                Contact::Crossing => Sign::Negative,
-                _ => Sign::Positive,
-            },
+            as_sign(circle.meets(&l).unwrap()),
+            as_sign(circle_contact_oracle(&circle, &l)),
         )
     });
-    let other = p2(centre.x.get() + (1 << 39), centre.y.get());
+    // 2^(2 step) + k² − k², beside squares of 2^78.
+    let k = 1_i64 << 39;
     crossed(|step| {
-        let t = (1_i128 << 39) - (1 << step);
+        let other = p2(1 << step, k);
         (
-            circle_gap::filter(centre, other, t),
-            circle_gap::exact(centre, other, t).unwrap(),
+            circle_gap::filter(p2(0, 0), other, i128::from(k)),
+            circle_gap::exact(p2(0, 0), other, i128::from(k)).unwrap(),
             Sign::Positive,
         )
     });
