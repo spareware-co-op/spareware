@@ -23,7 +23,7 @@
 //! `projects/engines/geometry/architecture/28-testing.md`).
 //!
 //! Cost: the sum of the groups run, each linear in the body's rows; it reserves
-//! [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most four per
+//! [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most three per
 //! vertex and one per edge), shared by every check.
 
 use alloc::vec::Vec;

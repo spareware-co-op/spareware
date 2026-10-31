@@ -56,11 +56,12 @@
 //! - A. Hatcher, *Algebraic Topology*, Cambridge University Press, 2002, section 2.2 (the Euler
 //!   characteristic of a compact surface, 2 − 2g − b), <https://pi.math.cornell.edu/~hatcher/AT/AT.pdf>.
 //! - R. E. Tarjan and J. van Leeuwen, "Worst-case analysis of set union algorithms", *Journal of
-//!   the ACM* 31 (1984), 245–281, <https://doi.org/10.1145/62.2160>, for the connected sets (union
-//!   by size, path halving).
+//!   the ACM* 31 (1984), 245–281, <https://doi.org/10.1145/62.2160>, for the connected sets (path
+//!   halving).
 //!
-//! Cost: linear in the body's rows, plus the near-constant time of each set union; memory: a few
-//! words per row of each arena, reserved before use.
+//! Cost: linear in the body's rows, plus each set operation's time with path halving, logarithmic
+//! amortised at worst (Tarjan and van Leeuwen); memory: a few words per row of each arena,
+//! reserved before use.
 
 use core::iter::successors;
 
@@ -81,10 +82,10 @@ pub(crate) fn words(a: &Arenas) -> usize {
     let vertices = rows(Arena::Vertex);
     [
         rows(Arena::Shell),
-        rows(Arena::Face).saturating_mul(2),
+        rows(Arena::Face),
         rows(Arena::Loop),
         rows(Arena::Fin),
-        vertices.saturating_mul(4).saturating_add(rows(Arena::Edge)),
+        vertices.saturating_mul(3).saturating_add(rows(Arena::Edge)),
     ]
     .into_iter()
     .max()
@@ -523,11 +524,11 @@ fn partners(a: &Arenas, kind: BodyKind, sink: &mut Sink<'_, '_>) -> Result<(), S
     Ok(())
 }
 
-/// Disjoint sets of rows, by size with path halving (Tarjan and van Leeuwen), in two slices of
-/// scratch: each row's parent and each root's size.
+/// Disjoint sets of rows, with path halving (Tarjan and van Leeuwen), in one slice of scratch:
+/// each row's parent. Linking puts the second set's root under the first's; which root goes under
+/// which never changes the sets, only the trees' depth, which path halving keeps small.
 struct Sets<'s> {
     parent: &'s mut [u32],
-    size: &'s mut [u32],
 }
 
 impl<'s> Sets<'s> {
@@ -537,9 +538,7 @@ impl<'s> Sets<'s> {
         for (row, p) in (0u32..).zip(parent.iter_mut()) {
             *p = row;
         }
-        let (size, rest) = take(rest, n);
-        size.fill(1);
-        (Sets { parent, size }, rest)
+        (Sets { parent }, rest)
     }
 
     /// The parent of `row` (itself at a root).
@@ -547,38 +546,25 @@ impl<'s> Sets<'s> {
         self.parent.get(at(row)).copied().unwrap_or(row)
     }
 
-    /// The size of the set rooted at `root`.
-    fn size(&self, root: u32) -> u32 {
-        self.size.get(at(root)).copied().unwrap_or(1)
-    }
-
-    /// The set `row` is in, halving its path.
+    /// The set `row` is in, halving its path. A path is never longer than the rows, so the walk
+    /// is bounded by them.
     fn find(&mut self, mut row: u32) -> u32 {
-        loop {
+        for _ in 0..self.parent.len() {
             let up = self.up(row);
             if up == row {
-                return row;
+                break;
             }
             let grand = self.up(up);
             swap_in(self.parent, at(row), grand);
             row = grand;
         }
+        row
     }
 
-    /// Joins the sets of `x` and `y`, the smaller under the larger.
+    /// Joins the sets of `x` and `y`.
     fn join(&mut self, x: u32, y: u32) {
         let (x, y) = (self.find(x), self.find(y));
-        if x == y {
-            return;
-        }
-        let (big, small) = if self.size(x) < self.size(y) {
-            (y, x)
-        } else {
-            (x, y)
-        };
-        let joined = self.size(big).saturating_add(self.size(small));
-        swap_in(self.parent, at(small), big);
-        swap_in(self.size, at(big), joined);
+        swap_in(self.parent, at(y), x);
     }
 }
 
