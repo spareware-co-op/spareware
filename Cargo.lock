@@ -792,8 +792,14 @@ name = "geom-bench"
 version = "0.0.0"
 dependencies = [
  "divan",
+ "geom-bvh",
+ "geom-curve",
+ "geom-linalg",
+ "geom-math",
  "geom-num",
+ "geom-nurbs",
  "geom-run",
+ "geom-surface",
  "geom-test",
  "gungraun",
  "gungraun-runner",
