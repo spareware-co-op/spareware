@@ -31,8 +31,10 @@ fn bytes(hex: &str) -> Vec<u8> {
         .collect()
 }
 
+/// A budget far above what any test here spends, so a decoder that stops advancing ends in a
+/// failed test, not a hang.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(1_000_000))
 }
 
 #[test]

@@ -23,8 +23,9 @@
 //! - **Each violation is real and small.** One line changes, and the change breaks exactly the
 //!   property the gate checks: a line rustfmt would format differently; a sign the Kani harness
 //!   for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs
-//!   assert; a set bit the canonical encoder's narrowing proofs keep; the frame's edge the
-//!   file reader's range proofs accept; orient2d's exact path answering `Positive` whatever its points, which breaks the
+//!   assert; a row the arena index proofs assert; a set bit the canonical encoder's narrowing
+//!   proofs keep; the frame's edge the file reader's range proofs accept; orient2d's exact path
+//!   answering `Positive` whatever its points, which breaks the
 //!   antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz
 //!   target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target
 //!   compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own
@@ -72,7 +73,7 @@ pub struct Violation {
 }
 
 /// The planted violations, one for each gate that runs an outside tool on the kernel's code.
-pub const VIOLATIONS: [Violation; 13] = [
+pub const VIOLATIONS: [Violation; 14] = [
     Violation {
         name: "fmt",
         gate: "kernel.yml lint",
@@ -95,6 +96,14 @@ pub const VIOLATIONS: [Violation; 13] = [
         file: "projects/engines/geometry/crates/geom-num/src/sign.rs",
         anchor: "        } else if v > 0 {",
         planted: "        } else if v > 1 {",
+        caught: &["VERIFICATION:- FAILED"],
+    },
+    Violation {
+        name: "kani-topo",
+        gate: "kernel-fuzz.yml kani-topo",
+        file: "projects/engines/geometry/crates/geom-topo/src/ix.rs",
+        anchor: "        self.stored.get().wrapping_sub(1)",
+        planted: "        self.stored.get().wrapping_sub(2)",
         caught: &["VERIFICATION:- FAILED"],
     },
     Violation {

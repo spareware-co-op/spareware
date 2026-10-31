@@ -34,8 +34,10 @@ use geom_run::{Budget, WorkMeter};
 use geom_test::rng::SplitMix64;
 use geom_test::seed::{Seed, resolve};
 
+/// A budget far above what any test here spends, so a decoder that stops advancing ends in a
+/// failed test, not a hang.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(1_000_000))
 }
 
 /// A payload: one canonical item, the array `[n, "x"]`.

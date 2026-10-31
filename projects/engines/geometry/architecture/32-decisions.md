@@ -823,6 +823,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-fuzz.yml` | `libfuzzer` | `trip libfuzzer` |
 | `kernel-fuzz.yml` | `kani` | `trip kani-fuzz` |
 | `kernel-fuzz.yml` | `kani-num` | `trip kani-num` |
+| `kernel-fuzz.yml` | `kani-topo` | `trip kani-topo` |
 | `kernel-fuzz.yml` | `kani-op` | `trip kani-op` |
 | `kernel-fuzz.yml` | `kani-format` | `trip kani-format` |
 | `kernel-fuzz.yml` | `kani-limbs` | `trip kani-limbs` |

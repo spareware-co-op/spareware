@@ -34,6 +34,12 @@
 //!   ways, before anything is allocated for it when reading from a source.
 //! - **No panic.** Every refusal is a [`RecordError`] with the byte offset at fault.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7) that reading a
+//! record of any eight bytes, whatever heads the decoder hands out, gives a record that ends inside
+//! them or a refusal, never a panic; `cbor`'s header says what is proven of the heads. Real
+//! records end to end, `depends` and long payloads are tested (`tests/record_layer.rs`,
+//! `tests/fuzz_records.rs`).
+//!
 //! Method: chapter 24.2 of the kernel architecture,
 //! `projects/engines/geometry/architecture/24-file-format-exchange.md`; PNG's critical and
 //! safe-to-copy chunk rule (<https://www.w3.org/TR/png-3/#5Chunk-naming-conventions>), which 24.2's
@@ -327,5 +333,41 @@ fn bytes_item<'a>(
     match d.next(meter)? {
         Some(Item::Bytes(b)) => Ok(b),
         _ => Err(RecordError::Shape { offset, expected }),
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G112), proven by `kernel-fuzz.yml`'s `kani-format` job.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use geom_run::{Budget, WorkMeter};
+
+    use super::Record;
+    use crate::cbor::decode::{self, proofs as heads};
+
+    /// Stands in for `crc32c`: the `crc` crate's table walk, any value.
+    fn any_check(_: &[u8]) -> u32 {
+        kani::any()
+    }
+
+    /// Whatever heads the decoder hands out over any eight bytes, reading a record gives a record
+    /// that ends inside them, or a refusal, never a panic: the envelope's shape, the `depends`
+    /// order, the cap and the check. `cbor::decode::proofs` proves the decoder's heads themselves;
+    /// a real record's many heads, each a symbolic step, ran CBMC past its budget.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    #[kani::stub(decode::Decoder::next, heads::any_head)]
+    #[kani::stub(decode::Decoder::end, heads::any_end)]
+    #[kani::stub(decode::check, heads::any_check)]
+    #[kani::stub(crate::checksum::crc32c, any_check)]
+    fn decode_never_panics() {
+        let bytes: [u8; 8] = kani::any();
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        if let Ok((_, end)) = Record::decode(&bytes, &mut meter) {
+            assert!(end <= bytes.len());
+        }
     }
 }

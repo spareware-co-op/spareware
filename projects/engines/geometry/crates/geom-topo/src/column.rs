@@ -24,6 +24,13 @@
 //! - **At most `u32::MAX` rows,** the most a 32-bit index addresses: one more is
 //!   [`TopoError::Full`].
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7), for every
+//! column of two rows of any values and every row index, that `get` reads exactly the
+//! rows the column holds and nothing past them, never out of bounds, and that `set` changes only
+//! its own row, refuses a row past the end and never changes a copy made before it. Chunks of
+//! [`CHUNK_ROWS`] rows are too long for a bounded proof: the chunk boundaries, `push`, `extend`,
+//! `filled` and copying on write across chunks are tested (`tests/arena.rs`, `tests/model.rs`).
+//!
 //! Method: structure of arrays as Manifold stores its halfedges
 //! (`projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 2), cut into the fixed
 //! chunks of chapter 23.9 and shared between versions through `Arc` chunks, as report 03 advises
@@ -388,5 +395,73 @@ impl<K, V: Eq> Eq for Column<K, V> {}
 impl<K, V: fmt::Debug> fmt::Debug for Column<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+    use crate::entity::Face;
+
+    /// The rows of a proof's column: a first and a last row. The row count is fixed and the values
+    /// and indices symbolic: a symbolic count multiplies the allocations Kani must model, and
+    /// three symbolic rows took CBMC past 50 GB.
+    const ROWS: u32 = 2;
+
+    /// A column of [`ROWS`] arbitrary values, and the values.
+    fn any_column() -> (Column<Face, u8>, [u8; ROWS as usize]) {
+        let values: [u8; ROWS as usize] = kani::any();
+        let mut c = Column::new();
+        for v in values {
+            assert!(c.push(v).is_ok());
+        }
+        (c, values)
+    }
+
+    /// Every index reads its own row, and every index past the end reads nothing, never out of
+    /// bounds.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn get_is_in_bounds() {
+        let (c, values) = any_column();
+        assert_eq!(c.len(), ROWS);
+        assert_eq!(c.chunk_count(), 1);
+        let row: u32 = kani::any();
+        kani::assume(row < u32::MAX);
+        let got = c.get(Ix::new(row).unwrap());
+        if row < ROWS {
+            assert_eq!(got, values.get(row as usize));
+        } else {
+            assert!(got.is_none());
+        }
+    }
+
+    /// A write changes exactly its own row of the column written, refuses a row past the end,
+    /// and never changes a copy made before it.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn set_writes_one_row_and_never_the_copy() {
+        let (c, values) = any_column();
+        let copy = c.clone();
+        let mut edited = c;
+        let row: u32 = kani::any();
+        kani::assume(row < u32::MAX);
+        let value: u8 = kani::any();
+        let result = edited.set(Ix::new(row).unwrap(), value);
+        assert_eq!(result.is_ok(), row < ROWS);
+        for r in 0..ROWS {
+            let ix = Ix::new(r).unwrap();
+            assert_eq!(copy.get(ix), values.get(r as usize));
+            let want = if r == row {
+                value
+            } else {
+                values.get(r as usize).copied().unwrap_or(0)
+            };
+            assert_eq!(edited.get(ix), Some(&want));
+        }
     }
 }
