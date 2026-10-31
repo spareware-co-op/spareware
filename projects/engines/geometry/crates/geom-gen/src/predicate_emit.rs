@@ -704,7 +704,8 @@ const WIDTH: usize = 100;
 
 /// A paragraph of comment lines starting with `lead` (`//!` or `///`), its words wrapped so that
 /// no line passes [`WIDTH`] columns unless one word does; `first` begins the first line and
-/// `rest` every other (`- ` and two spaces for a list item).
+/// `rest` every other (`- ` and two spaces for a list item). A line never opens with `+` or `-`,
+/// which rustdoc would read as a list item: the word before goes down with it.
 fn para(out: &mut String, lead: &str, first: &str, rest: &str, text: &str) {
     let mut current = format!("{lead} {first}");
     let mut empty = true;
@@ -715,9 +716,20 @@ fn para(out: &mut String, lead: &str, first: &str, rest: &str, text: &str) {
             .saturating_add(usize::from(!empty))
             .saturating_add(word.chars().count());
         if !empty && needed > WIDTH {
-            line(out, &current);
-            current = format!("{lead} {rest}");
-            empty = true;
+            let carried = if matches!(word, "+" | "-") {
+                current.rsplit_once(' ').map(|(kept, last)| (kept.to_owned(), last.to_owned()))
+            } else {
+                None
+            };
+            let next = format!("{lead} {rest}");
+            if let Some((kept, last)) = carried {
+                line(out, &kept);
+                current = format!("{next}{last}");
+            } else {
+                line(out, &current);
+                current = next;
+                empty = true;
+            }
         }
         if !empty {
             current.push(' ');
