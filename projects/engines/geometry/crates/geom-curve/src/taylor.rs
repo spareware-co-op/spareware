@@ -176,6 +176,9 @@ pub fn same_parameter<K: ParamCurve<D>, const D: usize>(
         return Err(CurveError::Unbounded);
     }
     let n = pieces(b - a, width)?;
+    // Charged before the cuts are allocated, so the budget stops a domain too long to cut, not the
+    // allocator.
+    meter.charge(u64::try_from(n).map_err(|_| CurveError::Defect)?)?;
     let cuts = breaks((a, b), n)?;
     from_cuts(kind, degree, &cuts, meter)
 }
