@@ -664,7 +664,7 @@ mod repository {
         ("geom-topo", 3, "base math curve surface"),
         ("geom-name", 3, "base topo"),
         ("geom-intersect", 4, "base math nurbs curve surface bvh"),
-        ("geom-check", 5, "base topo intersect"),
+        ("geom-check", 5, "base curve topo intersect"),
         ("geom-poly", 6, "base math topo"),
         ("geom-bool", 6, "base poly intersect topo name check bvh"),
         ("geom-2d", 6, "base math curve topo name intersect bvh"),
@@ -1216,7 +1216,6 @@ mod repository {
             "G129 G130 G131 G132 G133 G137 G138 G139 G144 G242 G243 G244 G245 G246 G247 G248 \
              G249 G250 G324",
         ),
-        ("geom-check", "G84 G85 G102 G134 G177 G322"),
         ("geom-cloud", "G350 G379 G380 G436"),
         ("geom-combine", "G336 G337"),
         (
