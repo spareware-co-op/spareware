@@ -7,7 +7,9 @@
 //! comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine
 //! function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes
 //! it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at
-//! (u, …, u); [`Spline::point`] divides by the weight. A new knot vector over the same domain, finer
+//! (u, …, u); [`Spline::point`] divides by the weight. [`Spline::homogeneous_derivative`] is the
+//! blossom with k of its arguments the unit direction (u + 1) − u, times p!/(p − k)!: the k-th
+//! derivative of the homogeneous curve (piece G68). A new knot vector over the same domain, finer
 //! or of higher degree, gets its control points from the dual functional property: control point i
 //! of a spline of degree q is the blossom of any of its pieces in that point's support, at the q
 //! knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces'
@@ -335,6 +337,52 @@ impl Spline {
         let k = self.span(u)?;
         let args: Vec<&RBig> = (0..self.degree).map(|_| u).collect();
         self.blossom(k, &args)
+    }
+
+    /// The k-th derivative of the homogeneous curve at `u`, from the side
+    /// [`Spline::homogeneous_point`] takes: p!/(p − k)! times the blossom of u's piece with k of
+    /// its p arguments the unit direction δ = (u + 1) − u, which multi-affinity expands as the sum
+    /// over m of (−1)^(k−m)·C(k, m)·b(u^(p−k), (u + 1)^m, u^(k−m)); zero above the degree
+    /// (Ramshaw 1989, the derivatives of a polynomial from its blossom).
+    ///
+    /// # Errors
+    ///
+    /// As [`Spline::homogeneous_point`].
+    pub fn homogeneous_derivative(&self, u: &RBig, k: usize) -> Result<Vec<RBig>, ReferenceError> {
+        let piece = self.span(u)?;
+        let degree = self.degree;
+        let dim = self
+            .points
+            .first()
+            .map(Vec::len)
+            .ok_or(ReferenceError::Points)?;
+        let mut out = vec![RBig::ZERO; dim];
+        if k > degree {
+            return Ok(out);
+        }
+        let next = u + RBig::ONE;
+        let whole = |n: usize| RBig::from(dashu_int::UBig::from(n));
+        // C(k, m) for m = 0, 1, …, k, each from the last by (k − m)/(m + 1).
+        let mut choose = RBig::ONE;
+        for m in 0..=k {
+            let mut args: Vec<&RBig> = Vec::with_capacity(degree);
+            args.extend((0..degree.saturating_sub(k)).map(|_| u));
+            args.extend((0..m).map(|_| &next));
+            args.extend((0..k.saturating_sub(m)).map(|_| u));
+            let values = self.blossom(piece, &args)?;
+            let plus = k.saturating_sub(m) % 2 == 0;
+            for (o, x) in out.iter_mut().zip(&values) {
+                let term = &choose * x;
+                *o = if plus { &*o + term } else { &*o - term };
+            }
+            choose = choose * whole(k.saturating_sub(m)) / whole(m.saturating_add(1));
+        }
+        // p!/(p − k)!
+        let mut factor = RBig::ONE;
+        for i in 0..k {
+            factor *= whole(degree.saturating_sub(i));
+        }
+        Ok(out.iter().map(|x| x * &factor).collect())
     }
 
     /// The point C(u), as [`Spline::homogeneous_point`] divided by its weight for a rational curve.
