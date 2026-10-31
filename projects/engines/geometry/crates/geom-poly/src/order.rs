@@ -278,7 +278,7 @@ fn same_flap(a: &Flap, b: &Flap) -> bool {
         .iter()
         .zip(y)
         .find(|(p, _)| **p != 0)
-        .is_some_and(|(p, q)| (*p > 0) == (q > 0));
+        .is_some_and(|(p, q)| p.signum() == q.signum());
     agree != (a.reversed != b.reversed)
 }
 
