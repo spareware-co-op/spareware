@@ -28,10 +28,12 @@ name: Kernel fuzzing and proofs
 #   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-bench, geom-curve, geom-format, geom-gen,
-# geom-linalg, geom-math, geom-num, geom-nurbs, geom-op, geom-run, geom-surface, geom-test and
-# geom-topo today; geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed
-# here), geom-op for its job kani-op, geom-format for kani-format, the workspace
+# every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
+# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-num, geom-nurbs,
+# geom-op, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with engine-geometry
+# and kit-core through geom-gen's facade generators;
+# geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
+# its job kani-op, geom-format for kani-format, the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
 # ClusterFuzzLite files and this workflow.
 #
@@ -50,9 +52,11 @@ name: Kernel fuzzing and proofs
 on:
   pull_request:
     paths:
+      - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-draw/**"
@@ -62,6 +66,7 @@ on:
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
+      - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
@@ -69,6 +74,7 @@ on:
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
       - "projects/engines/geometry/crates/geom-poly/**"
+      - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-sketch/**"
       - "projects/engines/geometry/crates/geom-spatial/**"
@@ -76,6 +82,7 @@ on:
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
+      - "projects/kit/crates/kit-core/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -86,9 +93,11 @@ on:
   push:
     branches: [main]
     paths:
+      - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-draw/**"
@@ -98,6 +107,7 @@ on:
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
+      - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
@@ -105,6 +115,7 @@ on:
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
       - "projects/engines/geometry/crates/geom-poly/**"
+      - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-sketch/**"
       - "projects/engines/geometry/crates/geom-spatial/**"
@@ -112,6 +123,7 @@ on:
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
+      - "projects/kit/crates/kit-core/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -146,7 +158,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, cbor_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, cbor_fuzz, make_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
