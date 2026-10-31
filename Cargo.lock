@@ -764,6 +764,7 @@ dependencies = [
  "geom-run",
  "geom-surface",
  "geom-test",
+ "geom-topo",
  "gungraun",
  "gungraun-runner",
  "hex",

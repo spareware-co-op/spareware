@@ -511,6 +511,13 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_topo",
+        &[
+            ("column", include_str!("../../geom-topo/src/column.rs")),
+            ("builder", include_str!("../../geom-topo/src/builder.rs")),
+        ],
+    ),
+    (
         "geom_nurbs",
         &[
             ("curve", include_str!("../../geom-nurbs/src/curve.rs")),
