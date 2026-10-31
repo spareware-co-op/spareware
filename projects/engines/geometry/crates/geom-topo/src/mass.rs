@@ -76,18 +76,18 @@ impl Corner {
                 x: [p.x, p.y, p.z].map(|c| Big::from_i64(c.get())),
                 w: Big::one(),
             }),
-            Corner::Tpi(t) => {
-                let ([x, y, z], w) = t.homogeneous()?;
+            Corner::Tpi(point) => {
+                let ([first, second, third], weight) = point.homogeneous()?;
                 Ok(Homogeneous {
-                    x: [widen(&x)?, widen(&y)?, widen(&z)?],
-                    w: widen(&w)?,
+                    x: [widen(&first)?, widen(&second)?, widen(&third)?],
+                    w: widen(&weight)?,
                 })
             }
-            Corner::Lpi(l) => {
-                let ([x, y, z], w) = l.homogeneous()?;
+            Corner::Lpi(point) => {
+                let ([first, second, third], weight) = point.homogeneous()?;
                 Ok(Homogeneous {
-                    x: [widen(&x)?, widen(&y)?, widen(&z)?],
-                    w: Big::from_i128(w),
+                    x: [widen(&first)?, widen(&second)?, widen(&third)?],
+                    w: Big::from_i128(weight),
                 })
             }
         }
