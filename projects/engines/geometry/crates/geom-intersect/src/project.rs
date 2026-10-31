@@ -167,13 +167,26 @@ fn image<const D: usize>(x: &[Interval; D]) -> f64 {
 }
 
 /// Whether an interval holds nothing but positive numbers.
-fn positive(x: Interval) -> bool {
+#[must_use]
+pub fn positive(x: Interval) -> bool {
     x.lo() > 0.0
 }
 
 /// Whether an interval holds nothing but negative numbers.
-fn negative(x: Interval) -> bool {
+#[must_use]
+pub fn negative(x: Interval) -> bool {
     x.hi() < 0.0
+}
+
+/// The middle of a span, if it has a double strictly inside.
+fn halfway((a, b): (f64, f64)) -> Option<f64> {
+    let middle = a / 2.0 + b / 2.0;
+    (a < middle && middle < b).then_some(middle)
+}
+
+/// Whether a box around `gap` can reach within `upper` of the point.
+fn reaches<const D: usize>(gap: &[Interval; D], upper: f64) -> Result<bool, NumError> {
+    Ok(Interval::norm(gap)?.lo() <= upper)
 }
 
 /// A kind of one parameter, as the search reads it.
@@ -251,18 +264,39 @@ struct Line<'a> {
 }
 
 impl Line<'_> {
+    /// The side the fixed parameter is read from: inward, since a spline has nothing past its end.
+    fn inward(&self) -> Limit {
+        let (u, v) = self.surface.domain();
+        let (_, end) = if self.fixed_u { u } else { v };
+        if self.at < end {
+            Limit::FromRight
+        } else {
+            Limit::FromLeft
+        }
+    }
+
+    /// `span` of the line as a box, and the sides to read it from.
+    fn region(&self, span: (f64, f64)) -> (geom_surface::ParamBox, (Limit, Limit)) {
+        if self.fixed_u {
+            (
+                ((self.at, self.at), span),
+                (self.inward(), Limit::FromRight),
+            )
+        } else {
+            (
+                (span, (self.at, self.at)),
+                (Limit::FromRight, self.inward()),
+            )
+        }
+    }
+
     /// The partials of the surface to the second order over `span` of the line.
     fn partials(
         &self,
         span: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<Vec<[Interval; 3]>>, IntersectError> {
-        let region = if self.fixed_u {
-            ((self.at, self.at), span)
-        } else {
-            (span, (self.at, self.at))
-        };
-        let sides = (Limit::FromRight, Limit::FromRight);
+        let (region, sides) = self.region(span);
         match self.surface.partials_over(region, sides, 2, meter) {
             Ok(partials) => Ok(Some(partials)),
             Err(CurveError::Unbounded) => Ok(None),
@@ -288,12 +322,11 @@ impl Path<3> for Line<'_> {
         span: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; 3], IntersectError> {
-        let region = if self.fixed_u {
-            ((self.at, self.at), span)
-        } else {
-            (span, (self.at, self.at))
-        };
-        boxed(&self.surface.bound(region, meter)?)
+        // Not `bound`: a spline's control net is only clipped along a span with a width, so on a
+        // line its box stays as wide as the patch across it.
+        let (region, sides) = self.region(span);
+        let partials = self.surface.partials_over(region, sides, 0, meter)?;
+        partials.first().copied().ok_or(IntersectError::Internal)
     }
 
     fn derivative(
@@ -315,9 +348,9 @@ impl Path<3> for Line<'_> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<([Interval; 3], [Interval; 3]), IntersectError> {
         let (u, v, sides) = if self.fixed_u {
-            (self.at, t, (Limit::FromRight, side))
+            (self.at, t, (self.inward(), side))
         } else {
-            (t, self.at, (side, Limit::FromRight))
+            (t, self.at, (side, self.inward()))
         };
         let [point, along_u, along_v] = self.surface.enclose(u, v, sides, meter)?;
         Ok((point, if self.fixed_u { along_v } else { along_u }))
@@ -373,12 +406,14 @@ fn refine<const D: usize>(
     floor: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(f64, f64), IntersectError> {
-    while image(&path.around(span, meter)?) > floor {
-        meter.charge(STEP)?;
-        let middle = span.0 / 2.0 + span.1 / 2.0;
-        if middle <= span.0 || middle >= span.1 {
-            break;
+    loop {
+        if image(&path.around(span, meter)?) <= floor {
+            return Ok(span);
         }
+        meter.charge(STEP)?;
+        let Some(middle) = halfway(span) else {
+            return Ok(span);
+        };
         let f = slope(path, p, middle, Limit::FromRight, meter)?;
         if negative(f) {
             span.0 = middle;
@@ -386,22 +421,22 @@ fn refine<const D: usize>(
             span.1 = middle;
         } else {
             // The foot is at the middle, to rounding: close in from both sides.
-            let low = span.0 / 2.0 + middle / 2.0;
-            let high = middle / 2.0 + span.1 / 2.0;
-            let below = negative(slope(path, p, low, Limit::FromRight, meter)?);
-            let above = positive(slope(path, p, high, Limit::FromRight, meter)?);
-            if below {
+            let before = span;
+            if let Some(low) = halfway((span.0, middle))
+                && negative(slope(path, p, low, Limit::FromRight, meter)?)
+            {
                 span.0 = low;
             }
-            if above {
+            if let Some(high) = halfway((middle, span.1))
+                && positive(slope(path, p, high, Limit::FromRight, meter)?)
+            {
                 span.1 = high;
             }
-            if !(below || above) {
-                break;
+            if span == before {
+                return Ok(span);
             }
         }
     }
-    Ok(span)
 }
 
 /// The search of one path: 12.4's steps 2 to 6 in one parameter.
@@ -412,9 +447,6 @@ fn search<const D: usize>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Found<D>, IntersectError> {
     let (a, b) = path.span();
-    if !(a.is_finite() && b.is_finite()) {
-        return Err(IntersectError::InvalidInput);
-    }
     let mut found = Found {
         points: Vec::new(),
         open: Vec::new(),
@@ -436,7 +468,7 @@ fn search<const D: usize>(
         meter.charge(STEP)?;
         let around = path.around(span, meter)?;
         let gap = minus(&around, p)?;
-        if Interval::norm(&gap)?.lo() > found.upper {
+        if !reaches(&gap, found.upper)? {
             continue;
         }
         let mut convex = false;
@@ -456,6 +488,7 @@ fn search<const D: usize>(
                     convex = true;
                     let left = slope(path, p, span.0, Limit::FromRight, meter)?;
                     let right = slope(path, p, span.1, Limit::FromLeft, meter)?;
+                    // No stationary point inside: without this, the floor would call it a foot.
                     if positive(left) || negative(right) {
                         continue;
                     }
@@ -469,8 +502,12 @@ fn search<const D: usize>(
                 }
             }
         }
-        let middle = span.0 / 2.0 + span.1 / 2.0;
-        if image(&around) <= floor || middle <= span.0 || middle >= span.1 {
+        let cut = if image(&around) <= floor {
+            None
+        } else {
+            halfway(span)
+        };
+        let Some(middle) = cut else {
             // Convex here means at most one stationary point, so the span's nearest is one point.
             if convex {
                 let point = nearest(path, p, span, Place::Foot, meter)?;
@@ -480,7 +517,7 @@ fn search<const D: usize>(
                 found.open.push((span, Interval::norm(&gap)?.lo()));
             }
             continue;
-        }
+        };
         let (point, _) = path.at(middle, Limit::FromRight, meter)?;
         found.upper = smaller(found.upper, Interval::norm(&minus(&point, p)?)?.hi());
         work.push((middle, span.1));
@@ -563,12 +600,13 @@ fn close<const D: usize>(
         }
     }
     for run in runs {
-        if image(&path.around(run, meter)?) > 2.0 * floor {
+        if image(&path.around(run, meter)?) <= 2.0 * floor {
+            let point = nearest(path, p, run, Place::Foot, meter)?;
+            found.upper = smaller(found.upper, point.distance.hi());
+            found.points.push(point);
+        } else {
             return Ok(Some(run));
         }
-        let point = nearest(path, p, run, Place::Foot, meter)?;
-        found.upper = smaller(found.upper, point.distance.hi());
-        found.points.push(point);
     }
     Ok(None)
 }
@@ -597,8 +635,8 @@ fn line_foot<const D: usize>(
 ///
 /// # Errors
 ///
-/// [`IntersectError::InvalidInput`] for a domain that is not finite on a kind other than a line, or
-/// a floor that is not positive; [`IntersectError::BudgetExceeded`] and
+/// [`IntersectError::InvalidInput`] for a floor that is not positive;
+/// [`IntersectError::BudgetExceeded`] and
 /// [`IntersectError::Cancelled`]; [`IntersectError::UnprovenMaths`] where a kind's bound needs one.
 pub fn project_curve<const D: usize>(
     curve: &CurveKind<D>,
@@ -610,23 +648,31 @@ pub fn project_curve<const D: usize>(
         return Err(IntersectError::InvalidInput);
     }
     if let CurveKind::Line(line) = curve {
-        let t = line_foot(&line.origin(), &line.direction(), p)?;
+        let foot = line_foot(&line.origin(), &line.direction(), p)?;
         let (a, b) = curve.domain();
-        if t.lo() >= a && t.hi() <= b {
-            let (low, _) = Path::at(curve, t.lo(), Limit::FromRight, meter)?;
-            let (high, _) = Path::at(curve, t.hi(), Limit::FromLeft, meter)?;
-            let mut point = low;
-            for (o, other) in point.iter_mut().zip(high) {
-                *o = Interval::new(smaller(o.lo(), other.lo()), larger(o.hi(), other.hi()))?;
-            }
-            let distance = Interval::norm(&minus(&point, p)?)?;
-            return Ok(Projection::Points(alloc::vec![Nearest {
-                at: [t],
-                point,
-                distance,
-                place: Place::Foot,
-            }]));
+        let (lo, hi) = (
+            smaller(larger(foot.lo(), a), b),
+            smaller(larger(foot.hi(), a), b),
+        );
+        let (low, _) = Path::at(curve, lo, Limit::FromRight, meter)?;
+        let (high, _) = Path::at(curve, hi, Limit::FromLeft, meter)?;
+        let mut point = low;
+        for (o, other) in point.iter_mut().zip(high) {
+            *o = Interval::new(smaller(o.lo(), other.lo()), larger(o.hi(), other.hi()))?;
         }
+        let distance = Interval::norm(&minus(&point, p)?)?;
+        let t = Interval::new(lo, hi)?;
+        let place = if t == foot {
+            Place::Foot
+        } else {
+            Place::Boundary
+        };
+        return Ok(Projection::Points(alloc::vec![Nearest {
+            at: [t],
+            point,
+            distance,
+            place,
+        }]));
     }
     if let CurveKind::Circle(circle) = curve {
         let (_, unit) = circle.frame().unit_vectors()?;
@@ -675,19 +721,9 @@ struct Inside {
     open: Vec<([Interval; 2], f64)>,
 }
 
-/// The sign of the Hessian of half the squared distance over a box.
-#[derive(PartialEq)]
-enum Shape {
-    /// Positive definite: at most one stationary point, a minimum.
-    Bowl,
-    /// Negative definite or a saddle: no minimum inside.
-    NoMinimum,
-    /// Not known.
-    Unknown,
-}
-
-/// The shape over a box, from its partials and the gap to the point.
-fn shape(partials: &[[Interval; 3]], gap: &[Interval; 3]) -> Result<Shape, IntersectError> {
+/// Whether the Hessian of half the squared distance is positive definite over a box: at most one
+/// stationary point, a minimum.
+fn bowl(partials: &[[Interval; 3]], gap: &[Interval; 3]) -> Result<bool, IntersectError> {
     let [_, su, sv, suu, suv, svv, ..] = partials else {
         return Err(IntersectError::Internal);
     };
@@ -695,13 +731,7 @@ fn shape(partials: &[[Interval; 3]], gap: &[Interval; 3]) -> Result<Shape, Inter
     let b = dot(su, sv)?.add(dot(suv, gap)?)?;
     let c = square(sv)?.add(dot(svv, gap)?)?;
     let det = a.mul(c)?.sub(b.square()?)?;
-    Ok(if positive(a) && positive(det) {
-        Shape::Bowl
-    } else if negative(a) || negative(c) || negative(det) {
-        Shape::NoMinimum
-    } else {
-        Shape::Unknown
-    })
+    Ok(positive(a) && positive(det))
 }
 
 /// The search of the inside of a surface: 12.4's steps 2 to 6 in two parameters.
@@ -723,7 +753,7 @@ fn search_inside(
         let ((a, b), (c, d)) = region;
         let around = boxed(&surface.bound(region, meter)?)?;
         let gap = minus(&around, p)?;
-        if Interval::norm(&gap)?.lo() > *upper {
+        if !reaches(&gap, *upper)? {
             continue;
         }
         let partials = match surface.partials_over(region, sides, 2, meter) {
@@ -731,7 +761,7 @@ fn search_inside(
             Err(CurveError::Unbounded) => None,
             Err(e) => return Err(e.into()),
         };
-        let mut bowl = false;
+        let mut settled = false;
         if let Some(partials) = &partials {
             let [_, su, sv, ..] = partials.as_slice() else {
                 return Err(IntersectError::Internal);
@@ -740,17 +770,17 @@ fn search_inside(
             if positive(fu) || negative(fu) || positive(fv) || negative(fv) {
                 continue;
             }
-            match shape(partials, &gap)? {
-                Shape::NoMinimum => continue,
-                Shape::Bowl => bowl = true,
-                Shape::Unknown => {}
-            }
+            settled = bowl(partials, &gap)?;
         }
-        let (u, v) = (a / 2.0 + b / 2.0, c / 2.0 + d / 2.0);
-        let stuck = (u <= a || u >= b) && (v <= c || v >= d);
-        if image(&around) <= floor || stuck {
+        // Splitting takes the wider side, so the sides run out of doubles together.
+        let cut = if image(&around) <= floor {
+            None
+        } else {
+            halfway((a, b)).zip(halfway((c, d)))
+        };
+        let Some((u, v)) = cut else {
             let at = [Interval::new(a, b)?, Interval::new(c, d)?];
-            if bowl {
+            if settled {
                 let distance = Interval::norm(&gap)?;
                 *upper = smaller(*upper, distance.hi());
                 inside.points.push(Nearest {
@@ -763,11 +793,11 @@ fn search_inside(
                 inside.open.push((at, Interval::norm(&gap)?.lo()));
             }
             continue;
-        }
+        };
         let [point, _, _] = surface.enclose(u, v, sides, meter)?;
         *upper = smaller(*upper, Interval::norm(&minus(&point, p)?)?.hi());
         // The wider side in parameter is split, so a box of a long thin kind stays square in use.
-        if (b - a >= d - c && u > a && u < b) || v <= c || v >= d {
+        if b - a >= d - c {
             work.push(((u, b), (c, d)));
             work.push(((a, u), (c, d)));
         } else {
@@ -878,17 +908,18 @@ pub fn project_surface(
     if let (Some(a), Some(b), Some(c), Some(d)) = (low(0), high(0), low(1), high(1)) {
         let at = [Interval::new(a, b)?, Interval::new(c, d)?];
         let point = boxed(&surface.bound(((a, b), (c, d)), meter)?)?;
-        if image(&point) > 2.0 * floor {
+        if image(&point) <= 2.0 * floor {
+            let distance = Interval::norm(&minus(&point, p)?)?;
+            upper = smaller(upper, distance.hi());
+            points.push(Nearest {
+                at,
+                point,
+                distance,
+                place: Place::Foot,
+            });
+        } else {
             return Ok(Projection::NonIsolated { enclosure: at });
         }
-        let distance = Interval::norm(&minus(&point, p)?)?;
-        upper = smaller(upper, distance.hi());
-        points.push(Nearest {
-            at,
-            point,
-            distance,
-            place: Place::Foot,
-        });
     }
     Ok(Projection::Points(settle(points, upper)?))
 }
