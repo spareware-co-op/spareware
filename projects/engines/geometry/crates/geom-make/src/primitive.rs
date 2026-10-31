@@ -340,7 +340,7 @@ fn polyhedron(ctx: &OpContext<'_>, corners: &[P3], faces: &[(Vec<usize>, Role)])
                 e
             };
             edge_faces.get_mut(e)?.push(name);
-            let sense = if a < b {
+            let sense = if a == key.0 {
                 Sense::Forward
             } else {
                 Sense::Reversed
