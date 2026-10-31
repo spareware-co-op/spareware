@@ -33,7 +33,8 @@
 //! - **A hash-checked fetch or none.**
 //!
 //! Method: chapters 28.12 and 29.15, rule (i) of decision 32.11
-//! (`projects/engines/geometry/architecture/`). A folder's digest is SHA-256 over one line per file,
+//! (`projects/engines/geometry/architecture/28-testing.md`,
+//! `projects/engines/geometry/architecture/29-sources-licences.md`). A folder's digest is SHA-256 over one line per file,
 //! `<sha256> <size> <path>\n`, as `sha256sum` lists a tree. Downloads run `curl` and `git` as
 //! programs, with their standard flags; the register adds no network code of its own.
 //!
@@ -211,18 +212,18 @@ fn is_storable(licence: &str) -> bool {
         return STORABLE.contains(&licence) || Expr::parse(licence).is_ok_and(|e| e.permissive());
     }
     // A choice is stored under its first storable branch, and a licence with AND must hold in full.
-    licence
-        .split(" OR ")
-        .any(|branch| {
-            identifiers(branch)
-                .iter()
-                .all(|one| STORABLE.contains(one) || Expr::parse(one).is_ok_and(|e| e.permissive()))
-        })
+    licence.split(" OR ").any(|branch| {
+        identifiers(branch)
+            .iter()
+            .all(|one| STORABLE.contains(one) || Expr::parse(one).is_ok_and(|e| e.permissive()))
+    })
 }
 
 /// Whether a credit may be left out: every licence of `licence` asks for none.
 fn asks_no_credit(licence: &str) -> bool {
-    identifiers(licence).iter().all(|one| NO_CREDIT.contains(one))
+    identifiers(licence)
+        .iter()
+        .all(|one| NO_CREDIT.contains(one))
 }
 
 fn is_label(text: &str) -> bool {
@@ -269,7 +270,10 @@ impl Corpus {
                 return Err(format!("{} data cannot be stored", self.licence));
             }
             if self.credit.is_none() && !asks_no_credit(&self.licence) {
-                return Err(format!("{} asks for a credit, and none is given", self.licence));
+                return Err(format!(
+                    "{} asks for a credit, and none is given",
+                    self.licence
+                ));
             }
         }
         if let Some(Fetch::Git { commit, paths, .. }) = &self.fetch {
@@ -411,7 +415,17 @@ fn download(corpus: &Corpus, into: &Path) -> Result<(), String> {
                 let text = path.to_string_lossy().into_owned();
                 program(
                     "curl",
-                    &["--fail", "--location", "--silent", "--show-error", "--retry", "3", "--output", &text, &file.url],
+                    &[
+                        "--fail",
+                        "--location",
+                        "--silent",
+                        "--show-error",
+                        "--retry",
+                        "3",
+                        "--output",
+                        &text,
+                        &file.url,
+                    ],
                     None,
                 )?;
                 let bytes = fs::read(&path).map_err(|e| format!("{text}: {e}"))?;

@@ -17,7 +17,8 @@
 //! - `digest` downloads a corpus's pinned source and prints the digest of what came, for a new or
 //!   changed entry. It writes nothing but the scratch folder.
 //!
-//! Exit codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file
+//! Guarantees: only `fetch` and `digest` write, and only under the folder given. Exit codes: 0 when
+//! everything checked holds; 1 when a check fails; 2 for a usage error or a file
 //! or command that cannot be read or run.
 //!
 //! Method: none; it parses its arguments and calls [`geom_test::corpus`], whose header carries the

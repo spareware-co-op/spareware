@@ -14,7 +14,10 @@
 //! - The fetcher takes a pinned source, refuses bytes that are not the register's and deletes them,
 //!   keeps a good cached copy and replaces a bad one, driving a local Git repository and a `file:`
 //!   URL so it needs no network.
+//!
+//! Native only: WebAssembly has no file system and no processes.
 
+#![cfg(not(target_family = "wasm"))]
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::disallowed_methods,
@@ -154,7 +157,11 @@ fn a_corpus_says_all_of_it() {
 
 #[test]
 fn nothing_non_commercial_anywhere() {
-    for licence in ["CC-BY-NC-4.0", "CC-BY-NC-SA-3.0", "LicenseRef-Non-Commercial"] {
+    for licence in [
+        "CC-BY-NC-4.0",
+        "CC-BY-NC-SA-3.0",
+        "LicenseRef-Non-Commercial",
+    ] {
         for storage in [Storage::Stored, Storage::Fetched, Storage::Rebuilt] {
             assert!(rule(entry("a", licence, storage)).contains("non-commercial"));
         }
@@ -175,7 +182,10 @@ fn storing_follows_the_licence() {
         "EDL-1.0",
         "GPL-3.0-only OR MIT",
     ] {
-        assert!(parsed(vec![entry("a", good, Storage::Stored)]).is_ok(), "{good}");
+        assert!(
+            parsed(vec![entry("a", good, Storage::Stored)]).is_ok(),
+            "{good}"
+        );
     }
     for bad in [
         "GPL-2.0-only",
@@ -184,7 +194,10 @@ fn storing_follows_the_licence() {
         "LicenseRef-Unknown",
         "LGPL-3.0-only",
     ] {
-        assert!(rule(entry("a", bad, Storage::Stored)).contains("cannot be stored"), "{bad}");
+        assert!(
+            rule(entry("a", bad, Storage::Stored)).contains("cannot be stored"),
+            "{bad}"
+        );
     }
     // Copyleft data may be fetched, never stored (32.6).
     assert!(parsed(vec![entry("a", "GPL-2.0-only", Storage::Fetched)]).is_ok());
@@ -274,10 +287,7 @@ fn tree(dir: &Path, files: &[(&str, &str)]) {
 
 #[test]
 fn a_tree_has_one_digest() {
-    let one = [
-        ("b/x".to_owned(), vec![1, 2]),
-        ("a".to_owned(), vec![3]),
-    ];
+    let one = [("b/x".to_owned(), vec![1, 2]), ("a".to_owned(), vec![3])];
     let two = [one[1].clone(), one[0].clone()];
     assert_eq!(digest_of(&one), digest_of(&two), "order does not matter");
     let mut changed = one.clone();
@@ -337,7 +347,14 @@ fn the_vendored_folder_holds_to_the_register() {
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
-        .args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "protocol.file.allow=always"])
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "protocol.file.allow=always",
+        ])
         .args(args)
         .current_dir(dir)
         .output()
@@ -348,7 +365,14 @@ fn git(dir: &Path, args: &[&str]) -> String {
 
 /// A local repository to fetch from, and its commit.
 fn repository(dir: &Path) -> String {
-    tree(dir, &[("models/a.obj", "v 1"), ("models/b/c.obj", "v 2"), ("code/x.rs", "fn x() {}")]);
+    tree(
+        dir,
+        &[
+            ("models/a.obj", "v 1"),
+            ("models/b/c.obj", "v 2"),
+            ("code/x.rs", "fn x() {}"),
+        ],
+    );
     git(dir, &["init", "--quiet", "--initial-branch=main"]);
     git(dir, &["config", "uploadpack.allowFilter", "true"]);
     git(dir, &["config", "uploadpack.allowAnySHA1InWant", "true"]);
@@ -386,7 +410,10 @@ fn a_git_source_is_fetched_by_its_commit_and_its_digest() {
     assert_eq!(fetch(&c, &cache).unwrap(), Fetched::Cached);
     fs::write(cache.join("models/models/a.obj"), "tampered").unwrap();
     assert_eq!(fetch(&c, &cache).unwrap(), Fetched::Downloaded);
-    assert_eq!(fs::read_to_string(cache.join("models/models/a.obj")).unwrap(), "v 1");
+    assert_eq!(
+        fs::read_to_string(cache.join("models/models/a.obj")).unwrap(),
+        "v 1"
+    );
     // Bytes that are not the register's are refused and left nowhere.
     c.sha256 = Some(Hash([9; 32]));
     let error = fetch(&c, &cache).unwrap_err();
