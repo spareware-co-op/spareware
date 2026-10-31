@@ -24,7 +24,6 @@
 # (chapter 27) and which neither 28.8 bar covers.
 examine_globs = ["projects/engines/geometry/crates/*/src/**/*.rs"]
 exclude_globs = [
-  "projects/engines/geometry/crates/geom-test/**",
   "projects/engines/geometry/crates/geom-fuzz/**",
   "projects/engines/geometry/crates/geom-gen/**",
   "projects/engines/geometry/crates/geom-bench/**",
@@ -36,7 +35,7 @@ exclude_globs = [
 # strength when internals are rewritten"). `--test *` selects every integration test target and
 # leaves out the unit tests in src/ (which can call private items) and the doctests. A crate with
 # code but no integration test fails the baseline, which fails the gate.
-additional_cargo_test_args = ["--test", "*"]
+additional_cargo_test_args = ["--test", "fixtures", "--test", "fixture_tool", "--test", "corpus", "--test", "oracle"]
 
 # Cargo.lock is committed and CI never resolves a different version (28.13, the toolchain guard).
 additional_cargo_args = ["--locked"]
