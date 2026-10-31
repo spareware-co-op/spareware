@@ -565,6 +565,8 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
     ("Tpi::planes", "field accessor"),
+    ("Tpi::weight", "field accessor"),
+    ("Plane::new", "four magnitude comparisons on a plane already made"),
     ("Lpi::points", "field accessor"),
     ("Lpi::plane", "field accessor"),
     ("Ssi::points", "field accessor"),
