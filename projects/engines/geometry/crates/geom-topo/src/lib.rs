@@ -68,10 +68,15 @@ pub use arenas::{Arenas, Pool};
 pub use body::{Body, BodyKind};
 pub use builder::{Builder, Euler, NewEdge, NewFace, NewVertex, Wire};
 pub use column::{CHUNK_ROWS, Column, Memory};
+// The geometry kinds a body's pools hold, for the crates above this one that read them (such as
+// geom-check's exactness record) without a direct dependency on geom-curve and geom-surface,
+// which chapter 27's crate table does not give them.
 pub use entity::{
     CurveIx, Edge, EdgeIx, Edges, Face, FaceIx, Faces, Fin, FinIx, Fins, Link, Loop, LoopIx, Loops,
     PcurveIx, PointIx, Region, RegionIx, RegionKind, Regions, Sense, Shell, ShellIx, Shells,
     SurfaceIx, Vertex, VertexIx, Vertices,
 };
 pub use error::{Refusal, TopoError};
+pub use geom_curve::CurveKind;
+pub use geom_surface::SurfaceKind;
 pub use ix::{Arena, Ix, Kind};

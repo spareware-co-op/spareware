@@ -224,9 +224,21 @@
               "kind": "corpus",
               "piece": "G43",
               "why": "ExactSum's Debug text, by which canonical.rs encodes a sum, now writes the sum's value only (its digits after a carry propagation, its special values and its lost flag, and `..` for the rest), not the raw chunks and the additions left before a propagation (chapter 28.8; Gate 1's ledger review): the 12 exact_sum digests moved, the results of add, add_slice and add_iter, the inputs of round and round_ieee, and both of merge; no result changed, and every other benchmark's digests are the same; merged after G53's 6 isolate and ball benchmarks, whose rows are kept unchanged"
+            },
+            {
+              "sha256": "a333cd51bc9ab310418e88347fcc516abf6e9822dda90aa44ed998df9b1bf96b",
+              "kind": "corpus",
+              "piece": "G70",
+              "why": "26 new count benchmarks on the hot paths of phase 2's code pieces (decision 32.44): geom-math 7, geom-curve 5, geom-surface 5, geom-nurbs 3, geom-linalg 2, geom-bvh 2, geom-num 2; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G105",
+              "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
             }
           ],
-          "sha256": "a333cd51bc9ab310418e88347fcc516abf6e9822dda90aa44ed998df9b1bf96b"
+          "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812"
         },
         {
           "id": "geom-nurbs/operations",
@@ -504,6 +516,26 @@
             "function": "every_exhibit_opens_and_replays_on_this_target"
           },
           "sha256": "209b85c07bf9e41d6a4255b8a09d85d82a9ad314b24ab67afcb5778d7a06424d"
+        },
+        {
+          "id": "geom-format/cache-keys",
+          "what": "geom-format's cache keys and content IDs (piece G105): keys with a path and name-free keys of two editions at final and preview precision; the content and geometry IDs of geom-topo's wall, of a body of 9,000 faces and of a wall named by a run; the content IDs of a chain of eight versions of the 9,000 faces; and a name-free wall restamped: its names' IDs and its records, in the encoding of tests/cache_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "cache_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "6b400b80063ad59bfa4d6ea59a194596b2613a4854db06ad4ef1ad1aeb597cae"
+        },
+        {
+          "id": "geom-format/body-records",
+          "what": "geom-format's body records (piece G94): the records of geom-topo's wall, of a body of 9,000 faces and of that body with 90 faces moved to another surface, each read back and written again, and a cached offset curve, a reversed transition part and a cached offset cylinder, each read back (refitting the caches) and written again, in the encoding of tests/body_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "body_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "24ff775319022741d62b771ab3c5e33beba0ff2da29bb39b005f30778c7c73e1"
         }
       ]
     }

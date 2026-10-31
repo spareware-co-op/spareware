@@ -38,6 +38,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
+use crate::cbor::{EncodeError, Encoder};
+
 /// The longest step label, in bytes.
 pub const STEP_MAX: usize = 64;
 
@@ -217,6 +219,29 @@ impl OpPath {
     #[must_use]
     pub fn item(&self, key: [u8; 16]) -> OpPath {
         self.child(Label::Key(key))
+    }
+
+    /// Writes the path in the canonical encoding (20.1): an array of its `OpId`'s 16 bytes, then
+    /// each label, a step as text and a key as its 16 bytes. Names and cache keys (23.8) both
+    /// write a path this way, so a path has one encoding.
+    ///
+    /// # Errors
+    ///
+    /// [`EncodeError`] as the encoder gives it.
+    pub fn encode(&self, e: &mut Encoder) -> Result<(), EncodeError> {
+        let len = u64::try_from(self.labels.len())
+            .ok()
+            .and_then(|n| n.checked_add(1))
+            .ok_or(EncodeError::TooLong)?;
+        e.array(len)?;
+        e.bytes(&self.op.to_bytes())?;
+        for label in &self.labels {
+            match label {
+                Label::Step(step) => e.text(step)?,
+                Label::Key(key) => e.bytes(key)?,
+            }
+        }
+        Ok(())
     }
 
     /// Whether `other` is this path or lies inside it: the same operation, and this path's labels

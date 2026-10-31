@@ -16,6 +16,10 @@ geom-run = { path = "../geom-run" }
 # The operation contract, for the history-law kit (src/history.rs, piece G88): the kit checks
 # histories through geom-op's own checker, so every operation's tests use the same laws.
 geom-op = { path = "../geom-op" }
+# What the fixture runner replays (pieces G97, G101): the operations, and the types of their inputs.
+geom-make = { path = "../geom-make" }
+geom-math = { path = "../geom-math" }
+geom-topo = { path = "../geom-topo" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
 # Cargo's metadata in its typed model, and the command that asks for it, so the dependency rule
@@ -109,7 +113,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.

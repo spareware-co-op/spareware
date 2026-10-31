@@ -162,6 +162,30 @@ impl<K, V> Column<K, V> {
         self.chunks.iter().map(|chunk| chunk.as_slice())
     }
 
+    /// Takes from `other` each chunk at the same place that `same` says holds this column's rows,
+    /// given the place and both chunks: the rows stay as they are and the two columns share the
+    /// chunk (23.9).
+    pub(crate) fn share_with(&mut self, other: &Self, same: impl Fn(usize, &[V], &[V]) -> bool) {
+        for (place, (mine, theirs)) in self.chunks.iter_mut().zip(&other.chunks).enumerate() {
+            if same(place, mine, theirs) {
+                *mine = Arc::clone(theirs);
+            }
+        }
+    }
+
+    /// Whether chunk `chunk` of this column is the very chunk `other` holds there: then their rows
+    /// are equal without reading them, and a new version of a body need not hash it again (23.8).
+    /// `false` for a chunk either column lacks. A hint of equality only: equal rows in two chunks
+    /// answer `false`. This is the kernel's one use of an address: it answers for clones of one
+    /// chunk whatever the addresses are, and orders nothing.
+    #[must_use]
+    pub fn shares_chunk(&self, other: &Self, chunk: usize) -> bool {
+        match (self.chunks.get(chunk), other.chunks.get(chunk)) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+
     /// What the column holds in memory; see [`Memory`]. A measurement only: which chunks are
     /// shared depends on which other versions are alive, never on the column's values.
     #[must_use]
@@ -288,10 +312,10 @@ impl<K: Kind, V: Clone> Column<K, V> {
     /// [`TopoError::Full`] if the rows would pass `u32::MAX`, before anything is added;
     /// [`TopoError::OutOfMemory`] if an allocation is refused, after which the column holds the
     /// rows added before the refusal.
-    pub fn extend<I>(&mut self, values: I) -> Result<(), TopoError>
+    pub fn extend<I, J>(&mut self, values: I) -> Result<(), TopoError>
     where
-        I: IntoIterator<Item = V>,
-        I::IntoIter: ExactSizeIterator,
+        I: IntoIterator<Item = V, IntoIter = J>,
+        J: ExactSizeIterator<Item = V>,
     {
         let mut values = values.into_iter();
         let mut left = values.len();
