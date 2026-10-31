@@ -36,6 +36,16 @@
 //!   faces or a face's loops ([`Builder::publish_named`] rebuilds them from the owner links), only
 //!   each loop's and each edge's first fin.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7), with its
+//! overflow, bounds and panic checks on, these sequences from a lone wire, every argument a
+//! constant: MEV then KEV, MEF then KEF, MEF from a fin to itself, KEMR then MEKR, MFKRH then KFMRH
+//! and a wire's removal each keep every rule above and Euler's formula, and three refusals change
+//! nothing.
+//! A symbolic fin took CBMC past 12 GB, so these are bounded in their arguments as well as their
+//! length; the geometry pools, which no operator reads, are stood in for. That the operators keep
+//! the rules on every body is Verus's proof on a model (`verus/euler.rs`, piece G111), and
+//! `tests/euler_model.rs`'s 100,000 random steps tie the model to this code.
+//!
 //! Method: Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and their
 //! inverses; "GWB: a solid modeler with Euler operators", IEEE Computer Graphics and Applications
 //! 2(7), 17-31, 1982, <https://doi.org/10.1109/MCG.1982.1674396>), with fins as half-edges. A fin
@@ -1059,7 +1069,10 @@ mod proofs {
             let l: LoopIx = Ix::new(row).unwrap();
             let first = e.loop_(l).unwrap().first_fin.unwrap();
             let ring = e.segment(first, first);
-            assert!(ring.iter().all(|&f| e.fin(f).is_ok_and(|fin| fin.loop_ == l)));
+            assert!(
+                ring.iter()
+                    .all(|&f| e.fin(f).is_ok_and(|fin| fin.loop_ == l))
+            );
             let mut fins = 0;
             for f in 0..rows {
                 let x: FinIx = Ix::new(f).unwrap();
@@ -1222,10 +1235,12 @@ mod proofs {
     fn refusals_change_nothing() {
         let mut stock = Stock::new();
         let mut e = wire(&mut stock);
-        let before = e.clone();
+        let rows = [e.fin(fin(0)).unwrap(), e.fin(fin(1)).unwrap()];
         assert!(e.kev(Ix::new(0).unwrap()).is_err());
         assert!(e.kef(fin(0)).is_err());
         assert!(e.kemr(fin(0)).is_err());
-        assert!(e == before);
+        assert!([e.fin(fin(0)).unwrap(), e.fin(fin(1)).unwrap()] == rows);
+        assert!(e.arenas.fins.len() == 2 && e.arenas.loops.len() == 1);
+        assert_rules(&e, 0, 2);
     }
 }
