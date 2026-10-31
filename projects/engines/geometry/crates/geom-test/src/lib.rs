@@ -58,6 +58,10 @@
 //! - [`corpus`]: the corpus register of 28.12 (G114): every outside corpus with its source, version,
 //!   SHA-256, licence and whether we may store it, the licence rules of 29.15 and 32.11, and the
 //!   hash-checked fetcher. The binary `corpus` lists, checks and fetches.
+//! - [`oracle`]: differential testing against outside oracles (28.10; G113): the catalogue, the
+//!   exact-input writer, exact and bounded comparisons, signatures and the four-outcome triage, and
+//!   the first oracle, geomdl, on NURBS. The binary `oracle` writes the jobs and judges the answers;
+//!   every harness lives in the oracle repository.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -193,8 +197,8 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
-//! - `geom-nurbs` (Apache-2.0, ours), a development dependency (G57): the curves
-//!   `tests/nurbs_reference.rs` compares with the reference.
+//! - `geom-nurbs` (Apache-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
+//!   reference, and `oracle::geomdl` (G113) with the first outside oracle.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), dependencies (G97): a fixture's operation log is
 //!   a standalone native file, and the meter its readers take.
 //! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
@@ -243,6 +247,7 @@ pub mod map;
 pub mod miri;
 pub mod mutants;
 pub mod nurbs_reference;
+pub mod oracle;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;
