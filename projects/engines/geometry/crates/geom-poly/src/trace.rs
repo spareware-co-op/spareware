@@ -299,15 +299,17 @@ fn exit(p: &Moved, q: &Moved, faces: &[[Moved; 2]; 3]) -> Result<(usize, usize),
     let mut first: Option<(usize, usize)> = None;
     for (axis, row) in faces.iter().enumerate() {
         for (end, face) in row.iter().enumerate() {
-            if normals_det(&p.plane, &q.plane, &face.plane)? != Sign::Negative {
-                continue;
-            }
-            let earlier = match first.and_then(|(a, e)| faces.get(a)?.get(e)) {
-                Some(held) => read(p, q, held, face)? != Sign::Positive,
-                None => true,
-            };
-            if earlier {
-                first = Some((axis, end));
+            match normals_det(&p.plane, &q.plane, &face.plane)? {
+                Sign::Negative => {
+                    let earlier = match first.and_then(|(a, e)| faces.get(a)?.get(e)) {
+                        Some(held) => read(p, q, held, face)? != Sign::Positive,
+                        None => true,
+                    };
+                    if earlier {
+                        first = Some((axis, end));
+                    }
+                }
+                Sign::Positive | Sign::Zero => {}
             }
         }
     }

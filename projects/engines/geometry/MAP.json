@@ -1243,13 +1243,13 @@
           "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
           "kinds": [
             {
-              "doc": "The numbers layer refused.",
-              "name": "Num",
+              "doc": "The merge refused.",
+              "name": "Merge",
               "shape": "tuple"
             },
             {
-              "doc": "A trace failed.",
-              "name": "Trace",
+              "doc": "The numbers layer refused.",
+              "name": "Num",
               "shape": "tuple"
             },
             {
@@ -1258,23 +1258,8 @@
               "shape": "tuple"
             },
             {
-              "doc": "The meter stopped the run.",
-              "name": "Stopped",
-              "shape": "tuple"
-            },
-            {
-              "doc": "Two pieces of one sheet overlap.",
-              "name": "Overlap",
-              "shape": "unit"
-            },
-            {
-              "doc": "A stretch of boundary has no partner across it: the pieces do not close.",
-              "name": "Open",
-              "shape": "unit"
-            },
-            {
-              "doc": "A shell faces inward with no shell around it.",
-              "name": "Inside",
+              "doc": "A row past the end of a list: a defect, reported instead of a wrong body.",
+              "name": "Broken",
               "shape": "unit"
             }
           ],
@@ -1300,25 +1285,22 @@
       "layer": "6",
       "modules": [
         {
-          "cost": "O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the meter one unit per side of a piece, per fin and per shell.",
-          "does": "[`select`] reads a test over classified pieces and turns each kept piece to face out of the result. [`rebuild`] merges those pieces into maximal faces, finds the edges between the faces as maximal runs on one line, makes loops, joins faces into shells by their order around each edge, nests shells into regions, and publishes a [`Body`].",
+          "cost": "linear in what [`merge`] returns, after its cost.",
+          "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge`] make them faces, edges and shells, and writes those into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
           "guarantees": [
-            "**The same bytes however the boxes fell.** Faces, edges and vertices are numbered by exact keys that depend on the shape alone: not on the boxes, the leaf size, the threads, or the order the pieces came in (11.3; tested).",
-            "**Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by their Plücker coordinates, in at most 576 bits, and nothing is rounded but the shadows below.",
-            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' `Line`s are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
-            "**Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has no partner across it, mean the pieces are no closed boundary: [`RebuildError`]."
+            "**The same bytes however the boxes fell.** Every row comes in the order [`merge`] numbers the shape, which depends on the shape alone (11.3; tested).",
+            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
+            "**Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a [`RebuildError`]."
           ],
-          "job": "The canonical rebuild: the pieces a selection keeps, made into a body (11.3, step 5).",
+          "job": "The canonical rebuild: merged pieces published as a body (11.3, step 5).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/11-booleans.md",
-              "https://doi.org/10.1145/3528223.3530181",
-              "https://doi.org/10.1098/rstl.1865.0017",
-              "https://doi.org/10.1109/MCG.1985.276271"
+              "https://doi.org/10.1145/3528223.3530181"
             ],
-            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which goes further than EMBER's section 6, whose output keeps T-junctions (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); a line's coordinates are Plücker's, <https://doi.org/10.1098/rstl.1865.0017>; radial order at an edge is Weiler's radial edge structure, 1985, <https://doi.org/10.1109/MCG.1985.276271>."
+            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), into the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
           },
           "path": "geom_bool::rebuild",
           "provenance": [],
@@ -8322,6 +8304,45 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why pieces could not be merged.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A trace failed.",
+              "name": "Trace",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two pieces of one sheet overlap.",
+              "name": "Overlap",
+              "shape": "unit"
+            },
+            {
+              "doc": "A stretch of boundary has no partner across it: the pieces do not close.",
+              "name": "Open",
+              "shape": "unit"
+            },
+            {
+              "doc": "A shell faces inward with no shell around it.",
+              "name": "Inside",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_poly::merge",
+          "name": "MergeError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a plane could not join a table.",
           "file": "projects/engines/geometry/crates/geom-poly/src/plane.rs",
           "kinds": [
@@ -8468,6 +8489,33 @@
           "target": "lib"
         },
         {
+          "cost": "O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the meter one unit per side of a piece, per fin and per shell.",
+          "does": "[`select`] reads a test over classified pieces and turns each kept piece to face out of the result. [`merge`] merges those pieces into maximal faces, finds the edges between the faces as maximal runs on one line, makes rings, orders the fins around each edge, joins faces into shells, and says which shells are cavities of which.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+          "guarantees": [
+            "**The same numbers however the boxes fell.** Faces, edges and vertices are numbered by exact keys that depend on the shape alone: not on the boxes, the leaf size, the threads, or the order the pieces came in (11.3; tested).",
+            "**Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by their Plücker coordinates, in at most 576 bits, and nothing is rounded.",
+            "**Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has no partner across it, mean the pieces are no closed boundary: [`MergeError`].",
+            "**Each fin knows its piece.** [`Fin::piece`] is an index into the pieces given, whose [`Outward::polygon`] names where it came from, for a caller's history.",
+            "**No recursion.** Disjoint sets and rings are walked in loops (principle 13)."
+          ],
+          "job": "The maximal-face merge: the pieces a selection keeps, as faces, edges, rings and shells (11.3, step 5), shared by `geom-bool` and `geom-mesh` (19.5, 27).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181",
+              "https://doi.org/10.1098/rstl.1865.0017",
+              "https://doi.org/10.1109/MCG.1985.276271"
+            ],
+            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which goes further than EMBER's section 6, whose output keeps T-junctions (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); a line's coordinates are Plücker's, <https://doi.org/10.1098/rstl.1865.0017>; radial order at an edge is Weiler's radial edge structure, 1985, <https://doi.org/10.1109/MCG.1985.276271>."
+          },
+          "path": "geom_poly::merge",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant and no allocation. [`along`] is two three-plane determinants and one classify; the others are at most three determinants or seven cross products of normals.",
           "does": "a [`Line`] is where two planes meet. [`along`] orders two points of a line, each the meeting of the line with a third plane. [`same_point`] says whether two three-plane points are one point: 11.3's test, that one lies on all three planes of the other. Within a plane, a [`Ray`] runs from a vertex along the line where that plane meets another, and [`turn`] and [`around`] order rays. About a line, a [`Flap`] is a half-plane bounded by the line, and [`turn_about`] and [`about`] order flaps.",
           "family": [],
@@ -8593,7 +8641,7 @@
       "provenance": [],
       "sections": "6.2, 11.3, 11.12, 11.14, 13.2, 19.5 and 23.2; open questions OQ-11.2 and OQ-19.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); faces into convex pieces ([`convex`]) built (G125); clipping and local cuts ([`cut`]) built (G126); winding vectors ([`winding`]) and tracing ([`trace`]) built (G127); the subdivision ([`subdivide`]) built (G128); the rest by pieces G124, G142.",
+      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); faces into convex pieces ([`convex`]) built (G125); clipping and local cuts ([`cut`]) built (G126); winding vectors ([`winding`]) and tracing ([`trace`]) built (G127); the subdivision ([`subdivide`]) built (G128); the maximal-face merge ([`merge`]) built (G129); the rest by pieces G124, G142.",
       "summary": "Spare Kit geometry kernel: exact plane-based polyhedra."
     },
     {

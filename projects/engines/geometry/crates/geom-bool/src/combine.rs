@@ -22,11 +22,13 @@
 use alloc::vec::Vec;
 
 use geom_check::{Level, check};
+use geom_num::ladder::FIT;
 use geom_num::{Exactness, NumError};
 use geom_op::{
     Charge, Class, CombineDetail, DiagnosticSpec, ErrorKind, ErrorSpec, Family, Field, OpContext,
     OpError, OpOutput, OpSchema, RoleSpec, RunDetail, Unit,
 };
+use geom_poly::merge::{Merge, MergeError, select};
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::TraceError;
 use geom_poly::winding::Winding;
@@ -34,7 +36,7 @@ use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
 use geom_topo::Body;
 
 use crate::operand::{BooleanInput, Operand, OperandKey, PrepareError, Selection, prepare};
-use crate::rebuild::{Merge, RebuildError, rebuild, select};
+use crate::rebuild::{RebuildError, rebuild};
 
 /// The arrangement's phase.
 const ARRANGEMENT: Phase = Phase::new("arrangement");
@@ -136,13 +138,17 @@ fn prepared(ctx: &OpContext<'_>, error: PrepareError, meter: &WorkMeter<'_>) -> 
 }
 
 /// `error` as the operation's.
-fn rebuilt(ctx: &OpContext<'_>, error: RebuildError, meter: &WorkMeter<'_>) -> OpError {
+fn rebuilt(ctx: &OpContext<'_>, error: RebuildError, meter: &mut WorkMeter<'_>) -> OpError {
     match error {
-        RebuildError::Stopped(stopped) | RebuildError::Trace(TraceError::Stopped(stopped)) => {
-            ctx.stopped(meter, stopped, REBUILD)
-        }
-        RebuildError::Inside => fail(ctx, CombineDetail::UnboundedResult),
-        RebuildError::Num(e) => numbers(ctx, e),
+        RebuildError::Merge(
+            MergeError::Stopped(stopped) | MergeError::Trace(TraceError::Stopped(stopped)),
+        ) => ctx.stopped(meter, stopped, REBUILD),
+        RebuildError::Merge(MergeError::Inside) => fail(ctx, CombineDetail::UnboundedResult),
+        RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) => numbers(ctx, e),
+        RebuildError::Topo(e) => match e.stop(meter) {
+            Some(stopped) => ctx.stopped(meter, stopped, REBUILD),
+            None => fail(ctx, CombineDetail::ResultInvalid),
+        },
         _ => fail(ctx, CombineDetail::ResultInvalid),
     }
 }
@@ -159,6 +165,21 @@ fn arranged(ctx: &OpContext<'_>, error: RunError<TraceError>, meter: &WorkMeter<
         RunError::Cancelled => OpError::new(ctx.path().clone(), RunDetail::Cancelled),
         RunError::OutOfMemory => OpError::new(ctx.path().clone(), RunDetail::OutOfMemory),
         RunError::Internal(what) => OpError::new(ctx.path().clone(), RunDetail::Internal { what }),
+    }
+}
+
+/// Whether the caller takes a result of class `would`: anything Exact, and otherwise a class at
+/// least as loose and a bound at least its own, ε_fit unless the caller said (11.1).
+fn accepted(would: Exactness, accept: Option<Exactness>) -> bool {
+    match (would.bound(), accept) {
+        (None, _) => true,
+        (Some((_, step)), None) => would.within(FIT, step).is_ok(),
+        (Some(_), Some(accept)) => {
+            accept.rank() >= would.rank()
+                && accept
+                    .bound()
+                    .is_some_and(|(most, step)| would.within(most, step).is_ok())
+        }
     }
 }
 
@@ -181,6 +202,9 @@ pub fn combine(
             .combine(operand.exactness)
             .ok_or_else(|| numbers(ctx, NumError::BudgetExceeded))?;
     }
+    if !accepted(exactness, input.accept) {
+        return Err(fail(ctx, CombineDetail::NotAccepted { would: exactness }));
+    }
     let cell = around(&ready.polygons).map_err(|e| numbers(ctx, e))?;
     let classified = arrange(
         exec,
@@ -194,9 +218,9 @@ pub fn combine(
     .map_err(|e| arranged(ctx, e, &meter))?;
     let mut bodies = Vec::with_capacity(ready.tests.len());
     for test in &ready.tests {
-        let kept = select(test, &classified);
+        let kept = select(test, &classified).map_err(|e| numbers(ctx, e))?;
         let body = rebuild(&kept, &ready.carriers, input.merge, &mut meter)
-            .map_err(|e| rebuilt(ctx, e, &meter))?;
+            .map_err(|e| rebuilt(ctx, e, &mut meter))?;
         let report = check(&body, exactness, Level::Cheap, &mut meter)
             .map_err(|stopped: Stopped| ctx.stopped(&meter, stopped, REBUILD))?;
         if !report.passed() {
@@ -218,6 +242,7 @@ fn one(
         operands: operands.to_vec(),
         select: alloc::vec![selection],
         merge: Merge::RemoveRedundant,
+        accept: None,
     };
     let OpOutput {
         mut result,

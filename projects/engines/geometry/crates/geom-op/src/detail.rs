@@ -103,6 +103,7 @@ impl fmt::Display for OpErrorDetail {
             OpErrorDetail::Num(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Make(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Query(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Combine(detail) => fmt::Display::fmt(detail, f),
         }
     }
 }
@@ -580,7 +581,7 @@ impl fmt::Display for QueryDetail {
 impl core::error::Error for QueryDetail {}
 
 /// A failure of the Combine family (chapter 11.11).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombineDetail {
     /// Two operands share a key.
     DuplicateOperand,
@@ -594,6 +595,11 @@ pub enum CombineDetail {
     NotPlaneBased,
     /// The selection would include the outside.
     UnboundedResult,
+    /// The result would be less exact than the caller accepts.
+    NotAccepted {
+        /// The class and bound it would have.
+        would: Exactness,
+    },
     /// A rebuilt body failed the checker: a defect, reported instead of a wrong body.
     ResultInvalid,
 }
@@ -609,6 +615,7 @@ impl CombineDetail {
             | CombineDetail::InvalidOperand
             | CombineDetail::UnboundedResult => ErrorKind::InvalidInput,
             CombineDetail::NotPlaneBased => ErrorKind::Unsupported,
+            CombineDetail::NotAccepted { .. } => ErrorKind::ExactnessNotAccepted,
             CombineDetail::ResultInvalid => ErrorKind::Internal,
         }
     }
@@ -625,7 +632,34 @@ impl CombineDetail {
                 vec![change("select")]
             }
             CombineDetail::NotPlaneBased => vec![Remedy::AwaitPiece { piece: "G242" }],
+            CombineDetail::NotAccepted { would } => vec![Remedy::Accept { class: *would }],
             CombineDetail::ResultInvalid => Vec::new(),
+        }
+    }
+}
+
+impl fmt::Display for CombineDetail {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CombineDetail::DuplicateOperand => f.write_str("two operands share a key"),
+            CombineDetail::UnknownOperand => f.write_str("a selection names no solid operand"),
+            CombineDetail::BadSelection => {
+                f.write_str("a test on winding numbers leaves no answer")
+            }
+            CombineDetail::InvalidOperand => f.write_str("an operand cannot enter the arrangement"),
+            CombineDetail::NotPlaneBased => {
+                f.write_str("an operand has a face the flat path cannot take")
+            }
+            CombineDetail::UnboundedResult => {
+                f.write_str("the selection would include the outside")
+            }
+            CombineDetail::NotAccepted { would } => {
+                write!(
+                    f,
+                    "the result would be {would:?}, which the caller does not accept"
+                )
+            }
+            CombineDetail::ResultInvalid => f.write_str("a rebuilt body failed the checker"),
         }
     }
 }

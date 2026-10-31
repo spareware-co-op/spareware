@@ -36,6 +36,7 @@ use geom_num::math::round_ties_even;
 use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Sign};
 use geom_poly::convex::{ConvexError, Piece, Side, convex_pieces};
+use geom_poly::merge::Merge;
 use geom_poly::order::{Line, along, normals_det};
 use geom_poly::plane::canonical;
 use geom_poly::trace::Polygon;
@@ -43,7 +44,7 @@ use geom_poly::winding::{Entry, Term as Inner, WindingError, WindingTest};
 use geom_run::{Stopped, WorkMeter};
 use geom_topo::{Arenas, Body, Face, Fin, Ix, PointKind, Sense, SurfaceKind, Vertex};
 
-use crate::rebuild::{Carrier, Merge};
+use crate::rebuild::Carrier;
 
 /// An operand's stable key: an element's permanent ID, or an `OpPath`'s bytes (11.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -112,6 +113,8 @@ pub struct BooleanInput<'b> {
     pub select: Vec<Selection>,
     /// What merges.
     pub merge: Merge,
+    /// The least exact result taken; `None` takes anything within ε_fit (11.1).
+    pub accept: Option<Exactness>,
 }
 
 /// Why a boolean's input was refused.
@@ -280,8 +283,7 @@ fn stood_on(
             )?;
             Ok(Some(Plane::through(p, q, above)?))
         }
-        (Some(PointKind::Meet(planes)), Some(other))
-        | (Some(other), Some(PointKind::Meet(planes))) => {
+        (Some(PointKind::Meet(planes)), Some(other)) | (Some(other), Some(PointKind::Meet(planes))) => {
             for ix in planes {
                 let Some(plane) = a.planes.get(ix).copied() else {
                     continue;

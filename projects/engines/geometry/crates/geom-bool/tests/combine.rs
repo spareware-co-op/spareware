@@ -12,11 +12,11 @@
 
 use geom_bool::combine::{COMBINE, combine, intersect, subtract, unite};
 use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection, Term};
-use geom_bool::rebuild::Merge;
 use geom_check::{Level, check};
 use geom_make::{BoxInput, Made, cylinder, make_box, prism};
 use geom_num::{Exactness, P3, Steps};
 use geom_op::{CombineDetail, ErrorKind, OpContext, OpErrorDetail, OpId, OpPath};
+use geom_poly::merge::Merge;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_topo::Body;
 use geom_topo::query::volume;
@@ -116,6 +116,7 @@ fn one_arrangement_gives_every_selection() {
             ]),
         ],
         merge: Merge::RemoveRedundant,
+        accept: None,
     };
     let out = combine(&ctx(), &SERIAL, &input).unwrap();
     let volumes: Vec<i128> = out.result.iter().map(sixfold).collect();
@@ -202,6 +203,7 @@ fn seams_stay_and_come_back_in() {
         operands: vec![solid(1, &a), solid(2, &b)],
         select: vec![Selection::Unite],
         merge: Merge::KeepSeams,
+        accept: None,
     };
     let seamed = combine(&ctx(), &SERIAL, &input).unwrap().result.remove(0);
     checked(&seamed);
@@ -247,6 +249,7 @@ fn refusals_name_what_is_wrong() {
         operands: vec![solid(1, &a)],
         select: vec![Selection::Where(vec![Term::And])],
         merge: Merge::RemoveRedundant,
+        accept: None,
     };
     let bad = combine(&ctx(), &SERIAL, &input).unwrap_err();
     assert_eq!(bad.kind(), ErrorKind::InvalidInput);
@@ -254,6 +257,7 @@ fn refusals_name_what_is_wrong() {
         operands: vec![solid(1, &a)],
         select: vec![Selection::Where(vec![Term::Inside(key(1)), Term::Not])],
         merge: Merge::RemoveRedundant,
+        accept: None,
     };
     let unbounded = combine(&ctx(), &SERIAL, &outside).unwrap_err();
     assert_eq!(

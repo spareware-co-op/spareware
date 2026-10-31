@@ -29,7 +29,8 @@
 //!
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
 //! - [`combine`]: the boolean's entry and its schema (G131).
-//! - [`rebuild`]: the pieces a selection keeps, made into a body by canonical rules (G129).
+//! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
+//! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
 //! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the rest
 //! by pieces G132, G133, G137, G138, G139, G144, G242, G243, G244, G245, G246, G247, G248, G249,
@@ -40,5 +41,6 @@
 extern crate alloc;
 
 pub mod combine;
+pub mod half_space;
 pub mod operand;
 pub mod rebuild;
