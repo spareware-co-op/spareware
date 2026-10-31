@@ -277,7 +277,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-surface",   2, Accepted,   Elsewhere("G60"), "base math nurbs curve"),
     // 3. Topology.
     kernel("geom-topo",      3, Accepted,   Here, "base math curve surface"),
-    kernel("geom-name",      3, Accepted,   Elsewhere("G87"), "base topo"),
+    kernel("geom-name",      3, Accepted,   Here, "base topo"),
     // 4. Intersections.
     kernel("geom-intersect", 4, Accepted,   Here, "base math nurbs curve surface bvh"),
     // 5. Checker.

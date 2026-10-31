@@ -203,3 +203,33 @@ jobs:
         run: >-
           cargo test --locked --release -p geom-op --test cbor2_oracle
           -- --ignored --exact compare_with_the_answers --nocapture
+
+  zcbor:
+    name: Body records and kinds against their CDDL, with zcbor
+    runs-on: ubuntu-latest
+    # The writers build and run in a few minutes; zcbor validates each file in well under a second.
+    timeout-minutes: 30
+    env:
+      # python:3.13-slim, pinned by digest, as the cbor2 job; oracles/zcbor.sh pins zcbor 0.9.1 and
+      # its three dependencies' wheels by SHA-256.
+      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The archived body records and every kind, one file each
+        run: |
+          set -euo pipefail
+          echo "ZCBOR_DIR=$RUNNER_TEMP/zcbor" >> "$GITHUB_ENV"
+          export ZCBOR_DIR="$RUNNER_TEMP/zcbor"
+          cargo test --locked --release -p geom-format --test registry --test kinds \
+            -- --ignored --exact write_the_body_payloads write_the_kinds --nocapture
+      - name: zcbor 0.9.1, in the container
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/work:ro" -v "$ZCBOR_DIR:/cases:ro" -w /work "$PYTHON_IMAGE" \
+            bash projects/engines/geometry/crates/geom-format/oracles/zcbor.sh \
+            projects/engines/geometry/format/cddl/body.cddl /cases

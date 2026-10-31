@@ -102,6 +102,31 @@ impl<const D: usize> BulgePolyline<D> {
         BulgePolyline::with_start(vertices, bulges, widths, closed, 0.0)
     }
 
+    /// The polyline of [`BulgePolyline::new`] whose parameter starts at `start` rather than 0, as
+    /// reversing one leaves it: what a stored polyline is rebuilt from.
+    ///
+    /// # Errors
+    ///
+    /// As [`BulgePolyline::new`]; [`CurveError::NotFinite`] for a start that is not finite.
+    pub fn starting_at(
+        vertices: Vec<[f64; D]>,
+        bulges: Vec<f64>,
+        widths: Option<Vec<(f64, f64)>>,
+        closed: bool,
+        start: f64,
+    ) -> Result<BulgePolyline<D>, CurveError> {
+        if !start.is_finite() {
+            return Err(CurveError::NotFinite);
+        }
+        BulgePolyline::with_start(vertices, bulges, widths, closed, start)
+    }
+
+    /// The parameter at the first vertex.
+    #[must_use]
+    pub fn start(&self) -> f64 {
+        self.start
+    }
+
     fn with_start(
         vertices: Vec<[f64; D]>,
         bulges: Vec<f64>,

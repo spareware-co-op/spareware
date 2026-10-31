@@ -42,6 +42,7 @@
 
 extern crate alloc;
 
+pub mod body;
 pub mod cache;
 pub mod cbor;
 pub mod checksum;
@@ -49,6 +50,7 @@ pub mod chunk;
 pub mod content;
 pub mod file;
 pub mod header;
+pub mod kinds;
 pub mod range;
 pub mod record;
 pub mod registry;
