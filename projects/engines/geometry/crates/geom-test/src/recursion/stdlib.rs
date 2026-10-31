@@ -50,6 +50,9 @@ pub const LIBM: &str = include_str!("stdlib/libm.rs.txt");
 /// The model of the part of `rayon` that `geom-pool` calls.
 pub const RAYON: &str = include_str!("stdlib/rayon.rs.txt");
 
+/// The model of the part of `sha2` that `geom-op`'s hash calls.
+pub const SHA2: &str = include_str!("stdlib/sha2.rs.txt");
+
 /// Where the model of `core` is, relative to the workspace root (its text is [`CORE`]).
 pub const CORE_PATH: &str =
     "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/core.rs.txt";
@@ -62,10 +65,14 @@ pub const LIBM_PATH: &str =
 pub const RAYON_PATH: &str =
     "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/rayon.rs.txt";
 
+/// Where the model of `sha2` is, relative to the workspace root (its text is [`SHA2`]).
+pub const SHA2_PATH: &str =
+    "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/sha2.rs.txt";
+
 /// The folder of the model's files.
 pub const FOLDER: &str = "projects/engines/geometry/crates/geom-test/src/recursion/stdlib";
 
-/// The model's crates, for the loader: `core`, `libm` and `rayon`.
+/// The model's crates, for the loader: `core`, `libm`, `rayon` and `sha2`.
 #[must_use]
 pub fn sources() -> Vec<CrateSource> {
     vec![
@@ -90,6 +97,13 @@ pub fn sources() -> Vec<CrateSource> {
             root: RAYON_PATH.to_owned(),
             role: Role::Model,
         },
+        CrateSource {
+            package: "sha2".to_owned(),
+            lib: "sha2".to_owned(),
+            folder: FOLDER.to_owned(),
+            root: SHA2_PATH.to_owned(),
+            role: Role::Model,
+        },
     ]
 }
 
@@ -100,6 +114,7 @@ pub fn read_model(path: &str) -> Option<String> {
         CORE_PATH => Some(CORE.to_owned()),
         LIBM_PATH => Some(LIBM.to_owned()),
         RAYON_PATH => Some(RAYON.to_owned()),
+        SHA2_PATH => Some(SHA2.to_owned()),
         _ => None,
     }
 }

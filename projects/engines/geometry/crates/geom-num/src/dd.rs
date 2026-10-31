@@ -917,7 +917,9 @@ impl DD {
     ///    rounded to nearest, and rounding is monotone, so `t > 1/2` implies `F > 1/2` and
     ///    `t < 1/2` implies `F < 1/2`; when `t = 1/2` the sign of `t_e` decides (likewise at −1/2).
     ///    So `n + F` rounds to `n + a` with `a` = −1, 0 or +1, a tie at `F = ±1/2` going to the even
-    ///    neighbour; it was an integer exactly when `F` is 0 or ±1.
+    ///    neighbour; it was an integer exactly when `F` is 0 or ±1. `F` is never ±1 for a pair in
+    ///    the invariant: if `|hi| < 2^52` then `|lo| ≤ ulp(hi)/2 ≤ 1/4`, so `|F| ≤ 3/4`; otherwise
+    ///    `d_h = 0` and `|F| = |d_l| ≤ 1/2`. So it was an integer exactly when `t = t_e = 0`.
     /// 5. `a` is decided before anything is subtracted, because `n`, or the neighbour of `n` not
     ///    chosen, need not fit an `i128` when the result does: `hi = 3.5`, `lo = −2^−60` and
     ///    `offset = i128::MIN + 4` give `s = 4`, `F = −1/2 − 2^−60` and `n = 2^127`, which rounds
@@ -960,7 +962,7 @@ impl DD {
             -1
         };
         let value = s.checked_add(step)?.checked_sub(offset)?;
-        let exact = te == 0.0 && (t == 0.0 || t == 1.0 || t == -1.0);
+        let exact = te == 0.0 && t == 0.0;
         Some(Rounded::new(value, exact))
     }
 }

@@ -1447,6 +1447,7 @@ dependencies = [
 name = "geom-surface"
 version = "0.0.0"
 dependencies = [
+ "dashu-ratio",
  "geom-curve",
  "geom-math",
  "geom-num",
