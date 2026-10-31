@@ -173,6 +173,19 @@ impl PlaneTable {
         self.rows.is_empty()
     }
 
+    /// Room for `more` planes, so that inserting them cannot run out of memory.
+    ///
+    /// # Errors
+    ///
+    /// [`TableError::OutOfMemory`] when the allocator refuses; the table is unchanged.
+    pub fn reserve(&mut self, more: usize) -> Result<(), TableError> {
+        self.rows
+            .try_reserve(more)
+            .and(self.small.try_reserve(more))
+            .and(self.wide.try_reserve(more))
+            .map_err(|_| TableError::OutOfMemory)
+    }
+
     /// The entry of `plane`, new or already held, and which way `plane` faces along it.
     ///
     /// # Errors
@@ -188,9 +201,7 @@ impl PlaneTable {
             });
         }
         let row = row_of(self.rows.len())?;
-        self.rows
-            .try_reserve(1)
-            .map_err(|_| TableError::OutOfMemory)?;
+        self.reserve(1)?;
         let [x, y, z] = plane.n();
         let narrow = (
             i64::try_from(x),
@@ -199,16 +210,10 @@ impl PlaneTable {
             i64::try_from(plane.d()),
         );
         let stored = if let (Ok(x), Ok(y), Ok(z), Ok(d)) = narrow {
-            self.small
-                .try_reserve(1)
-                .map_err(|_| TableError::OutOfMemory)?;
             let at = row_of(self.small.len())?;
             self.small.push([x, y, z, d]);
             Stored::Small(at)
         } else {
-            self.wide
-                .try_reserve(1)
-                .map_err(|_| TableError::OutOfMemory)?;
             let at = row_of(self.wide.len())?;
             self.wide.push([x, y, z, plane.d()]);
             Stored::Wide(at)

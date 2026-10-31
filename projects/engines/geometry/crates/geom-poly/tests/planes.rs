@@ -211,6 +211,22 @@ fn a_table_holds_each_plane_once_at_its_narrowest() {
 }
 
 #[test]
+fn a_table_says_when_it_holds_something() {
+    let mut table = PlaneTable::new();
+    assert!(table.is_empty());
+    table.insert(&Plane::new([1, 0, 0], 0).unwrap()).unwrap();
+    assert!(!table.is_empty());
+}
+
+#[test]
+fn a_table_refuses_room_no_allocator_can_give() {
+    let mut table = PlaneTable::new();
+    assert_eq!(table.reserve(usize::MAX), Err(TableError::OutOfMemory));
+    assert_eq!(table.reserve(4), Ok(()));
+    assert!(table.is_empty());
+}
+
+#[test]
 fn a_row_past_the_table_is_none() {
     let mut table = PlaneTable::new();
     let a = table.insert(&at_z(0)).unwrap();
