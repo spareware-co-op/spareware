@@ -3567,12 +3567,100 @@
       "job": "The Make and Transform families of 10.2: primitives, transforms and patterns.",
       "kind": "kernel",
       "layer": "9",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "linear in the part's rows, plus publishing (a sort by name) and the checker's own cost. Recursion: none.",
+          "does": "a [`Part`] lists a solid's vertices, edges and faces, each with its geometry and the role it is named by (20.2), and each face's loops as edges and senses. [`assemble`] names every region, face, edge and vertex `Created { op, role, from }` (`geom_op::TopoName`), builds the rows (one solid region and the void outside it, one shell, a ring of fins round each edge), publishes them in name order (`geom_topo::Builder::publish_named`), runs the checker on the result as the operation's postcondition (8.3) and records each entity's origin. [`Made`] is what comes back: the body and its history.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/build.rs",
+          "guarantees": [
+            "**Names, not positions.** Every index of the body follows its entities' names, and every name comes from the operation's path, a role and the names it is relative to: never from the order the rows were written in (8.2, 20.2).",
+            "**Checked before returned.** A body that does not pass the checker at the build's level is never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.",
+            "**Charged by what it builds.** One meter unit per row built, before it is built (23.10), and the publishing and the checker charge their own rows to the same meter.",
+            "**Transactional.** Nothing the caller holds is changed; a failure returns no body."
+          ],
+          "job": "Assembling what a Make or Transform operation returns: a body's rows, each entity named by its role, published in name order, checked, and the history that says where each entity came from.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 8's arenas and name order (8.2), chapter 20's names by role and history records (20.2, 20.3), and the checker's postcondition (8.3) (`projects/engines/geometry/architecture/08-topology.md`, `projects/engines/geometry/architecture/20-naming-history.md`)."
+          },
+          "path": "geom_make::build",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one transform of the body per instance. Recursion: none.",
+          "does": "[`pattern`] runs one copy per [`Instance`], in key order: the body moved by the instance's transform as the Transform family moves it, each entity named `Created { op: the operation's path with the instance's key, role: copy(source), from: source }` and recorded as generated from its source with that role. It returns one [`Made`] per instance, keyed as given, and the least exact of their records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
+          "guarantees": [
+            "**One answer per key, whatever the order given.** Instances run in key order; two with one key are refused ([`MakeDetail::RepeatedKey`]), and so is an empty pattern.",
+            "**Copies, not the body.** Every copy's entities have names of their own, distinct across instances (each instance's path differs), and trace to the body's entities as copies.",
+            "**Each copy checked.** Every copy passes the checker before the pattern returns; one failure fails the whole pattern, which returns nothing."
+          ],
+          "job": "Patterns: copies of one body, each by its own transform and keyed by the caller, each copy's entities named as copies of the body's (8.4's `Copied`, which a pattern's schema declares).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 10.1's batch rule (an item's path is the operation's path and its key) and chapter 8.4's `Copied` event (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_make::pattern",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per primitive, linear in a prism's corners (quadratic in them for its convexity and edge lookups, at most a few hundred corners in practice). Recursion: none.",
+          "does": "each function checks its input, writes the solid as a [`Part`] and hands it to [`assemble`], which names, publishes, checks and records it. Lengths are whole grid steps of the frame (`geom_num::Steps`) and every vertex is a grid point; round shapes stand on the z axis through the point given, and other orientations come from the Transform family.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/primitive.rs",
+          "guarantees": [
+            "**Outward and counter-clockwise.** Every face's surface normal, with its sense, points out of the solid, and every loop runs counter-clockwise seen from outside.",
+            "**Exact where it can be.** A box and a prism are recorded Exact: their planes are given by integers through grid corners. Round shapes are recorded Certified with a bound of one step of the step given, as 10.2 asks: their circles' points come from certified sines and cosines.",
+            "**Typed refusals.** A zero length, a base that is not strictly convex or not level, and a torus that would not be a ring are input errors that name the input and the nearest value that works; a corner past the grid's range is the numbers layer's `OutOfRange`."
+          ],
+          "job": "The primitives of chapter 10.2's Make family: box, prism, cylinder, cone, sphere and torus, each the shape 10.2's \"Primitive topology\" fixes, its faces, edges and vertices named by role.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md"
+            ],
+            "text": "chapter 10.2's primitives and their topology, accepted with piece G85 (`projects/engines/geometry/architecture/10-operations.md`), on chapter 7's analytic surfaces (`geom_surface::analytic`)."
+          },
+          "path": "geom_make::primitive",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the body's rows, one meter unit each, plus each curve's and surface's transform and the checker. Recursion: none.",
+          "does": "each function turns its input into a `geom_math::TypedTransform` and hands it to [`moved_copy`], which copies every row of the body with its points, curves, surfaces and face boxes moved, publishes the copy under the same names, checks it and records each entity as modified from itself (20.2: a one-to-one change keeps the name). [`Motion`] says which of the four it was, for the attribute event `Transformed` (8.4).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/transform.rs",
+          "guarantees": [],
+          "job": "The Transform family of chapter 10.2: move, rotate, mirror and scale a body, its entities keeping their names, its geometry changing kind only as chapter 7's typed transforms say.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "chapter 7's typed transforms and their kind changes (`projects/engines/geometry/architecture/07-geometry-types.md`), applied as `geom-math`, `geom-curve` and `geom-surface` define them; chapter 20.2's naming rule for one-to-one changes."
+          },
+          "path": "geom_make::transform",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-make",
       "provenance": [],
       "sections": "7, 8.4, 10.2 and 30.5, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G101.",
+      "status": "built by piece G101: every primitive and transform of 10.2 with its schema in the facade; scales that are not uniform on curved bodies wait for G177's checker.",
       "summary": "Spare Kit geometry kernel: primitives and transforms."
     },
     {
@@ -6927,6 +7015,12 @@
               "doc": "A failure of the numbers layer, wrapped by meaning.",
               "name": "Num",
               "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A failure of the Make and Transform families: primitives, transforms and patterns (`geom-make`, piece G101).",
+              "name": "Make",
+              "shape": "tuple"
             }
           ],
           "module": "geom_op::detail",
@@ -7045,6 +7139,93 @@
           ],
           "module": "geom_op::detail",
           "name": "NumDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "A failure of the Make and Transform families (`geom-make`, piece G101): an input the shape cannot be made from, a transform the result could not keep exact or certified, or a defect found before anything was returned.",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "Degenerate",
+              "doc": "A length the shape needs to be positive is zero: an extent, a radius or a height, the input `input` names.",
+              "name": "ZeroLength",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base has fewer than three corners.",
+              "name": "TooFewCorners",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base corners do not all lie in one plane perpendicular to the z axis.",
+              "name": "BaseNotLevel",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base is not a strictly convex polygon running counter-clockwise seen from above: three corners in a row on one line, a turn the other way, or corners repeated.",
+              "name": "BaseNotConvex",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A torus's minor radius is not below its major radius: it would be a horn or spindle torus, not a primitive (chapter 10.2).",
+              "name": "MinorNotBelowMajor",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "ExactnessNotAccepted",
+              "doc": "A transform would leave the body less exact than the class the caller accepted.",
+              "name": "NotAccepted",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A transform would turn a curved face or edge into a kind the checker cannot certify yet: a scale that is not uniform makes cylinders, cones, spheres and tori affine surfaces and circles ellipses.",
+              "name": "KindNotCertified",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A transform that rounds corners or moves curved geometry by a certified deviation gave a body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted curved face meets its caps where only exact data is followed today.",
+              "name": "NotCertifiedYet",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "The body given carries no names: it was not published in name order, so its entities cannot keep their names through the transform.",
+              "name": "BodyNotNamed",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A pattern has no instance.",
+              "name": "EmptyPattern",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "Two instances of a pattern have one key.",
+              "name": "RepeatedKey",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "The result did not pass the checker. A defect: nothing was returned.",
+              "name": "ResultInvalid",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "The body could not be assembled from its rows. A defect.",
+              "name": "BuildFailed",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "MakeDetail",
           "non_exhaustive": false
         },
         {
@@ -10481,6 +10662,55 @@
           "module": "geom_topo::order",
           "name": "OrderError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a query could not answer.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/query.rs",
+          "kinds": [
+            {
+              "doc": "A link into a row its arena does not have; a published body never holds one.",
+              "name": "NoSuchRow",
+              "shape": "unit"
+            },
+            {
+              "doc": "A loop's ring of fins, or a list of loops or faces, that does not come back or end within its arena.",
+              "name": "Ring",
+              "shape": "unit"
+            },
+            {
+              "doc": "An edge that is not a straight line between two vertices, where a polygon is needed.",
+              "name": "Curved",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A face whose surface is not a plane, where a polygon is needed.",
+              "name": "NotPlanar",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A face with no loop, where a polygon is needed.",
+              "name": "Loopless",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A volume asked of a body that is not a solid.",
+              "name": "NotSolid",
+              "shape": "unit"
+            },
+            {
+              "doc": "A sum past its integer's width: never for a body within its arenas' limits.",
+              "name": "Overflow",
+              "shape": "unit"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_topo::query",
+          "name": "QueryError",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -10754,6 +10984,29 @@
             "text": "a sort by key, then by row to keep the order total, as section 23.4's builder sorts its scratch arrays before publishing (`projects/engines/geometry/architecture/08-topology.md`, 8.2; `projects/engines/geometry/architecture/32-decisions.md`, 32.17)."
           },
           "path": "geom_topo::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the rows visited; each list is walked once per query, and memory holds one loop's vertices at a time.",
+          "does": "[`faces`] lists every face with its shell, surface, sense, loops and name. [`loop_area`] and [`face_area`] give twice the area vector of a loop and of a face, Σ pᵢ × pᵢ₊₁ over the loop's vertices in fin order; [`shell_volume`] and [`volume`] give six times the signed volume enclosed, Σ over faces of the face's twice-area vector dotted with one of its vertices. [`bounding_box`] gives the box of every vertex, joined with the stored box of each face that is not a polygon. A loop's vertex at each fin is where the fin starts: its edge's start for a forward fin, its end for a reversed one.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/query.rs",
+          "guarantees": [
+            "**Exact.** Integers throughout, never rounded: an area vector's components are `i128` (each below n·2⁸¹ for a loop of n fins, so below 2¹¹⁴ for any arena), a volume is an `I256` (below 2¹⁸⁷). A face's area vector is normal to its plane and points the way its loops run counter-clockwise; with outer loops counter-clockwise seen from outside the material, a closed solid shell's volume is positive and a cavity's shell's negative.",
+            "**Flat only, said so.** A loop with an edge that is not a straight line between two vertices is refused with [`QueryError::Curved`] naming the edge, a face not on a plane with [`QueryError::NotPlanar`], a face with no loop with [`QueryError::Loopless`], and the volume of a body that is not a solid with [`QueryError::NotSolid`]. Certified mass properties of curved bodies and of implicit vertices come with later pieces.",
+            "**Ends on any body.** Every list and ring walk is bounded by its arena's length, so a ring that does not come back is [`QueryError::Ring`], never a hang; a link out of its arena is [`QueryError::NoSuchRow`], never a panic.",
+            "**Charged.** One unit of work per face listed, per vertex boxed and per loop, face and fin visited."
+          ],
+          "job": "Core queries on a body's topology and points (10.2, 22; piece G102): its faces listed, its bounding box, and the exact mass properties of a flat body whose vertices are grid points.",
+          "method": {
+            "links": [
+              "doi:10.1016/B978-0-08-050754-5.50043-8"
+            ],
+            "text": "the vector area of a polygon in space and a closed polyhedron's volume by the divergence theorem over its faces, `6V = Σ A_f · p_f` (Goldman, \"Area of planar polygons and volume of polyhedra\", Graphics Gems II, 1991, pp. 170–171, doi:10.1016/B978-0-08-050754-5.50043-8)."
+          },
+          "path": "geom_topo::query",
           "provenance": [],
           "spdx": null,
           "target": "lib"

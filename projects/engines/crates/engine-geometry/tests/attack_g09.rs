@@ -1244,7 +1244,6 @@ mod repository {
              G176 G292 G320 G321 G372 G390 G392 G393 G466 G467 G468",
         ),
         ("geom-landxml", "G437"),
-        ("geom-make", "G101"),
         (
             "geom-mesh",
             "G146 G147 G148 G149 G150 G151 G152 G153 G288 G289 G290 G291 G298 G299 G300 G301 \
@@ -1345,7 +1344,6 @@ mod repository {
         ),
         ("geom-landxml", &[(17, "G437"), (24, "G437")]),
         ("geom-linalg", &[(15, "G49 G50 G215"), (16, "G49 G50 G215")]),
-        ("geom-make", &[(10, "G101")]),
         (
             "geom-mesh",
             &[(16, "G341"), (17, "G153"), (19, "G146-G306"), (23, "G291")],
