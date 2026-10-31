@@ -14,7 +14,7 @@
 //! (G158), an intersection's items keep their invariants against an all-pairs oracle and a pair
 //! asked either way round makes one call; [`quadric`] (G159), every exact decision on a line and a
 //! quadric agrees with big integers, and a Sturm chain counts the roots a polynomial was built
-//! from; [`project`] (G162), a nearest point is never beaten by a sample of the kind; and [`curves`]
+//! from; [`project`] (G162), a nearest point is never beaten by a sample of the kind; and [`crossings`]
 //! (G163), every point of any two curves lies on both, and two cubic graphs that change sides have
 //! an item between them. The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
@@ -162,7 +162,7 @@
 
 use core::fmt;
 
-pub mod curves;
+pub mod crossings;
 pub mod intersect;
 pub mod orient2d;
 pub mod predicates;

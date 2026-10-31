@@ -1,11 +1,11 @@
-//! The curves fuzz target (G163), run as tests on stable Rust: bolero's test mode, the seeded leg,
+//! The crossings fuzz target (G163), run as tests on stable Rust: bolero's test mode, the seeded leg,
 //! the input bound, and what it reaches.
 //!
-//! - `curves_fuzz` wraps `geom_fuzz::curves::harness` in `bolero::check!`: the crate's corpus and
+//! - `crossings_fuzz` wraps `geom_fuzz::crossings::harness` in `bolero::check!`: the crate's corpus and
 //!   crash files, then [`ITERATIONS`] random byte strings; a failing one's seed is printed as
-//!   `BOLERO_RANDOM_SEED=<seed>`. Under `cargo bolero test curves_fuzz --package geom-fuzz` it is a
+//!   `BOLERO_RANDOM_SEED=<seed>`. Under `cargo bolero test crossings_fuzz --package geom-fuzz` it is a
 //!   libFuzzer target.
-//! - `curves_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
+//! - `crossings_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly, and the cases reach every kind of curve, crossings, misses
 //!   and a shared carrier.
@@ -28,7 +28,7 @@ mod common;
 
 use common::holds;
 
-use geom_fuzz::curves::{Case, Drawn, MAX_INPUT_BYTES, check, decode, harness};
+use geom_fuzz::crossings::{Case, Drawn, MAX_INPUT_BYTES, check, decode, harness};
 use geom_fuzz::seeded;
 use geom_test::Seed;
 
@@ -50,7 +50,7 @@ const _: () = assert!(MAX_LEN as usize >= MAX_INPUT_BYTES);
               which WASI cannot; the seeded leg runs the same harness there"
 )]
 #[test]
-fn curves_fuzz() {
+fn crossings_fuzz() {
     println!(
         "bolero test mode: corpus and crash files, then {ITERATIONS} random inputs whose seeds \
          bolero draws from the operating system; a failing input's seed is printed as \
@@ -63,9 +63,9 @@ fn curves_fuzz() {
 }
 
 #[test]
-fn curves_seeded() -> Result<(), seeded::Failure> {
+fn crossings_seeded() -> Result<(), seeded::Failure> {
     seeded::run(
-        "curves fuzz target, seeded",
+        "crossings fuzz target, seeded",
         Seed::DEFAULT,
         SEEDED_CASES,
         MAX_LEN,
