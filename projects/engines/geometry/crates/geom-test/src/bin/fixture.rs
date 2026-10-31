@@ -48,7 +48,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode, Stdio};
+use std::process::{Child, Command, ExitCode, ExitStatus, Stdio};
 use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -60,7 +60,6 @@ use geom_test::fixture::{Expect, Fixture, Hash, Speed, Status, diff};
 use geom_test::golden::diff::approved;
 use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
-use wait_timeout::ChildExt;
 
 /// The fixtures' tool.
 #[derive(Parser)]
@@ -403,6 +402,18 @@ fn fixes(base: &str, root: &Root) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// Waits for `child` up to `limit`; `None` if it is still running.
+#[cfg(not(target_family = "wasm"))]
+fn wait(child: &mut Child, limit: Duration) -> std::io::Result<Option<ExitStatus>> {
+    wait_timeout::ChildExt::wait_timeout(child, limit)
+}
+
+/// WebAssembly starts no processes, so there is never a child to time.
+#[cfg(target_family = "wasm")]
+fn wait(child: &mut Child, _limit: Duration) -> std::io::Result<Option<ExitStatus>> {
+    child.wait().map(Some)
+}
+
 fn fails(timeout_seconds: u64, ids: &[String], root: &Root) -> Result<ExitCode, String> {
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let root = root_of(root)?;
@@ -415,8 +426,7 @@ fn fails(timeout_seconds: u64, ids: &[String], root: &Root) -> Result<ExitCode, 
             .stdout(Stdio::inherit())
             .spawn()
             .map_err(|e| format!("{id}: {e}"))?;
-        let status = child
-            .wait_timeout(Duration::from_secs(timeout_seconds))
+        let status = wait(&mut child, Duration::from_secs(timeout_seconds))
             .map_err(|e| format!("{id}: {e}"))?;
         if status.is_none() {
             child.kill().map_err(|e| format!("{id}: {e}"))?;
