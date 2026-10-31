@@ -107,7 +107,13 @@
 //!   with it on every pull request: knot vectors exactly, points and changed curves within the
 //!   bounds `geom-nurbs` states.
 //!
-//! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
+//! Piece G136 adds the reference for flat solids:
+//!
+//! - [`flat_reference`]: booleans, imprint, cells, plane sections, In-On-Out, volumes, centroids,
+//!   clash and first contact in exact rationals, by brute force over a full plane arrangement,
+//!   written from the definitions alone; `tests/flat_reference.rs` holds it to hand cases.
+//!
+//! The other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
@@ -212,6 +218,7 @@ pub mod canonical;
 pub mod coverage;
 pub mod deps;
 pub mod fixture;
+pub mod flat_reference;
 pub mod foundation;
 pub mod golden;
 pub mod grid;
