@@ -28,16 +28,17 @@ use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use geom_format::operation::Operation;
+use geom_format::record::{REQUIRED, Record};
 use geom_make::{BoxInput, make_box};
 use geom_num::Steps;
 use geom_num::grid::P3;
 use geom_op::{ErrorKind, OpContext, OpId, OpPath};
 use geom_run::{Budget, Cancel};
 use geom_test::fixture::calls::Call;
-use geom_test::fixture::kernel::Kernel;
+use geom_test::fixture::kernel::{Kernel, id_of};
 use geom_test::fixture::replay::{FAMILIES, digest, operation_of, seeded};
 use geom_test::fixture::repo::{embedded, parse_all};
-use geom_test::fixture::run::{Failure, Ran, Replayed, Verdict, replay, run};
+use geom_test::fixture::run::{Engine, Failure, Ran, Replayed, Verdict, replay, run};
 use geom_test::fixture::{Expect, Fixture, Kind, Name, OpLog, Source, Speed, Spend, Status};
 use geom_test::golden;
 
@@ -110,6 +111,34 @@ fn every_thread_count_gives_one_digest() {
             }
         });
     }
+}
+
+#[test]
+fn the_kernel_keeps_what_it_made_and_reads_nothing_stored() {
+    let log = seeded("box").unwrap().unwrap().remove(0);
+    let mut kernel = Kernel::new();
+    assert!(matches!(replay(&mut kernel, &log), Replayed::Done { .. }));
+    let body = kernel.last().first().unwrap().clone();
+    let id = id_of(&body).unwrap();
+    assert_eq!(kernel.body(&id), Some(&body));
+    // A fresh start forgets it, and no operation can take a stored body yet.
+    let stored = Record {
+        tag: 3,
+        flags: REQUIRED,
+        schema: 1,
+        depends: Vec::new(),
+        payload: vec![0x41, 1],
+    };
+    assert!(matches!(
+        kernel.start(log.heal, core::slice::from_ref(&stored)),
+        Err(why) if why.contains("stored body")
+    ));
+    assert_eq!(kernel.body(&id), None);
+    let reads = OpLog::new(vec![stored], log.operations.clone());
+    assert!(matches!(
+        replay(&mut Kernel::new(), &reads),
+        Replayed::Broken(_)
+    ));
 }
 
 #[test]
