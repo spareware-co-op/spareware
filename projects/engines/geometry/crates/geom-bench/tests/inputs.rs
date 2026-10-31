@@ -2301,6 +2301,7 @@ fn mesh_typical_batches_all_succeed() {
     all_ok("line_line", k::line_line, &m::line_line(Typical));
     all_ok("closest_dots", k::closest_dots, &m::closest_dots(Typical));
     all_ok("triangles", k::triangles, &m::triangles(Typical));
+    all_ok("envelope", k::envelope, &m::envelope(Typical));
 }
 
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
