@@ -279,7 +279,7 @@ async fn a_watcher_sees_only_its_models_and_each_entry_once() {
 
     let mut watcher = Watcher::new();
     watcher.set_client(i("tab-b"));
-    watcher.watch(i("model"));
+    watcher.watch(i("document"));
     assert!(watcher.next(&log[0]).is_some());
     assert!(watcher.next(&log[0]).is_none(), "already passed on");
     assert!(
@@ -289,7 +289,7 @@ async fn a_watcher_sees_only_its_models_and_each_entry_once() {
 
     let mut author = Watcher::new();
     author.set_client(i("tab-d"));
-    author.watch(i("model"));
+    author.watch(i("document"));
     assert!(
         author.next(&log[1]).is_some(),
         "the tab that sent it hears why"
@@ -367,7 +367,7 @@ async fn verify_finds_a_piece_the_log_doesnt_explain() {
         .run(&project(), edit("anna", "tab", 1, "a", "x"))
         .await
         .unwrap();
-    let extra = kit_store::Place::Piece { project: i("project"), document: i("model"), piece: i("b") };
+    let extra = kit_store::Place::Piece { project: i("project"), document: i("document"), piece: i("b") };
     store.tamper(&extra.key(), Some(kit_store::to_row(&"cc").unwrap()));
     assert!(
         verify(&store, &project())

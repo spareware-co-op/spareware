@@ -5,7 +5,7 @@
 //! with a server-held order, as Figma describes it).
 //!
 //! - [`orderer`]: one log for each scope, one batch at a time, each batch one transaction.
-//! - [`claims`]: light, automatic, per element.
+//! - [`claims`]: light, automatic, per piece.
 //! - [`replay`]: reads a log back and proves the stored pieces follow from it.
 //! - [`live`]: what a browser connection sees.
 //!

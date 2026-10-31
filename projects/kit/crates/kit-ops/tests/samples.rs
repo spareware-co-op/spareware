@@ -30,7 +30,7 @@ fn version_1_samples_still_read_and_write_the_same_bytes() {
 #[test]
 fn the_samples_say_what_they_recorded() {
     let moved = Entry::decode(sample(V1_MOVE)).unwrap();
-    assert_eq!(moved.cmd, "element.move");
+    assert_eq!(moved.cmd, "piece.move");
     assert_eq!(moved.args["x"], 2500);
     let turned_back = Entry::decode(sample(V1_TURNED_BACK)).unwrap();
     assert_eq!(

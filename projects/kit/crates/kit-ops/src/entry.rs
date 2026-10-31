@@ -29,7 +29,7 @@ pub struct Edit {
     pub counter: u64,
     /// The last log number the client had seen.
     pub base: u64,
-    /// What the edit acts on: a model, or in the directory a hub or person.
+    /// What the edit acts on: a document, or in the directory whatever a command says.
     pub target: Id,
     pub cmd: String,
     pub args: Value,
@@ -199,13 +199,13 @@ mod tests {
             client: i("tab-1"),
             counter: 7,
             base: 41,
-            target: i("arch-model"),
-            cmd: "element.move".to_owned(),
-            args: json!({ "element": "D-104", "x": 1200, "y": 300 }),
+            target: i("doc-1"),
+            cmd: "piece.move".to_owned(),
+            args: json!({ "piece": "P-104", "x": 1200, "y": 300 }),
             author_ms: 1000,
         };
         let change = Change {
-            piece: i("D-104"),
+            piece: i("P-104"),
             before: Some(i("aa")),
             after: Some(i("bb")),
         };

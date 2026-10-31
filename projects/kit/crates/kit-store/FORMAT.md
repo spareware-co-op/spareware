@@ -46,17 +46,9 @@ Keys are plain ASCII, with parts split by `/`. Each key starts with its scope. N
 
 | Key | Value |
 | --- | --- |
-| `p:<project>/record/<hash>` | An element, named by the SHA-256 of these bytes. A version is never rewritten |
-| `p:<project>/shape/<hash>` | A shape, named the same way |
-| `p:<project>/elem/<model>/<element>` | The hash of the element's current record |
-| `p:<project>/area/<model>/<level>/<x>/<y>/<element>` | The same hash, in each 5 m cell the element touches |
-| `p:<project>/claim/<model>/<element>` | Who is working on an element, until when |
-| `p:<project>/model/<model>` | A model in a team's WIP folder |
-| `p:<project>/team/<team>` | A team |
-| `p:<project>/item/<team>/<folder>/<item>` | A package in the `shared` or `consumed` folder |
-| `p:<project>/version/<model>` | The last package number of a model |
-| `p:<project>/incoming/<id>` | A package bridged in and waiting |
-| `p:<project>/link/<model>/<link>` | A link from a model |
+| `p:<project>/record/<hash>` | A piece's data, named by the SHA-256 of these bytes. A version is never rewritten |
+| `p:<project>/piece/<document>/<piece>` | The hash of the piece's current record |
+| `p:<project>/claim/<document>/<piece>` | Who is working on a piece, until when |
 
 ### The directory
 
@@ -65,22 +57,11 @@ Keys are plain ASCII, with parts split by `/`. Each key starts with its scope. N
 | `dir/person/<person>` | A person. It holds no email address |
 | `dir/email/<hash>` | Who an address belongs to, under the SHA-256 of the lowercased address |
 | `dir/login/<hash>` | Who a login belongs to, under the SHA-256 of its issuer and subject |
-| `dir/hub/<hub>` | A hub |
-| `dir/hub/<hub>/project/<project>` | A hub's project |
-| `dir/project/<project>` | A project |
+| `acl/admin/<person>` | This person may change the directory. A row's presence is the fact |
 
-### Access
+### A program's own tables
 
-These rows are what Cedar reads. A row's presence is the fact.
-
-| Key | Value |
-| --- | --- |
-| `acl/admin/<person>` | This person may change the directory |
-| `acl/person/<person>/hub/<hub>` | Their role: `user` or `external` |
-| `acl/person/<person>/project/<project>` | They are on this project |
-| `acl/person/<person>/team/<project>/<team>` | They are on this team |
-| `acl/hub/<hub>/user/<person>` | The hub's side of the first row |
-| `acl/hub/<hub>/bridge/<other>` | `hub` permits bridges with `other`. A bridge needs this row from both sides |
+A program adds tables under the same three roots: `p:<project>/<table>/...`, `dir/<table>/...` and `acl/<table>/...`, with no table name the kit uses. It builds their keys with `kit_store::table` and `Scope::table`, so the parts stay IDs and the rules on this page hold, and it publishes them in a format page of its own. Spare Construct's is [construct-model's FORMAT.md](../../../spare-construct/crates/construct-model/FORMAT.md).
 
 ### Sign-in
 
@@ -93,7 +74,7 @@ Not kept forever, and not in any log, because these are secrets that expire.
 
 ## Rows
 
-Every value except a log entry is JSON in the form `{"v":1,"row":<value>}`. JSON, so a row stays readable in decades with no Spareware program to hand. Field names and meanings are in the row types: `kit-accounts`'s `rows.rs`, and for Spare Construct's boxes and folders the test stack's `boxes.rs` and `spaces.rs`.
+Every value except a log entry is JSON in the form `{"v":1,"row":<value>}`. JSON, so a row stays readable in decades with no Spareware program to hand. Field names and meanings are in the row types: here `kit-accounts`'s `rows.rs`, and a program's in its own format page.
 
 Numbers in anything hashed are whole: lengths are millimetres. A hash must never depend on how a float prints.
 
@@ -111,14 +92,14 @@ An entry is JSON, one object, with its fields in this order:
 | `base` | The last log number the client had seen |
 | `author_ms` | The client's clock, for history. Nothing runs on it |
 | `orderer_ms` | The orderer's clock: the only time a command may read |
-| `target` | What it acted on: a model, or a package, or in the directory a person |
+| `target` | What it acted on: a document, or whatever else a command says |
 | `cmd`, `command_version` | The command, and the version of the commands it ran under |
 | `args` | Its arguments, kept for history, undo and AI audit |
-| `changes` | `{"piece","before","after"}`: which record an element moved between. `null` for none |
+| `changes` | `{"piece","before","after"}`: which record a piece moved between. `null` for none |
 | `claims` | `{"piece","claim"}`: a claim taken, or `null` when let go |
 | `content_id` | SHA-256 of `changes` as written |
 | `failed` | `null`, or why the edit was turned back. A turned-back edit stays in the log |
 
 An edit that couldn't be committed is not in the log at all: it stays with its client.
 
-`kit_sync::verify_log` reads a log back and checks all of this: no gaps, every content ID right, each change following from the one before, and replaying the log giving exactly the elements stored.
+`kit_sync::verify_log` reads a log back and checks all of this: no gaps, every content ID right, each change following from the one before, and replaying the log giving exactly the pieces stored.

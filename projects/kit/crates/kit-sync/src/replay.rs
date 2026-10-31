@@ -1,5 +1,5 @@
 //! Reads a log back, and proves what is stored follows from it. The log is the truth, so if this
-//! passes, nothing has been lost. Run after every failure test, by `test-stack verify`, and after a
+//! passes, nothing has been lost. Run after every failure test, by a server's `verify`, and after a
 //! restore.
 
 use kit_core::Id;

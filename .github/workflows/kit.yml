@@ -3,7 +3,8 @@ name: Kit
 # The kit's foundation crates: the store format, the edit log and the orderer. These need no
 # database: every failure is staged in-process (kit-store's `memory` feature), so they run on every
 # platform. The fuzz targets run as property tests in the first job, and for real under libFuzzer
-# in the second. TiKV itself is tested in test-stack.yml.
+# in the second, with Spare Construct's table keys and recipes beside the kit's. TiKV itself is
+# tested in construct-server.yml.
 
 on:
   pull_request:
@@ -12,6 +13,8 @@ on:
       - "projects/kit/crates/kit-ops/**"
       - "projects/kit/crates/kit-store/**"
       - "projects/kit/crates/kit-sync/**"
+      - "projects/spare-construct/crates/construct-model/**"
+      - "projects/spare-construct/crates/construct-regen/**"
       - "Cargo.lock"
       - ".github/workflows/kit.yml"
 
@@ -66,6 +69,10 @@ jobs:
           - { package: kit-ops, name: reading_any_bytes_is_safe }
           - { package: kit-ops, name: entries_round_trip }
           - { package: kit-sync, name: faults_in_any_order }
+          - { package: construct-model, name: construct_keys_have_one_spelling }
+          - { package: construct-model, name: construct_keys_read_back }
+          - { package: construct-regen, name: any_recipe_builds_or_says_why }
+          - { package: construct-regen, name: reading_any_recipe_text_is_safe }
     defaults:
       run:
         shell: bash
@@ -92,5 +99,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crashes-${{ matrix.target.name }}
-          path: projects/kit/crates/*/tests/__fuzz__/*/crashes/
+          path: |
+            projects/kit/crates/*/tests/__fuzz__/*/crashes/
+            projects/spare-construct/crates/*/tests/__fuzz__/*/crashes/
           if-no-files-found: ignore

@@ -15,13 +15,13 @@ fn record() {
         client: id("01JB8ZK3QH6Y7M4T9VXCDE2FGH"),
         counter: 12,
         base: 40,
-        target: id("arch-model"),
+        target: id("doc-1"),
         cmd: cmd.to_owned(),
         args,
         author_ms: 1_793_413_539_019,
     };
     let claim = ClaimChange {
-        piece: id("D-104"),
+        piece: id("P-104"),
         claim: Some(Claim {
             person: id("anna"),
             name: "Anna".to_owned(),
@@ -32,13 +32,13 @@ fn record() {
     let moved = Entry::new(
         41,
         &edit(
-            "element.move",
-            json!({ "element": "D-104", "x": 2500, "y": 300 }),
+            "piece.move",
+            json!({ "piece": "P-104", "x": 2500, "y": 300 }),
         ),
         1,
         1_793_413_539_100,
         vec![Change {
-            piece: id("D-104"),
+            piece: id("P-104"),
             before: Some(hash('a')),
             after: Some(hash('b')),
         }],
@@ -48,14 +48,14 @@ fn record() {
     let created = Entry::new(
         42,
         &edit(
-            "element.create",
-            json!({ "element": "D-105", "kind": "door", "level": 2, "x": 100, "y": 0,
+            "piece.create",
+            json!({ "piece": "P-105", "kind": "note", "level": 2, "x": 100, "y": 0,
                     "w": 900, "d": 300, "h": 2100, "props": { "fire rating": "FD30" } }),
         ),
         1,
         1_793_413_539_200,
         vec![Change {
-            piece: id("D-105"),
+            piece: id("P-105"),
             before: None,
             after: Some(hash('c')),
         }],
@@ -65,8 +65,8 @@ fn record() {
     let turned_back = Entry::new(
         43,
         &edit(
-            "element.move",
-            json!({ "element": "W-101", "x": 1, "y": 1 }),
+            "piece.move",
+            json!({ "piece": "W-101", "x": 1, "y": 1 }),
         ),
         1,
         1_793_413_539_300,

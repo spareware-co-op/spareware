@@ -1,5 +1,5 @@
-//! What one browser connection sees. A browser subscribes to the models it has open, sends edits
-//! up, and gets every ordered edit of those models down. After a dropped connection it sends the
+//! What one browser connection sees. A browser subscribes to the documents it has open, sends edits
+//! up, and gets every ordered edit of those documents down. After a dropped connection it sends the
 //! last log number it saw, gets what it missed, and resends what wasn't confirmed; the orderer
 //! drops repeats, so a restart of a server loses nothing and doubles nothing.
 //!
@@ -20,21 +20,21 @@ pub enum FromBrowser {
     /// Starts or resumes: who this tab is, what it watches, the last log number it saw.
     Hello {
         client: String,
-        models: Vec<String>,
+        documents: Vec<String>,
         since: u64,
     },
-    /// Watches one more model.
+    /// Watches one more document.
     Watch {
-        model: String,
+        document: String,
         since: u64,
     },
     Stop {
-        model: String,
+        document: String,
     },
     Op {
         counter: u64,
         base: u64,
-        model: String,
+        document: String,
         cmd: String,
         args: Value,
         author_ms: u64,
@@ -64,15 +64,15 @@ impl Watcher {
         self.client.as_ref()
     }
 
-    pub fn watch(&mut self, model: Id) {
-        self.watching.insert(model);
+    pub fn watch(&mut self, document: Id) {
+        self.watching.insert(document);
     }
 
-    pub fn stop(&mut self, model: &Id) {
-        self.watching.remove(model);
+    pub fn stop(&mut self, document: &Id) {
+        self.watching.remove(document);
     }
 
-    /// Every model being watched.
+    /// Every document being watched.
     #[must_use]
     pub fn watched(&self) -> Vec<Id> {
         self.watching.iter().cloned().collect()

@@ -4,10 +4,9 @@ version = "0.0.0"
 edition = "2024"
 publish = false
 license = "MPL-2.0"
-# In the test stack's workspace, not the root one: note K08 says why.
-workspace = "../../test-stack"
 
-# Every version is pinned here and by the workspace's Cargo.lock. deny.toml there checks licences.
+# Every version is pinned here and by the services workspace's Cargo.lock. deny.toml there checks
+# licences.
 [dependencies]
 kit-store = { path = "../../crates/kit-store" }
 futures = "=0.3.31"                # MIT OR Apache-2.0

@@ -1,4 +1,4 @@
-//! A small set of commands for testing the orderer: one "note" element per id, claims on them, and
+//! A small set of commands for testing the orderer: one "note" piece per id, claims on them, and
 //! a list of who is refused. Only what the tests need.
 #![allow(dead_code, reason = "each test file uses part of this")]
 
@@ -129,7 +129,7 @@ pub fn edit(person: &str, client: &str, counter: u64, note: &str, text: &str) ->
         client: i(client),
         counter,
         base: 0,
-        target: i("model"),
+        target: i("document"),
         cmd: "note.set".to_owned(),
         args: json!({ "note": note, "text": text }),
         author_ms: 0,
@@ -173,7 +173,7 @@ pub fn value_text(value: &Value) -> String {
 
 pub async fn stored_text(store: &Memory, note: &str) -> Option<String> {
     let mut snapshot = store.snapshot().await.unwrap();
-    let place = Place::Piece { project: i("project"), document: i("model"), piece: i(note) };
+    let place = Place::Piece { project: i("project"), document: i("document"), piece: i(note) };
     let hash: String = read_row(&mut snapshot, &place.key()).await.unwrap()?;
     let record_place = Place::Record {
         project: i("project"),

@@ -29,7 +29,7 @@ fn entries_round_trip() {
                 client: id("tab"),
                 counter: *counter,
                 base: seq / 2,
-                target: id("model"),
+                target: id("document"),
                 cmd: cmd.clone(),
                 args: json!({ "note": note, "n": seq }),
                 author_ms: 1,

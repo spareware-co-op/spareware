@@ -1,7 +1,7 @@
 //! The direct `tikv-client` route under load: the orderer on real TiKV, with no web server in the
 //! way. Going direct is the less-travelled path, and "many writers at once" is why TiKV was
 //! chosen, so these are the numbers that decide whether the choice holds. They need a running
-//! TiKV at STACK_PD. The figures in the test stack's README come from here.
+//! TiKV at STACK_PD. The figures in Spare Construct's server README come from here.
 
 use kit_core::Id;
 use kit_ops::{Change, Edit, sha256_hex};
@@ -34,10 +34,10 @@ impl Commands<Tikv> for Rewrite {
             return Ok(Err("projects only".to_owned()));
         };
         let piece = Id::parse(edit.args["piece"].as_str().unwrap_or("")).unwrap();
-        let place = Place::Element {
+        let place = Place::Piece {
             project: project.clone(),
-            model: edit.target.clone(),
-            element: piece.clone(),
+            document: edit.target.clone(),
+            piece: piece.clone(),
         };
         let before: Option<String> = read_row(txn, &place.key()).await?;
         let record = serde_json::to_vec(&edit.args).unwrap();
@@ -101,7 +101,7 @@ async fn writer(server: Arc<Server>, scope: Scope, name: String, edits: u64) -> 
             client: id.clone(),
             counter,
             base: 0,
-            target: Id::parse("model").unwrap(),
+            target: Id::parse("document").unwrap(),
             cmd: "rewrite".to_owned(),
             args: json!({ "piece": name, "n": counter }),
             author_ms: 0,

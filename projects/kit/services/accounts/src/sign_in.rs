@@ -5,12 +5,12 @@
 //! expire. Keeping them in the store means a restart signs nobody out, and any server can serve
 //! any browser.
 
-use crate::directory::{DirectoryCommands, SYSTEM};
+use crate::people::SYSTEM;
 use base64::Engine;
 use kit_core::Id;
 use kit_ops::{Edit, sha256_hex};
 use kit_store::{Kv, Place, Reader, StoreError, Txn, read_row, to_row};
-use kit_sync::{Clock, Orderers, Reply};
+use kit_sync::{Clock, Commands, Orderers, Reply};
 use openidconnect::core::{
     CoreAuthenticationFlow, CoreClient, CoreIdTokenClaims, CoreProviderMetadata,
 };
@@ -102,21 +102,22 @@ fn id_of_hash(hash: &str) -> Result<Id, StoreError> {
     Id::parse(hash).map_err(|e| StoreError::Damaged(e.to_string()))
 }
 
-/// Accounts: sign-in, sessions and server-run directory edits.
-pub struct Accounts<K: Kv> {
+/// Accounts: sign-in, sessions and server-run directory edits. `C` is the program's directory
+/// commands, which run [`crate::people`]'s alongside its own.
+pub struct Accounts<K: Kv, C: Commands<K>> {
     kv: K,
     clock: Arc<dyn Clock>,
     settings: SignInSettings,
     client: OnceCell<Client>,
-    directory: Orderers<K, DirectoryCommands<K>>,
+    directory: Orderers<K, C>,
 }
 
-impl<K: Kv> Accounts<K> {
+impl<K: Kv, C: Commands<K>> Accounts<K, C> {
     pub fn new(
         kv: K,
         clock: Arc<dyn Clock>,
         settings: SignInSettings,
-        directory: Orderers<K, DirectoryCommands<K>>,
+        directory: Orderers<K, C>,
     ) -> Self {
         Self {
             kv,
