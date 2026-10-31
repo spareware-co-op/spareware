@@ -1552,6 +1552,7 @@ dependencies = [
  "clap",
  "dashu-int",
  "dashu-ratio",
+ "geom-check",
  "geom-curve",
  "geom-format",
  "geom-make",

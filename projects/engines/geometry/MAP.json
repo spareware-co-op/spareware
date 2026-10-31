@@ -11358,6 +11358,31 @@
           "target": "lib"
         },
         {
+          "cost": "one full check of the body per injection, each linear in its rows but for group 3's pairs of faces. Recursion: none.",
+          "does": "[`CATALOGUE`] lists every [`Injection`]: a name from 28.4's list or chapter 8.3's groups, the [`FaultKind`]s that are the right answer, and a function that breaks a copy of a valid body. It breaks the rows, not the checker's view of them: each goes through `geom_topo::Builder::edit` and is published again, so only what the builder allows gets through, as with a body from a damaged file or a broken operation. An injection applies to the bodies that have what it breaks: a fin to flip, a line to move, a certified bound to lower. [`attack`] runs the catalogue on one valid body and says, per injection, whether it applied and whether the checker caught it, [`Outcome`]; [`missed`] reads the outcomes as a list of checker bugs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/faults.rs",
+          "guarantees": [
+            "**One fault at a time.** Each injection changes one thing a chapter 8.3 group promises to catch: the broken body differs from the valid one in that thing only, and an injection that finds nothing to break reports [`Applied::No`], never a pass.",
+            "**The right kind.** A fault is caught only by a report that names one of the injection's kinds. Any other fault is a miss: a checker that reports the wrong thing has not understood what is broken.",
+            "**Both ways.** [`attack`] first checks the body unbroken, so a body it is given that does not pass is an error, never a catalogue of false catches.",
+            "**Just past the bound.** A fault of distance moves by the smallest whole number of steps past the body's bound (28.4, \"by just more than its bound\"): a looser check would miss it.",
+            "**Deterministic.** Nothing here reads a clock or a random number; the same body gives the same outcomes on every target."
+          ],
+          "job": "Checker fault injection (chapter 28.4, the first catalogue): valid bodies broken on purpose, one fault at a time, and the checker must name each with the right kind; and it must pass every valid body, so a checker that rejects too much is caught too.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 28.4's fault injection, both ways (`projects/engines/geometry/architecture/28-testing.md`), on chapter 8.3's checker groups (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_test::faults",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a product or quotient of k-bit numbers is O(k²) at these sizes; [`cos_sin`] and [`exp`] about 150 terms each; no recursion.",
           "does": "an [`IBig`] n stands for n / 2^400. [`of`] reads a double exactly but for the bits below 2^−400, [`mul`] and [`div`] cut their results to a whole number of 2^−400, [`sqrt`] is the floor of the root, [`cos_sin`] and [`exp`] sum their Taylor series until a term vanishes, and π is read from its first 100 decimal places. [`cos_sin_pi`], [`tan_pi`] and [`tanh`] are built on them, for the half-turn angles and the tangent half-angle maps of the kinds. [`rational`] and [`of_rational`] pass values to and from the exact rationals of [`crate::nurbs_reference`], and [`within`] decides whether two points are at most a distance apart.",
           "family": [],
