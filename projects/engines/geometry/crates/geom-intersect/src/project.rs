@@ -149,7 +149,10 @@ fn minus<const D: usize>(x: &[Interval; D], p: &[f64; D]) -> Result<[Interval; D
 }
 
 /// `a·b`.
-fn dot<const D: usize>(a: &[Interval; D], b: &[Interval; D]) -> Result<Interval, NumError> {
+pub(crate) fn dot<const D: usize>(
+    a: &[Interval; D],
+    b: &[Interval; D],
+) -> Result<Interval, NumError> {
     a.iter()
         .zip(b)
         .try_fold(Interval::point(0.0)?, |sum, (x, y)| sum.add(x.mul(*y)?))
@@ -179,7 +182,7 @@ pub fn negative(x: Interval) -> bool {
 }
 
 /// The middle of a span, if it has a double strictly inside.
-fn halfway((a, b): (f64, f64)) -> Option<f64> {
+pub(crate) fn halfway((a, b): (f64, f64)) -> Option<f64> {
     let middle = a / 2.0 + b / 2.0;
     (a < middle && middle < b).then_some(middle)
 }
@@ -612,7 +615,7 @@ fn close<const D: usize>(
 }
 
 /// Exact coordinates as intervals.
-fn exact<const D: usize>(x: &[f64; D]) -> Result<[Interval; D], NumError> {
+pub(crate) fn exact<const D: usize>(x: &[f64; D]) -> Result<[Interval; D], NumError> {
     let mut out = [Interval::point(0.0)?; D];
     for (o, c) in out.iter_mut().zip(x) {
         *o = Interval::point(*c)?;

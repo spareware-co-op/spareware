@@ -1,4 +1,4 @@
-//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): a list of items
+//! Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.44): a list of items
 //! put in canonical order, a circle's canonical key, a pair of lines put in canonical order, and a
 //! point projected on an arc and on a band of a sphere.
 //!
@@ -21,7 +21,7 @@ use geom_intersect::{Item, ParamBox, PointContact};
 use geom_math::Box3;
 use geom_num::Exactness;
 use geom_num::interval::Interval;
-use geom_surface::{Sphere, SurfaceKind};
+use geom_surface::{Plane, Sphere, SurfaceKind, Torus};
 
 use super::{Class, batch_of, p3, rng, within};
 use crate::rng::SplitMix64;
@@ -153,5 +153,45 @@ pub fn spheres(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
             ((0.0, 1.5), (-0.4, 0.4)),
         );
         Some((SurfaceKind::Sphere(band.ok()?), point(&mut g)))
+    })
+}
+
+/// A plane patch and the centre of a sphere that cuts it in a closed circle, for `trace`.
+#[must_use]
+pub fn patches(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::patches", class);
+    batch_of(|_| {
+        let at = point(&mut g);
+        let patch = Plane::new(
+            [at[0], at[1], 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-8.0, 8.0), (-8.0, 8.0)),
+        );
+        let lift = f64::from(i32::try_from(g.range(1, 4)).ok()?);
+        Some((SurfaceKind::Plane(patch.ok()?), [at[0], at[1], lift]))
+    })
+}
+
+/// Most of a torus and a view direction, for a silhouette.
+#[must_use]
+pub fn tori(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::tori", class);
+    batch_of(|_| {
+        let band = Torus::new(
+            point(&mut g),
+            8.0,
+            2.0,
+            Frame::standard().ok()?,
+            ((0.1, 1.9), (0.1, 1.9)),
+        );
+        let run = f64::from(i32::try_from(g.range(1, 4)).ok()?);
+        Some((SurfaceKind::Torus(band.ok()?), [run, 1.0, 2.0]))
     })
 }

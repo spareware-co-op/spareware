@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, and a point projected on an arc and on a band of a sphere.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, and a point projected on an arc and on a band of a sphere.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2545,6 +2545,29 @@
           "target": "lib"
         },
         {
+          "cost": "one trace and one budgeted rerun (chapter 12.8's cost), and [`CELLS`] squared evaluations.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of five surfaces on small lattice sizes, and one of six functions on it. [`check`] traces the zero set and holds the answer to the laws below, with a dense grid of the function's own value as the oracle: the trace bounds and prunes, and the oracle only evaluates. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/level.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a sign change on the grid with no branch and no flag near it, a vertex off the curve or out of the domain, a branch with a chord further out than the ceiling lets it, an internal error, or a budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s level curves miss nothing a dense grid can see, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.8's implicit tracer and 12.13's level curves (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`). A sign change between neighbours proves a zero between them, so the law cannot be broken by a true answer; the grid sees nothing smaller than a cell, which is why [`crate::level`]'s own tests carry small loops."
+          },
+          "path": "geom_fuzz::level",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
@@ -3434,6 +3457,33 @@
           "target": "lib"
         },
         {
+          "cost": "each box or span takes two reads of the surface's partials and the function, charged to the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with their neighbours; a side's crossing takes log₂(side/floor) reads more. Recursion: none.",
+          "does": "[`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines ([`Isocline`]) and envelopes ([`Envelope`]). The domain is cut at the surface's breaks, then each box is excluded, settled or split, and the settled boxes' crossings are joined across their shared sides into branches.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/level.rs",
+          "guarantees": [
+            "**Nothing is missed.** A box is dropped only where g is proven nonzero (Snyder's exclusion), or where g is monotone in one parameter and no side holds a root: a monotone box holds no closed loop, so any curve in it would cross a side.",
+            "**No branch is jumped.** In a settled box the curve is a graph over one parameter, so its arcs lie over disjoint spans of that parameter, and sorting the crossings along it pairs them.",
+            "**Everything is accounted for.** Each crossing is met by one crossing across its side, or ends at the domain's boundary, at a break, or at a flagged box. Any other crossing is [`IntersectError::Internal`], never a branch quietly ended.",
+            "**What cannot be decided is flagged.** A box at the floor that holds a possible singular point, a crease, or a side whose roots cannot be told apart is a [`FlaggedBox`] (for 12.9).",
+            "**Each branch has a bound.** [`Branch::deviation`] bounds, in space, how far the exact branch is from the surface's image of the straight parameter chords through its vertices.",
+            "**Deterministic.** A fixed cut position, first part first, and branches in the order of their first vertices."
+          ],
+          "job": "Level curves and the implicit-parametric tracer: the zero set of a function on a surface's parameter plane, traced with proofs (12.8, 12.13).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/142920.134024",
+              "https://doi.org/10.1145/1057432.1057465",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "J. M. Snyder, Interval analysis for computer graphics, SIGGRAPH (1992), <https://doi.org/10.1145/142920.134024>, for the exclusion and parameterisability tests, as 12.8 sets them out. S. Plantinga and G. Vegter's small-normal-variation test (2004, <https://doi.org/10.1145/1057432.1057465>) needs no code of its own: if both partials' enclosures span zero, the enclosure of the gradient's inner product with itself spans zero as well, so a box it accepts is one Snyder's test accepts already. Values take the mean-value form over a box (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, section 6.4), so exclusion tightens with the square of a box's width. An arc over a span w whose slopes lie in an interval of width m leaves its chord by at most m·w/4, which with the surface's speed across the arc is [`Branch::deviation`]."
+          },
+          "path": "geom_intersect::level",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a key is one conversion to NURBS, charged to the meter; ordering a pair compares two keys, linear in their lengths. Recursion: none.",
           "does": "a [`CanonicalKey`] orders operands by kind, then by a kernel-internal encoding of their defining data: each kind's NURBS form, which is a function of that data alone, or, for a line or plane that has no such form because it may be unbounded, the data itself. [`pair`] puts two [`Operand`]s in that order, runs a method on them and gives its answer back in the caller's roles. [`pairs`] does so for many pairs on the kernel's parallel helper, each under an equal share of the budget, in canonical pair order.",
           "family": [],
@@ -3509,7 +3559,7 @@
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the result types and canonical order built by piece G158, projection and inversion by G162; the other methods come with G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168; the other methods come with G159, G163, G164, G165, G166, G167, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {
@@ -7868,7 +7918,7 @@
         },
         {
           "cost": "constant for a plane: nine interval operations.",
-          "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields with `geom-field`.",
+          "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; the analytic kinds implement it in `analytic`, each with the equation of its whole untrimmed shape (G168), and fields do with `geom-field`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/implicit.rs",
           "guarantees": [

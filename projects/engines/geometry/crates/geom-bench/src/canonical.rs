@@ -885,6 +885,12 @@ impl<const N: usize, const D: usize> Canonical for geom_intersect::Projection<N,
     }
 }
 
+impl Canonical for geom_intersect::LevelCurves {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_intersect::Item {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
