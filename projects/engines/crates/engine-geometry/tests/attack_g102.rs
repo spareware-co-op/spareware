@@ -56,7 +56,10 @@ fn every_query_is_listed_with_its_cost() {
         );
         assert!(!s.charges.is_empty(), "{name}");
         assert!(s.charges.iter().all(|c| c.units == 1), "{name}");
-        assert!(s.charges.iter().all(|c| c.phase.name() == "query"), "{name}");
+        assert!(
+            s.charges.iter().all(|c| c.phase.name() == "query"),
+            "{name}"
+        );
         assert!(s.example.starts_with(name), "{name}");
         assert!(!s.batch, "{name}");
         assert!(

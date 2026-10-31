@@ -71,7 +71,7 @@ pub fn roles_of(
                 .map(|o| (at, o))
         });
         match step {
-            None => {}
+            None | Some((_, Origin::Unchanged)) => {}
             Some((_, Origin::Generated { role, .. })) => {
                 found.insert(role.clone());
             }
@@ -82,7 +82,6 @@ pub fn roles_of(
             Some((at, Origin::Merged { of })) => {
                 stack.extend(of.names().iter().map(|&n| (n, at)));
             }
-            Some((_, Origin::Unchanged)) => {}
         }
     }
     Ok(found.into_iter().collect())

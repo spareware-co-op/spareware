@@ -495,7 +495,7 @@ fn crossing(p: P3, a: P3, b: P3, c: P3) -> Result<i64, NumError> {
     if plane == Sign::Zero || plane == turn {
         return Ok(0);
     }
-    Ok(if turn == Sign::Positive { 1 } else { -1 })
+    Ok(i64::from(turn.as_i8()))
 }
 
 /// Which side of closed flat shell `s` the point `p` lies on, or `None` if a vertex of the shell

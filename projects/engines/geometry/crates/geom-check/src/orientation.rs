@@ -163,10 +163,10 @@ fn nesting(body: &Body, roles: &[u32], sink: &mut Sink<'_, '_>) -> Result<(), St
     for s in rows::<Shell>(a.rows(Arena::Shell)) {
         for t in rows::<Shell>(a.rows(Arena::Shell)).filter(|&t| t != s) {
             sink.charge()?;
-            let (rs, rt) = (role(roles, s), role(roles, t));
+            let (first, second) = (role(roles, s), role(roles, t));
             let same = region(a, s) == region(a, t);
-            let lumps = !same && rs == OUTER && rt == OUTER;
-            let want = wanted(same, rs, rt);
+            let lumps = !same && first == OUTER && second == OUTER;
+            let want = wanted(same, first, second);
             if want.is_none() && !lumps {
                 continue;
             }

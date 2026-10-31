@@ -174,6 +174,55 @@ fn a_lump_in_another_regions_material_is_found() {
 }
 
 #[test]
+fn a_lump_with_a_cavity_of_its_own_in_another_regions_material_is_one_fault() {
+    // The lump's outer shell is the fault. Its cavity is the lump's business: it lies inside the
+    // other region too, but only a region's outer shell is judged against another region.
+    let (mut r, _) = solid();
+    let other = r.region(RegionKind::Solid);
+    let lump = add(&mut r, other, [10; 3], [20; 3], false);
+    add(&mut r, other, [12; 3], [18; 3], true);
+    assert_eq!(
+        exact(&r).faults(),
+        [Fault::at(FaultKind::ShellNesting, Entity::Shell(ix(lump))).with(Entity::Shell(ix(0)))]
+    );
+}
+
+#[test]
+fn a_shell_is_judged_only_once_its_loops_are_sound() {
+    // Inside out and with one face's sense wrong: the loop comes first, and a shell whose loops
+    // are wrong is not judged.
+    let mut r = Rows::empty();
+    let region = r.region(RegionKind::Solid);
+    let s = r.shell(region);
+    add_box(&mut r, s, [0; 3], [10; 3], true);
+    r.faces[1].sense = Sense::Reversed;
+    assert_eq!(
+        exact(&r).faults(),
+        [Fault::at(FaultKind::LoopSense, Entity::Face(ix(1))).value(0)]
+    );
+}
+
+#[test]
+fn a_shell_that_encloses_nothing_is_found() {
+    // A pillow: two triangles on one plane, back to back, their edges shared.
+    let mut r = Rows::empty();
+    let region = r.region(RegionKind::Solid);
+    let s = r.shell(region);
+    for p in [[0, 0, 0], [10, 0, 0], [0, 10, 0]] {
+        r.vertex(p);
+    }
+    faces_into(&mut r, s, &[&[0, 1, 2], &[0, 2, 1]]);
+    let found = exact(&r);
+    assert!(!found.passed());
+    assert_eq!(
+        found.faults().iter().map(|f| f.kind).collect::<Vec<_>>(),
+        [FaultKind::ShellFlat, FaultKind::ShellInward],
+        "{:?}",
+        found.faults()
+    );
+}
+
+#[test]
 fn shells_that_share_every_vertex_of_one_fail_closed() {
     // A cube dented on all six sides, each dent four triangles to a tip inside it, and a cavity
     // that is the tetrahedron through four of the tips: every vertex of the cavity is a vertex of
@@ -460,6 +509,7 @@ fn every_new_kind_says_what_is_wrong() {
     for kind in [
         FaultKind::LoopSense,
         FaultKind::FaceBound,
+        FaultKind::ShellFlat,
         FaultKind::ShellInward,
         FaultKind::ShellOutward,
         FaultKind::ShellNesting,

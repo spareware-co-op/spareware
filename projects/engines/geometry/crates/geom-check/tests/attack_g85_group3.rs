@@ -257,7 +257,10 @@ fn two_faces_on_one_integer_plane_stay_unchecked() {
             .unwrap(),
         );
     }
-    assert!(only(&group_3(&at(&r, BodyKind::Sheet, 1)), FaultKind::PairUnchecked));
+    assert!(only(
+        &group_3(&at(&r, BodyKind::Sheet, 1)),
+        FaultKind::PairUnchecked
+    ));
     // Parallel planes a step apart pass.
     let r = sheets(&[
         &[[0, 0, 1], [4, 0, 1], [4, 4, 1], [0, 4, 1]],

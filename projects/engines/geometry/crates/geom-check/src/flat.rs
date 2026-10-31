@@ -84,14 +84,16 @@ fn minor(p: f64, q: f64, r: f64, s: f64) -> Option<Interval> {
     tight::sub(product(p, q).ok()?, product(r, s).ok()?).ok()
 }
 
-/// The sign of `area` · (a × b) for a plane spanned by a and b, in certified intervals.
-fn spanned(a: [f64; 3], b: [f64; 3], area: [i128; 3]) -> Option<Sign> {
-    let ([ax, ay, az], [bx, by, bz]) = (a, b);
-    let [cx, cy, cz] = area.map(around);
-    let x = tight::mul(cx?, minor(ay, bz, az, by)?).ok()?;
-    let y = tight::mul(cy?, minor(az, bx, ax, bz)?).ok()?;
-    let z = tight::mul(cz?, minor(ax, by, ay, bx)?).ok()?;
-    tight::add(tight::add(x, y).ok()?, z).ok()?.certain_sign()
+/// The sign of `area` · (u × v) for a plane spanned by u and v, in certified intervals.
+fn spanned(u: [f64; 3], v: [f64; 3], area: [i128; 3]) -> Option<Sign> {
+    let ([ux, uy, uz], [vx, vy, vz]) = (u, v);
+    let [ax, ay, az] = area.map(around);
+    let along_x = tight::mul(ax?, minor(uy, vz, uz, vy)?).ok()?;
+    let along_y = tight::mul(ay?, minor(uz, vx, ux, vz)?).ok()?;
+    let along_z = tight::mul(az?, minor(ux, vy, uy, vx)?).ok()?;
+    tight::add(tight::add(along_x, along_y).ok()?, along_z)
+        .ok()?
+        .certain_sign()
 }
 
 /// What one face's loops came to.

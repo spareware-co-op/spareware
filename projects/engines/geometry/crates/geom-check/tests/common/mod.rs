@@ -230,9 +230,10 @@ impl Rows {
                 ))
             })
             .collect();
-        let mut area = [0_i64; 3];
+        let mut area = [0_i128; 3];
         for (k, p) in starts.iter().enumerate() {
-            let q = starts[(k + 1) % starts.len()];
+            let p = p.map(i128::from);
+            let q = starts[(k + 1) % starts.len()].map(i128::from);
             area[0] += p[1] * q[2] - p[2] * q[1];
             area[1] += p[2] * q[0] - p[0] * q[2];
             area[2] += p[0] * q[1] - p[1] * q[0];
