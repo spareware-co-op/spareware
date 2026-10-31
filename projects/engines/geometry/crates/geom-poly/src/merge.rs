@@ -818,6 +818,9 @@ fn nest(
     Ok(out)
 }
 
+/// What numbers a face: its sheet, then its lowest fin's edge and way.
+type FaceKey = (usize, usize, usize, bool);
+
 /// Merges `pieces` into the faces, edges and shells of a body, every number the shape's own.
 ///
 /// # Errors
@@ -851,17 +854,17 @@ pub fn merge(
     }
     let runs = cut_at_ends(runs, &points)?;
 
-    // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest vertex.
-    let mut lowest: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
+    // only one face of a sheet can hold.
+    let mut lowest: BTreeMap<usize, FaceKey> = BTreeMap::new();
     for run in &runs {
         for fin in &run.fins {
-            let slot = lowest
-                .entry(root(&same_piece, fin.held))
-                .or_insert((fin.sheet, run.low));
-            slot.1 = slot.1.min(run.low);
+            let key = (fin.sheet, run.low, run.high, fin.rising);
+            let slot = lowest.entry(root(&same_piece, fin.held)).or_insert(key);
+            *slot = key.min(*slot);
         }
     }
-    let mut face_list: Vec<((usize, usize), usize)> =
+    let mut face_list: Vec<(FaceKey, usize)> =
         lowest.iter().map(|(top, key)| (*key, *top)).collect();
     face_list.sort_unstable();
     let numbered_faces: BTreeMap<usize, usize> = face_list
@@ -876,7 +879,7 @@ pub fn merge(
             .ok_or(MergeError::Open)
     };
     let mut planes: Vec<Plane> = Vec::with_capacity(face_list.len());
-    for ((sheet, _), _) in &face_list {
+    for ((sheet, ..), _) in &face_list {
         planes.push(sheets.get(*sheet).ok_or(MergeError::Open)?.face);
     }
 
@@ -954,7 +957,7 @@ pub fn merge(
             faces: Vec::new(),
         })
         .collect();
-    for (at, (((sheet, _), _), list)) in face_list.iter().zip(&own_fins).enumerate() {
+    for (at, (((sheet, ..), _), list)) in face_list.iter().zip(&own_fins).enumerate() {
         let plane = planes.get(at).ok_or(MergeError::Open)?;
         let shell = shell_of(at)?;
         faces.push(Face {

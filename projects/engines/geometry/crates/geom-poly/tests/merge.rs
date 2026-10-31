@@ -560,6 +560,23 @@ fn tilted_solids_meet_where_three_planes_do() {
 }
 
 #[test]
+fn two_faces_that_meet_at_their_lowest_corner_keep_their_numbers() {
+    let mut polygons = Vec::new();
+    let up = [[0, 0, 0], [40, 10, 0], [40, 30, 0], [30, 20, 30]];
+    let down = [[0, 0, 0], [40, -10, 0], [40, -30, 0], [30, -20, 30]];
+    tetrahedron(up, 0, &mut polygons).unwrap();
+    tetrahedron(down, 1, &mut polygons).unwrap();
+    let mut pieces = kept(&polygons, &WindingTest::unite(), LEAF_POLYGONS);
+    let once = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&once, &pieces);
+    pieces.reverse();
+    let again = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    assert_eq!(once.faces, again.faces);
+    assert_eq!(once.edges, again.edges);
+    assert_eq!(once.shells, again.shells);
+}
+
+#[test]
 fn an_edge_breaks_where_a_corner_rests_on_it() {
     let mut polygons = scene(&[A]);
     let tip = [[2, 4, 4], [2, 8, 5], [3, 9, 9], [1, 5, 9]];
