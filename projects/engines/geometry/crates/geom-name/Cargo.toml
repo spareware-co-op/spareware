@@ -16,6 +16,9 @@ geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 
 [dev-dependencies]
+# Property tests only, never linked into the kernel (chapter 29: a development dependency).
+# MIT OR Apache-2.0. Without its default fork and timeout features, as geom-op's tests use it.
+proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 # The tests' seeded generator and seed printing (geom_test::rng and geom_test::seed).
 geom-test = { path = "../geom-test" }
 # The property tests of the attribute step over generated histories (geom_test::history's
