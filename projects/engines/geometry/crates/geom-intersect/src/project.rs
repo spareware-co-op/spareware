@@ -489,38 +489,56 @@ fn search<const D: usize>(
     Ok(found)
 }
 
+/// The smallest interval holding `x` and `y`.
+fn hull(x: Interval, y: Interval) -> Result<Interval, NumError> {
+    Interval::new(smaller(x.lo(), y.lo()), larger(x.hi(), y.hi()))
+}
+
+/// Two touching enclosures of one nearest point as one: the exact point is in one of them, so the
+/// answer holds both, and is a foot if either is.
+fn joined<const N: usize, const D: usize>(
+    a: &Nearest<N, D>,
+    b: &Nearest<N, D>,
+) -> Result<Nearest<N, D>, NumError> {
+    let mut out = *a;
+    for (x, y) in out.at.iter_mut().zip(&b.at) {
+        *x = hull(*x, *y)?;
+    }
+    for (x, y) in out.point.iter_mut().zip(&b.point) {
+        *x = hull(*x, *y)?;
+    }
+    out.distance = hull(a.distance, b.distance)?;
+    if b.place == Place::Foot {
+        out.place = Place::Foot;
+    }
+    Ok(out)
+}
+
 /// Keeps what can still be nearest, in parameter order, joining enclosures that touch: one foot
-/// reached from both sides of a split, or a foot at an end.
+/// reached from both sides of a split, or from several boxes that touch only through each other,
+/// or a foot at an end.
 fn settle<const N: usize, const D: usize>(
     mut points: Vec<Nearest<N, D>>,
     upper: f64,
-) -> Vec<Nearest<N, D>> {
+) -> Result<Vec<Nearest<N, D>>, NumError> {
     points.retain(|n| n.distance.lo() <= upper);
-    points.sort_by(|a, b| {
-        let (a, b) = (
-            a.at.map(|i| (i.lo(), i.hi())),
-            b.at.map(|i| (i.lo(), i.hi())),
-        );
+    let mut kept: Vec<Nearest<N, D>> = Vec::with_capacity(points.len());
+    for mut point in points {
+        // Each join can reach another group, so this runs until nothing kept touches the point.
+        while let Some(k) = kept.iter().position(|n| {
+            n.at.iter()
+                .zip(&point.at)
+                .all(|(x, y)| x.hi() >= y.lo() && y.hi() >= x.lo())
+        }) {
+            point = joined(&kept.swap_remove(k), &point)?;
+        }
+        kept.push(point);
+    }
+    kept.sort_by(|a, b| {
+        let (a, b) = (a.at.map(Interval::lo), b.at.map(Interval::lo));
         a.partial_cmp(&b).unwrap_or(core::cmp::Ordering::Equal)
     });
-    let mut kept: Vec<Nearest<N, D>> = Vec::with_capacity(points.len());
-    for point in points {
-        let joined = kept.last_mut().is_some_and(|last| {
-            let touches = last
-                .at
-                .iter()
-                .zip(&point.at)
-                .all(|(x, y)| x.hi() >= y.lo() && y.hi() >= x.lo());
-            if touches && point.place == Place::Foot {
-                last.place = Place::Foot;
-            }
-            touches
-        });
-        if !joined {
-            kept.push(point);
-        }
-    }
-    kept
+    Ok(kept)
 }
 
 /// Joins the open spans still in reach of `found.upper` into runs. A run within twice the floor
@@ -639,7 +657,7 @@ fn settled<const D: usize>(
             enclosure: [Interval::new(run.0, run.1)?],
         });
     }
-    Ok(Projection::Points(settle(found.points, found.upper)))
+    Ok(Projection::Points(settle(found.points, found.upper)?))
 }
 
 /// A point of 2D or 3D as 3D, its missing coordinates zero.
@@ -872,7 +890,7 @@ pub fn project_surface(
             place: Place::Foot,
         });
     }
-    Ok(Projection::Points(settle(points, upper)))
+    Ok(Projection::Points(settle(points, upper)?))
 }
 
 /// The parameters of `p` on `curve`, if it lies within `bound` of it (12.4's inversion).

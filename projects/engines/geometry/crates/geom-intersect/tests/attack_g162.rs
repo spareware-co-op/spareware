@@ -213,6 +213,27 @@ fn zero_wrong_answers_on_surfaces_with_known_feet() {
     }
 }
 
+/// One foot on a domain's edge, reached by the edge's search and by boxes that touch only through
+/// each other, is one nearest point, whose enclosures hold the exact foot: no tie.
+#[test]
+fn boxes_around_one_foot_are_one_nearest_point() {
+    let frame = Frame::standard().unwrap();
+    let s =
+        SurfaceKind::Sphere(Sphere::new([0.0; 3], 6.0, frame, ((0.0, 1.0), (-0.5, 0.5))).unwrap());
+    let p = [1.5, 0.0, -2.5];
+    let found = project_surface(&s, &p, FLOOR, &mut meter()).unwrap();
+    assert!(!found.tie_broken(), "{found:?}");
+    let foot = found.first().unwrap();
+    let length = 8.5f64.sqrt();
+    assert!(foot.at[0].contains(0.0), "{foot:?}");
+    assert!(foot.distance.lo() <= 6.0 - length, "{foot:?}");
+    assert!(foot.distance.hi() >= 6.0 - length, "{foot:?}");
+    let exact = [1.5 * 6.0 / length, 0.0, -2.5 * 6.0 / length];
+    for (x, e) in foot.point.iter().zip(exact) {
+        assert!(x.lo() - 1e-12 <= e && e <= x.hi() + 1e-12, "{foot:?}");
+    }
+}
+
 #[test]
 fn a_round_kind_seen_from_its_axis_is_a_typed_set() {
     let frame = Frame::standard().unwrap();
