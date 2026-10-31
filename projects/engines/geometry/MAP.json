@@ -432,6 +432,26 @@
           "target": "lib"
         },
         {
+          "cost": "about a hundred draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/bvh.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): small scenes for the box tree (build, then the boxes meeting a query box) and for the Morton-sorted cell index (build, then the points within a radius of a centre).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the queries of `geom-bvh`'s tests (`tests/tree.rs`, `tests/cells.rs`, each checked there against brute force), built and queried whole under an unlimited budget on the serial executor, at one scene size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::bvh",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a batch of up to 64 inputs, built once per benchmark run.",
           "does": null,
           "family": [],
@@ -447,6 +467,26 @@
             "text": "the degenerate cases of a crossing as `Ssi::new` documents them, with Shewchuk's input classes (<https://doi.org/10.1007/PL00009321>, section 6) and a unimodular 2D basis (Knuth, volume 2, section 4.5.2) for the nearly degenerate ones, built from the shared draws of `inputs` as the plane inputs are."
           },
           "path": "geom_bench::inputs::crossing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per value, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/curve.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44): parameters on an exact helix (its point, and its certified enclosure with two derivatives), bulge polylines for their conversion to NURBS, stations on a clothoid transition, and transition lengths for their conversion to NURBS.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-curve`'s benchmarks (`benches/analytic.rs`, `compound.rs`, `enclosure.rs` and `transition.rs`), at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::curve",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -635,6 +675,26 @@
           "target": "lib"
         },
         {
+          "cost": "36 or 24 draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/linalg.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.44): small dense matrices for the column-pivoted QR factorisation and the one-sided Jacobi singular value decomposition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the corpus shape of `geom-linalg`'s `tests/dense_determinism.rs` and `tests/spectral_determinism.rs` (random entries, the factorisation run whole under an unlimited budget), at one size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::linalg",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -650,6 +710,26 @@
             "text": "the hard cases of elementary-function implementations, each a separate path through libm (which `geom_num::math` wraps): arguments that need the longest trigonometric argument reduction (Payne and Hanek 1983, <https://doi.org/10.1145/1057600.1057602>), results near overflow and underflow, subnormals, and arguments next to the ends of each domain."
           },
           "path": "geom_bench::inputs::math",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/math_types.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.44): grid points for the typed transforms and the rational rotation, unit directions for the rational-rotation search, grid points for the frame-to-map conversion, and survey coordinates as decimal text.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-math`'s `benches/transform.rs` (the 1M-point transform benchmark of G45, with G46's searches and G48's frames), whose header says they move here once this harness exists. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::math_types",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -693,6 +773,26 @@
             "text": "the cases an interval Newton step decides, as chapter 12.4 lists them (exclusion, uniqueness, refinement) and as `geom_num::newton`'s module header proves them (`projects/engines/geometry/architecture/12-intersections.md`), each with its own class, and boxes around a zero at widths a decade apart, as the root-isolation engine (G53) will hand them over."
           },
           "path": "geom_bench::inputs::newton",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per value, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/nurbs.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): parameters for evaluating a clamped cubic curve, point sets for its interpolation, and interval control points for the Bernstein bound.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-nurbs`'s benchmarks (`benches/nurbs.rs`, `fit.rs` and `bernstein.rs`): a clamped cubic, chord-length interpolation by version 1 of the fit, and the bound of a cubic Bernstein piece, at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::nurbs",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -801,6 +901,26 @@
           "target": "lib"
         },
         {
+          "cost": "two draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/roots.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for root finding and quadrature (piece G51, decision 32.44): brackets for Brent's zero search on a fixed cubic, and intervals for Gauss-Legendre quadrature of a fixed quintic.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the classic test function x³ − 2x − 5 of root finding (Wallis's, used by Brent in *Algorithms for Minimization without Derivatives*, 1973, chapter 4), and a quintic, which an eight-point rule integrates exactly. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::roots",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -816,6 +936,26 @@
             "text": "one input per branch of a three-way comparison, at both ends of the type (boundary-value analysis, <https://en.wikipedia.org/wiki/Boundary-value_analysis>)."
           },
           "path": "geom_bench::inputs::sign",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two draws of [`SplitMix64`] per pair, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/surface.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.44): parameter pairs on a torus (its point, and its certified enclosure with first partials) and on an offset cylinder (its point).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-surface`'s benchmarks (`benches/surfaces.rs`, `offsets.rs`), at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::surface",
           "provenance": [],
           "spdx": null,
           "target": "lib"
