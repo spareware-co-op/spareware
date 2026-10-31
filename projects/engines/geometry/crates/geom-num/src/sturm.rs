@@ -351,10 +351,9 @@ impl Chain {
         let mut len: usize = 2;
         // Cohen's lead and step, as magnitudes.
         let (mut lead, mut step) = (Big::one(), Big::one());
-        while let (Some(above), Some(below)) = (
-            len.checked_sub(2).and_then(|i| polys.get(i)).copied(),
-            len.checked_sub(1).and_then(|i| polys.get(i)).copied(),
-        ) {
+        loop {
+            let above = *polys.get(len.checked_sub(2)?)?;
+            let below = *polys.get(len.checked_sub(1)?)?;
             if below.degree == 0 {
                 break;
             }
