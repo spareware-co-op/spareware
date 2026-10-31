@@ -13751,7 +13751,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-topo/src/builder/euler.rs",
           "guarantees": [
-            "**Euler's formula is kept.** Each operator changes the counts by its row of the table above, so V − E + F − R = 2 (S − H) holds after it when it held before; `R` is loops less faces, and `H` is the count the model of `tests/euler_model.rs` keeps.",
+            "**Euler's formula is kept.** Each operator changes the counts by its row of the table above, so V − E + F − R = 2 (S − H) holds after it when it held before; `R` is loops less faces, and `H` is the count the model of `tests/euler_model.rs` keeps. `verus/euler.rs` proves this, and the next guarantee, on a model of these operators (piece G111); `tests/euler_model.rs` ties the model to this code.",
             "**Loops stay closed and rings stay paired.** Every operator leaves each loop's fins one cycle by `next` and `prev`, each the inverse of the other, each fin's start the end of the fin before it, and each edge it makes with two fins, each the other's radial neighbour.",
             "**A refusal changes nothing.** Every operator checks its arguments before it changes a row; one it cannot apply is a [`TopoError::Euler`] with the [`Refusal`]. An arena that is full or an allocation refused part-way leaves the editor part-way, to be dropped.",
             "**Rows only grow while editing.** A killed row is marked dead, so every handle the editor gave stays the row it named; [`Euler::publish`] drops dead rows and the geometry no live entity uses, then assigns every index in name order.",
