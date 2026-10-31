@@ -105,18 +105,20 @@ fn point(rng: &mut SplitMix64) -> Option<P3> {
     P3::new(x, y, z).ok()
 }
 
+/// Eight corners in convex position, counter-clockwise from above.
+const RING: [(i64, i64); 8] = [
+    (4, 0),
+    (3, 3),
+    (0, 4),
+    (-3, 3),
+    (-4, 0),
+    (-3, -3),
+    (0, -4),
+    (3, -3),
+];
+
 /// A strictly convex polygon of three to eight corners on one level, counter-clockwise from above.
 fn polygon(rng: &mut SplitMix64) -> Option<Vec<P3>> {
-    const RING: [(i64, i64); 8] = [
-        (4, 0),
-        (3, 3),
-        (0, 4),
-        (-3, 3),
-        (-4, 0),
-        (-3, -3),
-        (0, -4),
-        (3, -3),
-    ];
     let z = coordinate(rng);
     let scale = i64::try_from(below(rng, 1 << 12))
         .unwrap_or(0)
@@ -294,4 +296,23 @@ pub fn digest(fixtures: &[Fixture], engine: &mut dyn Engine) -> Result<[u8; 32],
         }
     }
     Ok(sha.finish())
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "test cases; the rules are for kernel code"
+)]
+mod tests {
+    use super::RING;
+
+    #[test]
+    fn the_ring_turns_left_at_every_corner() {
+        let next = RING.iter().cycle().skip(1);
+        let after = RING.iter().cycle().skip(2);
+        for ((a, b), c) in RING.iter().zip(next).zip(after) {
+            let turn = (b.0 - a.0) * (c.1 - b.1) - (b.1 - a.1) * (c.0 - b.0);
+            assert!(turn > 0, "{a:?} {b:?} {c:?}");
+        }
+    }
 }
