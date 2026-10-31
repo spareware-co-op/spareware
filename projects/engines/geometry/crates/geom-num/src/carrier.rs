@@ -68,7 +68,6 @@ const _: () = {
     assert!(OFFSET_BITS + NORMAL_BITS + 1 == POINT_BITS);
     assert!(NORMAL_BITS + NORMAL_BITS + 1 == WEIGHT_BITS);
     assert!(NORMAL_BITS + POINT_BITS == 165 && OFFSET_BITS + WEIGHT_BITS == 165);
-    assert!(165 + 2 + 1 == 168);
     assert!(POINT_BITS + WEIGHT_BITS + 1 + NORMAL_BITS + 1 + 1 == 251);
     assert!(POINT_BITS + WEIGHT_BITS + 1 + 1 == 209);
     assert!(2 * POINT_BITS + WEIGHT_BITS + 3 + 1 == 335);
@@ -76,7 +75,7 @@ const _: () = {
 
 /// The largest magnitude below 2 to `bits`.
 const fn below(bits: u32) -> i128 {
-    (1_i128 << bits) - 1
+    (1_i128 << bits).saturating_sub(1)
 }
 
 /// Whether `v` is below 2 to `bits` in magnitude.
@@ -121,6 +120,10 @@ impl Carrier {
     /// # Errors
     ///
     /// [`NumError::Degenerate`] when `p` and `q` are one point.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "p and q are the points, a, b and c the line's coefficients, as in the formula"
+    )]
     pub fn through(p: P2, q: P2) -> Result<Carrier, NumError> {
         let wide = |v: Coord| i128::from(v.get());
         let a = wide(p.y)
@@ -155,6 +158,10 @@ impl Carrier {
     ///
     /// [`NumError::BudgetExceeded`] if a step of the exact path did not fit, which no input in the
     /// budget can reach.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b and c are the line's coefficients, x, y and w the point's, as in the formula"
+    )]
     pub fn side(&self, p: &Rational2) -> Result<Sign, NumError> {
         let (a, b, c) = (self.a, self.b, self.c);
         let (x, y, w) = (p.x, p.y, p.w);
