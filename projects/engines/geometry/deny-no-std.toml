@@ -40,12 +40,15 @@ all-features = true
 exclude-dev = true
 
 [bans]
-# The vetted allow-list: the only published crates allowed in the graph of a kernel crate, libm
-# alone today. Our own crates are workspace members and are allowed as such; which of them a kernel
-# crate may name is the crate table's rule (projects/engines/crates/engine-geometry/tests/
-# scaffold), which also holds that only geom-num names libm, the kernel's one door to maths
-# functions (21). A path crate outside the workspace is not allowed, and a vetted crate must come
-# from crates.io (the gate's rules, above).
+# The vetted allow-list: the only published crates allowed in the graph of a kernel crate: libm,
+# RustCrypto's sha2 with the crates it brings (owner action G79, 32.20; piece G86), and the crc
+# crate with its catalogue, for records' CRC-32C (24.2; piece G92). Our own
+# crates are workspace members and are allowed as such; which of them a kernel crate may name is
+# the crate table's rule (projects/engines/crates/engine-geometry/tests/scaffold), which also holds
+# that only geom-num names libm, the kernel's one door to maths functions (21), and that of the
+# kernel crates only geom-op and geom-format name sha2 (32.20) and only geom-format names crc
+# (24.2). A path crate outside the workspace
+# is not allowed, and a vetted crate must come from crates.io (the gate's rules, above).
 allow = [
   { crate = "libm@0.2.16", reason = """\
 deterministic: pure Rust; its default arch feature takes the processor's square root on x86-64 \
@@ -58,6 +61,84 @@ allocation) of the release this entry pins (29.20, rule 3); what vendoring it sh
 (31.7); \
 pinned: 0.2.16, by Cargo.lock and this entry: geom-num asks for ^0.2.16, so a lock that moves past \
 it fails the gate until a new record is written""" },
+  { crate = "block-buffer@0.12.1", reason = """\
+deterministic: buffers a message into 64-byte blocks for sha2: copies and counts bytes, no \
+arithmetic on their values, so the blocks are the same on every target; no_std: yes, the crate is \
+#![no_std]; audited: projects/kit/notes/G86-sha2-audit.md, the written audit of sha2 0.11.0 and \
+every crate it brings, at the releases these entries pin (29.20, rule 3); pinned: 0.12.1, by \
+Cargo.lock and this entry: digest 0.11.3 asks for ^0.12, so a lock that moves past it fails the \
+gate until a new record is written""" },
+  { crate = "cfg-if@1.0.5", reason = """\
+deterministic: one macro, expanded at compile time, that chooses sha2's backend code by target; \
+it runs nothing; no_std: yes, the crate is #![no_std]; audited: \
+projects/kit/notes/G86-sha2-audit.md, the written audit of sha2 0.11.0 and every crate it brings, \
+at the releases these entries pin (29.20, rule 3); pinned: 1.0.5, by Cargo.lock and this entry: \
+sha2 0.11.0 asks for ^1""" },
+  { crate = "cpufeatures@0.3.1", reason = """\
+deterministic: tells sha2 whether the processor has SHA instructions, so it can take its x86 \
+SHA-NI or AArch64 SHA2 path: at run time on x86-64 and AArch64 Linux, at build time where the \
+target already has the instructions (AArch64 Apple, or -C target-cpu=native on such a processor), \
+and always no on AArch64 Windows; each path computes the one function FIPS 180-4 defines, so the \
+answer changes speed, never bits; it is compiled only for x86, x86-64 and AArch64, never for \
+wasm32; no_std: yes, the crate is #![no_std]; audited: projects/kit/notes/G86-sha2-audit.md, the \
+written audit of sha2 0.11.0 and every crate it brings, at the releases these entries pin (29.20, \
+rule 3); pinned: 0.3.1, by Cargo.lock and this entry: sha2 0.11.0 asks for ^0.3 on x86, x86-64 \
+and AArch64""" },
+  { crate = "crc@3.4.0", reason = """\
+deterministic: CRC-32C by table lookups, shifts and XORs on u32, with no processor-specific path, \
+so the check is the same on every target; no_std: yes, the crate is #![no_std] and \
+#![forbid(unsafe_code)], with no default features; audited: projects/kit/notes/G92-crc-audit.md, \
+the written audit of crc 3.4.0 and crc-catalog 2.5.0 at the releases these entries pin (29.20, \
+rule 3); pinned: 3.4.0, by Cargo.lock and this entry: geom-format asks for ^3.4.0, so a lock that \
+moves past it fails the gate until a new record is written""" },
+  { crate = "crc-catalog@2.5.0", reason = """\
+deterministic: constant parameters of published CRCs, among them CRC_32_ISCSI, the Castagnoli \
+CRC-32C; it computes nothing; no_std: yes, the crate is #![no_std] and #![forbid(unsafe_code)]; \
+audited: projects/kit/notes/G92-crc-audit.md, the written audit of crc 3.4.0 and crc-catalog \
+2.5.0 at the releases these entries pin (29.20, rule 3); pinned: 2.5.0, by Cargo.lock and this \
+entry: crc 3.4.0 asks for ^2.4.0""" },
+  { crate = "crypto-common@0.2.2", reason = """\
+deterministic: the traits and fixed-size array types sha2 is written against; it computes nothing \
+of its own; no_std: yes, the crate is #![no_std], with its optional getrandom and rand_core \
+features off; audited: projects/kit/notes/G86-sha2-audit.md, the written audit of sha2 0.11.0 and \
+every crate it brings, at the releases these entries pin (29.20, rule 3); pinned: 0.2.2, by \
+Cargo.lock and this entry: digest 0.11.3 asks for ^0.2""" },
+  { crate = "digest@0.11.3", reason = """\
+deterministic: the traits sha2 implements and the update and finalize plumbing around \
+block-buffer; it computes nothing of its own; no_std: yes, the crate is #![no_std], with its \
+alloc, oid, zeroize and dev features off; audited: projects/kit/notes/G86-sha2-audit.md, the \
+written audit of sha2 0.11.0 and every crate it brings, at the releases these entries pin (29.20, \
+rule 3); pinned: 0.11.3, by Cargo.lock and this entry: sha2 0.11.0 asks for ^0.11""" },
+  { crate = "hybrid-array@0.4.15", reason = """\
+deterministic: fixed-size arrays sized by typenum, for the blocks and the digest; it copies and \
+indexes, and computes nothing of its own; no_std: yes, the crate is #![no_std], with every \
+optional feature off; audited: projects/kit/notes/G86-sha2-audit.md, the written audit of sha2 \
+0.11.0 and every crate it brings, at the releases these entries pin (29.20, rule 3); pinned: \
+0.4.15, by Cargo.lock and this entry: block-buffer 0.12.1 and crypto-common 0.2.2 ask for ^0.4.7 \
+or ^0.4""" },
+  { crate = "libc@0.2.191", reason = """\
+deterministic: declarations only, used by cpufeatures to ask the operating system for the \
+processor's features on AArch64 Linux, Android and Apple targets; it computes nothing and is not \
+compiled for x86-64 or wasm32; no_std: yes, with its default std feature off, as cpufeatures \
+asks; audited: projects/kit/notes/G86-sha2-audit.md, the written audit of sha2 0.11.0 and every \
+crate it brings, at the releases these entries pin (29.20, rule 3); pinned: 0.2.191, by \
+Cargo.lock and this entry: cpufeatures 0.3.1 asks for ^0.2.155 on those AArch64 targets""" },
+  { crate = "sha2@0.11.0", reason = """\
+deterministic: SHA-256 as FIPS 180-4 defines it, in pure Rust; its x86 SHA-NI and AArch64 SHA2 \
+backends, chosen by cpufeatures, and its portable backend, the one on wasm32, compute the one \
+function, so the digest never depends on the machine; geom-op's tests check NIST's published \
+vectors on every leg of kernel.yml, natively and in WebAssembly (owner action G79, 32.20); \
+no_std: yes, the crate is #![no_std], and geom-op names it with default-features = false, so its \
+alloc and oid features are off; it builds for wasm32v1-none in the gate's build of geom-op; \
+audited: projects/kit/notes/G86-sha2-audit.md, the written audit of sha2 0.11.0 and every crate \
+it brings, at the releases these entries pin (29.20, rule 3); pinned: 0.11.0, by Cargo.lock and \
+this entry: geom-op asks for ^0.11.0, so a lock that moves past it fails the gate until a new \
+record is written""" },
+  { crate = "typenum@1.20.1", reason = """\
+deterministic: numbers in the type system, worked out at compile time to size arrays; no code of \
+it runs; no_std: yes, the crate is #![no_std]; audited: projects/kit/notes/G86-sha2-audit.md, the \
+written audit of sha2 0.11.0 and every crate it brings, at the releases these entries pin (29.20, \
+rule 3); pinned: 1.20.1, by Cargo.lock and this entry: hybrid-array 0.4.15 asks for ^1.20""" },
 ]
 allow-workspace = true
 wildcards = "deny"

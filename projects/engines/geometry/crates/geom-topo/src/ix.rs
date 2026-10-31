@@ -18,6 +18,10 @@
 //! - **Valid inside one body version only.** An index is a position, not a name; references and
 //!   files hold persistent names (8.2, 20.1).
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7) that every
+//! row but `u32::MAX` has an index that gives it back, `u32::MAX` none, through both constructors,
+//! and that indices compare as their rows, for every `u32`. Hashing and printing are tested.
+//!
 //! Method: one arena per entity kind addressed by a `u32` newtype index, never by address, the
 //! design Fornjot ended on after losing determinism to address identity
 //! (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, sections 2 and 5); the free
@@ -192,5 +196,47 @@ impl<K: Kind> fmt::Debug for Ix<K> {
 impl<K: Kind> fmt::Display for Ix<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", K::ARENA, self.row())
+    }
+}
+
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// A kind for the proofs.
+    struct Row;
+
+    impl Kind for Row {
+        const ARENA: Arena = Arena::Face;
+    }
+
+    /// Every row but `u32::MAX` has an index, which gives the row back; `u32::MAX` has none.
+    #[kani::proof]
+    fn every_row_round_trips() {
+        let row: u32 = kani::any();
+        match Ix::<Row>::new(row) {
+            Some(ix) => {
+                assert!(row <= Ix::<Row>::MAX_ROW);
+                assert_eq!(ix.row(), row);
+                assert_eq!(ix.to_usize(), row as usize);
+                assert_eq!(Ix::<Row>::from_usize(row as usize), Some(ix));
+            }
+            None => assert_eq!(row, u32::MAX),
+        }
+    }
+
+    /// Indices compare as their rows, and an absent index costs no space.
+    #[kani::proof]
+    fn order_is_row_order() {
+        let (a, b): (u32, u32) = (kani::any(), kani::any());
+        kani::assume(a < u32::MAX && b < u32::MAX);
+        let (x, y) = (Ix::<Row>::new(a), Ix::<Row>::new(b));
+        assert_eq!(x.cmp(&y), a.cmp(&b));
+        assert_eq!(x == y, a == b);
+        assert_eq!(core::mem::size_of::<Option<Ix<Row>>>(), 4);
     }
 }

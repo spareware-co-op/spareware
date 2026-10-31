@@ -25,6 +25,8 @@ geom-math = { path = "../geom-math" }
 geom-run = { path = "../geom-run" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
+# The code under test of the cbor target (G91; MPL-2.0, ours).
+geom-format = { path = "../geom-format" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under
