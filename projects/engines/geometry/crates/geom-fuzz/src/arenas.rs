@@ -321,7 +321,7 @@ fn fill(case: &Case) -> Arenas {
         let _ = a.regions.kind.push(kind);
     }
     for (i, &(link, _)) in LINKS.iter().enumerate() {
-        let values = case.links.get(i).map_or(&[][..], Vec::as_slice);
+        let values = case.links.get(i).map_or(Default::default(), Vec::as_slice);
         for value in values {
             push(&mut a, link, *value);
         }
