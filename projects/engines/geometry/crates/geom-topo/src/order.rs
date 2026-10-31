@@ -162,12 +162,6 @@ impl Permutation {
             .copied()
     }
 
-    /// Whether every row stays where it is.
-    #[must_use]
-    pub fn is_identity(&self) -> bool {
-        (0u32..).zip(self.new_of_old.iter()).all(|(i, &n)| i == n)
-    }
-
     /// `rows` in their new order: the row now at `i` is `rows[old_of(i)]`. `None` when `rows`
     /// does not hold exactly [`Permutation::len`] rows.
     #[must_use]
@@ -223,7 +217,6 @@ mod tests {
             (Some(2), Some(0), Some(1))
         );
         assert_eq!((p.old_of(0), p.old_of(2)), (Some(1), Some(0)));
-        assert!(!p.is_identity());
         assert_eq!(p.len(), 3);
     }
 
@@ -242,9 +235,9 @@ mod tests {
     #[test]
     fn empty_and_sorted_inputs() {
         let p = Permutation::by_name(&[]).unwrap();
-        assert!(p.is_empty() && p.is_identity());
+        assert!(p.is_empty());
         let p = Permutation::by_name(&[k(1), k(2)]).unwrap();
-        assert!(p.is_identity());
+        assert_eq!((p.new_of(0), p.new_of(1)), (Some(0), Some(1)));
         assert_eq!(p.apply(&[k(1)]), None);
         assert_eq!(p.new_of(2), None);
     }
