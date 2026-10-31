@@ -30,6 +30,8 @@
 //! of an unbounded derivative as chapter 12.1 asks.
 //!
 //! Cost: none here; each kind's implementation states its own.
+//!
+//! Tier: Preview since 2026-10-31.
 
 use alloc::vec::Vec;
 

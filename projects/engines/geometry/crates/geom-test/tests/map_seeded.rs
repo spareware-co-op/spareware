@@ -1539,3 +1539,27 @@ fn print_the_fixture_map() {
         build(&good(), &[]).text
     );
 }
+
+/// A `Covers:` claim must name something real.
+#[test]
+fn covers() {
+    let tools = r#"{"tools": [{"name": "make.box", "_meta": {"org.spareware/kernel":
+        {"family": "Make", "tier": "Stable", "version": 1}}}]}"#;
+    let claim = |list: &str| {
+        let mut input = good();
+        input.registry = Some(geom_test::map::Registry {
+            tools: tools.to_owned(),
+            evidence: vec![SourceFile {
+                path: "a/tests/b.rs".to_owned(),
+                text: Ok(format!("//! Tests.\n//!\n//! Covers: {list}\n")),
+            }],
+        });
+        build(&input, &[])
+    };
+    let good_claim = claim("make.box.");
+    assert!(good_claim.problems.is_empty(), "{:?}", good_claim.problems);
+    assert!(good_claim.text.contains("\"unit\""));
+    let found = claim("make.nothing.").problems;
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule, Rule::Covers);
+}

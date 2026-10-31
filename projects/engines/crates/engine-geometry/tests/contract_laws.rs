@@ -6,6 +6,9 @@
 //! operation piece adds its row to [`drivers`]. No body holds a tolerance until chapter 6.5's
 //! healing lands, so "No tolerance grows" joins here with the first operation that takes one; the
 //! law itself is seeded in `geom-test/tests/contract_kit.rs`.
+//!
+//! Covers: make.box, make.cone, make.cylinder, make.prism, make.sphere, make.torus,
+//! transform.mirror, transform.move, transform.pattern, transform.rotate, transform.scale.
 
 #![allow(
     clippy::unwrap_used,
@@ -244,13 +247,16 @@ fn matrix(m: [[i64; 3]; 3]) -> Instance {
 /// The counts an example may state, from a result.
 fn counts(body: &Body) -> Vec<(&'static str, u64)> {
     let a = body.arenas();
-    let rows = |arena| u64::try_from(a.rows(arena)).unwrap();
+    let rows = |arena| u64::from(a.rows(arena));
     vec![
         ("face", rows(Arena::Face)),
         ("edge", rows(Arena::Edge)),
         ("vertex", rows(Arena::Vertex)),
     ]
 }
+
+/// A remedy that gives a number: the input, a value that fails, and the call at a value.
+type Remedial = (&'static str, u64, Box<dyn Fn(u64) -> S>);
 
 /// What one operation's laws are run on.
 #[derive(Default)]
@@ -260,7 +266,7 @@ struct Driver {
     /// Calls that fail, one or more per error the schema lists.
     triggers: Vec<Trigger<'static, String>>,
     /// Remedies that give a number: the input, a value that fails, and the call at a value.
-    remedies: Vec<(&'static str, u64, Box<dyn Fn(u64) -> S>)>,
+    remedies: Vec<Remedial>,
     /// The call under an accepted class, where a less exact result needs one.
     accept: Option<Box<dyn Fn(Option<Exactness>) -> S>>,
     /// A call reaching the frame's edge, and one a step past it.
@@ -764,7 +770,7 @@ fn every_operation_is_transactional_under_cancel_and_budget_injection() {
     let seed = geom_test::seed::resolve("contract_laws", Seed(0x4731_3033)).unwrap();
     let mut rng = SplitMix64::new(seed);
     each(|schema, driver| {
-        assert!(!driver.good.is_empty(), "{}", schema.name);
+        assert_ne!(driver.good.len(), 0, "{}", schema.name);
         for (subject, _) in &driver.good {
             transactional(subject, &mut rng).unwrap();
         }
@@ -812,9 +818,8 @@ fn exactness_is_never_lost_unasked() {
 
 #[test]
 fn the_range_holds_at_the_frames_edge() {
-    each(|schema, driver| {
+    each(|_, driver| {
         let (inside, outside) = driver.range.as_ref().unwrap();
-        assert!(!schema.name.is_empty());
         range_holds(inside, outside).unwrap();
     });
 }

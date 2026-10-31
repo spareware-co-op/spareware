@@ -271,6 +271,7 @@ The map is deterministic: crates in name order, modules in path order, object ke
 | `Error enum` | A public error enum declared inside a block, where the map cannot place it | `error_enum` |
 | `Error doc` | An error enum or error kind without a doc comment | `error_doc` |
 | `Error base` | A `kind` function returning `ErrorKind` that is not one `match self`, an arm that is not `Enum::Variant => ErrorKind::Kind` or `Enum::Variant(detail) => detail.kind()`, a variant with no arm or with two, or a base kind that is not a variant of `ErrorKind` | `error_base` |
+| `Covers` | A `Covers:` item that names no operation or kind, or a kind enum's module with no `Tier:` | `covers` |
 | `Stale map` | `MAP.json` is missing, or differs from the map the headers give | `stale` |
 | `Stale gap` | A known gap that no longer occurs, or a pending folder the tree now holds | `gaps` (and `a_pending_folder_is_checked_once_it_exists` in `tests/map_files.rs`) |
 

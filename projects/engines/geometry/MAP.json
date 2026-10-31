@@ -12684,168 +12684,632 @@
   "gaps": [],
   "generated_by": "cargo run -p geom-test --bin map -- write",
   "grammar": "projects/engines/geometry/HEADERS.md",
-  "kinds": [],
+  "kinds": [
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/compound.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Bulge",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Circle",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/compound.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Composite",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Ellipse",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Helix",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Hyperbola",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Involute",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Line",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/contract.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Nurbs",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/compound.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Offset",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/compound.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::OnSurface",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Parabola",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Polynomial",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/attack_g64.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Transition",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-curve/tests/compound.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "CurveKind::Trimmed",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/attack_g65.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Affine",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Cone",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Cylinder",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/swept.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Extrusion",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/contract.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Nurbs",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/offset.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Offset",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Plane",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/swept.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Revolution",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/swept.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Ruled",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Sphere",
+      "tier": "Preview since 2026-10-31"
+    },
+    {
+      "evidence": {
+        "contract": [
+          "projects/engines/geometry/crates/geom-surface/tests/analytic.rs"
+        ]
+      },
+      "missing": [
+        "file_tag",
+        "intersection"
+      ],
+      "name": "SurfaceKind::Torus",
+      "tier": "Preview since 2026-10-31"
+    }
+  ],
   "operations": [
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Make",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "make.box",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Make",
       "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
+        "benchmark"
       ],
       "name": "make.cone",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Make",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "make.cylinder",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Make",
       "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
+        "benchmark"
       ],
       "name": "make.prism",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Make",
       "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
+        "benchmark"
       ],
       "name": "make.sphere",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Make",
       "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
+        "benchmark"
       ],
       "name": "make.torus",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Transform",
       "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
+        "benchmark"
       ],
       "name": "transform.mirror",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Transform",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "transform.move",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Transform",
       "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
+        "benchmark"
       ],
       "name": "transform.pattern",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Transform",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "transform.rotate",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+        ]
+      },
       "family": "Transform",
       "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
+        "benchmark"
       ],
       "name": "transform.scale",
       "tier": "Preview since 2026-10-31",
