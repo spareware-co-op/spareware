@@ -7,8 +7,8 @@
 # script prints one line per file and fails if any does not validate.
 #
 # zcbor and its dependencies install into a fresh virtual environment from wheels pinned by
-# SHA-256: cbor2 6.1.5 (MIT, as oracles/cbor2.sh in geom-op), PyYAML 6.0.3 (MIT) and regex
-# 2026.9.29 (Apache-2.0 AND CNRI-Python).
+# SHA-256: cbor2 5.9.0 (MIT; zcbor 0.9.1 imports CBORDecodeValueError, which cbor2 6 removed),
+# PyYAML 6.0.3 (MIT) and regex 2026.9.29 (Apache-2.0 AND CNRI-Python).
 set -euo pipefail
 schema=$1
 dir=$2
@@ -17,7 +17,7 @@ python3 -m venv "$venv"
 req="$venv/requirements.txt"
 cat > "$req" <<'REQ'
 zcbor==0.9.1 --hash=sha256:bc8bf4470f235c56d6276f162a5cd5417206335da21648ac2274f6417a18266e
-cbor2==6.1.5 --hash=sha256:833db11fbea9808b080e5340d5f96615e28a6a6617618a4331e60082d0dc1ca4
+cbor2==5.9.0 --hash=sha256:2a54fbb32cb828c214f7f333a707e4aec61182e7efdc06ea5d9596d3ecee624a --hash=sha256:27695cbd70c90b8de5c4a284642c2836449b14e2c2e07e3ffe0744cb7669a01b
 pyyaml==6.0.3 --hash=sha256:0f29edc409a6392443abf94b9cf89ce99889a1dd5376d94316ae5145dfedd5d6
 regex==2026.9.29 --hash=sha256:d49c18f1ea294cf4adde2e5ac256e98c82ea9d708462ce4bf799dffa7cfe8a2c
 REQ
