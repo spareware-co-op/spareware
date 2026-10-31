@@ -249,12 +249,12 @@ const FILTERS: [Filter; 15] = [
         module: include_str!("../../geom-num/src/generated/carrier_side.rs"),
         gappa: &[
             (
-                "gappa-carrier-side-p-n.g",
-                include_str!("../generated/gappa-carrier-side-p-n.g"),
+                "gappa-carrier-side-n-p.g",
+                include_str!("../generated/gappa-carrier-side-n-p.g"),
             ),
             (
-                "gappa-carrier-side-w-d.g",
-                include_str!("../generated/gappa-carrier-side-w-d.g"),
+                "gappa-carrier-side-d-w.g",
+                include_str!("../generated/gappa-carrier-side-d-w.g"),
             ),
         ],
         fptaylor: (

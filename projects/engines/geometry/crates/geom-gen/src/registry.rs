@@ -319,16 +319,16 @@ pub const GENERATORS: [Generator; 72] = [
         generate: Generate::Plain(predicates::generate_gappa_ssi_side),
     },
     Generator {
-        name: "gappa-carrier-side-p-n",
-        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-carrier-side-p-n.g",
+        name: "gappa-carrier-side-n-p",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-carrier-side-n-p.g",
         about: "carrier_side's f64 filter for Gappa, one case of two, whose proof Rocq checks",
-        generate: Generate::Plain(predicates::generate_gappa_carrier_side_p_n),
+        generate: Generate::Plain(predicates::generate_gappa_carrier_side_n_p),
     },
     Generator {
-        name: "gappa-carrier-side-w-d",
-        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-carrier-side-w-d.g",
+        name: "gappa-carrier-side-d-w",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-carrier-side-d-w.g",
         about: "carrier_side's f64 filter for Gappa, one case of two, whose proof Rocq checks",
-        generate: Generate::Plain(predicates::generate_gappa_carrier_side_w_d),
+        generate: Generate::Plain(predicates::generate_gappa_carrier_side_d_w),
     },
     Generator {
         name: "gappa-carrier-order",

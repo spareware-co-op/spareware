@@ -12,7 +12,7 @@
 //! `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`,
 //! `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`,
 //! `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`,
-//! `gappa-carrier-side-p-n`, `gappa-carrier-side-w-d`, `gappa-carrier-order`, `gappa-rational-cmp`,
+//! `gappa-carrier-side-n-p`, `gappa-carrier-side-d-w`, `gappa-carrier-order`, `gappa-rational-cmp`,
 //! `gappa-rational-orient`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
 //! `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`,
 //! `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-carrier-side`,
@@ -1189,24 +1189,24 @@ pub fn generate_gappa_ssi_side() -> Result<Vec<u8>, GenError> {
     certificate("ssi_side", "gappa-ssi-side", gappa_problem)
 }
 
-/// Generator `gappa-carrier-side-p-n`: `carrier_side`'s filter for Gappa in the case where
-/// `m_p * m_n` is the largest term of its scale.
+/// Generator `gappa-carrier-side-n-p`: `carrier_side`'s filter for Gappa in the case where
+/// `m_n * m_p` is the largest term of its scale.
 ///
 /// # Errors
 ///
 /// [`GenError::Generator`] if the derivation or the emission fails.
-pub fn generate_gappa_carrier_side_p_n() -> Result<Vec<u8>, GenError> {
-    case_certificate("carrier_side", "gappa-carrier-side-p-n", "p-n")
+pub fn generate_gappa_carrier_side_n_p() -> Result<Vec<u8>, GenError> {
+    case_certificate("carrier_side", "gappa-carrier-side-n-p", "n-p")
 }
 
-/// Generator `gappa-carrier-side-w-d`: `carrier_side`'s filter for Gappa in the case where
-/// `m_w * m_d` is the largest term of its scale.
+/// Generator `gappa-carrier-side-d-w`: `carrier_side`'s filter for Gappa in the case where
+/// `m_d * m_w` is the largest term of its scale.
 ///
 /// # Errors
 ///
 /// [`GenError::Generator`] if the derivation or the emission fails.
-pub fn generate_gappa_carrier_side_w_d() -> Result<Vec<u8>, GenError> {
-    case_certificate("carrier_side", "gappa-carrier-side-w-d", "w-d")
+pub fn generate_gappa_carrier_side_d_w() -> Result<Vec<u8>, GenError> {
+    case_certificate("carrier_side", "gappa-carrier-side-d-w", "d-w")
 }
 
 /// Generator `gappa-carrier-order`: `carrier_order`'s filter for Gappa, whose proof Rocq checks.
