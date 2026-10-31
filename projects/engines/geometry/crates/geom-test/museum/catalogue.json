@@ -1,0 +1,69 @@
+{
+  "exhibits": [
+    {
+      "id": "1/empty-log",
+      "what": "An operation log of format 1 with no inputs and no operations: the replay's own framing, the hash of nothing run.",
+      "format": 1,
+      "edition": "pre-edition",
+      "file": "v1/empty-log.skgf",
+      "sha256": "3902d607ec57ad67d71db51444eab84edee49f3de75dda58aa48aa00d25cb932",
+      "kind": {
+        "log": {
+          "replays_to": "964f0996b5ed24d186d1cb43f3c8d7b6dc1476c86070d02d2f9d5a05423ac7de"
+        }
+      }
+    },
+    {
+      "id": "1/every-primitive-log",
+      "what": "One of each of chapter 10.2's primitives: box, prism, cylinder, cone, sphere and torus, at version 1.",
+      "format": 1,
+      "edition": "pre-edition",
+      "file": "v1/every-primitive-log.skgf",
+      "sha256": "ea90b9f5b483690b25a00e2f44cde0ddce8e91b7db965c34e637e4448e9276cb",
+      "kind": {
+        "log": {
+          "replays_to": "53ffe6e6f59d04abead8d60bcf64e9969bc3c3da4cceb2526054649cb424bc67"
+        }
+      }
+    },
+    {
+      "id": "1/header-only",
+      "what": "Format 1's header and nothing else, geom-format's first archived file.",
+      "format": 1,
+      "edition": "pre-edition",
+      "file": "v1/header-only.skgf",
+      "sha256": "6a98b9784afd14919297f84dd92a954fe6e4ba43eec0813df055fc7e80edbed7",
+      "kind": {
+        "file": {
+          "records": 0
+        }
+      }
+    },
+    {
+      "id": "1/moved-box-log",
+      "what": "A box moved, turned a quarter and mirrored, each step taking the body before it.",
+      "format": 1,
+      "edition": "pre-edition",
+      "file": "v1/moved-box-log.skgf",
+      "sha256": "a589e7a0ceaaf97cea759b53a78d6181f7c528757b7c371b4c989832703b7743",
+      "kind": {
+        "log": {
+          "replays_to": "5899b069664b4ba9b0824e33bfa7ccb886a6e5314938c96c13754b23947375fc"
+        }
+      }
+    },
+    {
+      "id": "1/wall-body",
+      "what": "A wall as format 1's body index and chunk records, geom-format's archived body.",
+      "format": 1,
+      "edition": "pre-edition",
+      "file": "v1/wall-body.skgf",
+      "sha256": "f2c04de25f2cbbf1a94396d3a204f8254d2a60b791c2af254351052cbe016d4c",
+      "kind": {
+        "file": {
+          "records": 15
+        }
+      }
+    }
+  ]
+}

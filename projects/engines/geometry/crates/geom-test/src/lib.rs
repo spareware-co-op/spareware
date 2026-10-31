@@ -62,6 +62,9 @@
 //! - [`corpus`]: the corpus register of 28.12 (G114): every outside corpus with its source, version,
 //!   SHA-256, licence and whether we may store it, the licence rules of 29.15 and 32.11, and the
 //!   hash-checked fetcher. The binary `corpus` lists, checks and fetches.
+//! - [`museum`]: the format museum (28.13, 24.6; G99): sample files and operation logs of every
+//!   released format version and edition, compiled in and held to their recorded hashes on every
+//!   target.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -246,6 +249,7 @@ pub mod ledger;
 pub mod licence;
 pub mod map;
 pub mod miri;
+pub mod museum;
 pub mod mutants;
 pub mod nurbs_reference;
 pub mod oracle;
