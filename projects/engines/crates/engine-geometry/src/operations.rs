@@ -24,4 +24,4 @@
 use crate::schema::Operation;
 
 /// Every operation, in name order.
-pub static OPERATIONS: &[Operation] = &[];
+pub const OPERATIONS: &[Operation] = &[];

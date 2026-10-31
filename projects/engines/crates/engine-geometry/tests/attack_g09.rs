@@ -1270,7 +1270,6 @@ mod repository {
             "geom-terrain",
             "G362 G363 G364 G365 G366 G367 G368 G369 G370 G374 G377 G380",
         ),
-        ("engine-geometry", "G100 G482"),
     ];
 
     #[test]

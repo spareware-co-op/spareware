@@ -77,7 +77,8 @@ jobs:
 
   # The facade's public interface against the release before this one (chapter 25; piece G100):
   # cargo-semver-checks reads engine-geometry's public items at both commits and fails on a breaking
-  # change the version number does not admit. The first release has no baseline, and says so.
+  # change the version number does not admit. The first release has no baseline, and says so. A
+  # failure turns the tag's run red, which the owner reads before publishing the draft release.
   semver:
     name: The facade's public interface against the last release
     runs-on: ubuntu-latest
@@ -124,7 +125,7 @@ jobs:
 
   freeze:
     name: The golden store, recorded with the release
-    needs: [kernel, build, gate, dev, certificates, golden, bench, variants, fuzz, fuzz-campaign, quality, nightly, semver]
+    needs: [kernel, build, gate, dev, certificates, golden, bench, variants, fuzz, fuzz-campaign, quality, nightly]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

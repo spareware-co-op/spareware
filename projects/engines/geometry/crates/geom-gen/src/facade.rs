@@ -48,6 +48,8 @@
 
 use engine_geometry::operations::OPERATIONS;
 use engine_geometry::schema::{Class, Family, Field, OpSchema, Operation, Tier, Unit};
+use std::fmt::Write as _;
+
 use serde_json::{Map, Value, json};
 
 use crate::generator::GenError;
@@ -151,7 +153,7 @@ fn row(cells: &[&str]) -> String {
 
 /// A table of fields, or a line saying there are none.
 fn fields(out: &mut String, title: &str, list: &[Field]) {
-    out.push_str(&format!("**{title}**"));
+    let _ = write!(out, "**{title}**");
     if list.is_empty() {
         out.push_str(": none.\n\n");
         return;
@@ -193,14 +195,15 @@ pub fn api(ops: &[Operation]) -> Result<Vec<u8>, GenError> {
     }
     for op in ops {
         let s: &OpSchema = op.schema;
-        out.push_str(&format!("## `{}`\n\n", s.name));
-        out.push_str(&format!(
+        let _ = write!(out, "## `{}`\n\n", s.name);
+        let _ = write!(
+            out,
             "Version {}, family {}, {}.\n\n{}\n\n",
             s.version,
             family(s.family),
             tier(op.tier),
             s.doc
-        ));
+        );
         fields(&mut out, "Inputs", s.inputs);
         fields(&mut out, "Outputs", s.outputs);
         out.push_str("**Roles**");
@@ -209,7 +212,7 @@ pub fn api(ops: &[Operation]) -> Result<Vec<u8>, GenError> {
         } else {
             out.push_str("\n\n");
             for r in s.roles {
-                out.push_str(&format!("- `{}`: {}\n", r.name, r.doc));
+                let _ = writeln!(out, "- `{}`: {}", r.name, r.doc);
             }
             out.push('\n');
         }
@@ -246,17 +249,18 @@ pub fn api(ops: &[Operation]) -> Result<Vec<u8>, GenError> {
         } else {
             out.push_str("\n\n");
             for d in s.diagnostics {
-                out.push_str(&format!("- `{}`: {}\n", d.code, d.doc));
+                let _ = writeln!(out, "- `{}`: {}", d.code, d.doc);
             }
             out.push('\n');
         }
         let classes: Vec<&str> = s.classes.iter().map(|c| class(*c)).collect();
-        out.push_str(&format!(
+        let _ = write!(
+            out,
             "**Exactness**: {}. **Batch entry**: {}.\n\n",
             classes.join(", "),
             if s.batch { "yes" } else { "no" }
-        ));
-        out.push_str(&format!("**Example**\n\n```text\n{}\n```\n\n", s.example));
+        );
+        let _ = write!(out, "**Example**\n\n```text\n{}\n```\n\n", s.example);
     }
     Ok(out.into_bytes())
 }

@@ -89,12 +89,15 @@
 //! Licences of every outside package this crate brings into a build itself, on every target
 //! (`cargo tree --target all`), each record checked by `geom-test`'s `tests/licences.rs`: the
 //! exact big integers and rationals of the quadrature-rules generator (`dashu-int`, `dashu-ratio`
-//! and what they bring), and its tests' `proc-macro2` and what that brings. Every other outside
+//! and what they bring), the JSON writer of the facade generators (`serde_json` and what it
+//! brings), and its tests' `proc-macro2` and what that brings. Every other outside
 //! package in its build comes through `geom-num` or `geom-test`. Where a package offers a choice,
 //! it is taken under the permissive licences offered (MIT or Apache-2.0):
 //!
-//! - MIT OR Apache-2.0: `cfg-if`, `dashu-base`, `dashu-int`, `dashu-ratio`, `proc-macro2`,
-//!   `static_assertions`.
+//! - MIT OR Apache-2.0: `cfg-if`, `dashu-base`, `dashu-int`, `dashu-ratio`, `itoa`, `proc-macro2`,
+//!   `quote`, `serde`, `serde_core`, `serde_derive`, `serde_json`, `static_assertions`, `syn`.
+//! - Unlicense OR MIT: `memchr`.
+//! - MIT: `zmij`.
 //! - Apache-2.0: `num-modular`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 #![forbid(unsafe_code)]

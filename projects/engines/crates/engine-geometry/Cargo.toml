@@ -3,6 +3,7 @@ name = "engine-geometry"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 # kit-core for permanent IDs and units at the boundary (section 5), every kernel crate this
