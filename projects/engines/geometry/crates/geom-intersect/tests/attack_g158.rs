@@ -29,6 +29,7 @@ use geom_intersect::{
 use geom_math::Box3;
 use geom_num::interval::Interval;
 use geom_num::{Exactness, P3, Steps};
+use geom_nurbs::{Basis, Curve};
 use geom_run::{Budget, CancelToken, Exec, Pool, WorkMeter};
 use geom_surface::{Plane, Sphere, SurfaceKind};
 use geom_test::{Seed, SplitMix64};
@@ -491,6 +492,60 @@ fn keys_order_by_kind_then_by_defining_data() {
     assert_ne!(key, of_c(&line([1.0; 3], [2.0; 3]), &mut m));
 }
 
+/// A kind's place decides before its data does: each pair here would sort the other way by data
+/// alone, the line's first word being a large coordinate and the circle's a small degree.
+#[test]
+fn a_kinds_place_comes_before_its_data() {
+    let mut m = meter();
+    let far = line([5.0, 0.0, 0.0], [6.0, 0.0, 0.0]);
+    let circle = CurveKind::Circle(
+        geom_curve::Circle::full([0.0; 3], 2.0, Frame::standard().unwrap()).unwrap(),
+    );
+    assert!(
+        CanonicalKey::of_curve(&far, &mut m).unwrap()
+            < CanonicalKey::of_curve(&circle, &mut m).unwrap()
+    );
+    assert!(
+        CanonicalKey::of_surface(&plane(5.0), &mut m).unwrap()
+            < CanonicalKey::of_surface(&ball(1.0), &mut m).unwrap()
+    );
+    let tilted = SurfaceKind::Plane(
+        Plane::new(
+            [7.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    assert!(
+        CanonicalKey::of_surface(&tilted, &mut m).unwrap()
+            < CanonicalKey::of_surface(&ball(1.0), &mut m).unwrap()
+    );
+}
+
+/// Two NURBS forms with one net and different knots are different curves, and so have different
+/// keys, which the basis alone can tell.
+#[test]
+fn a_key_reads_the_basis() {
+    let net: [[f64; 3]; 4] = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [2.0, 1.0, 0.0],
+        [3.0, 0.0, 0.0],
+    ];
+    let curve = |knot: f64| {
+        let basis = Basis::new(2, vec![0.0, 0.0, 0.0, knot, 1.0, 1.0, 1.0]).unwrap();
+        CurveKind::Nurbs(Curve::new(basis, &net).unwrap())
+    };
+    let mut m = meter();
+    let (a, b) = (curve(0.25), curve(0.75));
+    assert_ne!(
+        CanonicalKey::of_curve(&a, &mut m).unwrap(),
+        CanonicalKey::of_curve(&b, &mut m).unwrap()
+    );
+}
+
 #[test]
 fn a_stopped_meter_stops_a_key() {
     let circle = CurveKind::Circle(
@@ -547,8 +602,12 @@ fn intersect_a_b_is_intersect_b_a_with_the_roles_swapped_on_10000_pairs() {
     for _ in 0..10_000 {
         let (a, b) = (segments(&mut rng), segments(&mut rng));
         let (x, y) = (operand(&a), operand(&b));
-        let one = pair(&x, &y, solve).unwrap();
-        let two = pair(&y, &x, solve).unwrap();
+        let canonical = |p: &Operand<'_>, q: &Operand<'_>| {
+            assert!(p.key <= q.key, "a method saw the operands out of order");
+            solve(p, q)
+        };
+        let one = pair(&x, &y, canonical).unwrap();
+        let two = pair(&y, &x, canonical).unwrap();
         // The stand-in saw one order both times: the diagnostics say so.
         assert_eq!(one.diagnostics(), two.diagnostics());
         let unknowns = if x.key <= y.key {
