@@ -246,7 +246,7 @@ fn at_least(known: &Winding, open: &[Entry], n: u32) -> Option<bool> {
     let settled = known
         .pairs
         .iter()
-        .filter(|(entry, count)| *count > 0 && !open.contains(entry))
+        .filter(|(entry, count)| count.is_positive() && !open.contains(entry))
         .count();
     let n = usize::try_from(n).unwrap_or(usize::MAX);
     if settled >= n {
