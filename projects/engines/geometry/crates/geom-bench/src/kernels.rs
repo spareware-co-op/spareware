@@ -1771,6 +1771,25 @@ pub mod bvh {
     }
 }
 
+/// The attribute step's hot path (piece G90, decision 32.44).
+pub mod attributes {
+    use geom_name::{AttrError, Step, apply as step};
+
+    use super::run;
+    use crate::inputs::attributes::Scene;
+
+    /// `geom_name::apply` on each scene; how many values come out.
+    #[inline(never)]
+    pub fn apply(batch: &[Scene], out: &mut Vec<Result<u64, AttrError>>) {
+        run(batch, out, |scene| {
+            let (after, notes) =
+                step(&scene.defs, &scene.before, &scene.history, &Step::default())?;
+            let values = after.iter().count().saturating_add(notes.len());
+            Ok(u64::try_from(values).unwrap_or(u64::MAX))
+        });
+    }
+}
+
 /// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
 /// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
 /// budget where it takes one.

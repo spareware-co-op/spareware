@@ -396,6 +396,8 @@ pub static OPS: &[Op] = &[
     // each built for a scene and queried.
     Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // The attribute step's hot path (piece G90; decision 32.44).
+    Op { group: "attributes", name: "apply", measures: "geom_name::classes::apply", classes: T, prepare: |c| bind(inputs::attributes::apply(c), kernels::attributes::apply) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -423,7 +425,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 30] = [
+pub const GROUPS: [&str; 31] = [
     "predicate",
     "sign",
     "wide",
@@ -448,6 +450,7 @@ pub const GROUPS: [&str; 30] = [
     "ball",
     "math_types",
     "bvh",
+    "attributes",
     "nurbs",
     "curve",
     "surface",

@@ -511,6 +511,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_name",
+        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
+    ),
+    (
         "geom_nurbs",
         &[
             ("curve", include_str!("../../geom-nurbs/src/curve.rs")),

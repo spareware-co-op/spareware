@@ -2572,6 +2572,23 @@ pub mod bvh {
     );
 }
 
+/// The attribute step's hot path (piece G90; decision 32.44).
+pub mod attributes {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("attributes/apply/typical"))]
+    fn apply(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = attributes;
+        benchmarks = apply
+    );
+}
+
 /// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
 pub mod nurbs {
     use super::*;
