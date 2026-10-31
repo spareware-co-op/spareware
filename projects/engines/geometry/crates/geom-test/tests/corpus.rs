@@ -458,3 +458,21 @@ fn a_file_source_is_checked_file_by_file() {
     assert!(digest_source(&rebuilt, &cache).is_err());
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn an_error_says_what_is_wrong() {
+    let cases: [(CorpusError, &str); 3] = [
+        (CorpusError::Json("j".to_owned()), "register: j"),
+        (CorpusError::Format(9), "format 9"),
+        (
+            CorpusError::Rule {
+                id: "a".to_owned(),
+                what: "w".to_owned(),
+            },
+            "corpus a: w",
+        ),
+    ];
+    for (error, words) in cases {
+        assert!(error.to_string().contains(words), "{error}");
+    }
+}
