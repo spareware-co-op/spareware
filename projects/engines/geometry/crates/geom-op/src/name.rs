@@ -416,14 +416,13 @@ const fn kind_number(kind: EdgeOrVertex) -> u64 {
 
 /// Each name as a finished 16-byte byte-string item.
 pub(crate) fn items(names: &[NameId]) -> Result<Vec<Item>, NameError> {
-    names
-        .iter()
-        .map(|name| {
-            let mut e = Encoder::new();
-            e.bytes(&name.to_bytes())?;
-            Ok(e.finish()?)
-        })
-        .collect()
+    let mut out: Vec<Item> = Vec::with_capacity(names.len());
+    for name in names {
+        let mut e = Encoder::new();
+        e.bytes(&name.to_bytes()).map_err(NameError::Encode)?;
+        out.push(e.finish().map_err(NameError::Encode)?);
+    }
+    Ok(out)
 }
 
 /// The length of an array of `n` items after a first one.
