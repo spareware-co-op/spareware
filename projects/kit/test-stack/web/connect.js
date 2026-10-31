@@ -673,26 +673,26 @@
       return;
     }
     if (!mine) C.arriving.push(entry);
-    const into = entry.model === C.model?.id ? C.elements : C.linked.get(entry.model);
+    const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
     for (const change of entry.changes) {
-      const piece = into.get(change.element);
+      const piece = into.get(change.piece);
       if (piece && piece.seq >= entry.seq) continue;
-      const stillMine = C.pending.some((edit) => edit.args.element === change.element);
+      const stillMine = C.pending.some((edit) => edit.args.element === change.piece);
       if (!change.after) {
-        into.delete(change.element);
+        into.delete(change.piece);
       } else if (piece && entry.cmd === 'element.move') {
         piece.hash = change.after;
         piece.seq = entry.seq;
         if (!(mine && stillMine)) piece.el = { ...piece.el, x: entry.args.x, y: entry.args.y };
       } else {
-        loadPiece(entry.model, change.element, change.after, entry.seq, into).then(queueDraw);
+        loadPiece(entry.target, change.piece, change.after, entry.seq, into).then(queueDraw);
       }
     }
-    if (entry.model === C.model?.id) {
+    if (entry.target === C.model?.id) {
       for (const change of entry.claims) {
-        if (change.claim) C.claims.set(change.element, change.claim);
-        else C.claims.delete(change.element);
+        if (change.claim) C.claims.set(change.piece, change.claim);
+        else C.claims.delete(change.piece);
       }
     }
     queueDraw();

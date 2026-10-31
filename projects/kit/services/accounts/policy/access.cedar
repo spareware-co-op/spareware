@@ -1,5 +1,14 @@
 // Who may do what. Nothing is allowed unless a rule here says so.
-// The rows in TiKV say who belongs to which hub, project and team; these rules never name a person.
+// The rows in the store say who belongs to which hub, project and team; these rules never name a
+// person.
+
+// Administrators change the directory.
+permit (principal, action == Spare::Action::"directory.edit", resource)
+when { principal.admin };
+
+// Someone signing in for the first time binds their login to their own person, and no other.
+permit (principal, action == Spare::Action::"login.bind", resource)
+when { principal == resource };
 
 // A hub opens for its users and its external users.
 permit (principal, action == Spare::Action::"hub.open", resource)
@@ -25,10 +34,15 @@ permit (
 )
 when { principal in resource.folder.team };
 
-// A team publishes to its own Shared folder and takes packages into its own Consumed folder.
+// A team adds models, publishes to its own Shared folder, and takes packages into its own
+// Consumed folder.
 permit (
   principal,
-  action in [Spare::Action::"package.publish", Spare::Action::"package.consume"],
+  action in [
+    Spare::Action::"model.add",
+    Spare::Action::"package.publish",
+    Spare::Action::"package.consume"
+  ],
   resource
 )
 when { principal in resource };

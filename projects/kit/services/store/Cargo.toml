@@ -1,0 +1,24 @@
+[package]
+name = "kit-store-tikv"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MPL-2.0"
+# In the test stack's workspace, not the root one: note K08 says why.
+workspace = "../../test-stack"
+
+# Every version is pinned here and by the workspace's Cargo.lock. deny.toml there checks licences.
+[dependencies]
+kit-store = { path = "../../crates/kit-store" }
+futures = "=0.3.31"                # MIT OR Apache-2.0
+object_store = { version = "=0.14.2", features = ["aws", "gcp"] }  # MIT OR Apache-2.0
+tikv-client = { version = "=0.4.0", default-features = false }  # Apache-2.0
+url = "=2.5.8"                     # MIT OR Apache-2.0
+
+[dev-dependencies]
+anyhow = "=1.0.100"
+kit-core = { path = "../../crates/kit-core" }
+kit-ops = { path = "../../crates/kit-ops" }
+kit-sync = { path = "../../crates/kit-sync" }
+serde_json = "=1.0.154"
+tokio = { version = "=1.54.1", features = ["full"] }

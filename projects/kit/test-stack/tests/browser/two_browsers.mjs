@@ -1,7 +1,7 @@
 // Two real browsers on the real page: separate sign-ins, real mouse drags. Needs the stack running
 // on a fresh seed; scripts/run-browser-test.sh sets that up.
 //   STACK_URL    the server, default http://localhost:8080
-//   BROWSER      a browser channel, msedge or chrome, default msedge
+//   BROWSER      a browser channel, msedge or chrome, or bundled for Playwright's own; default msedge
 //   STACK_KILL   a command that kills the server the hard way
 //   STACK_START  a command that starts it again
 //   SHOTS        a folder for screenshots
@@ -10,7 +10,8 @@ import { chromium } from 'playwright-core';
 
 const base = process.env.STACK_URL || 'http://localhost:8080';
 const shots = process.env.SHOTS;
-const browser = await chromium.launch({ channel: process.env.BROWSER || 'msedge' });
+const channel = process.env.BROWSER || 'msedge';
+const browser = await chromium.launch(channel === 'bundled' ? {} : { channel });
 
 function pass(label) {
   console.log(`PASS  ${label}`);

@@ -4,7 +4,7 @@
 use clap::Args;
 
 #[derive(Args, Clone, Debug)]
-pub struct Config {
+pub struct Settings {
     /// Where this server listens.
     #[arg(long, env = "STACK_BIND", default_value = "127.0.0.1:8080")]
     pub bind: String,
@@ -40,7 +40,7 @@ pub struct Config {
     pub oidc_client_id: String,
     #[arg(long, env = "OIDC_CLIENT_SECRET", default_value = "")]
     pub oidc_client_secret: String,
-    /// Maps people to the Google addresses that sign in as them: anna=someone@gmail.com,dan=...
+    /// Maps people to the addresses that sign in as them: anna=someone@gmail.com,dan=...
     #[arg(long, env = "STACK_PEOPLE", default_value = "")]
     pub people: String,
     /// How often a server looks for edits another server ordered, in milliseconds.

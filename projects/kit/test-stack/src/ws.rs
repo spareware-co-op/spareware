@@ -1,23 +1,19 @@
-//! The live channel. A browser subscribes to the models it has open, sends edits up, and gets
-//! every ordered edit of those models down. After a dropped connection it sends the last log
-//! number it saw, gets what it missed, and resends what wasn't confirmed; the orderer drops
-//! repeats, so a restart of this server loses nothing and doubles nothing.
+//! The socket behind the live channel. The rules are in `kit_sync::live` and `Service`; this file
+//! only moves messages.
 
-use crate::access::Target;
-use crate::api::{ApiError, Shared};
-use crate::auth::Me;
-use crate::keys;
-use crate::orderer::{Orderer, Reply, Submit, read_log};
-use crate::rows::{ClientMark, Entry};
-use anyhow::Result;
+use crate::http::{ApiError, Me, Shared, id};
+use crate::service::Refusal;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, header};
 use axum::response::Response;
 use futures::{SinkExt, StreamExt};
-use serde::Deserialize;
+use kit_core::Id;
+use kit_ops::Edit;
+use kit_store::StoreError;
+use kit_sync::live::{FromBrowser, Watcher, entry_message, reply_message};
+use kit_sync::{Orderer, Submit};
 use serde_json::{Value, json};
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
@@ -27,7 +23,7 @@ use tokio::sync::mpsc;
 const RECHECK: Duration = Duration::from_secs(15);
 
 pub async fn upgrade(
-    State(st): State<Shared>,
+    State(app): State<Shared>,
     Me(person): Me,
     Path(project): Path<String>,
     headers: HeaderMap,
@@ -35,71 +31,48 @@ pub async fn upgrade(
 ) -> Result<Response, ApiError> {
     // A browser always sends Origin, so this stops another website opening a socket as its visitor.
     let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
-    if origin.is_some_and(|o| o != st.config.public_url) {
-        return Err(ApiError::Refused("Wrong site.".to_owned()));
+    if origin.is_some_and(|o| o != app.settings.public_url) {
+        return Err(ApiError(Refusal::Refused("Wrong site.".to_owned())));
     }
-    st.require(&person, "project.open", Target::Project(&project))
-        .await?;
+    let project = id(&project)?;
+    app.service.may_open_project(&person, &project).await?;
     Ok(socket.on_upgrade(move |socket| async move {
-        if let Err(e) = Live::new(st, person, project).await.run(socket).await {
-            tracing::debug!("connection closed: {e:#}");
+        let orderer = app.service.orderer(&project).await;
+        let live = Live {
+            app,
+            person,
+            project,
+            orderer,
+            watcher: Watcher::new(),
+        };
+        if let Err(e) = live.run(socket).await {
+            tracing::debug!("connection closed: {e}");
         }
     }))
 }
 
-#[derive(Deserialize)]
-#[serde(tag = "t", rename_all = "lowercase")]
-enum FromBrowser {
-    /// Starts or resumes: who this tab is, what it watches, and the last log number it saw.
-    Hello {
-        client: String,
-        models: Vec<String>,
-        since: u64,
-    },
-    /// Watches one more model, for a live link.
-    Watch {
-        model: String,
-        since: u64,
-    },
-    Stop {
-        model: String,
-    },
-    Op {
-        counter: u64,
-        base: u64,
-        model: String,
-        cmd: String,
-        args: Value,
-        author_ms: u64,
-    },
+struct Live {
+    app: Shared,
+    person: Id,
+    project: Id,
+    orderer: Arc<Orderer>,
+    watcher: Watcher,
 }
 
-struct Live {
-    st: Shared,
-    person: String,
-    project: String,
-    orderer: Arc<Orderer>,
-    client: Option<String>,
-    watching: HashSet<String>,
-    /// The last log number looked at for this browser.
-    cursor: u64,
+fn gone<E: std::fmt::Display>(e: E) -> StoreError {
+    StoreError::Unavailable(e.to_string())
+}
+
+/// A connection whose person has lost the project ends there.
+fn refused(refusal: Refusal) -> StoreError {
+    match refusal {
+        Refusal::Failed(e) => e,
+        other => StoreError::Unavailable(other.to_string()),
+    }
 }
 
 impl Live {
-    async fn new(st: Shared, person: String, project: String) -> Self {
-        let orderer = st.orderers.get(&project).await;
-        Self {
-            st,
-            person,
-            project,
-            orderer,
-            client: None,
-            watching: HashSet::new(),
-            cursor: 0,
-        }
-    }
-
-    async fn run(mut self, socket: WebSocket) -> Result<()> {
+    async fn run(mut self, socket: WebSocket) -> Result<(), StoreError> {
         let (mut sink, mut stream) = socket.split();
         let mut bus = self.orderer.subscribe();
         let (reply, mut replies) = mpsc::unbounded_channel();
@@ -109,40 +82,30 @@ impl Live {
             tokio::select! {
                 message = stream.next() => {
                     let Some(message) = message else { return Ok(()) };
-                    match message? {
-                        Message::Text(text) => {
-                            match serde_json::from_str(&text) {
-                                Ok(request) => {
-                                    self.handle(request, &reply, &mut out).await?;
-                                }
-                                Err(e) => out.push(json!({ "t": "error", "reason": e.to_string() })),
-                            }
-                        }
+                    match message.map_err(gone)? {
+                        Message::Text(text) => match serde_json::from_str(&text) {
+                            Ok(request) => self.handle(request, &reply, &mut out).await?,
+                            Err(e) => out.push(json!({ "t": "error", "reason": e.to_string() })),
+                        },
                         Message::Close(_) => return Ok(()),
                         _ => {}
                     }
                 }
-                entry = bus.recv() => {
-                    match entry {
-                        Ok(entry) => self.forward(&entry, &mut out),
-                        Err(RecvError::Lagged(_)) => self.catch_up(&mut out).await?,
-                        Err(RecvError::Closed) => return Ok(()),
-                    }
-                }
+                entry = bus.recv() => match entry {
+                    Ok(entry) => out.extend(self.watcher.next(&entry)),
+                    Err(RecvError::Lagged(_)) => self.catch_up(&mut out).await?,
+                    Err(RecvError::Closed) => return Ok(()),
+                },
                 done = replies.recv() => {
                     let Some(done) = done else { return Ok(()) };
-                    out.push(match done {
-                        Reply::Ack { counter, seq } => json!({ "t": "ack", "counter": counter, "seq": seq }),
-                        Reply::Rejected { counter, reason } => {
-                            json!({ "t": "rejected", "counter": counter, "reason": reason })
-                        }
-                        Reply::Retry { counter } => json!({ "t": "retry", "counter": counter }),
-                    });
+                    out.push(reply_message(&done));
                 }
                 _ = recheck.tick() => self.recheck(&mut out).await?,
             }
             for message in out {
-                sink.send(Message::Text(message.to_string().into())).await?;
+                sink.send(Message::Text(message.to_string().into()))
+                    .await
+                    .map_err(gone)?;
             }
         }
     }
@@ -150,39 +113,48 @@ impl Live {
     async fn handle(
         &mut self,
         request: FromBrowser,
-        reply: &mpsc::UnboundedSender<Reply>,
+        reply: &mpsc::UnboundedSender<kit_sync::Reply>,
         out: &mut Vec<Value>,
-    ) -> Result<()> {
+    ) -> Result<(), StoreError> {
         match request {
             FromBrowser::Hello {
                 client,
                 models,
                 since,
             } => {
-                let mark_key = keys::client(&self.project, &self.person, &client);
-                let mark: Option<ClientMark> = self.st.kv.get(mark_key).await?;
-                self.client = Some(client);
+                let Ok(client) = Id::parse(&client) else {
+                    out.push(json!({ "t": "error", "reason": "That isn't a client ID." }));
+                    return Ok(());
+                };
+                let service = &self.app.service;
+                let last_counter = service
+                    .last_counter(&self.person, &self.project, &client)
+                    .await?;
+                self.watcher.set_client(client);
                 for model in models {
-                    self.watch(model, out).await?;
+                    self.watch(&model, out).await?;
                 }
                 let head = self.head().await?;
                 out.push(json!({
                     "t": "welcome",
                     "head": head,
-                    "person": self.person,
-                    "last_counter": mark.map_or(0, |m| m.counter),
+                    "person": self.person.as_str(),
+                    "last_counter": last_counter,
                 }));
-                self.cursor = head;
+                self.watcher.set_cursor(head);
                 self.send_log(since, head, None, out).await?;
                 out.push(json!({ "t": "caught_up", "head": head }));
             }
             FromBrowser::Watch { model, since } => {
-                if self.watch(model.clone(), out).await? {
-                    self.send_log(since, self.cursor, Some(&model), out).await?;
+                if let Some(model) = self.watch(&model, out).await? {
+                    self.send_log(since, self.watcher.cursor(), Some(&model), out)
+                        .await?;
                 }
             }
             FromBrowser::Stop { model } => {
-                self.watching.remove(&model);
+                if let Ok(model) = Id::parse(&model) {
+                    self.watcher.stop(&model);
+                }
             }
             FromBrowser::Op {
                 counter,
@@ -192,70 +164,63 @@ impl Live {
                 args,
                 author_ms,
             } => {
-                let Some(client) = self.client.clone() else {
+                let (Some(client), Ok(target)) = (self.watcher.client(), Id::parse(&model)) else {
                     out.push(json!({ "t": "error", "reason": "Say hello first." }));
                     return Ok(());
                 };
-                let edit = Submit {
+                let edit = Edit {
                     person: self.person.clone(),
-                    client,
+                    client: client.clone(),
                     counter,
                     base,
-                    model,
+                    target,
                     cmd,
                     args,
                     author_ms,
-                    reply: reply.clone(),
                 };
-                self.orderer.submit(edit).await?;
+                self.orderer
+                    .submit(Submit {
+                        edit,
+                        reply: reply.clone(),
+                    })
+                    .await?;
             }
         }
         Ok(())
     }
 
-    async fn watch(&mut self, model: String, out: &mut Vec<Value>) -> Result<bool> {
-        let target = Target::Model(&self.project, &model);
+    async fn watch(&mut self, model: &str, out: &mut Vec<Value>) -> Result<Option<Id>, StoreError> {
+        let refused = |out: &mut Vec<Value>| out.push(json!({ "t": "refused", "model": model }));
+        let Ok(id) = Id::parse(model) else {
+            refused(out);
+            return Ok(None);
+        };
         if self
-            .st
-            .access
-            .allowed(&self.person, "model.read", target, None)
+            .app
+            .service
+            .may_watch(&self.person, &self.project, &id)
             .await?
         {
-            self.watching.insert(model);
-            Ok(true)
+            self.watcher.watch(id.clone());
+            Ok(Some(id))
         } else {
-            out.push(json!({ "t": "refused", "model": model }));
-            Ok(false)
+            refused(out);
+            Ok(None)
         }
     }
 
-    async fn head(&self) -> Result<u64> {
-        Ok(self
-            .st
-            .kv
-            .get::<u64>(keys::head(&self.project))
-            .await?
-            .unwrap_or(0))
+    async fn head(&self) -> Result<u64, StoreError> {
+        self.app
+            .service
+            .head(&self.person, &self.project)
+            .await
+            .map_err(refused)
     }
 
-    fn visible(&self, entry: &Entry) -> bool {
-        let mine = self.client.as_deref() == Some(entry.client.as_str());
-        self.watching.contains(&entry.model) && (entry.failed.is_none() || mine)
-    }
-
-    fn forward(&mut self, entry: &Entry, out: &mut Vec<Value>) {
-        if entry.seq > self.cursor {
-            self.cursor = entry.seq;
-            if self.visible(entry) {
-                out.push(json!({ "t": "entry", "entry": entry }));
-            }
-        }
-    }
-
-    async fn catch_up(&mut self, out: &mut Vec<Value>) -> Result<()> {
+    async fn catch_up(&mut self, out: &mut Vec<Value>) -> Result<(), StoreError> {
         let head = self.head().await?;
-        let from = self.cursor;
-        self.cursor = head;
+        let from = self.watcher.cursor();
+        self.watcher.set_cursor(head);
         self.send_log(from, head, None, out).await
     }
 
@@ -263,30 +228,33 @@ impl Live {
         &self,
         from: u64,
         to: u64,
-        only: Option<&str>,
+        only: Option<&Id>,
         out: &mut Vec<Value>,
-    ) -> Result<()> {
-        let mut snap = self.st.kv.snapshot().await?;
-        for entry in read_log(&mut snap, &self.project, from, to).await? {
-            if self.visible(&entry) && only.is_none_or(|m| m == entry.model) {
-                out.push(json!({ "t": "entry", "entry": entry }));
+    ) -> Result<(), StoreError> {
+        let entries = self
+            .app
+            .service
+            .entries(&self.person, &self.project, from, to)
+            .await;
+        for entry in entries.map_err(refused)? {
+            if self.watcher.sees(&entry) && only.is_none_or(|model| *model == entry.target) {
+                out.push(entry_message(&entry));
             }
         }
         Ok(())
     }
 
     /// Someone taken off a team mid-session stops receiving that team's edits.
-    async fn recheck(&mut self, out: &mut Vec<Value>) -> Result<()> {
-        for model in self.watching.clone() {
-            let target = Target::Model(&self.project, &model);
+    async fn recheck(&mut self, out: &mut Vec<Value>) -> Result<(), StoreError> {
+        for model in self.watcher.watched() {
             if !self
-                .st
-                .access
-                .allowed(&self.person, "model.read", target, None)
+                .app
+                .service
+                .may_watch(&self.person, &self.project, &model)
                 .await?
             {
-                self.watching.remove(&model);
-                out.push(json!({ "t": "refused", "model": model }));
+                self.watcher.stop(&model);
+                out.push(json!({ "t": "refused", "model": model.as_str() }));
             }
         }
         Ok(())

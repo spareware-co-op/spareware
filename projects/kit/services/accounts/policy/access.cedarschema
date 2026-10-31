@@ -1,18 +1,24 @@
-// The shape of what access.cedar talks about. The rows in TiKV fill these in on every request.
+// The shape of what access.cedar talks about. Rows in the store fill these in on every request.
 namespace Spare {
+  entity Directory;
   entity Hub { permits: Set<Hub> };
   entity Project { hub: Hub };
   entity Team { project: Project };
   entity Folder { team: Team, kind: String };
   entity Model { folder: Folder };
   entity Package { folder: Folder };
-  entity Person in [Hub, Project, Team];
+  entity Person in [Hub, Project, Team] { admin: Bool };
 
+  action "directory.edit" appliesTo { principal: Person, resource: Directory };
+  action "login.bind" appliesTo { principal: Person, resource: Person };
   action "hub.open" appliesTo { principal: Person, resource: Hub };
   action "project.open" appliesTo { principal: Person, resource: Project };
   action "folder.open" appliesTo { principal: Person, resource: Folder };
   action "model.read", "model.edit", "model.link" appliesTo { principal: Person, resource: Model };
-  action "package.publish", "package.consume" appliesTo { principal: Person, resource: Team };
+  action "model.add", "package.publish", "package.consume" appliesTo {
+    principal: Person,
+    resource: Team
+  };
   action "package.read" appliesTo { principal: Person, resource: Package };
   action "package.bridge" appliesTo {
     principal: Person,

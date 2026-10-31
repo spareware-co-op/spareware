@@ -1,7 +1,8 @@
-//! A stand-in for Google's sign-in, for local testing only. It speaks real OpenID Connect, with
-//! signed ID tokens and PKCE, so the server's one sign-in path is exercised without a Google
-//! account and without any test back door in the server. It lets anyone be anyone: never run it
-//! anywhere but your own machine.
+//! A stand-in for Google's sign-in, for tests only: built as an example, never by the deploy
+//! script, and the server reaches it only through the OIDC_ISSUER setting. It speaks real OpenID
+//! Connect, with signed ID tokens and PKCE, so the server's one sign-in path is exercised without
+//! a Google account and without any test back door in the server. It lets anyone be anyone: never
+//! run it anywhere but your own machine.
 
 use axum::extract::{Form, Query, State};
 use axum::response::{Html, IntoResponse, Redirect};

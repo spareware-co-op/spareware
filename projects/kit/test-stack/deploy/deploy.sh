@@ -23,7 +23,9 @@ ssh=(ssh -i "$key" -o StrictHostKeyChecking=accept-new "$user@$server")
 [ -f "$settings" ] || { echo "no settings file at $settings" >&2; exit 1; }
 
 "${ssh[@]}" 'sudo mkdir -p /opt/spare-stack/src /etc/spare-stack && sudo chmod 700 /etc/spare-stack'
-git -C "$root" archive HEAD projects/kit/test-stack projects/spare-construct/demo/index.html design/ribbon \
+git -C "$root" archive HEAD Cargo.toml rust-toolchain.toml projects/kit/test-stack projects/kit/crates \
+  projects/kit/services/accounts projects/kit/services/store \
+  projects/spare-construct/demo/index.html design/ribbon \
   | "${ssh[@]}" 'sudo tar -x -C /opt/spare-stack/src'
 "${ssh[@]}" 'sudo tee /etc/spare-stack/owner.env >/dev/null && sudo chmod 600 /etc/spare-stack/owner.env' \
   <"$settings"

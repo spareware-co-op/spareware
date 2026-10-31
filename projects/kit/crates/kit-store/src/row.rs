@@ -29,8 +29,11 @@ struct Reading<T> {
 
 /// A value as a stored row.
 pub fn to_row<T: Serialize>(value: &T) -> Result<Vec<u8>, StoreError> {
-    serde_json::to_vec(&Writing { v: ROW_FORMAT, row: value })
-        .map_err(|e| StoreError::Damaged(e.to_string()))
+    serde_json::to_vec(&Writing {
+        v: ROW_FORMAT,
+        row: value,
+    })
+    .map_err(|e| StoreError::Damaged(e.to_string()))
 }
 
 /// Reads a stored row of any version. Bad bytes are an error, never a panic.
@@ -38,8 +41,13 @@ pub fn from_row<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, StoreError> {
     let damaged = |e: serde_json::Error| StoreError::Damaged(e.to_string());
     let version: Version = serde_json::from_slice(bytes).map_err(damaged)?;
     match version.v {
-        1 => Ok(serde_json::from_slice::<Reading<T>>(bytes).map_err(damaged)?.row),
-        found => Err(StoreError::TooNew { found, known: ROW_FORMAT }),
+        1 => Ok(serde_json::from_slice::<Reading<T>>(bytes)
+            .map_err(damaged)?
+            .row),
+        found => Err(StoreError::TooNew {
+            found,
+            known: ROW_FORMAT,
+        }),
     }
 }
 
@@ -85,8 +93,18 @@ mod tests {
 
     #[test]
     fn damage_is_an_error() {
-        for bad in [&b""[..], b"{", b"[]", br#"{"v":"1"}"#, br#"{"v":1}"#, br#"{"row":7}"#] {
-            assert!(matches!(from_row::<u32>(bad), Err(StoreError::Damaged(_))), "{bad:?}");
+        for bad in [
+            &b""[..],
+            b"{",
+            b"[]",
+            br#"{"v":"1"}"#,
+            br#"{"v":1}"#,
+            br#"{"row":7}"#,
+        ] {
+            assert!(
+                matches!(from_row::<u32>(bad), Err(StoreError::Damaged(_))),
+                "{bad:?}"
+            );
         }
     }
 }

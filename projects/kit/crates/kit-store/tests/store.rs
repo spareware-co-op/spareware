@@ -51,7 +51,16 @@ async fn a_transaction_sees_its_own_writes() {
     let seen = txn.scan(&list::log(&scope)).await.unwrap();
     assert_eq!(seen, vec![(scope.log(2), b"b".to_vec())]);
     txn.rollback().await.unwrap();
-    assert_eq!(store.snapshot().await.unwrap().get(&scope.log(2)).await.unwrap(), None);
+    assert_eq!(
+        store
+            .snapshot()
+            .await
+            .unwrap()
+            .get(&scope.log(2))
+            .await
+            .unwrap(),
+        None
+    );
 }
 
 #[tokio::test]
@@ -61,8 +70,14 @@ async fn a_lost_answer_still_landed() {
     store.inject(Fault::LandsAnswerLost);
     let mut txn = store.begin().await.unwrap();
     txn.put(key.clone(), b"1".to_vec()).await.unwrap();
-    assert!(matches!(txn.commit().await, Err(StoreError::Undetermined(_))));
-    assert_eq!(store.snapshot().await.unwrap().get(&key).await.unwrap(), Some(b"1".to_vec()));
+    assert!(matches!(
+        txn.commit().await,
+        Err(StoreError::Undetermined(_))
+    ));
+    assert_eq!(
+        store.snapshot().await.unwrap().get(&key).await.unwrap(),
+        Some(b"1".to_vec())
+    );
 }
 
 #[tokio::test]
@@ -73,5 +88,8 @@ async fn a_failed_commit_leaves_nothing() {
     let mut txn = store.begin().await.unwrap();
     txn.put(key.clone(), b"1".to_vec()).await.unwrap();
     assert!(txn.commit().await.is_err());
-    assert_eq!(store.snapshot().await.unwrap().get(&key).await.unwrap(), None);
+    assert_eq!(
+        store.snapshot().await.unwrap().get(&key).await.unwrap(),
+        None
+    );
 }

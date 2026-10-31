@@ -22,15 +22,26 @@ fn record() {
     };
     let claim = ClaimChange {
         piece: id("D-104"),
-        claim: Some(Claim { person: id("anna"), name: "Anna".to_owned(), until_ms: 1_793_413_569_100 }),
+        claim: Some(Claim {
+            person: id("anna"),
+            name: "Anna".to_owned(),
+            until_ms: 1_793_413_569_100,
+        }),
     };
     let hash = |digit: char| id(&digit.to_string().repeat(64));
     let moved = Entry::new(
         41,
-        &edit("element.move", json!({ "element": "D-104", "x": 2500, "y": 300 })),
+        &edit(
+            "element.move",
+            json!({ "element": "D-104", "x": 2500, "y": 300 }),
+        ),
         1,
         1_793_413_539_100,
-        vec![Change { piece: id("D-104"), before: Some(hash('a')), after: Some(hash('b')) }],
+        vec![Change {
+            piece: id("D-104"),
+            before: Some(hash('a')),
+            after: Some(hash('b')),
+        }],
         vec![claim],
         None,
     );
@@ -43,13 +54,20 @@ fn record() {
         ),
         1,
         1_793_413_539_200,
-        vec![Change { piece: id("D-105"), before: None, after: Some(hash('c')) }],
+        vec![Change {
+            piece: id("D-105"),
+            before: None,
+            after: Some(hash('c')),
+        }],
         Vec::new(),
         None,
     );
     let turned_back = Entry::new(
         43,
-        &edit("element.move", json!({ "element": "W-101", "x": 1, "y": 1 })),
+        &edit(
+            "element.move",
+            json!({ "element": "W-101", "x": 1, "y": 1 }),
+        ),
         1,
         1_793_413_539_300,
         Vec::new(),
@@ -64,7 +82,10 @@ fn record() {
         ("entry-v1-turned-back.json", turned_back),
     ] {
         let path = folder.join(name);
-        assert!(!path.exists(), "{name} is recorded already: samples are never rewritten");
+        assert!(
+            !path.exists(),
+            "{name} is recorded already: samples are never rewritten"
+        );
         std::fs::write(path, entry.encode()).unwrap();
     }
 }

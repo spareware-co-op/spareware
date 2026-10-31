@@ -8,7 +8,7 @@ cd "$here"
 . config/local.env
 target="${CARGO_TARGET_DIR:-$here/target}"
 
-cargo build --release --bins --examples
+cargo build --release -p test-stack --bins --examples
 pkill -u "$(id -u)" -x test-stack || true
 bash scripts/stack-wipe.sh
 if ! pgrep -u "$(id -u)" -x mock_oidc >/dev/null; then

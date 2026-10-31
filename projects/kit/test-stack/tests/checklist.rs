@@ -45,19 +45,22 @@ struct Server {
 impl Server {
     async fn start(bind: &'static str) -> Self {
         let port = bind.rsplit(':').next().unwrap();
-        let child = Command::new(BIN)
-            .arg("serve")
-            .env("STACK_BIND", bind)
-            .env("STACK_PUBLIC_URL", format!("http://localhost:{port}"))
-            .stdout(Stdio::null())
-            .spawn()
-            .expect("starting the server");
+        let mut child = Starting(Some(
+            Command::new(BIN)
+                .arg("serve")
+                .env("STACK_BIND", bind)
+                .env("STACK_PUBLIC_URL", format!("http://localhost:{port}"))
+                .stdout(Stdio::null())
+                .spawn()
+                .expect("starting the server"),
+        ));
         let health = format!("http://{bind}/health");
         for _ in 0..200 {
             if reqwest::get(&health)
                 .await
                 .is_ok_and(|r| r.status().is_success())
             {
+                let child = child.0.take().expect("still held");
                 return Self { child, bind };
             }
             sleep(Duration::from_millis(50)).await;
@@ -73,6 +76,18 @@ impl Server {
 
     fn base(&self) -> String {
         format!("http://localhost:{}", self.bind.rsplit(':').next().unwrap())
+    }
+}
+
+/// Kills what a failed start left, so a test that panics leaves no server behind.
+struct Starting(Option<Child>);
+
+impl Drop for Starting {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -319,6 +334,10 @@ async fn one_signs_in_and_lands_in_their_hub(base: &str) {
     check(
         me["person"]["home_hub"] == "company-1",
         "her home hub is Company 1",
+    );
+    check(
+        me["person"].get("email").is_none(),
+        "no email address is kept",
     );
     check(
         me["hubs"][0]["name"] == "Company 1",
@@ -606,6 +625,10 @@ async fn four_access_and_bridges(base: &str) {
         "Dan can't publish the Architecture team's model",
     );
     let (status, package) = anna.post(url, json!({ "model": "arch-model" })).await;
+    check(
+        package["entry"].as_u64().unwrap_or(0) > 0,
+        "sharing is an entry in the project's log",
+    );
     check(status == StatusCode::OK, "Anna shares the Arch model");
     check(package["name"] == "Arch package v12", "as Arch package v12");
     let (_, seen) = dan.get(project.clone()).await;
@@ -728,7 +751,7 @@ async fn four_access_and_bridges(base: &str) {
         )
         .await;
     let got = watcher
-        .until(|m| m["t"] == "entry" && m["entry"]["model"] == "interiors-model")
+        .until(|m| m["t"] == "entry" && m["entry"]["target"] == "interiors-model")
         .await;
     check(got.is_some(), "a live link updates as they edit");
     editor.reply_to(c).await;

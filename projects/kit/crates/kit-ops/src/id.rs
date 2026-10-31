@@ -24,6 +24,7 @@ pub mod option {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Id>, D::Error> {
         let text = Option::<String>::deserialize(deserializer)?;
-        text.map(|text| Id::parse(&text).map_err(serde::de::Error::custom)).transpose()
+        text.map(|text| Id::parse(&text).map_err(serde::de::Error::custom))
+            .transpose()
     }
 }

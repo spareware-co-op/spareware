@@ -141,7 +141,10 @@ impl Entry {
         let version: Version = serde_json::from_slice(bytes).map_err(damaged)?;
         match version.v {
             1 => serde_json::from_slice(bytes).map_err(damaged),
-            found => Err(FormatError::TooNew { found, known: ENTRY_FORMAT }),
+            found => Err(FormatError::TooNew {
+                found,
+                known: ENTRY_FORMAT,
+            }),
         }
     }
 }
@@ -158,7 +161,10 @@ impl fmt::Display for FormatError {
         match self {
             Self::Damaged(why) => write!(f, "a log entry is damaged: {why}"),
             Self::TooNew { found, known } => {
-                write!(f, "this log entry is version {found}; this program reads up to {known}")
+                write!(
+                    f,
+                    "this log entry is version {found}; this program reads up to {known}"
+                )
             }
         }
     }
@@ -198,7 +204,11 @@ mod tests {
             args: json!({ "element": "D-104", "x": 1200, "y": 300 }),
             author_ms: 1000,
         };
-        let change = Change { piece: i("D-104"), before: Some(i("aa")), after: Some(i("bb")) };
+        let change = Change {
+            piece: i("D-104"),
+            before: Some(i("aa")),
+            after: Some(i("bb")),
+        };
         Entry::new(42, &edit, 1, 2000, vec![change], Vec::new(), None)
     }
 
@@ -210,15 +220,29 @@ mod tests {
 
     #[test]
     fn a_change_to_the_content_changes_the_content_id() {
-        let one = Change { piece: i("a"), before: None, after: Some(i("b")) };
-        let two = Change { piece: i("a"), before: None, after: Some(i("c")) };
+        let one = Change {
+            piece: i("a"),
+            before: None,
+            after: Some(i("b")),
+        };
+        let two = Change {
+            piece: i("a"),
+            before: None,
+            after: Some(i("c")),
+        };
         assert_ne!(content_id(&[one]), content_id(&[two]));
     }
 
     #[test]
     fn an_entry_from_a_newer_program_is_refused() {
         let err = Entry::decode(br#"{"v":2}"#).unwrap_err();
-        assert_eq!(err, FormatError::TooNew { found: 2, known: ENTRY_FORMAT });
+        assert_eq!(
+            err,
+            FormatError::TooNew {
+                found: 2,
+                known: ENTRY_FORMAT
+            }
+        );
     }
 
     #[test]
@@ -226,6 +250,9 @@ mod tests {
         let mut value: Value = serde_json::from_slice(&entry().encode()).unwrap();
         value["author"] = json!("a/b");
         let bytes = serde_json::to_vec(&value).unwrap();
-        assert!(matches!(Entry::decode(&bytes), Err(FormatError::Damaged(_))));
+        assert!(matches!(
+            Entry::decode(&bytes),
+            Err(FormatError::Damaged(_))
+        ));
     }
 }

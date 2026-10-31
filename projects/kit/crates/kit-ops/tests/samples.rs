@@ -16,7 +16,10 @@ fn sample(bytes: &[u8]) -> &[u8] {
 
 #[test]
 fn version_1_samples_still_read_and_write_the_same_bytes() {
-    assert_eq!(ENTRY_FORMAT, 1, "a new format needs its own samples, and this test extended");
+    assert_eq!(
+        ENTRY_FORMAT, 1,
+        "a new format needs its own samples, and this test extended"
+    );
     for bytes in [V1_MOVE, V1_CREATE, V1_TURNED_BACK] {
         let entry = Entry::decode(sample(bytes)).unwrap();
         assert_eq!(entry.encode(), sample(bytes));
@@ -30,6 +33,9 @@ fn the_samples_say_what_they_recorded() {
     assert_eq!(moved.cmd, "element.move");
     assert_eq!(moved.args["x"], 2500);
     let turned_back = Entry::decode(sample(V1_TURNED_BACK)).unwrap();
-    assert_eq!(turned_back.failed.as_deref(), Some("Anna is working on this."));
+    assert_eq!(
+        turned_back.failed.as_deref(),
+        Some("Anna is working on this.")
+    );
     assert!(turned_back.changes.is_empty());
 }

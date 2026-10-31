@@ -15,12 +15,12 @@ pub async fn read_log<R: Reader>(
     from: u64,
     to: u64,
 ) -> Result<Vec<Entry>, StoreError> {
-    let pairs = reader.scan_between(&scope.log(from + 1), &scope.log(to.saturating_add(1))).await?;
+    let pairs = reader
+        .scan_between(&scope.log(from + 1), &scope.log(to.saturating_add(1)))
+        .await?;
     pairs
         .iter()
-        .map(|(_, bytes)| {
-            Entry::decode(bytes).map_err(|e| StoreError::Damaged(e.to_string()))
-        })
+        .map(|(_, bytes)| Entry::decode(bytes).map_err(|e| StoreError::Damaged(e.to_string())))
         .collect()
 }
 
@@ -36,7 +36,10 @@ pub struct LogCheck {
 /// record matching its hash.
 pub async fn verify_log<R: Reader>(reader: &mut R, scope: &Scope) -> Result<LogCheck, String> {
     let fault = |e: StoreError| e.to_string();
-    let head: u64 = read_row(reader, &scope.head()).await.map_err(fault)?.unwrap_or(0);
+    let head: u64 = read_row(reader, &scope.head())
+        .await
+        .map_err(fault)?
+        .unwrap_or(0);
     let entries = read_log(reader, scope, 0, head).await.map_err(fault)?;
     if entries.len() as u64 != head {
         return Err(format!("{} log entries, head says {head}", entries.len()));
@@ -52,7 +55,10 @@ pub async fn verify_log<R: Reader>(reader: &mut R, scope: &Scope) -> Result<LogC
         for change in &entry.changes {
             let key = (entry.target.clone(), change.piece.clone());
             if replayed.get(&key) != change.before.as_ref() {
-                return Err(format!("log entry {} doesn't follow from the one before", entry.seq));
+                return Err(format!(
+                    "log entry {} doesn't follow from the one before",
+                    entry.seq
+                ));
             }
             match &change.after {
                 Some(hash) => replayed.insert(key, hash.clone()),
@@ -61,11 +67,18 @@ pub async fn verify_log<R: Reader>(reader: &mut R, scope: &Scope) -> Result<LogC
         }
     }
     let Scope::Project(project) = scope else {
-        return Ok(LogCheck { entries: head, elements: 0 });
+        return Ok(LogCheck {
+            entries: head,
+            elements: 0,
+        });
     };
 
     let mut stored = BTreeMap::new();
-    for (key, value) in reader.scan(&list::all_elements(project)).await.map_err(fault)? {
+    for (key, value) in reader
+        .scan(&list::all_elements(project))
+        .await
+        .map_err(fault)?
+    {
         let Some(Place::Element { model, element, .. }) = key.parse() else {
             return Err(format!("{key} isn't an element key"));
         };
@@ -77,12 +90,18 @@ pub async fn verify_log<R: Reader>(reader: &mut R, scope: &Scope) -> Result<LogC
         return Err("the stored elements differ from the replayed log".to_owned());
     }
     for ((_, element), hash) in &stored {
-        let place = Place::Record { project: project.clone(), hash: hash.clone() };
+        let place = Place::Record {
+            project: project.clone(),
+            hash: hash.clone(),
+        };
         let bytes = reader.get(&place.key()).await.map_err(fault)?;
         let bytes = bytes.ok_or_else(|| format!("the record of {element} is missing"))?;
         if sha256_hex(&bytes) != hash.as_str() {
             return Err(format!("the record of {element} doesn't match its hash"));
         }
     }
-    Ok(LogCheck { entries: head, elements: stored.len() })
+    Ok(LogCheck {
+        entries: head,
+        elements: stored.len(),
+    })
 }

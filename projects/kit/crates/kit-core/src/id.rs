@@ -119,7 +119,9 @@ mod tests {
     fn anything_that_could_break_a_key_or_a_path_is_refused() {
         assert_eq!(Id::parse(""), Err(IdError::Empty));
         assert_eq!(Id::parse(&"a".repeat(65)), Err(IdError::TooLong));
-        for bad in ["a/b", "a:b", "..", ".hidden", "-x", "a b", "a\nb", "é", "a\0"] {
+        for bad in [
+            "a/b", "a:b", "..", ".hidden", "-x", "a b", "a\nb", "é", "a\0",
+        ] {
             assert_eq!(Id::parse(bad), Err(IdError::BadCharacter), "{bad:?}");
         }
     }
@@ -136,7 +138,10 @@ mod tests {
         let early = Id::from_time_and_random(1000, [255; 10]);
         let late = Id::from_time_and_random(1001, [0; 10]);
         assert!(early < late);
-        assert_ne!(Id::from_time_and_random(5, [1; 10]), Id::from_time_and_random(5, [2; 10]));
+        assert_ne!(
+            Id::from_time_and_random(5, [1; 10]),
+            Id::from_time_and_random(5, [2; 10])
+        );
     }
 
     #[test]

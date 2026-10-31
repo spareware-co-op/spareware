@@ -44,7 +44,11 @@ impl Commands<Memory> for Notes {
 
     async fn permit(&self, _scope: &Scope, edit: &Edit) -> Result<Result<(), String>, StoreError> {
         let refused = self.refused.lock().unwrap().contains(edit.person.as_str());
-        Ok(if refused { Err("You don't have access to this.".to_owned()) } else { Ok(()) })
+        Ok(if refused {
+            Err("You don't have access to this.".to_owned())
+        } else {
+            Ok(())
+        })
     }
 
     async fn apply(
@@ -75,11 +79,14 @@ impl Commands<Memory> for Notes {
             element: piece.clone(),
         };
         let before: Option<String> = read_row(txn, &place.key()).await?;
-        let record = serde_json::to_vec(&json!({ "note": piece.as_str(), "text": edit.args["text"] }))
-            .unwrap();
+        let record =
+            serde_json::to_vec(&json!({ "note": piece.as_str(), "text": edit.args["text"] }))
+                .unwrap();
         let hash = sha256_hex(&record);
-        let record_place =
-            Place::Record { project: project.clone(), hash: Id::parse(&hash).unwrap() };
+        let record_place = Place::Record {
+            project: project.clone(),
+            hash: Id::parse(&hash).unwrap(),
+        };
         txn.put(record_place.key(), record).await?;
         txn.put(place.key(), to_row(&hash)?).await?;
         let claim = Claim {
@@ -102,7 +109,11 @@ impl Commands<Memory> for Notes {
             }],
             None => Vec::new(),
         };
-        Ok(Ok(Applied { changes: vec![change], claims: vec![claim], elsewhere }))
+        Ok(Ok(Applied {
+            changes: vec![change],
+            claims: vec![claim],
+            elsewhere,
+        }))
     }
 }
 
@@ -137,13 +148,18 @@ pub async fn run_until_answered(server: &Server, scope: &Scope, edit: Edit) -> R
 
 pub async fn head(store: &Memory, scope: &Scope) -> u64 {
     let mut snapshot = store.snapshot().await.unwrap();
-    read_row::<u64, _>(&mut snapshot, &scope.head()).await.unwrap().unwrap_or(0)
+    read_row::<u64, _>(&mut snapshot, &scope.head())
+        .await
+        .unwrap()
+        .unwrap_or(0)
 }
 
 pub async fn log(store: &Memory, scope: &Scope) -> Vec<kit_ops::Entry> {
     let mut snapshot = store.snapshot().await.unwrap();
     let to = head(store, scope).await;
-    kit_sync::read_log(&mut snapshot, scope, 0, to).await.unwrap()
+    kit_sync::read_log(&mut snapshot, scope, 0, to)
+        .await
+        .unwrap()
 }
 
 pub async fn verify(store: &Memory, scope: &Scope) -> Result<kit_sync::LogCheck, String> {
@@ -157,10 +173,16 @@ pub fn value_text(value: &Value) -> String {
 
 pub async fn stored_text(store: &Memory, note: &str) -> Option<String> {
     let mut snapshot = store.snapshot().await.unwrap();
-    let place =
-        Place::Element { project: i("project"), model: i("model"), element: i(note) };
+    let place = Place::Element {
+        project: i("project"),
+        model: i("model"),
+        element: i(note),
+    };
     let hash: String = read_row(&mut snapshot, &place.key()).await.unwrap()?;
-    let record_place = Place::Record { project: i("project"), hash: i(&hash) };
+    let record_place = Place::Record {
+        project: i("project"),
+        hash: i(&hash),
+    };
     let bytes = snapshot.get(&record_place.key()).await.unwrap()?;
     let record: Value = serde_json::from_slice(&bytes).unwrap();
     Some(value_text(&record["text"]))

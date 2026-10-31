@@ -22,31 +22,49 @@ fn key_parsing_has_one_spelling() {
 /// IDs built from text round-trip through every kind of key that holds them.
 #[test]
 fn keys_built_from_ids_read_back() {
-    check!().with_type::<(String, String, i32, i64, u64)>().for_each(|(a, b, level, x, seq)| {
-        let (Ok(a), Ok(b)) = (Id::parse(a), Id::parse(b)) else { return };
-        let places = [
-            Place::Head(Scope::Directory),
-            Place::Head(Scope::Project(a.clone())),
-            Place::Log(Scope::Project(a.clone()), *seq),
-            Place::Client(Scope::Directory, a.clone(), b.clone()),
-            Place::Record { project: a.clone(), hash: b.clone() },
-            Place::Element { project: a.clone(), model: b.clone(), element: a.clone() },
-            Place::Area {
-                project: a.clone(),
-                model: b.clone(),
-                level: *level,
-                x: *x,
-                y: -*x / 2,
-                element: b.clone(),
-            },
-            Place::MemberOfTeam { person: a.clone(), project: b.clone(), team: a.clone() },
-            Place::Bridge { hub: a.clone(), other: b.clone() },
-            Place::Session(a.clone()),
-        ];
-        for place in places {
-            assert_eq!(place.key().parse().as_ref(), Some(&place));
-        }
-    });
+    check!()
+        .with_type::<(String, String, i32, i64, u64)>()
+        .for_each(|(a, b, level, x, seq)| {
+            let (Ok(a), Ok(b)) = (Id::parse(a), Id::parse(b)) else {
+                return;
+            };
+            let places = [
+                Place::Head(Scope::Directory),
+                Place::Head(Scope::Project(a.clone())),
+                Place::Log(Scope::Project(a.clone()), *seq),
+                Place::Client(Scope::Directory, a.clone(), b.clone()),
+                Place::Record {
+                    project: a.clone(),
+                    hash: b.clone(),
+                },
+                Place::Element {
+                    project: a.clone(),
+                    model: b.clone(),
+                    element: a.clone(),
+                },
+                Place::Area {
+                    project: a.clone(),
+                    model: b.clone(),
+                    level: *level,
+                    x: *x,
+                    y: -*x / 2,
+                    element: b.clone(),
+                },
+                Place::MemberOfTeam {
+                    person: a.clone(),
+                    project: b.clone(),
+                    team: a.clone(),
+                },
+                Place::Bridge {
+                    hub: a.clone(),
+                    other: b.clone(),
+                },
+                Place::Session(a.clone()),
+            ];
+            for place in places {
+                assert_eq!(place.key().parse().as_ref(), Some(&place));
+            }
+        });
 }
 
 /// Log keys sort as their numbers do.
@@ -61,11 +79,15 @@ fn log_keys_keep_number_order() {
 /// A project's range holds every key of that project and no key of any other.
 #[test]
 fn one_projects_range_never_holds_anothers_keys() {
-    check!().with_type::<(String, String, u64)>().for_each(|(a, b, seq)| {
-        let (Ok(a), Ok(b)) = (Id::parse(a), Id::parse(b)) else { return };
-        let (start, end) = list::project(&a).bounds();
-        let inside = |key: &Key| key.as_bytes() >= &start[..] && key.as_bytes() < &end[..];
-        assert!(inside(&Scope::Project(a.clone()).log(*seq)));
-        assert_eq!(inside(&Scope::Project(b.clone()).log(*seq)), a == b);
-    });
+    check!()
+        .with_type::<(String, String, u64)>()
+        .for_each(|(a, b, seq)| {
+            let (Ok(a), Ok(b)) = (Id::parse(a), Id::parse(b)) else {
+                return;
+            };
+            let (start, end) = list::project(&a).bounds();
+            let inside = |key: &Key| key.as_bytes() >= &start[..] && key.as_bytes() < &end[..];
+            assert!(inside(&Scope::Project(a.clone()).log(*seq)));
+            assert_eq!(inside(&Scope::Project(b.clone()).log(*seq)), a == b);
+        });
 }

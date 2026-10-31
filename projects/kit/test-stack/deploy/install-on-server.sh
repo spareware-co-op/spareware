@@ -46,7 +46,7 @@ export RUSTUP_HOME="$home/rustup" CARGO_HOME="$home/cargo" CARGO_TARGET_DIR="$ho
 if [ ! -x "$CARGO_HOME/bin/rustup" ]; then
   curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
 fi
-(cd "$src" && "$CARGO_HOME/bin/cargo" build --release --locked --bin test-stack)
+(cd "$src" && "$CARGO_HOME/bin/cargo" build --release --locked -p test-stack --bin test-stack)
 install -m 755 "$CARGO_TARGET_DIR/release/test-stack" "$home/bin/test-stack.new"
 mv "$home/bin/test-stack.new" "$home/bin/test-stack"
 chown -R spare:spare "$home/data" "$home/log" "$home/backups"

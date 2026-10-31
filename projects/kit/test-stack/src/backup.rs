@@ -1,27 +1,20 @@
 //! Backup and restore: every key from one snapshot, plus every file, written somewhere else.
 //! The format is plain gzip'd JSON lines, readable without this program. A real cloud would use
 //! TiKV's own `br` tool for speed; this is enough to prove a server can be lost and rebuilt.
+//!
+//! These are operators' tools, run on the server with the store's own credentials, so they go
+//! round the edit log by design (note K08). `restore` refuses a store that holds anything.
 
-use crate::kv::{self, Kv};
-use crate::rows::sha256_hex;
-use anyhow::{Context as _, Result, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use futures::TryStreamExt;
-use object_store::path::Path;
-use object_store::{ObjectStore, ObjectStoreExt};
+use kit_ops::sha256_hex;
+use kit_store::{FileStore, Key, Kv, Prefix, Reader, StoreError, Txn};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::{BufRead, BufReader, Write};
-use std::sync::Arc;
-
-/// Every key the stack writes sorts inside this range.
-fn whole_range() -> std::ops::Range<Vec<u8>> {
-    b"!".to_vec()..b"~".to_vec()
-}
 
 const RESTORE_BATCH: usize = 256;
 
@@ -38,35 +31,36 @@ struct Manifest {
     files: Vec<(String, String)>,
 }
 
-pub async fn backup(
-    kv: &Kv,
-    files: &Arc<dyn ObjectStore>,
-    target: &Arc<dyn ObjectStore>,
+fn damaged(e: impl std::fmt::Display) -> StoreError {
+    StoreError::Damaged(e.to_string())
+}
+
+pub async fn backup<K: Kv, F: FileStore, T: FileStore>(
+    kv: &K,
+    files: &F,
+    target: &T,
     name: &str,
-) -> Result<()> {
-    let mut snap = kv.snapshot().await?;
-    let pairs = kv::scan_range(&mut snap, whole_range()).await?;
+) -> Result<(), StoreError> {
+    let mut snapshot = kv.snapshot().await?;
+    let pairs = snapshot.scan(&Prefix::everything()).await?;
     let mut gz = GzEncoder::new(Vec::new(), Compression::default());
     for (key, value) in &pairs {
         let line = Line {
-            k: String::from_utf8(key.clone())?,
+            k: key.as_str().to_owned(),
             v: STANDARD.encode(value),
         };
-        serde_json::to_writer(&mut gz, &line)?;
-        gz.write_all(b"\n")?;
+        serde_json::to_writer(&mut gz, &line).map_err(damaged)?;
+        gz.write_all(b"\n").map_err(damaged)?;
     }
-    let bytes = gz.finish()?;
+    let bytes = gz.finish().map_err(damaged)?;
     let kv_sha256 = sha256_hex(&bytes);
-    target
-        .put(&Path::from(format!("{name}/kv.jsonl.gz")), bytes.into())
-        .await?;
+    target.put(&format!("{name}/kv.jsonl.gz"), bytes).await?;
 
     let mut copied = Vec::new();
-    for object in files.list(None).try_collect::<Vec<_>>().await? {
-        let bytes = files.get(&object.location).await?.bytes().await?;
-        copied.push((object.location.to_string(), sha256_hex(&bytes)));
-        let path = Path::from(format!("{name}/files/{}", object.location));
-        target.put(&path, bytes.into()).await?;
+    for path in files.list().await? {
+        let bytes = files.get(&path).await?;
+        copied.push((path.clone(), sha256_hex(&bytes)));
+        target.put(&format!("{name}/files/{path}"), bytes).await?;
     }
 
     let manifest = Manifest {
@@ -74,10 +68,8 @@ pub async fn backup(
         kv_sha256,
         files: copied,
     };
-    let body = serde_json::to_vec_pretty(&manifest)?;
-    target
-        .put(&Path::from(format!("{name}/manifest.json")), body.into())
-        .await?;
+    let body = serde_json::to_vec_pretty(&manifest).map_err(damaged)?;
+    target.put(&format!("{name}/manifest.json"), body).await?;
     println!(
         "backup {name}: {} keys, {} files",
         manifest.pairs,
@@ -87,64 +79,57 @@ pub async fn backup(
 }
 
 /// Restores into an empty store only, so it can never overwrite live work.
-pub async fn restore(
-    kv: &Kv,
-    files: &Arc<dyn ObjectStore>,
-    source: &Arc<dyn ObjectStore>,
+pub async fn restore<K: Kv, F: FileStore, S: FileStore>(
+    kv: &K,
+    files: &F,
+    source: &S,
     name: &str,
-) -> Result<()> {
-    let mut snap = kv.snapshot().await?;
-    let existing = kv::scan_range(&mut snap, whole_range()).await?;
+) -> Result<(), StoreError> {
+    let mut snapshot = kv.snapshot().await?;
+    let existing = snapshot.scan(&Prefix::everything()).await?;
     if !existing.is_empty() {
-        bail!(
+        return Err(StoreError::Damaged(format!(
             "the store already holds {} keys; restore needs an empty one",
             existing.len()
-        );
+        )));
     }
-    let manifest = source
-        .get(&Path::from(format!("{name}/manifest.json")))
-        .await?;
-    let manifest: Manifest = serde_json::from_slice(&manifest.bytes().await?)?;
-    let bytes = source
-        .get(&Path::from(format!("{name}/kv.jsonl.gz")))
-        .await?
-        .bytes()
-        .await?;
+    let manifest = source.get(&format!("{name}/manifest.json")).await?;
+    let manifest: Manifest = serde_json::from_slice(&manifest).map_err(damaged)?;
+    let bytes = source.get(&format!("{name}/kv.jsonl.gz")).await?;
     if sha256_hex(&bytes) != manifest.kv_sha256 {
-        bail!("backup {name} is damaged: its key file doesn't match the manifest");
+        return Err(damaged(format!(
+            "backup {name}: its key file doesn't match the manifest"
+        )));
     }
 
     let mut lines = Vec::new();
     for line in BufReader::new(GzDecoder::new(&bytes[..])).lines() {
-        lines.push(serde_json::from_str::<Line>(&line?)?);
+        lines.push(serde_json::from_str::<Line>(&line.map_err(damaged)?).map_err(damaged)?);
     }
     if lines.len() != manifest.pairs {
-        bail!(
-            "backup {name} is damaged: {} keys, manifest says {}",
+        return Err(damaged(format!(
+            "backup {name}: {} keys, manifest says {}",
             lines.len(),
             manifest.pairs
-        );
+        )));
     }
     for chunk in lines.chunks(RESTORE_BATCH) {
         let mut txn = kv.begin().await?;
         for line in chunk {
-            txn.put(line.k.clone(), STANDARD.decode(&line.v)?).await?;
+            let value = STANDARD.decode(&line.v).map_err(damaged)?;
+            txn.put(Key::from_stored(line.k.clone()), value).await?;
         }
         txn.commit().await?;
     }
 
     for (path, sha256) in &manifest.files {
-        let from = Path::from(format!("{name}/files/{path}"));
-        let bytes = source
-            .get(&from)
-            .await?
-            .bytes()
-            .await
-            .context("reading a backed-up file")?;
+        let bytes = source.get(&format!("{name}/files/{path}")).await?;
         if sha256_hex(&bytes) != *sha256 {
-            bail!("backup {name} is damaged: {path} doesn't match the manifest");
+            return Err(damaged(format!(
+                "backup {name}: {path} doesn't match the manifest"
+            )));
         }
-        files.put(&Path::from(path.as_str()), bytes.into()).await?;
+        files.put(path, bytes).await?;
     }
     println!(
         "restored {name}: {} keys, {} files",
@@ -155,20 +140,20 @@ pub async fn restore(
 }
 
 /// One hash over every key, value and file, to compare two stores.
-pub async fn digest(kv: &Kv, files: &Arc<dyn ObjectStore>) -> Result<String> {
-    let mut snap = kv.snapshot().await?;
+pub async fn digest<K: Kv, F: FileStore>(kv: &K, files: &F) -> Result<String, StoreError> {
+    let mut snapshot = kv.snapshot().await?;
     let mut hash = Sha256::new();
-    for (key, value) in kv::scan_range(&mut snap, whole_range()).await? {
-        hash.update((key.len() as u64).to_le_bytes());
-        hash.update(&key);
+    for (key, value) in snapshot.scan(&Prefix::everything()).await? {
+        hash.update((key.as_bytes().len() as u64).to_le_bytes());
+        hash.update(key.as_bytes());
         hash.update((value.len() as u64).to_le_bytes());
         hash.update(&value);
     }
-    let mut objects = files.list(None).try_collect::<Vec<_>>().await?;
-    objects.sort_by(|a, b| a.location.cmp(&b.location));
-    for object in objects {
-        hash.update(object.location.as_ref().as_bytes());
-        hash.update(files.get(&object.location).await?.bytes().await?);
+    let mut paths = files.list().await?;
+    paths.sort();
+    for path in paths {
+        hash.update(path.as_bytes());
+        hash.update(files.get(&path).await?);
     }
     Ok(hex::encode(hash.finalize()))
 }

@@ -54,7 +54,9 @@ impl Memory {
     }
 
     fn rows(&self) -> MutexGuard<'_, Rows> {
-        self.rows.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.rows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Makes one coming commit fail. Faults are used up in the order they were added.
@@ -72,7 +74,10 @@ impl Memory {
         let mut rows = self.rows();
         rows.clock += 1;
         let at = rows.clock;
-        rows.versions.entry(key.as_str().to_owned()).or_default().push((at, value));
+        rows.versions
+            .entry(key.as_str().to_owned())
+            .or_default()
+            .push((at, value));
     }
 
     /// Every live key, for tests that look at the whole store.
@@ -80,7 +85,11 @@ impl Memory {
     pub fn keys(&self) -> Vec<String> {
         let rows = self.rows();
         let at = rows.clock;
-        rows.versions.keys().filter(|key| rows.read(key, at).is_some()).cloned().collect()
+        rows.versions
+            .keys()
+            .filter(|key| rows.read(key, at).is_some())
+            .cloned()
+            .collect()
     }
 }
 
@@ -97,7 +106,10 @@ impl View {
         }
         let at = rows.clock;
         drop(rows);
-        Ok(Self { store: store.clone(), at })
+        Ok(Self {
+            store: store.clone(),
+            at,
+        })
     }
 }
 
@@ -112,7 +124,10 @@ impl Reader for View {
     }
 
     async fn scan_between(&mut self, from: &Key, to: &Key) -> Result<Vec<Pair>, StoreError> {
-        Ok(self.store.rows().scan(from.as_bytes(), to.as_bytes(), self.at))
+        Ok(self
+            .store
+            .rows()
+            .scan(from.as_bytes(), to.as_bytes(), self.at))
     }
 }
 
@@ -146,13 +161,19 @@ impl Reader for MemoryTxn {
             .into_iter()
             .map(|(key, value)| (key.as_str().to_owned(), value))
             .collect();
-        for (key, value) in self.writes.range(from.as_str().to_owned()..to.as_str().to_owned()) {
+        for (key, value) in self
+            .writes
+            .range(from.as_str().to_owned()..to.as_str().to_owned())
+        {
             match value {
                 Some(value) => pairs.insert(key.clone(), value.clone()),
                 None => pairs.remove(key),
             };
         }
-        Ok(pairs.into_iter().map(|(key, value)| (Key::from_stored(key), value)).collect())
+        Ok(pairs
+            .into_iter()
+            .map(|(key, value)| (Key::from_stored(key), value))
+            .collect())
     }
 }
 
@@ -180,7 +201,10 @@ impl Txn for MemoryTxn {
         }
         let at = self.view.at;
         let conflict = self.writes.keys().any(|key| {
-            rows.versions.get(key).and_then(|v| v.last()).is_some_and(|(ts, _)| *ts > at)
+            rows.versions
+                .get(key)
+                .and_then(|v| v.last())
+                .is_some_and(|(ts, _)| *ts > at)
         });
         if conflict {
             return Err(StoreError::Conflict);
@@ -191,9 +215,9 @@ impl Txn for MemoryTxn {
             rows.versions.entry(key).or_default().push((now, value));
         }
         match fault {
-            Some(Fault::LandsAnswerLost) => {
-                Err(StoreError::Undetermined("injected: the answer was lost".to_owned()))
-            }
+            Some(Fault::LandsAnswerLost) => Err(StoreError::Undetermined(
+                "injected: the answer was lost".to_owned(),
+            )),
             _ => Ok(()),
         }
     }
@@ -212,7 +236,10 @@ impl Kv for Memory {
     }
 
     async fn begin(&self) -> Result<MemoryTxn, StoreError> {
-        Ok(MemoryTxn { view: View::open(self)?, writes: BTreeMap::new() })
+        Ok(MemoryTxn {
+            view: View::open(self)?,
+            writes: BTreeMap::new(),
+        })
     }
 }
 
@@ -224,18 +251,30 @@ pub struct MemoryFiles {
 
 impl FileStore for MemoryFiles {
     async fn put(&self, path: &str, bytes: Vec<u8>) -> Result<(), StoreError> {
-        let mut files = self.files.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut files = self
+            .files
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         files.insert(path.to_owned(), bytes);
         Ok(())
     }
 
     async fn get(&self, path: &str) -> Result<Vec<u8>, StoreError> {
-        let files = self.files.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        files.get(path).cloned().ok_or_else(|| StoreError::Unavailable(format!("no file {path}")))
+        let files = self
+            .files
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        files
+            .get(path)
+            .cloned()
+            .ok_or_else(|| StoreError::Unavailable(format!("no file {path}")))
     }
 
     async fn list(&self) -> Result<Vec<String>, StoreError> {
-        let files = self.files.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let files = self
+            .files
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Ok(files.keys().cloned().collect())
     }
 }

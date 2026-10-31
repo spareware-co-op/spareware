@@ -8,7 +8,11 @@ use kit_ops::{Claim, ClaimChange};
 use kit_store::{Place, Reader, StoreError, Txn, read_row, to_row};
 
 fn place(project: &Id, model: &Id, piece: &Id) -> Place {
-    Place::Claim { project: project.clone(), model: model.clone(), element: piece.clone() }
+    Place::Claim {
+        project: project.clone(),
+        model: model.clone(),
+        element: piece.clone(),
+    }
 }
 
 /// Who else holds a piece now, if anyone. A claim that has run out holds nothing.
@@ -32,8 +36,12 @@ pub async fn take<T: Txn>(
     piece: &Id,
     claim: Claim,
 ) -> Result<ClaimChange, StoreError> {
-    txn.put(place(project, model, piece).key(), to_row(&claim)?).await?;
-    Ok(ClaimChange { piece: piece.clone(), claim: Some(claim) })
+    txn.put(place(project, model, piece).key(), to_row(&claim)?)
+        .await?;
+    Ok(ClaimChange {
+        piece: piece.clone(),
+        claim: Some(claim),
+    })
 }
 
 /// Lets a claim go.
@@ -44,5 +52,8 @@ pub async fn release<T: Txn>(
     piece: &Id,
 ) -> Result<ClaimChange, StoreError> {
     txn.delete(place(project, model, piece).key()).await?;
-    Ok(ClaimChange { piece: piece.clone(), claim: None })
+    Ok(ClaimChange {
+        piece: piece.clone(),
+        claim: None,
+    })
 }

@@ -5,38 +5,46 @@ edition = "2024"
 publish = false
 license = "MPL-2.0"
 
-# Not part of the root workspace: this is a stand-alone test server, so its packages stay out of
-# the geometry kernel's checks and its own Cargo.lock pins them.
+# Its own workspace, apart from the root one: note K08 says why. It holds the program and the two
+# services with heavy dependencies; the kit's crates come in as path dependencies.
 [workspace]
+members = [".", "../services/accounts", "../services/store"]
 
-# Every version is pinned; licences are in README.md and `cargo deny check licenses` enforces them.
+# Every version is pinned here and by Cargo.lock; deny.toml checks every licence.
 [dependencies]
-anyhow = "=1.0.100"                # MIT OR Apache-2.0
+kit-accounts = { path = "../services/accounts" }
+kit-core = { path = "../crates/kit-core" }
+kit-ops = { path = "../crates/kit-ops" }
+kit-store = { path = "../crates/kit-store" }
+kit-store-tikv = { path = "../services/store" }
+kit-sync = { path = "../crates/kit-sync" }
 axum = { version = "=0.8.9", features = ["ws"] }  # MIT
 axum-extra = { version = "=0.12.6", features = ["cookie"] }  # MIT
 base64 = "=0.22.1"                 # MIT OR Apache-2.0
-bytes = "=1.11.1"                  # MIT
-cedar-policy = "=4.14.0"           # Apache-2.0
 clap = { version = "=4.5.51", features = ["derive", "env"] }  # MIT OR Apache-2.0
 flate2 = "=1.1.5"                  # MIT OR Apache-2.0
 futures = "=0.3.31"                # MIT OR Apache-2.0
 hex = "=0.4.3"                     # MIT OR Apache-2.0
-object_store = { version = "=0.14.2", features = ["aws", "gcp"] }  # MIT OR Apache-2.0
-openidconnect = { version = "=4.0.1", default-features = false }   # MIT
 rand = "=0.9.2"                    # MIT OR Apache-2.0
-reqwest = { version = "=0.13.1", default-features = false, features = ["rustls"] }  # MIT OR Apache-2.0
-serde = { version = "=1.0.228", features = ["derive"] }  # MIT OR Apache-2.0
-serde_json = "=1.0.145"            # MIT OR Apache-2.0
-sha2 = "=0.10.9"                   # MIT OR Apache-2.0
-tikv-client = { version = "=0.4.0", default-features = false }  # Apache-2.0
-time = "=0.3.55"                     # MIT OR Apache-2.0
+serde = { version = "=1.0.229", features = ["derive"] }  # MIT OR Apache-2.0
+serde_json = "=1.0.154"            # MIT OR Apache-2.0
+sha2 = "=0.11.0"                   # MIT OR Apache-2.0
+thiserror = "=2.0.21"              # MIT OR Apache-2.0
+time = "=0.3.55"                   # MIT OR Apache-2.0
 tokio = { version = "=1.54.1", features = ["full"] }  # MIT
 tracing = "=0.1.41"                # MIT
 tracing-subscriber = { version = "=0.3.20", features = ["env-filter"] }  # MIT
-url = "=2.5.8"                     # MIT OR Apache-2.0
 
 [dev-dependencies]
-chrono = "=0.4.45"                  # MIT OR Apache-2.0
-reqwest = { version = "=0.13.1", default-features = false, features = ["rustls", "cookies", "json"] }
+kit-store = { path = "../crates/kit-store", features = ["memory"] }
+chrono = "=0.4.45"                 # MIT OR Apache-2.0
+openidconnect = { version = "=4.0.1", default-features = false }   # MIT
+reqwest = { version = "=0.13.1", default-features = false, features = ["rustls", "cookies", "json"] }  # MIT OR Apache-2.0
 rsa = "=0.9.10"                    # MIT OR Apache-2.0
 tokio-tungstenite = "=0.29.0"      # MIT
+url = "=2.5.8"                     # MIT OR Apache-2.0
+
+# The stand-in for Google's sign-in, for tests only: the server has no way to reach it but a setting.
+[[example]]
+name = "mock_oidc"
+path = "tests/support/mock_oidc.rs"

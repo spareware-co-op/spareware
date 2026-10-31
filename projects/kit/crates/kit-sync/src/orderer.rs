@@ -18,7 +18,8 @@
 //!   ("Anna is working on this") goes in the log. A store outage leaves the edit with its client.
 //! - Conflicts between servers are normal here, not an error. Long back-offs made two busy servers
 //!   crawl, 117 edits a second with stalls near two seconds, so a conflict is retried at once with
-//!   a small random wait, and edits that arrived meanwhile join the retry.
+//!   a small random wait, and edits that arrived meanwhile join the retry. The wait grows only
+//!   while one batch keeps losing, so two servers stop trading places in step.
 
 use crate::replay::read_log;
 use kit_core::Id;
@@ -40,8 +41,9 @@ const BATCH: usize = 64;
 const GIVE_UP: Duration = Duration::from_secs(5);
 /// The longest wait between tries when the store is failing.
 const LONGEST_WAIT_MS: u64 = 500;
-/// The longest wait after a conflict.
+/// The longest wait after a first conflict, and the most that wait grows to.
 const CONFLICT_WAIT_MS: u64 = 8;
+const CONFLICT_WAIT_MOST_MS: u64 = 120;
 const INBOX: usize = 4096;
 
 /// The time a command may read. A test can stop it.
@@ -53,7 +55,9 @@ pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now_ms(&self) -> u64 {
-        SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |t| t.as_millis() as u64)
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |t| t.as_millis() as u64)
     }
 }
 
@@ -171,7 +175,13 @@ impl Orderer {
 
 impl<K: Kv, C: Commands<K>> Orderers<K, C> {
     pub fn new(kv: K, commands: Arc<C>, clock: Arc<dyn Clock>, tail_ms: u64) -> Self {
-        Self { kv, commands, clock, tail_ms, running: Mutex::new(HashMap::new()) }
+        Self {
+            kv,
+            commands,
+            clock,
+            tail_ms,
+            running: Mutex::new(HashMap::new()),
+        }
     }
 
     pub async fn get(&self, scope: &Scope) -> Arc<Orderer> {
@@ -181,7 +191,10 @@ impl<K: Kv, C: Commands<K>> Orderers<K, C> {
         }
         let (inbox, mail) = mpsc::channel(INBOX);
         let (bus, _) = broadcast::channel(INBOX);
-        let orderer = Arc::new(Orderer { inbox, bus: bus.clone() });
+        let orderer = Arc::new(Orderer {
+            inbox,
+            bus: bus.clone(),
+        });
         running.insert(scope.clone(), orderer.clone());
         let task = Task {
             kv: self.kv.clone(),
@@ -226,7 +239,9 @@ struct Built {
 }
 
 async fn read_head<R: Reader>(reader: &mut R, scope: &Scope) -> Result<u64, StoreError> {
-    Ok(read_row::<u64, R>(reader, &scope.head()).await?.unwrap_or(0))
+    Ok(read_row::<u64, R>(reader, &scope.head())
+        .await?
+        .unwrap_or(0))
 }
 
 /// A short random wait, so two servers stop colliding on their next try.
@@ -286,6 +301,7 @@ impl<K: Kv, C: Commands<K>> Task<K, C> {
         let started = Instant::now();
         let mut allowed = HashMap::new();
         let mut failures = 0u32;
+        let mut conflicts = 0u64;
         while started.elapsed() < GIVE_UP {
             match self.try_commit(&batch, &mut allowed).await {
                 Ok(built) => {
@@ -306,7 +322,13 @@ impl<K: Kv, C: Commands<K>> Task<K, C> {
                     }
                     return;
                 }
-                Err(StoreError::Conflict) => sleep(jitter(CONFLICT_WAIT_MS)).await,
+                Err(StoreError::Conflict) => {
+                    conflicts += 1;
+                    sleep(jitter(
+                        (CONFLICT_WAIT_MS * conflicts).min(CONFLICT_WAIT_MOST_MS),
+                    ))
+                    .await;
+                }
                 Err(_) => {
                     failures += 1;
                     let wait = (5u64 << failures.min(7)).min(LONGEST_WAIT_MS);
@@ -317,7 +339,9 @@ impl<K: Kv, C: Commands<K>> Task<K, C> {
         }
         // Nothing was consumed, so the client keeps each edit and sends it again.
         for submit in &batch {
-            let _ = submit.reply.send(Reply::Retry { counter: submit.edit.counter });
+            let _ = submit.reply.send(Reply::Retry {
+                counter: submit.edit.counter,
+            });
         }
     }
 
@@ -358,11 +382,22 @@ impl<K: Kv, C: Commands<K>> Task<K, C> {
             if edit.counter <= last {
                 // A resend of something already in the log: confirm it, change nothing.
                 let seq = mark.map_or(0, |m| m.seq);
-                replies.push((index, Reply::Ack { counter: edit.counter, seq }));
+                replies.push((
+                    index,
+                    Reply::Ack {
+                        counter: edit.counter,
+                        seq,
+                    },
+                ));
                 continue;
             }
             if edit.counter != last + 1 {
-                replies.push((index, Reply::Retry { counter: edit.counter }));
+                replies.push((
+                    index,
+                    Reply::Retry {
+                        counter: edit.counter,
+                    },
+                ));
                 continue;
             }
 
@@ -375,7 +410,11 @@ impl<K: Kv, C: Commands<K>> Task<K, C> {
                     answer
                 }
             };
-            let context = Context { scope: &self.scope, now_ms, head };
+            let context = Context {
+                scope: &self.scope,
+                now_ms,
+                head,
+            };
             let outcome = match permitted {
                 Ok(()) => self.commands.apply(txn, &context, edit).await?,
                 Err(reason) => Err(reason),
@@ -387,16 +426,36 @@ impl<K: Kv, C: Commands<K>> Task<K, C> {
 
             head += 1;
             let version = self.commands.version();
-            let entry =
-                Entry::new(head, edit, version, now_ms, applied.changes, applied.claims, failed);
+            let entry = Entry::new(
+                head,
+                edit,
+                version,
+                now_ms,
+                applied.changes,
+                applied.claims,
+                failed,
+            );
             for other in applied.elsewhere {
                 self.write_elsewhere(txn, edit, &entry, other).await?;
             }
             txn.put(self.scope.log(head), entry.encode()).await?;
-            txn.put(mark_key, to_row(&ClientMark { counter: edit.counter, seq: head })?).await?;
+            txn.put(
+                mark_key,
+                to_row(&ClientMark {
+                    counter: edit.counter,
+                    seq: head,
+                })?,
+            )
+            .await?;
             let reply = match &entry.failed {
-                None => Reply::Ack { counter: edit.counter, seq: head },
-                Some(reason) => Reply::Rejected { counter: edit.counter, reason: reason.clone() },
+                None => Reply::Ack {
+                    counter: edit.counter,
+                    seq: head,
+                },
+                Some(reason) => Reply::Rejected {
+                    counter: edit.counter,
+                    reason: reason.clone(),
+                },
             };
             replies.push((index, reply));
             entries.push(Arc::new(entry));
@@ -404,7 +463,12 @@ impl<K: Kv, C: Commands<K>> Task<K, C> {
         if head != head_before {
             txn.put(self.scope.head(), to_row(&head)?).await?;
         }
-        Ok(Built { head_before, head_after: head, entries, replies })
+        Ok(Built {
+            head_before,
+            head_after: head,
+            entries,
+            replies,
+        })
     }
 
     /// Adds an entry to another scope's log. Its own orderer finds it by watching `head`.
@@ -416,9 +480,22 @@ impl<K: Kv, C: Commands<K>> Task<K, C> {
         other: Elsewhere,
     ) -> Result<(), StoreError> {
         let seq = read_head(txn, &other.scope).await? + 1;
-        let arriving = Edit { target: other.target, cmd: other.cmd, args: other.args, ..edit.clone() };
+        let arriving = Edit {
+            target: other.target,
+            cmd: other.cmd,
+            args: other.args,
+            ..edit.clone()
+        };
         let version = self.commands.version();
-        let written = Entry::new(seq, &arriving, version, entry.orderer_ms, vec![], vec![], None);
+        let written = Entry::new(
+            seq,
+            &arriving,
+            version,
+            entry.orderer_ms,
+            vec![],
+            vec![],
+            None,
+        );
         txn.put(other.scope.log(seq), written.encode()).await?;
         let head: Key = other.scope.head();
         txn.put(head, to_row(&seq)?).await

@@ -134,41 +134,102 @@ pub enum Place {
     Log(Scope, u64),
     Client(Scope, Id, Id),
     /// An element's data, named by the hash of its bytes, so a version is never rewritten.
-    Record { project: Id, hash: Id },
+    Record {
+        project: Id,
+        hash: Id,
+    },
     /// A shape, named by hash too: every door of one type shares it.
-    Shape { project: Id, hash: Id },
+    Shape {
+        project: Id,
+        hash: Id,
+    },
     /// Which record is an element's current version.
-    Element { project: Id, model: Id, element: Id },
+    Element {
+        project: Id,
+        model: Id,
+        element: Id,
+    },
     /// Which elements touch a 5 m cell of a level, so a browser loads only what is in view.
-    Area { project: Id, model: Id, level: i32, x: i64, y: i64, element: Id },
+    Area {
+        project: Id,
+        model: Id,
+        level: i32,
+        x: i64,
+        y: i64,
+        element: Id,
+    },
     /// Who is working on an element.
-    Claim { project: Id, model: Id, element: Id },
-    Model { project: Id, model: Id },
-    Team { project: Id, team: Id },
+    Claim {
+        project: Id,
+        model: Id,
+        element: Id,
+    },
+    Model {
+        project: Id,
+        model: Id,
+    },
+    Team {
+        project: Id,
+        team: Id,
+    },
     /// A package in a team's Shared or Consumed folder.
-    Item { project: Id, team: Id, folder: Id, item: Id },
+    Item {
+        project: Id,
+        team: Id,
+        folder: Id,
+        item: Id,
+    },
     /// The last package number of a model.
-    Version { project: Id, model: Id },
+    Version {
+        project: Id,
+        model: Id,
+    },
     /// A package bridged in and waiting for the team to take it.
-    Incoming { project: Id, id: Id },
-    Link { project: Id, model: Id, link: Id },
+    Incoming {
+        project: Id,
+        id: Id,
+    },
+    Link {
+        project: Id,
+        model: Id,
+        link: Id,
+    },
     Person(Id),
     /// Who an address belongs to, under the hash of the address.
     Email(Id),
     /// Who a login belongs to, under the hash of its issuer and subject.
     Login(Id),
     Hub(Id),
-    HubProject { hub: Id, project: Id },
+    HubProject {
+        hub: Id,
+        project: Id,
+    },
     Project(Id),
     /// Someone who may change the directory.
     Admin(Id),
-    MemberOfHub { person: Id, hub: Id },
-    MemberOfProject { person: Id, project: Id },
-    MemberOfTeam { person: Id, project: Id, team: Id },
+    MemberOfHub {
+        person: Id,
+        hub: Id,
+    },
+    MemberOfProject {
+        person: Id,
+        project: Id,
+    },
+    MemberOfTeam {
+        person: Id,
+        project: Id,
+        team: Id,
+    },
     /// The same hub membership looked up from the hub's side.
-    HubUser { hub: Id, person: Id },
+    HubUser {
+        hub: Id,
+        person: Id,
+    },
     /// `hub` permits bridges with `other`. A bridge needs this row from both sides.
-    Bridge { hub: Id, other: Id },
+    Bridge {
+        hub: Id,
+        other: Id,
+    },
     /// A signed-in browser, under the hash of its cookie.
     Session(Id),
     /// A sign-in on its way to the provider and back.
@@ -201,23 +262,47 @@ impl Place {
             Self::Client(scope, person, client) => return scope.client(person, client),
             Self::Record { project, hash } => format!("p:{project}/record/{hash}"),
             Self::Shape { project, hash } => format!("p:{project}/shape/{hash}"),
-            Self::Element { project, model, element } => {
+            Self::Element {
+                project,
+                model,
+                element,
+            } => {
                 format!("p:{project}/elem/{model}/{element}")
             }
-            Self::Area { project, model, level, x, y, element } => {
+            Self::Area {
+                project,
+                model,
+                level,
+                x,
+                y,
+                element,
+            } => {
                 format!("p:{project}/area/{model}/{level}/{x}/{y}/{element}")
             }
-            Self::Claim { project, model, element } => {
+            Self::Claim {
+                project,
+                model,
+                element,
+            } => {
                 format!("p:{project}/claim/{model}/{element}")
             }
             Self::Model { project, model } => format!("p:{project}/model/{model}"),
             Self::Team { project, team } => format!("p:{project}/team/{team}"),
-            Self::Item { project, team, folder, item } => {
+            Self::Item {
+                project,
+                team,
+                folder,
+                item,
+            } => {
                 format!("p:{project}/item/{team}/{folder}/{item}")
             }
             Self::Version { project, model } => format!("p:{project}/version/{model}"),
             Self::Incoming { project, id } => format!("p:{project}/incoming/{id}"),
-            Self::Link { project, model, link } => format!("p:{project}/link/{model}/{link}"),
+            Self::Link {
+                project,
+                model,
+                link,
+            } => format!("p:{project}/link/{model}/{link}"),
             Self::Person(id) => format!("dir/person/{id}"),
             Self::Email(hash) => format!("dir/email/{hash}"),
             Self::Login(hash) => format!("dir/login/{hash}"),
@@ -229,7 +314,11 @@ impl Place {
             Self::MemberOfProject { person, project } => {
                 format!("acl/person/{person}/project/{project}")
             }
-            Self::MemberOfTeam { person, project, team } => {
+            Self::MemberOfTeam {
+                person,
+                project,
+                team,
+            } => {
                 format!("acl/person/{person}/team/{project}/{team}")
             }
             Self::HubUser { hub, person } => format!("acl/hub/{hub}/user/{person}"),
@@ -247,9 +336,7 @@ impl Place {
             ["acl", rest @ ..] => Self::parse_access(rest),
             ["auth", "session", hash] => Some(Self::Session(id(hash)?)),
             ["auth", "pending", state] => Some(Self::Pending(id(state)?)),
-            [scope, rest @ ..] => {
-                Self::parse_project(id(scope.strip_prefix("p:")?)?, rest)
-            }
+            [scope, rest @ ..] => Self::parse_project(id(scope.strip_prefix("p:")?)?, rest),
             [] => None,
         }
     }
@@ -258,16 +345,15 @@ impl Place {
         Some(match parts {
             ["head"] => Self::Head(Scope::Directory),
             ["log", seq] => Self::Log(Scope::Directory, log_number(seq)?),
-            ["client", person, client] => {
-                Self::Client(Scope::Directory, id(person)?, id(client)?)
-            }
+            ["client", person, client] => Self::Client(Scope::Directory, id(person)?, id(client)?),
             ["person", person] => Self::Person(id(person)?),
             ["email", hash] => Self::Email(id(hash)?),
             ["login", hash] => Self::Login(id(hash)?),
             ["hub", hub] => Self::Hub(id(hub)?),
-            ["hub", hub, "project", project] => {
-                Self::HubProject { hub: id(hub)?, project: id(project)? }
-            }
+            ["hub", hub, "project", project] => Self::HubProject {
+                hub: id(hub)?,
+                project: id(project)?,
+            },
             ["project", project] => Self::Project(id(project)?),
             _ => return None,
         })
@@ -276,19 +362,27 @@ impl Place {
     fn parse_access(parts: &[&str]) -> Option<Self> {
         Some(match parts {
             ["admin", person] => Self::Admin(id(person)?),
-            ["person", person, "hub", hub] => {
-                Self::MemberOfHub { person: id(person)?, hub: id(hub)? }
-            }
-            ["person", person, "project", project] => {
-                Self::MemberOfProject { person: id(person)?, project: id(project)? }
-            }
+            ["person", person, "hub", hub] => Self::MemberOfHub {
+                person: id(person)?,
+                hub: id(hub)?,
+            },
+            ["person", person, "project", project] => Self::MemberOfProject {
+                person: id(person)?,
+                project: id(project)?,
+            },
             ["person", person, "team", project, team] => Self::MemberOfTeam {
                 person: id(person)?,
                 project: id(project)?,
                 team: id(team)?,
             },
-            ["hub", hub, "user", person] => Self::HubUser { hub: id(hub)?, person: id(person)? },
-            ["hub", hub, "bridge", other] => Self::Bridge { hub: id(hub)?, other: id(other)? },
+            ["hub", hub, "user", person] => Self::HubUser {
+                hub: id(hub)?,
+                person: id(person)?,
+            },
+            ["hub", hub, "bridge", other] => Self::Bridge {
+                hub: id(hub)?,
+                other: id(other)?,
+            },
             _ => return None,
         })
     }
@@ -299,11 +393,19 @@ impl Place {
             ["head"] => Self::Head(scope()),
             ["log", seq] => Self::Log(scope(), log_number(seq)?),
             ["client", person, client] => Self::Client(scope(), id(person)?, id(client)?),
-            ["record", hash] => Self::Record { project, hash: id(hash)? },
-            ["shape", hash] => Self::Shape { project, hash: id(hash)? },
-            ["elem", model, element] => {
-                Self::Element { project, model: id(model)?, element: id(element)? }
-            }
+            ["record", hash] => Self::Record {
+                project,
+                hash: id(hash)?,
+            },
+            ["shape", hash] => Self::Shape {
+                project,
+                hash: id(hash)?,
+            },
+            ["elem", model, element] => Self::Element {
+                project,
+                model: id(model)?,
+                element: id(element)?,
+            },
             ["area", model, level, x, y, element] => Self::Area {
                 project,
                 model: id(model)?,
@@ -312,20 +414,38 @@ impl Place {
                 y: number(y)?,
                 element: id(element)?,
             },
-            ["claim", model, element] => {
-                Self::Claim { project, model: id(model)?, element: id(element)? }
-            }
-            ["model", model] => Self::Model { project, model: id(model)? },
-            ["team", team] => Self::Team { project, team: id(team)? },
+            ["claim", model, element] => Self::Claim {
+                project,
+                model: id(model)?,
+                element: id(element)?,
+            },
+            ["model", model] => Self::Model {
+                project,
+                model: id(model)?,
+            },
+            ["team", team] => Self::Team {
+                project,
+                team: id(team)?,
+            },
             ["item", team, folder, item] => Self::Item {
                 project,
                 team: id(team)?,
                 folder: id(folder)?,
                 item: id(item)?,
             },
-            ["version", model] => Self::Version { project, model: id(model)? },
-            ["incoming", incoming] => Self::Incoming { project, id: id(incoming)? },
-            ["link", model, link] => Self::Link { project, model: id(model)?, link: id(link)? },
+            ["version", model] => Self::Version {
+                project,
+                model: id(model)?,
+            },
+            ["incoming", incoming] => Self::Incoming {
+                project,
+                id: id(incoming)?,
+            },
+            ["link", model, link] => Self::Link {
+                project,
+                model: id(model)?,
+                link: id(link)?,
+            },
             _ => return None,
         })
     }
@@ -453,12 +573,29 @@ mod tests {
             assert_eq!(Key::from_stored(bad.to_owned()).parse(), None, "{bad}");
         }
         let negative = Key::from_stored("p:x/area/m/-1/-7/0/e".to_owned());
-        assert!(matches!(negative.parse(), Some(Place::Area { level: -1, x: -7, .. })));
+        assert!(matches!(
+            negative.parse(),
+            Some(Place::Area {
+                level: -1,
+                x: -7,
+                ..
+            })
+        ));
     }
 
     #[test]
     fn nothing_outside_the_list_parses() {
-        for bad in ["", "/", "dir", "dir/", "p:/head", "p:a/b/head", "p:a/nope/b", "meta/other", "x/y"] {
+        for bad in [
+            "",
+            "/",
+            "dir",
+            "dir/",
+            "p:/head",
+            "p:a/b/head",
+            "p:a/nope/b",
+            "meta/other",
+            "x/y",
+        ] {
             assert_eq!(Key::from_stored(bad.to_owned()).parse(), None, "{bad}");
         }
     }

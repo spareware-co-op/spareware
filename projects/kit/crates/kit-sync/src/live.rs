@@ -18,11 +18,27 @@ use std::collections::HashSet;
 #[serde(tag = "t", rename_all = "lowercase")]
 pub enum FromBrowser {
     /// Starts or resumes: who this tab is, what it watches, the last log number it saw.
-    Hello { client: String, models: Vec<String>, since: u64 },
+    Hello {
+        client: String,
+        models: Vec<String>,
+        since: u64,
+    },
     /// Watches one more model.
-    Watch { model: String, since: u64 },
-    Stop { model: String },
-    Op { counter: u64, base: u64, model: String, cmd: String, args: Value, author_ms: u64 },
+    Watch {
+        model: String,
+        since: u64,
+    },
+    Stop {
+        model: String,
+    },
+    Op {
+        counter: u64,
+        base: u64,
+        model: String,
+        cmd: String,
+        args: Value,
+        author_ms: u64,
+    },
 }
 
 /// What one connection is watching, and how far through the log it has got.
