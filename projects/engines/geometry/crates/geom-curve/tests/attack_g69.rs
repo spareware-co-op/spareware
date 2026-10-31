@@ -11,6 +11,10 @@
 //!   `Unbounded`: an offset through a cusp of its basis, whose normal vanishes, refuses so. (Where
 //!   the offset folds, the cache it makes states a large deviation: honest, and checked against
 //!   the definition by the catalogue.)
+//! - **The contract kit steps past huge ends.** Testing that a kind refuses outside its domain, the
+//!   kit stepped one unit past each end, which beyond 2^53 in magnitude rounds back to the end
+//!   itself, inside: `geom-fuzz`'s `curves` target found it reporting kinds that rightly accepted
+//!   it. Now each step is at least one double.
 #![allow(
     clippy::unwrap_used,
     clippy::float_cmp,
@@ -24,7 +28,7 @@ use geom_curve::offset::{Offset, OffsetLaw};
 use geom_curve::trimmed::Trimmed;
 use geom_curve::{
     Axes, Basis, BulgePolyline, Circle, CurveError, CurveKind, DerivativeBound, Ellipse, Frame,
-    ParamCurve, Polynomial,
+    Line, ParamCurve, Polynomial,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, TypedTransform};
 use geom_run::{Budget, WorkMeter};
@@ -160,4 +164,21 @@ fn an_offset_through_a_cusp_is_unbounded_even_on_the_finest_pieces() {
         o.to_nurbs(&mut meter()),
         Err(CurveError::Unbounded)
     ));
+}
+
+#[test]
+fn the_contract_kit_steps_past_huge_domain_ends() {
+    let m = &mut meter();
+    let huge = 1_152_921_504_606_846_976.0; // 2^60
+    let t = grid()[0];
+    for domain in [(-huge, 0.0), (0.0, huge), (-huge, huge)] {
+        let line = Line::new([0.0, 0.0], [1.0, 2.0], domain).unwrap();
+        let (a, b) = domain;
+        let params = [a, a / 2.0, b / 2.0, b];
+        assert_eq!(
+            geom_curve::contract::check(&line, &params, &t, m),
+            Ok(()),
+            "{domain:?}"
+        );
+    }
 }

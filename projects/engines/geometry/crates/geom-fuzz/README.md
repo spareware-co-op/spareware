@@ -12,8 +12,11 @@ agree with the exact determinant of orient2d's definition, computed from scratch
 flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
 every operation at every width, `I128` to the reserved 768 bits; `intersect`
 (`src/intersect.rs`, G158), an intersection's items keep their invariants against an all-pairs
-oracle, and a pair asked either way round makes one call; and `project` (`src/project.rs`, G162),
-a nearest point is never beaten by a sample of the kind.
+oracle, and a pair asked either way round makes one call; `project` (`src/project.rs`, G162),
+a nearest point is never beaten by a sample of the kind; and, for Gate 2 (decision 32.44:
+a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
+every curve and surface kind built from any bytes keeps the kind contract kit
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform.
 
 ## One law, four engines
 

@@ -4,16 +4,25 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has six targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has fourteen targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
 //! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
 //! operation at every width; and [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers; and [`intersect`]
+//! returns the exact value of its description, evaluated in big integers; [`intersect`]
 //! (G158), an intersection's items keep their invariants against an all-pairs oracle and a pair
 //! asked either way round makes one call; and [`project`] (G162), a nearest point is never beaten
-//! by a sample of the kind. The layout every target follows, and how each engine runs it locally and in CI,
+//! by a sample of the kind. Gate 2 (32.44) adds
+//! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
+//! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
+//! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
+//! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
+//! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
+//! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
+//! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
+//! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
+//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -115,6 +124,8 @@
 //!   `bolero-honggfuzz` or `bolero-kani`).
 //! - `geom-gen` (MPL-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
+//! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
+//!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
 //!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
@@ -133,8 +144,10 @@
 //!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
-//!   `num-bigint`, `num-integer`, `num-traits` and `autocfg`.
+//!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,
+//!   `dashu-ratio` and `static_assertions`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
+//! - Apache-2.0: `num-modular` (through `dashu-int`).
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
@@ -159,11 +172,19 @@
 
 use core::fmt;
 
+pub mod boxtree;
+pub mod curves;
 pub mod intersect;
+pub mod linalg;
+pub mod maths;
+pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;
 pub mod project;
+pub mod roots;
 pub mod seeded;
+pub mod surfaces;
+pub mod transforms;
 pub mod variants;
 pub mod wide;
 

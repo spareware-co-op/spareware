@@ -984,10 +984,14 @@ name = "geom-fuzz"
 version = "0.0.0"
 dependencies = [
  "bolero",
+ "dashu-int",
+ "dashu-ratio",
  "geom-bench",
+ "geom-bvh",
  "geom-curve",
  "geom-gen",
  "geom-intersect",
+ "geom-linalg",
  "geom-math",
  "geom-num",
  "geom-nurbs",
