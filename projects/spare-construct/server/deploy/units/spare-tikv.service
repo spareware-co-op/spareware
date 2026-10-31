@@ -1,0 +1,15 @@
+[Unit]
+Description=TiKV, the database
+After=spare-pd.service
+Requires=spare-pd.service
+
+[Service]
+User=spare
+ExecStart=/opt/spare-stack/bin/tikv-server --pd-endpoints=127.0.0.1:2379 --addr=127.0.0.1:20160 \
+  --status-addr=127.0.0.1:20180 --data-dir=/opt/spare-stack/data/tikv1 \
+  --config=/opt/spare-stack/config/tikv.toml --log-file=/opt/spare-stack/log/tikv.log
+Restart=always
+LimitNOFILE=1000000
+
+[Install]
+WantedBy=multi-user.target
