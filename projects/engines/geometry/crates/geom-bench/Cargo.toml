@@ -30,6 +30,10 @@ bench = false
 geom-num = { path = "../geom-num" }
 # The work meter the root-isolation engine runs under (its benchmarks, G53).
 geom-run = { path = "../geom-run" }
+# Cache keys, the memo store and body versions (piece G105), with the crates their inputs need.
+geom-format = { path = "../geom-format" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 # The math types of phase 2 (pieces G45, G46 and G48): their count benchmarks, as decision 32.44
 # asks of every phase-2 code piece.
 geom-math = { path = "../geom-math" }

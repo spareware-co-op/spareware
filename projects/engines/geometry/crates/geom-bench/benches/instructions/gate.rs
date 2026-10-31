@@ -2648,6 +2648,37 @@ pub mod curve {
     );
 }
 
+/// geom-format's hot paths (piece G105; decision 32.44).
+pub mod format {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/cache_key/typical"))]
+    fn cache_key(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/memo_get/typical"))]
+    fn memo_get(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/next_version/typical"))]
+    fn next_version(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = format;
+        benchmarks = cache_key, memo_get, next_version
+    );
+}
+
 /// geom-surface's hot paths (pieces G65 to G68; decision 32.44).
 pub mod surface {
     use super::*;

@@ -246,7 +246,9 @@ pub struct NamedBody {
 /// Each of `keys` stamped.
 fn stamped_keys(keys: &[NameKey], stamp: &Stamp) -> Result<Vec<NameKey>, NameError> {
     keys.iter()
-        .map(|key| Ok(NameKey(stamp.id(NameId::from_bytes(key.0))?.to_bytes())))
+        .map(|key| -> Result<NameKey, NameError> {
+            Ok(NameKey(stamp.id(NameId::from_bytes(key.0))?.to_bytes()))
+        })
         .collect()
 }
 

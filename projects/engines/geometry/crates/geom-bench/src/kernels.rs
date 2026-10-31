@@ -2025,3 +2025,57 @@ pub mod roots {
         });
     }
 }
+
+/// `geom-format`'s hot paths (piece G105; decision 32.44): a cache key, a lookup in a memo store,
+/// and a new version of a body, which hashes the one chunk that changed. The keys and versions a
+/// batch holds are built before the measured run; the store each lookup reads is built inside it,
+/// once, since a lookup changes it.
+pub mod format {
+    use geom_format::body::BodyVersion;
+    use geom_format::cache::CacheKey;
+    use geom_format::content::ContentId;
+    use geom_op::Precision;
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::Body;
+
+    use super::run;
+    use crate::inputs::format as inputs;
+
+    /// `CacheKey::new` on each call: one operation, one input.
+    #[inline(never)]
+    pub fn cache_key(batch: &[(u64, u64)], out: &mut Vec<Option<CacheKey>>) {
+        let path = inputs::path();
+        run(batch, out, |&(edition, seed)| {
+            let input = inputs::input(seed);
+            CacheKey::new(
+                edition,
+                &inputs::SCHEMA,
+                &path,
+                Precision::Final,
+                core::slice::from_ref(&input),
+            )
+            .ok()
+        });
+    }
+
+    /// `MemoStore::get` on each key, a hit under an unlimited budget.
+    #[inline(never)]
+    pub fn memo_get(batch: &[CacheKey], out: &mut Vec<Option<u64>>) {
+        let mut store = inputs::store();
+        run(batch, out, |key| match store.get(key, Budget::UNLIMITED) {
+            Some(Ok(answer)) => Some(answer.result),
+            _ => None,
+        });
+    }
+
+    /// `BodyVersion::next` on each pair: the IDs of a body one chunk from its first version.
+    #[inline(never)]
+    pub fn next_version(batch: &[(BodyVersion, Body)], out: &mut Vec<Option<ContentId>>) {
+        run(batch, out, |(first, body)| {
+            first
+                .next(body, &mut WorkMeter::new(Budget::UNLIMITED))
+                .ok()
+                .map(|version| version.content_id())
+        });
+    }
+}
