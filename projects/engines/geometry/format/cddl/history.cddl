@@ -1,0 +1,7 @@
+; The history record's payload (tag 17, schema 1): format 1 (draft), SPEC.md section 11.
+; CDDL by RFC 8610. The first rule is the one a payload is validated against; paths, roles, piece
+; keys and names are names.cddl's rules, read together with this file.
+history = [op: op-path, records: [* history-entry], deleted: [* name-id], changes: [* topology-change]]
+history-entry = [output: name-id, origin: origin]
+origin = [0] / [1, from: [* name-id]] / [2, from: [* name-id], role: role] / [3, of: name-id, piece: piece-key] / [4, of: [* name-id]]
+topology-change = [0, vertex: name-id, edges: [* name-id]] / [1, face: name-id, why: 0 / 1] / [2, face: name-id, along: [* name-id]] / [3, faces: [* name-id]] / [4, faces: [* name-id]] / [5, faces: [* name-id], into: name-id] / [6, face: name-id, role: role] / [7, face: name-id, change: 0 / 1] / [8, lumps: [* name-id]]

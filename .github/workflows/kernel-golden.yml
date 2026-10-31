@@ -28,6 +28,20 @@ name: Kernel goldens
 # Before the first kernel edition the store holds one open edition, "pre-edition", and every edit
 # to a golden is approved by a kernel owner in its pull request (chapter 32.12, recommendation A).
 #
+# The second job holds the fixtures (chapter 28.16; piece G97) to their rules, on the same terms:
+#
+# - `fixture check`: every fixture holds its rules and sits where its id says.
+# - `fixture run`: the fast fixtures pass; slow ones run in kernel-nightly.yml.
+# - `fixture diff`, on every pull request and on every review of one: a removed fixture, a changed
+#   log or source, or a change to a frozen edition fails outright, and any other change to a stored
+#   expectation needs a history record and a kernel owner's approval on the head commit. Adding a
+#   fixture, and moving a Known fixture to Pass with what it wanted, need only ordinary review.
+# - The fails-on-base check, on every pull request: a new fixture whose source records a fix must
+#   fail on the merge base. `fixture fixes` lists them, the base is checked out with those files
+#   copied in, and `fixture fails` requires each to fail there (a crash or a hang counts as
+#   failing). `fixture run` above is the other half: it passes with the fix. Oracle outcomes "their
+#   bug" and "both within bounds", and Known fixtures, are exempt (28.16, step 3).
+#
 # If this workflow becomes a required check, note that the pull_request path filter below means a
 # pull request outside those paths never runs it; drop the filter or require a summary job first.
 #
@@ -149,3 +163,100 @@ jobs:
           --permissions "$RUNNER_TEMP/permissions.json"
           --head "$HEAD_SHA"
           --author "$AUTHOR"
+
+  fixtures:
+    name: Fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      FIXTURES: projects/engines/geometry/crates/geom-test/fixtures
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The base commit's fixtures are read with `git show`, and its tree is checked out.
+          fetch-depth: 0
+      # As the store's job: the base is the first parent of GitHub's test merge commit, so the diff
+      # is what merging does to the fixtures. A review of a pull request that does not touch them
+      # has nothing to approve.
+      - name: Does this pull request edit the fixtures?
+        id: edits
+        env:
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            echo "fixtures=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git rev-parse --verify --quiet HEAD^2 > /dev/null; then
+            BASE=$(git rev-parse HEAD^1)
+          else
+            BASE=$EVENT_BASE
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "$BASE" HEAD -- "$FIXTURES"; then
+            echo "The fixtures are the same as at the base, $BASE."
+            echo "fixtures=same" >> "$GITHUB_OUTPUT"
+          else
+            git diff --stat "$BASE" HEAD -- "$FIXTURES"
+            echo "fixtures=edited" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        if: github.event_name != 'pull_request_review' || steps.edits.outputs.fixtures == 'edited'
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: github.event_name != 'pull_request_review' || steps.edits.outputs.fixtures == 'edited'
+      - name: Every fixture holds its rules
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --bin fixture -- check
+      - name: The fast fixtures pass
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --bin fixture -- run --tier fast
+      - name: The pull request's reviews and its reviewers' permissions
+        if: github.event_name != 'push' && steps.edits.outputs.fixtures == 'edited'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" | jq -s 'add // []' > "$RUNNER_TEMP/reviews.json"
+          echo '{}' > "$RUNNER_TEMP/permissions.json"
+          for login in $(jq -r '.[] | select(.user != null) | .user.login' "$RUNNER_TEMP/reviews.json" | sort -u); do
+            permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2>/dev/null || echo none)
+            jq --arg login "$login" --arg permission "$permission" '. + {($login): $permission}' "$RUNNER_TEMP/permissions.json" > "$RUNNER_TEMP/permissions.next"
+            mv "$RUNNER_TEMP/permissions.next" "$RUNNER_TEMP/permissions.json"
+          done
+      - name: Edits to the fixtures, and a kernel owner's approval where one is needed
+        if: github.event_name != 'push' && steps.edits.outputs.fixtures == 'edited'
+        env:
+          BASE: ${{ steps.edits.outputs.base }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: >-
+          cargo run --locked -p geom-test --bin fixture -- diff
+          --base "$BASE"
+          --reviews "$RUNNER_TEMP/reviews.json"
+          --permissions "$RUNNER_TEMP/permissions.json"
+          --head "$HEAD_SHA"
+          --author "$AUTHOR"
+      - name: New fixtures that record a fix fail on the merge base
+        if: github.event_name == 'pull_request' && steps.edits.outputs.fixtures == 'edited'
+        env:
+          BASE: ${{ steps.edits.outputs.base }}
+        run: |
+          cargo run --locked -p geom-test --bin fixture -- fixes --base "$BASE" > "$RUNNER_TEMP/fixes.txt"
+          if [ ! -s "$RUNNER_TEMP/fixes.txt" ]; then
+            echo "No new fixture records a fix."
+            exit 0
+          fi
+          cat "$RUNNER_TEMP/fixes.txt"
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE"
+          while read -r id; do
+            mkdir -p "$RUNNER_TEMP/base/$FIXTURES/$(dirname "$id")"
+            cp "$FIXTURES/$id.json" "$RUNNER_TEMP/base/$FIXTURES/$id.json"
+          done < "$RUNNER_TEMP/fixes.txt"
+          cd "$RUNNER_TEMP/base"
+          xargs cargo run --locked -p geom-test --bin fixture -- fails < "$RUNNER_TEMP/fixes.txt"

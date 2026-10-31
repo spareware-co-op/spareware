@@ -5308,6 +5308,134 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Interval bounds are finite with lo <= hi and a zero bound stored as +0. Where hi is not zero, lo / hi has the sign of lo * hi; where hi is zero, lo <= 0, so lo / hi is -inf or NaN and lo * hi is 0, and none of them is above 0. So the comparison with 0 is the same for every interval."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace | with ^ in Decoder<'a>::head",
+      "line_text": ".fold(0_u64, |value, &byte| (value << 8) | u64::from(byte));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "value << 8 has its low eight bits clear and u64::from(byte) sets only those eight. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::open -> Result<(), CborError> with Ok(())",
+      "line_text": "let (start, end) = head;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without pushing the frame or moving past the container's head, the next call of next reads the same head again, for ever under the tests' unlimited meter (a metered read stops at its budget). It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::complete -> Result<(), CborError> with Ok(())",
+      "line_text": "self.at = end;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without moving past the item it just read, the next call of next reads the same head again, for ever under the tests' unlimited meter. It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/float.rs",
+      "mutant": "replace | with ^ in half",
+      "line_text": "u16::try_from(magnitude >> 13).ok().map(|m| m | sign)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "m is at most 0x7bff (larger magnitudes are refused just above), so its bit 15 is clear, and sign is 0 or 0x8000. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Cursor<'_>::bump -> Option<char> with Some(Default::default())",
+      "line_text": "let c = self.peek()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Cursor<'_>::bump -> Option<char> with None",
+      "line_text": "let c = self.peek()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Parser<'_>::item -> Result<bool, TextError> with Ok(false)",
+      "line_text": "let (line, column) = (self.cursor.line, self.cursor.column);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "No item ever completes and nothing is consumed, so the parse loop calls item for ever under the tests' unlimited meter. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex_float",
+      "line_text": "significand = (significand << 4) | u128::from(d);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "significand << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in escape",
+      "line_text": "let code = (((unit & 0x3ff) << 10) | (low & 0x3ff))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "(unit & 0x3ff) << 10 sets only bits 10 to 19 and low & 0x3ff only bits 0 to 9. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex4",
+      "line_text": "unit = (unit << 4) | d;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "unit << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex_bytes",
+      "line_text": "Some(h) => out.push(u8::try_from((h << 4) | d).map_err(|_| here)?),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "h << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(initial | small);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "initial is the major type shifted up five places, so its low five bits are clear, and small is below 24. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(initial | info);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "initial is the major type shifted up five places, so its low five bits are clear, and info is 24, 25, 26 or 27. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/text.rs",
+      "mutant": "replace < with <= in hex_float",
+      "line_text": "let (normal, offset) = if magnitude < f64::MIN_POSITIVE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two branches differ only at magnitude = f64::MIN_POSITIVE = 2^-1022. Scaled by 2^64 it reads with exponent field 65 and offset 1087, unscaled with field 1 and offset 1023: the same exponent -1022 and the same empty fraction, so the same text."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/file.rs",
+      "mutant": "replace | with ^ in pull_record",
+      "line_text": "bytes.iter().fold(0_u64, |a, &b| (a << 8) | u64::from(b))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The value so far is shifted left by 8, so its low byte is zero, and u64::from(b) is a single byte, below 256. The two never share a bit, so | and ^ give the same argument for every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/record.rs",
+      "mutant": "replace | with ^",
+      "line_text": "const FLAGS: u64 = REQUIRED | COPY_ALWAYS;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "REQUIRED is 1 and COPY_ALWAYS is 2, one bit each and not the same bit, so REQUIRED | COPY_ALWAYS and REQUIRED ^ COPY_ALWAYS are both 3."
     }
   ],
   "coverage_off": [],

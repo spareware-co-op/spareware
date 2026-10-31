@@ -4,15 +4,17 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has five targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has six targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
 //! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
 //! operation at every width; [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers; and [`make`]
-//! (G101), the primitives and transforms return only what the full checker passes, keep their laws,
-//! and refuse with a typed error. The layout every target follows, and how each engine runs it locally and in CI,
+//! returns the exact value of its description, evaluated in big integers; [`cbor`] (G91),
+//! `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input
+//! and convert both ways bit for bit; and [`make`] (G101), the primitives and transforms return
+//! only what the full checker passes, keep their laws, and refuse with a typed error. The layout
+//! every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -114,6 +116,8 @@
 //!   `bolero-honggfuzz` or `bolero-kani`).
 //! - `geom-gen` (MPL-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
+//! - `geom-format` and `geom-run` (MPL-2.0, ours), the code under test of the [`cbor`] target and
+//!   the work meter it reads with.
 //! - `geom-make`, `geom-check`, `geom-math`, `geom-op`, `geom-run` and `geom-topo` (MPL-2.0, ours),
 //!   the code under test of the [`make`] target and the checker and values it judges them by.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
@@ -158,6 +162,7 @@
 
 use core::fmt;
 
+pub mod cbor;
 pub mod make;
 pub mod orient2d;
 pub mod predicates;

@@ -9,8 +9,8 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 37 | 35 |
-| DEPEND | 4 | 3 |
+| PORT METHOD | 36 | 34 |
+| DEPEND | 5 | 4 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
 
@@ -79,7 +79,6 @@ Each kernel file implements a published method in its own code and copied nothin
 | Shewchuk's `predicates.c` | public domain | readable | <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs`: for its error constants (`exactinit`), a cross-check of the analysis here. No code copied.<br>`projects/engines/geometry/crates/geom-num/src/predicate.rs`: for the determinant forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions above follow; chapter 29.3 asks for this credit line. |
 | shuffling-allocator | MPL-2.0 | allowed | <https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs> | none | `projects/engines/geometry/crates/geom-test/src/golden/perturb.rs`: for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied. |
 | SPDX License List 3.29.0 | CC-BY-3.0 | readable | <https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json> | none | `projects/engines/geometry/crates/geom-test/src/map/classes.rs`: to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences. |
-| the Model Context Protocol specification | Apache-2.0 AND MIT | allowed | <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts> | none | `projects/engines/geometry/crates/geom-gen/src/facade.rs`: for the fields of a tool description and their rules. No code copied. |
 | Vigna's SplitMix64 reference code | public domain | readable | <https://prng.di.unimi.it/splitmix64.c> | none | `projects/engines/geometry/crates/geom-bench/src/rng.rs`: for the constants and steps of SplitMix64, which the tests check against its published outputs. No code copied. |
 | Wasmtime | Apache-2.0 WITH LLVM-exception | allowed | <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs> | none | `projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs`: for what fuel counts and how `Config::consume_fuel` meters it. No code copied.<br>`projects/engines/geometry/crates/geom-bench/src/guest.rs`: for what fuel counts and how `Config::consume_fuel` meters it. No code copied. |
 
@@ -89,6 +88,7 @@ A kernel crate may depend only on `libm` (29.1); the development crates' own dep
 
 | Crate | Licence | Class (29.2) | Link | Manifest | Version requirement |
 | --- | --- | --- | --- | --- | --- |
+| crc | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/crc/3.4.0> | `projects/engines/geometry/crates/geom-format/Cargo.toml` | 3.4.0 |
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | rayon | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/rayon/1.12.0> | `projects/engines/geometry/crates/geom-pool/Cargo.toml` | 1.12.0 |

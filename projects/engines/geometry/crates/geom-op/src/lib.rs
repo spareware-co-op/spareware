@@ -75,6 +75,7 @@
 
 extern crate alloc;
 
+pub mod canonical;
 pub mod cbor;
 pub mod context;
 pub mod detail;

@@ -709,6 +709,7 @@ PUBLISHED CRATES
 The published crates the kernel crates depend on (DEPEND, section 29.1). Their notices, and those of
 every other crate compiled into a shipped binary, go in the generated third-party notices file.
 
+  crc 3.4.0 (Apache-2.0 OR MIT), https://crates.io/crates/crc/3.4.0, named by projects/engines/geometry/crates/geom-format/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml
