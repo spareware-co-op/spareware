@@ -2201,13 +2201,13 @@ pub mod slice {
         pub fn chunks_mut(&mut self, chunk_size: usize) -> ChunksMut<T> {
             loop {}
         }
+        pub fn chunks_exact(&self, chunk_size: usize) -> Chunks<T> {
+            loop {}
+        }
         pub const fn as_chunks<const N: usize>(&self) -> (&[[T; N]], &[T]) {
             loop {}
         }
-        pub fn join(&self, sep: &str) -> crate::string::String {
-            loop {}
-        }
-        pub fn chunks_exact(&self, chunk_size: usize) -> Chunks<T> {
+        pub const fn as_rchunks<const N: usize>(&self) -> (&[T], &[[T; N]]) {
             loop {}
         }
         pub fn chunks_exact_mut(&mut self, chunk_size: usize) -> ChunksMut<T> {
@@ -2385,6 +2385,22 @@ pub mod slice {
             let a: &A = crate::any();
             let b: &B = crate::any();
             a.eq(b);
+            loop {}
+        }
+    }
+    impl<A: PartialEq<B>, B, const N: usize> PartialEq<[B; N]> for &[A] {
+        fn eq(&self, other: &[B; N]) -> bool {
+            let a: &A = crate::any();
+            let b: &B = crate::any();
+            a.eq(b);
+            loop {}
+        }
+    }
+    impl<S: crate::borrow::Borrow<str>> [S] {
+        pub fn join(&self, sep: &str) -> crate::string::String {
+            loop {}
+        }
+        pub fn concat(&self) -> crate::string::String {
             loop {}
         }
     }
@@ -2631,14 +2647,6 @@ pub mod array {
         }
     }
     impl<A: PartialEq<B>, B, const N: usize> PartialEq<[B; N]> for [A; N] {
-        fn eq(&self, other: &[B; N]) -> bool {
-            let a: &A = crate::any();
-            let b: &B = crate::any();
-            a.eq(b);
-            loop {}
-        }
-    }
-    impl<A: PartialEq<B>, B, const N: usize> PartialEq<[B; N]> for &[A] {
         fn eq(&self, other: &[B; N]) -> bool {
             let a: &A = crate::any();
             let b: &B = crate::any();
@@ -3279,6 +3287,12 @@ pub mod str {
         pub fn bytes(&self) -> Bytes {
             loop {}
         }
+        pub fn trim_end_matches<P>(&self, pat: P) -> &str {
+            loop {}
+        }
+        pub fn trim_start_matches<P>(&self, pat: P) -> &str {
+            loop {}
+        }
         pub fn trim(&self) -> &str {
             loop {}
         }
@@ -3286,9 +3300,6 @@ pub mod str {
             loop {}
         }
         pub fn ends_with(&self, pat: &str) -> bool {
-            loop {}
-        }
-        pub fn trim_end_matches(&self, pat: char) -> &str {
             loop {}
         }
         pub fn contains(&self, pat: &str) -> bool {
@@ -3958,16 +3969,20 @@ pub mod collections {
             where
                 K: Borrow<T>,
             {
-                let t: &T = crate::any();
-                t.cmp(t);
+                // The bound type is not inferable from the range alone, and is the key's own type
+                // or a borrowed form of it: compare keys.
+                let k: &K = crate::any();
+                k.cmp(k);
                 loop {}
             }
             pub fn range_mut<T: ?Sized + Ord, R: RangeBounds<T>>(&mut self, range: R) -> RangeMut<K, V>
             where
                 K: Borrow<T>,
             {
-                let t: &T = crate::any();
-                t.cmp(t);
+                // The bound type is not inferable from the range alone, and is the key's own type
+                // or a borrowed form of it: compare keys.
+                let k: &K = crate::any();
+                k.cmp(k);
                 loop {}
             }
             pub fn retain<F: FnMut(&K, &mut V) -> bool>(&mut self, f: F) {
@@ -4399,8 +4414,9 @@ pub mod collections {
             where
                 T: Borrow<K>,
             {
-                let k: &K = crate::any();
-                k.cmp(k);
+                // As BTreeMap::range: compare the set's own values.
+                let a: &T = crate::any();
+                a.cmp(a);
                 loop {}
             }
             pub fn retain<F: FnMut(&T) -> bool>(&mut self, f: F) {
@@ -5422,9 +5438,6 @@ pub mod primitives {
                     pub const fn ilog2(self) -> u32 {
                         loop {}
                     }
-                    pub const fn bit_width(self) -> u32 {
-                        loop {}
-                    }
                     pub const fn ilog10(self) -> u32 {
                         loop {}
                     }
@@ -5456,6 +5469,9 @@ pub mod primitives {
                         loop {}
                     }
                     pub const fn is_power_of_two(self) -> bool {
+                        loop {}
+                    }
+                    pub const fn bit_width(self) -> u32 {
                         loop {}
                     }
                     pub const fn next_power_of_two(self) -> $t {

@@ -7,11 +7,13 @@
 //! closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types
 //! (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`).
 //! Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from
-//! their documented signatures, which [`sources`] gives the loader as three crates of role
+//! their documented signatures, which [`sources`] gives the loader as crates of role
 //! [`Role::Model`]: `core` (also answering to `alloc` and `std`,
-//! [`crate::recursion::resolve::MODEL_ALIASES`]), `libm` and `rayon` (`geom-pool`, the one
+//! [`crate::recursion::resolve::MODEL_ALIASES`]), `libm`, `rayon` (`geom-pool`, the one
 //! kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its
-//! closure and `Scope::spawn` its body). A function of the model that calls
+//! closure and `Scope::spawn` its body), and the parts of `sha2` (`geom-op`'s hash),
+//! `unicode-normalization` (`geom-op`'s names) and `crc` (`geom-format`'s checksum) the kernel
+//! calls. A function of the model that calls
 //! back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls
 //! its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`.
 //! The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a
@@ -56,6 +58,9 @@ pub const SHA2: &str = include_str!("stdlib/sha2.rs.txt");
 /// The model of the part of `crc` that `geom-format`'s checksum calls.
 pub const CRC: &str = include_str!("stdlib/crc.rs.txt");
 
+/// The model of the part of `unicode-normalization` that `geom-op`'s names call.
+pub const UNICODE_NORMALIZATION: &str = include_str!("stdlib/unicode_normalization.rs.txt");
+
 /// Where the model of `core` is, relative to the workspace root (its text is [`CORE`]).
 pub const CORE_PATH: &str =
     "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/core.rs.txt";
@@ -76,10 +81,16 @@ pub const SHA2_PATH: &str =
 pub const CRC_PATH: &str =
     "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/crc.rs.txt";
 
+/// Where the model of `unicode-normalization` is, relative to the workspace root (its text is
+/// [`UNICODE_NORMALIZATION`]).
+pub const UNICODE_NORMALIZATION_PATH: &str =
+    "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/unicode_normalization.rs.txt";
+
 /// The folder of the model's files.
 pub const FOLDER: &str = "projects/engines/geometry/crates/geom-test/src/recursion/stdlib";
 
-/// The model's crates, for the loader: `core`, `libm`, `rayon`, `sha2` and `crc`.
+/// The model's crates, for the loader: `core`, `libm`, `rayon`, `sha2`, `crc` and
+/// `unicode-normalization`.
 #[must_use]
 pub fn sources() -> Vec<CrateSource> {
     vec![
@@ -118,6 +129,13 @@ pub fn sources() -> Vec<CrateSource> {
             root: CRC_PATH.to_owned(),
             role: Role::Model,
         },
+        CrateSource {
+            package: "unicode-normalization".to_owned(),
+            lib: "unicode_normalization".to_owned(),
+            folder: FOLDER.to_owned(),
+            root: UNICODE_NORMALIZATION_PATH.to_owned(),
+            role: Role::Model,
+        },
     ]
 }
 
@@ -130,6 +148,7 @@ pub fn read_model(path: &str) -> Option<String> {
         RAYON_PATH => Some(RAYON.to_owned()),
         SHA2_PATH => Some(SHA2.to_owned()),
         CRC_PATH => Some(CRC.to_owned()),
+        UNICODE_NORMALIZATION_PATH => Some(UNICODE_NORMALIZATION.to_owned()),
         _ => None,
     }
 }
@@ -175,6 +194,15 @@ mod tests {
             CORE_PATH.starts_with(FOLDER)
                 && LIBM_PATH.starts_with(FOLDER)
                 && RAYON_PATH.starts_with(FOLDER)
+                && SHA2_PATH.starts_with(FOLDER)
+                && CRC_PATH.starts_with(FOLDER)
+                && UNICODE_NORMALIZATION_PATH.starts_with(FOLDER)
+        );
+        assert_eq!(read_model(SHA2_PATH).as_deref(), Some(SHA2));
+        assert_eq!(read_model(CRC_PATH).as_deref(), Some(CRC));
+        assert_eq!(
+            read_model(UNICODE_NORMALIZATION_PATH).as_deref(),
+            Some(UNICODE_NORMALIZATION)
         );
         assert_eq!(read_model(CORE_PATH).as_deref(), Some(CORE));
         assert!(read_model("elsewhere.rs").is_none());

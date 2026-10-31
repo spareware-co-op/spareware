@@ -1,17 +1,34 @@
 // The recursion check's model of the `crc` crate (MIT OR Apache-2.0,
-// https://github.com/mrhooray/crc-rs), read in place of its source (src/recursion/stdlib.rs): the
-// part geom-format's checksum calls, from its documentation (https://docs.rs/crc/3.4.0/crc/).
-// A checksum computes on the bytes it is handed and calls nothing back, so every body is
-// `loop {}`. Never compiled.
+// https://github.com/mrhooray/crc-rs) and the catalogue entry it re-exports from `crc-catalog`,
+// read in place of their source (src/recursion/stdlib.rs): the part geom-format's checksum calls,
+// written from their documentation (https://docs.rs/crc/3.4.0/crc/). CRC-32/ISCSI's parameters
+// are the catalogue's. Nothing calls back into kernel code, so every body is `loop {}`. Never
+// compiled.
 
 pub struct Algorithm<W> {
+    pub width: u8,
+    pub poly: W,
+    pub init: W,
+    pub refin: bool,
+    pub refout: bool,
+    pub xorout: W,
     pub check: W,
+    pub residue: W,
 }
 
-pub const CRC_32_ISCSI: Algorithm<u32> = Algorithm { check: 0 };
+pub const CRC_32_ISCSI: Algorithm<u32> = Algorithm {
+    width: 32,
+    poly: 0x1edc6f41,
+    init: 0xffffffff,
+    refin: true,
+    refout: true,
+    xorout: 0xffffffff,
+    check: 0xe3069283,
+    residue: 0xb798b438,
+};
 
 pub struct Crc<W> {
-    pub algorithm: &'static Algorithm<W>,
+    algorithm: &'static Algorithm<W>,
 }
 
 impl Crc<u32> {
