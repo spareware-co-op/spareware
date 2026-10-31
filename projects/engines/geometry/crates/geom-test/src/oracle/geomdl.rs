@@ -264,14 +264,16 @@ fn kernel<const D: usize>(job: &Job, input: &Parsed) -> Option<(Vec<f64>, f64)> 
 }
 
 /// `γ_n` as a double, rounded up: n·u / (1 − n·u), u = 2^−53.
-fn gamma(n: usize) -> f64 {
+#[must_use]
+pub fn gamma(n: usize) -> f64 {
     #[allow(clippy::cast_precision_loss, reason = "a small count")]
     let nu = n as f64 * f64::EPSILON / 2.0;
     (nu / (1.0 - nu)).next_up()
 }
 
 /// The bound of a value of a job: `geom-nurbs`'s statement, measured on the largest coordinate.
-fn bound(job: &Job, size: f64) -> f64 {
+#[must_use]
+pub fn bound(job: &Job, size: f64) -> f64 {
     let p = job.degree;
     let steps = if job.weights.is_some() {
         p.saturating_mul(14).saturating_add(3)
@@ -347,15 +349,14 @@ fn reference(job: &Job, input: &Parsed) -> Result<Spline, String> {
     clippy::arithmetic_side_effects,
     reason = "exact rationals, which cannot overflow"
 )]
-/// Settles a point difference against the exact curve: which side is within the bound of the truth.
-fn settle(
-    job: &Job,
-    input: &Parsed,
-    ours: &[f64],
-    theirs: &[f64],
-    limit: f64,
-) -> Result<String, String> {
-    let spline = reference(job, input)?;
+/// Settles a point difference against the exact curve: which side is within `limit` of the truth.
+///
+/// # Errors
+///
+/// A job the exact reference cannot read.
+pub fn settle(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<String, String> {
+    let input = parse(job)?;
+    let spline = reference(job, &input)?;
     let truth = spline
         .point(&exact(input.at)?)
         .map_err(|e| format!("the reference: {e:?}"))?;
@@ -437,7 +438,7 @@ pub fn judge(job: &Job, answer: &Answer) -> Result<Compared, String> {
         return Ok(Compared::Agree);
     }
     let settled = if job.op == Op::Point {
-        settle(job, &input, &ours, &theirs, stated)?
+        settle(job, &ours, &theirs, stated)?
     } else {
         "beyond the allowance; the exact reference settles a point only".to_owned()
     };

@@ -41,7 +41,7 @@ use geom_test::fixture::{Class, Counts, Expect, Hash, Measures, OpLog, Source, S
 use geom_test::oracle::catalogue::{Catalogue, CatalogueError, Oracle, Run, State, audit, linked};
 use geom_test::oracle::compare::{Allowance, exact, within};
 use geom_test::oracle::exact::{float, read_float, steps, to_millimetres};
-use geom_test::oracle::geomdl::{Answer, Compared, ID, Job, Op, jobs, judge};
+use geom_test::oracle::geomdl::{Answer, Compared, ID, Job, Op, bound, gamma, jobs, judge, settle};
 use geom_test::oracle::triage::{Record, Register, Signature, TriageError, fixture, group};
 use geom_test::seed::Seed;
 
@@ -605,4 +605,140 @@ fn a_refusal_a_shape_and_a_broken_answer_are_caught() {
     let mut bad_job = job.clone();
     bad_job.at = "x".to_owned();
     assert!(judge(&bad_job, &honest(job)).is_err());
+}
+
+#[test]
+fn errors_say_what_is_wrong() {
+    let cases: [(CatalogueError, &str); 3] = [
+        (CatalogueError::Json("j".to_owned()), "catalogue: j"),
+        (CatalogueError::Format(9), "format 9"),
+        (
+            CatalogueError::Rule {
+                id: "a".to_owned(),
+                what: "w".to_owned(),
+            },
+            "oracle a: w",
+        ),
+    ];
+    for (error, words) in cases {
+        assert!(error.to_string().contains(words), "{error}");
+    }
+    assert!(
+        TriageError::Json("j".to_owned())
+            .to_string()
+            .contains("register: j")
+    );
+    assert_eq!(TriageError::Rule("r".to_owned()).to_string(), "r");
+}
+
+#[test]
+fn not_finite_never_agrees_however_wide_the_allowance() {
+    let wide = Allowance {
+        ours: f64::INFINITY,
+        theirs: f64::INFINITY,
+        rounding: 0.0,
+        fit: f64::INFINITY,
+    };
+    assert!(wide.total().is_infinite());
+    assert!(within(1.0, 2.0, &wide));
+    assert!(!within(1.0, f64::INFINITY, &wide));
+    assert!(!within(f64::INFINITY, 1.0, &wide));
+}
+
+#[test]
+fn the_rounding_is_twice_epsilon_of_the_value() {
+    let mm = to_millimetres(6400, GridStep::Q0);
+    assert!(mm.rounding >= 2.0 * f64::EPSILON);
+    assert!(mm.rounding < 2.1 * f64::EPSILON);
+}
+
+#[test]
+fn the_inputs_are_what_the_jobs_say() {
+    let all = jobs(Seed(5), 300);
+    let number = |t: &String| t.parse::<f64>().unwrap();
+    let coordinates: Vec<f64> = all
+        .iter()
+        .flat_map(|j| j.points.iter().flatten())
+        .map(number)
+        .collect();
+    let (low, high) = coordinates
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(l, h), x| (l.min(*x), h.max(*x)));
+    assert!((-8.0..-7.0).contains(&low), "{low}");
+    assert!((7.0..8.0).contains(&high), "{high}");
+    let weights: Vec<f64> = all
+        .iter()
+        .filter_map(|j| j.weights.as_ref())
+        .flatten()
+        .map(number)
+        .collect();
+    assert!(weights.iter().all(|w| (0.25..4.25).contains(w)));
+    assert!(weights.iter().any(|w| *w > 2.0));
+    let parameters: Vec<f64> = all.iter().map(|j| number(&j.at)).collect();
+    assert!(parameters.iter().all(|u| *u > 0.0 && *u < 1.0));
+    assert!(parameters.iter().any(|u| *u < 0.25));
+    assert!(parameters.iter().any(|u| *u > 0.75));
+    // Every knot vector is clamped on [0, 1], and no interior knot repeats past the degree.
+    for job in &all {
+        let knots: Vec<f64> = job.knots.iter().map(number).collect();
+        assert!(knots.iter().take(job.degree + 1).all(|k| *k == 0.0));
+        assert!(knots.iter().rev().take(job.degree + 1).all(|k| *k == 1.0));
+        for k in knots.iter().filter(|k| **k > 0.0 && **k < 1.0) {
+            assert!(knots.iter().filter(|x| *x == k).count() <= job.degree);
+        }
+    }
+}
+
+#[test]
+fn the_bound_is_the_one_geom_nurbs_states() {
+    let u = f64::EPSILON / 2.0;
+    assert!(gamma(1) >= u && gamma(1) < 1.001 * u);
+    assert!(gamma(1000) >= 1000.0 * u && gamma(1000) < 1000.001 * u);
+    let plain = jobs(Seed(6), 100)
+        .into_iter()
+        .find(|j| j.weights.is_none() && j.degree == 2)
+        .unwrap();
+    // gamma(7p + 1) of the largest coordinate.
+    assert_eq!(bound(&plain, 1.0), gamma(15).next_up());
+    assert!(bound(&plain, 8.0) > 7.9 * bound(&plain, 1.0));
+    let mut rational = plain.clone();
+    rational.weights = Some(
+        (0..plain.points.len())
+            .map(|i| {
+                if i == 0 {
+                    "4e0".to_owned()
+                } else {
+                    "1e0".to_owned()
+                }
+            })
+            .collect(),
+    );
+    // gamma(14p + 3) and the largest weight over the least.
+    let want = gamma(31) * 4.0;
+    assert!(bound(&rational, 1.0) >= want && bound(&rational, 1.0) < want * 1.0001);
+}
+
+#[test]
+fn truth_settles_either_way() {
+    let all = jobs(Seed(7), 200);
+    let job = all.iter().find(|j| j.op == Op::Point).unwrap();
+    let right: Vec<f64> = honest(job)
+        .values
+        .unwrap()
+        .iter()
+        .map(|t| t.parse().unwrap())
+        .collect();
+    let limit = 1e-3;
+    let high: Vec<f64> = right.iter().map(|x| x + 1.0).collect();
+    let low: Vec<f64> = right.iter().map(|x| x - 1.0).collect();
+    for wrong in [&high, &low] {
+        let theirs_off = settle(job, &right, wrong, limit).unwrap();
+        assert!(theirs_off.starts_with("theirs"), "{theirs_off}");
+        let ours_off = settle(job, wrong, &right, limit).unwrap();
+        assert!(ours_off.starts_with("ours: geomdl"), "{ours_off}");
+        let neither = settle(job, wrong, wrong, limit).unwrap();
+        assert!(neither.starts_with("ours: neither"), "{neither}");
+    }
+    let both = settle(job, &right, &right, limit).unwrap();
+    assert!(both.starts_with("both"), "{both}");
 }
