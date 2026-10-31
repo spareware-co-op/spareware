@@ -43,6 +43,7 @@
 extern crate alloc;
 
 mod combinatorial;
+mod curved;
 mod exactness;
 mod geometric;
 pub mod report;

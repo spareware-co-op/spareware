@@ -144,7 +144,7 @@ fn radial(a: &Arenas, f: FinIx) -> FinIx {
 }
 
 /// A fin's edge.
-fn fin_edge(a: &Arenas, f: FinIx) -> Option<EdgeIx> {
+pub(crate) fn fin_edge(a: &Arenas, f: FinIx) -> Option<EdgeIx> {
     a.fins.edge.get(f).copied()
 }
 

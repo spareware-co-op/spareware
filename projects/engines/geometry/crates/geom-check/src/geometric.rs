@@ -1,14 +1,12 @@
 //! Group 2 of chapter 8.3, geometric consistency: every vertex lies on its faces' surfaces and at
-//! its edges' curve ends, within the bound the body is recorded with, and every edge on its faces.
+//! its edges' curve ends, and every edge on its faces, within the bound the body is recorded with.
 //!
-//! What it does: [`check`] walks the faces, fins and edges in row order. A vertex lies on a flat
-//! face's plane when its signed distance, computed exactly in integers, is at most the body's
-//! bound; a vertex lies at a straight edge's end when a certified upper bound on its distance from
-//! the curve's end point is at most the bound. An edge on a flat face follows from its two
-//! vertices: a segment whose ends lie within b of a plane lies within b of it everywhere (distance
-//! to a plane is affine along a segment), so no point of the edge is sampled. Every carrier this
-//! group has no certified check for yet (a curved surface, a curve other than a line, a pcurve) is
+//! What it does: [`check`] walks the faces, fins and edges in row order. A face's surface is a
+//! plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is
 //! reported as [`FaultKind::Unchecked`], never passed (8.3: "certified with bounds, not sampled").
+//! For each fin, the vertex it starts at must lie on its face's surface, and its edge's line or
+//! circle on that surface; for each edge, its vertices must lie at its line's or circle's ends. An
+//! edge on another kind of curve, and a fin's pcurve, are reported unchecked.
 //!
 //! The bound: the body's [`Exactness`] record, in the steps of its coordinates (a vertex is a whole
 //! number of grid steps, and the curves and surfaces are doubles in the same units, chapter 6.1):
@@ -19,12 +17,14 @@
 //! - **Exact on flat faces.** A plane given by integer-valued doubles (its origin and two
 //!   spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and
 //!   a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for
-//!   b = 0 that is the orient test, n · p + d = 0. A plane not given by integers is unchecked.
-//! - **Certified on lines.** A line's end points are enclosed with `geom_curve::tight`, which is
-//!   exact when the doubles are, so a vertex exactly on the bound passes and one a step beyond
-//!   fails.
+//!   b = 0 that is the orient test, n · p + d = 0. A plane not given by integers is unchecked in a
+//!   body recorded Exact, and measured in certified intervals otherwise.
+//! - **Certified on lines and curved carriers.** Every other distance is a certified upper bound
+//!   (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the
+//!   doubles are), so a vertex exactly on the bound passes where the data are exact and one a step
+//!   beyond fails.
 //! - **Fails closed.** Every comparison whose operands cannot be formed (a value out of its range,
-//!   an overflow) is a fault, never a pass.
+//!   an overflow, a cone past its apex) is a fault, never a pass.
 //! - **No sampling, nothing allocated.** Each check is an exact predicate or one interval
 //!   evaluation of a closed form.
 //!
@@ -38,8 +38,8 @@
 //! Cost: linear in faces, fins and edges, one meter unit each; constant work per row; nothing
 //! allocated. Recursion: none.
 
-use geom_curve::ParamCurve;
 use geom_curve::tight;
+use geom_curve::{Circle, Line, ParamCurve};
 use geom_num::interval::Interval;
 use geom_num::plane::Plane as GridPlane;
 use geom_num::wide::I320;
@@ -49,7 +49,8 @@ use geom_topo::entity::{Edge, Face, Fin, Vertex};
 use geom_topo::ix::Arena;
 use geom_topo::{Arenas, Body, CurveKind, Ix, SurfaceKind};
 
-use crate::combinatorial::{fin_ends, fin_face, rows};
+use crate::combinatorial::{fin_edge, fin_ends, fin_face, rows};
+use crate::curved::{self, Carrier};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
 
@@ -64,16 +65,22 @@ pub(crate) fn check(
 ) -> Result<(), Stopped> {
     let a = body.arenas();
     let b = bound(exactness);
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a bound past 2^53 steps exceeds every distance between points of the grid's range (below 2^42), so rounding it changes no answer"
+    )]
+    let limit = b as f64;
+    let exact = matches!(exactness, Exactness::Exact);
     for f in rows::<Face>(a.rows(Arena::Face)) {
         sink.charge()?;
-        if plane(a, f).is_none() {
-            let surface = a
+        if surface(a, f, exact).is_none() {
+            let at = a
                 .faces
                 .surface
                 .get(f)
                 .copied()
                 .map_or(Entity::Face(f), Entity::Surface);
-            sink.push(Fault::at(FaultKind::Unchecked, surface).with(Entity::Face(f)));
+            sink.push(Fault::at(FaultKind::Unchecked, at).with(Entity::Face(f)));
         }
     }
     for n in rows::<Fin>(a.rows(Arena::Fin)) {
@@ -81,42 +88,119 @@ pub(crate) fn check(
         if let Some(p) = a.fins.pcurve.get(n).copied().flatten() {
             sink.push(Fault::at(FaultKind::Unchecked, Entity::Pcurve(p)).with(Entity::Fin(n)));
         }
-        let face = fin_face(a, n);
-        let start = fin_ends(a, n).map(|(s, _)| s);
-        if let (Some(face), Some(v)) = (face, start)
-            && let Some(grid) = plane(a, face)
-            && !on_plane(&grid, point(a, v), b)
+        let Some((face, on)) = fin_face(a, n).and_then(|f| surface(a, f, exact).map(|on| (f, on)))
+        else {
+            continue;
+        };
+        if let Some((v, _)) = fin_ends(a, n)
+            && !on.holds_point(point(a, v), b, limit)
         {
             sink.push(
                 Fault::at(FaultKind::VertexOffSurface, Entity::Vertex(v)).with(Entity::Face(face)),
+            );
+        }
+        if let Some(e) = fin_edge(a, n)
+            && !edge_on(a, e, &on.carrier, limit)
+        {
+            sink.push(
+                Fault::at(FaultKind::EdgeOffSurface, Entity::Edge(e)).with(Entity::Face(face)),
             );
         }
     }
     for e in rows::<Edge>(a.rows(Arena::Edge)) {
         sink.charge()?;
         let c = a.edges.curve.get(e).copied();
-        if let Some(CurveKind::Line(line)) = c.and_then(|c| a.curves.get(c)) {
-            let (lo, hi) = line.domain();
-            let ends = [
-                (a.edges.start.get(e).copied().flatten(), lo),
-                (a.edges.end.get(e).copied().flatten(), hi),
-            ];
-            for (vertex, t) in ends {
-                if let Some(v) = vertex
-                    && !on_line(line.origin(), line.direction(), t, point(a, v), b)
-                {
-                    sink.push(
-                        Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(v))
-                            .with(Entity::Edge(e)),
-                    );
-                }
+        let ends = [
+            a.edges.start.get(e).copied().flatten(),
+            a.edges.end.get(e).copied().flatten(),
+        ];
+        let curve = match c.and_then(|c| a.curves.get(c)) {
+            Some(CurveKind::Line(line)) => Ends::Line(line),
+            Some(CurveKind::Circle(circle)) => Ends::Circle(circle),
+            _ => {
+                let curve = c.map_or(Entity::Edge(e), Entity::Curve);
+                sink.push(Fault::at(FaultKind::Unchecked, curve).with(Entity::Edge(e)));
+                continue;
             }
-        } else {
-            let curve = c.map_or(Entity::Edge(e), Entity::Curve);
-            sink.push(Fault::at(FaultKind::Unchecked, curve).with(Entity::Edge(e)));
+        };
+        let (lo, hi) = curve.domain();
+        for (vertex, t) in ends.into_iter().zip([lo, hi]) {
+            if let Some(v) = vertex
+                && !curve.holds(t, point(a, v), b, limit)
+            {
+                sink.push(
+                    Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(v)).with(Entity::Edge(e)),
+                );
+            }
         }
     }
     Ok(())
+}
+
+/// An edge's curve, of a kind whose ends group 2 can certify.
+enum Ends<'c> {
+    Line(&'c Line<3>),
+    Circle(&'c Circle<3>),
+}
+
+impl Ends<'_> {
+    /// The parameters of the curve's two ends.
+    fn domain(&self) -> (f64, f64) {
+        match self {
+            Ends::Line(line) => line.domain(),
+            Ends::Circle(circle) => circle.domain(),
+        }
+    }
+
+    /// Whether `p` lies within `b` steps (`limit` as a double) of the curve's point at `t`.
+    fn holds(&self, t: f64, p: P3, b: u64, limit: f64) -> bool {
+        match self {
+            Ends::Line(line) => on_line(line.origin(), line.direction(), t, p, b),
+            Ends::Circle(circle) => curved::at_circle_end(circle, t, p, limit),
+        }
+    }
+}
+
+/// What group 2 measures a face's vertices and edges against: its surface's closed form, and the
+/// exact integer plane when the surface is a plane given by integers.
+struct Surface {
+    grid: Option<GridPlane>,
+    carrier: Carrier,
+}
+
+impl Surface {
+    /// Whether `p` lies within `b` steps (`limit` as a double) of the surface: exactly on an
+    /// integer plane, by a certified bound otherwise.
+    fn holds_point(&self, p: P3, b: u64, limit: f64) -> bool {
+        match &self.grid {
+            Some(plane) => on_plane(plane, p, b),
+            None => self.carrier.holds_point(p, limit),
+        }
+    }
+}
+
+/// The surface of `face`, if group 2 has a certified check for it: not for a kind without a closed
+/// form here, nor, in a body recorded Exact (`exact`), for a plane not given by integers.
+fn surface(a: &Arenas, face: Ix<Face>, exact: bool) -> Option<Surface> {
+    let kind = a.faces.surface.get(face).and_then(|s| a.surfaces.get(*s))?;
+    let grid = plane(kind);
+    if exact && grid.is_none() && matches!(kind, SurfaceKind::Plane(_)) {
+        return None;
+    }
+    Some(Surface {
+        grid,
+        carrier: curved::carrier(kind)?,
+    })
+}
+
+/// Whether edge `e`'s curve lies within `limit` steps of `on`: a line or a circle by its certified
+/// bound; any other curve is the edge rows' to report unchecked, so it is not reported again here.
+fn edge_on(a: &Arenas, e: Ix<Edge>, on: &Carrier, limit: f64) -> bool {
+    match a.edges.curve.get(e).and_then(|c| a.curves.get(*c)) {
+        Some(CurveKind::Line(line)) => on.holds_line(line, limit),
+        Some(CurveKind::Circle(circle)) => on.holds_circle(circle, limit),
+        _ => true,
+    }
 }
 
 /// The bound a vertex may lie from its carriers, in steps: 0 for an Exact body.
@@ -145,10 +229,9 @@ fn point(a: &Arenas, v: Ix<Vertex>) -> P3 {
         .unwrap_or(ORIGIN)
 }
 
-/// The integer plane of a face whose surface is a plane given by integers: its origin and two
-/// spanning vectors, every coordinate a whole number of steps within the grid's range.
-fn plane(a: &Arenas, face: Ix<Face>) -> Option<GridPlane> {
-    let surface = a.faces.surface.get(face).and_then(|s| a.surfaces.get(*s))?;
+/// The integer plane of a surface that is a plane given by integers: its origin and two spanning
+/// vectors, every coordinate a whole number of steps within the grid's range.
+fn plane(surface: &SurfaceKind) -> Option<GridPlane> {
     let SurfaceKind::Plane(flat) = surface else {
         return None;
     };

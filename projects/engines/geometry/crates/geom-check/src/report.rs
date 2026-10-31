@@ -245,9 +245,12 @@ pub enum FaultKind {
     /// A vertex does not lie at its edge's curve end within the body's bound. `at` is the vertex,
     /// `with` the edge.
     VertexOffCurve,
+    /// An edge's curve does not lie on a face's surface within the body's bound. `at` is the
+    /// edge, `with` the face.
+    EdgeOffSurface,
     /// A carrier group 2 has no certified check for yet: a surface or curve of another kind, a
-    /// plane not given by integers, or a fin's pcurve. Reported, never passed. `at` is the
-    /// surface, curve or pcurve, `with` the face, edge or fin that uses it.
+    /// plane not given by integers in a body recorded Exact, or a fin's pcurve. Reported, never
+    /// passed. `at` is the surface, curve or pcurve, `with` the face, edge or fin that uses it.
     Unchecked,
 }
 
@@ -259,9 +262,10 @@ impl FaultKind {
             FaultKind::NotFlat | FaultKind::NotStraight | FaultKind::CurvedPcurve => {
                 Group::Exactness
             }
-            FaultKind::VertexOffSurface | FaultKind::VertexOffCurve | FaultKind::Unchecked => {
-                Group::Geometric
-            }
+            FaultKind::VertexOffSurface
+            | FaultKind::VertexOffCurve
+            | FaultKind::EdgeOffSurface
+            | FaultKind::Unchecked => Group::Geometric,
             _ => Group::Combinatorial,
         }
     }
@@ -307,6 +311,7 @@ impl FaultKind {
             FaultKind::VertexOffCurve => {
                 "the vertex is not at the edge's curve end within the bound"
             }
+            FaultKind::EdgeOffSurface => "the edge is not on the face's surface within the bound",
             FaultKind::Unchecked => "no certified check of this carrier exists yet",
         }
     }

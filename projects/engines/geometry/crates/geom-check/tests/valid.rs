@@ -14,8 +14,8 @@
 mod common;
 
 use common::{
-    acorn, annulus_sheet, certified, cube, cylinder, disc_sheet, meter, report, square_sheet,
-    torus, wire,
+    Rows, acorn, annulus_sheet, ball, certified, cone, cube, cylinder, disc_sheet, hemisphere,
+    meter, report, ring_torus, round_cylinder, seamed_cylinder, square_sheet, torus, wire,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_num::{Exactness, GridStep, Steps};
@@ -27,6 +27,19 @@ fn every_kind_of_valid_body_passes() {
         ("cube", cube(), BodyKind::Solid),
         ("cube as a general body", cube(), BodyKind::General),
         ("torus of planes and lines", torus(), BodyKind::Solid),
+        (
+            "cylinder of planes and circles",
+            cylinder(),
+            BodyKind::Solid,
+        ),
+        ("cylinder", round_cylinder(), BodyKind::Solid),
+        ("cylinder with a seam", seamed_cylinder(), BodyKind::Solid),
+        ("cone with its apex", cone(), BodyKind::Solid),
+        ("hemisphere", hemisphere(), BodyKind::Solid),
+        ("ball", ball(), BodyKind::Solid),
+        ("ring torus", ring_torus(), BodyKind::Solid),
+        ("disc sheet", disc_sheet(), BodyKind::Sheet),
+        ("annulus sheet", annulus_sheet(), BodyKind::Sheet),
         ("square sheet", square_sheet(), BodyKind::Sheet),
         ("wire", wire(), BodyKind::Wire),
         ("wire as a general body", wire(), BodyKind::General),
@@ -49,21 +62,33 @@ fn every_kind_of_valid_body_passes() {
 }
 
 #[test]
-fn curved_carriers_are_reported_unchecked_never_passed() {
-    // Group 2 has no certified check of circles yet: each is reported, and nothing else is.
-    for (name, rows, kind) in [
-        ("cylinder", cylinder(), BodyKind::Solid),
-        ("disc sheet", disc_sheet(), BodyKind::Sheet),
-        ("annulus sheet", annulus_sheet(), BodyKind::Sheet),
-    ] {
-        let r = report(&rows, kind, certified());
+fn curved_bodies_recorded_exact_fail_only_where_their_bound_is_needed() {
+    // Recorded Exact, a curved body is group 4's to refuse; group 2 holds its exact data to a
+    // bound of 0 and reports only what the certified sines and cosines of its circles widen.
+    let cases: [(&str, Rows); 4] = [
+        ("cylinder", round_cylinder()),
+        ("cone", cone()),
+        ("hemisphere", hemisphere()),
+        ("ring torus", ring_torus()),
+    ];
+    for (name, rows) in cases {
+        let r = report(&rows, BodyKind::Solid, Exactness::Exact);
         assert!(!r.passed(), "{name}");
         assert!(
-            r.faults()
-                .iter()
-                .all(|f| f.kind == FaultKind::Unchecked && matches!(f.at, Entity::Curve(_))),
+            r.faults().iter().all(|f| matches!(
+                f.kind,
+                FaultKind::NotFlat
+                    | FaultKind::NotStraight
+                    | FaultKind::VertexOffCurve
+                    | FaultKind::EdgeOffSurface
+                    | FaultKind::VertexOffSurface
+            )),
             "{name}: {:?}",
             r.faults()
+        );
+        assert!(
+            r.faults().iter().any(|f| f.kind == FaultKind::NotFlat),
+            "{name}"
         );
     }
 }
