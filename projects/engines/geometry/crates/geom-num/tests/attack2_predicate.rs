@@ -453,7 +453,7 @@ mod copy {
         }
         pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
             if ORIENT2D_FILTER_FIRST {
-                match generated::orient2d::filter(a, b, c) {
+                match filtered(|| generated::orient2d::filter(a, b, c)) {
                     Some(sign) => Ok(sign),
                     None => orient2d_unfiltered(a, b, c),
                 }
@@ -466,6 +466,13 @@ mod copy {
             target_pointer_width = "64",
             not(target_family = "wasm")
         ));
+
+        pub const FILTERS: bool = !cfg!(feature = "reference");
+
+        #[inline]
+        pub(crate) fn filtered<T>(filter: impl FnOnce() -> Option<T>) -> Option<T> {
+            if FILTERS { filter() } else { None }
+        }
 
         #[inline(never)]
         fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
@@ -480,7 +487,7 @@ mod copy {
             fast_else_total(fast, || orient2d_total(a, b, c))
         }
         pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
-            match generated::orient3d::filter(a, b, c, d) {
+            match filtered(|| generated::orient3d::filter(a, b, c, d)) {
                 Some(sign) => Ok(sign),
                 None => orient3d_unfiltered(a, b, c, d),
             }
@@ -494,7 +501,7 @@ mod copy {
             fast_else_total(fast, || orient3d_total(a, b, c, d))
         }
         pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
-            match generated::incircle::filter(a, b, c, d) {
+            match filtered(|| generated::incircle::filter(a, b, c, d)) {
                 Some(sign) => Ok(sign),
                 None => incircle_unfiltered(a, b, c, d),
             }
@@ -512,7 +519,7 @@ mod copy {
             reason = "a to e name the points of the documented formula"
         )]
         pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
-            match generated::insphere::filter(a, b, c, d, e) {
+            match filtered(|| generated::insphere::filter(a, b, c, d, e)) {
                 Some(sign) => Ok(sign),
                 None => insphere_unfiltered(a, b, c, d, e),
             }
