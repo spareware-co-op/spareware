@@ -283,6 +283,13 @@ fn a_fixture_round_trips_in_one_spelling() {
     }
     let k = known();
     assert_eq!(Fixture::parse(&k.to_json().unwrap()).unwrap(), k);
+    // An error's entities keep their names, in lowercase hexadecimal only.
+    let e = fixture(vec![op("bad", 1)]);
+    let text = e.to_json().unwrap();
+    assert!(text.contains(&"07".repeat(16)));
+    assert_eq!(Fixture::parse(&text).unwrap(), e);
+    let shouted = text.replace(&"07".repeat(16), &"0A".repeat(16));
+    assert!(Fixture::parse(&shouted).is_err());
 }
 
 #[test]
