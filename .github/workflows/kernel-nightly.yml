@@ -68,11 +68,16 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy, rustfmt
       - name: The map, regenerated
-        run: cargo run --locked -p geom-test --bin map -- write
+        run: |
+          cargo run --locked -p geom-test --bin map -- write
+          cargo run --locked -p geom-test --bin provenance -- write
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
         with:
           name: map
-          path: projects/engines/geometry/MAP.json
+          path: |
+            projects/engines/geometry/MAP.json
+            projects/engines/geometry/PROVENANCE.md
       - name: Format
         if: always()
         run: cargo fmt -p geom-test -- --check
@@ -84,10 +89,10 @@ jobs:
         run: cargo run --locked -p geom-test --bin golden -- check
       - name: Provenance
         if: always()
-        run: cargo run --locked -p geom-test --bin provenance
+        run: cargo run --locked -p geom-test --bin provenance -- check
       - name: Tests
         if: always()
-        run: cargo test --locked -p geom-test --test ssi --test ssi_tool
+        run: cargo test --locked --no-fail-fast -p geom-test --test ssi --test ssi_tool
 
   ssi-acceptance:
     name: Intersection acceptance harness, on the ssi-corpus
