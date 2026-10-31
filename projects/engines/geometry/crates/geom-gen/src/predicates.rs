@@ -1755,7 +1755,11 @@ pub fn generate_fptaylor_rational_cmp() -> Result<Vec<u8>, GenError> {
 ///
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_fptaylor_rational_orient() -> Result<Vec<u8>, GenError> {
-    certificate("rational_orient", "fptaylor-rational-orient", fptaylor_problem)
+    certificate(
+        "rational_orient",
+        "fptaylor-rational-orient",
+        fptaylor_problem,
+    )
 }
 
 /// Generator `fptaylor-round-grid`: `round_grid`'s normalised filter for `FPTaylor`, whose certificate
@@ -1775,7 +1779,11 @@ pub fn generate_fptaylor_round_grid() -> Result<Vec<u8>, GenError> {
 ///
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_fptaylor_round_rational() -> Result<Vec<u8>, GenError> {
-    certificate("round_rational", "fptaylor-round-rational", fptaylor_problem)
+    certificate(
+        "round_rational",
+        "fptaylor-round-rational",
+        fptaylor_problem,
+    )
 }
 
 /// Generator `fptaylor-round-line`: `round_line`'s normalised filter for `FPTaylor`, whose certificate

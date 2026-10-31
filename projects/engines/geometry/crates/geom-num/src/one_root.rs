@@ -263,7 +263,12 @@ struct Part {
 
 impl Crossing2 {
     /// Makes a crossing from its integers, its enclosure from theirs.
-    fn from_parts(a: [Stored; 2], b: [Stored; 2], k: Stored, w: Stored) -> Result<Crossing2, NumError> {
+    fn from_parts(
+        a: [Stored; 2],
+        b: [Stored; 2],
+        k: Stored,
+        w: Stored,
+    ) -> Result<Crossing2, NumError> {
         let root = enclose(&k)?.sqrt()?;
         let weight = enclose(&w)?;
         let coordinate = |a: &Stored, b: &Stored| -> Result<Interval, NumError> {

@@ -27,7 +27,6 @@ use core::cmp::Ordering;
 
 use geom_num::arc::{Arc2, Circle2, Contact, Round};
 use geom_num::carrier::{Carrier, Rational2};
-use geom_num::one_root::Crossing2;
 use geom_num::crossing::Ssi;
 use geom_num::dd::DD;
 use geom_num::exact_sum::ExactSum;
@@ -35,6 +34,7 @@ use geom_num::grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::{Flagged, IsolateError, Isolation, Reason, Zero};
 use geom_num::newton::{NewtonError, Precision, Verdict};
+use geom_num::one_root::Crossing2;
 use geom_num::plane::{Lpi, Plane, Tpi};
 use geom_num::real::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange};
