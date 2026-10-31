@@ -1296,6 +1296,36 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .map(|(a, b)| geom_num::brent::zero(inputs::roots::cubic, a, b, tol, 100)),
             )
         }
+        ("intersect", "curve_segments") => fold(
+            inputs::intersect::segment_pairs(class)
+                .iter()
+                .map(|(a, b)| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::curve::curves(a, b, &mut meter)
+                }),
+        ),
+        ("intersect", "curve_circles") => {
+            fold(inputs::intersect::circle_pairs(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "curve_line_circle") => {
+            fold(inputs::intersect::line_circles(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "curve_cubics") => {
+            fold(inputs::intersect::cubic_pairs(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_intersect::curve::self_crossings(c, &mut meter)
+        })),
         ("intersect", "sort_items") => {
             fold(inputs::intersect::items(class).into_iter().map(|items| {
                 geom_intersect::Intersection::new(

@@ -429,6 +429,11 @@ pub static OPS: &[Op] = &[
     Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
     Op { group: "intersect", name: "key_circle", measures: "geom_intersect::CanonicalKey::of_curve", classes: T, prepare: |c| bind(inputs::intersect::circles(c), kernels::intersect::keys) },
     Op { group: "intersect", name: "pair_lines", measures: "geom_intersect::order::pair", classes: T, prepare: |c| bind(inputs::intersect::lines(c), kernels::intersect::paired) },
+    Op { group: "intersect", name: "curve_segments", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::segment_pairs(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "curve_circles", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::circle_pairs(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "curve_line_circle", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::line_circles(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "curve_cubics", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::cubic_pairs(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "curve_loop", measures: "geom_intersect::curve::self_crossings", classes: T, prepare: |c| bind(inputs::intersect::loops(c), kernels::intersect::crossed) },
     // geom-intersect's projection (piece G162; decision 32.44): the search on an arc and on a band
     // of a sphere.
     Op { group: "intersect", name: "project_arc", measures: "geom_intersect::project::project_curve", classes: T, prepare: |c| bind(inputs::intersect::arcs(c), kernels::intersect::on_arcs) },
@@ -657,6 +662,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("generated::limbs::cross_norm_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
     ("generated::plain::axis_gap_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
     ("generated::limbs::axis_gap_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("newton::inverse", "the small inverse a Krawczyk step takes, measured through `newton::krawczyk`"),
     ("Point::whole", "a constructor"),
     ("Chain::of", "the slow path of `quadric::roots`, measured through it near repeated roots only"),
     ("Chain::roots", "reads a built chain"),

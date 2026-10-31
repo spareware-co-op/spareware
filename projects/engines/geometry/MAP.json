@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (piece G158, decision 32.44): a list of items put in canonical order, a circle's canonical key, and a pair of lines put in canonical order.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G163, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, and pairs of curves that meet, each path of 12.5 once.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2496,6 +2496,29 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: two curves, each a segment, a circle or arc, an ellipse or a cubic graph over the same span, on a coarse lattice so that shared ends, tangencies and copies are common. [`check`] asks where they meet and holds the answer to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/curves.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: an answer that changes between two runs, a point where the curves are apart, two cubic graphs that change sides between two samples with no item between them, a pair asked either way round that finds a different number of proven points, or a smaller budget that changes an answer instead of stopping it. Self-crossings are held to the first two."
+          ],
+          "job": "Fuzz target: `geom-intersect` says where any two curves meet, and what it says is so.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.5 (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): the sign changes are read from the curves' Bernstein sums, which share nothing with the solver they judge."
+          },
+          "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "at most [`MAX_ITEMS`] items, compared pairwise by the oracle; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_ITEMS`] items whose enclosures sit on a coarse lattice, so ties, touches and overlaps are common, a coverage, and two operands, each a line, a circle, a plane or a sphere. [`check`] builds the intersection and holds it to the laws below, with an all-pairs oracle that shares nothing with the sweep it judges. [`harness`] is `decode` then `check`.",
           "family": [],
@@ -2587,6 +2610,29 @@
             "text": "the algebraic laws of section 28.6 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`, \"Swapping two points flips the sign\"). Each predicate is the sign of a determinant with one row per point (the points lifted onto the paraboloid z = |p|² for in-circle and in-sphere), as in Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", Discrete & Computational Geometry 18, 1997 (<https://doi.org/10.1007/PL00009321>), which `geom_num::predicate` follows. Exchanging two points exchanges two rows, and by the Leibniz formula an exchange of two rows negates a determinant, so every transposition must flip the sign. The board names orient2d's swap; the same law is checked on the other three predicates, whose points the harness decodes anyway."
           },
           "path": "geom_fuzz::predicates",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one search and one budgeted rerun (chapter 12.4's cost), and at most [`CURVE_SAMPLES`] or [`SURFACE_SAMPLES`] squared evaluations of the kind.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of eight kinds on small lattice sizes and domains, and a point on a coarse lattice, so points on an axis, ties and feet on an end are common. [`check`] projects the point and holds the answer to the laws below, with a dense sample of the kind as the oracle: the search bounds and prunes, and the oracle only evaluates, so the two share nothing but the kind. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/project.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a sample nearer than the distance reported, a nearest point that is not on the kind where it says or not in the domain, points out of parameter order, a typed set whose members are not all at its distance, an internal error, or a budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s nearest points are never beaten by a sample, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.4's projection (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`). A sample bounds the minimum from above, which is all a sample can do: the law cannot be broken by a true answer, and a wrong one is caught once a sample lands nearer than it."
+          },
+          "path": "geom_fuzz::project",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3273,6 +3319,31 @@
           "target": "lib"
         },
         {
+          "cost": "a closed form is a few predicates. The engine's boxes are near the logarithm of the curves' reach for a transversal crossing, and each is a few evaluations; a clip is O(p²). Recursion: none.",
+          "does": "[`curves`] answers for any two kinds. Two lines, two circles, and a line with any conic have closed forms, in the plane; two lines also in space. Every other pair runs [`crate::solve`] on A(s) − B(t) in two coordinates, with Bézier clipping narrowing the boxes of NURBS pieces. In 3D the coordinate left out decides: a meeting is reported only where it is proven, and a pair whose gap cannot be told from zero is flagged [`Unresolved::NearMiss`]. Two conics that are not both circles run the engine too: their exact counts are the fixed-integer predicates of chapter 14's piece G190. [`self_crossings`] runs the same engine on a curve and itself, above the diagonal, dropping every span whose tangents stay in one half-plane, since such a span cannot cross itself.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+          "guarantees": [
+            "**Every crossing found or flagged.** The engine discards a box only on a proof, so a meeting that no item reports does not exist; one that could not be isolated is a flagged region.",
+            "**Tangency is never a guess.** Two circles, and a line with a circle on whole-number data, decide it by an exact sign. Elsewhere a tangency is what the operator cannot separate, and 12.9's second order test reads it: curvatures that differ give [`Unresolved::TangentBand`], with the band's width, and curvatures that cannot be told apart [`Unresolved::HigherOrderContact`]. Whether a contact exists there is an equality no interval can prove.",
+            "**Overlap by identity.** The same carrier, two pieces of one line, or two arcs of one circle are an [`Item::Overlap`] with [`Coincidence::Identical`]. A near overlap stays flagged.",
+            "**Circles of very different radii.** The count of crossings comes from exact signs of the squared distances, never from a relative threshold, so a small circle on a large one has its two points."
+          ],
+          "job": "Where two curves meet, and where a curve meets itself (chapter 12.5).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1016/0010-4485(90",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "chapter 12.5 (`projects/engines/geometry/architecture/12-intersections.md`): Bézier clipping ([Sederberg and Nishita 1990](https://doi.org/10.1016/0010-4485(90)90039-F)), bisecting when a clip removes too little, finished by Krawczyk's test; exact signs of products by error-free transformations ([Shewchuk 1997](https://doi.org/10.1007/PL00009321))."
+          },
+          "path": "geom_intersect::curve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant.",
           "does": "[`IntersectError`] names each failure of a pair. Every pair of kinds is supported, so there is no \"unsupported\" error. A flagged region is not one of these: it is part of a complete, honest answer.",
           "family": [],
@@ -3316,6 +3387,31 @@
           "target": "lib"
         },
         {
+          "cost": "spans are halved, so a curve takes O(log(length/floor)) spans per foot, plus those near the distance's other turning points, each a bound on the point and two derivatives. A surface takes four such curves for its edges, then boxes in the same way, each a set of partials to the second order. All of it is charged to the meter. Recursion: none.",
+          "does": "[`project_curve`] and [`project_surface`] find every nearest point of a kind to a point. A line's foot and a plane's are closed forms. Everything else takes Ma and Hewitt's pruning, made certified: a work list of parameter spans, each dropped once a box around it lies further than the best distance so far, or once its distance's derivative cannot vanish, and the ends of a curve and the edges of a surface added as candidates, since a minimum on the boundary need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters of a point known to lie on a kind. A point on a round kind's axis has a continuum of nearest points, returned as a typed [`Continuum`] rather than found by search.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/project.rs",
+          "guarantees": [
+            "**The minimum is proven.** Every span dropped has a lower bound above the reported distance, or a derivative that cannot vanish, by certified bounds on the kind. Nothing is sampled.",
+            "**Ties are kept.** Candidates whose distance enclosures overlap are all returned, in parameter order; [`Projection::tie_broken`] says so, and the first is the lowest parameter.",
+            "**Nothing is guessed at the floor.** Spans at the floor that the test cannot decide join into runs. A run whose image is within twice the floor is one nearest point, since nothing in it can be told apart on the grid (a sphere's pole, a foot on a split); a longer one is [`Projection::NonIsolated`], never a foot.",
+            "**Enclosures, never numbers.** Each parameter, point and distance is an interval holding the exact value.",
+            "**Deterministic.** Midpoint splits, and a fixed work order, first half first."
+          ],
+          "job": "Projection and inversion: the nearest points of a curve or surface to a point, proven (12.4).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0167-8396(03",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "X. Ma and W. Hewitt, Point inversion and projection for NURBS curve and surface, Computer Aided Geometric Design 20 (2003), <https://doi.org/10.1016/S0167-8396(03)00021-9>, for the pruning, with convex-hull distance replaced by each kind's certified bound; chapter 12.4 (`projects/engines/geometry/architecture/12-intersections.md`). A span's convexity test is the sign of the second derivative of half the squared distance, an interval of the kind's certified derivative bounds, so a span it passes holds at most one foot, by Rolle's theorem. Circles, spheres, cylinders, cones and tori go through the same search: their certified bounds are their own closed forms, and the search adds what a closed form alone lacks, a trimmed domain."
+          },
+          "path": "geom_intersect::project",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(n log n) comparisons to order n items, then a sweep to prove them disjoint: for each item, one comparison per later item of its kind that starts before it ends in the first unknown, n²/2 at worst and each charged to the meter. Recursion: none.",
           "does": "an [`Intersection`] is the items of one pair in canonical order, with its [`Coverage`], its diagnostics and the work it took. An [`Item`] is a point, a curve, an overlap or a flagged region, each with its enclosure on the operands' parameters and in space. A [`ParamBox`] holds one interval per unknown of the pair, the canonical first operand's first, so [`Intersection::swapped`] gives the same items with the roles changed.",
           "family": [],
@@ -3338,13 +3434,39 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "each box is one residual range and at most one operator step, each a few evaluations of the kind; O(N³) doubles for the inverse. One allocation for each list. Recursion: none.",
+          "does": "a [`Field`] gives a system's residuals at a point and over a box, its Jacobian over a box, and how far a box reaches in space, from whatever a kind can bound. [`solve`] keeps boxes on a work list, discards each one a caller's test rules out or whose residuals exclude zero, takes a Krawczyk step, and splits what is left. `geom_num::isolate` does this for a system that is written once over its scalars; kinds that are bounded through their own traits come here.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+          "guarantees": [
+            "**A zero is proven.** A [`Zero`] has passed Krawczyk's test: K(X) ⊆ X with ‖I − Y·J(X)‖ < 1, so its `proof` box holds exactly one zero, and its `enclosure` holds that zero.",
+            "**Nothing is lost.** A box is dropped only when its residuals exclude zero, when the operator proves it empty, when the caller's test rules it out, or when a proven zero's box covers it. Everything else ends as a [`Zero`] or a [`Flagged`] region.",
+            "**Zeros on split lines are found once.** Each step runs on the box widened a little inside the domain, and a zero whose enclosure meets an earlier proof box is that zero.",
+            "**Bounded.** The list is explicit, each box is charged, and a box that reaches less than the resolution floor, or cannot be split, is flagged rather than split again.",
+            "**Enclosures apart.** A zero's enclosure reaches less than a step, and two zeros nearer than that are refined until the doubles part them.",
+            "**Deterministic.** Boxes are taken lower first, the longest side split at its middle."
+          ],
+          "job": "The interval engine: every zero of a small system over a box, each proven alone in a box of its own or flagged where it could not be decided (chapter 12.3).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/BF02234767",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "Krawczyk's operator ([Krawczyk 1969](https://doi.org/10.1007/BF02234767)) on a subdivision work list, as `geom_num::isolate` runs it, and the small inverse is that module's (Golub and Van Loan, algorithm 3.4.1). Chapter 12.3, `projects/engines/geometry/architecture/12-intersections.md`, sets out the tests."
+          },
+          "path": "geom_intersect::solve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-intersect",
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the result types and canonical order built by piece G158; the methods come with G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162; the other methods come with G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {

@@ -2765,9 +2765,44 @@ pub mod intersect {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_segments/typical"))]
+    fn curve_segments(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_circles/typical"))]
+    fn curve_circles(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_line_circle/typical"))]
+    fn curve_line_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_cubics/typical"))]
+    fn curve_cubics(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_loop/typical"))]
+    fn curve_loop(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop
     );
 }
 

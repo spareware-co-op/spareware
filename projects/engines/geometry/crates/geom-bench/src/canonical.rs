@@ -905,7 +905,7 @@ impl Canonical for geom_num::sturm::Roots {
 // debug text: their fields are public only as far as the kernel needs, and a double's debug text
 // is the same on every target.
 
-impl Canonical for geom_curve::CurveKind<3> {
+impl<const D: usize> Canonical for geom_curve::CurveKind<D> {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
     }

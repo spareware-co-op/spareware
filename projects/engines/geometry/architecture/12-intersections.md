@@ -218,6 +218,15 @@ Stationing a point against a 50 km alignment is the hardest everyday case, becau
 
   Vertices of solids are never found this way. They are where three surfaces meet, or where a curve meets a surface, and both are well-posed questions.
 
+**As built (G163).** `geom-intersect`'s `curve` answers any two kinds, and its `solve` is the engine for kinds bounded through their traits: Krawczyk's operator on each box first, then Bézier clipping on NURBS pieces, then bisection. The operator goes first because a clip can take a box below what the kinds' rounding lets the operator prove, and the operator settles a simple crossing from far wider boxes.
+
+- Closed forms: two lines in the plane and in space, with parallel, collinear and coplanar each an exact sign; two circles, the count from the exact signs of |c − e|² − (r ± q)², each a sum of products of doubles, and the points measured from the smaller circle by Kahan's stable Heron, which keeps CADCraft 926's two crossings apart at radii 2^30 to 1; a line with a circle, ellipse, branch of a hyperbola or parabola, a quadratic in the conic's own coordinates, its count exact on whole-number data for a circle. Two conics that are not both circles run the engine, Certified; their exact counts are piece G190's.
+- Two crossings the doubles cannot hold apart, where the exact signs say there are two, are one flagged band.
+- Overlap: the same carrier, a shared stretch of one line, and the turns two arcs of one circle share, an arc's shared end being a point. A near copy stays flagged.
+- Tangency: a box whose ‖I − Y·J(X)‖ does not contract cannot rule out a singular Jacobian. A run of those at the floor takes 12.9's test on the curves' signed curvatures: `TangentBand` with the width √(2δ/Δκ), δ the floor, where they differ; `HigherOrderContact` where they cannot be told apart.
+- In 3D the engine solves in the two coordinates that spread the pair most and the third decides. It is proven only where its enclosures agree exactly, as in a pair in one coordinate plane, and otherwise `NearMiss`.
+- `self_crossings` runs the engine above the diagonal, dropping every span the tangents show runs one way, and on a closed curve the short way round through its join.
+
 ## 12.6 Curve with surface
 
 - **Closed forms.**

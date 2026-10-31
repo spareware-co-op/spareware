@@ -2030,6 +2030,7 @@ pub mod roots {
 /// order, a key read, a pair put in order, and a point projected, under an unlimited budget.
 pub mod intersect {
     use geom_curve::CurveKind;
+    use geom_intersect::curve::{curves, self_crossings};
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, Projection,
         pair, project_curve, project_surface,
@@ -2046,6 +2047,21 @@ pub mod intersect {
     /// A meter of its own, under no limit.
     fn meter() -> WorkMeter<'static> {
         WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// `curves` on each pair.
+    #[inline(never)]
+    pub fn met(
+        batch: &[(CurveKind<2>, CurveKind<2>)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| curves(a, b, &mut meter()));
+    }
+
+    /// `self_crossings` on each curve.
+    #[inline(never)]
+    pub fn crossed(batch: &[CurveKind<2>], out: &mut Vec<Result<Intersection, IntersectError>>) {
+        run(batch, out, |curve| self_crossings(curve, &mut meter()));
     }
 
     /// `Intersection::new` on each list.
