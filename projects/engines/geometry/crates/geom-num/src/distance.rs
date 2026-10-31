@@ -199,6 +199,10 @@ pub fn dot_from(a: P3, b: P3, c: P3) -> i128 {
 }
 
 #[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
 mod proofs {
     use super::*;
 
@@ -238,6 +242,10 @@ mod proofs {
         [b * z - c * y, c * x - a * z, a * y - b * x]
     }
 
+    fn wide([a, b, c]: [i64; 3]) -> Run {
+        [i128::from(a), i128::from(b), i128::from(c)]
+    }
+
     #[kani::proof]
     #[kani::unwind(6)]
     fn point_point_has_the_sign_of_its_gap() {
@@ -260,27 +268,27 @@ mod proofs {
         assert!(point_line(a, b, p, c.cast_unsigned()) == Ok(Sign::of_i64(gap)));
     }
 
+    /// [`point_plane`] and [`line_line`] are a cross product of differences, then this. Proving
+    /// the two steps apart keeps each within the solver's reach, where the whole took over 15
+    /// minutes without an answer. Comparing arrays of `i128` is a loop over 48 bytes.
     #[kani::proof]
-    #[kani::unwind(6)]
-    fn point_plane_has_the_sign_of_its_gap() {
-        let (a, b, d, p, c) = (point(), point(), point(), point(), clearance());
-        let n = small_cross(small_run(a, b), small_run(a, d));
+    #[kani::unwind(50)]
+    fn triple_has_the_sign_of_its_gap() {
+        let n = [small(), small(), small()];
+        let w = [small(), small(), small()];
         kani::assume(n != [0; 3]);
-        let h = small_dot(n, small_run(a, p));
-        let c = i64::try_from(c).unwrap_or(0);
+        let c = i64::try_from(clearance()).unwrap_or(0);
+        let h = small_dot(n, w);
         let gap = h * h - c * c * small_dot(n, n);
-        assert!(point_plane(a, b, d, p, c.cast_unsigned()) == Ok(Sign::of_i64(gap)));
+        let result = triple_against(wide(n), wide(w), c.cast_unsigned());
+        assert!(result == Ok(Sign::of_i64(gap)));
     }
 
     #[kani::proof]
-    #[kani::unwind(6)]
-    fn line_line_has_the_sign_of_its_gap() {
-        let (p0, p1, q0, q1, c) = (point(), point(), point(), point(), clearance());
-        let n = small_cross(small_run(p0, p1), small_run(q0, q1));
-        kani::assume(n != [0; 3]);
-        let h = small_dot(n, small_run(p0, q0));
-        let c = i64::try_from(c).unwrap_or(0);
-        let gap = h * h - c * c * small_dot(n, n);
-        assert!(line_line(p0, p1, q0, q1, c.cast_unsigned()) == Ok(Sign::of_i64(gap)));
+    #[kani::unwind(50)]
+    fn cross_is_the_cross_product() {
+        let u = [small(), small(), small()];
+        let v = [small(), small(), small()];
+        assert!(cross(wide(u), wide(v)) == wide(small_cross(u, v)));
     }
 }

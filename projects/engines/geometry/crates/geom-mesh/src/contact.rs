@@ -80,7 +80,7 @@ fn lone(t: [P3; 3], s: [Sign; 3]) -> Option<([P3; 3], [Sign; 3], bool)> {
     }
     // Two on the plane and one off is caught above; one on it and two to a side stays here.
     for (turned, [x, y, z]) in turns {
-        if x == Sign::Zero && y == z {
+        if x == Sign::Zero {
             return Some((turned, [x, y, z], y == Sign::Positive));
         }
     }
@@ -121,22 +121,13 @@ fn meets(a: [P2; 3], b: [P2; 3]) -> Result<bool, NumError> {
     Ok(false)
 }
 
-/// Whether `q`, on the line through `a` and `b`, lies between them or on an end.
-fn on_segment(a: P2, b: P2, q: P2) -> bool {
-    a.min(b) <= q && q <= a.max(b)
-}
-
-/// Whether two closed segments share a point.
+/// Whether two closed segments on different lines share a point. Two triangles with area that
+/// touch always have such a pair of edges: where two edges overlap on one line, one of them ends,
+/// and the next edge round its triangle leaves that line.
 fn segments_meet(p: P2, q: P2, r: P2, s: P2) -> Result<bool, NumError> {
     let (a, b) = (orient2d(p, q, r)?, orient2d(p, q, s)?);
     let (c, d) = (orient2d(r, s, p)?, orient2d(r, s, q)?);
-    if a != b && c != d && a.mul(b) != Sign::Positive && c.mul(d) != Sign::Positive {
-        return Ok(true);
-    }
-    Ok((a == Sign::Zero && on_segment(p, q, r))
-        || (b == Sign::Zero && on_segment(p, q, s))
-        || (c == Sign::Zero && on_segment(r, s, p))
-        || (d == Sign::Zero && on_segment(r, s, q)))
+    Ok(a != b && c != d && a.mul(b) != Sign::Positive && c.mul(d) != Sign::Positive)
 }
 
 /// Whether the first vertex of `a` is inside or on `b`.

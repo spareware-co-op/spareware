@@ -32,7 +32,7 @@ use geom_test::{Seed, SplitMix64};
 
 mod shapes;
 
-use shapes::{cuboid, frustum, g, prism, soup, source};
+use shapes::{cuboid, frustum, g, join, prism, slab, soup, source};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 20))
@@ -183,10 +183,49 @@ fn two_boxes_on_one_edge_pair_in_radial_order() {
     let m = mesh(&soup(vertices, &refs));
     assert_eq!(m.kind(), MeshKind::General);
     assert_eq!(six(&m), 2 * 6 * 8);
-    // Every pair is the other box's face or its own: each pair bounds one solid.
+    // Every pair stays on one box: each pair bounds one solid.
     let p = m.parts();
+    let solid = |h: usize| {
+        let (u, v) = (p.he_vert[h], p.he_vert[next_half(p, h)]);
+        [u, v].map(|w| match p.verts[w as usize] {
+            Vertex::Grid(at) => at.x.get() + at.y.get(),
+            Vertex::Planes(_) => 0,
+        })
+    };
     for (h, &q) in p.he_pair.iter().enumerate() {
         assert_eq!(p.he_pair[q as usize] as usize, h);
+        let (a, b) = (solid(h), solid(q as usize));
+        assert!(a.iter().chain(&b).all(|v| *v >= 0) || a.iter().chain(&b).all(|v| *v <= 0));
+    }
+    // A shared edge's pairs are checked too: either half of a pair changed alone is refused.
+    let shared: Vec<usize> = (0..p.he_pair.len())
+        .filter(|&h| solid(h) == [0, 0])
+        .collect();
+    assert_eq!(shared.len(), 4);
+    for &h in &shared {
+        let other = shared
+            .iter()
+            .copied()
+            .find(|&o| o != h && o != p.he_pair[h] as usize)
+            .unwrap();
+        let mut wrong = p.clone();
+        wrong.he_pair[h] = other as u32;
+        assert!(matches!(
+            ExactMesh::new(wrong, &Exec::serial(), &mut meter()),
+            Err(MeshError::Fault(MeshFault::RadialOrder { .. }))
+        ));
+    }
+}
+
+/// The half-edge after `h` round its loop.
+fn next_half(p: &Parts, h: usize) -> usize {
+    let h = h as u32;
+    let looped = p.loop_start.partition_point(|&s| s <= h) - 1;
+    let next = h + 1;
+    if next == p.loop_start[looped + 1] {
+        p.loop_start[looped] as usize
+    } else {
+        next as usize
     }
 }
 
@@ -265,6 +304,27 @@ fn the_checker_refuses_each_fault() {
     assert_eq!(fault(|p| p.face_loops[1] = 0), shape);
     assert_eq!(fault(|p| p.runs[0].faces.end = 2), shape);
     assert_eq!(fault(|p| p.runs[0].faces.start = 1), shape);
+    assert_eq!(fault(|p| p.loop_start[0] = 1), shape);
+    // A loop no face holds, at the end of the arrays.
+    assert_eq!(
+        fault(|p| {
+            let end = p.he_vert.len() as u32;
+            let first: Vec<_> = p.he_plane[..3].to_vec();
+            p.he_vert.extend([0, 1, 2]);
+            p.he_plane.extend(first);
+            p.he_pair.extend([NONE; 3]);
+            p.he_prop.extend([NONE; 3]);
+            p.loop_start.push(end + 3);
+        }),
+        shape
+    );
+    // An edge's plane through one of its two ends is off the edge.
+    for other in [1, 3] {
+        assert_eq!(
+            fault(|p| p.he_plane[0] = p.he_plane[other]),
+            MeshError::Fault(MeshFault::OffEdgePlane { half_edge: 0 })
+        );
+    }
 
     assert!(matches!(
         fault(|p| p.planes.swap(0, 1)),
@@ -682,7 +742,98 @@ fn the_budget_stops_a_build() {
 }
 
 #[test]
+fn a_loop_no_face_holds_is_refused() {
+    let mut input = cuboid(2, 3, 4);
+    input.corners.extend([0, 1, 2]);
+    input.loop_start.push(input.corners.len() as u32);
+    assert_eq!(
+        build(&input, &Exec::serial(), &mut meter()).unwrap_err(),
+        MeshError::Fault(MeshFault::Shape)
+    );
+}
+
+#[test]
+fn planes_of_any_size_sort_exactly() {
+    // Offsets of 1.75 · 2^61 and 1.86 · 2^60: the smaller has the higher top bits. Each slab's two
+    // offsets differ by 1 and share their top 56 bits, so only the whole values can order them.
+    let mut input = join(slab(1 << 39), &slab(17 << 34));
+    let mut rng = SplitMix64::new(resolve("geom-mesh exact big planes", Seed(0x146)).unwrap());
+    let reach = NonZeroU64::new(1 << 39).unwrap();
+    for _ in 0..24 {
+        input = join(input, &slab(rng.below(reach) as i64 + (1 << 33)));
+    }
+    let m = mesh(&input);
+    assert_eq!(m.faces(), 26 * 6);
+    // Each slab's two offsets, its sides, and the two planes every slab shares.
+    assert_eq!(m.parts().planes.len(), 26 * 4 + 2);
+}
+
+#[test]
+fn scaling_a_solid_leaves_its_normals_alone() {
+    let tetrahedron = |s: i64| {
+        soup(
+            vec![g(0, 0, 0), g(3 * s, 0, 0), g(0, 5 * s, 0), g(0, 0, 7 * s)],
+            &[&[0, 2, 1], &[0, 1, 3], &[1, 2, 3], &[2, 0, 3]],
+        )
+    };
+    let normals = |input: &Polygons| -> Vec<[i128; 3]> {
+        mesh(input).parts().planes.iter().map(Plane::n).collect()
+    };
+    assert_eq!(normals(&tetrahedron(1)), normals(&tetrahedron(1 << 20)));
+}
+
+#[test]
+fn faces_tied_on_their_start_settle_by_the_rest() {
+    let mut vertices = cuboid(4, 4, 4).vertices;
+    vertices.push(g(4, 2, 4));
+    let sides: [&[u32]; 5] = [
+        &[0, 3, 2, 1],
+        &[0, 1, 5, 4],
+        &[1, 2, 6, 8, 5],
+        &[2, 3, 7, 6],
+        &[3, 0, 4, 7],
+    ];
+    // Round the top from its lowest corner, which starts each of these with the same three
+    // vertices but for the last two faces' order.
+    let fan = |top: [&'static [u32]; 3]| {
+        let faces: Vec<&[u32]> = sides.iter().copied().chain(top).collect();
+        mesh(&soup(vertices.clone(), &faces)).into_parts()
+    };
+    let a: &[u32] = &[4, 5, 8];
+    let (b, c): (&[u32], &[u32]) = (&[4, 8, 6], &[4, 6, 7]);
+    assert_eq!(fan([a, b, c]), fan([c, b, a]));
+}
+
+#[test]
+fn a_loop_through_its_lowest_vertex_twice_starts_at_the_first_visit() {
+    let m = mesh(&soup(
+        vec![g(0, 0, 0), g(4, 1, 0), g(4, 2, 0), g(2, 4, 0), g(1, 4, 0)],
+        &[&[0, 1, 2, 0, 3, 4]],
+    ));
+    let p = m.parts();
+    assert_eq!(p.he_vert[0], p.he_vert[3]);
+    assert_eq!(
+        p.verts[p.he_vert[1] as usize],
+        Vertex::Grid(P3::new(4, 1, 0).unwrap())
+    );
+}
+
+#[test]
+fn the_rows_of_a_vertex_must_rise() {
+    let mut p = mesh(&frustum()).into_parts();
+    let Some(Vertex::Planes(rows)) = p.verts.last_mut() else {
+        panic!("the frustum's last vertex is off the grid");
+    };
+    rows.swap(1, 2);
+    assert!(matches!(
+        ExactMesh::new(p, &Exec::serial(), &mut meter()),
+        Err(MeshError::Fault(MeshFault::VerticesOutOfOrder { .. }))
+    ));
+}
+
+#[test]
 fn errors_say_what_went_wrong() {
+    assert_ne!(MeshFault::Shape.to_string(), "");
     let texts = [
         MeshError::Fault(MeshFault::Shape).to_string(),
         MeshError::FacePlaneNeeded { face: 1 }.to_string(),

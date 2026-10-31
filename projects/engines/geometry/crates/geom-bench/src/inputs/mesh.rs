@@ -167,7 +167,7 @@ fn solid(r: &mut SplitMix64) -> Option<ExactMesh> {
         .iter()
         .map(|corner| match corner {
             Corner::Grid(at) => P3::new(at.x.get(), at.y.get(), -4096).map(Corner::Grid),
-            other => Ok(other.clone()),
+            other => Ok(*other),
         })
         .collect::<Result<_, _>>()
         .ok()?;
@@ -293,5 +293,18 @@ pub fn triangles(class: Class) -> Vec<[[P3; 3]; 2]> {
         Some(core::array::from_fn(|_| {
             core::array::from_fn(|_| point(&mut g))
         }))
+    })
+}
+
+/// Triangles and points near them for `geom_mesh::envelope::TriangleEnvelope`.
+#[must_use]
+pub fn envelope(class: Class) -> Vec<([P3; 3], P3)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::envelope", class);
+    batch_of(|_| {
+        let t = core::array::from_fn(|_| point(&mut g));
+        Some((t, point(&mut g)))
     })
 }
