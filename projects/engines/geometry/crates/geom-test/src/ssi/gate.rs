@@ -631,6 +631,14 @@ pub struct Run<'a> {
     pub credit: &'a str,
 }
 
+/// The scorer's JSON as JSON proper: Python writes the distance to an empty truth as a bare
+/// `Infinity`, which no field this crate reads holds.
+fn plain_json(text: &str) -> String {
+    text.replace(": -Infinity", ": null")
+        .replace(": Infinity", ": null")
+        .replace(": NaN", ": null")
+}
+
 /// The file at `path`, as text.
 fn text(path: &Path) -> Result<String, SsiError> {
     fs::read_to_string(path).map_err(|e| SsiError::File {
@@ -703,7 +711,7 @@ fn row(r: &Run<'_>, scored: &Scored) -> Result<Row, SsiError> {
 /// a rule is not an error: it is the report.
 pub fn run(r: &Run<'_>) -> Result<Report, SsiError> {
     let scored: Vec<Scored> =
-        serde_json::from_str(&text(r.scores)?).map_err(|e| SsiError::Malformed {
+        serde_json::from_str(&plain_json(&text(r.scores)?)).map_err(|e| SsiError::Malformed {
             what: r.scores.display().to_string(),
             why: e.to_string(),
         })?;
@@ -718,4 +726,71 @@ pub fn run(r: &Run<'_>) -> Result<Report, SsiError> {
         credit: r.credit.to_owned(),
         rows,
     })
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "test cases; the rules are for kernel code"
+)]
+mod tests {
+    use super::meets;
+
+    const LOW: [f64; 3] = [1.0, 2.0, 3.0];
+    const HIGH: [f64; 3] = [3.0, 4.0, 5.0];
+
+    fn hit(a: [f64; 3], b: [f64; 3]) -> bool {
+        meets(a, b, LOW, HIGH, 0.0)
+    }
+
+    #[test]
+    fn a_segment_meets_a_box_where_it_runs_through_it() {
+        // Through, each way along each axis.
+        assert!(hit([0.0, 3.0, 4.0], [4.0, 3.0, 4.0]));
+        assert!(hit([4.0, 3.0, 4.0], [0.0, 3.0, 4.0]));
+        assert!(hit([2.0, 0.0, 4.0], [2.0, 9.0, 4.0]));
+        assert!(hit([2.0, 3.0, 9.0], [2.0, 3.0, 0.0]));
+        // Corner to corner, and with both ends inside.
+        assert!(hit([0.0, 1.0, 2.0], [4.0, 5.0, 6.0]));
+        assert!(hit([1.5, 2.5, 3.5], [2.5, 3.5, 4.5]));
+        // One end inside.
+        assert!(hit([2.0, 3.0, 4.0], [9.0, 9.0, 9.0]));
+        assert!(hit([9.0, 9.0, 9.0], [2.0, 3.0, 4.0]));
+    }
+
+    #[test]
+    fn a_segment_short_of_the_box_or_beside_it_does_not() {
+        // Stops before it, starts after it, each way.
+        assert!(!hit([0.0, 3.0, 4.0], [0.5, 3.0, 4.0]));
+        assert!(!hit([3.5, 3.0, 4.0], [9.0, 3.0, 4.0]));
+        assert!(!hit([9.0, 3.0, 4.0], [3.5, 3.0, 4.0]));
+        // Parallel to an axis, off to one side of the box and the other.
+        assert!(!hit([0.0, 1.0, 4.0], [9.0, 1.0, 4.0]));
+        assert!(!hit([0.0, 5.0, 4.0], [9.0, 5.0, 4.0]));
+        assert!(!hit([0.0, 3.0, 2.0], [9.0, 3.0, 2.0]));
+        // Diagonal, past a corner: inside on each axis alone, never on all at once.
+        assert!(!hit([-3.0, 1.0, 4.0], [2.0, 6.0, 4.0]));
+        assert!(!hit([1.0, 0.0, 0.0], [1.0, 6.0, 0.5]));
+    }
+
+    #[test]
+    fn a_box_holds_its_faces() {
+        assert!(hit([0.0, 2.0, 3.0], [1.0, 2.0, 3.0]));
+        assert!(hit([3.0, 4.0, 5.0], [9.0, 9.0, 9.0]));
+        assert!(hit([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]));
+        assert!(hit([3.0, 4.0, 5.0], [3.0, 4.0, 5.0]));
+    }
+
+    #[test]
+    fn a_margin_grows_every_side_by_its_own_amount() {
+        let at = |x: f64, margin: f64| meets([x, 3.0, 4.0], [x, 3.0, 4.0], LOW, HIGH, margin);
+        assert!(!at(0.5, 0.25));
+        assert!(at(0.5, 0.5));
+        assert!(at(3.5, 0.5));
+        assert!(!at(3.5, 0.25));
+        // On a slanted segment, which clears a corner by half a unit on each axis.
+        let by = |margin: f64| meets([-3.0, 1.0, 4.0], [2.0, 6.0, 4.0], LOW, HIGH, margin);
+        assert!(!by(0.25));
+        assert!(by(1.0));
+    }
 }

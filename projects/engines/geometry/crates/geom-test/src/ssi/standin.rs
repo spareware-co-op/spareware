@@ -391,3 +391,24 @@ fn tweak(stand_in: StandIn, placed: &Placed, out: &mut Output) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{length, point_at};
+
+    #[test]
+    fn a_point_along_a_curve_is_measured_from_its_start() {
+        let line = [[1.0, 0.0, 0.0], [3.0, 0.0, 0.0], [3.0, 4.0, 0.0]];
+        let at = [0.0, 2.0, 6.0];
+        assert_eq!(length(&line), 6.0);
+        assert_eq!(point_at(&line, &at, 0.0), [1.0, 0.0, 0.0]);
+        assert_eq!(point_at(&line, &at, 0.5), [1.5, 0.0, 0.0]);
+        assert_eq!(point_at(&line, &at, 2.0), [3.0, 0.0, 0.0]);
+        assert_eq!(point_at(&line, &at, 3.0), [3.0, 1.0, 0.0]);
+        assert_eq!(point_at(&line, &at, 6.0), [3.0, 4.0, 0.0]);
+        // Past the end it stays there, and a repeated sample does not divide by nothing.
+        assert_eq!(point_at(&line, &at, 9.0), [3.0, 4.0, 0.0]);
+        let stopped = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
+        assert_eq!(point_at(&stopped, &[0.0, 0.0, 1.0], 0.0), [1.0, 0.0, 0.0]);
+    }
+}

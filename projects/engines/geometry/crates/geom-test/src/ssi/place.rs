@@ -10,7 +10,8 @@
 //!
 //! Guarantees: what [`kept`] holds, for the case's two surfaces together:
 //!
-//! - **`ε_fit`**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale.
+//! - **`ε_fit`**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale: [`place`]
+//!   starts there.
 //! - **The range**: every coordinate is inside the grid's range.
 //! - **The truth is still on the surfaces**: every truth sample is within the tolerance of each
 //!   analytic surface as placed, by its closed form. A NURBS surface cannot move further than its
@@ -518,14 +519,11 @@ pub fn holds_contact(width: f64, moved: f64, extent: f64, order: u32) -> bool {
     left >= right
 }
 
-/// Why rounding at `placed`'s scale changes `case`'s truth, or `None` if it does not. `tolerance`
-/// is the one `ε_fit` answers to, and `accuracy` the run's.
-fn kept(case: &Case, placed: &Placed, tolerance: f64, accuracy: Option<f64>) -> Option<String> {
+/// Why rounding at `placed`'s scale changes `case`'s truth, or `None` if it does not. `accuracy` is
+/// the run's.
+fn kept(case: &Case, placed: &Placed, accuracy: Option<f64>) -> Option<String> {
     let scale = placed.scale();
     let allowed = case.cov_tol * scale;
-    if tolerance * scale < FIT_STEPS {
-        return Some(format!("{tolerance:e} is under ε_fit"));
-    }
     let moved = placed.moved();
     let closed: Vec<Implicit> = placed.surfaces.iter().filter_map(implicit).collect();
     for feature in case.features() {
@@ -599,7 +597,7 @@ pub fn place(case: &Case, accuracy: Option<f64>) -> Result<Placed, SsiError> {
             extent: far * scale,
             order: order_of(&case.id),
         };
-        match kept(case, &placed, tolerance, accuracy) {
+        match kept(case, &placed, accuracy) {
             None => return Ok(placed),
             Some(why) => last = why,
         }
