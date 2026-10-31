@@ -175,14 +175,14 @@ fn a_changed_blob_never_panics_and_harms_only_its_own_body() {
                     (Some(k), Ok(opened)) => {
                         prop_assert_eq!(opened.entries.len(), clean_open.entries.len());
                         for (i, entry) in opened.entries.iter().enumerate() {
-                            if !keys[i].contains(k) {
-                                prop_assert_eq!(entry, &clean_open.entries[i]);
-                            } else {
+                            if keys[i].contains(k) {
                                 prop_assert!(
                                     matches!(entry.state, State::Damaged(_)),
                                     "{:?}",
                                     entry.state
                                 );
+                            } else {
+                                prop_assert_eq!(entry, &clean_open.entries[i]);
                             }
                         }
                     }

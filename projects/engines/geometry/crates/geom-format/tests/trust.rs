@@ -10,6 +10,7 @@
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
+    clippy::many_single_char_names,
     reason = "test code: a failure should stop loudly"
 )]
 
@@ -159,8 +160,11 @@ fn stamp(id: &ContentId, checker: u64, groups: &[u64]) -> Stamp {
     }
 }
 
+/// A body's stamps: each one's checker and groups.
+type Stamps<'a> = &'a [(u64, &'a [u64])];
+
 /// A container holding `bodies`, each followed by its stamps.
-fn container(bodies: &[(&Body, &[(u64, &[u64])])]) -> (Vec<ContentId>, Container) {
+fn container(bodies: &[(&Body, Stamps<'_>)]) -> (Vec<ContentId>, Container) {
     let mut all = Vec::new();
     let mut ids = Vec::new();
     for (body, stamps) in bodies {
@@ -571,7 +575,7 @@ fn a_document_blob_that_is_not_a_header_stops_the_open() {
             | ("header", OpenError::Header(_)) => {}
             _ => panic!("{want}: {e:?}"),
         }
-        assert!(!e.to_string().is_empty());
+        assert_ne!(e.to_string(), "");
     }
 }
 
@@ -596,7 +600,7 @@ fn a_stopped_open_opens_nothing_and_never_reports_damage() {
             Ok(opened) => assert_eq!(opened, whole, "budget {work}"),
             Err(e) => {
                 assert!(matches!(e, OpenError::Stopped(_)), "budget {work}: {e:?}");
-                assert!(!e.to_string().is_empty());
+                assert_ne!(e.to_string(), "");
                 stops += 1;
             }
         }
@@ -605,13 +609,13 @@ fn a_stopped_open_opens_nothing_and_never_reports_damage() {
 }
 
 #[test]
-fn a_stamp_reads_back_and_refuses_what_is_not_one() {
+fn a_stamp_reads_back_as_it_was_written() {
     let id = ContentId::of_payload(b"a body");
     let s = stamp(&id, 2, &[1, 3, 4]);
     let r = s.record().unwrap();
     assert_eq!((r.tag, r.flags, r.schema), (STAMP_TAG, 0, 1));
     assert!(!r.is_required() && !r.is_copy_always());
-    assert_eq!(r.depends, [id.clone()]);
+    assert_eq!(r.depends, std::slice::from_ref(&id));
     assert_eq!(Stamp::read(&r, &mut meter()).unwrap(), s);
     assert!(s.passed(1) && s.passed(3) && s.passed(4));
     assert!(!s.passed(2) && !s.passed(0) && !s.passed(5));
@@ -625,6 +629,12 @@ fn a_stamp_reads_back_and_refuses_what_is_not_one() {
             Err(StampError::Shape("groups strictly ascending"))
         );
     }
+}
+
+#[test]
+fn a_stamp_reader_refuses_what_is_not_one() {
+    let id = ContentId::of_payload(b"a body");
+    let r = stamp(&id, 2, &[1, 3, 4]).record().unwrap();
     let refused = |r: &Record| Stamp::read(r, &mut meter()).unwrap_err();
     for wrong in [
         Record {
@@ -714,8 +724,8 @@ fn a_stamp_reads_back_and_refuses_what_is_not_one() {
         ..r.clone()
     });
     assert!(matches!(e, StampError::Cbor(_)), "{e:?}");
-    assert!(!e.to_string().is_empty());
-    assert!(!StampError::Shape("x").to_string().is_empty());
+    assert_ne!(e.to_string(), "");
+    assert_ne!(StampError::Shape("x").to_string(), "");
 }
 
 #[test]
@@ -729,6 +739,6 @@ fn unread_bodies_say_why() {
         Unread::Stamp(StampError::Shape("x")),
         Unread::Body(geom_format::body::BodyError::Shape("y")),
     ] {
-        assert!(!u.to_string().is_empty());
+        assert_ne!(u.to_string(), "");
     }
 }

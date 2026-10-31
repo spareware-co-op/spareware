@@ -200,7 +200,7 @@ fn two_records_with_one_content_id_are_refused() {
     };
     let e = Container::from_file(&file, &mut meter()).unwrap_err();
     assert_eq!(e, ContainerError::Collision(r.content_id()));
-    assert!(!e.to_string().is_empty());
+    assert_ne!(e.to_string(), "");
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn a_record_whose_dependency_the_file_lacks_is_refused() {
             error: BlobError::Missing,
         })
     );
-    assert!(!e.to_string().is_empty());
+    assert_ne!(e.to_string(), "");
 }
 
 /// A container of a cube and a sheet, and the first chunk key of the cube's index.
@@ -277,7 +277,7 @@ fn a_file_is_not_written_from_a_damaged_container() {
                 | ("trailing", ContainerError::Document(BlobError::Trailing)) => {}
                 _ => panic!("{want}: {e:?}"),
             }
-            assert!(!e.to_string().is_empty());
+            assert_ne!(e.to_string(), "");
         }
     }
 }
@@ -288,7 +288,7 @@ fn salvage_keeps_every_intact_record_and_names_the_damage() {
     // Intact: the file to_file writes, and no damage.
     let whole = c.salvage(&mut meter()).unwrap();
     assert_eq!(whole.file, c.to_file(&mut meter()).unwrap());
-    assert!(whole.damaged.is_empty());
+    assert_eq!(whole.damaged, []);
     // A damaged chunk: every other record is kept.
     let mut flipped = c.clone();
     let blob = flipped.blobs.get_mut(&chunk).unwrap();
@@ -432,7 +432,7 @@ fn a_blob_is_read_only_as_the_one_record_its_key_names() {
         ),
     ] {
         assert_eq!(got, Err(want.clone()));
-        assert!(!want.to_string().is_empty());
+        assert_ne!(want.to_string(), "");
     }
 }
 
@@ -452,7 +452,7 @@ fn a_stopped_meter_is_a_stop_and_never_damage() {
             match got {
                 Ok(bytes) => assert_eq!(bytes, file, "budget {work}"),
                 Err(ContainerError::Stopped(s)) => {
-                    assert!(!ContainerError::Stopped(s).to_string().is_empty());
+                    assert_ne!(ContainerError::Stopped(s).to_string(), "");
                     stops += 1;
                 }
                 Err(e) => panic!("budget {work}: {e:?}"),
@@ -470,7 +470,7 @@ fn a_stopped_meter_is_a_stop_and_never_damage() {
 #[test]
 fn errors_say_what_went_wrong() {
     let e = ContainerError::Record(geom_format::record::RecordError::DependsOrder);
-    assert!(!e.to_string().is_empty());
+    assert_ne!(e.to_string(), "");
     let e = ContainerError::File(geom_format::file::FileError::Label);
-    assert!(!e.to_string().is_empty());
+    assert_ne!(e.to_string(), "");
 }
