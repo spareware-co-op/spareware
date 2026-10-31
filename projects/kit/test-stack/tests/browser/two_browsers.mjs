@@ -159,7 +159,7 @@ if (process.env.STACK_KILL) {
 }
 
 console.log('\n4. Arch v12 is shared, bridged and consumed, on the page');
-await anna.click('[data-act="stackshare"][data-a="arch-model"]');
+await anna.click('#browser [data-act="stackshare"][data-a="arch-model"]');
 await anna.waitForSelector('[data-package="arch-package-v12"]');
 pass('Anna clicks Share and Arch package v12 appears in Shared');
 await anna.click('[data-act="stackbridge"][data-a="arch-package-v12"]');

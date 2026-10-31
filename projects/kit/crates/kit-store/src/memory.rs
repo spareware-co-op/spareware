@@ -18,10 +18,13 @@ pub enum Fault {
     LandsAnswerLost,
 }
 
+/// A key's value at one moment, or that it was deleted then.
+type Version = (u64, Option<Vec<u8>>);
+
 /// Every version of every key.
 #[derive(Default)]
 struct Rows {
-    versions: BTreeMap<String, Vec<(u64, Option<Vec<u8>>)>>,
+    versions: BTreeMap<String, Vec<Version>>,
     clock: u64,
     faults: VecDeque<Fault>,
     down: bool,
