@@ -31,6 +31,7 @@
 //!   Euler's formula.
 //! - `exactness`: group 4, the exactness record against the geometry.
 //! - `sink`: the faults found so far, capped at [`MAX_FAULTS`], and the caller's meter.
+//! - [`VERSION`]: the checker's version, as validation stamps record it (G108).
 //!
 //! Status: the framework and groups 1 and 4 (G84) built; geometric consistency and
 //! self-intersection to come in G85, G102, G134, G177 and G322.
@@ -48,3 +49,9 @@ mod sink;
 pub use report::{Entity, Fault, FaultKind, Group, Level, Report};
 pub use run::check;
 pub use sink::MAX_FAULTS;
+
+/// The checker's version, which a validation stamp records (24.7): a stored body from a known
+/// source whose stamp comes from a checker at least this new, and lists every group this one has,
+/// needs only the cheap groups when it is opened. It rises with every group built and every check
+/// made stricter: G84's framework with groups 1 and 4 is version 1.
+pub const VERSION: u64 = 1;

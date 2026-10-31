@@ -12,6 +12,7 @@
     reason = "tests: native arithmetic and indexing, and a failure stops the test"
 )]
 
+// geom-topo's fixtures, whose module allows the ones these tests do not use.
 #[path = "../../geom-topo/tests/common/mod.rs"]
 mod topo;
 
