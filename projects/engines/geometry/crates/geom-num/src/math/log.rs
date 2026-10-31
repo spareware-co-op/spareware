@@ -208,7 +208,7 @@ const ERR: f64 = hf!("0x1.b6p-69");
     clippy::many_single_char_names,
     reason = "the names of the C source's variables, so the two can be read side by side"
 )]
-fn log_fast(e: i64, v: f64) -> (f64, f64) {
+fn log_fast(e: i64, v: f64) -> Option<(f64, f64)> {
     /// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on
     /// `[−0.00202941894531250, 0.00212097167968735]` with absolute error below 2^−70.278.
     const P: [f64; 6] = [
@@ -229,22 +229,18 @@ fn log_fast(e: i64, v: f64) -> (f64, f64) {
     let m = (1u64 << 52) | (v.to_bits() & MANTISSA);
     // Above √2, halve v to avoid cancellation.
     let above = m >= 0x16_a09e_667f_3bcd;
-    // C: `e += above`; |e| ≤ 1074, so the checked sum cannot overflow. Were it to, the NaN pair
-    // fails the rounding test and the accurate path, which starts from x, gives the result.
-    let Some(e) = e.checked_add(i64::from(above)) else {
-        return (super::NAN, super::NAN);
-    };
+    // C: `e += above`; |e| ≤ 1074, so the checked sum cannot overflow. Were it to, the caller's
+    // NaN pair fails the rounding test and the accurate path, which starts from x, gives the result.
+    let e = e.checked_add(i64::from(above))?;
     let (i, y) = if above {
         (m >> 44, v * 0.5)
     } else {
         (m >> 43, v)
     };
     // 362 ≤ i ≤ 724: i·2^−9 ≤ y < (i + 1)·2^−9. C: `INVERSE[i − 362]`. The checked difference
-    // cannot fail (i ≥ 362); were it to, the NaN pair fails the rounding test and the accurate
-    // path, which starts from x, gives the result, as for `e` above.
-    let Some(k) = i.checked_sub(362) else {
-        return (super::NAN, super::NAN);
-    };
+    // cannot fail (i ≥ 362); were it to, the caller's NaN pair fails the rounding test and the
+    // accurate path, which starts from x, gives the result, as for `e` above.
+    let k = i.checked_sub(362)?;
     let r = entry(&INVERSE, k);
     let [l1, l2] = entry(&LOG_INV, k);
     // z = r·y − 1 exactly, the C source's fma(r, y, −1) without a fused operation: r has at
@@ -270,7 +266,7 @@ fn log_fast(e: i64, v: f64) -> (f64, f64) {
     let (h, l) = fast_two_sum(ee * LOG2_H + l1, z);
     let l = ph + (l + l2);
     let l = ee * LOG2_L + l; // C: fma(e, LOG2_L, l)
-    (h, l)
+    Some((h, l))
 }
 
 /// Natural logarithm, correctly rounded.
@@ -280,48 +276,50 @@ fn log_fast(e: i64, v: f64) -> (f64, f64) {
 /// rounding rests on. `ln(1) = +0`, `ln(±0) = −∞`, `ln(+∞) = +∞`; negative inputs and NaN give
 /// the canonical NaN.
 #[must_use]
+pub fn ln(x: f64) -> f64 {
+    ln_checked(x).unwrap_or(super::NAN)
+}
+
+/// [`ln`], `None` only if one of its integer steps failed, which no double makes (each is noted
+/// below): [`ln`] then returns NaN, never a plausible wrong value.
 #[allow(
     clippy::many_single_char_names,
     reason = "the names of the C source's variables, so the two can be read side by side"
 )]
-pub fn ln(x: f64) -> f64 {
+fn ln_checked(x: f64) -> Option<f64> {
     let mut bits = x.to_bits();
     // The exponent field with the sign bit above it, below 2^12, so `signed` reads its value, and
     // the checked subtraction cannot overflow (C: `(int64_t)(bits >> 52) − 0x3ff`).
-    let Some(mut e) = signed(bits >> 52).checked_sub(0x3ff) else {
-        return super::NAN;
-    };
+    let mut e = signed(bits >> 52).checked_sub(0x3ff)?;
     if e >= 0x400 || e == -0x3ff {
         // x ≤ 0, NaN, ±∞, or subnormal
         if x.is_nan() || x < 0.0 {
-            return super::NAN; // includes −∞
+            return Some(super::NAN); // includes −∞
         }
         if x == f64::INFINITY {
-            return x;
+            return Some(x);
         }
         if x == 0.0 {
-            return f64::NEG_INFINITY; // pole
+            return Some(f64::NEG_INFINITY); // pole
         }
         // subnormal: scale into the normal range
         bits = (x * hf!("0x1p52")).to_bits();
-        let Some(scaled) = signed(bits >> 52).checked_sub(0x3ff + 52) else {
-            return super::NAN;
-        };
-        e = scaled;
+        e = signed(bits >> 52).checked_sub(0x3ff + 52)?;
     }
     // x = 2^e·v with 1 ≤ v < 2 and −1074 ≤ e ≤ 1023
     let v = f64::from_bits((0x3ff << 52) | (bits & MANTISSA));
     if v == 1.0 && e == 0 {
-        return 0.0;
+        return Some(0.0);
     }
-    let (h, l) = log_fast(e, v);
+    // A failed step in the fast path gives the NaN pair, which fails the rounding test below.
+    let (h, l) = log_fast(e, v).unwrap_or((super::NAN, super::NAN));
     let left = h + (l - ERR);
     let right = h + (l + ERR);
     if left == right {
-        return left;
+        return Some(left);
     }
     // CORE-MATH measures the fast path's failure rate at about 2^−11.5.
-    log_accurate(x)
+    Some(log_accurate(x))
 }
 
 /// The accurate path (C: `cr_log_accurate`): `ln x` in 128-bit floating point, then rounded.
@@ -331,10 +329,9 @@ fn log_accurate(x: f64) -> f64 {
     // `log` reads its tables in range by construction, and its integer steps cannot overflow;
     // were either ever broken, the result is NaN, never a plausible wrong value (see
     // `support::entry`).
-    match Dint::from_f64(x).and_then(Dint::log) {
-        Some(v) => v.to_f64(),
-        None => super::NAN,
-    }
+    Dint::from_f64(x)
+        .and_then(Dint::log)
+        .map_or(super::NAN, Dint::to_f64)
 }
 
 /// A 128-bit floating-point number `(−1)^sgn · (hi + lo/2^64) · 2^(ex − 63)` (C: `dint64_t`).
@@ -497,22 +494,18 @@ impl Dint {
         // Below 2^64 · 2^11 = 2^75: the checked products cannot fail.
         let mut t = u128::from(a.hi).checked_mul(u128::from(c))?;
         let hi = hi64(t);
-        let mut m = if hi != 0 { hi.leading_zeros() } else { 64 };
+        let m = if hi != 0 { hi.leading_zeros() } else { 64 };
         t <<= m;
         // m ≥ 53 here, since a.hi·|b| < 2^75 makes hi < 2^11; so m − 1 is exact.
         let l = shl128(
             u128::from(a.lo).checked_mul(u128::from(c))?,
             u64::from(m.checked_sub(1)?),
         ) >> 63;
-        let (sum, carry) = l.overflowing_add(t);
-        t = sum;
-        if carry {
-            // C: `t += t & 1` on the wrapped sum, then the carried-out bit on top: the checked
-            // step fails only for a sum of all ones, which the bounds above exclude.
-            t = t.checked_add(t & 1)?;
-            t = (1u128 << 127) | (t >> 1);
-            m = m.checked_sub(1)?;
-        }
+        // C adds with a carry out of 128 bits (then `t += t & 1` and the carried bit on top), a
+        // branch its only call, `mul_int(E, LOG2)`, never takes for any exponent E a double has
+        // (`mul_int_never_carries_for_ln`, for every E in ±2000). So the sum is a checked step:
+        // were it ever to carry, `ln` would give NaN, never a plausible wrong value.
+        t = l.checked_add(t)?;
         let ex = a.ex.checked_add(64)?.checked_sub(i64::from(m))?;
         Some(Dint::with_significand(t, ex, sgn))
     }
@@ -572,12 +565,9 @@ impl Dint {
         // 181 ≤ i ≤ 362, so the table index i − 181 is in range of the trimmed tables (C:
         // `i − 181`), and the checked difference cannot fail.
         let k = i.checked_sub(181)?;
-        let (Some(&inverse), Some(&log_inverse)) = (
-            usize::try_from(k).ok().and_then(|k| INVERSE_2.get(k)),
-            usize::try_from(k).ok().and_then(|k| LOG_INV_2.get(k)),
-        ) else {
-            return None; // never: k is in range, as above
-        };
+        let index = usize::try_from(k).ok()?;
+        let inverse = *INVERSE_2.get(index)?;
+        let log_inverse = *LOG_INV_2.get(index)?;
         let z = x.mul(inverse)?.add(M_ONE)?;
         let r = Dint::mul_int(big_e, LOG2)?;
         // For i = 255 the table's inverse is 1, so z = x − 1 ∈ [−2^−8, 0): outside the range
@@ -594,9 +584,7 @@ impl Dint {
 
 /// `z·P(z)`, the degree-13 approximation of `ln(1 + z)` of the accurate path (C: `p_2`).
 fn poly2(z: Dint) -> Option<Dint> {
-    let Some((first, rest)) = P2_COEFFS.split_first() else {
-        return Some(ZERO);
-    };
+    let [first, rest @ ..] = &P2_COEFFS;
     let mut r = *first;
     for c in rest {
         r = r.mul(z)?.add(*c)?;
@@ -610,9 +598,7 @@ const NEAR_ONE_BELOW: u64 = 255 - 181;
 /// `ln(1 + z)` for `−2^−8 ≤ z ≤ 0` by its Taylor series to degree 16 (a change from the C
 /// source; see the module documentation). The remainder is below `|z|^17/17/(1 − |z|) ≤ 2^−140`.
 fn log1p_taylor(z: Dint) -> Option<Dint> {
-    let Some((first, rest)) = LOG1P_TAYLOR.split_first() else {
-        return Some(ZERO);
-    };
+    let [first, rest @ ..] = &LOG1P_TAYLOR;
     let mut r = *first;
     for c in rest {
         r = r.mul(z)?.add(*c)?;
@@ -1908,5 +1894,143 @@ mod tests {
             log2_approx(&worst)
         );
         assert!(le(&worst, &p2(-101)));
+    }
+
+    /// `mul_int`'s checked sum never fails. Its only call is `mul_int(E, LOG2)`, with `E` the
+    /// input's binary exponent (`|E| ≤ 1075`), and for every `|E| ≤ 2000` the sum `l + t` that
+    /// could carry out of 128 bits fits: `mul_int`'s own steps up to that sum, repeated here.
+    #[test]
+    fn mul_int_never_carries_for_ln() {
+        for b in (-2000i64..=2000).filter(|&b| b != 0) {
+            let c = u128::from(b.unsigned_abs());
+            let mut t = u128::from(LOG2.hi) * c;
+            let hi = hi64(t);
+            let m = if hi != 0 { hi.leading_zeros() } else { 64 };
+            t <<= m;
+            let l = shl128(u128::from(LOG2.lo) * c, u64::from(m - 1)) >> 63;
+            assert!(l.checked_add(t).is_some(), "E = {b}");
+        }
+    }
+
+    /// `Dint::add`'s arms that `ln`'s evaluation never takes (see the test above), each checked
+    /// against the exact sum of the operands: equal magnitudes (exactly zero, or exactly twice),
+    /// an addend 128 places or more below the other (the larger, unchanged), an aligned addend
+    /// whose rounding carries out of 128 bits, and a difference that this rounding cancels to zero.
+    /// Each result is within two units of the larger operand's last place of the exact sum.
+    #[test]
+    fn dint_add_arms_ln_never_takes() {
+        let x = Dint {
+            hi: 0xb504_f333_f9de_6484,
+            lo: 0x5979_6b3e_9f7a_3c21,
+            ex: 3,
+            sgn: 0,
+        };
+        let close = |a: Dint, b: Dint| {
+            let r = a.add(b).unwrap();
+            let exact = dint_value(a).add(&dint_value(b));
+            // Two units of the last place of the larger operand, 2^(ex − 127) each.
+            let two_ulps = Dy::pow2(a.ex.max(b.ex) - 126);
+            assert!(
+                le(&dint_value(r).sub(&exact).abs(), &two_ulps),
+                "({:x}, {:x}, {}, {}) + ({:x}, {:x}, {}, {}) = ({:x}, {:x}, {}, {})",
+                a.hi,
+                a.lo,
+                a.ex,
+                a.sgn,
+                b.hi,
+                b.lo,
+                b.ex,
+                b.sgn,
+                r.hi,
+                r.lo,
+                r.ex,
+                r.sgn
+            );
+            r
+        };
+        // Equal magnitudes: opposite signs give exactly zero, equal signs exactly twice.
+        assert!(close(x, Dint { sgn: 1, ..x }).is_zero());
+        let twice = close(x, x);
+        assert_eq!((twice.hi, twice.lo, twice.ex), (x.hi, x.lo, x.ex + 1));
+        // An addend 200 places below: the larger, unchanged, in either order.
+        let tiny = Dint {
+            ex: x.ex - 200,
+            ..x
+        };
+        for r in [close(x, tiny), close(tiny, x)] {
+            assert_eq!((r.hi, r.lo, r.ex, r.sgn), (x.hi, x.lo, x.ex, x.sgn));
+        }
+        // An all-ones significand one place below 2^ex: aligned, its rounding bit carries it out
+        // of 128 bits, to exactly 2^ex's significand. Added to 2^ex it doubles it; subtracted,
+        // the difference cancels to zero.
+        let power = Dint {
+            hi: 1 << 63,
+            lo: 0,
+            ex: 7,
+            sgn: 0,
+        };
+        let ones = Dint {
+            hi: u64::MAX,
+            lo: u64::MAX,
+            ex: 6,
+            sgn: 0,
+        };
+        let sum = close(power, ones);
+        assert_eq!((sum.hi, sum.lo, sum.ex), (1 << 63, 0, 8));
+        assert!(close(power, Dint { sgn: 1, ..ones }).is_zero());
+    }
+
+    /// The accurate path alone gives `ln` at every power of two, `k` from −1074 to 1023. The fast
+    /// path answers all of these (the test below), so this is the one place they reach
+    /// `log_accurate` and `Dint::add`'s equal-magnitude arms. The ledger's `log_fast` entries, whose
+    /// mutants send every input other than 1 down this path, rest on it.
+    #[test]
+    fn the_accurate_path_alone_gives_ln_at_every_power_of_two() {
+        for k in (-1074i64..=1023).filter(|&k| k != 0) {
+            let x = if k < -1022 {
+                f64::from_bits(1 << (k + 1074))
+            } else {
+                f64::from_bits(((k + 1023) as u64) << 52)
+            };
+            assert_eq!(log_accurate(x).to_bits(), super::ln(x).to_bits(), "2^{k}");
+        }
+    }
+
+    /// No power of two reaches the accurate path: for every `2^k`, `k` from −1074 to 1023 (`ln 1`
+    /// returns before), the fast path's two bounds round alike, so `ln` returns from it. The
+    /// accurate path's equal-magnitude additions would need one (`Dint::add`).
+    #[test]
+    fn no_power_of_two_reaches_the_accurate_path() {
+        for k in (-1074i64..=1023).filter(|&k| k != 0) {
+            let (h, l) = log_fast(k, 1.0).unwrap();
+            assert_eq!(
+                (h + (l - ERR)).to_bits(),
+                (h + (l + ERR)).to_bits(),
+                "2^{k}"
+            );
+        }
+    }
+}
+
+/// Bounded proofs (chapter 28.7): [`Dint::is_zero`]'s own contract, for every bit pattern.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `is_zero` holds exactly when both significand words are zero, whatever the exponent and
+    /// sign.
+    #[kani::proof]
+    fn is_zero_reads_both_words() {
+        let a = Dint {
+            hi: kani::any(),
+            lo: kani::any(),
+            ex: kani::any(),
+            sgn: kani::any(),
+        };
+        assert_eq!(a.is_zero(), a.hi == 0 && a.lo == 0);
     }
 }

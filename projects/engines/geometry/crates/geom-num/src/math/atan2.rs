@@ -352,10 +352,8 @@ pub fn atan2(y0: f64, x0: f64) -> f64 {
     let eps = z.abs() * EPS1_REL + EPS1_ABS;
     let (rh, z) = fast_two_sum(fh, z);
     let rl = (fl + dz) + z;
-    let lb = rh + (rl - eps);
-    let ub = rh + (rl + eps);
-    if lb == ub {
-        return ub;
+    if let Some(r) = agreed(rh, rl, eps) {
+        return r;
     }
 
     // Second fast path: the reduced quotient in double-double.
@@ -381,12 +379,18 @@ pub fn atan2(y0: f64, x0: f64) -> f64 {
     let zl = zl * sgn;
     let eps = EPS2_REL * (zh.abs() * z2 + EPS2_ABS);
     let (fh, fl) = fast_sum(fh, fl, zh, zl);
+    agreed(fh, fl, eps).unwrap_or_else(|| atan2_accurate(y0, x0))
+}
+
+/// The fast paths' rounding test (Lemma 1): the double that both ends of `fh + fl ± eps` round to,
+/// `None` if they round apart. On its own so that Kani can hold its contract: no input is known to
+/// show a loosened test through [`atan2`] (it needs `y/x` within 2^−154 of a value only a lattice
+/// search could find).
+#[inline]
+fn agreed(fh: f64, fl: f64, eps: f64) -> Option<f64> {
     let lb = fh + (fl - eps);
     let ub = fh + (fl + eps);
-    if lb != ub {
-        return atan2_accurate(y0, x0);
-    }
-    ub
+    (lb == ub).then_some(ub)
 }
 
 /// The accurate path (C: `atan2_accurate`): `y/x` or `x/y` and a degree-[29, 29] rational
@@ -439,7 +443,7 @@ fn accurate(y: f64, x: f64) -> Option<f64> {
     // When |y/x| < 2^−95 and x > 0, atan(y/x) rounds as y/x does, except when y/x is exactly a
     // midpoint between two subnormal numbers (see `tiny_quotient`).
     if !inv && x > 0.0 && z.ex <= -96 {
-        return Some(tiny_quotient(y, x));
+        return tiny_quotient(y, x);
     }
 
     // |z − y/x| < 2^−185.53·|z| (relative error of the division). The rational approximation is
@@ -447,10 +451,8 @@ fn accurate(y: f64, x: f64) -> Option<f64> {
     let sz = z.sgn;
     z.sgn = 0;
     // Horner's rule from the leading coefficients down, by iteration: no index to go wrong. The
-    // tables are fixed arrays of 30, so `split_last` always succeeds.
-    let (Some((p_top, p_rest)), Some((q_top, q_rest))) = (P.split_last(), Q.split_last()) else {
-        return None;
-    };
+    // tables are fixed arrays of 30, so the patterns below cannot fail.
+    let ([p_rest @ .., p_top], [q_rest @ .., q_top]) = (&P, &Q);
     let mut p = *p_top;
     let mut q = *q_top;
     for (pc, qc) in p_rest.iter().zip(q_rest.iter()).rev() {
@@ -507,14 +509,17 @@ fn accurate(y: f64, x: f64) -> Option<f64> {
 /// `y / x`, unless `q` is a midpoint, when it rounds to the neighbour of `q` towards zero. A
 /// quotient of two doubles is never a midpoint in the normal range (`M·x` would need 54
 /// significant bits), so only odd multiples of 2^−1075 are checked, with integer arithmetic.
+///
+/// `None` only if an integer step failed, which no pair of doubles makes (each is noted below);
+/// [`accurate`]'s caller then returns NaN, never a plausible wrong value.
 #[allow(
     clippy::many_single_char_names,
     reason = "the names of the C source's variables, so the two can be read side by side"
 )]
-fn tiny_quotient(y: f64, x: f64) -> f64 {
+fn tiny_quotient(y: f64, x: f64) -> Option<f64> {
     let t = y / x; // the correctly rounded quotient
     if t.abs() > f64::MIN_POSITIVE {
-        return t;
+        return Some(t);
     }
     // y = my·2^ey and x = mx·2^ex with my and mx odd. The exponent field is below 2^11, so
     // `signed` reads its value; the exponents stay within ±1200, so no checked step fails.
@@ -529,27 +534,21 @@ fn tiny_quotient(y: f64, x: f64) -> f64 {
         let tz = m.trailing_zeros(); // m ≠ 0: v is not zero here
         Some((shr(m, u64::from(tz)), e.checked_add(i64::from(tz))?))
     };
-    let (Some((my, ey)), Some((mx, ex))) = (odd_parts(y), odd_parts(x)) else {
-        return super::NAN;
-    };
-    let Some(d) = ey.checked_sub(ex) else {
-        return super::NAN;
-    };
+    let (my, ey) = odd_parts(y)?;
+    let (mx, ex) = odd_parts(x)?;
+    let d = ey.checked_sub(ex)?;
     // q = (my/mx)·2^(ey−ex) is an odd multiple of 2^−1075 exactly when mx divides my and
     // ey − ex = −1075; then q = k·2^−1075 with k = my/mx odd and k < 2^53. (`checked_rem` is
     // `None` only for mx = 0, which the C also tests.)
     if my.checked_rem(mx) != Some(0) || d != -1075 {
-        return t;
+        return Some(t);
     }
-    let Some(k) = my.checked_div(mx) else {
-        return super::NAN; // never: mx ≠ 0 here
-    };
-    if k >= 1 << 53 {
-        return t; // not reachable: q would be a midpoint of the normal range
-    }
+    // mx ≠ 0 here (it is odd), so the quotient is defined; and k ≤ my < 2^53, so k/2 below is the
+    // bit pattern of a subnormal.
+    let k = my.checked_div(mx)?;
     // C: `(k − 1)/2`, which is ⌊k/2⌋ for the odd k: (k − 1)/2 · 2^−1074, the neighbour of q
     // towards zero.
-    f64::from_bits(k / 2).copysign(y)
+    Some(f64::from_bits(k / 2).copysign(y))
 }
 
 /// A 192-bit floating-point number `(−1)^sgn · (h/2^64 + m/2^128 + l/2^192) · 2^ex`
@@ -1795,5 +1794,364 @@ mod tests {
             assert!(le(&e_y, &p2(-101)), "{case}: the reciprocal's error");
             assert!(le(&rel, &Dy::from_f64(EPS_DIV)), "{case}: ε₁ = ε₄");
         }
+    }
+    /// The arms of the 192-bit helpers that atan2's evaluation never takes, each against its
+    /// exact value: shifts by 192 places or more, magnitude comparisons with zero, additions of
+    /// equal magnitudes, and `to_f64` beyond the double range, below it and at a midpoint.
+    #[test]
+    fn helper_arms_atan2_never_takes() {
+        let w = Wide192 {
+            hi: u128::MAX,
+            lo: u64::MAX,
+        };
+        for k in [192, 193, 1000, u64::MAX] {
+            let (r, l) = (w.shr(k), w.shl(k));
+            assert_eq!((r.hi, r.lo, l.hi, l.lo), (0, 0, 0, 0), "{k}");
+        }
+        assert_eq!(ZERO.cmp_magnitude(&ZERO), Ordering::Equal);
+        assert_eq!(ZERO.cmp_magnitude(&ONE), Ordering::Less);
+        assert_eq!(ONE.cmp_magnitude(&ZERO), Ordering::Greater);
+        // Equal magnitudes: opposite signs give zero, equal signs exactly twice.
+        assert!(ONE.add(&t(1 << 63, 0, 0, 1, 1)).unwrap().is_zero());
+        let two = ONE.add(&ONE).unwrap();
+        assert_eq!(
+            (two.h, two.m, two.l, two.ex, two.sgn),
+            (1 << 63, 0, 0, 2, 0)
+        );
+        // 2^1024 overflows to infinity, 2^−1076 is zero, exactly 2^−1075 ties to zero and just
+        // above it rounds to the smallest subnormal, each with its sign.
+        for sgn in [0, 1] {
+            let s = if sgn == 0 { 1.0 } else { -1.0 };
+            let got = |h: u64, ex: i64| t(h, 0, 0, ex, sgn).to_f64(1).unwrap().to_bits();
+            assert_eq!(got(1 << 63, 1025), (s * f64::INFINITY).to_bits());
+            assert_eq!(got(1 << 63, -1075), (s * 0.0).to_bits());
+            assert_eq!(got(1 << 63, -1074), (s * 0.0).to_bits());
+            assert_eq!(got((1 << 63) | 1, -1074), (s * f64::from_bits(1)).to_bits());
+            // Just above 2^−1075 by a bit in a lower word: the smallest subnormal too.
+            for (m, l) in [(1, 0), (0, 1)] {
+                let above = t(1 << 63, m, l, -1074, sgn).to_f64(1).unwrap().to_bits();
+                assert_eq!(above, (s * f64::from_bits(1)).to_bits());
+            }
+        }
+        // 1 + 2^−53 is exactly the midpoint between 1 and its successor: ties to even, to 1. A
+        // bit in either lower word puts it above the midpoint, to 1 + 2^−52.
+        let mid = (1u64 << 63) | 0x400;
+        assert_eq!(t(mid, 0, 0, 1, 0).to_f64(1).unwrap(), 1.0);
+        let above = 1.0 + f64::EPSILON;
+        assert_eq!(t(mid, 1, 0, 1, 0).to_f64(1).unwrap(), above);
+        assert_eq!(t(mid, 0, 1, 1, 0).to_f64(1).unwrap(), above);
+    }
+}
+
+/// Bounded proofs (chapter 28.7): the own contracts of [`Tint::to_f64`] and [`Wide192::shl`], for
+/// every 192-bit value.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `agreed` answers exactly when the lower and upper ends, each rounded once as the enclosure
+    /// is, are the same double, and it answers that double. For the fast paths' values: an angle,
+    /// its low part and a small positive bound.
+    #[kani::proof]
+    fn agreed_answers_exactly_when_both_ends_round_alike() {
+        let (fh, fl, eps): (f64, f64, f64) = (kani::any(), kani::any(), kani::any());
+        kani::assume(fh.abs() <= 4.0 && fl.abs() <= 1.0 && eps > 0.0 && eps <= 1.0);
+        let lower = fh + (fl - eps);
+        let upper = fh + (fl + eps);
+        match agreed(fh, fl, eps) {
+            Some(r) => assert!(lower == upper && r.to_bits() == upper.to_bits()),
+            None => assert!(lower != upper),
+        }
+    }
+
+    /// The bits of the double nearest `(−1)^s·(h·2^128 + m·2^64 + l)·2^(ex − 192)` (`s` = 1 when
+    /// `sgn ≠ 0`), for `h ≥ 2^63`: rounded to nearest with ties to even, overflowing to infinity
+    /// and underflowing to zero. Integers only: the 53 (or, for a subnormal result, fewer) bits
+    /// kept, the round bit after them and a sticky bit for everything below, independent of
+    /// `to_f64`'s floating-point steps.
+    fn nearest(h: u64, m: u64, l: u64, ex: i64, sgn: u64) -> u64 {
+        let sign = u64::from(sgn != 0) << 63;
+        if ex >= 1025 {
+            return sign | 0x7ff0_0000_0000_0000; // the value is at least 2^1024
+        }
+        if ex < -1074 {
+            return sign; // below 2^−1075
+        }
+        // The value lies in [2^(ex − 1), 2^ex); its last place is 2^(ex − 53) for a normal
+        // result and 2^−1074 below, so the low `drop` bits of h (12 to 64 for a subnormal
+        // result) and all of m and l fall below it.
+        let drop: u32 = if ex >= -1021 {
+            11
+        } else {
+            u32::try_from(-1010 - ex).unwrap()
+        };
+        let kept = if drop == 64 { 0 } else { h >> drop };
+        let round = (h >> (drop - 1)) & 1 == 1;
+        let sticky = h & ((1u64 << (drop - 1)) - 1) != 0 || m != 0 || l != 0;
+        let q = kept + u64::from(round && (sticky || kept & 1 == 1));
+        if ex >= -1021 {
+            // q is 2^52 to 2^53; 2^53 carries into the exponent, past 2^1023 to infinity.
+            let field = u64::try_from(ex + 1022).unwrap();
+            sign | ((field << 52) + q - (1 << 52))
+        } else {
+            // A subnormal, or the smallest normal when q rounds up to 2^52: q is the bits.
+            sign | q
+        }
+    }
+
+    /// `to_f64` with a non-zero error bound returns the double nearest the value, ties to even,
+    /// for every normalised `Tint`: any three significand words with the top bit set, any
+    /// exponent and either sign.
+    #[kani::proof]
+    fn to_f64_rounds_to_nearest() {
+        let a = Tint {
+            h: kani::any(),
+            m: kani::any(),
+            l: kani::any(),
+            ex: kani::any(),
+            sgn: kani::any(),
+        };
+        kani::assume(a.h >> 63 == 1);
+        let err: u64 = kani::any();
+        kani::assume(err != 0);
+        let got = a.to_f64(err).unwrap();
+        assert_eq!(got.to_bits(), nearest(a.h, a.m, a.l, a.ex, a.sgn));
+    }
+
+    /// Bit `i` (0 to 191) of a 192-bit value.
+    fn bit(w: Wide192, i: u64) -> bool {
+        if i < 64 {
+            (w.lo >> i) & 1 == 1
+        } else {
+            (w.hi >> (i - 64)) & 1 == 1
+        }
+    }
+
+    /// `shl(k)` moves every bit up by `k` places and drops those past bit 191, for every value
+    /// and every shift.
+    #[kani::proof]
+    fn shl_moves_every_bit_up() {
+        let w = Wide192 {
+            hi: kani::any(),
+            lo: kani::any(),
+        };
+        let k: u64 = kani::any();
+        let i: u64 = kani::any();
+        kani::assume(i < 192);
+        assert_eq!(bit(w.shl(k), i), i >= k && bit(w, i - k));
+    }
+
+    /// A normalised `Tint` (the top bit of `h` set) or zero, with either sign and an exponent
+    /// below 2^60 in magnitude: every operand the accurate path forms, whose exponents stay below
+    /// 2^11 in magnitude.
+    fn any_tint() -> Tint {
+        let a = Tint {
+            h: kani::any(),
+            m: kani::any(),
+            l: kani::any(),
+            ex: kani::any(),
+            sgn: kani::any(),
+        };
+        kani::assume(a.h >> 63 == 1 || (a.h == 0 && a.m == 0 && a.l == 0));
+        kani::assume(a.ex.unsigned_abs() < 1 << 60);
+        kani::assume(a.sgn <= 1);
+        a
+    }
+
+    /// `mul`'s contract, for every pair of operands: it returns exactly the six partial products
+    /// it keeps, `K = ah·bh·2^64 + ah·bm + am·bh + ⌊ah·bl/2^64⌋ + ⌊am·bm/2^64⌋ + ⌊al·bh/2^64⌋` in
+    /// units of `2^(a.ex + b.ex − 192)`, shifted left once if its top bit is clear, with the signs'
+    /// exclusive or and the exponents' sum. The reference adds the products by columns in 128-bit
+    /// sums, not by `mul`'s comparisons, so every carry `mul` keeps is checked. What `mul` drops
+    /// (the low halves of the last three products, `am·bl + al·bm` and `al·bl`) is below
+    /// `3·2^192 + 2·(2^64 − 1)^2·2^64 + 2^128 < 5·2^192`, so `K` is within 5 of its units of the
+    /// exact product, and after the shift within 10 ulps: the bound `mul` documents.
+    #[kani::proof]
+    fn mul_keeps_every_carry() {
+        let a = any_tint();
+        let b = any_tint();
+        let r = a.mul(&b).unwrap();
+        let (ah, am, al) = (u128::from(a.h), u128::from(a.m), u128::from(a.l));
+        let (bh, bm, bl) = (u128::from(b.h), u128::from(b.m), u128::from(b.l));
+        let rh = ah.checked_mul(bh).unwrap();
+        let rm1 = ah.checked_mul(bm).unwrap();
+        let rm2 = am.checked_mul(bh).unwrap();
+        let rl1 = ah.checked_mul(bl).unwrap();
+        let rl2 = am.checked_mul(bm).unwrap();
+        let rl3 = al.checked_mul(bh).unwrap();
+        let w = |x: u64| u128::from(x);
+        // Each column is a sum of at most five 64-bit numbers: below 2^67.
+        let c0 = w(lo64(rm1)) + w(lo64(rm2)) + w(hi64(rl1)) + w(hi64(rl2)) + w(hi64(rl3));
+        let c1 = w(hi64(c0)) + w(lo64(rh)) + w(hi64(rm1)) + w(hi64(rm2));
+        let c2 = w(hi64(rh)) + w(hi64(c1));
+        assert!(c2 >> 64 == 0, "K is below 2^192");
+        let (kh, km, kl) = (lo64(c2), lo64(c1), lo64(c0));
+        let ex = a.ex + b.ex;
+        assert_eq!(r.sgn, a.sgn ^ b.sgn);
+        if kh >> 63 == 1 {
+            assert_eq!((r.h, r.m, r.l, r.ex), (kh, km, kl, ex));
+        } else {
+            let shifted = ((kh << 1) | (km >> 63), (km << 1) | (kl >> 63), kl << 1);
+            assert_eq!((r.h, r.m, r.l), shifted);
+            assert!(
+                r.h >> 63 == 1 || (r.h, r.m, r.l) == (0, 0, 0),
+                "normalised or zero"
+            );
+            if r.h != 0 {
+                assert_eq!(r.ex, ex - 1);
+            }
+        }
+    }
+
+    /// A non-negative integer below 2^448, as seven 64-bit words, least significant first.
+    type Big = [u64; 7];
+
+    /// `w · 2^s`, for `s < 256`.
+    fn big(w: Wide192, s: u64) -> Big {
+        let words = [w.lo, lo64(w.hi), hi64(w.hi)];
+        let q = usize::try_from(s / 64).unwrap();
+        let r = s % 64;
+        let mut out = [0u64; 7];
+        for (i, &x) in words.iter().enumerate() {
+            out[i + q] |= x << r;
+            if r != 0 {
+                out[i + q + 1] |= x >> (64 - r);
+            }
+        }
+        out
+    }
+
+    /// `a + b`, for a sum below 2^448.
+    fn big_add(a: &Big, b: &Big) -> Big {
+        let mut out = [0u64; 7];
+        let mut carry = 0u128;
+        for i in 0..7 {
+            let s = u128::from(a[i]) + u128::from(b[i]) + carry;
+            out[i] = lo64(s);
+            carry = u128::from(hi64(s));
+        }
+        assert!(carry == 0);
+        out
+    }
+
+    /// `a − b`, for `a ≥ b`.
+    fn big_sub(a: &Big, b: &Big) -> Big {
+        let mut out = [0u64; 7];
+        let mut borrow = 0u64;
+        for i in 0..7 {
+            let (d, o1) = a[i].overflowing_sub(b[i]);
+            let (d, o2) = d.overflowing_sub(borrow);
+            out[i] = d;
+            borrow = u64::from(o1 || o2);
+        }
+        assert!(borrow == 0);
+        out
+    }
+
+    /// `a < b`.
+    fn big_lt(a: &Big, b: &Big) -> bool {
+        a.iter().rev().cmp(b.iter().rev()) == Ordering::Less
+    }
+
+    /// Two normalised operands (the top bit of `h` set), `a.ex = 0` and `b.ex = d` with
+    /// `|d| ≤ 1`, and like or unlike signs. `add` reads the exponents only through their order
+    /// and difference, so these stand for every pair at most one apart; that difference is the
+    /// shift `sh ≤ 1`, where the carries and the exact cancellation branch are taken.
+    fn close_operands(like: bool, d: i64) -> (Tint, Tint) {
+        let a = Tint {
+            h: kani::any(),
+            m: kani::any(),
+            l: kani::any(),
+            ex: 0,
+            sgn: kani::any(),
+        };
+        kani::assume(a.sgn <= 1);
+        let b = Tint {
+            h: kani::any(),
+            m: kani::any(),
+            l: kani::any(),
+            ex: d,
+            sgn: if like { a.sgn } else { a.sgn ^ 1 },
+        };
+        kani::assume(a.h >> 63 == 1 && b.h >> 63 == 1);
+        (a, b)
+    }
+
+    /// `add`'s contract for operands from `close_operands`: the result is the exact sum's sign
+    /// and, unless the sum is zero (then it is zero), a normalised value less than 2 ulps of
+    /// itself from the exact sum. The exact sum is formed in 448-bit integers in units of
+    /// `2^(min(a.ex, b.ex) − 384)`, where both operands and the result are integers.
+    fn check_add(a: &Tint, b: &Tint) {
+        let r = a.add(b).unwrap();
+        let base = a.ex.min(b.ex);
+        let da = a.ex.abs_diff(base);
+        let db = b.ex.abs_diff(base);
+        let ta = big(a.wide(), da + 192);
+        let tb = big(b.wide(), db + 192);
+        let (exact, sgn) = if a.sgn == b.sgn {
+            (big_add(&ta, &tb), a.sgn)
+        } else if big_lt(&ta, &tb) {
+            (big_sub(&tb, &ta), b.sgn)
+        } else {
+            (big_sub(&ta, &tb), a.sgn)
+        };
+        if exact == [0; 7] {
+            assert_eq!((r.h, r.m, r.l), (0, 0, 0));
+            return;
+        }
+        assert!(r.h >> 63 == 1, "normalised");
+        assert_eq!(r.sgn, sgn);
+        // The result's last place, 2^(r.ex − 192), in these units.
+        let er = r.ex - base + 192;
+        assert!((0..=194).contains(&er));
+        let er = er.unsigned_abs();
+        let got = big(r.wide(), er);
+        let err = if big_lt(&got, &exact) {
+            big_sub(&exact, &got)
+        } else {
+            big_sub(&got, &exact)
+        };
+        assert!(
+            big_lt(&err, &big(Wide192 { hi: 0, lo: 2 }, er)),
+            "below 2 ulps"
+        );
+    }
+
+    /// `add`'s contract for like signs, exponents at most one apart (`check_add`).
+    #[kani::proof]
+    fn add_of_like_signs_is_within_two_ulps() {
+        let d: i64 = kani::any();
+        kani::assume((-1..=1).contains(&d));
+        let (a, b) = close_operands(true, d);
+        check_add(&a, &b);
+    }
+
+    /// `add`'s contract for unlike signs, equal exponents (`check_add`): the exact subtraction.
+    #[kani::proof]
+    fn add_of_unlike_signs_at_equal_exponents_is_within_two_ulps() {
+        let (a, b) = close_operands(false, 0);
+        check_add(&a, &b);
+    }
+
+    /// `add`'s contract for unlike signs, exponents one apart (`check_add`). `add` first orders
+    /// its operands by magnitude, and of two exponents one apart the larger is the larger
+    /// operand's, so `b.ex = −1` stands for both orders (with both, the proof takes an hour, not
+    /// five minutes).
+    #[kani::proof]
+    fn add_of_unlike_signs_one_apart_is_within_two_ulps() {
+        let (a, b) = close_operands(false, -1);
+        check_add(&a, &b);
+    }
+
+    /// `is_zero`'s contract: for every normalised or zero `Tint`, it holds exactly when all
+    /// three words are 0.
+    #[kani::proof]
+    fn is_zero_holds_exactly_for_zero() {
+        let a = any_tint();
+        assert_eq!(a.is_zero(), a.h == 0 && a.m == 0 && a.l == 0);
     }
 }

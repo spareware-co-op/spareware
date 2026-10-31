@@ -17,12 +17,13 @@ geom-run = { path = "../geom-run", default-features = false }
 # proven maths functions are CORE-MATH ports in src/math/. MIT (libm 0.2.16's licence).
 libm = "0.2.16"
 
-# Under Miri only (the weekly run of section 28.8, .github/workflows/kernel-quality.yml): libm's
-# software square root and fused multiply-add instead of the x86 and AArch64 instructions it reaches
-# through inline assembly, which Miri cannot interpret. Both are correctly rounded (IEEE 754), so
-# every result is the same bits; the feature is libm's own switch for this (libm 0.2.16's
-# configure.rs, `force-soft-floats`). No ordinary build sets cfg(miri).
-[target.'cfg(miri)'.dependencies]
+# Under Miri and Kani only (the weekly run of section 28.8, .github/workflows/kernel-quality.yml;
+# the proofs of chapter 28.7, kernel-fuzz.yml): libm's software square root and fused multiply-add
+# instead of the x86 and AArch64 instructions it reaches through inline assembly (after a run-time
+# processor check), which neither Miri nor Kani can interpret. Both are correctly rounded (IEEE
+# 754), so every result is the same bits; the feature is libm's own switch for this (libm 0.2.16's
+# configure.rs, `force-soft-floats`). No ordinary build sets cfg(miri) or cfg(kani).
+[target.'cfg(any(miri, kani))'.dependencies]
 libm = { version = "0.2.16", features = ["force-soft-floats"] }
 
 [dev-dependencies]
@@ -57,7 +58,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.

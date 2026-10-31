@@ -243,12 +243,9 @@ fn mul_dd_d(xh: f64, xl: f64, ch: f64) -> (f64, f64) {
 }
 
 /// Horner evaluation in double-double of `Σ c[i]·x^i` at `x = xh + xl`, with `l` added to the
-/// leading coefficient's low part (C: `polydd`). The coefficient list is never empty; an empty
-/// one is treated as the zero polynomial.
-fn poly_dd(xh: f64, xl: f64, c: &[[f64; 2]], l: f64) -> (f64, f64) {
-    let Some((last, rest)) = c.split_last() else {
-        return (l, 0.0);
-    };
+/// leading coefficient's low part (C: `polydd`): `last` is the leading coefficient and `rest` the
+/// others, lowest first, as the caller splits a fixed table (so no list is ever empty).
+fn poly_dd(xh: f64, xl: f64, last: &[f64; 2], rest: &[[f64; 2]], l: f64) -> (f64, f64) {
     let mut ch = last[0] + l;
     let mut cl = ((last[0] - ch) + l) + last[1];
     for ci in rest.iter().rev() {
@@ -308,7 +305,8 @@ fn sinpi_near_zero(x: f64) -> f64 {
     let x3 = x2 * x;
     let dx3 = fma(x2, x, -x3) + dx2 * x;
     let fl = x2 * (CL[0] + x2 * (CL[1] + x2 * CL[2]));
-    let (fh, fl) = poly_dd(x2, dx2, &CH, fl);
+    let [ch_rest @ .., ch_last] = &CH;
+    let (fh, fl) = poly_dd(x2, dx2, ch_last, ch_rest, fl);
     let (fh, fl) = mul_dd(fh, fl, x3, dx3);
 
     let mut y0 = PI0 * x;
@@ -344,7 +342,8 @@ fn cospi_near_zero(x: f64) -> f64 {
     let x2 = x * x;
     let dx2 = fma(x, x, -x2);
     let fl = x2 * (CL[0] + x2 * CL[1]);
-    let (fh, fl) = poly_dd(x2, dx2, &CH, fl);
+    let [ch_rest @ .., ch_last] = &CH;
+    let (fh, fl) = poly_dd(x2, dx2, ch_last, ch_rest, fl);
     let (fh, fl) = mul_dd(x2, dx2, fh, fl);
     let (y0, y1) = fast_two_sum(1.0, fh);
     let (y1, y2) = fast_two_sum(y1, fl);
@@ -389,10 +388,12 @@ fn refine(iq: u64, z: f64, hard: &[HardCase]) -> f64 {
     let x2 = x * x;
     let dx2 = fma(x, x, -x2);
     let sll = S3L * x2;
-    let (slh, sll) = poly_dd(x2, dx2, &SH, sll);
+    let [sh_rest @ .., sh_last] = &SH;
+    let (slh, sll) = poly_dd(x2, dx2, sh_last, sh_rest, sll);
     let (slh, sll) = mul_dd_d(slh, sll, x * hf!("0x1p-12"));
     let cll = x2 * (C2L + C3L * x2);
-    let (clh, cll) = poly_dd(x2, dx2, &CH, cll);
+    let [ch_rest @ .., ch_last] = &CH;
+    let (clh, cll) = poly_dd(x2, dx2, ch_last, ch_rest, cll);
     let (clh, cll) = mul_dd(clh, cll, x2, dx2);
     let (sbh, sbl, cbh, cbl) = sincosn2(iq);
     let (csh, csl) = mul_dd(clh, cll, sbh, sbl);
@@ -405,17 +406,27 @@ fn refine(iq: u64, z: f64, hard: &[HardCase]) -> f64 {
     // or all zeros; then the input may be one of the listed hard cases.
     let t = tsl.to_bits();
     if (t | (0xfff << 52)) == u64::MAX || (t << 12) == 0 {
-        let sgn = if iq > 2048 { -1.0 } else { 1.0 };
-        let iq = iq & 0x7ff;
-        for h in hard {
-            // At most one of the two conditions can hold.
-            // C: `iq == 2048 − h.iq`; every listed index is below 2048.
-            if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {
-                return sgn * h.r + sgn * h.d;
-            }
+        if let Some(r) = hard_case(x, iq, hard) {
+            return r;
         }
     }
     tsh + tsl
+}
+
+/// The listed result for the input at table index `iq` with remainder `x`, if it is one of `hard`
+/// or its mirror image, with the sign of the fold; `None` otherwise (C: the loop over `db` in
+/// `as_sinpi_refine` and `as_cospi_refine`).
+fn hard_case(x: f64, iq: u64, hard: &[HardCase]) -> Option<f64> {
+    let sgn = if iq > 2048 { -1.0 } else { 1.0 };
+    let iq = iq & 0x7ff;
+    for h in hard {
+        // At most one of the two conditions can hold.
+        // C: `iq == 2048 − h.iq`; every listed index is below 2048.
+        if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {
+            return Some(sgn * h.r + sgn * h.d);
+        }
+    }
+    None
 }
 
 /// Hard cases of `sinpi`'s accurate path (C: `db` in `as_sinpi_refine`).
@@ -1696,5 +1707,103 @@ mod tests {
             let cubic = Dy::div(&px.mul(&px).mul(&px), &Dy::int(6), P, true);
             assert!(gap.signum() > 0 && le(&cubic, &gap), "k = {k}");
         }
+    }
+
+    /// `refine`'s hard-case scan answers every `(iq, z)` it can match with the listed correctly
+    /// rounded value: each entry, its mirror `(2048 − iq, −x)`, and both moved by 2048, 48 in all.
+    /// So its doubt test lets the scan run at each of them.
+    #[test]
+    fn refine_answers_every_listed_hard_case() {
+        for hard in [&SINPI_HARD[..], &COSPI_HARD[..]] {
+            for h in hard {
+                for (iq, x) in [
+                    (h.iq, h.x),
+                    (h.iq + 2048, h.x),
+                    (2048 - h.iq, -h.x),
+                    (4096 - h.iq, -h.x),
+                ] {
+                    let sgn = if iq > 2048 { -1.0 } else { 1.0 };
+                    let want = sgn * h.r + sgn * h.d;
+                    let got = refine(iq, x * hf!("0x1p63"), hard);
+                    assert_eq!(got.to_bits(), want.to_bits(), "iq = {iq}, x = {x:e}");
+                }
+            }
+        }
+    }
+
+    /// `sticky` leaves a zero `y1` alone, of either sign and whatever `y2` is: the C code's
+    /// decrement of the bit pattern would make a NaN there, and the adjustment could not change
+    /// `y0 + y1` anyway.
+    #[test]
+    fn sticky_leaves_a_zero_alone() {
+        for y1 in [0.0, -0.0] {
+            for y2 in [1.0, -1.0, f64::MIN_POSITIVE] {
+                assert_eq!(sticky(y1, y2).to_bits(), y1.to_bits(), "{y1} {y2}");
+            }
+        }
+    }
+
+    /// `hard_case` returns a listed result only at the listed table index (with the sign of the
+    /// fold above 2048), or for the mirror image at the mirrored index: the listed remainder at
+    /// any other index, or its mirror at any other index, is no hard case.
+    #[test]
+    fn a_hard_case_needs_its_own_index() {
+        for hard in [&SINPI_HARD[..], &COSPI_HARD[..]] {
+            for h in hard {
+                let s = h.r + h.d;
+                assert_eq!(hard_case(h.x, h.iq, hard), Some(s));
+                assert_eq!(hard_case(h.x, h.iq + 2048, hard), Some(-s));
+                assert_eq!(hard_case(h.x, h.iq + 1, hard), None);
+                assert_eq!(hard_case(-h.x, 2048 - h.iq, hard), Some(s));
+                assert_eq!(hard_case(-h.x, (2048 - h.iq) ^ 1, hard), None);
+            }
+        }
+    }
+}
+
+/// Bounded proofs (chapter 28.7): [`hard_case`]'s own contract, for every remainder and index.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// `hard_case(x, iq, hard)` for any `x` and `iq`: the entry whose remainder and index both
+    /// match, or whose mirror image's do, with the sign of the fold, and `None` where no entry
+    /// matches in both. Tests cannot show this through `sinpi` and `cospi`: the scan runs only
+    /// when the low part's significand is all ones or all zeros, and no input known reaches it
+    /// with one half of a pair matching and the other not.
+    fn answers_exactly_the_listed_pairs(hard: &[HardCase]) {
+        let x: f64 = kani::any();
+        let iq: u64 = kani::any();
+        let folded = iq & 0x7ff;
+        let listed = hard.iter().find(|h| {
+            let here = x == h.x && folded == h.iq;
+            let mirror = x == -h.x && folded + h.iq == 2048;
+            here || mirror
+        });
+        let got = hard_case(x, iq, hard);
+        assert_eq!(got.is_some(), listed.is_some());
+        if let (Some(got), Some(h)) = (got, listed) {
+            let sum = h.r + h.d;
+            let want = if iq > 2048 { -sum } else { sum };
+            assert_eq!(got.to_bits(), want.to_bits());
+        }
+    }
+
+    /// [`SINPI_HARD`]: see [`answers_exactly_the_listed_pairs`].
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn sinpi_hard_case_answers_exactly_the_listed_pairs() {
+        answers_exactly_the_listed_pairs(&SINPI_HARD);
+    }
+
+    /// [`COSPI_HARD`]: see [`answers_exactly_the_listed_pairs`].
+    #[kani::proof]
+    #[kani::unwind(10)]
+    fn cospi_hard_case_answers_exactly_the_listed_pairs() {
+        answers_exactly_the_listed_pairs(&COSPI_HARD);
     }
 }
