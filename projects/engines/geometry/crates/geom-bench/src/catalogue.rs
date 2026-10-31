@@ -427,6 +427,12 @@ pub static OPS: &[Op] = &[
     Op { group: "surface", name: "offset_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::offset_point(c), kernels::surface::offset_point) },
     Op { group: "surface", name: "torus_second_bound", measures: "geom_surface::ParamSurface::second_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_second_bound(c), kernels::surface::torus_second_bound) },
     Op { group: "surface", name: "torus_normal_bound", measures: "geom_surface::ParamSurface::normal_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_normal_bound(c), kernels::surface::torus_normal_bound) },
+    // geom-make's hot paths (piece G101; decision 32.44): a primitive built and a body moved, named,
+    // published and checked.
+    Op { group: "make", name: "build_box", measures: "geom_make::primitive::make_box", classes: T, prepare: |c| bind(inputs::make::boxes(c), kernels::make::boxes) },
+    Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
+    Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
+    Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -434,7 +440,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 31] = [
+pub const GROUPS: [&str; 32] = [
     "predicate",
     "sign",
     "wide",
@@ -466,6 +472,7 @@ pub const GROUPS: [&str; 31] = [
     "brent",
     "quadrature",
     "linalg",
+    "make",
 ];
 
 /// The group of the growth checks.
@@ -625,9 +632,9 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Interval::hi", "field accessor"),
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
+    ("Plane::new", "four magnitude comparisons on a plane already made"),
     ("Tpi::planes", "field accessor"),
     ("Tpi::weight", "field accessor"),
-    ("Plane::new", "four magnitude comparisons on a plane already made"),
     ("Lpi::points", "field accessor"),
     ("Lpi::plane", "field accessor"),
     ("Ssi::points", "field accessor"),

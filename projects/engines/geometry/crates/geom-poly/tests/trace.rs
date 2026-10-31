@@ -156,8 +156,8 @@ fn scene(blocks: &[Block]) -> Vec<Classified> {
         .collect();
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap()
 }
@@ -321,8 +321,8 @@ fn a_cutter_cuts_and_counts_nothing() {
     polygons.push(sheet);
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     let classified = classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap();
     assert_eq!(classified.len(), 4 * 2 + 2 + 5);
@@ -365,8 +365,19 @@ fn in_cell(blocks: &[Block], cell: &Cell) -> Vec<Classified> {
         .collect();
     let polygons = clipped(&all, cell);
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
+    let doubled = Cell {
+        low: cell.low.map(|v| v * 2),
+        high: cell.high.map(|v| v * 2),
+    };
     let start = cell.low.map(|v| v * 4 + 1);
-    classify(cell, &oracle(blocks, start), &polygons, &cuts, &mut meter()).unwrap()
+    classify(
+        &doubled,
+        &oracle(blocks, start),
+        &polygons,
+        &cuts,
+        &mut meter(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -407,8 +418,8 @@ fn a_small_budget_stops_the_trace() {
     let polygons = faces(&A, Some(0));
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
     let got = classify(&cell, &Winding::new(), &polygons, &cuts, &mut small);
@@ -421,8 +432,8 @@ fn a_count_past_its_range_is_refused() {
     let polygons = faces(&A, Some(0));
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     let mut full = Winding::new();
     full.add(0, i32::MAX).unwrap();
@@ -439,8 +450,8 @@ fn a_piece_that_is_no_polygon_is_refused() {
         bounds: vec![],
     };
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     let got = classify(
         &cell,
@@ -552,7 +563,11 @@ fn wedges_in_cell(solids: &[[Plane; 4]], cell: &Cell) {
     // Just inside the low corner, x moved most and z least, as the box's moves are ordered.
     let [x, y, z] = cell.low.map(|v| v as f64);
     let reference = wedges_at(solids, [x + 1e-4, y + 1e-6, z + 1e-8]);
-    for c in classify(cell, &reference, &polygons, &cuts, &mut meter()).unwrap() {
+    let doubled = Cell {
+        low: cell.low.map(|v| v * 2),
+        high: cell.high.map(|v| v * 2),
+    };
+    for c in classify(&doubled, &reference, &polygons, &cuts, &mut meter()).unwrap() {
         let (front, back) = (off_middle(&c.piece, 1e-9), off_middle(&c.piece, -1e-9));
         assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
         assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);

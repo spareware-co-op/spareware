@@ -47,7 +47,7 @@ use geom_num::plane::Plane;
 use geom_num::{NumError, Sign, generated};
 use geom_run::{Stopped, WorkMeter};
 
-use crate::convex::Piece;
+use crate::convex::{ConvexError, Piece};
 use crate::order::normals_det;
 use crate::plane::{Canonical, canonical};
 use crate::winding::{Entry, Winding, WindingError};
@@ -61,7 +61,8 @@ pub struct Polygon {
     pub entry: Option<Entry>,
 }
 
-/// A box of the subdivision, with its reference point at the low corner, moved just inside it.
+/// A box of the subdivision, in half steps, with its reference point at the low corner, moved
+/// just inside it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Cell {
     /// The low corner.
@@ -111,6 +112,15 @@ impl core::error::Error for TraceError {}
 impl From<NumError> for TraceError {
     fn from(e: NumError) -> Self {
         TraceError::Num(e)
+    }
+}
+
+impl From<ConvexError> for TraceError {
+    fn from(e: ConvexError) -> Self {
+        match e {
+            ConvexError::Num(e) => TraceError::Num(e),
+            ConvexError::Stopped(e) => TraceError::Stopped(e),
+        }
     }
 }
 
@@ -262,7 +272,7 @@ fn faces(cell: &Cell) -> Result<[[Moved; 2]; 3], NumError> {
     for (axis, ((low, high), row)) in ends.zip(&mut out).enumerate() {
         let mut n = [0i128; 3];
         for (at, component) in n.iter_mut().enumerate() {
-            *component = i128::from(at == axis);
+            *component = if at == axis { 2 } else { 0 };
         }
         let turned = n.map(i128::saturating_neg);
         let low_plane = Plane::new(n, i128::from(*low).saturating_neg())?;
@@ -289,15 +299,17 @@ fn exit(p: &Moved, q: &Moved, faces: &[[Moved; 2]; 3]) -> Result<(usize, usize),
     let mut first: Option<(usize, usize)> = None;
     for (axis, row) in faces.iter().enumerate() {
         for (end, face) in row.iter().enumerate() {
-            if normals_det(&p.plane, &q.plane, &face.plane)? != Sign::Negative {
-                continue;
-            }
-            let earlier = match first.and_then(|(a, e)| faces.get(a)?.get(e)) {
-                Some(held) => read(p, q, held, face)? != Sign::Positive,
-                None => true,
-            };
-            if earlier {
-                first = Some((axis, end));
+            match normals_det(&p.plane, &q.plane, &face.plane)? {
+                Sign::Negative => {
+                    let earlier = match first.and_then(|(a, e)| faces.get(a)?.get(e)) {
+                        Some(held) => read(p, q, held, face)? != Sign::Positive,
+                        None => true,
+                    };
+                    if earlier {
+                        first = Some((axis, end));
+                    }
+                }
+                Sign::Positive | Sign::Zero => {}
             }
         }
     }
@@ -454,6 +466,44 @@ fn vectors(
     } else {
         (far_side, near_side, is_first)
     })
+}
+
+/// The vector at the reference point of the upper box of `cell` split at half step `at` of `axis`:
+/// the point walks up the box's edge from `cell`'s own, whose vector is `reference`.
+///
+/// # Errors
+///
+/// As [`classify`].
+pub fn reference_above(
+    cell: &Cell,
+    axis: usize,
+    at: i64,
+    reference: &Winding,
+    polygons: &[Polygon],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Winding, TraceError> {
+    let faces = faces(cell)?;
+    let low = face_at(&faces, (axis, 0))?;
+    let n = [0, 1, 2].map(|i| if i == axis { 2 } else { 0 });
+    let (next, last) = (
+        axis.saturating_add(1).checked_rem(3).unwrap_or(0),
+        axis.saturating_add(2).checked_rem(3).unwrap_or(0),
+    );
+    let segment = Segment {
+        p: face_at(&faces, (next, 0))?,
+        q: face_at(&faces, (last, 0))?,
+        from: Moved {
+            plane: Plane::new(n, i128::from(at).saturating_neg())?,
+            ..low
+        },
+        to: low,
+    };
+    let mut above = reference.clone();
+    for polygon in polygons {
+        meter.charge(1)?;
+        count_crossing(&segment, polygon, &mut above)?;
+    }
+    Ok(above)
 }
 
 /// Every piece of `pieces`, `pieces[i]` being polygon `i`'s as [`crate::cut::local_cuts`] left it,

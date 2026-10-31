@@ -7,178 +7,6 @@
       "state": "open",
       "goldens": [
         {
-          "id": "geom-num/determinism",
-          "what": "geom-num's determinism corpus: 88,218 calls into every module of the numbers layer (predicates, planes, three-plane points, grid steps, wide integers, error-free transformations, intervals, the maths module and the scalars), each result in the canonical encoding of tests/determinism.rs.",
-          "check": {
-            "crate": "geom-num",
-            "test": "determinism",
-            "function": "golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "81ed30a1251227dc3f2264d29de7d5efe8ba162d10a9b57e88152a9c44f9f2d0",
-          "history": [
-            {
-              "sha256": "c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8",
-              "kind": "improvement",
-              "piece": "G05",
-              "why": "The correctly rounded maths of piece G05 (issue #174): 92 of G02's 7,677 maths records moved by one unit in the last place to the correctly rounded value (exp 9, ln 3, sinpi 52, cospi 19, atan2 9); the refusals of Interval::exp and Interval::ln moved from the interval section to the maths section, now certified; 2,700 records were added from their own generator (SEED_G05) for the libm twins and the interval versions. No error changed; the other sections give G02's digests unchanged."
-            },
-            {
-              "sha256": "fb19edfc7c58ca5e93a8921dfbdd2ab2dfacc2d180fbe6dec540efbede954564",
-              "kind": "improvement",
-              "piece": "G47",
-              "why": "Interval::atan2 is certified now (piece G47): its refusal (index 2) left the interval section, and the maths section gains 601 records of it (index 32) from a generator of their own (SEED_G47), after every earlier record; no other record moved, and the sections predicates, planes, tpi, grid, wide, eft and scalars are unchanged. The same digest on wasm32 under Wasmtime, where exp's exact product error is now Dekker's two-product."
-            }
-          ]
-        },
-        {
-          "id": "geom-num/rng-draws",
-          "what": "The draw corpus of geom_num::rng (Philox4x32-10, piece G32): at least 20,000 draws of every kind over six seeds and streams from six starting positions, in the canonical encoding of tests/rng_determinism.rs.",
-          "check": {
-            "crate": "geom-num",
-            "test": "rng_determinism",
-            "function": "rng_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "706bf19f86a2ac5ba9be55866a1a5b151702dd6707b9b3b67a5c4c347cbabb7f"
-        },
-        {
-          "id": "geom-num/rng-stream-ranges",
-          "what": "The stream-range corpus of geom_num::rng (piece G32): stream ranges of every size and index, their streams and their errors, in the canonical encoding of tests/rng_determinism.rs.",
-          "check": {
-            "crate": "geom-num",
-            "test": "rng_determinism",
-            "function": "rng_stream_range_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "4d2c3a986913d7751a8f49eb3a7e5340eb973b591154c7acdaaf0ad47b6472f7"
-        },
-        {
-          "id": "geom-num/dd-exact-sum",
-          "what": "Double-double arithmetic and ExactSum (piece G25) on 6,000 adversarial operand pairs at every exponent: every DD operation, two_prod_fma and fma, 903,792 recorded bytes in the encoding of tests/attack_g25.rs.",
-          "check": {
-            "crate": "geom-num",
-            "test": "attack_g25",
-            "function": "adv_bits_are_the_same_on_every_target_and_profile"
-          },
-          "sha256": "ce0e1901d8d11ff1b2d490e929b51fae2adfd7479c63126f8359ac917d0cb0fd"
-        },
-        {
-          "id": "geom-num/proven-maths",
-          "what": "The five correctly rounded maths functions of piece G05 (sinpi, cospi, exp, ln and atan2) over 100,000 inputs, each result a word (a value's bits or a marker for its error) as tests/attack_g05.rs records it; the SHA-256 of the bytes whose 64-bit FNV-1a digest G05 pinned.",
-          "check": {
-            "crate": "geom-num",
-            "test": "attack_g05",
-            "function": "golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "3b7df11af336c9c692854f222e2227c3ee0d90fb539cf004cc0b5f3cb3800cc4"
-        },
-        {
-          "id": "geom-num/order-free",
-          "what": "The input-shuffle hook on geom-num's order-free contracts (piece G19): ExactSum over seeded term sets added in their own order and in shuffled orders, one by one, as slices, as streams and as shuffled chunks merged in shuffled order, and DD addition and multiplication and two_sum in both operand orders, in the encoding of tests/order_free.rs.",
-          "check": {
-            "crate": "geom-num",
-            "test": "order_free",
-            "function": "order_free_contracts_give_one_answer_in_every_order"
-          },
-          "sha256": "1c9ef01a48433fd9f6da1ecc6d234d124f450d02df34e40b6542e3e1ca16a7c8"
-        },
-        {
-          "id": "geom-math/determinism",
-          "what": "geom-math's determinism corpus (piece G03): vectors, floats, double-double, grid, rational, general and typed transforms, boxes, frames and shifts, at least 30,000 calls in the canonical encoding of tests/determinism.rs.",
-          "check": {
-            "crate": "geom-math",
-            "test": "determinism",
-            "function": "golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "d46b124ed75682f9718101362b4a9a858fb17170e264db37fc68ac037fb8edac",
-          "history": [
-            {
-              "sha256": "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126",
-              "kind": "improvement",
-              "piece": "G05",
-              "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which geom-math's rotations call: only the two sections that build rotations from them changed, transform (6773dadd...852b18 before) and boxes (2e8f3297...bc7e3e before); every other section's digest is the same. Recorded on main in G03's pull request (commit bbbc379), before the store existed."
-            },
-            {
-              "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6",
-              "kind": "improvement",
-              "piece": "G48",
-              "why": "Piece G48 moved geom-math onto geom-num's double-double type (piece G25) and made out-of-range conversions report the exact coordinate. Only two sections changed: dd (a675b95c...61b257 before), which now exercises geom-num's DD, the one geom-math's frames use, with its own algorithms, tighter proven bounds and errors (division by zero NotFinite, the root of a negative OutsideDomain); and frames (ae980551...e555d700 before), whose OutOfRange values are now the exact rounded coordinate, saturated only beyond i128, in the order height, x, y, where G03 reported estimates. Every successful conversion is unchanged: both pieces round correctly, and the rounding is unique. The other eight sections' digests are the same."
-            }
-          ]
-        },
-        {
-          "id": "geom-math/workload",
-          "what": "geom-math's attack workload (piece G03): map conversions both ways, double-double arithmetic and transform classification and inversion, as tests/attack_g03.rs records it.",
-          "check": {
-            "crate": "geom-math",
-            "test": "attack_g03",
-            "function": "results_identical_across_targets"
-          },
-          "sha256": "629014b5a4dbadaf75b8d24b6aa1224580df998a43a9139fc762001196816e27",
-          "history": [
-            {
-              "sha256": "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9",
-              "kind": "improvement",
-              "piece": "G05",
-              "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which the workload's rotations call; sqrt, abs, floor, ceil and round_ties_even, the only other maths functions geom-math calls, are unchanged. Recorded on main in G03's pull request (commit c19cca4), before the store existed."
-            },
-            {
-              "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25",
-              "kind": "improvement",
-              "piece": "G48",
-              "why": "Piece G48 moved geom-math onto geom-num's double-double type (piece G25): the workload's double-double arithmetic (add, mul, div and sqrt of random operands) now runs geom-num's DD, with its own algorithms and tighter proven bounds, so some results differ in their last bits and its errors differ (division by zero NotFinite, the root of a negative OutsideDomain). The workload's map conversions hash only successful results, which are correctly rounded in both pieces and so unchanged, and its transforms are untouched."
-            }
-          ]
-        },
-        {
-          "id": "geom-math/frames",
-          "what": "geom-math's frame workload (piece G48): map to frame from doubles and from exact decimal text, frame to map, in metres, feet, Clarke's foot and random linear units, Map and Ground frames with 64-bit scale factors, out-of-range values, decimal text forms, units from decimals and exact shifts, as tests/attack_g48.rs records it.",
-          "check": {
-            "crate": "geom-math",
-            "test": "attack_g48",
-            "function": "frame_results_identical_across_targets"
-          },
-          "sha256": "8a315871b62b2c0f1065d7092766e9033c0329f127a43a9fea2b89955577b574"
-        },
-        {
-          "id": "geom-run/helpers",
-          "what": "geom-run's parallel helpers (piece G04) on the serial executor and on pools of 1, 2, 3 and 8 threads with chunk sizes 1, 7 and 4,096: every answer, error and meter, in the canonical encoding of tests/golden.rs.",
-          "check": {
-            "crate": "geom-run",
-            "test": "golden",
-            "function": "golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size"
-          },
-          "sha256": "b5e1993aceab1c8f0a6cdfd0c786974375634b5470c635da384122a4bc015172"
-        },
-        {
-          "id": "geom-test/grid-sampler",
-          "what": "3,000 draws of geom-test's grid sampler (piece G11) from the default seed, every coordinate's little-endian bytes; the SHA-256 of the bytes whose 64-bit FNV-1a digest G11 pinned.",
-          "check": {
-            "crate": "geom-test",
-            "test": "lib",
-            "function": "grid::tests::the_same_seed_gives_the_same_data_on_every_target"
-          },
-          "sha256": "20918c21b82e75c8dd599f7ec6b424a12783584e4e46a4806f1de18fc2f5a1ac"
-        },
-        {
-          "id": "geom-test/prop-cases",
-          "what": "The first proptest case of seeds 0 to 63 from geom-test's grid strategies (piece G11), every coordinate's little-endian bytes; the SHA-256 of the bytes whose 64-bit FNV-1a digest G11 pinned.",
-          "check": {
-            "crate": "geom-test",
-            "test": "lib",
-            "function": "prop::tests::the_same_seed_gives_the_same_cases_on_every_target"
-          },
-          "sha256": "c45bff24db9659cbc69550a8ef2cdc00f81982cd6c75074abcadb8fb3c45e559"
-        },
-        {
-          "id": "geom-test/shuffle-permutations",
-          "what": "The permutations of 0 to 63 inputs the input-shuffle hook draws from the default seed (piece G19), every index as eight little-endian bytes: the orders every order-free golden runs in.",
-          "check": {
-            "crate": "geom-test",
-            "test": "lib",
-            "function": "golden::shuffle::tests::the_permutation_stream_is_pinned"
-          },
-          "sha256": "a78a89171f0b81299c6fdfa1f62551b94ec1917a285a8017d1b307fa51349215"
-        },
-        {
           "id": "geom-bench/output-hashes",
           "what": "geom-bench's golden file (piece G06, chapter 23.13's output hashes): the SHA-256 of every benchmark's inputs and results, one line per benchmark, which every benchmark harness checks; pinned here by the SHA-256 of the file's text with LF line ends, so an edit to it is an edit to the store.",
           "file": "projects/engines/geometry/crates/geom-bench/src/golden.txt",
@@ -260,39 +88,35 @@
               "kind": "corpus",
               "piece": "G147",
               "why": "1 new count benchmark on point location (decision 32.44): mesh/locate; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
           "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4"
         },
         {
-          "id": "geom-nurbs/operations",
-          "what": "geom-nurbs's knot operations (piece G56) on a fixed corpus of 96 curves of degrees 1 to 5, 7, 9 and 12 and 24 surfaces: insertion, refinement (by new knots, by the curve's own and by both), elevation, Bezier extraction, knot removal and degree reduction at several tolerances, and derivative curves and surfaces, each result's knots, control points, weights and deviation, in the encoding of tests/operations_determinism.rs.",
+          "id": "geom-bvh/cells",
+          "what": "The Morton-sorted cell index of geom-bvh (piece G55): indexes over seven fixed sets of 1 to 20,000 grid points (sparse over the frame, dense, clustered at the frame's edge, the eight corners and 300 equal points), each index's canonical bytes, the keys within six radii of twelve centres and the work each search charged, and every pair within two radii, in the encoding of tests/cells_determinism.rs.",
           "check": {
-            "crate": "geom-nurbs",
-            "test": "operations_determinism",
-            "function": "operations_golden_hash_is_the_same_on_every_target"
+            "crate": "geom-bvh",
+            "test": "cells_determinism",
+            "function": "cells_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "50b0697e2ea65748b98ac98410ee0fd70511d6e62843feb75be01fa5e6fc5eb0"
+          "sha256": "43aace359b854c006c7402104804f6aa51a45230484e66d5173c890586c1b541"
         },
         {
-          "id": "geom-nurbs/fit",
-          "what": "The fitting operations of geom-nurbs at FitVersion::V1 (piece G58): 64 curve interpolations, 16 with end derivatives, 32 least-squares curves, 16 weighted least-squares curves with point and derivative constraints, 8 surface interpolations, 8 least-squares surfaces, 8 approximations to a stated error (a helix, a corner and noisy data, single and multiple knots) and 5 refusals: 157 results in the canonical encoding of tests/fit_determinism.rs.",
+          "id": "geom-bvh/tree",
+          "what": "The box tree of geom-bvh (piece G54): 2D and 3D trees over 22 fixed sets of 1 to 9,000 boxes (sparse, dense, nested and all equal, the largest built with the parallel subtree phase), each tree's canonical bytes, the keys meeting eight query boxes, its pairs and its pairs with another tree both ways, the work each of those walks charged, and one refit of each, 3,970,021 bytes in the encoding of tests/tree_determinism.rs.",
           "check": {
-            "crate": "geom-nurbs",
-            "test": "fit_determinism",
-            "function": "fit_golden_hash_is_the_same_on_every_target"
+            "crate": "geom-bvh",
+            "test": "tree_determinism",
+            "function": "tree_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "a0bff06b629c6e61aa07b26cae5dbe28f2fbb5ce84876a53e38010321c2eb878"
-        },
-        {
-          "id": "geom-nurbs/bernstein",
-          "what": "The Bernstein toolkit of geom-nurbs (piece G59): 200 surfaces (degrees 1 to 3, one to three spans each way, rational half the time) with every patch's interval coefficients, box, derivative boxes, fat plane and normal patch; 200 pairs of plane curves with every piece's box, derivative box, fat line and clips; 50 scalar, dot and cross products; 20 exact normal patches and plane coefficients of grid patches; and 4 refusals: 5960 results in the canonical encoding of tests/bernstein_determinism.rs.",
-          "check": {
-            "crate": "geom-nurbs",
-            "test": "bernstein_determinism",
-            "function": "bernstein_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "e036ec6fc907153e3ff1960bfac8b52a646e091e9c2e23f4a364efd0ea9e2c12"
+          "sha256": "9286771316237554822844bb7bebfe4dfb2ba38b8f8f1ebdee5e23100e383ee8"
         },
         {
           "id": "geom-curve/analytic",
@@ -371,6 +195,278 @@
           ]
         },
         {
+          "id": "geom-linalg/dense",
+          "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
+          "check": {
+            "crate": "geom-linalg",
+            "test": "dense_determinism",
+            "function": "dense_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-linalg/spectral",
+          "what": "The singular value decompositions (one-sided Jacobi and Golub-Kahan) and the symmetric eigensolver of geom-linalg (piece G50): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), both SVDs of each and the eigendecomposition of each square one's symmetric part, and two refusals for want of work: 546 results in the canonical encoding of tests/spectral_determinism.rs.",
+          "check": {
+            "crate": "geom-linalg",
+            "test": "spectral_determinism",
+            "function": "spectral_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9c2a12093c3d4e85570d02e82f1a918d55300c7c14935ef8c3875ebac031d54a"
+        },
+        {
+          "id": "geom-make/queries",
+          "what": "The core queries (piece G102) over 32 boxes, each also moved, 32 prisms and 8 cylinders from a fixed stream: every face's row, name and roles, twice-area vectors, the bounding box, six times the volume, the exactness report's counts and the validity report's deferred count, as tests/query_determinism.rs records them.",
+          "check": {
+            "crate": "geom-make",
+            "test": "query_determinism",
+            "function": "queries_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "b8f2e38d41f1e8a7dacd616b124f55c6b7b46cc691203456872debd94e8f9c4f"
+        },
+        {
+          "id": "geom-math/determinism",
+          "what": "geom-math's determinism corpus (piece G03): vectors, floats, double-double, grid, rational, general and typed transforms, boxes, frames and shifts, at least 30,000 calls in the canonical encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-math",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "d46b124ed75682f9718101362b4a9a858fb17170e264db37fc68ac037fb8edac",
+          "history": [
+            {
+              "sha256": "d79932a18468bf79d55bdb204597c001ad9b512c5000fae5e87d7db01a72f126",
+              "kind": "improvement",
+              "piece": "G05",
+              "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which geom-math's rotations call: only the two sections that build rotations from them changed, transform (6773dadd...852b18 before) and boxes (2e8f3297...bc7e3e before); every other section's digest is the same. Recorded on main in G03's pull request (commit bbbc379), before the store existed."
+            },
+            {
+              "sha256": "dd9daf8861292fda5cd2de1d789a6f9739a4672145c9756cdc5299a6fe772ab6",
+              "kind": "improvement",
+              "piece": "G48",
+              "why": "Piece G48 moved geom-math onto geom-num's double-double type (piece G25) and made out-of-range conversions report the exact coordinate. Only two sections changed: dd (a675b95c...61b257 before), which now exercises geom-num's DD, the one geom-math's frames use, with its own algorithms, tighter proven bounds and errors (division by zero NotFinite, the root of a negative OutsideDomain); and frames (ae980551...e555d700 before), whose OutOfRange values are now the exact rounded coordinate, saturated only beyond i128, in the order height, x, y, where G03 reported estimates. Every successful conversion is unchanged: both pieces round correctly, and the rounding is unique. The other eight sections' digests are the same."
+            }
+          ]
+        },
+        {
+          "id": "geom-math/frames",
+          "what": "geom-math's frame workload (piece G48): map to frame from doubles and from exact decimal text, frame to map, in metres, feet, Clarke's foot and random linear units, Map and Ground frames with 64-bit scale factors, out-of-range values, decimal text forms, units from decimals and exact shifts, as tests/attack_g48.rs records it.",
+          "check": {
+            "crate": "geom-math",
+            "test": "attack_g48",
+            "function": "frame_results_identical_across_targets"
+          },
+          "sha256": "8a315871b62b2c0f1065d7092766e9033c0329f127a43a9fea2b89955577b574"
+        },
+        {
+          "id": "geom-math/rotations",
+          "what": "geom-math's rational rotations (piece G46): 2D searches for 175 directions at seven bounds, 3D searches for 129 quaternion targets at five bounds, 300 compositions at three bounds (exact and re-approximated) and as typed transforms, images of grid points at the frame's edges, every result's matrix, inverse, direction, rational and floating-point forms, and typed transforms of every variant composed, as tests/rotation_determinism.rs records them.",
+          "check": {
+            "crate": "geom-math",
+            "test": "rotation_determinism",
+            "function": "rotation_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "330445e67c88e24daf07e62cdf53cf1ead9abb5ae80c7219b69ed38842c91589"
+        },
+        {
+          "id": "geom-math/workload",
+          "what": "geom-math's attack workload (piece G03): map conversions both ways, double-double arithmetic and transform classification and inversion, as tests/attack_g03.rs records it.",
+          "check": {
+            "crate": "geom-math",
+            "test": "attack_g03",
+            "function": "results_identical_across_targets"
+          },
+          "sha256": "629014b5a4dbadaf75b8d24b6aa1224580df998a43a9139fc762001196816e27",
+          "history": [
+            {
+              "sha256": "c1c5d1b624f95d7ce6b6640acef43dda0a90ae2c4beb6c30483fa87a234747c9",
+              "kind": "improvement",
+              "piece": "G05",
+              "why": "The correctly rounded sinpi and cospi of piece G05 (CORE-MATH ports in place of an msun-method approximation), which the workload's rotations call; sqrt, abs, floor, ceil and round_ties_even, the only other maths functions geom-math calls, are unchanged. Recorded on main in G03's pull request (commit c19cca4), before the store existed."
+            },
+            {
+              "sha256": "977828731c890a725eae9d2f6eb79b9d04a69f927ffcf20525228c93f2cfda25",
+              "kind": "improvement",
+              "piece": "G48",
+              "why": "Piece G48 moved geom-math onto geom-num's double-double type (piece G25): the workload's double-double arithmetic (add, mul, div and sqrt of random operands) now runs geom-num's DD, with its own algorithms and tighter proven bounds, so some results differ in their last bits and its errors differ (division by zero NotFinite, the root of a negative OutsideDomain). The workload's map conversions hash only successful results, which are correctly rounded in both pieces and so unchanged, and its transforms are untouched."
+            }
+          ]
+        },
+        {
+          "id": "geom-mesh/cdt",
+          "what": "The constrained Delaunay triangulation of geom-mesh (piece G153): cocircular grids of 2 to 32 points a side, plain and with crossing constraints; 16 scatters with constraints between random points; 8 outlines refined to a quality. Vertices, triangles and constrained edges in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "cdt_determinism",
+            "function": "cdt_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e785c8bb58ed861f1eafccaa437e35dca30ec69a695ddf3abb238d1db057cb11"
+        },
+        {
+          "id": "geom-mesh/exact",
+          "what": "The exact mesh of geom-mesh (piece G146): boxes at five scales, 16 closed height fields and a cut pyramid with corners off the grid. Every array of each mesh and its volume, in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "exact_determinism",
+            "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
+        },
+        {
+          "id": "geom-num/dd-exact-sum",
+          "what": "Double-double arithmetic and ExactSum (piece G25) on 6,000 adversarial operand pairs at every exponent: every DD operation, two_prod_fma and fma, 903,792 recorded bytes in the encoding of tests/attack_g25.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "attack_g25",
+            "function": "adv_bits_are_the_same_on_every_target_and_profile"
+          },
+          "sha256": "ce0e1901d8d11ff1b2d490e929b51fae2adfd7479c63126f8359ac917d0cb0fd"
+        },
+        {
+          "id": "geom-num/determinism",
+          "what": "geom-num's determinism corpus: 88,218 calls into every module of the numbers layer (predicates, planes, three-plane points, grid steps, wide integers, error-free transformations, intervals, the maths module and the scalars), each result in the canonical encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "81ed30a1251227dc3f2264d29de7d5efe8ba162d10a9b57e88152a9c44f9f2d0",
+          "history": [
+            {
+              "sha256": "c9c61875e6da8cff4ffa79f147d8f32187fa2929564100ce834849bb43a211f8",
+              "kind": "improvement",
+              "piece": "G05",
+              "why": "The correctly rounded maths of piece G05 (issue #174): 92 of G02's 7,677 maths records moved by one unit in the last place to the correctly rounded value (exp 9, ln 3, sinpi 52, cospi 19, atan2 9); the refusals of Interval::exp and Interval::ln moved from the interval section to the maths section, now certified; 2,700 records were added from their own generator (SEED_G05) for the libm twins and the interval versions. No error changed; the other sections give G02's digests unchanged."
+            },
+            {
+              "sha256": "fb19edfc7c58ca5e93a8921dfbdd2ab2dfacc2d180fbe6dec540efbede954564",
+              "kind": "improvement",
+              "piece": "G47",
+              "why": "Interval::atan2 is certified now (piece G47): its refusal (index 2) left the interval section, and the maths section gains 601 records of it (index 32) from a generator of their own (SEED_G47), after every earlier record; no other record moved, and the sections predicates, planes, tpi, grid, wide, eft and scalars are unchanged. The same digest on wasm32 under Wasmtime, where exp's exact product error is now Dekker's two-product."
+            }
+          ]
+        },
+        {
+          "id": "geom-num/dual-and-newton",
+          "what": "The dual numbers and the interval Newton operators (piece G52): every elemental operation on 300 pairs of dual reals and 300 pairs of dual intervals, with the tripwire's refusals at singular points; the values and Jacobians of two fixed systems at 50 points and over 50 boxes; and the Krawczyk and Hansen-Sengupta operators, up to five steps each from boxes around the zeros of 60 seeded systems in each of one to four unknowns, with singular, empty and failing systems: 10,337 results in the canonical encoding of tests/dual_newton_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "dual_newton_determinism",
+            "function": "dual_and_newton_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "dd010907a8e85d445965877e147ffce51c90c5a9b9b40536714a71035d2364dc"
+        },
+        {
+          "id": "geom-num/order-free",
+          "what": "The input-shuffle hook on geom-num's order-free contracts (piece G19): ExactSum over seeded term sets added in their own order and in shuffled orders, one by one, as slices, as streams and as shuffled chunks merged in shuffled order, and DD addition and multiplication and two_sum in both operand orders, in the encoding of tests/order_free.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "order_free",
+            "function": "order_free_contracts_give_one_answer_in_every_order"
+          },
+          "sha256": "1c9ef01a48433fd9f6da1ecc6d234d124f450d02df34e40b6542e3e1ca16a7c8"
+        },
+        {
+          "id": "geom-num/proven-maths",
+          "what": "The five correctly rounded maths functions of piece G05 (sinpi, cospi, exp, ln and atan2) over 100,000 inputs, each result a word (a value's bits or a marker for its error) as tests/attack_g05.rs records it; the SHA-256 of the bytes whose 64-bit FNV-1a digest G05 pinned.",
+          "check": {
+            "crate": "geom-num",
+            "test": "attack_g05",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "3b7df11af336c9c692854f222e2227c3ee0d90fb539cf004cc0b5f3cb3800cc4"
+        },
+        {
+          "id": "geom-num/rng-draws",
+          "what": "The draw corpus of geom_num::rng (Philox4x32-10, piece G32): at least 20,000 draws of every kind over six seeds and streams from six starting positions, in the canonical encoding of tests/rng_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "rng_determinism",
+            "function": "rng_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "706bf19f86a2ac5ba9be55866a1a5b151702dd6707b9b3b67a5c4c347cbabb7f"
+        },
+        {
+          "id": "geom-num/rng-stream-ranges",
+          "what": "The stream-range corpus of geom_num::rng (piece G32): stream ranges of every size and index, their streams and their errors, in the canonical encoding of tests/rng_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "rng_determinism",
+            "function": "rng_stream_range_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "4d2c3a986913d7751a8f49eb3a7e5340eb973b591154c7acdaaf0ad47b6472f7"
+        },
+        {
+          "id": "geom-num/root-isolation",
+          "what": "The double-double balls and the root-isolation engine (piece G53): every ball operation on 400 seeded pairs, results and errors alike; and the engine, by both operators, on seeded product systems (24, 12, 6 and 4 in one to four unknowns), on zeros on split lines and on the domain's boundary, zeros closer than the floor, multiple zeros, a dependent system, a zero without a derivative, the double-double fallbacks, and every cap (the work and logical-memory budgets, an unreachable target, an imprecise position, a box that cannot be split): 6,181 results in the canonical encoding of tests/isolate_determinism.rs, with the work and logical memory each isolation charged.",
+          "check": {
+            "crate": "geom-num",
+            "test": "isolate_determinism",
+            "function": "root_isolation_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "ce9699711dc7f72a1b12491ffd673e7b720f28e9d22936550f618a24e0bc6421"
+        },
+        {
+          "id": "geom-num/roots-and-quadrature",
+          "what": "Brent's zero and minimum, the generated Gauss-Legendre and Gauss-Kronrod rules and the adaptive integrator (piece G51): every rule's nodes and weights, 1,790 results over fixed problems and every point each search and integration evaluated, in order, in the canonical encoding of tests/roots_quadrature_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "roots_quadrature_determinism",
+            "function": "roots_and_quadrature_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "624a2f76c0790d4cd1c05ed823c612a01217419ccce217b824f2fcd093912b26"
+        },
+        {
+          "id": "geom-nurbs/bernstein",
+          "what": "The Bernstein toolkit of geom-nurbs (piece G59): 200 surfaces (degrees 1 to 3, one to three spans each way, rational half the time) with every patch's interval coefficients, box, derivative boxes, fat plane and normal patch; 200 pairs of plane curves with every piece's box, derivative box, fat line and clips; 50 scalar, dot and cross products; 20 exact normal patches and plane coefficients of grid patches; and 4 refusals: 5960 results in the canonical encoding of tests/bernstein_determinism.rs.",
+          "check": {
+            "crate": "geom-nurbs",
+            "test": "bernstein_determinism",
+            "function": "bernstein_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e036ec6fc907153e3ff1960bfac8b52a646e091e9c2e23f4a364efd0ea9e2c12"
+        },
+        {
+          "id": "geom-nurbs/fit",
+          "what": "The fitting operations of geom-nurbs at FitVersion::V1 (piece G58): 64 curve interpolations, 16 with end derivatives, 32 least-squares curves, 16 weighted least-squares curves with point and derivative constraints, 8 surface interpolations, 8 least-squares surfaces, 8 approximations to a stated error (a helix, a corner and noisy data, single and multiple knots) and 5 refusals: 157 results in the canonical encoding of tests/fit_determinism.rs.",
+          "check": {
+            "crate": "geom-nurbs",
+            "test": "fit_determinism",
+            "function": "fit_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "a0bff06b629c6e61aa07b26cae5dbe28f2fbb5ce84876a53e38010321c2eb878"
+        },
+        {
+          "id": "geom-nurbs/operations",
+          "what": "geom-nurbs's knot operations (piece G56) on a fixed corpus of 96 curves of degrees 1 to 5, 7, 9 and 12 and 24 surfaces: insertion, refinement (by new knots, by the curve's own and by both), elevation, Bezier extraction, knot removal and degree reduction at several tolerances, and derivative curves and surfaces, each result's knots, control points, weights and deviation, in the encoding of tests/operations_determinism.rs.",
+          "check": {
+            "crate": "geom-nurbs",
+            "test": "operations_determinism",
+            "function": "operations_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "50b0697e2ea65748b98ac98410ee0fd70511d6e62843feb75be01fa5e6fc5eb0"
+        },
+        {
+          "id": "geom-op/determinism",
+          "what": "geom-op's canonical CBOR and SHA-256 corpus (piece G86): every power of two and the edges of each float width and integer head, 3,000 nested values of SKG's subset drawn from a fixed SplitMix64 stream, and the SHA-256 and 128-bit cut of each encoding and of seeded messages of every length to 300 bytes: 22,369 records in the encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-op",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
+        },
+        {
+          "id": "geom-run/helpers",
+          "what": "geom-run's parallel helpers (piece G04) on the serial executor and on pools of 1, 2, 3 and 8 threads with chunk sizes 1, 7 and 4,096: every answer, error and meter, in the canonical encoding of tests/golden.rs.",
+          "check": {
+            "crate": "geom-run",
+            "test": "golden",
+            "function": "golden_hash_is_the_same_on_every_target_thread_count_and_chunk_size"
+          },
+          "sha256": "b5e1993aceab1c8f0a6cdfd0c786974375634b5470c635da384122a4bc015172"
+        },
+        {
           "id": "geom-surface/analytic",
           "what": "The analytic and swept surface kinds of geom-surface (piece G65): 12 rounds of a plane, cylinder, cone, sphere and torus on random frames and a surface of revolution, an extrusion and a ruled surface on fixed profiles, each enclosed at nine parameter pairs, bounded with both derivative bounds and the normal bound over a box, converted to NURBS (knots, net, weights, both parameter maps and deviation), split and reversed in each direction and transformed (each enclosed, with its deviation); and 5 refusals: 2693 results in the canonical encoding of tests/surface_determinism.rs.",
           "check": {
@@ -393,6 +489,17 @@
               "why": "A grid transform that moves a cylinder's, cone's, sphere's or torus's centre exactly now states deviation 0 (chapter 7; piece G69's law catalogue found about 1e-15 stated, from comparing interval enclosures of irrational unit vectors). The corpus's quarter turns of those kinds moved; its revolutions turn about the origin, so piece G69's fix of a revolution's placement moved none of them; the result count (2693) and the refusals (5) are unchanged."
             }
           ]
+        },
+        {
+          "id": "geom-surface/derivative-bounds",
+          "what": "Every surface kind's second-derivative and normal-derivative bounds (piece G68): 6 rounds of a rational bicubic NURBS patch with an interior knot each way and weights from 2^-10 to 2^10 (with 1e-3 and 1e3 among them) and a nonrational biquadratic one, each over its whole domain, a quarter of it, a box of a hundredth of each side and a box across its interior knots; and a plane, a cylinder, a cone (at its apex and away from it), a sphere (at its pole and away from it), a torus and an affine image of a torus on random frames, over one box each. For every box the partials to order 2, the second-derivative bound with its chord constant M, and the normal-derivative bound; and 2 refusals: 386 results in the canonical encoding of tests/derivative_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "derivative_determinism",
+            "function": "derivative_bounds_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
+          "history": []
         },
         {
           "id": "geom-surface/offset",
@@ -425,125 +532,44 @@
           ]
         },
         {
-          "id": "geom-surface/derivative-bounds",
-          "what": "Every surface kind's second-derivative and normal-derivative bounds (piece G68): 6 rounds of a rational bicubic NURBS patch with an interior knot each way and weights from 2^-10 to 2^10 (with 1e-3 and 1e3 among them) and a nonrational biquadratic one, each over its whole domain, a quarter of it, a box of a hundredth of each side and a box across its interior knots; and a plane, a cylinder, a cone (at its apex and away from it), a sphere (at its pole and away from it), a torus and an affine image of a torus on random frames, over one box each. For every box the partials to order 2, the second-derivative bound with its chord constant M, and the normal-derivative bound; and 2 refusals: 386 results in the canonical encoding of tests/derivative_determinism.rs.",
+          "id": "geom-test/grid-sampler",
+          "what": "3,000 draws of geom-test's grid sampler (piece G11) from the default seed, every coordinate's little-endian bytes; the SHA-256 of the bytes whose 64-bit FNV-1a digest G11 pinned.",
           "check": {
-            "crate": "geom-surface",
-            "test": "derivative_determinism",
-            "function": "derivative_bounds_golden_hash_is_the_same_on_every_target"
+            "crate": "geom-test",
+            "test": "lib",
+            "function": "grid::tests::the_same_seed_gives_the_same_data_on_every_target"
           },
-          "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
-          "history": []
+          "sha256": "20918c21b82e75c8dd599f7ec6b424a12783584e4e46a4806f1de18fc2f5a1ac"
         },
         {
-          "id": "geom-bvh/tree",
-          "what": "The box tree of geom-bvh (piece G54): 2D and 3D trees over 22 fixed sets of 1 to 9,000 boxes (sparse, dense, nested and all equal, the largest built with the parallel subtree phase), each tree's canonical bytes, the keys meeting eight query boxes, its pairs and its pairs with another tree both ways, the work each of those walks charged, and one refit of each, 3,970,021 bytes in the encoding of tests/tree_determinism.rs.",
+          "id": "geom-test/prop-cases",
+          "what": "The first proptest case of seeds 0 to 63 from geom-test's grid strategies (piece G11), every coordinate's little-endian bytes; the SHA-256 of the bytes whose 64-bit FNV-1a digest G11 pinned.",
           "check": {
-            "crate": "geom-bvh",
-            "test": "tree_determinism",
-            "function": "tree_golden_hash_is_the_same_on_every_target"
+            "crate": "geom-test",
+            "test": "lib",
+            "function": "prop::tests::the_same_seed_gives_the_same_cases_on_every_target"
           },
-          "sha256": "9286771316237554822844bb7bebfe4dfb2ba38b8f8f1ebdee5e23100e383ee8"
+          "sha256": "c45bff24db9659cbc69550a8ef2cdc00f81982cd6c75074abcadb8fb3c45e559"
         },
         {
-          "id": "geom-bvh/cells",
-          "what": "The Morton-sorted cell index of geom-bvh (piece G55): indexes over seven fixed sets of 1 to 20,000 grid points (sparse over the frame, dense, clustered at the frame's edge, the eight corners and 300 equal points), each index's canonical bytes, the keys within six radii of twelve centres and the work each search charged, and every pair within two radii, in the encoding of tests/cells_determinism.rs.",
+          "id": "geom-test/shuffle-permutations",
+          "what": "The permutations of 0 to 63 inputs the input-shuffle hook draws from the default seed (piece G19), every index as eight little-endian bytes: the orders every order-free golden runs in.",
           "check": {
-            "crate": "geom-bvh",
-            "test": "cells_determinism",
-            "function": "cells_golden_hash_is_the_same_on_every_target"
+            "crate": "geom-test",
+            "test": "lib",
+            "function": "golden::shuffle::tests::the_permutation_stream_is_pinned"
           },
-          "sha256": "43aace359b854c006c7402104804f6aa51a45230484e66d5173c890586c1b541"
+          "sha256": "a78a89171f0b81299c6fdfa1f62551b94ec1917a285a8017d1b307fa51349215"
         },
         {
-          "id": "geom-num/roots-and-quadrature",
-          "what": "Brent's zero and minimum, the generated Gauss-Legendre and Gauss-Kronrod rules and the adaptive integrator (piece G51): every rule's nodes and weights, 1,790 results over fixed problems and every point each search and integration evaluated, in order, in the canonical encoding of tests/roots_quadrature_determinism.rs.",
+          "id": "geom-topo/arenas",
+          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
           "check": {
-            "crate": "geom-num",
-            "test": "roots_quadrature_determinism",
-            "function": "roots_and_quadrature_golden_hash_is_the_same_on_every_target"
+            "crate": "geom-topo",
+            "test": "arena_determinism",
+            "function": "arenas_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "624a2f76c0790d4cd1c05ed823c612a01217419ccce217b824f2fcd093912b26"
-        },
-        {
-          "id": "geom-num/dual-and-newton",
-          "what": "The dual numbers and the interval Newton operators (piece G52): every elemental operation on 300 pairs of dual reals and 300 pairs of dual intervals, with the tripwire's refusals at singular points; the values and Jacobians of two fixed systems at 50 points and over 50 boxes; and the Krawczyk and Hansen-Sengupta operators, up to five steps each from boxes around the zeros of 60 seeded systems in each of one to four unknowns, with singular, empty and failing systems: 10,337 results in the canonical encoding of tests/dual_newton_determinism.rs.",
-          "check": {
-            "crate": "geom-num",
-            "test": "dual_newton_determinism",
-            "function": "dual_and_newton_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "dd010907a8e85d445965877e147ffce51c90c5a9b9b40536714a71035d2364dc"
-        },
-        {
-          "id": "geom-num/root-isolation",
-          "what": "The double-double balls and the root-isolation engine (piece G53): every ball operation on 400 seeded pairs, results and errors alike; and the engine, by both operators, on seeded product systems (24, 12, 6 and 4 in one to four unknowns), on zeros on split lines and on the domain's boundary, zeros closer than the floor, multiple zeros, a dependent system, a zero without a derivative, the double-double fallbacks, and every cap (the work and logical-memory budgets, an unreachable target, an imprecise position, a box that cannot be split): 6,181 results in the canonical encoding of tests/isolate_determinism.rs, with the work and logical memory each isolation charged.",
-          "check": {
-            "crate": "geom-num",
-            "test": "isolate_determinism",
-            "function": "root_isolation_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "ce9699711dc7f72a1b12491ffd673e7b720f28e9d22936550f618a24e0bc6421"
-        },
-        {
-          "id": "geom-math/rotations",
-          "what": "geom-math's rational rotations (piece G46): 2D searches for 175 directions at seven bounds, 3D searches for 129 quaternion targets at five bounds, 300 compositions at three bounds (exact and re-approximated) and as typed transforms, images of grid points at the frame's edges, every result's matrix, inverse, direction, rational and floating-point forms, and typed transforms of every variant composed, as tests/rotation_determinism.rs records them.",
-          "check": {
-            "crate": "geom-math",
-            "test": "rotation_determinism",
-            "function": "rotation_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "330445e67c88e24daf07e62cdf53cf1ead9abb5ae80c7219b69ed38842c91589"
-        },
-        {
-          "id": "geom-linalg/spectral",
-          "what": "The singular value decompositions (one-sided Jacobi and Golub-Kahan) and the symmetric eigensolver of geom-linalg (piece G50): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), both SVDs of each and the eigendecomposition of each square one's symmetric part, and two refusals for want of work: 546 results in the canonical encoding of tests/spectral_determinism.rs.",
-          "check": {
-            "crate": "geom-linalg",
-            "test": "spectral_determinism",
-            "function": "spectral_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "9c2a12093c3d4e85570d02e82f1a918d55300c7c14935ef8c3875ebac031d54a"
-        },
-        {
-          "id": "geom-linalg/dense",
-          "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
-          "check": {
-            "crate": "geom-linalg",
-            "test": "dense_determinism",
-            "function": "dense_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
-        },
-        {
-          "id": "geom-mesh/cdt",
-          "what": "The constrained Delaunay triangulation of geom-mesh (piece G153): cocircular grids of 2 to 32 points a side, plain and with crossing constraints; 16 scatters with constraints between random points; 8 outlines refined to a quality. Vertices, triangles and constrained edges in canonical order.",
-          "check": {
-            "crate": "geom-mesh",
-            "test": "cdt_determinism",
-            "function": "cdt_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "e785c8bb58ed861f1eafccaa437e35dca30ec69a695ddf3abb238d1db057cb11"
-        },
-        {
-          "id": "geom-op/determinism",
-          "what": "geom-op's canonical CBOR and SHA-256 corpus (piece G86): every power of two and the edges of each float width and integer head, 3,000 nested values of SKG's subset drawn from a fixed SplitMix64 stream, and the SHA-256 and 128-bit cut of each encoding and of seeded messages of every length to 300 bytes: 22,369 records in the encoding of tests/determinism.rs.",
-          "check": {
-            "crate": "geom-op",
-            "test": "determinism",
-            "function": "golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
-        },
-        {
-          "id": "geom-mesh/exact",
-          "what": "The exact mesh of geom-mesh (piece G146): boxes at five scales, 16 closed height fields and a cut pyramid with corners off the grid. Every array of each mesh and its volume, in canonical order.",
-          "check": {
-            "crate": "geom-mesh",
-            "test": "exact_determinism",
-            "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
+          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
         }
       ]
     }

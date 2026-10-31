@@ -43,10 +43,13 @@ geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 # The dense linear algebra of phase 2 (pieces G49 and G50), for the same count benchmarks.
 geom-linalg = { path = "../geom-linalg" }
+# The primitives and transforms of phase 3 (piece G101), and the context and output they take and
+# give, for the same count benchmarks.
+geom-make = { path = "../geom-make" }
 # The triangulation of phase 3 (piece G153), for the same count benchmarks.
 geom-mesh = { path = "../geom-mesh" }
-# The exact mesh's names, for the same count benchmarks.
 geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
 # crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
 # sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which
