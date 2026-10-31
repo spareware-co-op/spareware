@@ -43,12 +43,24 @@ use geom_test::fixture::repo::{File, embedded, must_fail_on_base, parse_all};
 use geom_test::fixture::run::{Engine, Failure, PREFIX, Ran, Replayed, Step, Verdict, replay, run};
 use geom_test::fixture::{
     Class, Counts, Expect, Fixture, FixtureError, Hash, Key, Kind, Measures, Name, OpLog,
-    OpVersions, Quantity, Source, Speed, Status, Triage, is_id,
+    OpVersions, Quantity, Source, Speed, Spend, Status, Triage, is_id,
 };
 use geom_test::golden::store::{ChangeKind, State};
 use geom_test::golden::{Sha256, Store};
 
 const EDITION: &str = "pre-edition";
+const ONE: Spend = Spend {
+    work: 1,
+    logical_bytes: 0,
+};
+const ERRED: Spend = Spend {
+    work: 3,
+    logical_bytes: 4,
+};
+const DONE: Spend = Spend {
+    work: 5,
+    logical_bytes: 6,
+};
 
 fn op(name: &str, version: u64) -> Operation {
     Operation {
@@ -123,6 +135,7 @@ impl Engine for Toy {
                 history: None,
                 exactness: Exactness::Exact,
                 diagnostics: Vec::new(),
+                work: DONE,
             })
         };
         match operation.name.as_str() {
@@ -131,11 +144,12 @@ impl Engine for Toy {
             "bad" => Ran::Failed(
                 OpError::new(operation.op.clone(), RunDetail::Internal { what: "x" })
                     .with_entities([NameId::from_bytes([7; 16])]),
+                ERRED,
             ),
-            "typed" if operation.inputs.len() > 1 && self.stored > 0 => Ran::Failed(OpError::new(
-                operation.op.clone(),
-                geom_num::NumError::Degenerate,
-            )),
+            "typed" if operation.inputs.len() > 1 && self.stored > 0 => Ran::Failed(
+                OpError::new(operation.op.clone(), geom_num::NumError::Degenerate),
+                ERRED,
+            ),
             "typed" => step(1),
             "boom" => panic!("a planted panic"),
             "nope" => Ran::Refused("no such operation".to_owned()),
@@ -162,13 +176,24 @@ fn fixture(operations: Vec<Operation>) -> Fixture {
     let log = OpLog::new(vec![body(1)], operations);
     let got = replay(&mut Toy::default(), &log);
     let expect = match got {
-        Replayed::Done { hash, measures } => Expect::Ok {
+        Replayed::Done {
+            hash,
+            measures,
+            work,
+        } => Expect::Ok {
             hash: Some(hash),
+            work: Some(work),
             measures,
         },
-        Replayed::Failed { kind, entities, .. } => Expect::Err {
+        Replayed::Failed {
+            kind,
+            entities,
+            work,
+            ..
+        } => Expect::Err {
             kind: Kind(kind),
             entities: entities.into_iter().map(Name).collect(),
+            work: Some(work),
         },
         Replayed::Broken(why) => panic!("{why}"),
     };
@@ -192,11 +217,13 @@ fn known() -> Fixture {
         Expect::Err {
             kind: Kind(ErrorKind::Degenerate),
             entities: Vec::new(),
+            work: Some(ERRED),
         },
     );
     f.status = Status::Known {
         wanted: Expect::Ok {
             hash: None,
+            work: None,
             measures: measures(),
         },
     };
@@ -379,6 +406,7 @@ fn the_rules_hold() {
         key(&f.log),
         Expect::Ok {
             hash: None,
+            work: None,
             measures: measures(),
         },
     );
@@ -409,6 +437,7 @@ fn the_rules_hold() {
             key(&f.log),
             Expect::Ok {
                 hash: Some(Hash([0; 32])),
+                work: Some(ONE),
                 measures: m,
             },
         );
@@ -421,6 +450,7 @@ fn the_rules_hold() {
         key(&f.log),
         Expect::Ok {
             hash: Some(Hash([0; 32])),
+            work: Some(ONE),
             measures: m,
         },
     );
@@ -433,6 +463,7 @@ fn the_rules_hold() {
             Expect::Err {
                 kind: Kind(kind),
                 entities: Vec::new(),
+                work: Some(ERRED),
             },
         );
         assert!(rule(&f).contains("never logged"));
@@ -447,6 +478,7 @@ fn only_a_typed_error_can_be_known() {
         wanted: Expect::Err {
             kind: Kind(ErrorKind::Degenerate),
             entities: Vec::new(),
+            work: Some(ERRED),
         },
     };
     assert!(rule(&f).contains("must be a success"));
@@ -455,6 +487,7 @@ fn only_a_typed_error_can_be_known() {
         key(&f.log),
         Expect::Ok {
             hash: Some(Hash([1; 32])),
+            work: Some(ONE),
             measures: measures(),
         },
     );
@@ -465,6 +498,7 @@ fn only_a_typed_error_can_be_known() {
         Expect::Err {
             kind: Kind(ErrorKind::Internal),
             entities: Vec::new(),
+            work: Some(ERRED),
         },
     );
     assert!(rule(&f).contains("Internal"));
@@ -478,6 +512,7 @@ fn only_a_typed_error_can_be_known() {
     f.status = Status::Known {
         wanted: Expect::Ok {
             hash: None,
+            work: None,
             measures: m,
         },
     };
@@ -522,11 +557,17 @@ fn the_hash_covers_every_operation_in_order() {
         kind,
         entities,
         hash,
+        work,
     } = replay(&mut toy, &stopped)
     else {
         panic!()
     };
     assert_eq!(toy.done, 2, "nothing runs after the error");
+    assert_eq!(
+        work,
+        DONE.plus(ERRED),
+        "the work so far, the failing operation's included"
+    );
     assert_eq!(kind, ErrorKind::Internal);
     assert_eq!(entities, [NameId::from_bytes([7; 16])]);
     let error = OpError::new(
@@ -590,6 +631,7 @@ fn the_verdicts_are_the_chapters() {
         k.clone(),
         Expect::Ok {
             hash: Some(Hash([0; 32])),
+            work: Some(ONE),
             measures: m.clone(),
         },
     );
@@ -606,6 +648,7 @@ fn the_verdicts_are_the_chapters() {
         k.clone(),
         Expect::Ok {
             hash,
+            work: Some(DONE),
             measures: moved,
         },
     );
@@ -620,21 +663,26 @@ fn the_verdicts_are_the_chapters() {
         Expect::Err {
             kind: Kind(ErrorKind::Degenerate),
             entities: vec![entity],
+            work: Some(ERRED),
         },
         Expect::Err {
             kind: Kind(ErrorKind::Internal),
             entities: Vec::new(),
+            work: Some(ERRED),
         },
         Expect::Err {
             kind: Kind(ErrorKind::Internal),
             entities: vec![entity, entity],
+            work: Some(ERRED),
         },
         Expect::Err {
             kind: Kind(ErrorKind::Internal),
             entities: vec![Name(NameId::from_bytes([8; 16]))],
+            work: Some(ERRED),
         },
         Expect::Ok {
             hash: None,
+            work: None,
             measures: measures(),
         },
     ] {
@@ -668,13 +716,19 @@ fn the_verdicts_are_the_chapters() {
     let mut two = f.clone();
     let new_key = OpVersions::from([("good".to_owned(), 2)]);
     let log_at = f.log.at_versions(&new_key);
-    let Replayed::Done { hash, measures: m } = replay(&mut Toy::default(), &log_at) else {
+    let Replayed::Done {
+        hash,
+        measures: m,
+        work,
+    } = replay(&mut Toy::default(), &log_at)
+    else {
         panic!()
     };
     two.expect.insert(
         (EDITION.to_owned(), new_key.clone()),
         Expect::Ok {
             hash: Some(hash),
+            work: Some(work),
             measures: m.clone(),
         },
     );
@@ -683,6 +737,7 @@ fn the_verdicts_are_the_chapters() {
         (EDITION.to_owned(), new_key),
         Expect::Ok {
             hash: Some(Hash([0; 32])),
+            work: Some(ONE),
             measures: m,
         },
     );
@@ -710,11 +765,13 @@ fn a_known_fixture_passes_improves_or_fails() {
         Expect::Err {
             kind: Kind(ErrorKind::Degenerate),
             entities: vec![entity],
+            work: Some(ERRED),
         },
     );
     g.status = Status::Known {
         wanted: Expect::Ok {
             hash: None,
+            work: None,
             measures: measures(),
         },
     };
@@ -727,6 +784,7 @@ fn a_known_fixture_passes_improves_or_fails() {
     g.status = Status::Known {
         wanted: Expect::Ok {
             hash: Some(Hash([0; 32])),
+            work: Some(ONE),
             measures: measures(),
         },
     };
@@ -737,6 +795,7 @@ fn a_known_fixture_passes_improves_or_fails() {
     g.status = Status::Known {
         wanted: Expect::Ok {
             hash: None,
+            work: None,
             measures: m,
         },
     };
@@ -810,6 +869,7 @@ fn a_fixture_minimises_to_the_same_class_of_failure() {
         k,
         Expect::Ok {
             hash: Some(Hash([0; 32])),
+            work: Some(ONE),
             measures: measures(),
         },
     );
@@ -847,6 +907,7 @@ fn failures_say_what_failed() {
             Replayed::Done {
                 hash: Hash([0; 32]),
                 measures: measures(),
+                work: ONE,
             },
             "another result",
         ),
@@ -857,6 +918,7 @@ fn failures_say_what_failed() {
             want: Box::new(Expect::Err {
                 kind: Kind(ErrorKind::Degenerate),
                 entities: Vec::new(),
+                work: Some(ERRED),
             }),
         };
         assert_eq!(m.class(), class);
@@ -919,6 +981,7 @@ fn an_expectation_moves_only_on_the_record() {
     let was = base.expect[&k].clone();
     let now = Expect::Ok {
         hash: Some(Hash([9; 32])),
+        work: Some(ONE),
         measures: measures(),
     };
     let mut f = base.clone();
@@ -993,6 +1056,7 @@ fn status_moves_one_way() {
     let key = key(&k.log);
     let stored = Expect::Ok {
         hash: Some(Hash([3; 32])),
+        work: Some(ONE),
         measures: measures(),
     };
     // Known to Pass with what it wanted: free, no history record.
@@ -1011,6 +1075,7 @@ fn status_moves_one_way() {
         key,
         Expect::Ok {
             hash: Some(Hash([3; 32])),
+            work: Some(ONE),
             measures: m,
         },
     );
@@ -1024,6 +1089,7 @@ fn status_moves_one_way() {
     w.status = Status::Known {
         wanted: Expect::Ok {
             hash: Some(Hash([4; 32])),
+            work: Some(ONE),
             measures: measures(),
         },
     };
@@ -1170,6 +1236,7 @@ fn a_box_may_be_flat() {
         key(&f.log),
         Expect::Ok {
             hash: Some(Hash([0; 32])),
+            work: Some(ONE),
             measures: m,
         },
     );
@@ -1200,4 +1267,105 @@ fn a_removal_that_opens_another_is_found_on_the_next_pass() {
     let small = minimise(&log, fails).unwrap();
     assert_eq!(small.operations.len(), 1);
     assert_eq!(small.inputs.len(), 0);
+}
+
+#[test]
+fn a_moved_count_is_refused_on_any_record() {
+    let base = fixture(vec![op("good", 1)]);
+    let k = key(&base.log);
+    let was = base.expect[&k].clone();
+    let Expect::Ok {
+        hash,
+        measures: same,
+        ..
+    } = was.clone()
+    else {
+        panic!()
+    };
+    let mut moved = base.clone();
+    moved.expect.insert(
+        k.clone(),
+        Expect::Ok {
+            hash,
+            work: Some(ONE),
+            measures: same,
+        },
+    );
+    moved.history.push(geom_test::fixture::Change {
+        edition: EDITION.to_owned(),
+        operations: k.1.clone(),
+        was,
+        kind: ChangeKind::Improvement,
+        piece: "G1".to_owned(),
+        why: "w".to_owned(),
+    });
+    let d = diff(&[base], &[moved], state);
+    assert!(d.refused[0].contains("new operation version"), "{d:?}");
+    // The same for an error's counts.
+    let err = fixture(vec![op("bad", 1)]);
+    let k = key(&err.log);
+    let Expect::Err { kind, entities, .. } = err.expect[&k].clone() else {
+        panic!()
+    };
+    let mut moved = err.clone();
+    moved.expect.insert(
+        k,
+        Expect::Err {
+            kind,
+            entities,
+            work: Some(ONE),
+        },
+    );
+    assert!(diff(&[err], &[moved], state).refused[0].contains("new operation version"));
+    // A changed hash is not only a moved count: it takes the ordinary road.
+    let plain = fixture(vec![op("good", 1)]);
+    let k = key(&plain.log);
+    let mut other = plain.clone();
+    other.expect.insert(
+        k,
+        Expect::Ok {
+            hash: Some(Hash([7; 32])),
+            work: Some(ONE),
+            measures: measures(),
+        },
+    );
+    assert!(diff(&[plain], &[other], state).refused[0].contains("without a record"));
+}
+
+#[test]
+fn counts_are_required_where_a_golden_is_stored() {
+    let good = fixture(vec![op("good", 1)]);
+    let mut f = good.clone();
+    f.expect.insert(
+        key(&f.log),
+        Expect::Ok {
+            hash: Some(Hash([0; 32])),
+            work: None,
+            measures: measures(),
+        },
+    );
+    assert!(rule(&f).contains("work count"));
+    let mut f = good.clone();
+    f.expect.insert(
+        key(&f.log),
+        Expect::Err {
+            kind: Kind(ErrorKind::Degenerate),
+            entities: Vec::new(),
+            work: None,
+        },
+    );
+    assert!(rule(&f).contains("work count"));
+}
+
+#[test]
+fn a_run_says_what_a_fixture_would_hold() {
+    let f = fixture(vec![op("good", 1)]);
+    let got = replay(&mut Toy::default(), &f.log);
+    assert_eq!(got.expectation().as_ref(), f.expect.values().next());
+    let e = fixture(vec![op("bad", 1)]);
+    let got = replay(&mut Toy::default(), &e.log);
+    assert_eq!(got.expectation().as_ref(), e.expect.values().next());
+    assert_eq!(Replayed::Broken("b".to_owned()).expectation(), None);
+    let spend = DONE.plus(ERRED);
+    assert_eq!((spend.work, spend.logical_bytes), (8, 10));
 }
