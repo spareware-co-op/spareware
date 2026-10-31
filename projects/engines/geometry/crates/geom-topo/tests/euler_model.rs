@@ -3,7 +3,8 @@
 //! keyed by name. At every step both agree on whether the operator applies, a refusal leaves the
 //! editor unchanged, both describe the same topology, every loop is closed and every ring paired,
 //! and Euler's formula holds; every few steps the editor is published and edited again, and the
-//! body it gives is the body it came from.
+//! body it gives is the body it came from. Each vertex's fins form one fan, the fact
+//! `verus/euler.rs`'s proof of the operators rests on, checked here on the real arenas (G111).
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
@@ -437,11 +438,44 @@ fn state_of(e: &Euler) -> State {
         .into_iter()
         .map(|v| n.vertices[v as usize])
         .collect();
+    assert_fans(e);
     State {
         regions,
         faces,
         edges,
         vertices,
+    }
+}
+
+/// Each live vertex's fins are one cycle of "the fin after my partner", and every live vertex has
+/// such a fan: the rings `verus/euler.rs` models a vertex by.
+fn assert_fans(e: &Euler) {
+    let a = e.arenas();
+    let fin = |f: FinIx| a.fins.get(f).unwrap();
+    let mut at: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+    for f in live(e, Arena::Fin) {
+        let x = fin(ix(f));
+        let edge = a.edges.get(x.edge).unwrap();
+        let start = match x.sense {
+            Sense::Forward => edge.start.unwrap(),
+            Sense::Reversed => edge.end.unwrap(),
+        };
+        at.entry(start.row()).or_default().insert(f);
+    }
+    assert_eq!(at.len(), live(e, Arena::Vertex).len());
+    for fins in at.values() {
+        let first: FinIx = ix(*fins.first().unwrap());
+        let mut fan = BTreeSet::new();
+        let mut f = first;
+        loop {
+            fan.insert(f.row());
+            assert!(fan.len() <= fins.len());
+            f = fin(fin(f).radial).next;
+            if f == first {
+                break;
+            }
+        }
+        assert_eq!(&fan, fins);
     }
 }
 
