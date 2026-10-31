@@ -200,7 +200,7 @@ fn a_cut_ends_each_part_of_an_edge_it_crosses_where_it_crosses() {
         &[(18, 9), (4, 4), (3, 13), (-9, 0), (6, -1)],
     ];
     for corners in stars {
-        assert_eq!(total(&split(&[ring(corners)])), shoelace(corners));
+        assert!(is(&total(&split(&[ring(corners)])), shoelace(corners)));
     }
 }
 
