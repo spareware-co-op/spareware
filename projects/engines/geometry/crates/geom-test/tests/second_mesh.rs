@@ -272,7 +272,11 @@ fn breaks() -> Vec<(&'static str, fn(&mut geom_mesh::exact::Parts))> {
             p.he_pair[0] = p.he_pair[1];
         }),
         ("the wrong kind", |p| {
-            p.kind = MeshKind::General;
+            p.kind = if p.kind == MeshKind::General {
+                MeshKind::Closed
+            } else {
+                MeshKind::General
+            };
         }),
         ("the arrays short", |p| {
             p.he_pair.pop();
