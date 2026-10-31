@@ -1,42 +1,52 @@
 // The recursion check's model of the `sha2` crate (MIT OR Apache-2.0,
 // https://github.com/RustCrypto/hashes), read in place of its source (src/recursion/stdlib.rs):
-// the part geom-op's hash calls, from its documentation (https://docs.rs/sha2/0.11.0/sha2/) and
-// that of the `Digest` trait it re-exports (https://docs.rs/digest/0.11.0/digest/trait.Digest.html).
-// Hashing computes on the bytes it is handed and calls nothing back, so every body is `loop {}`.
-// Never compiled.
+// the part geom-op's hash.rs calls, from its documentation (https://docs.rs/sha2/0.11.0/sha2/)
+// and `digest`'s (https://docs.rs/digest/0.11.0/digest/trait.Digest.html). Each function hashes
+// the bytes it is handed and calls nothing back, so every body is `loop {}`. Never compiled.
 
-pub trait Digest {}
+pub trait Digest {
+    fn update(&mut self, data: &[u8]);
+    fn finalize(self) -> Output;
+}
 
 pub struct Sha256;
-
-impl Digest for Sha256 {}
 
 impl Sha256 {
     pub fn new() -> Sha256 {
         loop {}
     }
-    pub fn update(&mut self, data: &[u8]) {
-        loop {}
-    }
-    pub fn finalize(self) -> [u8; 32] {
+}
+
+impl Digest for Sha256 {
+    fn update(&mut self, data: &[u8]) {}
+    fn finalize(self) -> Output {
         loop {}
     }
 }
 
-impl Clone for Sha256 {
+impl core::clone::Clone for Sha256 {
     fn clone(&self) -> Sha256 {
         loop {}
     }
 }
 
-impl Default for Sha256 {
+impl core::fmt::Debug for Sha256 {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        loop {}
+    }
+}
+
+impl core::default::Default for Sha256 {
     fn default() -> Sha256 {
         loop {}
     }
 }
 
-impl core::fmt::Debug for Sha256 {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+// The digest: 32 bytes, which `into` gives as an array.
+pub struct Output;
+
+impl Output {
+    pub fn into(self) -> [u8; 32] {
         loop {}
     }
 }

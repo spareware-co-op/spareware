@@ -50,7 +50,7 @@ pub const LIBM: &str = include_str!("stdlib/libm.rs.txt");
 /// The model of the part of `rayon` that `geom-pool` calls.
 pub const RAYON: &str = include_str!("stdlib/rayon.rs.txt");
 
-/// The model of the part of `sha2` that `geom-op`'s hash calls.
+/// The model of the part of `sha2` that `geom-op` calls.
 pub const SHA2: &str = include_str!("stdlib/sha2.rs.txt");
 
 /// Where the model of `core` is, relative to the workspace root (its text is [`CORE`]).
@@ -160,6 +160,7 @@ mod tests {
             CORE_PATH.starts_with(FOLDER)
                 && LIBM_PATH.starts_with(FOLDER)
                 && RAYON_PATH.starts_with(FOLDER)
+                && SHA2_PATH.starts_with(FOLDER)
         );
         assert_eq!(read_model(CORE_PATH).as_deref(), Some(CORE));
         assert!(read_model("elsewhere.rs").is_none());
