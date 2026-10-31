@@ -239,7 +239,8 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     };
 
     // Grid transforms compose and invert exactly.
-    if let (Some(g), Some(h)) = (grid(case.grid[0]), grid(case.grid[1])) {
+    let [first, second] = case.grid;
+    if let (Some(g), Some(h)) = (grid(first), grid(second)) {
         if let (Ok(gh), Ok(hp)) = (g.compose(&h), h.apply(p))
             && let (Ok(a), Ok(b)) = (gh.apply(p), g.apply(hp))
             && a != b

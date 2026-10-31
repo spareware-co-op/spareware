@@ -38,6 +38,11 @@ const MAX_LEN: u16 = 3200;
 
 const _: () = assert!(MAX_LEN as usize >= MAX_INPUT_BYTES);
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "bolero's test mode reads its corpus folders from the host and catches panics, \
+              which WASI cannot; the seeded leg runs the same harness there"
+)]
 #[test]
 fn boxtree_fuzz() {
     println!(

@@ -199,7 +199,7 @@ fn gamma(n: usize) -> Option<RBig> {
 /// The reference spline of a kernel curve: its stored homogeneous points and weights, exactly.
 fn spline<const D: usize>(c: &Curve<D>) -> Option<Spline> {
     let b = c.basis();
-    let pts: Vec<&[f64]> = c.homogeneous().iter().map(|p| &p[..]).collect();
+    let pts: Vec<&[f64]> = c.homogeneous().iter().map(<[f64; D]>::as_slice).collect();
     match c.weights() {
         Some(w) => Spline::new_rational(b.degree(), b.knots(), &pts, w).ok(),
         None => Spline::new(b.degree(), b.knots(), &pts).ok(),

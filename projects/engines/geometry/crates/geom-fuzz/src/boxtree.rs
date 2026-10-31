@@ -101,10 +101,13 @@ fn coord(src: &mut ByteSource<'_>) -> i64 {
 fn corners(src: &mut ByteSource<'_>) -> ([i64; 3], [i64; 3]) {
     let a = [coord(src), coord(src), coord(src)];
     let b = [coord(src), coord(src), coord(src)];
-    (
-        core::array::from_fn(|i| a[i].min(b[i])),
-        core::array::from_fn(|i| a[i].max(b[i])),
-    )
+    let (mut lo, mut hi) = (a, b);
+    for (l, h) in lo.iter_mut().zip(hi.iter_mut()) {
+        if *h < *l {
+            core::mem::swap(l, h);
+        }
+    }
+    (lo, hi)
 }
 
 /// Any bytes as a case, and how many bytes were read.
@@ -149,16 +152,13 @@ fn meter() -> WorkMeter<'static> {
 }
 
 fn aabb<const D: usize>((lo, hi): ([i64; 3], [i64; 3])) -> Option<Aabb<D>> {
-    Aabb::new(
-        core::array::from_fn(|i| lo[i]),
-        core::array::from_fn(|i| hi[i]),
-    )
-    .ok()
+    Aabb::new(*lo.first_chunk::<D>()?, *hi.first_chunk::<D>()?).ok()
 }
 
 /// Closed boxes meet when they meet on every axis.
 fn meet<const D: usize>(a: &Aabb<D>, b: &Aabb<D>) -> bool {
-    (0..D).all(|i| a.lo()[i] <= b.hi()[i] && b.lo()[i] <= a.hi()[i])
+    let below = |p: &Aabb<D>, q: &Aabb<D>| p.lo().iter().zip(q.hi().iter()).all(|(l, h)| l <= h);
+    below(a, b) && below(b, a)
 }
 
 fn entries<const D: usize>(boxes: &[([i64; 3], [i64; 3])], first: u64) -> Option<Vec<Entry<D>>> {
@@ -267,12 +267,10 @@ fn trees<const D: usize>(case: &Case) -> Result<(), Finding> {
 }
 
 fn dist2(a: [i64; 3], b: [i64; 3]) -> i128 {
-    let mut s = 0i128;
-    for i in 0..3 {
-        let d = i128::from(a[i] - b[i]);
-        s += d * d;
-    }
-    s
+    a.iter().zip(&b).fold(0, |total, (x, y)| {
+        let d = i128::from(x - y);
+        total + d * d
+    })
 }
 
 fn cells(case: &Case) -> Result<(), Finding> {

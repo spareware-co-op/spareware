@@ -144,7 +144,10 @@ fn orthogonality(qm: &[Vec<RBig>]) -> RBig {
         for j in 0..k {
             let mut d = qm
                 .iter()
-                .fold(RBig::ZERO, |acc, row| acc + &row[i] * &row[j]);
+                .fold(RBig::ZERO, |acc, row| match (row.get(i), row.get(j)) {
+                    (Some(x), Some(y)) => acc + x * y,
+                    _ => acc,
+                });
             if i == j {
                 d -= RBig::ONE;
             }
@@ -164,8 +167,10 @@ fn found(law: &str, detail: impl FnOnce() -> String) -> Result<(), Finding> {
 fn is_permutation(p: &[usize], n: usize) -> bool {
     let mut seen = vec![false; n];
     p.len() == n
-        && p.iter()
-            .all(|&i| i < n && !core::mem::replace(&mut seen[i], true))
+        && p.iter().all(|&i| {
+            seen.get_mut(i)
+                .is_some_and(|s| !core::mem::replace(s, true))
+        })
 }
 
 fn finite(a: &Matrix) -> bool {
@@ -223,7 +228,7 @@ fn spectral(a: &Matrix, case: &Case) -> Result<(), Finding> {
         let s = svd.singular_values();
         if s.len() != m.min(n)
             || s.iter().any(|&x| x < 0.0 || !x.is_finite())
-            || s.windows(2).any(|w| w[0] < w[1])
+            || s.windows(2).any(|w| matches!(w, [a, b] if a < b))
         {
             return found(
                 "an SVD's singular values are min(m, n), finite, non-negative and descending",
@@ -231,13 +236,12 @@ fn spectral(a: &Matrix, case: &Case) -> Result<(), Finding> {
             );
         }
         let (u, v) = (exact(svd.u()), exact(svd.v()));
-        let k = s.len();
         let mut res = RBig::ZERO;
-        for i in 0..m {
-            for j in 0..n {
-                let mut r = ae[i][j].clone();
-                for t in 0..k {
-                    r -= &u[i][t] * q(s[t]) * &v[j][t];
+        for (ae_row, u_row) in ae.iter().zip(&u) {
+            for (aij, v_row) in ae_row.iter().zip(&v) {
+                let mut r = aij.clone();
+                for ((ut, vt), st) in u_row.iter().zip(v_row).zip(s) {
+                    r -= ut * q(*st) * vt;
                 }
                 let r = abs(&r);
                 if r > res {
@@ -263,7 +267,8 @@ fn spectral(a: &Matrix, case: &Case) -> Result<(), Finding> {
         let mut sym = Vec::with_capacity(n * n);
         for i in 0..n {
             for j in 0..n {
-                let (x, y) = (case.entries[i * n + j], case.entries[j * n + i]);
+                let entry = |r: usize, c: usize| case.entries.get(r * n + c).copied();
+                let (x, y) = (entry(i, j).unwrap_or(0.0), entry(j, i).unwrap_or(0.0));
                 // IEEE addition is commutative, so the pair (i, j), (j, i) gets the same value.
                 sym.push(x / 2.0 + y / 2.0);
             }
@@ -277,12 +282,15 @@ fn spectral(a: &Matrix, case: &Case) -> Result<(), Finding> {
             let scale = max_abs(&se);
             let (per, tiny) = bounds(n, n);
             let mut res = RBig::ZERO;
-            for i in 0..n {
-                for k in 0..vals.len() {
+            for (se_row, q_row) in se.iter().zip(&qm) {
+                for (k, val) in vals.iter().enumerate() {
                     // (A·Q − Q·Λ)_ik.
-                    let mut r = -(&qm[i][k] * q(vals[k]));
-                    for j in 0..n {
-                        r += &se[i][j] * &qm[j][k];
+                    let Some(qik) = q_row.get(k) else { continue };
+                    let mut r = -(qik * q(*val));
+                    for (sij, q_j) in se_row.iter().zip(&qm) {
+                        if let Some(qjk) = q_j.get(k) {
+                            r += sij * qjk;
+                        }
                     }
                     let r = abs(&r);
                     if r > res {
