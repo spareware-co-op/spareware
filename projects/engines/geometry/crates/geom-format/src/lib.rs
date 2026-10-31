@@ -34,8 +34,8 @@
 //! - MIT OR Apache-2.0: `crc`.
 //!
 //! Status: the strict CBOR decoder, its columns and the text form built (G91); the record layer,
-//! byte sources, files, salvage, chunks and range checks built (G92); the rest by pieces G93, G94,
-//! G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.
+//! byte sources, files, salvage, chunks and range checks built (G92); the header record and the
+//! registry built (G93); the rest by pieces G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -46,6 +46,8 @@ pub mod checksum;
 pub mod chunk;
 pub mod content;
 pub mod file;
+pub mod header;
 pub mod range;
 pub mod record;
+pub mod registry;
 pub mod source;
