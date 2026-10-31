@@ -416,7 +416,8 @@ const HEADER_GAPS: &[HeaderGap<'static>] = &[];
 /// Inside kernel crates the published crates used as they are, are `libm` (29.1) and `sha2`
 /// (owner action G79, 32.20). Every maths function reaches the kernel through `geom_num::math`
 /// (21), so only `geom-num` names `libm`; SHA-256 hashes names in `geom-op` and content in
-/// `geom-format`, so those two name `sha2` (32.20). The `std` crates (`geom-pool`, with rayon, and
+/// `geom-format`, so those two name `sha2` (32.20); records' CRC-32C is `geom-format`'s, so it
+/// alone names `crc` (24.2, piece G92). The `std` crates (`geom-pool`, with rayon, and
 /// the facade) and the development crates are left to the merge gate's dependency rules (G12).
 const REGISTRY: &[(&str, &str)] = &[
     ("num", "libm"),
@@ -424,6 +425,7 @@ const REGISTRY: &[(&str, &str)] = &[
     ("op", "unicode-normalization"),
     ("format", "sha2"),
 ];
+    ("format", "crc"),
 
 /// The kernel's one lint posture is `geom-num`'s: the numbers layer set it first, with chapter 21's
 /// disallowed methods and types and chapter 27's denials, and every crate that ships is built with

@@ -26,13 +26,26 @@
 //! the records hold.
 //!
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
-//! scaffold test in `engine-geometry` (`tests/scaffold`).
+//! scaffold test in `engine-geometry` (`tests/scaffold`), and `crc`, for records' CRC-32C (24.2).
 //!
-//! Status: the strict CBOR decoder, its columns and the text form built (G91); the rest by pieces
-//! G92, G93, G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.
+//! Licences of the published crates this crate depends on (DEPEND, chapter 29.1), as each one's
+//! manifest at the version in `Cargo.lock` states it:
+//!
+//! - MIT OR Apache-2.0: `crc`.
+//!
+//! Status: the strict CBOR decoder, its columns and the text form built (G91); the record layer,
+//! byte sources, files, salvage, chunks and range checks built (G92); the rest by pieces G93, G94,
+//! G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
 pub mod cbor;
+pub mod checksum;
+pub mod chunk;
+pub mod content;
+pub mod file;
+pub mod range;
+pub mod record;
+pub mod source;

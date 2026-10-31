@@ -15,7 +15,8 @@ name: Kernel fuzzing and proofs
 # - Kani: each `<target>_proof` test, bolero's harness unchanged, proven by Kani for every case of
 #   its domain (the target module's header says which).
 # - Kani for geom-num: each `#[kani::proof]` harness beside geom-num's code (piece G41), proven
-#   on its own; and the same for geom-op's (piece G86), in the job kani-op.
+#   on its own; and the same for geom-op's (piece G86), in the job kani-op, and geom-format's
+#   (piece G92), in the job kani-format.
 # - kernel-fuzz-campaign.yml runs a target for hours instead, on demand: the wide integers' 25-hour
 #   campaign (G26).
 # - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
@@ -31,7 +32,7 @@ name: Kernel fuzzing and proofs
 # geom-math, geom-name, geom-num, geom-nurbs, geom-op, geom-run, geom-surface, geom-test and
 # geom-topo today;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
-# its job kani-op, the workspace
+# its job kani-op, geom-format for kani-format, the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
 # ClusterFuzzLite files and this workflow.
 #
@@ -442,6 +443,52 @@ jobs:
         run: |
           start=$(date +%s)
           cargo kani -p geom-op --harness "${{ matrix.proof }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  # Bounded proofs beside geom-format's own code (chapter 28.7; piece G92): the range checks of
+  # 24.7, proven for every value of their domain, so the frame's edge at ±(2^40 − 1) and one beyond
+  # are covered by the proof, not only by tests. geom-format's tests/kani_harnesses.rs holds this
+  # list to the harnesses in the source.
+  kani-format:
+    name: Kani, geom-format (${{ matrix.proof }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        proof:
+          - range::proofs::bits_is_the_magnitude_width
+          - range::proofs::grid_accepts_exactly_the_frame
+          - range::proofs::real_accepts_exactly_the_finite_frame
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          cargo kani setup
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, the real
+      # check refusing the frame's edge (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-format --
+          cargo kani -p geom-format --harness range::proofs::real_accepts_exactly_the_finite_frame --exact
+      - name: Prove ${{ matrix.proof }}
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-format --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
