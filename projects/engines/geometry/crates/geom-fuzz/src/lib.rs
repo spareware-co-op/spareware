@@ -15,8 +15,9 @@
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
 //! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
-//! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55). The
-//! layout every target follows, and how each engine runs it locally and in CI,
+//! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
+//! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
+//! (G49, G50). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -166,6 +167,7 @@ use core::fmt;
 
 pub mod boxtree;
 pub mod curves;
+pub mod linalg;
 pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;

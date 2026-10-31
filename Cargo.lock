@@ -982,6 +982,7 @@ dependencies = [
  "geom-bvh",
  "geom-curve",
  "geom-gen",
+ "geom-linalg",
  "geom-math",
  "geom-num",
  "geom-nurbs",

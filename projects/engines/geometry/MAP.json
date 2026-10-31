@@ -2384,6 +2384,29 @@
           "target": "lib"
         },
         {
+          "cost": "each decomposition of a matrix of at most [`MAX_DIM`]² entries, and their exact residuals, O(n³) rational operations; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a matrix of up to [`MAX_DIM`] × [`MAX_DIM`] entries. [`check`] runs `geom-linalg`'s decompositions on it and holds each to its stated guarantees:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/linalg.rs",
+          "guarantees": [
+            "**Any bytes are a case**, through the rule bytes of the `curves` target: 0, ±1, whole numbers and quarters, tiny and huge powers of two, or a double read from the input.",
+            "**What is a finding.** A law above broken, decided exactly in dashu's rationals. Every typed error is legal (the guarantees say which refusals each method makes); a panic fails.",
+            "**No hang.** Each call has a work budget of [`WORK`] units.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below."
+          ],
+          "job": "Fuzz target: the dense decompositions are refused or finite, and the spectral ones backward stable, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the guarantees in `geom_linalg::solve`, `qr`, `svd` and `eigen`, checked exactly as their tests do, driven by coverage-guided fuzzing (chapter 28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::linalg",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one curve, one insertion, one Bernstein decomposition and one interpolation of at most [`MAX_POINTS`] points per input, each bounded by [`WORK`] work units, and their exact evaluations; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a NURBS curve in two or three dimensions (degree 1 to 4, a clamped or uniform knot vector with repeated knots, rational or not), a parameter, a knot to insert and the curve's control points again as data to interpolate. [`check`] builds it with `geom-nurbs` and holds four laws against `geom_test::nurbs_reference`, which computes the same curves in exact rationals:",
           "family": [],
