@@ -18,9 +18,8 @@
 //! - **The first fault in a fixed order.** Fins by edge, then edges, then faces, then pieces, each
 //!   ascending, the same on every machine.
 //!
-//! Method: chapter 11.10 (`projects/engines/geometry/architecture/11-booleans.md`), after the
-//! closure certificate hypermesh runs before publishing a mesh
-//! (<https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs#L4336-L4456>).
+//! Method: chapter 11.10 (`projects/engines/geometry/architecture/11-booleans.md`), which cites the
+//! closure certificate it follows.
 //!
 //! Cost: linear in the body's fins, and in the pieces. Charges the meter one unit per edge, face
 //! and piece.
