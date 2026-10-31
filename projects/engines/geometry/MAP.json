@@ -2286,6 +2286,50 @@
       ],
       "errors": [
         {
+          "doc": "Why a body could not be stored or read back.",
+          "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
+          "kinds": [
+            {
+              "doc": "The encoder refused a value (writing).",
+              "name": "Encode",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes that break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A payload that is not what its table or the index needs.",
+              "name": "Shape",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A chunk the index does not list, or listed in the wrong place or with another content ID.",
+              "name": "Chunk",
+              "shape": "struct"
+            },
+            {
+              "doc": "A geometry kind that could not be stored or read.",
+              "name": "Kind",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The topology did not build back.",
+              "name": "Topo",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::body",
+          "name": "BodyError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "The rule of SKG's CBOR subset (24.3, RFC 8949 section 4.2.1) an input breaks.",
           "file": "projects/engines/geometry/crates/geom-format/src/cbor/error.rs",
           "kinds": [
@@ -2517,6 +2561,40 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a kind could not be written or read back.",
+          "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+          "kinds": [
+            {
+              "doc": "The encoder refused a value: a double that is not finite where one must be.",
+              "name": "Encode",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes that break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An item that is not the kind its code names.",
+              "name": "Shape",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The kind's constructor refused the values.",
+              "name": "Curve",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A NURBS constructor refused the values.",
+              "name": "Nurbs",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::kinds",
+          "name": "KindError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a stored number cannot be used.",
           "file": "projects/engines/geometry/crates/geom-format/src/range.rs",
           "kinds": [
@@ -2629,6 +2707,30 @@
       "kind": "kernel",
       "layer": "12",
       "modules": [
+        {
+          "cost": "linear in the body: one pass over each table to write, one to read, one SHA-256 pass over every chunk; memory for one chunk's payload at a time plus the body itself.",
+          "does": "[`write_body`] turns a `geom_topo::Body` into a [`StoredBody`]: one chunk record (type 4) per run of [`CHUNK_ROWS`] rows of each table, in arena order, and the index record (type 3) listing every table's row count and its chunks' content IDs in order. [`read_body`] reads them back through `geom_topo::Builder`, which checks the topology again before it publishes, so a stored body is never trusted further than a built one. The tables, by code in [`table`], are the arenas of chapter 8.2: regions, shells, faces, loops, fins, edges and vertices; the geometry pools (points, surfaces, curves and pcurves); and, for a body published by name, the names of its regions, faces, edges and vertices.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
+          "guarantees": [
+            "**Index for index.** A body read back equals the one written (`PartialEq`), every arena in the same order, so the next operation on either gives the same bits (24.3).",
+            "**Chunks are a pure function of their rows.** The runs are geom-topo's own chunks (`geom_topo::CHUNK_ROWS`, 4,096), so a chunk whose rows did not change encodes to the same bytes and the same content ID, whatever else changed: an edit to 1% of a body's rows rewrites only the chunks those rows are in.",
+            "**References are checked.** Every reference is stored as its row plus one, 0 for none; a required reference of 0, a row count that disagrees with the chunks, a chunk of the wrong table or position, or a content ID that does not match its chunk is refused before anything is built, and the builder then checks the topology itself."
+          ],
+          "job": "Body records: a body stored as one index record and a chunk record for every 4,096-row run of each of its tables, so a body's content ID is the root of a hash tree and a new version writes only the chunks that changed (24.2, 24.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://doi.org/10.1007/3-540-48184-2_32"
+            ],
+            "text": "chapter 24.2 to 24.4 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`, and the arenas of chapter 8.2, `projects/engines/geometry/architecture/08-topology.md`; Merkle's hash tree, <https://doi.org/10.1007/3-540-48184-2_32>, for the content ID of the index over its chunks."
+          },
+          "path": "geom_format::body",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "see each module.",
           "does": "SKG's bytes are deterministic CBOR (RFC 8949, section 4.2.1) with the rules of 24.3. [`decode`] reads them head by head and refuses any other encoding; [`column`] reads the `i64` and `f64` columns coordinates and reals are stored in; [`text`] writes the diagnostic text form of 24.6, and [`parse`] reads it back into the same bytes. The canonical encoder that writes SKG's bytes from values is `geom-op`'s (piece G86), so that `NameId` hashing below this crate uses it too (30.5, \"Placed to keep the crate graph acyclic\").",
@@ -2915,6 +3017,29 @@
             "text": "chapter 24.3 and 24.4 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; the ladder of chapter 6.5, `projects/engines/geometry/architecture/06-numbers.md`; CDDL by RFC 8610, <https://www.rfc-editor.org/rfc/rfc8610>."
           },
           "path": "geom_format::header",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in a kind's values, plus, for an offset stored with its cache, the cost of fitting it again.",
+          "does": "[`write_curve`] and [`write_surface`] append one kind to an encoder; [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the kind's own constructor, so a stored kind is checked as a built one is. The codes are in [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the order `format/cddl/kinds.cddl` gives them. Doubles are written in their shortest exact width, lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as `[value]`, and a flag as 0 or 1.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+          "guarantees": [
+            "**Value for value.** A kind read back equals the one written (`PartialEq`), every double with its bits, a negative zero included: a kind keeps what defines it, never a refit.",
+            "**Caches are rebuilt, not stored.** An offset's fitted NURBS cache is a function of the offset; the item says whether it was there and reading computes it again (`Offset::cached`), which gives the same bits on every target (23.1). A curve on a surface keeps its 3D curve, which defines it.",
+            "**Infinite ends.** A parameter interval's end may be infinite only on its own side (a ray or line); it is written `[]`.",
+            "**Bounded.** Every kind nests at most [`DEPTH`] containers deep: a surface offset at most `geom_surface::offset::MAX_NESTING` (4) times, over a swept surface whose profile is a conic on axes on a frame."
+          ],
+          "job": "Geometry kinds as canonical items: every curve and surface kind a body's pools hold, written as `[code, fields…]` and read back to the same value (24.2, 24.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.2 and 24.3 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; the kinds are those of chapter 7, `07-curves-surfaces.md`."
+          },
+          "path": "geom_format::kinds",
           "provenance": [],
           "spdx": null,
           "target": "lib"

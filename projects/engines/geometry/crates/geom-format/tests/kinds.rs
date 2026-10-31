@@ -464,8 +464,8 @@ fn surfaces_as_the_operations_leave_them_read_back() {
             }
             let ((u0, u1), (v0, v1)) = s.domain();
             let t = match dir {
-                Direction::U => 0.5 * (u0 + u1),
-                Direction::V => 0.5 * (v0 + v1),
+                Direction::U => f64::midpoint(u0, u1),
+                Direction::V => f64::midpoint(v0, v1),
             };
             if let Ok((l, r)) = s.split(dir, t, &mut meter()) {
                 surface_trip(what, &l.value);
@@ -510,7 +510,7 @@ fn offset_surfaces_read_back_cached_split_and_nested() {
         let whole = SurfaceKind::Offset(offset.clone());
         let ((u0, u1), _) = whole.domain();
         let (l, r) = whole
-            .split(Direction::U, 0.5 * (u0 + u1), &mut meter())
+            .split(Direction::U, f64::midpoint(u0, u1), &mut meter())
             .unwrap();
         surface_trip("split offset", &l.value);
         surface_trip("split offset", &r.value);

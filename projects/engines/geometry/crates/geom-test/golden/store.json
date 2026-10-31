@@ -443,6 +443,16 @@
           "sha256": "601faa6494c0ad3f9b1d7dd7b8a1e78724066b90ac4a998057959dae37206886"
         },
         {
+          "id": "geom-format/body-records",
+          "what": "geom-format's body records (piece G94): the records of geom-topo's wall, of a body of 9,000 faces and of that body with 90 faces moved to another surface, each read back and written again, and a cached offset curve, a reversed transition part and a cached offset cylinder, each read back (refitting the caches) and written again, in the encoding of tests/body_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "body_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "24ff775319022741d62b771ab3c5e33beba0ff2da29bb39b005f30778c7c73e1"
+        },
+        {
           "id": "geom-topo/arenas",
           "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
           "check": {

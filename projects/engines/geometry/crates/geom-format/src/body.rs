@@ -819,6 +819,7 @@ pub fn read_body(stored: &StoredBody, meter: &mut WorkMeter<'_>) -> Result<Body,
         let rows = uint(&mut d, meter, "a table's rows")?;
         let chunks = array(&mut d, meter, "a table's chunks")?;
         codes.push(code);
+        let mut seen: u64 = 0;
         // geom-topo's own runs: every chunk full but the last, and none for an empty table.
         if chunks != rows.div_ceil(u64::from(CHUNK_ROWS)) {
             return Err(BodyError::Shape(
@@ -849,10 +850,16 @@ pub fn read_body(stored: &StoredBody, meter: &mut WorkMeter<'_>) -> Result<Body,
                 meter,
             )?;
             let full = position.saturating_add(1) < chunks;
-            if (full && got != u64::from(CHUNK_ROWS)) || got == 0 {
+            if full && got != u64::from(CHUNK_ROWS) {
                 return Err(wrong);
             }
+            seen = seen.saturating_add(got);
             listed.push(id);
+        }
+        if seen != rows {
+            return Err(BodyError::Shape(
+                "a table whose chunks hold another number of rows",
+            ));
         }
     }
     let by_name = match uint(&mut d, meter, "the named flag")? {
