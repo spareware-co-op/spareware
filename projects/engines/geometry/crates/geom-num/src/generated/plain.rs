@@ -558,3 +558,141 @@ pub fn ssi_side_value(a: P2, b: P2, c: P2, d: P2, p: P2, q: P2) -> Option<I256> 
     let s = s_1.checked_sub(&s_2)?;
     Some(s)
 }
+
+/// `carrier_side`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn carrier_side_value(a: i128, b: i128, c: i128, x: i128, y: i128, w: i128) -> Option<I256> {
+    let a = within(a, 41)?;
+    let x = within(x, 124)?;
+    let s_1 = I256::from_i128(a).checked_mul(&I256::from_i128(x))?;
+    let b = within(b, 41)?;
+    let y = within(y, 124)?;
+    let s_2 = I256::from_i128(b).checked_mul(&I256::from_i128(y))?;
+    let s_3 = s_1.checked_add(&s_2)?;
+    let c = within(c, 82)?;
+    let w = within(w, 83)?;
+    let s_4 = I256::from_i128(c).checked_mul(&I256::from_i128(w))?;
+    let s = s_3.checked_sub(&s_4)?;
+    Some(s)
+}
+
+/// `carrier_order`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn carrier_order_value(
+    a: i128,
+    b: i128,
+    xp: i128,
+    yp: i128,
+    xq: i128,
+    yq: i128,
+    wp: i128,
+    wq: i128,
+) -> Option<I256> {
+    let xq = within(xq, 124)?;
+    let wp = within(wp, 83)?;
+    let dx_1 = I256::from_i128(xq).checked_mul(&I256::from_i128(wp))?;
+    let xp = within(xp, 124)?;
+    let wq = within(wq, 83)?;
+    let dx_2 = I256::from_i128(xp).checked_mul(&I256::from_i128(wq))?;
+    let dx = dx_1.checked_sub(&dx_2)?;
+    let yq = within(yq, 124)?;
+    let dy_1 = I256::from_i128(yq).checked_mul(&I256::from_i128(wp))?;
+    let yp = within(yp, 124)?;
+    let dy_2 = I256::from_i128(yp).checked_mul(&I256::from_i128(wq))?;
+    let dy = dy_1.checked_sub(&dy_2)?;
+    let b = within(b, 41)?;
+    let s_1 = I256::from_i128(b).checked_mul(&dx)?;
+    let a = within(a, 41)?;
+    let s_2 = I256::from_i128(a).checked_mul(&dy)?;
+    let s = s_1.checked_sub(&s_2)?;
+    Some(s)
+}
+
+/// `rational_cmp`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn rational_cmp_value(p: i128, q: i128, wp: i128, wq: i128) -> Option<I256> {
+    let p = within(p, 124)?;
+    let wq = within(wq, 83)?;
+    let s_1 = I256::from_i128(p).checked_mul(&I256::from_i128(wq))?;
+    let q = within(q, 124)?;
+    let wp = within(wp, 83)?;
+    let s_2 = I256::from_i128(q).checked_mul(&I256::from_i128(wp))?;
+    let s = s_1.checked_sub(&s_2)?;
+    Some(s)
+}
+
+/// `rational_orient`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn rational_orient_value(
+    xa: i128,
+    ya: i128,
+    xb: i128,
+    yb: i128,
+    xc: i128,
+    yc: i128,
+    wa: i128,
+    wb: i128,
+    wc: i128,
+) -> Option<I384> {
+    let xb = within(xb, 124)?;
+    let yc = within(yc, 124)?;
+    let bc_1 = I256::from_i128(xb).checked_mul(&I256::from_i128(yc))?;
+    let xc = within(xc, 124)?;
+    let yb = within(yb, 124)?;
+    let bc_2 = I256::from_i128(xc).checked_mul(&I256::from_i128(yb))?;
+    let bc = bc_1.checked_sub(&bc_2)?;
+    let xa = within(xa, 124)?;
+    let ac_1 = I256::from_i128(xa).checked_mul(&I256::from_i128(yc))?;
+    let ya = within(ya, 124)?;
+    let ac_2 = I256::from_i128(xc).checked_mul(&I256::from_i128(ya))?;
+    let ac = ac_1.checked_sub(&ac_2)?;
+    let ab_1 = I256::from_i128(xa).checked_mul(&I256::from_i128(yb))?;
+    let ab_2 = I256::from_i128(xb).checked_mul(&I256::from_i128(ya))?;
+    let ab = ab_1.checked_sub(&ab_2)?;
+    let wa = within(wa, 83)?;
+    let det_1 = I384::from_i128(wa).checked_mul(&bc.resize::<6>()?)?;
+    let wb = within(wb, 83)?;
+    let det_2 = I384::from_i128(wb).checked_mul(&ac.resize::<6>()?)?;
+    let det_3 = det_1.checked_sub(&det_2)?;
+    let wc = within(wc, 83)?;
+    let det_4 = I384::from_i128(wc).checked_mul(&ab.resize::<6>()?)?;
+    let det = det_3.checked_add(&det_4)?;
+    Some(det)
+}

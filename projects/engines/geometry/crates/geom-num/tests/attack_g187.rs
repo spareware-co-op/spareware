@@ -544,12 +544,12 @@ fn a_carrier_through_grid_points_agrees_with_orient2d() {
             assert_eq!(p, q);
             continue;
         };
-        assert_eq!(l.side(&r.into()).unwrap(), orient2d(p, q, r));
+        assert_eq!(l.side(&r.into()).unwrap(), orient2d(p, q, r).unwrap());
         assert_eq!(l.side(&p.into()).unwrap(), Sign::Zero);
         assert_eq!(l.side(&q.into()).unwrap(), Sign::Zero);
         assert_eq!(
             Rational2::orient(&p.into(), &q.into(), &r.into()).unwrap(),
-            orient2d(p, q, r)
+            orient2d(p, q, r).unwrap()
         );
         assert_eq!(l.order(&p.into(), &q.into()).unwrap(), Sign::Positive);
     }

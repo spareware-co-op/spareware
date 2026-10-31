@@ -22,6 +22,7 @@ use geom_num::Sign;
 use geom_num::carrier::{Carrier, NORMAL_BITS, OFFSET_BITS, POINT_BITS, Rational2, WEIGHT_BITS};
 use geom_test::SplitMix64;
 use geom_test::golden::{self, hex, sha256};
+use geom_test::seed::Seed;
 
 const GOLDEN: &str = "geom-num/carrier";
 
@@ -79,7 +80,7 @@ fn ask(rec: &mut Record, l: &Carrier, p: &Rational2, q: &Rational2, r: &Rational
 }
 
 fn corpus() -> Record {
-    let mut rng = SplitMix64::new(SEED);
+    let mut rng = SplitMix64::new(Seed(SEED));
     let mut rec = Record {
         bytes: Vec::new(),
         results: 0,
