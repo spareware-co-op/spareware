@@ -298,7 +298,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-skeleton",  9, Accepted,   Here, "base math 2d topo poly"),
     kernel("geom-sweep",     9, Accepted,   Here,
         "base topo surface name check poly intersect bool skeleton"),
-    kernel("geom-make",      9, Amended30, Here, "base math curve surface topo check"),
+    kernel("geom-make",      9, Amended30, Elsewhere("G101"), "base math curve surface topo check"),
     // 10. Operations.
     kernel("geom-blend",    10, Accepted,   Here, "base bool intersect surface topo check"),
     kernel("geom-offset",   10, Accepted,   Here, "base bool intersect surface skeleton topo"),
