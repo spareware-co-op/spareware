@@ -115,7 +115,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [curves_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, surfaces_fuzz, variants_fuzz, wide_fuzz]
+        target: [curves_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

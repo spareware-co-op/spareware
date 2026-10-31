@@ -2482,6 +2482,28 @@
           "target": "lib"
         },
         {
+          "cost": "a handful of transform applications and one decimal parse per input; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a grid point, two grid transforms (signed permutations with whole-step translations), a rational transform (p ↦ (M·p + t)/d with small integers), a rational rotation (an integer quaternion), and a short text. [`check`] holds four laws, each decided exactly in rationals:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/transforms.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Coordinates are drawn through rule bytes that make the frame's limits ±(2^40 − 1), 0 and ±1 common; a transform the constructors refuse, or an image out of the frame's range, is a typed error and legal.",
+            "**A panic is a failure; a broken law is a [`Finding`].**",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below."
+          ],
+          "job": "Fuzz target: the typed transforms move grid points exactly as their definitions say, and decimals round-trip, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "each transform's definition in `geom-math` (chapter 7's typed transforms, `projects/engines/geometry/architecture/07-geometry-types.md`), evaluated exactly in dashu's rationals, and round-half-to-even read from the exact quotient; coverage-guided fuzzing (chapter 28.5)."
+          },
+          "path": "geom_fuzz::transforms",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "per input, the registered descriptions parsed and evaluated once each in big integers, and three exact-path calls per predicate; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into the inputs the predicates take: six 2D and five 3D grid points from `geom-test`'s [`GridSampler`], and twelve plane-normal coordinates of 83 bits and four plane offsets of 125 bits, each an extreme, zero, a small value or a value of a random bit length. [`check`] evaluates each registered predicate's description (geom-gen's `PREDICATES`, read by its `predicate_lang::parse`) on those inputs in big integers, and compares the shipped `value`, the plain-`i128` variant (`geom_num::generated::plain`) and the width-aware limb variant (`geom_num::generated::limbs`) with that exact value, and Avnaim et al.'s signs of orient2d and orient3d (`geom_bench::avnaim`) with its sign. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],

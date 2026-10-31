@@ -13,7 +13,9 @@
 //! returns the exact value of its description, evaluated in big integers. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
-//! their stated bounds against exact rational evaluation (G56, G58, G59). The layout every target follows, and how each engine runs it locally and in CI,
+//! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
+//! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
+//! G48). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -167,6 +169,7 @@ pub mod orient2d;
 pub mod predicates;
 pub mod seeded;
 pub mod surfaces;
+pub mod transforms;
 pub mod variants;
 pub mod wide;
 
