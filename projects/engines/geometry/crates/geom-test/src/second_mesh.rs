@@ -29,6 +29,10 @@
     clippy::arithmetic_side_effects,
     reason = "exact rational arithmetic, which cannot overflow; divisors are shown nonzero"
 )]
+#![allow(
+    clippy::indexing_slicing,
+    reason = "every index is of an array of three, or a row [`fits`] has shown in range"
+)]
 
 use core::cmp::Ordering;
 use std::collections::BTreeMap;
