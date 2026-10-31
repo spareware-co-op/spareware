@@ -292,10 +292,8 @@ fn remainder(dividend: &Poly, divisor: &Poly) -> Option<[Big; TERMS]> {
                 _ => scaled,
             };
         }
-        match top.checked_sub(1) {
-            Some(next) => top = next,
-            None => break,
-        }
+        // The divisor is of degree at least one: a chain stops at a constant.
+        top = top.checked_sub(1)?;
     }
     Some(r)
 }
@@ -453,9 +451,7 @@ fn interval_chain(
         }
     }
     let mut chain = [(*f, degree); TERMS];
-    if let Some(slot) = chain.get_mut(1) {
-        *slot = (slope, degree.checked_sub(1)?);
-    }
+    *chain.get_mut(1)? = (slope, degree.checked_sub(1)?);
     let mut k = 2;
     while k <= degree {
         let (mut rest, upper) = *chain.get(k.checked_sub(2)?)?;

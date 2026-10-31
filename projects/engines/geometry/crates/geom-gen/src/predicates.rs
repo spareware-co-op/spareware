@@ -1406,7 +1406,11 @@ pub fn generate_fptaylor_line_cone() -> Result<Vec<u8>, GenError> {
 ///
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_fptaylor_line_cone_lead() -> Result<Vec<u8>, GenError> {
-    certificate("line_cone_lead", "fptaylor-line-cone-lead", fptaylor_problem)
+    certificate(
+        "line_cone_lead",
+        "fptaylor-line-cone-lead",
+        fptaylor_problem,
+    )
 }
 
 /// Generator `fptaylor-cross-norm`: `cross_norm`'s normalised filter for `FPTaylor`, whose certificate

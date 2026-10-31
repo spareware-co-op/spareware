@@ -2397,6 +2397,6 @@ fn quadric_typical_batches_all_succeed() {
     all_ok("line_cone", k::cones, &m::cones(Typical));
     all_ok("line_torus", k::tori, &m::tori(Typical));
     all_ok("parallel", k::directions, &m::directions(Typical));
-    all_ok("axis_gap", k::gaps, &m::directions(Typical));
+    all_ok("axis_gap", k::gaps, &m::gaps(Typical));
     all_ok("tangent", k::tangents, &m::tangents(Typical));
 }

@@ -19,6 +19,7 @@
 //! Cost: a handful of predicates and two Sturm chains per case; at most [`MAX_INPUT_BYTES`] bytes
 //! read.
 
+use geom_num::Sign;
 use geom_num::grid::{COORD_MAX, Coord, P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::quadric::{
@@ -27,7 +28,6 @@ use geom_num::quadric::{
 };
 use geom_num::sturm::{Big, Chain, filtered};
 use geom_num::wide::I320;
-use geom_num::Sign;
 use geom_test::{ByteSource, Entropy};
 use num_bigint::BigInt;
 
@@ -86,6 +86,10 @@ fn size(src: &mut ByteSource<'_>) -> Steps {
 
 /// The case in `data`, and how many bytes it read.
 #[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the points and sizes are named as in the description of each surface"
+)]
 pub fn decode(data: &[u8]) -> (Case, usize) {
     let mut src = ByteSource::new(data);
     let (a, b, c, f, g, h) = (
@@ -105,19 +109,38 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
     ];
     let case = Case {
         line: Line { a, b },
-        sphere: Sphere { centre: c, radius: g },
-        cylinder: Cylinder { base: c, along: f, radius: h },
+        sphere: Sphere {
+            centre: c,
+            radius: g,
+        },
+        cylinder: Cylinder {
+            base: c,
+            along: f,
+            radius: h,
+        },
         cone: Cone {
             apex: c,
             along: f,
-            slope: Slope { rise: i.0, run: j.0 },
+            slope: Slope {
+                rise: i.0,
+                run: j.0,
+            },
         },
-        torus: Torus { centre: c, along: f, major: k.checked_add(g).unwrap_or(k), minor: g },
+        torus: Torus {
+            centre: c,
+            along: f,
+            major: k.checked_add(g).unwrap_or(k),
+            minor: g,
+        },
         factors,
     };
     (case, data.len().saturating_sub(src.remaining()))
 }
 
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "big integers, which cannot overflow"
+)]
 fn bigint(v: &I320) -> BigInt {
     let mut out = BigInt::from(0);
     for (i, limb) in v.to_le_limbs().iter().enumerate() {
@@ -130,6 +153,11 @@ fn bigint(v: &I320) -> BigInt {
 }
 
 /// The sign of `f`'s discriminant, in big integers.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
+    reason = "big integers, which cannot overflow; a, b, c and d are the discriminant's own names"
+)]
 fn discriminant(line: &Line, surface: &Surface) -> Result<Sign, Finding> {
     let (f, _) = polynomial::<I320>(line, surface)
         .ok_or_else(|| Finding::new("a quadric's polynomial fits", || format!("{surface:?}")))?;
@@ -143,6 +171,11 @@ fn discriminant(line: &Line, surface: &Surface) -> Result<Sign, Finding> {
 }
 
 /// The polynomial of four factors: (t − a)(t − b), or t² + a² + 1 when a is even, in turn.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
+    reason = "products of at most four numbers of 8 bits fit an i128; the names are the factors'"
+)]
 fn built(factors: [i8; 4]) -> ([Big; 5], u8, bool) {
     let [a, b, c, d] = factors.map(i128::from);
     let quadratic = |x: i128, y: i128| -> ([i128; 3], Vec<i128>) {
@@ -158,7 +191,9 @@ fn built(factors: [i8; 4]) -> ([Big; 5], u8, bool) {
     for (i, u) in p.iter().enumerate() {
         for (j, v) in q.iter().enumerate() {
             if let Some(slot) = out.get_mut(i.saturating_add(j)) {
-                *slot = slot.checked_add(&Big::from_i128(u * v)).unwrap_or(Big::ZERO);
+                *slot = slot
+                    .checked_add(&Big::from_i128(u * v))
+                    .unwrap_or(Big::ZERO);
             }
         }
     }

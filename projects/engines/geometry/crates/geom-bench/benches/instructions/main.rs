@@ -27,8 +27,8 @@ use gate::{
     eft::eft, exact_sum::exact_sum, exactness::exactness, generated::generated, grid::grid,
     growth::growth, intersect::intersect, interval::interval, isolate::isolate, linalg::linalg,
     math::math, math_types::math_types, newton::newton, nurbs::nurbs, perturb::perturb,
-    plane::plane, predicate::predicate, quadrature::quadrature, quadric::quadric, real::real, rng::rng, sign::sign,
-    surface::surface, unproven::unproven, wide::wide, wide32::wide32,
+    plane::plane, predicate::predicate, quadrature::quadrature, quadric::quadric, real::real,
+    rng::rng, sign::sign, surface::surface, unproven::unproven, wide::wide, wide32::wide32,
 };
 
 #[cfg(target_os = "linux")]

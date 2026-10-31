@@ -557,9 +557,8 @@ fn exact_chain(line: &Line, surface: &Surface) -> Result<Chain, NumError> {
 /// parallel to a cylinder's axis or lying along a cone's ruling. [`NumError::BudgetExceeded`] for a
 /// radius of 2^41 or more.
 pub fn roots(line: &Line, surface: &Surface) -> Result<Roots, NumError> {
-    if let Some((f, degree)) = polynomial::<Interval>(line, surface)
-        && let Some(answer) = sturm::filtered(&f, degree)
-    {
+    let enclosed = polynomial::<Interval>(line, surface);
+    if let Some(answer) = enclosed.and_then(|(f, degree)| sturm::filtered(&f, degree)) {
         return Ok(answer);
     }
     Ok(exact_chain(line, surface)?.roots())
@@ -572,8 +571,9 @@ pub fn roots(line: &Line, surface: &Surface) -> Result<Roots, NumError> {
 ///
 /// As [`roots`], and [`NumError::Degenerate`] unless `lo` is below `hi`.
 pub fn roots_between(line: &Line, surface: &Surface, lo: Point, hi: Point) -> Result<u8, NumError> {
-    if let Some((f, degree)) = polynomial::<Interval>(line, surface)
-        && let Some(answer) = sturm::filtered_between(&f, degree, lo, hi)
+    let enclosed = polynomial::<Interval>(line, surface);
+    if let Some(answer) =
+        enclosed.and_then(|(f, degree)| sturm::filtered_between(&f, degree, lo, hi))
     {
         return Ok(answer);
     }
