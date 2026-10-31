@@ -9,8 +9,9 @@
 //!   lie far apart, so the filter decides.
 //! - `degenerate`: one place reached two ways, by a Pythagorean triple, or a crossing on its own
 //!   carrier or circle, so the exact path runs and the answer is zero.
-//! - `nearly_degenerate`: a carrier a step from tangent, so two crossings lie a hair apart and the
-//!   filter cannot decide.
+//! - `nearly_degenerate`: a tiny circle far out, with a carrier of a large Pythagorean normal a step
+//!   from tangent, so two crossings lie closer than an enclosure is wide and the filter cannot
+//!   decide.
 //! - `extreme`: circles at the frame's edge with the largest radius, and carriers at their budgets.
 //!
 //! Guarantees: each class's batch is deterministic (its seed is the operation and class name)
@@ -59,6 +60,18 @@ fn tangent(g: &mut SplitMix64, by: i128) -> Option<(Carrier, Circle2)> {
     let (x, y) = (i128::from(centre.x.get()), i128::from(centre.y.get()));
     let l = Carrier::new(3, 4, 3 * x + 4 * y + 25 * k - by).ok()?;
     Some((l, Circle2::new(centre, 5 * k).ok()?))
+}
+
+/// A tiny circle far out, and a carrier of a large Pythagorean normal a step from tangent to it.
+fn hairline(g: &mut SplitMix64) -> Option<(Carrier, Circle2)> {
+    let (m, n) = (
+        i128::from(g.range(1 << 18, 1 << 19)),
+        i128::from(g.range(1, 1 << 18)),
+    );
+    let (a, b, length) = (m * m - n * n, 2 * m * n, m * m + n * n);
+    let (x, y, r) = (1_i128 << 38, 1_i128 << 38, i128::from(g.range(1, 16)));
+    let l = Carrier::new(a, b, a * x + b * y + length * r - 1).ok()?;
+    Some((l, Circle2::new(p2(x as i64, y as i64), r).ok()?))
 }
 
 /// Both crossings of a pair.
@@ -120,7 +133,7 @@ pub fn cmp_x(class: Class) -> Vec<(Crossing2, Crossing2)> {
             Some((p, if same(&p, &q) { q } else { r }))
         }),
         Class::NearlyDegenerate => batch_of(|_| {
-            let (l, c) = tangent(&mut g, 1)?;
+            let (l, c) = hairline(&mut g)?;
             both(&l, &c)
         }),
         Class::Extreme => batch_of(|_| {
