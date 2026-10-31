@@ -43,25 +43,40 @@ fn main() {
         let j = rng.below(NonZeroU64::new(i as u64 + 1).unwrap()) as usize;
         sites.swap(i, j);
     }
-    // Short breaklines between near sites: consecutive in sorted order, far apart in key.
+    // Breaklines as a survey has them: each joins a site to the third next up its column of a
+    // grid of 1,024 columns, a few site spacings long, and the sites are far apart in key.
     let mut sorted: Vec<u32> = (0..n as u32).collect();
+    sorted.sort_by_key(|&i| {
+        let at = sites[i as usize].at;
+        (at.x.get() >> 22, at.y.get())
+    });
+    let short: Vec<[u32; 2]> = (0..10_000)
+        .map(|i| {
+            let at = (i * 97) as usize;
+            [sorted[at], sorted[at + 3]]
+        })
+        .collect();
+    // Breaklines across the model: sorted by x alone, each runs far in y through hundreds of
+    // triangles, the heavy case of the constraint step.
     sorted.sort_by_key(|&i| sites[i as usize].at);
-    let constraints: Vec<[u32; 2]> = (0..10_000)
+    let long: Vec<[u32; 2]> = (0..10_000)
         .map(|i| {
             let at = (i * 97) as usize;
             [sorted[at], sorted[at + 30]]
         })
         .collect();
-    let start = Instant::now();
-    let mut meter = WorkMeter::new(Budget::UNLIMITED);
-    let c = triangulate(&sites, &constraints, None, &mut meter).unwrap();
-    println!(
-        "scatter: {} points, {} breaklines: {} triangles in {:?}",
-        n,
-        constraints.len(),
-        c.triangles.len(),
-        start.elapsed()
-    );
+    for (name, constraints) in [("short", &short), ("long", &long)] {
+        let start = Instant::now();
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let c = triangulate(&sites, constraints, None, &mut meter).unwrap();
+        println!(
+            "scatter: {} points, {} {name} breaklines: {} triangles in {:?}",
+            n,
+            constraints.len(),
+            c.triangles.len(),
+            start.elapsed()
+        );
+    }
     let side = 1000_i64;
     let grid: Vec<Site<u32>> = (0..side * side)
         .zip(0_u32..)

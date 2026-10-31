@@ -296,6 +296,8 @@ struct Mesh {
     hint: u32,
     /// Turns the slot each walk step starts from, so a walk cannot circle.
     spin: usize,
+    /// The triangles an insertion still has to test, kept so each insertion need not allocate.
+    stack: Vec<u32>,
 }
 
 impl Mesh {
@@ -585,10 +587,11 @@ impl Mesh {
     /// Puts vertex `p` in, and flips until every edge around it is locally Delaunay.
     fn insert(&mut self, p: u32, meter: &mut WorkMeter<'_>) -> Result<(), CdtError> {
         meter.charge(1)?;
-        let mut stack: Vec<u32> = match self.locate(p)? {
-            Place::In(t) => self.split(t, p)?.to_vec(),
-            Place::On(t, i) => self.split_edge(t, i, p)?.to_vec(),
-        };
+        let mut stack = core::mem::take(&mut self.stack);
+        match self.locate(p)? {
+            Place::In(t) => stack.extend(self.split(t, p)?),
+            Place::On(t, i) => stack.extend(self.split_edge(t, i, p)?),
+        }
         while let Some(t) = stack.pop() {
             let tri = self.t(t)?;
             let Some(i) = tri.v.iter().position(|&v| v == p) else {
@@ -601,6 +604,7 @@ impl Mesh {
                 stack.push(y);
             }
         }
+        self.stack = stack;
         self.hint = *at(&self.around, p)?;
         Ok(())
     }
@@ -917,10 +921,11 @@ fn crossings(
 /// Rounds go on until no two constraints cross (the module's guarantees).
 fn commit_crossings(
     points: &mut Vec<P2>,
+    by_point: &[(P2, u32)],
     mut segments: Vec<[u32; 2]>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<[u32; 2]>, CdtError> {
-    let mut known: BTreeMap<P2, u32> = (0_u32..).zip(points.iter()).map(|(v, &p)| (p, v)).collect();
+    let mut added: BTreeMap<P2, u32> = BTreeMap::new();
     for _ in 0..ROUNDS {
         segments.sort_unstable();
         segments.dedup();
@@ -938,13 +943,15 @@ fn commit_crossings(
                 *at(points, d)?,
             );
             let at_grid = Ssi::new(pa, pb, pc, pd)?.to_grid()?.value();
-            let vertex = if let Some(&v) = known.get(&at_grid) {
-                v
-            } else {
-                let v = index(points.len())?;
-                points.push(at_grid);
-                known.insert(at_grid, v);
-                v
+            let site = by_point.binary_search_by_key(&at_grid, |&(p, _)| p);
+            let vertex = match (site.ok().and_then(|i| by_point.get(i)), added.get(&at_grid)) {
+                (Some(&(_, v)), _) | (None, Some(&v)) => v,
+                (None, None) => {
+                    let v = index(points.len())?;
+                    points.push(at_grid);
+                    added.insert(at_grid, v);
+                    v
+                }
             };
             for s in [first, second] {
                 cuts.entry(s).or_default().insert((at_grid, vertex));
@@ -973,39 +980,46 @@ fn commit_crossings(
     Err(CdtError::Crossings)
 }
 
+/// What sorting the sites gives.
+struct Ranks {
+    /// Each site's rank.
+    of_site: Vec<u32>,
+    /// The sites by point, each with its rank, for finding a vertex at a point.
+    by_point: Vec<(P2, u32)>,
+}
+
 /// The vertices' ranks: sorted by key, each site's rank, refusing repeated keys and points.
-fn ranks<K: Ord + Copy>(sites: &[Site<K>]) -> Result<Vec<u32>, CdtError> {
+fn ranks<K: Ord + Copy>(sites: &[Site<K>]) -> Result<Ranks, CdtError> {
     let n = index(sites.len())?;
-    let key = |i: u32| at(sites, i).map(|s| s.key);
-    let mut by_key: Vec<u32> = (0..n).collect();
-    by_key.sort_unstable_by_key(|&i| sites.get(i as usize).map(|s| s.key));
+    let mut by_key: Vec<(K, u32)> = sites.iter().map(|s| s.key).zip(0..n).collect();
+    by_key.sort_unstable();
     for pair in by_key.windows(2) {
-        if let &[a, b] = pair
-            && key(a)? == key(b)?
+        if let &[(k, first), (l, second)] = pair
+            && k == l
         {
-            return Err(CdtError::DuplicateKey {
-                first: a.min(b),
-                second: a.max(b),
-            });
+            return Err(CdtError::DuplicateKey { first, second });
         }
     }
-    let mut by_point: Vec<u32> = (0..n).collect();
-    by_point.sort_unstable_by_key(|&i| sites.get(i as usize).map(|s| (s.at, i)));
+    let mut by_point: Vec<(P2, u32)> = sites.iter().map(|s| s.at).zip(0..n).collect();
+    by_point.sort_unstable();
     for pair in by_point.windows(2) {
-        if let &[a, b] = pair
-            && at(sites, a)?.at == at(sites, b)?.at
+        if let &[(p, first), (q, second)] = pair
+            && p == q
         {
-            return Err(CdtError::DuplicatePoint {
-                first: a.min(b),
-                second: a.max(b),
-            });
+            return Err(CdtError::DuplicatePoint { first, second });
         }
     }
     let mut rank = alloc::vec![0_u32; sites.len()];
-    for (r, &i) in (0_u32..).zip(&by_key) {
+    for (r, &(_, i)) in (0_u32..).zip(&by_key) {
         *rank.get_mut(i as usize).ok_or(CdtError::Internal)? = r;
     }
-    Ok(rank)
+    for entry in &mut by_point {
+        entry.1 = *at(&rank, entry.1)?;
+    }
+    Ok(Ranks {
+        of_site: rank,
+        by_point,
+    })
 }
 
 /// The first triangle: the first point on the curve, the next, and the first off their line,
@@ -1040,6 +1054,7 @@ fn seed(points: &[P2], order: &[u32]) -> Result<Option<(Mesh, [u32; 3])>, CdtErr
         around: alloc::vec![GHOST; points.len()],
         hint: 0,
         spin: 0,
+        stack: Vec::new(),
     };
     for _ in 0..4 {
         mesh.fresh()?;
@@ -1117,7 +1132,10 @@ pub fn triangulate<K: Ord + Copy>(
     quality: Option<&Quality>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Cdt<K>, CdtError> {
-    let rank = ranks(sites)?;
+    let Ranks {
+        of_site: rank,
+        by_point,
+    } = ranks(sites)?;
     let mut segments = Vec::with_capacity(constraints.len());
     for (index, &[a, b]) in (0_u32..).zip(constraints) {
         let bad = CdtError::BadConstraint { index };
@@ -1136,7 +1154,7 @@ pub fn triangulate<K: Ord + Copy>(
         *points.get_mut(r as usize).ok_or(CdtError::Internal)? = site.at;
         *keys.get_mut(r as usize).ok_or(CdtError::Internal)? = Some(site.key);
     }
-    let segments = commit_crossings(&mut points, segments, meter)?;
+    let segments = commit_crossings(&mut points, &by_point, segments, meter)?;
     let mut order: Vec<u32> = (0..index(points.len())?).collect();
     order.sort_by_cached_key(|&v| points.get(v as usize).copied().map(morton));
     let (triangles, constraints, points) = match seed(&points, &order)? {
