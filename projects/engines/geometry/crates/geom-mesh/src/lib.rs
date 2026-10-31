@@ -39,6 +39,7 @@ extern crate alloc;
 
 pub mod cdt;
 pub mod contact;
+pub mod envelope;
 pub mod exact;
 
 pub use cdt::{Cdt, CdtError, Quality, Site, Vertex, triangulate};
