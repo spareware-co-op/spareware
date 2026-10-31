@@ -322,9 +322,9 @@ fn bytes_per_wall_body_are_recorded() {
     assert_eq!(m.unique_bytes, bytes);
     // The record in body.rs's header, per pointer width.
     #[cfg(target_pointer_width = "64")]
-    assert_eq!((m.bytes, m.chunks, size_of::<Body>()), (16_740, 29, 976));
+    assert_eq!((m.bytes, m.chunks, size_of::<Body>()), (16_740, 29, 984));
     #[cfg(target_pointer_width = "32")]
-    assert_eq!((m.bytes, m.chunks, size_of::<Body>()), (15_024, 29, 492));
+    assert_eq!((m.bytes, m.chunks, size_of::<Body>()), (15_024, 29, 496));
     // Built row by row instead, the same body holds more: each column grew by doubling.
     let pushed = wall_builder(false)
         .publish(BodyKind::Solid, wall_outside(), &mut meter())

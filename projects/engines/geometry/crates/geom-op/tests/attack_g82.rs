@@ -350,6 +350,7 @@ fn the_maps_error_catalogue_is_the_codes() {
             ("Run".to_owned(), Some("held detail".to_owned())),
             ("Num".to_owned(), Some("held detail".to_owned())),
             ("Make".to_owned(), Some("held detail".to_owned())),
+            ("Bound".to_owned(), Some("held detail".to_owned())),
         ]
     );
 }
