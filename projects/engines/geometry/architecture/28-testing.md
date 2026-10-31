@@ -356,6 +356,16 @@ Every failure ends as a fixture that runs forever, whatever found it: a fuzz cra
 
 The statuses follow OpenCascade's test suite ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), section D). Only a typed error can be `Known`. A run reports Pass, Fail or Improved; Improved means a `Known` fixture now returns its wanted result, and the fixture moves to `Pass`. A panic, a hang, an invalid body, a broken law, a wrong but valid result, or a disagreement with an exact oracle can never be `Known`: each blocks every release until fixed.
 
+As built (G97, `geom_test::fixture`, the `fixture` binary): a fixture is one JSON file at `geom-test/fixtures/<family>/<number>-<slug>.json`, in one spelling, compiled into the crate so a WebAssembly run holds them too; its log is the hexadecimal bytes of a standalone `.skgf` file of operation records, its stored inputs ahead of them. Where the struct above left a detail open:
+
+- **A log's hash** is SHA-256 over `SKG log output v1\0` and each operation's canonical output in order, the failing operation's included, so an intermediate result that moves shows up. The first failing operation ends the log.
+- **`wanted` may leave out its hash.** Nobody can write the hash of a success the kernel has not produced, so `Expect::Ok.hash` is optional in `wanted` and required in `expect`; a `Known` fixture improves when it gives what `wanted` states. Any other success, and any other error, fails.
+- **Every key of the current edition runs**, each at its own operation versions, twice on perturbed heaps as a golden does. `Cancelled` and `OutOfMemory` are never logged, so no expectation names them; an `Internal` error is a defect, so it can never be `Known`.
+- **`Improved` fails the run** until the fixture moves to `Pass` (`fixture improve`), so a fix cannot leave a stale `Known` behind.
+- **A fix** is recorded in `fixed_by`, beside the source, since any source can lead to one, and **`speed`** is the tier: fast on every pull request, slow nightly.
+- **What a pull request may do** is `fixture diff`'s rule, in `kernel-golden.yml`, with the golden store's approval: adding a fixture and moving `Known` to `Pass` with what it wanted are free; a change to an open edition's expectation needs a history record (kind, piece, why, what it was) and a kernel owner's approval; a removed fixture, a changed log or source, `Pass` to `Known`, and any change to a frozen edition are refused.
+- **The fails-on-base check** checks out the merge base, copies the new fixtures in, and requires each to fail there through that commit's own `fixture` binary; a crash or a hang past ten minutes counts as failing. The real table of operations (`fixture/kernel.rs`) fills as operations become replayable; until then a log naming an operation is refused, which no status accepts.
+
 ## 28.17 When each check runs
 
 | When | What runs |
@@ -370,8 +380,8 @@ As built (G10): the workflows of each tier, and what no workflow runs yet. `geom
 
 | Tier | Workflows | Not run yet, and the piece that adds it |
 | --- | --- | --- |
-| Every pull request | `kernel.yml`, `kernel-build.yml`, `kernel-gate.yml`, `kernel-dev.yml`, `kernel-golden.yml`, `kernel-bench.yml`, `kernel-fuzz.yml`, `kernel-quality.yml`, `kernel-certificates.yml` (on a change to the generator or its filters: the problems that differ from the pull request's base, each other one logged as proved there), `kernel-variants.yml` (on the `variant-bench` label: timings, never a gate) | The checker after every operation (G84); fixtures and the fails-on-base check (G97); reference implementations, with the operations they check; the completeness gate (G103) |
-| Nightly | `kernel-nightly.yml`, `kernel-fuzz-campaign.yml`, `kernel-certificates.yml` | Fresh seeds beyond the predicates' suite (the law catalogues, G69 and G155); slow fixtures (G97); outside oracles (G113); fetched corpora (G114); all proofs, once each has its budget (G41, G43); wall-clock and scaling benchmarks on the reference machine (G107, G452) |
+| Every pull request | `kernel.yml`, `kernel-build.yml`, `kernel-gate.yml`, `kernel-dev.yml`, `kernel-golden.yml`, `kernel-bench.yml`, `kernel-fuzz.yml`, `kernel-quality.yml`, `kernel-certificates.yml` (on a change to the generator or its filters: the problems that differ from the pull request's base, each other one logged as proved there), `kernel-variants.yml` (on the `variant-bench` label: timings, never a gate) | The checker after every operation (G84); reference implementations, with the operations they check; the completeness gate (G103) |
+| Nightly | `kernel-nightly.yml`, `kernel-fuzz-campaign.yml`, `kernel-certificates.yml` | Fresh seeds beyond the predicates' suite (the law catalogues, G69 and G155); outside oracles (G113); fetched corpora (G114); all proofs, once each has its budget (G41, G43); wall-clock and scaling benchmarks on the reference machine (G107, G452) |
 | Weekly | `kernel-quality.yml` | Nothing |
 | Toolchain or dependency change | `kernel.yml` | The format museum (G99) |
 | Each release and edition | `kernel-release.yml` | The format museum (G99); a tag tied to a frozen edition of the golden store, which begins with the first Stable release (G482) |

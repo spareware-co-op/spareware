@@ -1505,10 +1505,12 @@ dependencies = [
  "clap",
  "dashu-int",
  "dashu-ratio",
+ "geom-format",
  "geom-num",
  "geom-nurbs",
  "geom-op",
  "geom-run",
+ "hex",
  "lcov",
  "num-rational",
  "petgraph",
@@ -1524,6 +1526,7 @@ dependencies = [
  "syn 3.0.9",
  "toml",
  "unicode-normalization",
+ "wait-timeout",
  "yaml-rust2",
 ]
 
@@ -2574,6 +2577,15 @@ name = "unty-next"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16062d030850f35054e37746427b9febb74a2f24c9c6dd6fa2d0c13c5f53221e"
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "wasip2"

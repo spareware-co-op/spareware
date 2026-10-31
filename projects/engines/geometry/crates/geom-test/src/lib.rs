@@ -48,6 +48,11 @@
 //! - [`canonical`]: the canonical output of one case and its SHA-256, a fixture's golden hash
 //!   (28.13; G96): bodies, names, history, exactness and diagnostics, or an error's kind, entities
 //!   and evidence.
+//! - [`fixture`]: the stored test cases every failure ends as (28.16; G97): [`fixture::Fixture`],
+//!   its [`fixture::Expect`] per edition and operation versions and its [`fixture::Status`]; the
+//!   operation log in the native format; the runner's Pass, Fail and Improved; the operation-log
+//!   minimiser; what a pull request may do to a stored fixture; the fails-on-base list. The binary
+//!   `fixture` lists, checks and runs them.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -204,6 +209,7 @@
 pub mod canonical;
 pub mod coverage;
 pub mod deps;
+pub mod fixture;
 pub mod foundation;
 pub mod golden;
 pub mod grid;
