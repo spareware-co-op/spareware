@@ -49,6 +49,7 @@ on:
   pull_request:
     paths:
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
@@ -72,6 +73,7 @@ on:
     branches: [main]
     paths:
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"

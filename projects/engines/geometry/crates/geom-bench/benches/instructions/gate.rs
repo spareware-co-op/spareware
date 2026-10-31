@@ -2464,3 +2464,265 @@ pub mod ball {
         benchmarks = cubic
     );
 }
+
+/// geom-math's hot paths (pieces G45, G46 and G48; decision 32.44).
+pub mod math_types {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("math_types/apply_exact/typical"))]
+    fn apply_exact(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("math_types/apply_rational/typical"))]
+    fn apply_rational(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("math_types/apply_certified/typical"))]
+    fn apply_certified(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("math_types/rotation_apply/typical"))]
+    fn rotation_apply(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("math_types/plane_within/typical"))]
+    fn plane_within(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("math_types/to_map/typical"))]
+    fn to_map(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("math_types/decimal_parse/typical"))]
+    fn decimal_parse(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = math_types;
+        benchmarks = apply_exact, apply_rational, apply_certified, rotation_apply, plane_within, to_map, decimal_parse
+    );
+}
+
+/// geom-linalg's hot paths (pieces G49 and G50; decision 32.44).
+pub mod linalg {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("linalg/pivoted_qr/typical"))]
+    fn pivoted_qr(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("linalg/svd_jacobi/typical"))]
+    fn svd_jacobi(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = linalg;
+        benchmarks = pivoted_qr, svd_jacobi
+    );
+}
+
+/// geom-bvh's hot paths (pieces G54 and G55; decision 32.44).
+pub mod bvh {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("bvh/tree_build_query/typical"))]
+    fn tree_build_query(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("bvh/cells_within/typical"))]
+    fn cells_within(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = bvh;
+        benchmarks = tree_build_query, cells_within
+    );
+}
+
+/// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
+pub mod nurbs {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("nurbs/curve_point/typical"))]
+    fn curve_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("nurbs/interpolate/typical"))]
+    fn interpolate(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("nurbs/bernstein_bound/typical"))]
+    fn bernstein_bound(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = nurbs;
+        benchmarks = curve_point, interpolate, bernstein_bound
+    );
+}
+
+/// geom-curve's hot paths (pieces G60 to G64 and G67; decision 32.44).
+pub mod curve {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curve/helix_point/typical"))]
+    fn helix_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curve/helix_enclose/typical"))]
+    fn helix_enclose(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curve/bulge_to_nurbs/typical"))]
+    fn bulge_to_nurbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curve/transition_point/typical"))]
+    fn transition_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curve/transition_to_nurbs/typical"))]
+    fn transition_to_nurbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = curve;
+        benchmarks = helix_point, helix_enclose, bulge_to_nurbs, transition_point, transition_to_nurbs
+    );
+}
+
+/// geom-surface's hot paths (pieces G65 to G68; decision 32.44).
+pub mod surface {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("surface/torus_point/typical"))]
+    fn torus_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("surface/torus_enclose/typical"))]
+    fn torus_enclose(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("surface/offset_point/typical"))]
+    fn offset_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("surface/torus_second_bound/typical"))]
+    fn torus_second_bound(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("surface/torus_normal_bound/typical"))]
+    fn torus_normal_bound(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = surface;
+        benchmarks = torus_point, torus_enclose, offset_point, torus_second_bound, torus_normal_bound
+    );
+}
+
+/// Root finding and quadrature (piece G51; decision 32.44).
+pub mod brent {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("brent/zero/typical"))]
+    fn zero(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = brent;
+        benchmarks = zero
+    );
+}
+
+/// Root finding and quadrature (piece G51; decision 32.44).
+pub mod quadrature {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadrature/gauss_legendre/typical"))]
+    fn gauss_legendre(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = quadrature;
+        benchmarks = gauss_legendre
+    );
+}
