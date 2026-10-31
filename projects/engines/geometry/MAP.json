@@ -2361,6 +2361,29 @@
           "target": "lib"
         },
         {
+          "cost": "one curve, one insertion, one Bernstein decomposition and one interpolation of at most [`MAX_POINTS`] points per input, each bounded by [`WORK`] work units, and their exact evaluations; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a NURBS curve in two or three dimensions (degree 1 to 4, a clamped or uniform knot vector with repeated knots, rational or not), a parameter, a knot to insert and the curve's control points again as data to interpolate. [`check`] builds it with `geom-nurbs` and holds four laws against `geom_test::nurbs_reference`, which computes the same curves in exact rationals:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/nurbs.rs",
+          "guarantees": [
+            "**Any bytes are a case**, through the rule bytes of the `curves` target: 0, ±1, whole numbers and quarters on a coarse grid, tiny and huge powers of two, or a double read from the input. Knot spans and weights are drawn positive; a curve or a fit `geom-nurbs` refuses is legal.",
+            "**What is a finding.** A law above broken, decided exactly, or any call failing as `NurbsError::Defect`; typed refusals (an overflow, a singular fit, a budget stop) are legal.",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below."
+          ],
+          "job": "Fuzz target: NURBS curves keep their stated bounds against exact rational evaluation on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the bounds `geom-nurbs` states, checked exactly against the reference implementation of chapter 28.9 (`projects/engines/geometry/architecture/28-testing.md`), as piece G69's law catalogue does, driven here by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "per case, 6 checked `i128` products and 5 checked sums for the reference, one call each to the predicate, the exact path and the filter (each constant time), and at most [`MAX_INPUT_BYTES`] bytes read by [`decode`]. No allocation unless a finding is reported.",
           "does": "[`check`] takes three grid points a, b, c and computes [`reference`], the determinant of the 3 × 3 matrix whose rows are (a.x, a.y, 1), (b.x, b.y, 1) and (c.x, c.y, 1), expanded along its third column in `i128`: (b.x·c.y − b.y·c.x) − (a.x·c.y − a.y·c.x) + (a.x·b.y − a.y·b.x). That determinant is orient2d's definition (Shewchuk 1997, section 4.1); this module computes it with no code shared with `geom-num`, and by another formula than `geom-num`'s (b − a) × (c − a), so the two agree only if both are right. Against it, `check` holds `geom-num` to three claims:",
           "family": [],
@@ -5838,6 +5861,7 @@
           "guarantees": [
             "**Well formed or refused.** A curve has exactly as many control points (and weights) as its basis has functions, every coordinate finite, every weight positive and finite, and every weighted coordinate w·P finite.",
             "**Points.** A nonrational point is within `γ_(7p+1)` · Σ `N_j`·|`P_j`| of the exact point: the basis values carry `γ_(6p)` each, and one product and p sums add p + 1 roundings. A rational point is within `γ_(14p+3)` · (Σ `N_j`·|`w_j`·`P_j`|) / (Σ `N_j`·`w_j`): the sums carry `γ_(7p+1)`, the weight sum relative to itself because every term is positive, and the division one more. On a clamped curve the ends are the end control points exactly (for a rational curve, the quotient w·P / w, rounded once).",
+            "**Underflow.** The bounds here are relative, so where a product falls below 2^−1022 (gradual underflow) a rounding may also err by up to 2^−1075 absolutely: each bound gains n·2^−1074 for its count n of roundings (7p + 1 for a point, 7p + 3 or e below for a derivative); for a rational curve, whose weights are taken in the normal range, n·2^−1074·(1 + 1 / Σ `N_j`·`w_j`), the roundings before the division scaled by it and the division's own not (piece G69's fuzz target found the point bound broken without it, at results near 2^−1074).",
             "**Derivatives.** A nonrational derivative of order k ≥ 1 is within `γ_(7p+3)` · Σ `M_j`·|`P_j`|. A rational derivative of order k is within `γ_e` · `MC_k`, e = (k + 1)(14p + 8 + k), where `MC_k` = (Σ `M_(k,j)`·|`w_j`·`P_j`| + `Σ_(i=1..k)` C(k, i) · (Σ `M_(i,j)`·`w_j`) · `MC_(k−i)`) / Σ `N_j`·`w_j` is Leibniz's recurrence run on magnitudes: each step adds the error of the sums, two products, k subtractions and the division to the error of the lower orders. The value of order 0 has the same bits as [`Curve::point`].",
             "**Derivative curves.** The k-th derivative curve's control points are each within `γ_(4k)` of the same differences run on magnitudes (each difference of two points replaced by the sum of their absolute values); each level adds a rounded knot difference, a quotient, two products and a sum. Its value at a parameter is the k-th derivative of the curve.",
             "**Typed failures.** A result that overflows is [`NurbsError::NotFinite`]; a derivative curve across a knot where a lower derivative jumps is [`NurbsError::Discontinuous`], where `NLib` reports a numerical error; derivative curves of rational curves are [`NurbsError::Rational`] (their symbolic form needs products of B-splines, piece G59).",
@@ -6387,6 +6411,7 @@
           "guarantees": [
             "**Well formed or refused.** A surface has exactly one control point (and one weight) per pair of basis functions, every coordinate finite, every weight positive and finite, and every weighted coordinate finite.",
             "**Points.** A nonrational point is within `γ_(7p+7q+2)` · `Σ_i` `NU_i` `Σ_j` `NV_j`·|`P_ij`|; a rational one within `γ_(14p+14q+5)` times the same sum over |w·P| divided by Σ `NU_i` `NV_j` `w_ij`. Each inner sum carries `γ_(7q+1)`, and each product with a u basis value and the outer sum add `γ_(6p)` and p + 1 roundings.",
+            "**Underflow.** These bounds are relative, so where a product falls below 2^−1022 (gradual underflow) a rounding may also err by up to 2^−1075 absolutely: each bound gains n·2^−1074 for its count n of roundings (7p + 7q + 2 for a point, 7p + 7q + 6 or e below for a derivative); for a rational surface, whose weights are taken in the normal range, n·2^−1074·(1 + 1 / `Σ_i` `NU_i` `Σ_j` `NV_j`·`w_ij`) (piece G69).",
             "**Derivatives.** A nonrational derivative is within `γ_(7p+7q+6)` · `Σ_i` `MU_(k,i)` `Σ_j` `MV_(l,j)`·|`P_ij`|. A rational one is within `γ_e` · `MS_(k,l)`, e = (D + 1)(14p + 14q + 2D + 12), where `MS` is A4.4's recurrence run on magnitudes (every subtraction an addition, with the magnitude sums in place of A and of the weight derivatives); each step of the recurrence adds the error of the sums, two products per term, its sums and subtractions and the division to the largest error of the lower orders, and a chain of steps from order (0, 0) has at most D of them. The value of order (0, 0) has the same bits as [`Surface::point`].",
             "**Typed failures.** A parameter outside its domain is [`NurbsError::ParameterOutside`], a result that overflows [`NurbsError::NotFinite`], an order above [`MAX_DEGREE`] [`NurbsError::DerivativeOrder`].",
             "**Deterministic.** Fixed summation order (v inside u, by increasing index), no fused multiply-add, no platform maths."

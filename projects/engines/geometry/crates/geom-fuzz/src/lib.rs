@@ -12,7 +12,8 @@
 //! operation at every width; and [`variants`] (G42), every variant of every generated exact path
 //! returns the exact value of its description, evaluated in big integers. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
-//! [`surfaces`], every surface kind likewise (G60, G65 to G68). The layout every target follows, and how each engine runs it locally and in CI,
+//! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
+//! their stated bounds against exact rational evaluation (G56, G58, G59). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -114,6 +115,8 @@
 //!   `bolero-honggfuzz` or `bolero-kani`).
 //! - `geom-gen` (MPL-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
+//! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
+//!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -130,8 +133,10 @@
 //!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
-//!   `num-bigint`, `num-integer`, `num-traits` and `autocfg`.
+//!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,
+//!   `dashu-ratio` and `static_assertions`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
+//! - Apache-2.0: `num-modular` (through `dashu-int`).
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
@@ -157,6 +162,7 @@
 use core::fmt;
 
 pub mod curves;
+pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;
 pub mod seeded;

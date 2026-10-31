@@ -977,6 +977,7 @@ name = "geom-fuzz"
 version = "0.0.0"
 dependencies = [
  "bolero",
+ "dashu-ratio",
  "geom-bench",
  "geom-curve",
  "geom-gen",
