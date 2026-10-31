@@ -120,7 +120,7 @@ fn the_two_checkers_agree_on_every_broken_body() {
 fn the_harness_still_catches_a_checker_that_sees_nothing() {
     let body = meeting(CORPUS[0], &still).unwrap();
     let outcomes = attack_with(&body, Exactness::Exact, |_, _| Ok(Vec::new())).unwrap();
-    assert!(!missed(&outcomes).is_empty());
+    assert_ne!(missed(&outcomes).len(), 0);
 }
 
 /// A spec with one corner set moved by `by`, from corner `from` on.

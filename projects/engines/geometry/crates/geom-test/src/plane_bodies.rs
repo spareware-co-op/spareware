@@ -25,8 +25,7 @@
 #![allow(
     clippy::many_single_char_names,
     clippy::cast_precision_loss,
-    clippy::indexing_slicing,
-    reason = "a test crate's fixtures: points by their letters, whole numbers far below 2^53, and rows it built itself"
+    reason = "a test crate's fixtures: points by their letters, and whole numbers far below 2^53"
 )]
 #![allow(
     clippy::arithmetic_side_effects,
@@ -167,9 +166,10 @@ const WALL_SHELL: [FaceSpec<'static>; 10] = [
 
 /// Two arrays of eight corners as one of sixteen.
 const fn two(a: [[i64; 3]; 8], b: [[i64; 3]; 8]) -> [[i64; 3]; 16] {
+    let [a0, a1, a2, a3, a4, a5, a6, a7] = a;
+    let [b0, b1, b2, b3, b4, b5, b6, b7] = b;
     [
-        a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], b[0], b[1], b[2], b[3], b[4], b[5], b[6],
-        b[7],
+        a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7,
     ]
 }
 
@@ -192,9 +192,12 @@ const NEST_POINTS: [[i64; 3]; 24] = {
         corners([100, 100, 100], [700, 700, 700]),
         corners([300, 300, 300], [300, 300, 300]),
     );
+    let [a0, a1, a2, a3, a4, a5, a6, a7] = a;
+    let [b0, b1, b2, b3, b4, b5, b6, b7] = b;
+    let [c0, c1, c2, c3, c4, c5, c6, c7] = c;
     [
-        a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], b[0], b[1], b[2], b[3], b[4], b[5], b[6],
-        b[7], c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7],
+        a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7, c0, c1, c2, c3, c4, c5, c6,
+        c7,
     ]
 };
 
@@ -256,16 +259,14 @@ pub fn scaled_jog(seed: u64) -> impl Fn(usize, usize) -> [i64; 3] {
 
 /// `a × b`.
 const fn cross(a: [i128; 3], b: [i128; 3]) -> [i128; 3] {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]
 }
 
 /// `a − b`.
 const fn minus(a: [i128; 3], b: [i128; 3]) -> [i128; 3] {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    [ax - bx, ay - by, az - bz]
 }
 
 /// Three corners of `ring` that turn the way it runs, by the ring's area vector: a corner of a loop
@@ -277,14 +278,15 @@ fn anchors(points: &[[i64; 3]], ring: &[u32]) -> Option<[[i64; 3]; 3]> {
     let rows = |k: usize| ring.get(k % n).copied();
     for k in 0..n {
         let c = cross(at(rows(k)?)?, at(rows(k + 1)?)?);
-        let [x, y, z] = area;
-        area = [x + c[0], y + c[1], z + c[2]];
+        let ([x, y, z], [cx, cy, cz]) = (area, c);
+        area = [x + cx, y + cy, z + cz];
     }
     (0..n)
         .find_map(|k| {
             let (a, b, c) = (rows(k)?, rows(k + 1)?, rows(k + 2)?);
             let turn = cross(minus(at(b)?, at(a)?), minus(at(c)?, at(a)?));
-            let along = turn[0] * area[0] + turn[1] * area[1] + turn[2] * area[2];
+            let ([tx, ty, tz], [ax, ay, az]) = (turn, area);
+            let along = tx * ax + ty * ay + tz * az;
             (along > 0).then(|| [a, b, c].map(|v| points.get(v as usize).copied()))
         })
         .and_then(|[a, b, c]| Some([a?, b?, c?]))
@@ -331,7 +333,8 @@ impl Rows {
             *self.places.get(key.0 as usize)?,
             *self.places.get(key.1 as usize)?,
         );
-        let direction = [0, 1, 2].map(|k| (to[k] - from[k]) as f64);
+        let ([tx, ty, tz], [fx, fy, fz]) = (to, from);
+        let direction = [(tx - fx) as f64, (ty - fy) as f64, (tz - fz) as f64];
         let direction = if direction == [0.0; 3] {
             [1.0, 0.0, 0.0]
         } else {
@@ -354,19 +357,20 @@ impl Rows {
     fn face(&mut self, shell: usize, loops: &[&[u32]], on: [[i64; 3]; 3]) -> Option<()> {
         let f = self.faces.len();
         let [o, a, b] = on.map(|p| p.map(|x| x as f64));
-        let span = |p: [f64; 3]| [p[0] - o[0], p[1] - o[1], p[2] - o[2]];
+        let [ox, oy, oz] = o;
+        let span = |[x, y, z]: [f64; 3]| [x - ox, y - oy, z - oz];
         let flat = Plane::new(o, span(a), span(b), ((0.0, 1.0), (0.0, 1.0))).ok()?;
         self.surfaces.push(SurfaceKind::Plane(flat));
         let mut low = [i64::MAX; 3];
         let mut high = [i64::MIN; 3];
         for v in loops.iter().copied().flatten() {
             let at = self.places.get(*v as usize)?;
-            for k in 0..3 {
-                low[k] = low[k].min(at[k] - 1);
-                high[k] = high[k].max(at[k] + 1);
+            for (((lo, hi), at), _) in low.iter_mut().zip(&mut high).zip(at).zip(0..3) {
+                *lo = (*lo).min(at - 1);
+                *hi = (*hi).max(at + 1);
             }
         }
-        let point = |p: [i64; 3]| P3::new(p[0], p[1], p[2]).ok();
+        let point = |[x, y, z]: [i64; 3]| P3::new(x, y, z).ok();
         self.faces.push(Face {
             shell: ix(shell)?,
             next: None,
@@ -484,9 +488,9 @@ fn moved_anchors(spec: Spec<'_>, jog: Jog<'_>) -> Option<Vec<[[i64; 3]; 3]>> {
         .enumerate()
         .map(|(k, loops)| {
             let [a, b, c] = anchors(spec.points, loops.first()?)?;
-            let moved = |p: [i64; 3], n: usize| {
-                let by = jog(k, n);
-                [p[0] + by[0], p[1] + by[1], p[2] + by[2]]
+            let moved = |[x, y, z]: [i64; 3], n: usize| {
+                let [dx, dy, dz] = jog(k, n);
+                [x + dx, y + dy, z + dz]
             };
             Some([moved(a, 0), moved(b, 1), moved(c, 2)])
         })
@@ -500,7 +504,7 @@ fn moved_anchors(spec: Spec<'_>, jog: Jog<'_>) -> Option<Vec<[[i64; 3]; 3]>> {
 pub fn meeting(spec: Spec<'_>, jog: Jog<'_>) -> Option<Body> {
     let on = moved_anchors(spec, jog)?;
     let mut r = Rows::default();
-    let point = |p: [i64; 3]| P3::new(p[0], p[1], p[2]).ok();
+    let point = |[x, y, z]: [i64; 3]| P3::new(x, y, z).ok();
     for [a, b, c] in &on {
         r.planes
             .push(GridPlane::through(point(*a)?, point(*b)?, point(*c)?).ok()?);
@@ -540,8 +544,8 @@ pub fn grid(spec: Spec<'_>) -> Option<Body> {
     let mut r = Rows::default();
     for p in spec.points {
         r.places.push(*p);
-        r.points
-            .push(PointKind::Grid(P3::new(p[0], p[1], p[2]).ok()?));
+        let [x, y, z] = *p;
+        r.points.push(PointKind::Grid(P3::new(x, y, z).ok()?));
         r.vertices.push(Vertex {
             point: ix(r.points.len() - 1)?,
         });

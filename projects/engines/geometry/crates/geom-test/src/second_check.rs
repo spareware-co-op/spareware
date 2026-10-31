@@ -51,10 +51,6 @@
     clippy::many_single_char_names,
     reason = "the names are the formulas': a to d points, n a normal, d an offset, s and t parameters"
 )]
-#![allow(
-    clippy::indexing_slicing,
-    reason = "every index is 0, 1 or 2 on an array of three, or 0 or 1 on an array of two"
-)]
 
 use core::cmp::Ordering;
 
@@ -114,23 +110,32 @@ fn point(p: P3) -> V3 {
     [p.x, p.y, p.z].map(|c| q(i128::from(c.get())))
 }
 
+/// `f` of each pair of coordinates.
+fn zipped(a: &V3, b: &V3, f: impl Fn(&RBig, &RBig) -> RBig) -> V3 {
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    [f(ax, bx), f(ay, by), f(az, bz)]
+}
+
 /// `a − b`.
 fn minus(a: &V3, b: &V3) -> V3 {
-    [&a[0] - &b[0], &a[1] - &b[1], &a[2] - &b[2]]
+    zipped(a, b, |x, y| x - y)
+}
+
+/// `a + b`.
+fn plus(a: &V3, b: &V3) -> V3 {
+    zipped(a, b, |x, y| x + y)
 }
 
 /// `a × b`.
 fn cross(a: &V3, b: &V3) -> V3 {
-    [
-        &a[1] * &b[2] - &a[2] * &b[1],
-        &a[2] * &b[0] - &a[0] * &b[2],
-        &a[0] * &b[1] - &a[1] * &b[0],
-    ]
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]
 }
 
 /// `a · b`.
 fn dot(a: &V3, b: &V3) -> RBig {
-    &a[0] * &b[0] + &a[1] * &b[1] + &a[2] * &b[2]
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    ax * bx + ay * by + az * bz
 }
 
 /// Whether a vector is zero.
@@ -150,7 +155,11 @@ fn meet(planes: [([i128; 3], i128); 3]) -> Option<V3> {
     }
     let (ca, ab) = (cross(&c, &a), cross(&a, &b));
     let (da, db, dc) = (q(da), q(db), q(dc));
-    Some([0, 1, 2].map(|k| -(&da * &across[k] + &db * &ca[k] + &dc * &ab[k]) / &det))
+    let sum = plus(
+        &across.map(|c| &da * c),
+        &plus(&ca.map(|c| &db * c), &ab.map(|c| &dc * c)),
+    );
+    Some(sum.map(|c| -c / &det))
 }
 
 /// A fin, as a ring holds it.
@@ -291,8 +300,8 @@ fn lines(a: &Arenas, points: &[Option<V3>], findings: &mut Vec<Finding>, bound: 
                     .zip(from_double(t))
                     .map(|((o, d), t)| o + d * t)
             };
-            let (o, d) = (line.origin(), line.direction());
-            let end = [at(o[0], d[0]), at(o[1], d[1]), at(o[2], d[2])];
+            let ([ox, oy, oz], [dx, dy, dz]) = (line.origin(), line.direction());
+            let end = [at(ox, dx), at(oy, dy), at(oz, dz)];
             let place = points.get(v.to_usize()).and_then(Option::as_ref);
             // A meeting of planes is shadowed: a step more than the bound, and a half for the
             // rounding of its place to the grid in each coordinate.
@@ -373,7 +382,8 @@ fn on_planes(r: &mut Read, bound: &RBig, meetings: &[bool]) {
             if !held {
                 found.push(Finding::OffPlane(side.from));
             }
-            if !(0..3).all(|k| plate.low[k] <= x[k] && x[k] <= plate.high[k]) {
+            let boxed = |(c, (lo, hi)): (&RBig, (&RBig, &RBig))| lo <= c && c <= hi;
+            if !x.iter().zip(plate.low.iter().zip(&plate.high)).all(boxed) {
                 found.push(Finding::OutOfBox(plate.row));
             }
         }
@@ -414,35 +424,36 @@ fn largest(n: &V3) -> usize {
             x.clone()
         }
     };
-    (1..3).fold(
-        0,
-        |best, k| if abs(&n[k]) > abs(&n[best]) { k } else { best },
-    )
+    let mut best = (0, RBig::ZERO);
+    for (k, c) in n.iter().enumerate() {
+        if abs(c) > best.1 {
+            best = (k, abs(c));
+        }
+    }
+    best.0
 }
 
 /// `x` with coordinate `axis` dropped.
 fn flat(x: &V3, axis: usize) -> V2 {
+    let [a, b, c] = x;
     match axis {
-        0 => [x[1].clone(), x[2].clone()],
-        1 => [x[0].clone(), x[2].clone()],
-        _ => [x[0].clone(), x[1].clone()],
+        0 => [b.clone(), c.clone()],
+        1 => [a.clone(), c.clone()],
+        _ => [a.clone(), b.clone()],
     }
 }
 
 /// `(b − a) × (c − a)` in the plane.
 fn turn(a: &V2, b: &V2, c: &V2) -> RBig {
-    (&b[0] - &a[0]) * (&c[1] - &a[1]) - (&b[1] - &a[1]) * (&c[0] - &a[0])
+    let ([ax, ay], [bx, by], [cx, cy]) = (a, b, c);
+    (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
 }
 
 /// Whether `x`, on the line through `a` and `b`, lies between them.
 fn between(a: &V2, b: &V2, x: &V2) -> bool {
-    (0..2).all(|k| {
-        let (lo, hi) = if a[k] <= b[k] {
-            (&a[k], &b[k])
-        } else {
-            (&b[k], &a[k])
-        };
-        *lo <= x[k] && x[k] <= *hi
+    a.iter().zip(b).zip(x).all(|((p, q), c)| {
+        let (lo, hi) = if p <= q { (p, q) } else { (q, p) };
+        lo <= c && c <= hi
     })
 }
 
@@ -459,13 +470,15 @@ enum Place {
 /// `b₁ − a₁` is nonzero: the half-open test holds for no level edge.
 fn locate(segments: &[(V2, V2)], x: &V2) -> Place {
     let mut odd = false;
+    let [px, py] = x;
     for (a, b) in segments {
         if turn(a, b, x) == RBig::ZERO && between(a, b, x) {
             return Place::Edge;
         }
-        if (a[1] <= x[1]) != (b[1] <= x[1]) {
-            let at = &a[0] + (&x[1] - &a[1]) * (&b[0] - &a[0]) / (&b[1] - &a[1]);
-            odd ^= at > x[0];
+        let ([ax, ay], [bx, by]) = (a, b);
+        if (ay <= py) != (by <= py) {
+            let at = ax + (py - ay) * (bx - ax) / (by - ay);
+            odd ^= at > *px;
         }
     }
     if odd { Place::In } else { Place::Out }
@@ -536,7 +549,7 @@ fn with_midpoints(mut points: Vec<V3>, direction: &V3) -> Vec<V3> {
     for pair in points.windows(2) {
         if let [a, b] = pair {
             out.push(a.clone());
-            out.push([0, 1, 2].map(|k| (&a[k] + &b[k]) / q(2)));
+            out.push(plus(a, b).map(|c| c / q(2)));
         }
     }
     out.extend(points.last().cloned());
@@ -557,7 +570,7 @@ fn meets(sides: &[(V3, V3)], other: &Plate) -> Vec<V3> {
         // s and t of opposite signs, so s − t is nonzero.
         if (s < RBig::ZERO) != (t < RBig::ZERO) && s != RBig::ZERO && t != RBig::ZERO {
             let share = &s / (&s - &t);
-            out.push([0, 1, 2].map(|k| &a[k] + (&b[k] - &a[k]) * &share));
+            out.push(zipped(a, b, |x, y| x + (y - x) * &share));
         }
     }
     out
@@ -568,29 +581,30 @@ fn meets(sides: &[(V3, V3)], other: &Plate) -> Vec<V3> {
 /// bound a stretch of the face.
 fn inside(sides: &[(V3, V3)], n: &V3, d: &RBig, axis: usize) -> Option<V3> {
     let segments = flats(sides, axis);
-    let mut levels: Vec<RBig> = segments.iter().map(|(a, _)| a[1].clone()).collect();
+    let mut levels: Vec<RBig> = segments.iter().map(|([_, y], _)| y.clone()).collect();
     levels.sort();
     levels.dedup();
     let level = (levels.first()? + levels.get(1)?) / q(2);
     let mut crossings: Vec<RBig> = segments
         .iter()
-        .filter(|(a, b)| (a[1] <= level) != (b[1] <= level))
-        .map(|(a, b)| &a[0] + (&level - &a[1]) * (&b[0] - &a[0]) / (&b[1] - &a[1]))
+        .filter(|([_, ay], [_, by])| (*ay <= level) != (*by <= level))
+        .map(|([ax, ay], [bx, by])| ax + (&level - ay) * (bx - ax) / (by - ay))
         .collect();
     crossings.sort();
     let across = (crossings.first()? + crossings.get(1)?) / q(2);
     // The dropped coordinate from the plane; n's largest is nonzero.
-    let (i, j) = match axis {
-        0 => (1, 2),
-        1 => (0, 2),
-        _ => (0, 1),
+    let [nx, ny, nz] = n;
+    let (first, second, dropped) = match axis {
+        0 => (ny, nz, nx),
+        1 => (nx, nz, ny),
+        _ => (nx, ny, nz),
     };
-    let rest = -(&n[i] * &across + &n[j] * &level + d) / &n[axis];
-    let mut x = [RBig::ZERO, RBig::ZERO, RBig::ZERO];
-    x[i] = across;
-    x[j] = level;
-    x[axis] = rest;
-    Some(x)
+    let rest = -(first * &across + second * &level + d) / dropped;
+    Some(match axis {
+        0 => [rest, across, level],
+        1 => [across, rest, level],
+        _ => [across, level, rest],
+    })
 }
 
 /// Whether two faces on one plane meet away from what they share.
@@ -613,7 +627,7 @@ fn coplanar(r: &Read, f: &Plate, g: &Plate) -> Option<bool> {
             // Not parallel, so s − t is nonzero; the meeting is on the side's line.
             if s != t {
                 let share = &s / (&s - &t);
-                let at: V3 = [0, 1, 2].map(|k| &c[k] + (&d[k] - &c[k]) * &share);
+                let at: V3 = zipped(c, d, |x, y| x + (y - x) * &share);
                 if on_segment(a, b, &at) {
                     stops.push(at);
                 }
@@ -631,7 +645,8 @@ fn coplanar(r: &Read, f: &Plate, g: &Plate) -> Option<bool> {
 
 /// Whether two faces meet away from what they share; `None` if a corner has no place.
 fn faces_cross(r: &Read, f: &Plate, g: &Plate) -> Option<bool> {
-    let apart = (0..3).any(|k| f.high[k] < g.low[k] || g.high[k] < f.low[k]);
+    let below = |p: &V3, q: &V3| p.iter().zip(q).any(|(a, b)| a < b);
+    let apart = below(&f.high, &g.low) || below(&g.high, &f.low);
     if apart {
         return Some(false);
     }
@@ -639,7 +654,7 @@ fn faces_cross(r: &Read, f: &Plate, g: &Plate) -> Option<bool> {
     if zero(&direction) {
         // One plane, or two apart. n and the other's normal are parallel, and each nonzero.
         let k = largest(&f.n);
-        let scale = &g.n[k] / &f.n[k];
+        let scale = g.n.get(k)? / f.n.get(k)?;
         return if g.d == &f.d * &scale {
             coplanar(r, f, g)
         } else {
@@ -668,8 +683,8 @@ fn sides_cross(r: &Read, axis: usize, s: Side, t: Side) -> Option<bool> {
         });
     if let Some((near, far, other)) = share {
         // They run from one vertex: they meet again only along each other, the same way.
-        let along = (&far[0] - &near[0]) * (&other[0] - &near[0])
-            + (&far[1] - &near[1]) * (&other[1] - &near[1]);
+        let ([fx, fy], [ox, oy], [nx, ny]) = (far, other, near);
+        let along = (fx - nx) * (ox - nx) + (fy - ny) * (oy - ny);
         return Some(turn(near, far, other) == RBig::ZERO && along > RBig::ZERO);
     }
     let opposite = |p: &RBig, q: &RBig| {
@@ -721,7 +736,7 @@ fn area(r: &Read, ring: &[Side]) -> Option<V3> {
             r.points.get(s.to as usize)?.as_ref()?,
         );
         let c = cross(a, b);
-        sum = [0, 1, 2].map(|k| &sum[k] + &c[k]);
+        sum = plus(&sum, &c);
     }
     Some(sum)
 }
@@ -802,7 +817,7 @@ fn in_shell(r: &Read, shell: u32, x: &V3) -> Option<bool> {
             if t < RBig::ZERO {
                 continue;
             }
-            let hit: V3 = [0, 1, 2].map(|k| &x[k] + &direction[k] * &t);
+            let hit: V3 = zipped(x, &direction, |p, d| p + d * &t);
             match locate(&segments, &flat(&hit, axis)) {
                 Place::Out => {}
                 _ if t == RBig::ZERO => return None,
