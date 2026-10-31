@@ -1000,7 +1000,9 @@ dependencies = [
  "geom-sketch",
  "geom-subd",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "serde_json",
 ]
 
 [[package]]
@@ -1010,6 +1012,7 @@ dependencies = [
  "bolero",
  "geom-bench",
  "geom-curve",
+ "geom-format",
  "geom-gen",
  "geom-math",
  "geom-name",

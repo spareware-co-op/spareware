@@ -50,18 +50,29 @@ name: Kernel fuzzing and proofs
 on:
   pull_request:
     paths:
+      - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
+      - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-field/**"
+      - "projects/engines/geometry/crates/geom-format/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-math/**"
+      - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-sketch/**"
+      - "projects/engines/geometry/crates/geom-spatial/**"
+      - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
@@ -75,18 +86,29 @@ on:
   push:
     branches: [main]
     paths:
+      - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
+      - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-field/**"
+      - "projects/engines/geometry/crates/geom-format/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-math/**"
+      - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-sketch/**"
+      - "projects/engines/geometry/crates/geom-spatial/**"
+      - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
@@ -124,7 +146,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, attributes_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, cbor_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

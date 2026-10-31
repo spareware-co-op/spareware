@@ -1233,10 +1233,6 @@ mod repository {
             "geom-field",
             "G326 G327 G328 G329 G330 G331 G332 G338 G339 G352 G469",
         ),
-        (
-            "geom-format",
-            "G91 G92 G93 G94 G95 G96 G105 G108 G112 G175 G318 G405 G410 G411 G459",
-        ),
         ("geom-heal", "G417 G419 G420"),
         ("geom-ifc", "G421 G422 G423 G424 G426"),
         (

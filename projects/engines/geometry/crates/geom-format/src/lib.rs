@@ -28,7 +28,11 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G91, G92, G93, G94, G95, G96, G105, G108, G112, G175,
-//! G318, G405, G410, G411, G459.
+//! Status: the strict CBOR decoder, its columns and the text form built (G91); the rest by pieces
+//! G92, G93, G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod cbor;

@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has six targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -12,9 +12,11 @@
 //! operation at every width; [`variants`] (G42), every variant of every generated exact path
 //! returns the exact value of its description, evaluated in big integers; [`arenas`] (G80),
 //! `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see each
-//! other's edits; and [`attributes`] (G90), `geom-name`'s attribute step gives each output exactly
-//! what section 8.4's table gives. The layout every target follows, and how each engine runs it
-//! locally and in CI, is in this crate's `README.md`.
+//! other's edits; [`attributes`] (G90), `geom-name`'s attribute step gives each output exactly
+//! what section 8.4's table gives; and [`cbor`] (G91), `geom-format`'s strict CBOR decoder and its
+//! text form never panic, refuse inside their input and convert both ways bit for bit. The layout
+//! every target follows, and how each engine runs it locally and in CI, is in this crate's
+//! `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -119,6 +121,8 @@
 //!   under test of the [`arenas`] target and the values that fill its arenas.
 //! - `geom-name` and `geom-op` (MPL-2.0, ours), the code under test of
 //!   the [`attributes`] target, with `geom-topo`.
+//! - `geom-format` and `geom-run` (MPL-2.0, ours), the code under test of the [`cbor`] target and
+//!   the work meter it reads with.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -163,6 +167,7 @@ use core::fmt;
 
 pub mod arenas;
 pub mod attributes;
+pub mod cbor;
 pub mod orient2d;
 pub mod predicates;
 pub mod seeded;
