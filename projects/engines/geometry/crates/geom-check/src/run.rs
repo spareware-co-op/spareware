@@ -32,6 +32,7 @@ use geom_num::Exactness;
 use geom_run::{Stopped, WorkMeter};
 use geom_topo::Body;
 
+use crate::geometric;
 use crate::report::{Group, Level, Report};
 use crate::sink::Sink;
 use crate::{combinatorial, exactness};
@@ -70,7 +71,16 @@ pub fn check(
                 exactness::check(body, exactness, &mut sink)?;
                 &mut ran
             }
-            Group::Geometric | Group::SelfIntersection => &mut missing,
+            // Group 2 walks the rings group 1 proves finite, so it runs only on a body group 1
+            // passed; otherwise it is skipped, neither run nor missing.
+            Group::Geometric => {
+                if sink.found() > 0 {
+                    continue;
+                }
+                geometric::check(body, exactness, &mut sink)?;
+                &mut ran
+            }
+            Group::SelfIntersection => &mut missing,
         };
         done.get_mut(at).into_iter().for_each(|slot| *slot = true);
     }

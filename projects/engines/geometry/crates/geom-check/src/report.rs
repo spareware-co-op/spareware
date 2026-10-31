@@ -76,11 +76,14 @@ impl Group {
         matches!(self, Group::Combinatorial | Group::Exactness)
     }
 
-    /// Whether this checker has the group yet: groups 1 and 4 (piece G84); 2 and 3 come with
-    /// pieces G85 and on.
+    /// Whether this checker has the group yet: groups 1 and 4 (piece G84) and 2 (G85); 3 comes
+    /// with G85 and the pieces after it.
     #[must_use]
     pub const fn built(self) -> bool {
-        matches!(self, Group::Combinatorial | Group::Exactness)
+        matches!(
+            self,
+            Group::Combinatorial | Group::Geometric | Group::Exactness
+        )
     }
 }
 
@@ -236,6 +239,16 @@ pub enum FaultKind {
     NotStraight,
     /// The body is recorded Exact, but a fin's pcurve is not a line. `at` is the fin.
     CurvedPcurve,
+    /// A vertex does not lie on a face's surface within the body's bound. `at` is the vertex,
+    /// `with` the face.
+    VertexOffSurface,
+    /// A vertex does not lie at its edge's curve end within the body's bound. `at` is the vertex,
+    /// `with` the edge.
+    VertexOffCurve,
+    /// A carrier group 2 has no certified check for yet: a surface or curve of another kind, a
+    /// plane not given by integers, or a fin's pcurve. Reported, never passed. `at` is the
+    /// surface, curve or pcurve, `with` the face, edge or fin that uses it.
+    Unchecked,
 }
 
 impl FaultKind {
@@ -245,6 +258,9 @@ impl FaultKind {
         match self {
             FaultKind::NotFlat | FaultKind::NotStraight | FaultKind::CurvedPcurve => {
                 Group::Exactness
+            }
+            FaultKind::VertexOffSurface | FaultKind::VertexOffCurve | FaultKind::Unchecked => {
+                Group::Geometric
             }
             _ => Group::Combinatorial,
         }
@@ -285,6 +301,13 @@ impl FaultKind {
             FaultKind::NotFlat => "the body is recorded Exact, but the face is curved",
             FaultKind::NotStraight => "the body is recorded Exact, but the edge is not straight",
             FaultKind::CurvedPcurve => "the body is recorded Exact, but the fin's pcurve is curved",
+            FaultKind::VertexOffSurface => {
+                "the vertex is not on the face's surface within the bound"
+            }
+            FaultKind::VertexOffCurve => {
+                "the vertex is not at the edge's curve end within the bound"
+            }
+            FaultKind::Unchecked => "no certified check of this carrier exists yet",
         }
     }
 }

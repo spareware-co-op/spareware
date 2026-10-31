@@ -128,7 +128,7 @@ This replaces section 5's three boxes (Numbers, Core, Operations) with thirteen 
 | `geom-topo` | 3 | Bodies to vertices in arenas; the builder; attributes and continuity records; regions and cells; the instance record | base, math, curve, surface | 18.7, 23.9 |
 | `geom-name` | 3 | The name graph and its hash-consing; references, their resolution and the walk through history; surface groups and placement references | base, topo | 17.12, 20.4 |
 | `geom-intersect` | 4 | Certified curve-curve, curve-surface and surface-surface intersection; level curves, isoclines and contour generators; closed-form distances | base, math, **nurbs**, curve, surface, **bvh** | 12.3, 12.13, 18.5, 19.10, 19.14, 23.7; OQ-12.1, OQ-19.7 |
-| `geom-check` | 5 | The B-rep validity checker | base, topo, intersect | 8.3, 18.10, 19.2 |
+| `geom-check` | 5 | The B-rep validity checker | base, **curve**, topo, intersect | 8.3, 18.10, 19.2 |
 | `geom-poly` | 6 | Exact plane-based polyhedra and their arrangements; plane commit; indicators, early-out derivation and piece selection; the maximal-face merge with T-junction insertion, shared by `geom-bool` and `geom-mesh` | base, math, topo | 11.14, 13.2, 19.5; OQ-11.2, OQ-19.4 |
 | `geom-bool` | 6 | The arrangement engine: booleans, imprint, split, cells, batch cuts, the arrangement step of local operations, `close_near_contacts` | base, poly, intersect, topo, name, check, **bvh** | 11.4, 11.14, 13 (intro) |
 | `geom-2d` | 6 | Drafting entities, the 2D arrangement, regions, hatches, 2D booleans and offsets, edits, snaps and references, 2D distance and clearance, survey linework and COGO | base, math, curve, **topo, name, intersect, bvh** | 14 (intro), 14.8, 14.9, 17.2; OQ-12.1, OQ-14.9 |

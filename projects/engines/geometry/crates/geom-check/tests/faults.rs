@@ -447,26 +447,39 @@ fn an_exact_record_on_curved_geometry() {
             .faults()
             .to_vec()
     };
+    // Group 2 reports what it cannot certify yet before group 4 judges the record.
+    let unchecked = |at: Entity, with: Entity| Fault::at(FaultKind::Unchecked, at).with(with);
     let mut r = cube();
     r.surfaces[0] = sphere();
+    let sphere_unchecked = unchecked(Entity::Surface(ix(0)), Entity::Face(ix(0)));
     assert_eq!(
         exact(&r),
-        [Fault::at(FaultKind::NotFlat, Entity::Face(ix(0)))]
+        [
+            sphere_unchecked,
+            Fault::at(FaultKind::NotFlat, Entity::Face(ix(0)))
+        ]
     );
-    // Certified, the same geometry is the record's to bound, not group 4's to refuse.
-    assert_eq!(faults(&r, BodyKind::Solid), Vec::<Fault>::new());
+    // Certified, the same geometry is the record's to bound, not group 4's to refuse: only group
+    // 2's report that the sphere has no certified check yet remains.
+    assert_eq!(faults(&r, BodyKind::Solid), [sphere_unchecked]);
     let mut r = cube();
     r.curves[0] = circle();
     assert_eq!(
         exact(&r),
-        [Fault::at(FaultKind::NotStraight, Entity::Edge(ix(0)))]
+        [
+            unchecked(Entity::Curve(ix(0)), Entity::Edge(ix(0))),
+            Fault::at(FaultKind::NotStraight, Entity::Edge(ix(0)))
+        ]
     );
     let mut r = cube();
     r.pcurves.push(pcircle());
     r.fins[0].pcurve = Some(ix(0));
     assert_eq!(
         exact(&r),
-        [Fault::at(FaultKind::CurvedPcurve, Entity::Fin(ix(0)))]
+        [
+            unchecked(Entity::Pcurve(ix(0)), Entity::Fin(ix(0))),
+            Fault::at(FaultKind::CurvedPcurve, Entity::Fin(ix(0)))
+        ]
     );
 }
 

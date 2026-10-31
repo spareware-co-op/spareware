@@ -124,7 +124,7 @@ pub(crate) fn check(
 // names is never taken, and keeps the check free of branches no body can reach.
 
 /// Every row of an arena of `rows` rows, ascending.
-fn rows<K>(rows: u32) -> impl Iterator<Item = Ix<K>> {
+pub(crate) fn rows<K>(rows: u32) -> impl Iterator<Item = Ix<K>> {
     (0..rows).filter_map(Ix::new)
 }
 
@@ -149,7 +149,7 @@ fn fin_edge(a: &Arenas, f: FinIx) -> Option<EdgeIx> {
 }
 
 /// The face a fin's loop belongs to.
-fn fin_face(a: &Arenas, f: FinIx) -> Option<FaceIx> {
+pub(crate) fn fin_face(a: &Arenas, f: FinIx) -> Option<FaceIx> {
     a.fins
         .loop_
         .get(f)
@@ -172,7 +172,7 @@ fn ends(a: &Arenas, e: Option<EdgeIx>) -> (Option<VertexIx>, Option<VertexIx>) {
 
 /// Where a fin starts and ends: its edge's start and end, swapped when the fin is `Reversed`;
 /// `None` for a closed edge without vertices.
-fn fin_ends(a: &Arenas, f: FinIx) -> Option<(VertexIx, VertexIx)> {
+pub(crate) fn fin_ends(a: &Arenas, f: FinIx) -> Option<(VertexIx, VertexIx)> {
     let (start, end) = ends(a, fin_edge(a, f));
     let reversed = a.fins.sense.get(f) == Some(&Sense::Reversed);
     start

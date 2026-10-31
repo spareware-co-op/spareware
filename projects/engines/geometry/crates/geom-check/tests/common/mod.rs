@@ -187,6 +187,56 @@ impl Rows {
         e
     }
 
+    /// The plane a face with `loops` lies on, and the box of its vertices: the plane through the
+    /// first three of its vertices that are not on one line, spanned by their differences, so
+    /// every vertex of a flat polygon lies on it exactly; `plane()`, z = 0, for loops of closed
+    /// edges without vertices (the circles all lie in z = 0).
+    fn carrier(&self, loops: &[&[(u32, Sense)]]) -> (SurfaceKind, Box3) {
+        let mut points: Vec<P3> = Vec::new();
+        for ring in loops {
+            for &(e, _) in *ring {
+                let edge = self.edges[e as usize];
+                for v in [edge.start, edge.end].into_iter().flatten() {
+                    let p = self.points[self.vertices[v.row() as usize].point.row() as usize];
+                    if !points.contains(&p) {
+                        points.push(p);
+                    }
+                }
+            }
+        }
+        let xyz = |p: P3| [p.x.get(), p.y.get(), p.z.get()];
+        let corner = |pick: fn(i64, i64) -> i64| {
+            let first = points.first().map_or([0; 3], |&p| xyz(p));
+            let c = points
+                .iter()
+                .fold(first, |acc, &p| [0, 1, 2].map(|k| pick(acc[k], xyz(p)[k])));
+            P3::new(c[0], c[1], c[2]).unwrap()
+        };
+        let bound = Box3::new(corner(i64::min), corner(i64::max)).unwrap();
+        for i in 0..points.len() {
+            for j in i + 1..points.len() {
+                for k in j + 1..points.len() {
+                    let (o, a, b) = (xyz(points[i]), xyz(points[j]), xyz(points[k]));
+                    let u = [a[0] - o[0], a[1] - o[1], a[2] - o[2]];
+                    let v = [b[0] - o[0], b[1] - o[1], b[2] - o[2]];
+                    let cross = [
+                        u[1] * v[2] - u[2] * v[1],
+                        u[2] * v[0] - u[0] * v[2],
+                        u[0] * v[1] - u[1] * v[0],
+                    ];
+                    if cross != [0; 3] {
+                        let f = |w: [i64; 3]| w.map(|x| x as f64);
+                        let surface = SurfaceKind::Plane(
+                            Plane::new(f(o), f(u), f(v), ((0.0, 1.0), (0.0, 1.0))).unwrap(),
+                        );
+                        return (surface, bound);
+                    }
+                }
+            }
+        }
+        (plane(), bound)
+    }
+
     /// Adds a shell to region `r`, at the end of the region's list, with no faces yet; its row.
     pub fn shell(&mut self, r: u32) -> u32 {
         let s = self.shells.len() as u32;
@@ -213,15 +263,15 @@ impl Rows {
     /// added.
     pub fn face(&mut self, s: u32, loops: &[&[(u32, Sense)]]) -> u32 {
         let f = self.faces.len() as u32;
-        self.surfaces.push(plane());
-        let origin = P3::new(0, 0, 0).unwrap();
+        let (surface, bound) = self.carrier(loops);
+        self.surfaces.push(surface);
         self.faces.push(Face {
             shell: ix(s),
             next: None,
             surface: ix(self.surfaces.len() as u32 - 1),
             sense: Sense::Forward,
             first_loop: None,
-            bound: Box3::new(origin, origin).unwrap(),
+            bound,
         });
         match self.shells[s as usize].first_face {
             None => self.shells[s as usize].first_face = Some(ix(f)),

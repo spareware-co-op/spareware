@@ -17,7 +17,7 @@ use common::{
     acorn, annulus_sheet, certified, cube, cylinder, disc_sheet, meter, report, square_sheet,
     torus, wire,
 };
-use geom_check::{Group, Level, check};
+use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_num::{Exactness, GridStep, Steps};
 use geom_topo::BodyKind;
 
@@ -26,11 +26,8 @@ fn every_kind_of_valid_body_passes() {
     let cases = [
         ("cube", cube(), BodyKind::Solid),
         ("cube as a general body", cube(), BodyKind::General),
-        ("cylinder", cylinder(), BodyKind::Solid),
-        ("torus", torus(), BodyKind::Solid),
+        ("torus of planes and lines", torus(), BodyKind::Solid),
         ("square sheet", square_sheet(), BodyKind::Sheet),
-        ("disc sheet", disc_sheet(), BodyKind::Sheet),
-        ("annulus sheet", annulus_sheet(), BodyKind::Sheet),
         ("wire", wire(), BodyKind::Wire),
         ("wire as a general body", wire(), BodyKind::General),
         ("acorn", acorn(), BodyKind::Acorn),
@@ -52,6 +49,26 @@ fn every_kind_of_valid_body_passes() {
 }
 
 #[test]
+fn curved_carriers_are_reported_unchecked_never_passed() {
+    // Group 2 has no certified check of circles yet: each is reported, and nothing else is.
+    for (name, rows, kind) in [
+        ("cylinder", cylinder(), BodyKind::Solid),
+        ("disc sheet", disc_sheet(), BodyKind::Sheet),
+        ("annulus sheet", annulus_sheet(), BodyKind::Sheet),
+    ] {
+        let r = report(&rows, kind, certified());
+        assert!(!r.passed(), "{name}");
+        assert!(
+            r.faults()
+                .iter()
+                .all(|f| f.kind == FaultKind::Unchecked && matches!(f.at, Entity::Curve(_))),
+            "{name}: {:?}",
+            r.faults()
+        );
+    }
+}
+
+#[test]
 fn flat_bodies_pass_recorded_exact() {
     for (name, rows, kind) in [
         ("cube", cube(), BodyKind::Solid),
@@ -62,11 +79,18 @@ fn flat_bodies_pass_recorded_exact() {
         let r = report(&rows, kind, Exactness::Exact);
         assert!(r.passed(), "{name}: {:?}", r.faults());
     }
-    // A pcurve that is a line keeps an exact body exact.
+    // A pcurve that is a line keeps an exact body exact (group 4); group 2 reports it unchecked
+    // until pcurves have a certified check (G177), never passes it.
     let mut rows = cube();
     rows.pcurves.push(common::pline());
     rows.fins[0].pcurve = Some(common::ix(0));
-    assert!(report(&rows, BodyKind::Solid, Exactness::Exact).passed());
+    assert_eq!(
+        report(&rows, BodyKind::Solid, Exactness::Exact).faults(),
+        [
+            Fault::at(FaultKind::Unchecked, Entity::Pcurve(common::ix(0)))
+                .with(Entity::Fin(common::ix(0)))
+        ]
+    );
 }
 
 #[test]
@@ -82,11 +106,11 @@ fn a_cheap_check_runs_groups_1_and_4_and_a_full_one_names_what_is_missing() {
     let full = check(&body, Exactness::Exact, Level::Full, &mut meter()).unwrap();
     assert_eq!(
         full.ran().collect::<Vec<_>>(),
-        [Group::Combinatorial, Group::Exactness]
+        [Group::Combinatorial, Group::Geometric, Group::Exactness]
     );
     assert_eq!(
         full.missing().collect::<Vec<_>>(),
-        [Group::Geometric, Group::SelfIntersection]
+        [Group::SelfIntersection]
     );
     assert!(full.passed());
     // The same body gives the same report, every time.
@@ -100,7 +124,7 @@ fn a_cheap_check_runs_groups_1_and_4_and_a_full_one_names_what_is_missing() {
 fn the_levels_and_groups_are_chapter_8_3s() {
     assert_eq!(Group::ALL.map(Group::number), [1, 2, 3, 4]);
     assert_eq!(Group::ALL.map(Group::cheap), [true, false, false, true]);
-    assert_eq!(Group::ALL.map(Group::built), [true, false, false, true]);
+    assert_eq!(Group::ALL.map(Group::built), [true, true, false, true]);
     assert_eq!(
         Group::ALL.map(|g| Level::Cheap.runs(g)),
         [true, false, false, true]
