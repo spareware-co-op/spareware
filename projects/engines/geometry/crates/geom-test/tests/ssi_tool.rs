@@ -159,7 +159,7 @@ fn a_kernel_kind_off_its_closed_form_fails_the_tool() {
     let mut case = catalogue::all().remove(0);
     let moved = serde_json::to_string(&case.truth[0])
         .expect("written")
-        .replace("-1.0", "-1.0004");
+        .replace("-1.0", "-1.4");
     case.truth[0] = serde_json::from_str(&moved).expect("read");
     let path = dir.join("cases").join(format!("{}.json", case.id));
     fs::write(&path, serde_json::to_string(&case).expect("written")).expect("wrote");

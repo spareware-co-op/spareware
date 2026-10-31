@@ -824,6 +824,50 @@ fn the_truth_passes_on_every_catalogue_case_in_both_modes() {
 }
 
 #[test]
+fn the_truth_splits_at_a_singular_point() {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    case.expected.singular_points = vec![[0.5, 0.0, 0.0]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let curves: Vec<&[[f64; 3]]> = out.curves.iter().map(|c| c.xyz.as_slice()).collect();
+    assert_eq!(
+        curves,
+        [
+            &[[-1.0, 0.0, 0.0], [0.5, 0.0, 0.0]][..],
+            &[[0.5, 0.0, 0.0], [1.0, 0.0, 0.0]][..]
+        ]
+    );
+    assert!(out.curves.iter().all(|c| c.kind == "CROSSING"));
+    // A curve that already ends there stays whole, and so does one that passes too far off.
+    for point in [[1.0, 0.0, 0.0], [1.000_5, 0.0, 0.0], [2.0, 0.0, 0.0]] {
+        case.expected.singular_points = vec![point];
+        let placed = place(&case, ACCURACY).expect("placed");
+        let out = StandIn::Truth
+            .answer(&case, &placed, ACCURACY)
+            .expect("answered");
+        assert_eq!(out.curves.len(), 1, "{point:?}");
+    }
+    // Two points make three pieces, and the nearest segment is the one cut.
+    case.expected.branches[0].points = vec![[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
+    case.expected.singular_points = vec![[-0.25, 0.0, 0.0], [0.75, 0.0, 0.0]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let curves: Vec<&[[f64; 3]]> = out.curves.iter().map(|c| c.xyz.as_slice()).collect();
+    assert_eq!(
+        curves,
+        [
+            &[[-1.0, 0.0, 0.0], [-0.25, 0.0, 0.0]][..],
+            &[[-0.25, 0.0, 0.0], [0.0, 0.0, 0.0], [0.75, 0.0, 0.0]][..],
+            &[[0.75, 0.0, 0.0], [1.0, 0.0, 0.0]][..]
+        ]
+    );
+}
+
+#[test]
 fn a_wrong_answer_fails_on_every_catalogue_case() {
     for stand_in in [StandIn::Shifted, StandIn::Spurious, StandIn::Dropped] {
         for case in catalogue::all() {
