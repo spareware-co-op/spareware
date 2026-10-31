@@ -9,6 +9,7 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+use engine_geometry::operations::PER_ROW;
 use engine_geometry::schema::{
     Class, DiagnosticSpec, ErrorSpec, Family, Field, OpSchema, Operation, RoleSpec, Tier, Unit,
 };
@@ -56,7 +57,7 @@ static BOX: OpSchema = OpSchema {
         doc: "The box is thinner than a millimetre.",
     }],
     classes: &[Class::Exact],
-    charges: &[],
+    charges: &[PER_ROW],
     batch: true,
     example: "make.box { corner: [0, 0, 0], size: 10 }",
 };
@@ -105,6 +106,7 @@ fn the_documentation_holds_every_part_of_each_schema() {
         "- `top`: The face at the greatest z.",
         "| `TooSmall` | `InvalidInput` | `size: u32` | The size is 0 \\| or less. |",
         "- `box.thin`: The box is thinner than a millimetre.",
+        "- `make`: 1 per row built",
         "**Exactness**: Exact. **Batch entry**: yes.",
         "make.box { corner: [0, 0, 0], size: 10 }",
         "## `query.count`",
@@ -114,6 +116,7 @@ fn the_documentation_holds_every_part_of_each_schema() {
         "**Roles**: none.",
         "**Errors**: none.",
         "**Warnings**: none.",
+        "**Charges**: none.",
         "**Exactness**: Certified, Approximate. **Batch entry**: no.",
     ] {
         assert!(text.contains(expected), "missing {expected:?} in\n{text}");
@@ -176,6 +179,10 @@ fn every_tool_is_a_valid_mcp_tool() {
     assert_eq!(meta["errors"][0]["kind"], "InvalidInput");
     assert_eq!(meta["errors"][0]["detail"], "TooSmall");
     assert_eq!(meta["warnings"][0]["code"], "box.thin");
+    assert_eq!(
+        meta["charges"][0],
+        json!({ "phase": "make", "per": "row built", "units": 1 })
+    );
     assert_eq!(meta["roles"][0]["name"], "top");
     assert_eq!(meta["batch"], true);
     // An operation with no inputs has the closed empty object MCP recommends.
@@ -219,6 +226,15 @@ fn every_type_has_its_rule_and_others_are_refused() {
         schema("Vec<&[bool]>").unwrap()["items"]["items"]["type"],
         "boolean"
     );
+    let fixed = schema("[Steps; 3]").unwrap();
+    assert_eq!(fixed["items"]["minimum"], 0);
+    assert_eq!(
+        (fixed["minItems"].clone(), fixed["maxItems"].clone()),
+        (json!(3), json!(3))
+    );
+    let no_length = format!("{:?}", schema("[Steps; three]").unwrap_err());
+    assert!(no_length.contains("three"), "{no_length}");
+    assert_eq!(schema("Axis").unwrap()["enum"], json!(["x", "y", "z"]));
     for value in [
         "Body",
         "CurveKind",
@@ -229,6 +245,12 @@ fn every_type_has_its_rule_and_others_are_refused() {
         "PieceKey",
         "Exactness",
         "GridStep",
+        "History",
+        "Motion",
+        "Copies",
+        "Instance",
+        "Rotation",
+        "Scale",
     ] {
         let s = schema(value).unwrap();
         assert_eq!(

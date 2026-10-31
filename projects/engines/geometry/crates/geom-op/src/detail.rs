@@ -391,6 +391,9 @@ pub enum MakeDetail {
     EmptyPattern,
     /// Two instances of a pattern have one key.
     RepeatedKey,
+    /// A pattern's transform has no inverse: it would collapse the body onto a plane, a line or a
+    /// point.
+    SingularTransform,
     /// The result did not pass the checker. A defect: nothing was returned.
     ResultInvalid,
     /// The body could not be assembled from its rows. A defect.
@@ -409,7 +412,8 @@ impl MakeDetail {
             | MakeDetail::MinorNotBelowMajor { .. }
             | MakeDetail::BodyNotNamed
             | MakeDetail::EmptyPattern
-            | MakeDetail::RepeatedKey => ErrorKind::InvalidInput,
+            | MakeDetail::RepeatedKey
+            | MakeDetail::SingularTransform => ErrorKind::InvalidInput,
             MakeDetail::NotAccepted { .. } => ErrorKind::ExactnessNotAccepted,
             MakeDetail::KindNotCertified | MakeDetail::NotCertifiedYet { .. } => {
                 ErrorKind::Unsupported
@@ -443,7 +447,7 @@ impl MakeDetail {
             MakeDetail::KindNotCertified => vec![Remedy::AwaitPiece { piece: "G177" }],
             MakeDetail::NotCertifiedYet { piece } => vec![Remedy::AwaitPiece { piece }],
             MakeDetail::BodyNotNamed => vec![change("body", None)],
-            MakeDetail::EmptyPattern | MakeDetail::RepeatedKey => {
+            MakeDetail::EmptyPattern | MakeDetail::RepeatedKey | MakeDetail::SingularTransform => {
                 vec![change("instances", None)]
             }
             MakeDetail::ResultInvalid | MakeDetail::BuildFailed => vec![Remedy::Report],
@@ -478,6 +482,9 @@ impl fmt::Display for MakeDetail {
             MakeDetail::BodyNotNamed => f.write_str("the body carries no names"),
             MakeDetail::EmptyPattern => f.write_str("the pattern has no instance"),
             MakeDetail::RepeatedKey => f.write_str("two instances of the pattern have one key"),
+            MakeDetail::SingularTransform => {
+                f.write_str("a transform of the pattern has no inverse")
+            }
             MakeDetail::ResultInvalid => f.write_str("the result did not pass the checker"),
             MakeDetail::BuildFailed => f.write_str("the body could not be assembled"),
         }

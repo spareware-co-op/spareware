@@ -633,10 +633,15 @@ name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
  "cargo_metadata",
+ "geom-check",
  "geom-curve",
+ "geom-make",
+ "geom-math",
+ "geom-name",
  "geom-num",
  "geom-op",
  "geom-pool",
+ "geom-run",
  "geom-surface",
  "geom-topo",
  "kit-core",
@@ -788,9 +793,18 @@ name = "geom-bench"
 version = "0.0.0"
 dependencies = [
  "divan",
+ "geom-bvh",
+ "geom-curve",
+ "geom-linalg",
+ "geom-make",
+ "geom-math",
  "geom-num",
+ "geom-nurbs",
+ "geom-op",
  "geom-run",
+ "geom-surface",
  "geom-test",
+ "geom-topo",
  "gungraun",
  "gungraun-runner",
  "hex",
@@ -1015,10 +1029,13 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "geom-bench",
+ "geom-check",
  "geom-curve",
  "geom-gen",
+ "geom-make",
  "geom-math",
  "geom-num",
+ "geom-op",
  "geom-run",
  "geom-surface",
  "geom-test",
@@ -1119,11 +1136,13 @@ dependencies = [
 name = "geom-make"
 version = "0.0.0"
 dependencies = [
+ "cap",
  "geom-check",
  "geom-curve",
  "geom-math",
  "geom-name",
  "geom-num",
+ "geom-nurbs",
  "geom-op",
  "geom-run",
  "geom-surface",

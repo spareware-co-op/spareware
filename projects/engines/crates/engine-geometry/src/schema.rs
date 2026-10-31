@@ -20,9 +20,9 @@
 //!
 //! Cost: none at run time: entries are constants.
 
-pub use geom_op::run::Phase;
+pub use geom_run::Phase;
 pub use geom_op::{
-    Charge, Class, DiagnosticSpec, ErrorKind, ErrorSpec, Family, Field, OpSchema, RoleSpec, Unit,
+    Charge, Class, DiagnosticSpec, ErrorSpec, Family, Field, OpSchema, RoleSpec, Unit,
 };
 
 /// A stability tier of chapter 25, for one operation.

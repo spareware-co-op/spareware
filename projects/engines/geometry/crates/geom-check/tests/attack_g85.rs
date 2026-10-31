@@ -7,6 +7,7 @@
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "test code: a failure should stop loudly"
@@ -242,6 +243,77 @@ fn an_edge_off_its_face_is_caught() {
     let mut r = ring_torus();
     r.curves[1] = round([10.0, 0.0, 0.0], 3.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
     assert!(edge_off(&at(&r, 2), 1, 0));
+}
+
+/// The cube's corners, sheared and stretched to `w` along x with each corner's y and z leaning
+/// by `lean` along x: every face a plane through grid points, most of them slanted.
+fn long(w: i64, lean: i64) -> Vec<[i64; 3]> {
+    common::CUBE
+        .iter()
+        .map(|&[x, y, z]| [x / 10 * w + y * lean, y, z])
+        .collect()
+}
+
+#[test]
+fn a_long_edge_on_an_integer_plane_is_judged_exactly() {
+    // Found by the make fuzz target: on a bar 2.9e9 steps long no double holds the squared normal
+    // of a long face's plane, so a test in intervals could not say the distance is 0.
+    for (w, lean) in [
+        (2_895_950_982, 0),
+        (2_895_950_982, 7),
+        (602_380_316_954, 0),
+        ((1 << 40) - 1, 0),
+        (94_906_267, 94_906_267),
+    ] {
+        let points = long(w, lean);
+        let r = common::polyhedron(&points, &common::CUBE_FACES);
+        let exact = report(&r, BodyKind::Solid, Exactness::Exact);
+        assert!(
+            !exact.faults().iter().any(|f| matches!(
+                f.kind,
+                FaultKind::EdgeOffSurface | FaultKind::VertexOffSurface
+            )),
+            "{w} {lean}: {:?}",
+            exact.faults()
+        );
+        // Either end of a long edge a step off its faces is caught at bound 0.
+        let [start, end] = [points[0], points[1]];
+        let [sx, sy, sz] = start;
+        let [ex, ey, ez] = end;
+        for bent_line in [line(start, [ex, ey, ez - 1]), line([sx, sy, sz - 1], end)] {
+            let mut bent = r.clone();
+            bent.curves[0] = bent_line;
+            let faults = report(&bent, BodyKind::Solid, Exactness::Exact);
+            assert!(
+                faults
+                    .faults()
+                    .iter()
+                    .any(|f| f.kind == FaultKind::EdgeOffSurface),
+                "{w} {lean}: {:?}",
+                faults.faults()
+            );
+        }
+    }
+}
+
+#[test]
+fn a_line_with_ends_off_the_grid_stays_certified_on_an_integer_plane() {
+    // A cube whose bottom edge's line ends half a step short: no grid end, so the certified bound
+    // judges it, on the plane it still lies in.
+    let mut r = cube();
+    r.curves[0] = CurveKind::Line(Line::new([0.0; 3], [0.0, 9.5, 0.0], (0.0, 1.0)).unwrap());
+    let f = report(&r, BodyKind::Solid, Exactness::Exact);
+    assert!(
+        !f.faults()
+            .iter()
+            .any(|x| x.kind == FaultKind::EdgeOffSurface),
+        "{:?}",
+        f.faults()
+    );
+    // Half a step off the plane, the same: caught at a bound of 0, passed at a bound of 1.
+    r.curves[0] = CurveKind::Line(Line::new([0.0; 3], [0.0, 10.0, 0.5], (0.0, 1.0)).unwrap());
+    assert!(edge_off(&at(&r, 0), 0, 0));
+    assert!(!edge_off(&at(&r, 1), 0, 0));
 }
 
 #[test]

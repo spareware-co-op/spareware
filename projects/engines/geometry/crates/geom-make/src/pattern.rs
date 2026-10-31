@@ -15,6 +15,8 @@
 //!   instances (each instance's path differs), and trace to the body's entities as copies.
 //! - **Each copy checked.** Every copy passes the checker before the pattern returns; one failure
 //!   fails the whole pattern, which returns nothing.
+//! - **The transform states its own stretch.** Each copy's bound grows by what its transform can
+//!   do to a length, read from the transform, never taken on the caller's word.
 //!
 //! Method: chapter 10.1's batch rule (an item's path is the operation's path and its key) and
 //! chapter 8.4's `Copied` event (`projects/engines/geometry/architecture/10-operations.md`,
@@ -31,7 +33,10 @@ use geom_op::{
     MakeDetail, NameList, NameSet, OpContext, OpError, OpOutput, Role, RoleArg, TopoName,
 };
 
-use crate::build::{Made, fail, meter};
+use geom_run::WorkMeter;
+use geom_topo::order::Names;
+
+use crate::build::{Made, fail};
 use crate::transform::{Moved, moved_copy, settle};
 
 /// The copies a pattern returns: each instance's key and what it made, in key order.
@@ -44,17 +49,15 @@ pub struct Instance {
     pub key: [u8; 16],
     /// Where the copy goes.
     pub transform: TypedTransform,
-    /// The largest factor the transform scales by, as a numerator and a denominator: (1, 1) for
-    /// moves, rotations and mirrors.
-    pub stretch: (u64, u64),
 }
 
 /// Copies of `input.body`, one per instance, in key order.
 ///
 /// # Errors
 ///
-/// [`MakeDetail::EmptyPattern`], [`MakeDetail::RepeatedKey`], [`MakeDetail::BodyNotNamed`]; as
-/// the Transform family for each copy.
+/// [`MakeDetail::EmptyPattern`], [`MakeDetail::RepeatedKey`], [`MakeDetail::BodyNotNamed`],
+/// [`MakeDetail::SingularTransform`] for a transform with no inverse; as the Transform family for
+/// each copy.
 pub fn pattern(
     ctx: &OpContext<'_>,
     input: Moved<'_>,
@@ -76,7 +79,17 @@ pub fn pattern(
         .names()
         .ok_or_else(|| fail(ctx, MakeDetail::BodyNotNamed))?
         .clone();
-    let mut meter = meter(ctx);
+    ctx.run(|meter| copies(ctx, meter, input, &order, &names))
+}
+
+/// [`pattern`]'s body, on the operation's meter: one copy per instance of `order`, in key order.
+fn copies(
+    ctx: &OpContext<'_>,
+    meter: &mut WorkMeter<'_>,
+    input: Moved<'_>,
+    order: &[&Instance],
+    names: &Names,
+) -> Result<OpOutput<Copies>, OpError> {
     let mut out = Vec::with_capacity(order.len());
     let mut least = Exactness::Exact;
     for instance in order {
@@ -93,16 +106,8 @@ pub fn pattern(
             let from = NameSet::new([source]).ok()?;
             Some((name, Origin::Generated { from, role }))
         };
-        let copied = moved_copy(
-            ctx,
-            &mut meter,
-            input,
-            &instance.transform,
-            instance.stretch,
-            &names,
-            &copy,
-        )?;
-        let made = settle(ctx, &mut meter, copied)?;
+        let copied = moved_copy(ctx, meter, input, &instance.transform, names, &copy)?;
+        let made = settle(ctx, meter, copied, None)?;
         least = less_exact(least, made.exactness);
         out.push((instance.key, made.result));
     }

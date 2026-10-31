@@ -349,11 +349,12 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-gerber",   12, Amended27, Deferred("G474"), "base format exchange 2d"),
     kernel("geom-ipc2581",  12, Amended27, Deferred("G475"), "base format exchange 2d"),
     // 13. Facade. engine-geometry's row: every kernel crate it re-exports (G100: the value types
-    // and the schema vocabulary), and geom-pool behind its `threads` feature. geom-pool was
+    // and the schema vocabulary; G101: the first operations and the transforms they take), and
+    // geom-pool behind its `threads` feature. geom-pool was
     // scaffolded here: G04 built only geom-run; G33 wrote its native pool (rayon), and G456 adds
     // Web Workers.
     Row { name: "engine-geometry", layer: Layer::N(13), kind: Kind::Facade, origin: Accepted,
-          state: Elsewhere("G100"), deps: Deps::Exact("pool num curve surface topo op"),
+          state: Elsewhere("G100"), deps: Deps::Exact("pool num math curve surface topo run op make check name"),
           external: "kit-core" },
     Row { name: "geom-pool", layer: Layer::N(13), kind: Kind::KernelStd, origin: Amended27,
           state: Elsewhere("G33"), deps: Deps::Exact("run"), external: "" },

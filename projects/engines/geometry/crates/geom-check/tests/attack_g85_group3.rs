@@ -195,6 +195,78 @@ fn simple_polygons_pass_in_planes_of_every_slope() {
 }
 
 #[test]
+fn large_flat_bodies_are_compared_exactly() {
+    // Found by the make fuzz target: the normals of a long bar's planes and of a wide prism's have
+    // products no double holds, so a test in intervals could not tell parallel from crossing.
+    let w = 768_024_272_902;
+    let bar: Vec<[i64; 3]> = common::CUBE
+        .iter()
+        .map(|&[x, y, z]| [x / 10 * w, y / 10 * 487_500, z / 10])
+        .collect();
+    let r = common::polyhedron(&bar, &common::CUBE_FACES);
+    assert_eq!(at(&r, BodyKind::Solid, 0), []);
+    // A parallelepiped of grid corners: opposite faces parallel, every other pair crossing.
+    let sheared: Vec<[i64; 3]> = common::CUBE
+        .iter()
+        .map(|&[x, y, z]| {
+            let (along, across, up) = (x / 10, y / 10, z / 10);
+            [
+                along * 300_000_000_001 + across * 7,
+                across * 300_000_000_001 - along * 11,
+                up * 3 + along,
+            ]
+        })
+        .collect();
+    let r = common::polyhedron(&sheared, &common::CUBE_FACES);
+    assert_eq!(at(&r, BodyKind::Solid, 0), []);
+}
+
+#[test]
+fn two_faces_on_one_integer_plane_stay_unchecked() {
+    // Two sheets on the plane z = 0, side by side: the same plane, so nothing certifies them.
+    let r = sheets(&[
+        &[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]],
+        &[[9, 0, 0], [13, 0, 0], [13, 4, 0], [9, 4, 0]],
+    ]);
+    assert!(only(
+        &group_3(&at(&r, BodyKind::Sheet, 0)),
+        FaultKind::PairUnchecked
+    ));
+    // The same on the plane z = 1, scaled: an integer multiple of a plane is the same plane.
+    let r = sheets(&[
+        &[[0, 0, 1], [4, 0, 1], [4, 4, 1], [0, 4, 1]],
+        &[[9, 0, 1], [18, 0, 1], [18, 9, 1], [9, 9, 1]],
+    ]);
+    assert!(only(
+        &group_3(&at(&r, BodyKind::Sheet, 0)),
+        FaultKind::PairUnchecked
+    ));
+    // Two faces on one plane that is not given by integers are left unchecked too.
+    let mut r = sheets(&[
+        &[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]],
+        &[[9, 0, 0], [13, 0, 0], [13, 4, 0], [9, 4, 0]],
+    ]);
+    for k in 0..2 {
+        r.surfaces[k] = SurfaceKind::Plane(
+            Plane::new(
+                [0.25, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                ((0.0, 1.0), (0.0, 1.0)),
+            )
+            .unwrap(),
+        );
+    }
+    assert!(only(&group_3(&at(&r, BodyKind::Sheet, 1)), FaultKind::PairUnchecked));
+    // Parallel planes a step apart pass.
+    let r = sheets(&[
+        &[[0, 0, 1], [4, 0, 1], [4, 4, 1], [0, 4, 1]],
+        &[[0, 0, 2], [8, 0, 2], [8, 8, 2], [0, 8, 2]],
+    ]);
+    assert_eq!(group_3(&at(&r, BodyKind::Sheet, 0)), []);
+}
+
+#[test]
 fn faces_whose_planes_cross_but_which_do_not_meet_pass() {
     // A square in z = 0, and one in x = 5 beyond it in y: each crosses the other's plane outside
     // the other.

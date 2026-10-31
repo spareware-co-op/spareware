@@ -25,11 +25,12 @@
       "modules": [
         {
           "cost": "none at run time.",
-          "does": "[`OPERATIONS`] lists one [`Operation`] per operation, in name order: its schema and its tier. `geom-gen` writes the API documentation (`generated/api.md`) and the MCP tool descriptions (`generated/mcp-tools.json`) from this list, and CI fails if a committed file has not been regenerated after the list changed, so the interfaces never drift from the kernel and no AI tool is written by hand (22; EXTENDING.md, section 2.2).",
+          "does": "[`OPERATIONS`] lists one [`Operation`] per operation, in name order: its schema and its tier. `geom-gen` writes the API documentation (`generated/api.md`) and the MCP tool descriptions (`generated/mcp-tools.json`) from this list, and CI fails if a committed file has not been regenerated after the list changed, so the interfaces never drift from the kernel and no AI tool is written by hand (22; EXTENDING.md, section 2.2). The operations themselves are re-exported beside the list, so a program reaches them here and never from a `geom-*` crate.",
           "family": [],
           "file": "projects/engines/crates/engine-geometry/src/operations.rs",
           "guarantees": [
-            "**One entry per operation, in name order.** `tests/attack_g100.rs` checks the names are unique, ascending, and valid MCP tool names, that each schema's version is at least 1, and that every preview's date is a real date."
+            "**One entry per operation, in name order.** `tests/attack_g100.rs` checks the names are unique, ascending, and valid MCP tool names, that each schema's version is at least 1, and that every preview's date is a real date.",
+            "**The schemas tell the truth.** `tests/attack_g101.rs` runs each operation and fails on an error, a role, a class or a charge its schema does not list, and on a listed detail whose base kind is not the one the kernel gives it."
           ],
           "job": "Every operation the kernel offers, its schema held as data (chapter 22, \"Every operation is described as data\").",
           "method": {
@@ -60,7 +61,7 @@
         },
         {
           "cost": "none at run time.",
-          "does": "re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]), bodies ([`body`]), names and history ([`name`]), errors ([`error`]), and an operation's context and output ([`op`]). Anything not re-exported here is internal.",
+          "does": "re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]), bodies ([`body`]), transforms ([`transform`]), names and history ([`name`]), errors ([`error`]), and an operation's context and output ([`op`]). Anything not re-exported here is internal.",
           "family": [],
           "file": "projects/engines/crates/engine-geometry/src/value.rs",
           "guarantees": [
@@ -486,6 +487,26 @@
           "target": "lib"
         },
         {
+          "cost": "about a hundred draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/bvh.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): small scenes for the box tree (build, then the boxes meeting a query box) and for the Morton-sorted cell index (build, then the points within a radius of a centre).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the queries of `geom-bvh`'s tests (`tests/tree.rs`, `tests/cells.rs`, each checked there against brute force), built and queried whole under an unlimited budget on the serial executor, at one scene size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::bvh",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a batch of up to 64 inputs, built once per benchmark run.",
           "does": null,
           "family": [],
@@ -501,6 +522,26 @@
             "text": "the degenerate cases of a crossing as `Ssi::new` documents them, with Shewchuk's input classes (<https://doi.org/10.1007/PL00009321>, section 6) and a unimodular 2D basis (Knuth, volume 2, section 4.5.2) for the nearly degenerate ones, built from the shared draws of `inputs` as the plane inputs are."
           },
           "path": "geom_bench::inputs::crossing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per value, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/curve.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44): parameters on an exact helix (its point, and its certified enclosure with two derivatives), bulge polylines for their conversion to NURBS, stations on a clothoid transition, and transition lengths for their conversion to NURBS.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-curve`'s benchmarks (`benches/analytic.rs`, `compound.rs`, `enclosure.rs` and `transition.rs`), at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::curve",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -689,6 +730,46 @@
           "target": "lib"
         },
         {
+          "cost": "36 or 24 draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/linalg.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.44): small dense matrices for the column-pivoted QR factorisation and the one-sided Jacobi singular value decomposition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the corpus shape of `geom-linalg`'s `tests/dense_determinism.rs` and `tests/spectral_determinism.rs` (random entries, the factorisation run whole under an unlimited budget), at one size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::linalg",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input and, for the transforms, one box built, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/make.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-make`'s hot paths (piece G101, decision 32.44): a box and a cylinder built from their inputs, and a box moved and quarter-turned, each with its checker postcondition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the operations of `geom-make`'s attack tests (`tests/attack_g101.rs`), under an unlimited budget, in the build a program ships. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::make",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -704,6 +785,26 @@
             "text": "the hard cases of elementary-function implementations, each a separate path through libm (which `geom_num::math` wraps): arguments that need the longest trigonometric argument reduction (Payne and Hanek 1983, <https://doi.org/10.1145/1057600.1057602>), results near overflow and underflow, subnormals, and arguments next to the ends of each domain."
           },
           "path": "geom_bench::inputs::math",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/math_types.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.44): grid points for the typed transforms and the rational rotation, unit directions for the rational-rotation search, grid points for the frame-to-map conversion, and survey coordinates as decimal text.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-math`'s `benches/transform.rs` (the 1M-point transform benchmark of G45, with G46's searches and G48's frames), whose header says they move here once this harness exists. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::math_types",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -747,6 +848,26 @@
             "text": "the cases an interval Newton step decides, as chapter 12.4 lists them (exclusion, uniqueness, refinement) and as `geom_num::newton`'s module header proves them (`projects/engines/geometry/architecture/12-intersections.md`), each with its own class, and boxes around a zero at widths a decade apart, as the root-isolation engine (G53) will hand them over."
           },
           "path": "geom_bench::inputs::newton",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per value, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/nurbs.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): parameters for evaluating a clamped cubic curve, point sets for its interpolation, and interval control points for the Bernstein bound.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-nurbs`'s benchmarks (`benches/nurbs.rs`, `fit.rs` and `bernstein.rs`): a clamped cubic, chord-length interpolation by version 1 of the fit, and the bound of a cubic Bernstein piece, at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::nurbs",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -855,6 +976,26 @@
           "target": "lib"
         },
         {
+          "cost": "two draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/roots.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for root finding and quadrature (piece G51, decision 32.44): brackets for Brent's zero search on a fixed cubic, and intervals for Gauss-Legendre quadrature of a fixed quintic.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the classic test function x³ − 2x − 5 of root finding (Wallis's, used by Brent in *Algorithms for Minimization without Derivatives*, 1973, chapter 4), and a quintic, which an eight-point rule integrates exactly. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::roots",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -870,6 +1011,26 @@
             "text": "one input per branch of a three-way comparison, at both ends of the type (boundary-value analysis, <https://en.wikipedia.org/wiki/Boundary-value_analysis>)."
           },
           "path": "geom_bench::inputs::sign",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two draws of [`SplitMix64`] per pair, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/surface.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.44): parameter pairs on a torus (its point, and its certified enclosure with first partials) and on an offset cylinder (its point).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-surface`'s benchmarks (`benches/surfaces.rs`, `offsets.rs`), at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::surface",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1457,7 +1618,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/geometric.rs",
           "guarantees": [
-            "**Exact on flat faces.** A plane given by integer-valued doubles (its origin and two spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for b = 0 that is the orient test, n · p + d = 0. A plane not given by integers is unchecked in a body recorded Exact, and measured in certified intervals otherwise.",
+            "**Exact on flat faces.** A plane given by integer-valued doubles (its origin and two spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for b = 0 that is the orient test, n · p + d = 0. A line whose ends are grid points passes the same way, end by end: a segment is never farther from a plane than its farther end, and no double holds the squared normal of a long edge's plane, so an interval could not say 0. A plane not given by integers is unchecked in a body recorded Exact, and measured in certified intervals otherwise.",
             "**Certified on lines and curved carriers.** Every other distance is a certified upper bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the doubles are), so a vertex exactly on the bound passes where the data are exact and one a step beyond fails.",
             "**Fails closed.** Every comparison whose operands cannot be formed (a value out of its range, an overflow, a cone past its apex) is a fault, never a pass.",
             "**No sampling, nothing allocated.** Each check is an exact predicate or one interval evaluation of a closed form."
@@ -2677,6 +2838,28 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at most [`MAX_CORNERS`] base corners, each run twice and checked in full; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the grid's edge), and a short list of transforms and patterns, each with the class the caller accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the last result, and holds every outcome to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/make.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a result the full checker rejects, a result without names, a history that breaks its laws, a transform that loses a name, a class that rises, a flat solid that turns inside out, a rerun that gives another answer, a budget that changes a result instead of stopping it, a defect on valid input, or an error of a kind no schema lists."
+          ],
+          "job": "Fuzz target: `geom-make`'s primitives and transforms, on any bytes, return only what the full checker passes, keep their laws, and refuse with a typed error, never a defect.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.5's oracle stack and its generators aimed at the hard cases (`projects/engines/geometry/architecture/28-testing.md`), with the volume of a flat solid computed from its loops as an oracle the checker does not share."
+          },
+          "path": "geom_fuzz::make",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "per case, 6 checked `i128` products and 5 checked sums for the reference, one call each to the predicate, the exact path and the filter (each constant time), and at most [`MAX_INPUT_BYTES`] bytes read by [`decode`]. No allocation unless a finding is reported.",
           "does": "[`check`] takes three grid points a, b, c and computes [`reference`], the determinant of the 3 × 3 matrix whose rows are (a.x, a.y, 1), (b.x, b.y, 1) and (c.x, c.y, 1), expanded along its third column in `i128`: (b.x·c.y − b.y·c.x) − (a.x·c.y − a.y·c.x) + (a.x·b.y − a.y·b.x). That determinant is orient2d's definition (Shewchuk 1997, section 4.1); this module computes it with no code shared with `geom-num`, and by another formula than `geom-num`'s (b − a) × (c − a), so the two agree only if both are right. Against it, `check` holds `geom-num` to three claims:",
           "family": [],
@@ -2914,7 +3097,7 @@
         },
         {
           "cost": "linear in the schemas' fields.",
-          "does": "[`api`] writes Markdown, one section per operation of `engine_geometry::operations::OPERATIONS`: its name, version, family and tier, what it does, its inputs and outputs (each with its type, unit and whether it may be left out), the roles it names, the errors it can return (each detail with its base kind and its data), the warnings it can give, the exactness classes it can return, whether it has a batch entry, and its example. [`mcp`] writes JSON: the MCP protocol version the descriptions follow ([`MCP_VERSION`]) and one `Tool` per operation, as MCP's `tools/list` describes a tool: its `name`, `title` and `description`, an `inputSchema` and an `outputSchema` in JSON Schema 2020-12 (MCP's default dialect) built from its fields, `annotations` (a kernel operation is pure, 10.1: it reads nothing outside its inputs and changes nothing, so it is read-only, idempotent and closed-world to the program that calls it), and the kernel's own data under `_meta` (`org.spareware/kernel`: version, family, tier, exactness classes, errors with base kinds, warnings, batch entry, roles). The command layer that serves the tools adds the program's side (sign-in scopes, the program's units), as EXTENDING.md, section 2.2, sets out.",
+          "does": "[`api`] writes Markdown, one section per operation of `engine_geometry::operations::OPERATIONS`: its name, version, family and tier, what it does, its inputs and outputs (each with its type, unit and whether it may be left out), the roles it names, the errors it can return (each detail with its base kind and its data), the warnings it can give, the exactness classes it can return, its charge schedule, whether it has a batch entry, and its example. [`mcp`] writes JSON: the MCP protocol version the descriptions follow ([`MCP_VERSION`]) and one `Tool` per operation, as MCP's `tools/list` describes a tool: its `name`, `title` and `description`, an `inputSchema` and an `outputSchema` in JSON Schema 2020-12 (MCP's default dialect) built from its fields, `annotations` (a kernel operation is pure, 10.1: it reads nothing outside its inputs and changes nothing, so it is read-only, idempotent and closed-world to the program that calls it), and the kernel's own data under `_meta` (`org.spareware/kernel`: version, family, tier, exactness classes, errors with base kinds, warnings, charges, batch entry, roles). The command layer that serves the tools adds the program's side (sign-in scopes, the program's units), as EXTENDING.md, section 2.2, sets out.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/facade.rs",
           "guarantees": [
@@ -3662,14 +3845,14 @@
       "modules": [
         {
           "cost": "linear in the part's rows, plus publishing (a sort by name) and the checker's own cost. Recursion: none.",
-          "does": "a [`Part`] lists a solid's vertices, edges and faces, each with its geometry and the role it is named by (20.2), and each face's loops as edges and senses. [`assemble`] names every region, face, edge and vertex `Created { op, role, from }` (`geom_op::TopoName`), builds the rows (one solid region and the void outside it, one shell, a ring of fins round each edge), publishes them in name order (`geom_topo::Builder::publish_named`), runs the checker on the result as the operation's postcondition (8.3) and records each entity's origin. [`Made`] is what comes back: the body and its history.",
+          "does": "a [`Part`] lists a solid's vertices, edges and faces, each with its geometry and the role it is named by (20.2), and each face's loops as edges and senses. [`assemble`] names every region, face, edge and vertex `Created { op, role, from }` (`geom_op::TopoName`), builds the rows (one solid region and the void outside it, one shell, a ring of fins round each edge), publishes them in name order (`geom_topo::Builder::publish_named`), runs the checker on the result as the operation's postcondition (8.3) and records each entity's origin. [`Made`] is what comes back: the body, its history and, from a transform, which one it was.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-make/src/build.rs",
           "guarantees": [
             "**Names, not positions.** Every index of the body follows its entities' names, and every name comes from the operation's path, a role and the names it is relative to: never from the order the rows were written in (8.2, 20.2).",
             "**Checked before returned.** A body that does not pass the checker at the build's level is never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.",
-            "**Charged by what it builds.** One meter unit per row built, before it is built (23.10), and the publishing and the checker charge their own rows to the same meter.",
-            "**Transactional.** Nothing the caller holds is changed; a failure returns no body."
+            "**Charged by what it builds.** One meter unit per row built ([`PER_ROW`]), before it is built (23.10), and the publishing and the checker charge their own rows to the same meter.",
+            "**Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation did not report, returns no body (`OpContext::run`)."
           ],
           "job": "Assembling what a Make or Transform operation returns: a body's rows, each entity named by its role, published in name order, checked, and the history that says where each entity came from.",
           "method": {
@@ -3692,7 +3875,8 @@
           "guarantees": [
             "**One answer per key, whatever the order given.** Instances run in key order; two with one key are refused ([`MakeDetail::RepeatedKey`]), and so is an empty pattern.",
             "**Copies, not the body.** Every copy's entities have names of their own, distinct across instances (each instance's path differs), and trace to the body's entities as copies.",
-            "**Each copy checked.** Every copy passes the checker before the pattern returns; one failure fails the whole pattern, which returns nothing."
+            "**Each copy checked.** Every copy passes the checker before the pattern returns; one failure fails the whole pattern, which returns nothing.",
+            "**The transform states its own stretch.** Each copy's bound grows by what its transform can do to a length, read from the transform, never taken on the caller's word."
           ],
           "job": "Patterns: copies of one body, each by its own transform and keyed by the caller, each copy's entities named as copies of the body's (8.4's `Copied`, which a pattern's schema declares).",
           "method": {
@@ -3708,7 +3892,7 @@
           "target": "lib"
         },
         {
-          "cost": "constant per primitive, linear in a prism's corners (quadratic in them for its convexity and edge lookups, at most a few hundred corners in practice). Recursion: none.",
+          "cost": "constant per primitive; O(n log n) for a prism of n corners, whose edges are found through an ordered map. Recursion: none.",
           "does": "each function checks its input, writes the solid as a [`Part`] and hands it to [`assemble`], which names, publishes, checks and records it. Lengths are whole grid steps of the frame (`geom_num::Steps`) and every vertex is a grid point; round shapes stand on the z axis through the point given, and other orientations come from the Transform family.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-make/src/primitive.rs",
@@ -3731,10 +3915,17 @@
         },
         {
           "cost": "linear in the body's rows, one meter unit each, plus each curve's and surface's transform and the checker. Recursion: none.",
-          "does": "each function turns its input into a `geom_math::TypedTransform` and hands it to [`moved_copy`], which copies every row of the body with its points, curves, surfaces and face boxes moved, publishes the copy under the same names, checks it and records each entity as modified from itself (20.2: a one-to-one change keeps the name). [`Motion`] says which of the four it was, for the attribute event `Transformed` (8.4).",
+          "does": "each function turns its input into a `geom_math::TypedTransform` and hands it to [`moved_copy`], which copies every row of the body with its points, curves, surfaces and face boxes moved, publishes the copy under the same names, checks it and records each entity as modified from itself (20.2: a one-to-one change keeps the name). [`Motion`], in the result, says which of the four it was, for the attribute event `Transformed` (8.4).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-make/src/transform.rs",
-          "guarantees": [],
+          "guarantees": [
+            "**Exact where the transform is.** A move by whole steps, quarter turns, mirrors across grid planes and whole-number uniform scales map grid points to grid points and keep planes given by integers: an Exact body stays Exact.",
+            "**Rounded once, and said so.** Any other rotation or scale rounds each vertex to the grid once (at most √3/2 of a step), and moves curves and surfaces by their own typed transforms, each with a certified deviation. The result's bound is the input's, stretched by the most the transform can stretch a length, plus one step if any vertex rounded, plus the largest deviation, rounded up.",
+            "**The class never rises.** The result keeps the input's class or a less exact one: an Approximate body stays Approximate whatever its bound does (principle 3).",
+            "**Accepted, or refused.** A result less exact than the input is returned only when the caller accepts it ([`Moved::accept`]): a class at least as loose and a ceiling at least the result's bound; otherwise [`MakeDetail::NotAccepted`] names the class the result would have.",
+            "**Kinds change only where the checker can follow.** A transform that does not keep circles turns them into ellipses and analytic surfaces into affine ones, which the checker cannot certify yet: on a body with curved geometry it is [`MakeDetail::KindNotCertified`] (G177).",
+            "**Mirrors keep the outside outside.** A mirror reverses orientation, so every face's sense and every loop's direction is reversed with it."
+          ],
           "job": "The Transform family of chapter 10.2: move, rotate, mirror and scale a body, its entities keeping their names, its geometry changing kind only as chapter 7's typed transforms say.",
           "method": {
             "links": [
@@ -7329,6 +7520,12 @@
               "base_kind": "InvalidInput",
               "doc": "Two instances of a pattern have one key.",
               "name": "RepeatedKey",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A pattern's transform has no inverse: it would collapse the body onto a plane, a line or a point.",
+              "name": "SingularTransform",
               "shape": "unit"
             },
             {
