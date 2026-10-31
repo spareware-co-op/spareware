@@ -887,7 +887,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Question | Raised in | Decided in |
 | --- | --- | --- |
 | Canonical body encoding: arena order with fixed 4,096-row chunks (24), or name order (23's draft). Name order first needs an "outputs independent of input arena order" invariant, with a shuffle test | 23, 24 | 32.17 (owner action G76): arena order is name order, so both hold; the shuffle test is the builder's (G81); piece "geom-format: body records" writes it |
-| The content hash: SHA-256 or BLAKE3, in a safe portable implementation or an audited exception crate (both common crates use unsafe SIMD); and whether to adopt the name-ordered bucket-tree hash | 23 | Hash: 32.20 (owner action G79), SHA-256 from `sha2`, audited by G86. The bucket tree: piece "Content hashes and cache keys", by benchmark |
+| The content hash: SHA-256 or BLAKE3, in a safe portable implementation or an audited exception crate (both common crates use unsafe SIMD); and whether to adopt the name-ordered bucket-tree hash | 23 | Hash: 32.20 (owner action G79), SHA-256 from `sha2`, audited by G86. The bucket tree: not adopted, by benchmark, 32.45 (G105) |
 | Sign chunks written by a released kernel edition, or rely on per-chunk checker versions and lazy re-checks | 23 | Piece "Container mapping and trust on open" |
 | Bodies opened with fallbacks stay read-only until an acknowledgement is logged | 24 | Piece "Container mapping and trust on open" |
 | Register CBOR tag 0x534B4746 with IANA, and check the SKG name and the .skg extension for clashes | 24 | 32.18 (owner action G77): the tag is unassigned and the owner sends the request; SKG is clear; the extension becomes `.skgf`, because Skrooge uses `.skg` |

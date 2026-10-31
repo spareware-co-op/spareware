@@ -152,6 +152,7 @@ const SCHEMA: OpSchema = OpSchema {
     classes: &[Class::Exact],
     charges: &[],
     batch: false,
+    name_free: false,
     example: "none",
 };
 

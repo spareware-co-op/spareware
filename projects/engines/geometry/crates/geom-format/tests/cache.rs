@@ -30,6 +30,7 @@ const SCHEMA: OpSchema = OpSchema {
     classes: &[Class::Exact],
     charges: &[],
     batch: false,
+    name_free: true,
     example: "a box of 1 m",
 };
 
@@ -51,6 +52,24 @@ fn key(
     CacheKey::new(edition, schema, path, p, ins).unwrap()
 }
 
+fn free_key(ins: &[ContentId]) -> CacheKey {
+    CacheKey::name_free(0, &SCHEMA, Precision::Final, ins)
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn a_schema_that_uses_names_gets_no_name_free_key() {
+    let named = OpSchema {
+        name_free: false,
+        ..SCHEMA
+    };
+    assert_eq!(
+        CacheKey::name_free(0, &named, Precision::Final, &[input(1)]),
+        Ok(None)
+    );
+}
+
 /// The key of a call written out byte by byte: `[0, "make.box", 1, [h'07..07'], 0, [[1, h'..']]]`.
 #[test]
 fn a_key_is_the_sha256_of_its_encoding_written_by_hand() {
@@ -68,7 +87,7 @@ fn a_key_is_the_sha256_of_its_encoding_written_by_hand() {
     free.extend_from_slice(b"make.box");
     free.extend_from_slice(&[0x01, 0x00, 0x81, 0x82, 0x01, 0x58, 0x20]);
     free.extend_from_slice(&digest);
-    let f = CacheKey::name_free(0, &SCHEMA, Precision::Final, &[input(5)]).unwrap();
+    let f = free_key(&[input(5)]);
     assert_eq!(f.to_bytes(), sha256(&free));
     // A preview writes `[1, bound, step in quarter nanometres]`.
     let preview = Precision::Preview {
@@ -129,7 +148,7 @@ fn every_field_changes_the_key() {
         key(0, &SCHEMA, &path(), Precision::Final, &[input(2), input(1)]),
         key(0, &SCHEMA, &path(), Precision::Final, &[input(1)]),
         key(0, &SCHEMA, &path(), Precision::Final, &[input(1), input(3)]),
-        CacheKey::name_free(0, &SCHEMA, Precision::Final, &[input(1), input(2)]).unwrap(),
+        free_key(&[input(1), input(2)]),
     ];
     for (i, k) in others.iter().enumerate() {
         assert_ne!(*k, base, "field {i}");
@@ -139,10 +158,7 @@ fn every_field_changes_the_key() {
     }
     // The name-free key ignores the path; the full key does not.
     let elsewhere = OpPath::new(OpId::from_bytes([8; 16]));
-    assert_eq!(
-        CacheKey::name_free(0, &SCHEMA, Precision::Final, &[input(1)]).unwrap(),
-        CacheKey::name_free(0, &SCHEMA, Precision::Final, &[input(1)]).unwrap()
-    );
+    assert_eq!(free_key(&[input(1)]), free_key(&[input(1)]));
     assert_ne!(
         key(0, &SCHEMA, &path(), Precision::Final, &[]),
         key(0, &SCHEMA, &elsewhere, Precision::Final, &[])

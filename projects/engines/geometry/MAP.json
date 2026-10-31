@@ -2330,6 +2330,25 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a name-free entry could not be restamped.",
+          "file": "projects/engines/geometry/crates/geom-format/src/cache.rs",
+          "kinds": [
+            {
+              "doc": "A name holds something other than blanks and names stamped before it.",
+              "name": "Name",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A body's new names could not be published.",
+              "name": "Topo",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::cache",
+          "name": "StampError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "The rule of SKG's CBOR subset (24.3, RFC 8949 section 4.2.1) an input breaks.",
           "file": "projects/engines/geometry/crates/geom-format/src/cbor/error.rs",
           "kinds": [
@@ -2708,13 +2727,14 @@
       "layer": "12",
       "modules": [
         {
-          "cost": "linear in the body: one pass over each table to write, one to read, one SHA-256 pass over every chunk; memory for one chunk's payload at a time plus the body itself.",
-          "does": "[`write_body`] turns a `geom_topo::Body` into a [`StoredBody`]: one chunk record (type 4) per run of [`CHUNK_ROWS`] rows of each table, in arena order, and the index record (type 3) listing every table's row count and its chunks' content IDs in order. [`read_body`] reads them back through `geom_topo::Builder`, which checks the topology again before it publishes, so a stored body is never trusted further than a built one. The tables, by code in [`table`], are the arenas of chapter 8.2: regions, shells, faces, loops, fins, edges and vertices; the geometry pools (points, surfaces, curves and pcurves); and, for a body published by name, the names of its regions, faces, edges and vertices.",
+          "cost": "linear in the body: one pass over each table to write, one to read, one SHA-256 pass over every chunk; memory for one chunk's payload at a time plus the body itself. [`BodyVersion::next`] is linear in the chunks it checks and the rows of the name tables, and encodes and hashes only the chunks that changed, plus the index.",
+          "does": "[`write_body`] turns a `geom_topo::Body` into a [`StoredBody`]: one chunk record (type 4) per run of [`CHUNK_ROWS`] rows of each table, in arena order, and the index record (type 3) listing every table's row count and its chunks' content IDs in order. [`read_body`] reads them back through `geom_topo::Builder`, which checks the topology again before it publishes, so a stored body is never trusted further than a built one. The tables, by code in [`table`], are the arenas of chapter 8.2: regions, shells, faces, loops, fins, edges and vertices; the geometry pools (points, surfaces, curves and pcurves); and, for a body published by name, the names of its regions, faces, edges and vertices. A [`BodyVersion`] is a body with each chunk's content ID: [`BodyVersion::next`] writes a new version, encoding and hashing only the chunks it does not share with the one before (23.8). Its [`BodyVersion::geometry_id`] is the root of the same tree without the name tables, which a name-free cache key takes (23.8).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
           "guarantees": [
             "**Index for index.** A body read back equals the one written (`PartialEq`), every arena in the same order, so the next operation on either gives the same bits (24.3).",
             "**Chunks are a pure function of their rows.** The runs are geom-topo's own chunks (`geom_topo::CHUNK_ROWS`, 4,096), so a chunk whose rows did not change encodes to the same bytes and the same content ID, whatever else changed: an edit to 1% of a body's rows rewrites only the chunks those rows are in.",
+            "**A new version hashes only what it changed, and gets the same IDs.** [`BodyVersion::next`] reuses a chunk's ID only where every column of the chunk is the very chunk the version before holds (`Column::shares_chunk`) or, for a name table, where the rows are equal, so its index is byte for byte [`write_body`]'s. The version holds the earlier body's columns, so a chunk it compares against is never freed and its address reused.",
             "**References are checked.** Every reference is stored as its row plus one, 0 for none; a required reference of 0, a row count that disagrees with the chunks, a chunk of the wrong table or position, or a content ID that does not match its chunk is refused before anything is built, and the builder then checks the topology itself."
           ],
           "job": "Body records: a body stored as one index record and a chunk record for every 4,096-row run of each of its tables, so a body's content ID is the root of a hash tree and a new version writes only the chunks that changed (24.2, 24.3).",
@@ -2733,12 +2753,14 @@
         },
         {
           "cost": "a key is one encoding and one SHA-256 pass over it: linear in the path's labels and the number of inputs. A store lookup, insertion or eviction is O(log n) in the entries held.",
-          "does": "[`CacheKey::new`] is the SHA-256 of the canonical encoding of `[edition, name, version, path, precision, [input content IDs]]`: the kernel edition, the operation's name and version from its schema, its `OpPath` (every name the operation creates holds it, 20.2), its precision (a preview and a final result never share a key, 23.6) and the content ID of each input, in the operation's order. [`CacheKey::name_free`] is the same without the path, for the operations whose schema says their geometry does not depend on names; its inputs are then the content IDs of their geometry without names. [`CacheEntry`] holds a result with the budget its run had and what the run used. [`MemoStore`] is the caller's store of entries: bounded by bytes, it forgets the entry used longest ago first, and it is a value the caller owns.",
+          "does": "[`CacheKey::new`] is the SHA-256 of the canonical encoding of `[edition, name, version, path, precision, [input content IDs]]`: the kernel edition, the operation's name and version from its schema, its `OpPath` (every name the operation creates holds it, 20.2), its precision (a preview and a final result never share a key, 23.6) and the content ID of each input, in the operation's order. [`CacheKey::name_free`] is the same without the path, for the operations whose schema says their geometry does not depend on names; its inputs are then the content IDs of their geometry without names. [`CacheEntry`] holds a result with the budget its run had and what the run used. [`MemoStore`] is the caller's store of entries: bounded by bytes, it forgets the entry used longest ago first, and it is a value the caller owns. [`restamp`] turns a name-free entry into the entry of one call: it fills in the path and the input names and recomputes every `NameId`, through a result's own [`Restamp`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-format/src/cache.rs",
           "guarantees": [
             "**A hit is the same bits as a fresh run.** [`CacheEntry::answer`] answers only when a fresh run under the caller's budget would give exactly the stored answer: a stored result, or a stored deterministic error, when the budget covers everything the run used (a run stops only when a charge passes its cap, and charges only add); a stored budget failure only under the same budget, since a smaller one can stop the run sooner with other numbers. Every other call misses, and the caller's own run gives the exact `BudgetExceeded`.",
             "**What is never stored.** [`CacheEntry::new`] refuses `Cancelled`, `OutOfMemory` and a batch's total: none is the operation's deterministic answer (23.10).",
+            "**Name-free only where the schema says so.** [`CacheKey::name_free`] gives no key for an operation whose schema does not set `name_free`. A body enters such a key by `BodyVersion::geometry_id`.",
+            "**A restamped hit is the same bits as a fresh run, names included.** Names go through `Stamp`, a body is published again by its new names, so its arenas take the new order. A stored error holds paths and names only the run knows, so [`restamp`] gives no entry for one: the call misses, and the caller's own run gives it.",
             "**One encoding.** A key is `geom-op`'s canonical encoding and SHA-256 (32.20), and its path is written by [`OpPath::encode`], as names write it. Every field changes the key; a key with a path and a name-free key differ in length, so they never collide by construction.",
             "**Bounded, and deterministic.** A [`MemoStore`] never holds more than its byte bound. Which entry it forgets depends only on the order of the calls made on it, never on time, addresses or a hash seed. It holds no global state (principle 7)."
           ],
@@ -7805,6 +7827,11 @@
               "shape": "unit"
             },
             {
+              "doc": "A name to stamp that refers to a name not stamped yet, or whose path is not blank.",
+              "name": "NotBlank",
+              "shape": "unit"
+            },
+            {
               "doc": "The encoder refused a value; only a defect in this module can cause it.",
               "name": "Encode",
               "shape": "tuple"
@@ -8057,12 +8084,13 @@
         },
         {
           "cost": "encoding a name allocates its bytes once and one small item per element of each set; hashing is one SHA-256 pass over at most a few hundred bytes. The NFC check is linear in a role name's length. Recursion: none; a name refers to other names by `NameId`, never by nesting.",
-          "does": "a [`TopoName`] says how an entity was made: created by an operation step in a [`Role`], split from one input by cutting faces ([`PieceKey`]), merged from several, bounded by the faces it lies between and those that end it, or, where entities would still collide, the [`Ordinal`]-th of a [`TopoName::Weak`] group (chapter 20.2). [`TopoName::encode`] writes its canonical bytes and [`TopoName::id`] hashes them to the 128-bit [`NameId`] (32.19): the first 16 bytes of SHA-256 over [`NAME_SCHEME_V1_PREFIX`] and those bytes. Sets of names are [`NameSet`]s, sorted lists [`NameList`]s, both in name order.",
+          "does": "a [`TopoName`] says how an entity was made: created by an operation step in a [`Role`], split from one input by cutting faces ([`PieceKey`]), merged from several, bounded by the faces it lies between and those that end it, or, where entities would still collide, the [`Ordinal`]-th of a [`TopoName::Weak`] group (chapter 20.2). [`TopoName::encode`] writes its canonical bytes and [`TopoName::id`] hashes them to the 128-bit [`NameId`] (32.19): the first 16 bytes of SHA-256 over [`NAME_SCHEME_V1_PREFIX`] and those bytes. Sets of names are [`NameSet`]s, sorted lists [`NameList`]s, both in name order. A [`Stamp`] fills in the names a name-free run made with its path and input names left blank (23.8).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-op/src/name.rs",
           "guarantees": [
             "**One name, one encoding, one `NameId`.** A `TopoName` can only hold sets without repeats, lists in order, ordinals with `n < of` and role names in Normalization Form C, so its encoding is a pure function of the name, and so is its `NameId`, on every target.",
             "**Text is NFC under Unicode 18.0.0** (32.19): a role name not in Normalization Form C is refused when the role is made, never normalised behind the caller's back. Step labels are printable ASCII ([`crate::id`]), which is NFC under every Unicode version.",
+            "**A stamped name is the name a run with those names would make.** [`Stamp::name`] writes the real path and names where the blanks stood and hashes the result the usual way, and it refuses a name that refers to anything it has not stamped.",
             "**Names never collide with other hashes.** The prefix `SKG NameScheme v1` and a zero byte go before every name's bytes, so no name hashes like a content ID (32.20) or a later scheme."
           ],
           "job": "Persistent names: how an operation names what it makes, and the `NameId` each name hashes to under `NameScheme v1`.",
@@ -11261,6 +11289,7 @@
             "**Every link follows its row.** A link that pointed at a row points at that row's new place, so the body joins the same entities as the arenas given.",
             "**Lists follow the back-links, in name order.** Each region's shells, each shell's faces and each face's loops are chained from the least row up, and each loop's and each edge's first fin is its least fin, all read from the links each entity holds to its owner (a shell's region, a face's shell, a loop's face, a fin's loop and edge). What the lists given held is replaced, so they never depend on the order a body was built in either. A loop's cycle of fins and an edge's radial ring are kept as given: their order is the shape's.",
             "**Checked as published.** The arenas pass [`Builder::publish`]'s checks before anything is read, and the moved arenas pass them again as they are published.",
+            "**What did not change stays shared.** A chunk that comes out holding what the arena given held at that place is that arena's own chunk, so a new version shares it with the version it was made from (23.8, 23.9), and republishing a body shares them all. Integers are compared; a pool of doubles shares a chunk only if none of its rows moved, since equal doubles can differ in bits.",
             "**One answer, the first fault.** Faults are reported in a fixed order: [`Builder::publish`]'s checks; then, for regions, faces, edges and vertices in turn, a count of names other than one per row or two rows of one name; then equal keys among shells, loops and fins in turn; then an unused row of the surface, curve, pcurve and point pools in turn.",
             "**Metered.** Besides what [`Builder::publish`] charges, twice (on the arenas given and on the moved ones), publishing by name charges one unit for every chunk of rows it moves."
           ],

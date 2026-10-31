@@ -466,6 +466,16 @@
           "sha256": "601faa6494c0ad3f9b1d7dd7b8a1e78724066b90ac4a998057959dae37206886"
         },
         {
+          "id": "geom-format/cache-keys",
+          "what": "geom-format's cache keys and content IDs (piece G105): keys with a path and name-free keys of two editions at final and preview precision; the content and geometry IDs of geom-topo's wall, of a body of 9,000 faces and of a wall named by a run; the content IDs of a chain of eight versions of the 9,000 faces; and a name-free wall restamped: its names' IDs and its records, in the encoding of tests/cache_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "cache_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "6b400b80063ad59bfa4d6ea59a194596b2613a4854db06ad4ef1ad1aeb597cae"
+        },
+        {
           "id": "geom-linalg/dense",
           "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
           "check": {

@@ -9,7 +9,9 @@
 //! operations whose schema says their geometry does not depend on names; its inputs are then the
 //! content IDs of their geometry without names. [`CacheEntry`] holds a result with the budget its
 //! run had and what the run used. [`MemoStore`] is the caller's store of entries: bounded by bytes,
-//! it forgets the entry used longest ago first, and it is a value the caller owns.
+//! it forgets the entry used longest ago first, and it is a value the caller owns. [`restamp`]
+//! turns a name-free entry into the entry of one call: it fills in the path and the input names
+//! and recomputes every `NameId`, through a result's own [`Restamp`].
 //!
 //! Guarantees:
 //!
@@ -21,6 +23,13 @@
 //!   misses, and the caller's own run gives the exact `BudgetExceeded`.
 //! - **What is never stored.** [`CacheEntry::new`] refuses `Cancelled`, `OutOfMemory` and a
 //!   batch's total: none is the operation's deterministic answer (23.10).
+//! - **Name-free only where the schema says so.** [`CacheKey::name_free`] gives no key for an
+//!   operation whose schema does not set `name_free`. A body enters such a key by
+//!   `BodyVersion::geometry_id`.
+//! - **A restamped hit is the same bits as a fresh run, names included.** Names go through
+//!   `Stamp`, a body is published again by its new names, so its arenas take the new order. A
+//!   stored error holds paths and names only the run knows, so [`restamp`] gives no entry for one:
+//!   the call misses, and the caller's own run gives it.
 //! - **One encoding.** A key is `geom-op`'s canonical encoding and SHA-256 (32.20), and its path is
 //!   written by [`OpPath::encode`], as names write it. Every field changes the key; a key with a
 //!   path and a name-free key differ in length, so they never collide by construction.
@@ -39,13 +48,18 @@
 //! number of inputs. A store lookup, insertion or eviction is O(log n) in the entries held.
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use core::fmt;
 
 use geom_op::cbor::{EncodeError, Encoder};
 use geom_op::hash::sha256;
 use geom_op::{
-    ErrorKind, OpError, OpErrorDetail, OpOutput, OpPath, OpSchema, Precision, RunDetail,
+    ErrorKind, NameError, NameId, OpError, OpErrorDetail, OpOutput, OpPath, OpSchema, Precision,
+    RunDetail, Stamp, TopoName,
 };
-use geom_run::{Budget, Usage};
+use geom_run::{Budget, Usage, WorkMeter};
+use geom_topo::order::{NameKey, Names};
+use geom_topo::{Body, Builder, TopoError};
 
 use crate::content::ContentId;
 
@@ -70,9 +84,9 @@ impl CacheKey {
         key(edition, schema, Some(path), precision, inputs)
     }
 
-    /// The name-free key: as [`CacheKey::new`] without the path, for an operation whose schema
-    /// says its geometry does not depend on names, called on `inputs`, the content IDs of its
-    /// inputs' geometry without names (23.8).
+    /// The name-free key: as [`CacheKey::new`] without the path, called on `inputs`, the content
+    /// IDs of its inputs' geometry without names (23.8). `None` unless `schema` says its geometry
+    /// does not depend on names.
     ///
     /// # Errors
     ///
@@ -82,8 +96,11 @@ impl CacheKey {
         schema: &OpSchema,
         precision: Precision,
         inputs: &[ContentId],
-    ) -> Result<CacheKey, EncodeError> {
-        key(edition, schema, None, precision, inputs)
+    ) -> Result<Option<CacheKey>, EncodeError> {
+        schema
+            .name_free
+            .then(|| key(edition, schema, None, precision, inputs))
+            .transpose()
     }
 
     /// The key's 32 bytes.
@@ -172,6 +189,120 @@ impl<R> CacheEntry<R> {
     pub const fn used(&self) -> Usage {
         self.used
     }
+}
+
+/// Why a name-free entry could not be restamped.
+#[derive(Clone, Debug, PartialEq)]
+pub enum StampError {
+    /// A name holds something other than blanks and names stamped before it.
+    Name(NameError),
+    /// A body's new names could not be published.
+    Topo(TopoError),
+}
+
+impl fmt::Display for StampError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StampError::Name(e) => write!(f, "a name could not be stamped: {e}"),
+            StampError::Topo(e) => write!(f, "a restamped body could not be published: {e}"),
+        }
+    }
+}
+
+impl core::error::Error for StampError {}
+
+impl From<NameError> for StampError {
+    fn from(e: NameError) -> Self {
+        StampError::Name(e)
+    }
+}
+
+impl From<TopoError> for StampError {
+    fn from(e: TopoError) -> Self {
+        StampError::Topo(e)
+    }
+}
+
+/// A result a name-free entry can hold: it makes itself again with every name stamped.
+pub trait Restamp: Sized {
+    /// This result as a run with `stamp`'s path and names would make it.
+    ///
+    /// # Errors
+    ///
+    /// A [`StampError`] for a name that is not blank, or names that cannot be published.
+    fn restamp(&self, stamp: &mut Stamp, meter: &mut WorkMeter<'_>) -> Result<Self, StampError>;
+}
+
+/// A body and the names of what it holds, in the order they were made: every `NameKey` in the
+/// body is the `NameId` of one of them or a name of the inputs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NamedBody {
+    /// The names, each after those it refers to.
+    pub names: Vec<TopoName>,
+    /// The body, published by name.
+    pub body: Body,
+}
+
+/// Each of `keys` stamped.
+fn stamped_keys(keys: &[NameKey], stamp: &Stamp) -> Result<Vec<NameKey>, NameError> {
+    keys.iter()
+        .map(|key| Ok(NameKey(stamp.id(NameId::from_bytes(key.0))?.to_bytes())))
+        .collect()
+}
+
+impl Restamp for NamedBody {
+    fn restamp(&self, stamp: &mut Stamp, meter: &mut WorkMeter<'_>) -> Result<Self, StampError> {
+        let names = self
+            .names
+            .iter()
+            .map(|name| stamp.name(name))
+            .collect::<Result<Vec<TopoName>, NameError>>()?;
+        let empty = Names::default();
+        let keys = self.body.names().unwrap_or(&empty);
+        let keys = Names {
+            regions: stamped_keys(&keys.regions, stamp)?,
+            faces: stamped_keys(&keys.faces, stamp)?,
+            edges: stamped_keys(&keys.edges, stamp)?,
+            vertices: stamped_keys(&keys.vertices, stamp)?,
+        };
+        let builder = Builder {
+            arenas: self.body.arenas().clone(),
+        };
+        let body = builder.publish_named(&keys, self.body.kind(), self.body.outside(), meter)?;
+        Ok(NamedBody { names, body })
+    }
+}
+
+/// 23.8's `restamp`: the entry a call at `path` on input names `inputs` would have stored, from
+/// `entry`, a name-free entry whose names are blank; `None` for a stored error, which misses.
+///
+/// # Errors
+///
+/// A [`StampError`] if the result's names are not blank, or a warning refers to a name the result
+/// does not hold.
+pub fn restamp<R: Restamp>(
+    entry: &CacheEntry<R>,
+    path: &OpPath,
+    inputs: &[NameId],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<CacheEntry<R>>, StampError> {
+    let Ok(output) = &entry.answer else {
+        return Ok(None);
+    };
+    let mut stamp = Stamp::new(path, inputs)?;
+    let mut answer = OpOutput::new(output.result.restamp(&mut stamp, meter)?, output.exactness);
+    for diagnostic in &output.diagnostics {
+        let mut diagnostic = diagnostic.clone();
+        for entity in &mut diagnostic.entities {
+            *entity = stamp.id(*entity)?;
+        }
+        answer = answer.with_diagnostic(diagnostic);
+    }
+    Ok(Some(CacheEntry {
+        answer: Ok(answer),
+        budget: entry.budget,
+        used: entry.used,
+    }))
 }
 
 /// One entry held, with its size and when it was last used.

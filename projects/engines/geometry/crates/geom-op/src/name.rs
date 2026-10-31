@@ -7,7 +7,8 @@
 //! [`Ordinal`]-th of a [`TopoName::Weak`] group (chapter 20.2). [`TopoName::encode`] writes its
 //! canonical bytes and [`TopoName::id`] hashes them to the 128-bit [`NameId`] (32.19): the first
 //! 16 bytes of SHA-256 over [`NAME_SCHEME_V1_PREFIX`] and those bytes. Sets of names are
-//! [`NameSet`]s, sorted lists [`NameList`]s, both in name order.
+//! [`NameSet`]s, sorted lists [`NameList`]s, both in name order. A [`Stamp`] fills in the names a
+//! name-free run made with its path and input names left blank (23.8).
 //!
 //! The canonical encoding, fixed for v1 by 32.19 and written with this crate's deterministic CBOR
 //! encoder ([`crate::cbor`]):
@@ -35,6 +36,9 @@
 //! - **Text is NFC under Unicode 18.0.0** (32.19): a role name not in Normalization Form C is
 //!   refused when the role is made, never normalised behind the caller's back. Step labels are
 //!   printable ASCII ([`crate::id`]), which is NFC under every Unicode version.
+//! - **A stamped name is the name a run with those names would make.** [`Stamp::name`] writes the
+//!   real path and names where the blanks stood and hashes the result the usual way, and it
+//!   refuses a name that refers to anything it has not stamped.
 //! - **Names never collide with other hashes.** The prefix `SKG NameScheme v1` and a zero byte go
 //!   before every name's bytes, so no name hashes like a content ID (32.20) or a later scheme.
 //!
@@ -50,17 +54,22 @@
 //! hashing is one SHA-256 pass over at most a few hundred bytes. The NFC check is linear in a role
 //! name's length. Recursion: none; a name refers to other names by `NameId`, never by nesting.
 
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
 use crate::cbor::{EncodeError, Encoder, Item};
 use crate::hash::Sha256;
-use crate::id::{NameId, OpPath};
+use crate::id::{NameId, OpId, OpPath};
 
 /// The bytes hashed before every name's canonical encoding under `NameScheme v1`: the 17 ASCII
 /// bytes `SKG NameScheme v1` and one zero byte (32.19).
 pub const NAME_SCHEME_V1_PREFIX: &[u8; 18] = b"SKG NameScheme v1\0";
+
+/// The operation a name-free run is given (23.8): its names hold this in place of a path, and
+/// [`Stamp::name`] replaces it. No key holds it: a name-free key has no path.
+pub const BLANK_OP: OpId = OpId::from_bytes([0; 16]);
 
 /// Why a name could not be made or encoded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,6 +82,8 @@ pub enum NameError {
     Repeated,
     /// An ordinal whose `n` is not below its `of`.
     Ordinal,
+    /// A name to stamp that refers to a name not stamped yet, or whose path is not blank.
+    NotBlank,
     /// The encoder refused a value; only a defect in this module can cause it.
     Encode(EncodeError),
 }
@@ -84,6 +95,7 @@ impl fmt::Display for NameError {
             NameError::NotNfc => f.write_str("a role name is not in Normalization Form C"),
             NameError::Repeated => f.write_str("a set of names holds one name twice"),
             NameError::Ordinal => f.write_str("an ordinal's n is not below its count"),
+            NameError::NotBlank => f.write_str("a name to stamp holds something not blank"),
             NameError::Encode(e) => write!(f, "the name could not be encoded: {e}"),
         }
     }
@@ -384,6 +396,130 @@ pub fn name_id(canonical: &[u8]) -> NameId {
     hash.write(NAME_SCHEME_V1_PREFIX);
     hash.write(canonical);
     NameId::from_bytes(hash.finish_128())
+}
+
+/// What fills in the names of a name-free run (23.8): the path it stands for and, blank by blank,
+/// the real names. A run of the same operation at that path on inputs with those names would make
+/// exactly the names this writes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stamp {
+    path: OpPath,
+    names: BTreeMap<NameId, NameId>,
+}
+
+impl Stamp {
+    /// The blank standing for a name-free run's input name number `position`: the `NameId` of
+    /// `[5, position]`, which no [`TopoName`] encodes to.
+    ///
+    /// # Errors
+    ///
+    /// [`NameError::Encode`], which only a defect in this module can cause.
+    pub fn blank_input(position: u64) -> Result<NameId, NameError> {
+        let mut e = Encoder::new();
+        e.array(2)?;
+        e.uint(5)?;
+        e.uint(position)?;
+        Ok(name_id(e.finish()?.as_bytes()))
+    }
+
+    /// The stamp of a run at `path` on input names `inputs`, in the order of their blanks.
+    ///
+    /// # Errors
+    ///
+    /// As [`Stamp::blank_input`].
+    pub fn new(path: &OpPath, inputs: &[NameId]) -> Result<Stamp, NameError> {
+        let mut names = BTreeMap::new();
+        for (position, name) in (0..).zip(inputs) {
+            names.insert(Stamp::blank_input(position)?, *name);
+        }
+        Ok(Stamp {
+            path: path.clone(),
+            names,
+        })
+    }
+
+    /// The name that stands where `blank` stood.
+    ///
+    /// # Errors
+    ///
+    /// [`NameError::NotBlank`] if `blank` is neither an input's blank nor a name stamped already.
+    pub fn id(&self, blank: NameId) -> Result<NameId, NameError> {
+        self.names.get(&blank).copied().ok_or(NameError::NotBlank)
+    }
+
+    /// `blank` with the real path and names in place of the blanks, remembered so that later names
+    /// may refer to it: stamp a run's names in the order it made them.
+    ///
+    /// # Errors
+    ///
+    /// [`NameError::NotBlank`] for a path not under [`BLANK_OP`], or a name referring to something
+    /// not stamped; [`NameError::Repeated`] where two blanks of a set stand for one name.
+    pub fn name(&mut self, blank: &TopoName) -> Result<TopoName, NameError> {
+        let stamped = match blank {
+            TopoName::Created { op, role, from } => TopoName::Created {
+                op: self.path(op)?,
+                role: self.role(role)?,
+                from: NameList::new(self.ids(from.names())?),
+            },
+            TopoName::Split { op, of, piece } => TopoName::Split {
+                op: self.path(op)?,
+                of: self.id(*of)?,
+                piece: match piece {
+                    PieceKey::ByTools { tools, side } => PieceKey::ByTools {
+                        tools: NameSet::new(self.ids(tools.names())?)?,
+                        side: *side,
+                    },
+                },
+            },
+            TopoName::Merged { op, of } => TopoName::Merged {
+                op: self.path(op)?,
+                of: NameSet::new(self.ids(of.names())?)?,
+            },
+            TopoName::Bounded { kind, by, ends } => TopoName::Bounded {
+                kind: *kind,
+                by: NameSet::new(self.ids(by.names())?)?,
+                ends: NameSet::new(self.ids(ends.names())?)?,
+            },
+            TopoName::Weak { base, ord } => TopoName::Weak {
+                base: self.id(*base)?,
+                ord: *ord,
+            },
+        };
+        self.names.insert(blank.id()?, stamped.id()?);
+        Ok(stamped)
+    }
+
+    /// The real path of a blank one: the stamp's, then its labels.
+    fn path(&self, blank: &OpPath) -> Result<OpPath, NameError> {
+        if blank.op() != BLANK_OP {
+            return Err(NameError::NotBlank);
+        }
+        Ok(blank
+            .labels()
+            .iter()
+            .fold(self.path.clone(), |path, label| path.child(label.clone())))
+    }
+
+    /// `role` with its names stamped.
+    fn role(&self, role: &Role) -> Result<Role, NameError> {
+        let args = role
+            .args
+            .iter()
+            .map(|arg| match arg {
+                RoleArg::Name(name) => self.id(*name).map(RoleArg::Name),
+                RoleArg::Count(count) => Ok(RoleArg::Count(*count)),
+            })
+            .collect::<Result<Vec<RoleArg>, NameError>>()?;
+        Ok(Role {
+            name: role.name.clone(),
+            args,
+        })
+    }
+
+    /// Each of `blanks` stamped.
+    fn ids(&self, blanks: &[NameId]) -> Result<Vec<NameId>, NameError> {
+        blanks.iter().map(|name| self.id(*name)).collect()
+    }
 }
 
 /// `Side`'s number for v1.
