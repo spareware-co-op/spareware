@@ -3968,6 +3968,29 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "constant per value; [`base`] and [`repeats`] are linear in what they return.",
+          "does": "each function reads a fuzzer's bytes and gives a coordinate, a point, a length or a prism's base that lands on a hard case far more often than chance: coordinates on the coarse sub-grids people draw on, so coincident faces, shared edges and tangencies are common; one grid step off them, so near-coincidences are common too; the grid's own edge; and one-step sizes. [`beside`] places a point on one a case already holds, or one step from it, which makes a coincidence certain rather than likely. [`repeats`] gives the extreme count of 28.5: as many copies as a wall has openings.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/adversarial.rs",
+          "guarantees": [
+            "**Any bytes are a value**, in range for its type; the functions never fail.",
+            "**Fixed reads.** Each function reads a fixed number of bytes, stated by its constant, so a target's input bound can be derived; a missing byte reads as zero ([`ByteSource`]).",
+            "**Every hard case is reachable from one rule byte**, tested in `tests/adversarial.rs`."
+          ],
+          "job": "The generators aimed at the hard cases of chapter 28.5, shared by the fuzz targets.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md"
+            ],
+            "text": "chapter 28.5's \"Generators aimed at the hard cases\" (`projects/engines/geometry/architecture/28-testing.md`): `SolidCraft`'s coarse placements, and the full ±2^40 range that `Manifold`'s fuzzer leaves out, as report 01 section 4 sets out (`projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`)."
+          },
+          "path": "geom_fuzz::adversarial",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "at most [`MAX_ROWS`] rows per arena and [`MAX_EDITS`] edits: a few hundred column writes and one publish per version; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a row count for each of the eleven arenas, a value for every link of every row (inside its arena, at its end, far past it, or absent where the link may be), a column that is one row longer or shorter than its arena, the outside region, and edits to make to a published body. [`check`] fills the arenas, publishes them, and compares the answer with an independent reading of `geom-topo`'s rules (the length of every column, then every link in the order of `Link::ALL`, then the outside region): the same body or the same first fault. When the body publishes, it checks that every index it holds is inside its arenas, that an edit starting from it publishes the same body, and that the edits leave the first version unchanged. [`harness`] is `decode` then `check`.",
           "family": [],
@@ -4129,6 +4152,27 @@
           "target": "lib"
         },
         {
+          "cost": "linear in [`DESIGNS`]: one or two operations a design.",
+          "does": "a typed error is legal, but an error where a person would expect success is a gap, and a crash hunt does not count gaps. [`tally`] runs [`DESIGNS`] designs per family, each the same on every run and target, through the kernel's operations, and counts the successes. `src/robustness.txt` records them; `tests/robustness.rs` fails if a count falls.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/robustness.rs",
+          "guarantees": [
+            "**The same designs every time.** Each design comes from a fixed seed through `geom_test::SplitMix64`, so a count moves only when an operation's answer moves.",
+            "**Plain designs, not the fuzzer's.** A design is what a person would draw: sizes in whole millimetres, near the origin, on the sub-grids. The fuzzer's hard cases are mostly refused for good reason; counting those would measure the generator. A design accepts no loss of exactness, so a scale of a curved body, which would widen its bound, counts as refused, as it is until the caller accepts it."
+          ],
+          "job": "Robustness, counted: of a fixed, seeded set of generated designs per operation family, how many succeed (chapter 28.5).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.5's \"Robustness is counted, not only crashes\" (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::robustness",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`cases` runs of the harness, plus one `SplitMix64` word per eight bytes drawn and one or two words per length.",
           "does": "[`run`] resolves a seed with `geom_test::seed::resolve` (the test's default, or `SPAREKIT_SEED`; printed as `seed: <hex>`), then for each case draws a length in `0..=max_len` and that many bytes from `geom-test`'s `SplitMix64`, and runs the harness on them.",
           "family": [],
@@ -4148,6 +4192,28 @@
             "text": "the fixed-seed property runs of section 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`: \"Unit and property tests with fixed seeds\" on every pull request, \"fresh, logged seeds\" nightly), over the byte strings a fuzzer would give, so the one harness function serves fuzzing and fixed-seed testing alike, the arrangement bolero's own test mode uses (<https://github.com/camshaft/bolero>)."
           },
           "path": "geom_fuzz::seeded",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most [`MAX_OPERATIONS`] operations, each checked in full, then two replays and one replay under a cut budget; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_OPERATIONS`] operations on the hard cases of chapter 28.5, each transform on any earlier result, each new primitive free to start exactly on a point of an earlier one or one step from it, some patterns of [`MANY_COPIES`] copies. The first operation is always a primitive, and half of them are tamed to sizes the grid can hold, so a log gets past its first step and its later laws run. [`check`] runs it through the kernel's replay, one operation at a time, and holds each to chapter 28.5's oracle stack; then it writes the operations that succeeded as a log and replays that. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/sequence.rs",
+          "guarantees": [
+            "**Any bytes are a case**, and [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a log the kernel refuses; a defect, or an error no schema lists; a result without names, or one the full checker rejects; a history that breaks its laws, alone or composed along a chain; a class that rises; an input that changes; a log that does not read back as written; a replay of the log that gives another hash; a budget that changes a result instead of stopping it.",
+            "**Not yet in the stack:** a thread-count rerun waits for the first parallel operation, since none of the operations a log can hold uses the helper, and an imported Tolerant body waits for the first importer."
+          ],
+          "job": "Fuzz target: whole operation logs. On any bytes, a log of primitives, transforms and patterns, each on any earlier result, replays to the same hash, and every step keeps every law.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.5's sequence target and oracle stack (`projects/engines/geometry/architecture/28-testing.md`), run through chapter 28.16's replay."
+          },
+          "path": "geom_fuzz::sequence",
           "provenance": [],
           "spdx": null,
           "target": "lib"

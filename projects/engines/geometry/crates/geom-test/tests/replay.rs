@@ -363,6 +363,23 @@ fn a_call_with_no_such_input_is_refused() {
 }
 
 #[test]
+fn a_call_says_whether_its_inputs_exist() {
+    for call in every_call() {
+        assert!(call.exists(), "{call:?}");
+    }
+    let turn = Turn::Direction(0, 0);
+    for call in [
+        Call::Rotate(EXACT, Axis::Z, turn, p(0, 0, 0)),
+        Call::Scale(EXACT, [(1, 1), (0, 1), (1, 1)], p(0, 0, 0)),
+        Call::Scale(EXACT, [(1, 1), (1, 1), (1, 0)], p(0, 0, 0)),
+        Call::Pattern(EXACT, vec![([1; 16], Place::Rotate(Axis::Z, turn))]),
+        Call::Pattern(EXACT, vec![([1; 16], Place::Scale(0, 1))]),
+    ] {
+        assert!(!call.exists(), "{call:?}");
+    }
+}
+
+#[test]
 fn starting_again_forgets_the_bodies() {
     let mut kernel = Kernel::new();
     kernel.start(Steps(0), &[]).unwrap();

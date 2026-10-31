@@ -455,6 +455,18 @@ impl Call {
         )
     }
 
+    /// Whether every rotation, scale factor and copy it names exists: [`Call::run`] gives no
+    /// answer otherwise.
+    #[must_use]
+    pub fn exists(&self) -> bool {
+        match self {
+            Call::Rotate(_, _, t, _) => t.rotation().is_some(),
+            Call::Scale(_, factors, _) => factors.iter().all(|(n, d)| Scale::new(*n, *d).is_ok()),
+            Call::Pattern(_, copies) => copies.iter().all(|(_, p)| p.transform().is_some()),
+            _ => true,
+        }
+    }
+
     /// The record's `params`.
     ///
     /// # Errors
