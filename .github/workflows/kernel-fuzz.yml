@@ -129,7 +129,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [cdt_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
+        target: [cdt_fuzz, exact_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

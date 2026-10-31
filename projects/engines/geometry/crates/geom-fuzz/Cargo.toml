@@ -8,8 +8,9 @@ license.workspace = true
 description = "Spare Kit geometry kernel, development only: fuzz harnesses and bounded proofs, run as tests on stable, under libFuzzer with cargo-bolero, in ClusterFuzzLite and under Kani."
 
 [dependencies]
-# The triangulation target (G153).
+# The triangulation target (G153) and the exact mesh target (G146).
 geom-mesh = { path = "../geom-mesh" }
+geom-op = { path = "../geom-op" }
 geom-num = { path = "../geom-num" }
 geom-run = { path = "../geom-run" }
 geom-test = { path = "../geom-test" }

@@ -31,10 +31,16 @@ proptest = { version = "1.12.0", default-features = false, features = ["std", "b
 # Seeds, the test generator, and the golden store with its one SHA-256 (piece G19): the kernel's
 # development crate, a development dependency only (chapter 28.1).
 geom-test = { path = "../geom-test" }
+# A real thread pool, for the timing program's 8 threads and the test that a pool changes nothing.
+geom-pool = { path = "../geom-pool" }
 
 # The triangulation's timing (piece G153), with the standard library's clock only.
 [[bench]]
 name = "cdt"
+harness = false
+
+[[bench]]
+name = "exact"
 harness = false
 
 [lints.rust]

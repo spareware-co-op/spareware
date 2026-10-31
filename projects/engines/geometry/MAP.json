@@ -742,7 +742,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for the triangulation's hot path (piece G153, decision 32.44): a small terrain, a scatter of survey points with breaklines across it.",
+          "job": "Inputs for `geom-mesh`'s hot paths (pieces G153 and G146, decision 32.44): a small terrain, a scatter of survey points with breaklines across it; and a small height field, every face on its own plane, for the exact mesh's build and check.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2499,6 +2499,28 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_FACES`] triangles, two builds and one pass over the result.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_FACES`] triangles between the corners of a small lattice, so that repeats, flat faces, open edges and edges of many faces are all common. [`check`] builds them. What it accepts must pass the checker again, come out the same with the input turned, and hold to the definitions of 19.2, which are worked out here apart from the code.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/exact.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-mesh`'s exact mesh never panics, refuses what is not a mesh, and gives one mesh whatever order its input comes in.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "the laws of chapter 19.2's \"What it guarantees\", `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`: the edge uses are counted here from the faces alone, and the kind must agree with them; each half-edge's pair is an opposite half-edge; six times a closed mesh's volume is the sum of the corners' determinants."
+          },
+          "path": "geom_fuzz::exact",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
@@ -4044,6 +4066,189 @@
           "module": "geom_mesh::cdt",
           "name": "CdtError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "What a mesh broke (19.2, \"What it guarantees\"). Each names the first place it was found.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+          "kinds": [
+            {
+              "doc": "The arrays do not fit together.",
+              "name": "Shape",
+              "shape": "unit"
+            },
+            {
+              "doc": "This plane is not in canonical form.",
+              "name": "PlaneNotCanonical",
+              "shape": "struct"
+            },
+            {
+              "doc": "This plane does not sort above the one before it.",
+              "name": "PlanesOutOfOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "This vertex does not sort above the one before it.",
+              "name": "VerticesOutOfOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "This vertex's three planes do not meet in a point.",
+              "name": "PlanesDoNotMeet",
+              "shape": "struct"
+            },
+            {
+              "doc": "This three-plane vertex is a grid point, and belongs in that form.",
+              "name": "ImplicitOnTheGrid",
+              "shape": "struct"
+            },
+            {
+              "doc": "These two vertices are one point.",
+              "name": "RepeatedVertex",
+              "shape": "struct"
+            },
+            {
+              "doc": "This loop has fewer than three half-edges.",
+              "name": "ShortLoop",
+              "shape": "struct"
+            },
+            {
+              "doc": "This half-edge starts and ends at one vertex.",
+              "name": "ZeroEdge",
+              "shape": "struct"
+            },
+            {
+              "doc": "This loop does not start at its lowest vertex.",
+              "name": "LoopStart",
+              "shape": "struct"
+            },
+            {
+              "doc": "This face's holes are not in key order.",
+              "name": "HolesOutOfOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "This face does not sort above the one before it in its run.",
+              "name": "FacesOutOfOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "This run does not sort above the one before it.",
+              "name": "RunsOutOfOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "These two faces use the same vertices in the same order.",
+              "name": "RepeatedFace",
+              "shape": "struct"
+            },
+            {
+              "doc": "This face has no area.",
+              "name": "DegenerateFace",
+              "shape": "struct"
+            },
+            {
+              "doc": "This half-edge's start is not on its face's plane.",
+              "name": "OffFacePlane",
+              "shape": "struct"
+            },
+            {
+              "doc": "An end of this half-edge is not on its edge plane.",
+              "name": "OffEdgePlane",
+              "shape": "struct"
+            },
+            {
+              "doc": "This face's corners turn the other way from its plane.",
+              "name": "WrongWayRound",
+              "shape": "struct"
+            },
+            {
+              "doc": "This half-edge's edge plane is its face's plane, or looks away from its face.",
+              "name": "EdgePlaneFacing",
+              "shape": "struct"
+            },
+            {
+              "doc": "This half-edge's pair is not its opposite.",
+              "name": "BadPair",
+              "shape": "struct"
+            },
+            {
+              "doc": "This half-edge's edge is not used equally often each way.",
+              "name": "UnevenEdge",
+              "shape": "struct"
+            },
+            {
+              "doc": "The half-edges around this one's edge are not paired in radial order.",
+              "name": "RadialOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "The mesh is not the kind it says.",
+              "name": "WrongKind",
+              "shape": "unit"
+            },
+            {
+              "doc": "This face's deviation is more than the mesh's class allows.",
+              "name": "Deviation",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_mesh::exact",
+          "name": "MeshFault",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a mesh could not be made or measured.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+          "kinds": [
+            {
+              "doc": "The mesh breaks a rule of the checker group.",
+              "name": "Fault",
+              "shape": "tuple"
+            },
+            {
+              "doc": "This face has a corner off the grid and came without its plane.",
+              "name": "FacePlaneNeeded",
+              "shape": "struct"
+            },
+            {
+              "doc": "This corner starts or ends an edge off the grid and came without its edge plane.",
+              "name": "EdgePlaneNeeded",
+              "shape": "struct"
+            },
+            {
+              "doc": "More items than 32-bit indices can name.",
+              "name": "Full",
+              "shape": "unit"
+            },
+            {
+              "doc": "The numbers layer refused: a plane over budget, or a fault of its own.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped: its budget ran out, the caller cancelled, or memory was refused.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A phase went over its budget, by `geom-run`'s phase rule.",
+              "name": "BudgetExceeded",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An allocation was refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "A step the helper's own rules exclude failed: a defect, reported, never answered.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_mesh::exact",
+          "name": "MeshError",
+          "non_exhaustive": false
         }
       ],
       "family": [
@@ -4098,6 +4303,142 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) in the half-edges for the sorts of the planes and faces, with a few allocations per array and none per face but for faces with holes. A face's plane takes up to three greatest common divisors, an edge plane's one or two.",
+          "does": "[`build`] takes [`Polygons`], whose vertices are grid points or three planes and whose faces are loops of vertices, and works out what the mesh stores. A face made from grid points gets its plane from its area vector; each edge between grid points gets the plane through it that holds the face's dominant axis. Faces and edges off the grid bring their planes with them. The planes go into one sorted pool, the vertices and faces into canonical order, and each half-edge finds its opposite, in exact radial order where more than two meet.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+          "guarantees": [
+            "**The order of the input does not show.** The result is the same value whatever order the vertices and faces came in, and however each loop was turned.",
+            "**The threads do not show.** Every parallel step goes through [`Exec`], whose results do not depend on its pool (23.4), and every sort is then made a total order.",
+            "**One point, one form.** Three planes that meet on a grid point give that grid point, and repeated grid points become one vertex. Repeated three-plane points are the caller's: they become one vertex only with the same canonical planes, and otherwise fail the checker.",
+            "**The result is checked.** It goes through [`ExactMesh::new`]."
+          ],
+          "job": "Makes an [`ExactMesh`] from polygons: the planes, the canonical order and the pairing of 19.2.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "chapter 19.2's \"Canonical order\" and \"Plane-based polygons\" (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). The half-edges are grouped by counting sort on an edge's lower vertex, so pairing is linear in the half-edges; radial order is 11.3's order of flaps about a line. A half-edge running against its line has its solid on the counter-clockwise side, so it pairs with the next flap round, which is why fins alternate cell sides (11.7)."
+          },
+          "path": "geom_mesh::exact::build",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the half-edges, but for the sort of a bucket of edges at each vertex, and for faces and three-plane points that sort when there are any such to compare. No recursion.",
+          "does": "[`check`] tests [`Parts`] for the rules of 19.2's \"What it guarantees\": every loop closes, no edge has zero length, no face is degenerate or repeated, every vertex lies exactly on its faces' and edges' planes, every edge is used equally often each way with consistent radial pairing, and a `Closed` mesh has no boundary edge. It also holds the arrays to their canonical order, so that a mesh's bytes depend only on its content.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+          "guarantees": [
+            "**Exact.** Every test is on integers or exact predicates: a vertex is on a plane only when the plane's exact side of it is `Zero`.",
+            "**Nothing read past its array.** The shape of the arrays is tested first, and every later test reads through checked lookups.",
+            "**The first fault is named.** The tests run in a fixed order over the arrays in order, so one mesh gives one [`MeshFault`] on every target.",
+            "**What is only partly tested off the grid.** A face with a corner off the grid has its turn and area tested through its planes alone: the sum of its corners' cross products would need rationals. An edge with an end off the grid is tested only for lying on both planes."
+          ],
+          "job": "The mesh checker group: what every [`ExactMesh`](super::ExactMesh) has passed (19.2).",
+          "method": {
+            "links": [
+              "https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs",
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "the closure certificate of csgrs's hypermesh (<https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs>), with exact radial order from 11.3, as 19.2 sets out (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`)."
+          },
+          "path": "geom_mesh::exact::check",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs",
+              "method_note": null,
+              "name": "csgrs",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for which rules a closure certificate holds; its method, not its code.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the half-edges; on grid points three products of `i128` per half-edge.",
+          "does": "[`ExactMesh::volume`] gives six times the volume, as an exact integer while every vertex is a grid point and as a certified interval otherwise. [`ExactMesh::twice_area_vector`] gives a grid face's exact doubled area vector, and [`ExactMesh::area`] its area as a certified interval, a square root having no exact value.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mass.rs",
+          "guarantees": [
+            "**Exact on the grid.** Six times the volume is a sum of integer determinants, each below 2^123 relative to the frame's origin, so at most 2^32 of them stay inside [`I256`], and every step is checked.",
+            "**Rounded outward off it.** A three-plane vertex's coordinates are exact fractions, enclosed in intervals rounded outward, and so is every sum and product of them, so the true volume is inside the interval.",
+            "**The sign says which way.** A closed mesh with outward normals has a positive volume."
+          ],
+          "job": "Volume and area of an exact mesh (19.2, \"Mass properties\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "the divergence theorem: the volume inside a closed surface is the sum over its faces of the signed tetrahedra from the origin, fanned from each loop's first vertex; holes run the other way and take away what they should. 19.2's \"Mass properties\", `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`."
+          },
+          "path": "geom_mesh::exact::mass",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Parts`] holds about 60 bytes per half-edge and 40 per plane. A mesh is immutable; an operation makes a new one.",
+          "does": "[`ExactMesh`] holds polygons with holes as parallel arrays, half-edge by half-edge. Every face points to its supporting plane and every half-edge to an edge plane, a second plane through that edge, in one sorted pool of canonical planes. A vertex is a grid point or the meeting of three planes of the pool. [`build`] makes a mesh from polygons, [`check`] is the mesh checker group, and [`mass`] gives its volume and areas. [`raw`] holds what an import reads before it is healed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+          "guarantees": [
+            "**Only checked meshes exist.** [`ExactMesh::new`] is the one way to make one, and it runs the whole checker group: a value of the type has passed every test of [`check`].",
+            "**A mesh's bytes depend only on its content.** The planes are sorted by coefficients, the vertices by key, the runs by source and role, the faces in a run by their keys; each loop starts at its lowest vertex, and the holes follow in key order. Nothing is ordered by a float, an address or a hash, and the checker refuses any other order.",
+            "**One point, one form.** An implicit vertex whose coordinates are whole grid steps is stored as a grid point, and no two vertices are one point.",
+            "**Properties decide nothing.** A property vertex carries display data only; no test here reads one, and [`Parts::props`] holds the only floats in a mesh."
+          ],
+          "job": "The exact mesh: a surface of flat polygons, every one of them exact data on the grid (19.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "chapter 19.2's data model (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`): parallel half-edge arrays, property vertices and provenance runs after Manifold, with polygons, plane-based corners after EMBER (<https://doi.org/10.1145/3528223.3530181>) and exact radial pairing added."
+          },
+          "path": "geom_mesh::exact",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/shared.h",
+              "method_note": null,
+              "name": "Manifold",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for half-edges as parallel arrays, and <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/include/manifold/mesh.h>, for property vertices and runs; its data model, not its code.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the corners.",
+          "does": "a [`RawMesh`] holds polygons on grid points with no promise about how they join. They may be open, non-manifold or self-intersecting. Only healing, reconstruction, display and clash accept one, because inside and outside are undefined for an open surface.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/exact/raw.rs",
+          "guarantees": [
+            "**On the grid.** Every vertex is a grid point: import rounds into the frame first (19.7).",
+            "**Every index in range.** [`RawMesh::new`] tests that, and that every polygon has at least three corners. Nothing else about its topology is tested."
+          ],
+          "job": "A raw mesh: what an import reads, before healing makes it an exact mesh (19.2, \"Raw meshes\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "chapter 19.2's \"Raw meshes\", `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`."
+          },
+          "path": "geom_mesh::exact::raw",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         }
@@ -10798,6 +11139,17 @@
     },
     {
       "licence": "Apache-2.0",
+      "link": "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/shared.h",
+      "method_note": null,
+      "name": "Manifold",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
       "link": "https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs",
       "method_note": null,
       "name": "ciborium-ll",
@@ -10966,6 +11318,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/classes.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs",
+      "method_note": null,
+      "name": "csgrs",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs"
       ]
     },
     {

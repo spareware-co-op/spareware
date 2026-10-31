@@ -26,7 +26,8 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today (piece G153): [`cdt`], the kernel's one exact constrained Delaunay triangulation.
+//! Modules today: [`cdt`] (piece G153), the kernel's one exact constrained Delaunay triangulation,
+//! and [`exact`] (piece G146), the exact mesh, its checker group and its mass properties.
 //!
 //! Status: built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288, G289, G290, G291,
 //! G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411; G153 is in.
@@ -36,5 +37,6 @@
 extern crate alloc;
 
 pub mod cdt;
+pub mod exact;
 
 pub use cdt::{Cdt, CdtError, Quality, Site, Vertex, triangulate};
