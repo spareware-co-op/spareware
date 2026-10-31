@@ -134,7 +134,7 @@ fn link<K, T: Copy>(column: &Column<K, Option<T>>, at: Ix<K>) -> Option<T> {
 }
 
 /// A fin's next fin in its loop.
-fn next(a: &Arenas, f: FinIx) -> FinIx {
+pub(crate) fn next(a: &Arenas, f: FinIx) -> FinIx {
     a.fins.next.get(f).copied().unwrap_or(f)
 }
 
@@ -194,17 +194,29 @@ fn ring(
 }
 
 /// The fins of a loop, from its first.
-fn loop_fins(a: &Arenas, l: LoopIx) -> impl Iterator<Item = FinIx> + '_ {
+pub(crate) fn loop_fins(a: &Arenas, l: LoopIx) -> impl Iterator<Item = FinIx> + '_ {
     link(&a.loops.first_fin, l)
         .into_iter()
         .flat_map(move |first| ring(a, first, next))
 }
 
 /// The fins of an edge, in radial order from its first.
-fn edge_fins(a: &Arenas, e: EdgeIx) -> impl Iterator<Item = FinIx> + '_ {
+pub(crate) fn edge_fins(a: &Arenas, e: EdgeIx) -> impl Iterator<Item = FinIx> + '_ {
     link(&a.edges.first_fin, e)
         .into_iter()
         .flat_map(move |first| ring(a, first, radial))
+}
+
+/// The loops of a face, from its first (lists the first stage found sound).
+pub(crate) fn face_loops(a: &Arenas, f: FaceIx) -> impl Iterator<Item = LoopIx> + '_ {
+    successors(link(&a.faces.first_loop, f), move |&l| {
+        link(&a.loops.next, l)
+    })
+}
+
+/// The fins of a face, loop by loop.
+pub(crate) fn face_fins(a: &Arenas, f: FaceIx) -> impl Iterator<Item = FinIx> + '_ {
+    face_loops(a, f).flat_map(move |l| loop_fins(a, l))
 }
 
 /// Sets `v[i]` to `value` and returns what it held.

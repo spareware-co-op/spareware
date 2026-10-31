@@ -114,14 +114,10 @@ pub(crate) fn check(
             a.edges.start.get(e).copied().flatten(),
             a.edges.end.get(e).copied().flatten(),
         ];
-        let curve = match c.and_then(|c| a.curves.get(c)) {
-            Some(CurveKind::Line(line)) => Ends::Line(line),
-            Some(CurveKind::Circle(circle)) => Ends::Circle(circle),
-            _ => {
-                let curve = c.map_or(Entity::Edge(e), Entity::Curve);
-                sink.push(Fault::at(FaultKind::Unchecked, curve).with(Entity::Edge(e)));
-                continue;
-            }
+        let Some(curve) = Ends::of(c.and_then(|c| a.curves.get(c))) else {
+            let curve = c.map_or(Entity::Edge(e), Entity::Curve);
+            sink.push(Fault::at(FaultKind::Unchecked, curve).with(Entity::Edge(e)));
+            continue;
         };
         let (lo, hi) = curve.domain();
         for (vertex, t) in ends.into_iter().zip([lo, hi]) {
@@ -138,12 +134,21 @@ pub(crate) fn check(
 }
 
 /// An edge's curve, of a kind whose ends group 2 can certify.
-enum Ends<'c> {
+pub(crate) enum Ends<'c> {
     Line(&'c Line<3>),
     Circle(&'c Circle<3>),
 }
 
-impl Ends<'_> {
+impl<'c> Ends<'c> {
+    /// The curve `curve` names, if group 2 can certify its kind.
+    pub(crate) fn of(curve: Option<&'c CurveKind<3>>) -> Option<Ends<'c>> {
+        match curve? {
+            CurveKind::Line(line) => Some(Ends::Line(line)),
+            CurveKind::Circle(circle) => Some(Ends::Circle(circle)),
+            _ => None,
+        }
+    }
+
     /// The parameters of the curve's two ends.
     fn domain(&self) -> (f64, f64) {
         match self {
@@ -163,9 +168,9 @@ impl Ends<'_> {
 
 /// What group 2 measures a face's vertices and edges against: its surface's closed form, and the
 /// exact integer plane when the surface is a plane given by integers.
-struct Surface {
+pub(crate) struct Surface {
     grid: Option<GridPlane>,
-    carrier: Carrier,
+    pub(crate) carrier: Carrier,
 }
 
 impl Surface {
@@ -181,7 +186,7 @@ impl Surface {
 
 /// The surface of `face`, if group 2 has a certified check for it: not for a kind without a closed
 /// form here, nor, in a body recorded Exact (`exact`), for a plane not given by integers.
-fn surface(a: &Arenas, face: Ix<Face>, exact: bool) -> Option<Surface> {
+pub(crate) fn surface(a: &Arenas, face: Ix<Face>, exact: bool) -> Option<Surface> {
     let kind = a.faces.surface.get(face).and_then(|s| a.surfaces.get(*s))?;
     let grid = plane(kind);
     if exact && grid.is_none() && matches!(kind, SurfaceKind::Plane(_)) {
@@ -196,10 +201,10 @@ fn surface(a: &Arenas, face: Ix<Face>, exact: bool) -> Option<Surface> {
 /// Whether edge `e`'s curve lies within `limit` steps of `on`: a line or a circle by its certified
 /// bound; any other curve is the edge rows' to report unchecked, so it is not reported again here.
 fn edge_on(a: &Arenas, e: Ix<Edge>, on: &Carrier, limit: f64) -> bool {
-    match a.edges.curve.get(e).and_then(|c| a.curves.get(*c)) {
-        Some(CurveKind::Line(line)) => on.holds_line(line, limit),
-        Some(CurveKind::Circle(circle)) => on.holds_circle(circle, limit),
-        _ => true,
+    match Ends::of(a.edges.curve.get(e).and_then(|c| a.curves.get(*c))) {
+        Some(Ends::Line(line)) => on.holds_line(line, limit),
+        Some(Ends::Circle(circle)) => on.holds_circle(circle, limit),
+        None => true,
     }
 }
 
@@ -220,7 +225,7 @@ const ORIGIN: P3 = P3 {
 };
 
 /// A vertex's point.
-fn point(a: &Arenas, v: Ix<Vertex>) -> P3 {
+pub(crate) fn point(a: &Arenas, v: Ix<Vertex>) -> P3 {
     a.vertices
         .point
         .get(v)

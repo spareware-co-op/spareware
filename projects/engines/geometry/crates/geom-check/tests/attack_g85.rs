@@ -40,11 +40,16 @@ fn moved(by: [i64; 3]) -> Rows {
     r
 }
 
-/// The faults of a full check of the solid `rows`, recorded certified to `bound`.
+/// Group 2's faults in a full check of the solid `rows`, recorded certified to `bound`. (A
+/// vertex moved off its planes leaves faces that are not flat, which group 3 then reports
+/// unchecked: `attack_g85_group3.rs`.)
 fn at(rows: &Rows, bound: u64) -> Vec<Fault> {
     report(rows, BodyKind::Solid, certified(bound))
         .faults()
-        .to_vec()
+        .iter()
+        .filter(|f| f.kind.group() == Group::Geometric)
+        .copied()
+        .collect()
 }
 
 /// Whether `faults` say vertex `v` is off face `f`'s surface.
@@ -95,7 +100,13 @@ fn a_vertex_off_its_plane_and_its_line_ends_is_caught_exactly_at_the_bound() {
             deviation: Steps(d as u64),
             step: GridStep::Q0,
         };
-        assert!(report(&r, BodyKind::Solid, approximate).passed(), "{d}");
+        assert!(
+            report(&r, BodyKind::Solid, approximate)
+                .faults()
+                .iter()
+                .all(|f| f.kind.group() != Group::Geometric),
+            "{d}"
+        );
     }
 }
 
@@ -344,15 +355,23 @@ fn group_2_runs_only_on_a_body_group_1_passed() {
 }
 
 #[test]
-fn group_2_charges_one_unit_per_face_fin_and_edge() {
+fn groups_2_and_3_charge_one_unit_per_row_and_pair_visited() {
     let work = |rows: &Rows, level| {
         let body = rows.body(BodyKind::Solid);
         let mut m = meter();
         check(&body, certified(1), level, &mut m).unwrap();
         m.used().get(BudgetKind::Work)
     };
-    // The cube: 6 faces, 24 fins, 12 edges. The cylinder with a seam: 3 faces, 6 fins, 3 edges.
-    for (rows, rows_visited) in [(cube(), 6 + 24 + 12), (seamed_cylinder(), 3 + 6 + 3)] {
+    // Group 2, one unit per face, fin and edge; group 3, one per face, per pair of a face's edges,
+    // per pair of faces and per edge tested against a face. The cube: 6 faces, 24 fins and 12
+    // edges; 6 faces, 6 pairs of edges in each, 15 pairs of faces, and each of the 12 pairs that
+    // meet at an edge tests its 8 edges. The cylinder with a seam: 3 faces, 6 fins and 3 edges; 3
+    // faces, the 3 pairs of the side's edges, 3 pairs of faces (parallel caps, and caps that share
+    // a circle with the side, tested without their edges).
+    for (rows, rows_visited) in [
+        (cube(), (6 + 24 + 12) + (6 + 6 * 6 + 15 + 12 * 8)),
+        (seamed_cylinder(), (3 + 6 + 3) + (3 + 3 + 3)),
+    ] {
         assert_eq!(
             work(&rows, Level::Full) - work(&rows, Level::Cheap),
             rows_visited

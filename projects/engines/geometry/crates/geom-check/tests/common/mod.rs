@@ -672,6 +672,30 @@ pub fn ring_torus() -> Rows {
     r
 }
 
+/// A square sheet of side 10 with a round hole of radius 2 at its centre: G84's annulus with its
+/// hole moved inside.
+pub fn holed_sheet() -> Rows {
+    let mut r = annulus_sheet();
+    r.curves[4] = round([5.0, 5.0, 0.0], 2.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    r
+}
+
+/// Adds to shell `s` a face with one loop for each ring of vertex numbers in `rings`, an edge for
+/// each step round a ring, from the vertex before to the vertex after; its row.
+pub fn face_of(r: &mut Rows, s: u32, rings: &[&[u32]]) -> u32 {
+    let mut loops: Vec<Vec<(u32, Sense)>> = Vec::new();
+    for ring in rings {
+        let mut fins = Vec::new();
+        for k in 0..ring.len() {
+            let e = r.edge(Some((ring[k], ring[(k + 1) % ring.len()])));
+            fins.push((e, Sense::Forward));
+        }
+        loops.push(fins);
+    }
+    let refs: Vec<&[(u32, Sense)]> = loops.iter().map(Vec::as_slice).collect();
+    r.face(s, &refs)
+}
+
 /// The report of a full check of `rows` as a body of `kind`, recorded `exactness`.
 pub fn report(rows: &Rows, kind: BodyKind, exactness: Exactness) -> Report {
     check(&rows.body(kind), exactness, Level::Full, &mut meter()).unwrap()

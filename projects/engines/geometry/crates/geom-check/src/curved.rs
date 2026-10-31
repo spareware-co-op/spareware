@@ -334,6 +334,132 @@ impl Torus {
     }
 }
 
+/// How two faces' carriers lie, as far as group 3 can certify.
+pub(crate) enum Pair {
+    /// Two parallel planes, certainly apart: their faces cannot meet.
+    Apart,
+    /// Two planes that certainly cross along a line.
+    Crossing,
+    /// A plane and a sphere, or a plane certainly perpendicular to a cylinder's or cone's axis:
+    /// they meet in one circle at most.
+    Circle,
+    /// Nothing certified.
+    Unknown,
+}
+
+/// How the carriers `first` and `second` lie.
+pub(crate) fn pair(first: &Carrier, second: &Carrier) -> Pair {
+    match (first, second) {
+        (
+            Carrier::Flat { origin, normal },
+            Carrier::Flat {
+                origin: other,
+                normal: across,
+            },
+        ) => {
+            let planes = || {
+                let turn = cross(*normal, *across)?;
+                let offset = dot(sub3(*other, *origin)?, *normal)?;
+                Some((turn, offset))
+            };
+            match planes() {
+                Some((turn, offset)) if zero(turn) && away(offset) => Pair::Apart,
+                Some((turn, _)) if turn.into_iter().any(away) => Pair::Crossing,
+                _ => Pair::Unknown,
+            }
+        }
+        (Carrier::Flat { normal, .. }, Carrier::Round(cone))
+        | (Carrier::Round(cone), Carrier::Flat { normal, .. }) => {
+            if cross(*normal, cone.axis).is_some_and(zero) {
+                Pair::Circle
+            } else {
+                Pair::Unknown
+            }
+        }
+        (Carrier::Flat { .. }, Carrier::Ball { .. })
+        | (Carrier::Ball { .. }, Carrier::Flat { .. }) => Pair::Circle,
+        _ => Pair::Unknown,
+    }
+}
+
+/// Whether the segment from grid point `from` to `to` certainly meets `circle` nowhere, or, when
+/// `shared` (`from` is a vertex of both), nowhere but at `from`: both ends strictly on one side of
+/// the circle's plane; or leaving that plane from the shared vertex; or, lying in it, on a line the
+/// circle certainly misses; or crossing it once, at a point certainly off the circle.
+pub(crate) fn segment_apart(from: P3, to: P3, shared: bool, circle: &Circle<3>) -> bool {
+    let apart = || {
+        let (_, [_, _, normal]) = circle.frame().unit_vectors().ok()?;
+        let center = lift(circle.center())?;
+        let r = at(circle.radius())?;
+        let (start, end) = (grid(from)?, grid(to)?);
+        let (above, below) = (
+            dot(sub3(start, center)?, normal)?,
+            dot(sub3(end, center)?, normal)?,
+        );
+        if same_side(above, below) {
+            return Some(true);
+        }
+        if shared {
+            return Some(away(below));
+        }
+        let along = sub3(end, start)?;
+        if zero([above, below, at(0.0)?]) {
+            // In the plane: the distance from the centre to the line, against the radius.
+            let reach = divide(length(cross(sub3(center, start)?, along)?)?, length(along)?)?;
+            return Some(minus(reach, r)?.lo() > 0.0);
+        }
+        // Through the plane once, at start + t · along with t = above / (above − below).
+        let t = divide(above, minus(above, below)?)?;
+        let crossing = add3(start, scale(t, along)?)?;
+        Some(away(minus(length(sub3(crossing, center)?)?, r)?))
+    };
+    apart().unwrap_or(false)
+}
+
+/// Whether two circles certainly meet nowhere, or, when `shared` (a vertex of both), nowhere but
+/// there: in parallel planes, apart or, in one plane, one certainly outside or inside the other;
+/// in crossing planes, through their shared vertex and with their centres' feet on the planes'
+/// line certainly apart (each circle meets that line at the vertex and at its reflection in the
+/// foot of its centre, so the second points differ).
+pub(crate) fn circles_apart(first: &Circle<3>, second: &Circle<3>, shared: bool) -> bool {
+    let apart = || {
+        let (_, [_, _, one]) = first.frame().unit_vectors().ok()?;
+        let (_, [_, _, other]) = second.frame().unit_vectors().ok()?;
+        let gap = sub3(lift(second.center())?, lift(first.center())?)?;
+        let line = cross(one, other)?;
+        if zero(line) {
+            if away(dot(gap, one)?) {
+                return Some(true);
+            }
+            let (r, s) = (at(first.radius())?, at(second.radius())?);
+            let d = length(gap)?;
+            let outside = minus(d, plus(r, s)?)?.lo();
+            let inside = minus(at(tight::magnitude(minus(r, s)?))?, d)?.lo();
+            return Some(tight::larger(outside, inside) > 0.0);
+        }
+        Some(shared && away(dot(gap, line)?))
+    };
+    apart().unwrap_or(false)
+}
+
+/// Whether every number in `a` is certainly not zero.
+fn away(a: Interval) -> bool {
+    a.lo() * a.hi() > 0.0
+}
+
+/// Whether `a` and `b` are certainly not zero and of one sign.
+fn same_side(a: Interval, b: Interval) -> bool {
+    [a.lo() * a.hi(), b.lo() * b.hi(), a.lo() * b.lo()]
+        .into_iter()
+        .fold(f64::INFINITY, tight::smaller)
+        > 0.0
+}
+
+/// Whether every coordinate of `v` is exactly zero.
+fn zero(v: V3) -> bool {
+    v.into_iter().map(tight::magnitude).fold(0.0, tight::larger) == 0.0
+}
+
 /// Whether `gap` is at most `b` in size.
 fn fits(gap: Interval, b: f64) -> bool {
     tight::magnitude(gap) <= b

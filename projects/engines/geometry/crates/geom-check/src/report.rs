@@ -82,7 +82,7 @@ impl Group {
     pub const fn built(self) -> bool {
         matches!(
             self,
-            Group::Combinatorial | Group::Geometric | Group::Exactness
+            Group::Combinatorial | Group::Geometric | Group::SelfIntersection | Group::Exactness
         )
     }
 }
@@ -252,6 +252,17 @@ pub enum FaultKind {
     /// plane not given by integers in a body recorded Exact, or a fin's pcurve. Reported, never
     /// passed. `at` is the surface, curve or pcurve, `with` the face, edge or fin that uses it.
     Unchecked,
+    /// Two edges of one face meet other than at a vertex they share. `at` is one edge, `with` the
+    /// other.
+    EdgesCross,
+    /// Two faces meet other than along an edge or at a vertex they share. `at` is one face,
+    /// `with` the other.
+    FacesCross,
+    /// A pair group 3 has no certified test for: two edges of one face or two faces whose
+    /// carriers no closed form here separates (a face with holes or not convex against a crossing
+    /// plane, two curved faces, a circle crossing a plane's line). Reported, never passed. `at`
+    /// and `with` are the two edges or the two faces.
+    PairUnchecked,
 }
 
 impl FaultKind {
@@ -266,6 +277,9 @@ impl FaultKind {
             | FaultKind::VertexOffCurve
             | FaultKind::EdgeOffSurface
             | FaultKind::Unchecked => Group::Geometric,
+            FaultKind::EdgesCross | FaultKind::FacesCross | FaultKind::PairUnchecked => {
+                Group::SelfIntersection
+            }
             _ => Group::Combinatorial,
         }
     }
@@ -313,6 +327,9 @@ impl FaultKind {
             }
             FaultKind::EdgeOffSurface => "the edge is not on the face's surface within the bound",
             FaultKind::Unchecked => "no certified check of this carrier exists yet",
+            FaultKind::EdgesCross => "two edges of the face meet other than at a shared vertex",
+            FaultKind::FacesCross => "the two faces meet other than along a shared edge or vertex",
+            FaultKind::PairUnchecked => "no certified test of this pair exists yet",
         }
     }
 }

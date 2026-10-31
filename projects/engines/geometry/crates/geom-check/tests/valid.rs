@@ -14,8 +14,8 @@
 mod common;
 
 use common::{
-    Rows, acorn, annulus_sheet, ball, certified, cone, cube, cylinder, disc_sheet, hemisphere,
-    meter, report, ring_torus, round_cylinder, seamed_cylinder, square_sheet, torus, wire,
+    Rows, acorn, ball, certified, cone, cube, disc_sheet, hemisphere, holed_sheet, meter, report,
+    ring_torus, round_cylinder, seamed_cylinder, square_sheet, wire,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_num::{Exactness, GridStep, Steps};
@@ -26,12 +26,6 @@ fn every_kind_of_valid_body_passes() {
     let cases = [
         ("cube", cube(), BodyKind::Solid),
         ("cube as a general body", cube(), BodyKind::General),
-        ("torus of planes and lines", torus(), BodyKind::Solid),
-        (
-            "cylinder of planes and circles",
-            cylinder(),
-            BodyKind::Solid,
-        ),
         ("cylinder", round_cylinder(), BodyKind::Solid),
         ("cylinder with a seam", seamed_cylinder(), BodyKind::Solid),
         ("cone with its apex", cone(), BodyKind::Solid),
@@ -39,7 +33,11 @@ fn every_kind_of_valid_body_passes() {
         ("ball", ball(), BodyKind::Solid),
         ("ring torus", ring_torus(), BodyKind::Solid),
         ("disc sheet", disc_sheet(), BodyKind::Sheet),
-        ("annulus sheet", annulus_sheet(), BodyKind::Sheet),
+        (
+            "square sheet with a round hole",
+            holed_sheet(),
+            BodyKind::Sheet,
+        ),
         ("square sheet", square_sheet(), BodyKind::Sheet),
         ("wire", wire(), BodyKind::Wire),
         ("wire as a general body", wire(), BodyKind::General),
@@ -129,14 +127,8 @@ fn a_cheap_check_runs_groups_1_and_4_and_a_full_one_names_what_is_missing() {
     assert_eq!(cheap.missing().count(), 0);
     assert!(cheap.passed());
     let full = check(&body, Exactness::Exact, Level::Full, &mut meter()).unwrap();
-    assert_eq!(
-        full.ran().collect::<Vec<_>>(),
-        [Group::Combinatorial, Group::Geometric, Group::Exactness]
-    );
-    assert_eq!(
-        full.missing().collect::<Vec<_>>(),
-        [Group::SelfIntersection]
-    );
+    assert_eq!(full.ran().collect::<Vec<_>>(), Group::ALL);
+    assert_eq!(full.missing().count(), 0);
     assert!(full.passed());
     // The same body gives the same report, every time.
     assert_eq!(
@@ -149,7 +141,7 @@ fn a_cheap_check_runs_groups_1_and_4_and_a_full_one_names_what_is_missing() {
 fn the_levels_and_groups_are_chapter_8_3s() {
     assert_eq!(Group::ALL.map(Group::number), [1, 2, 3, 4]);
     assert_eq!(Group::ALL.map(Group::cheap), [true, false, false, true]);
-    assert_eq!(Group::ALL.map(Group::built), [true, true, false, true]);
+    assert_eq!(Group::ALL.map(Group::built), [true; 4]);
     assert_eq!(
         Group::ALL.map(|g| Level::Cheap.runs(g)),
         [true, false, false, true]

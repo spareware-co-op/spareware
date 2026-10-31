@@ -48,6 +48,7 @@ mod exactness;
 mod geometric;
 pub mod report;
 mod run;
+mod self_intersection;
 mod sink;
 
 pub use report::{Entity, Fault, FaultKind, Group, Level, Report};
