@@ -1033,14 +1033,13 @@ fn tpi_axis(t: &Tpi, s: &Plane) -> Option<Sign> {
         1 => qr_y,
         _ => qr_z,
     };
-    let x = numerator(
-        &I320::from_i128(p.d),
-        &I320::from_i128(q.d),
-        &I320::from_i128(r.d),
-        qr,
-        &one(&r.n, &p.n)?,
-        &one(&p.n, &q.n)?,
-    )?;
+    let (pd, qd, rd) = (
+        I320::from_i128(p.d),
+        I320::from_i128(q.d),
+        I320::from_i128(r.d),
+    );
+    let (rp, pq) = (one(&r.n, &p.n)?, one(&p.n, &q.n)?);
+    let x = numerator(&pd, &qd, &rd, qr, &rp, &pq)?;
     let x = if negative { x.checked_neg()? } else { x };
     let side = x.checked_add(&I320::from_i128(s.d).checked_mul(&w.resize::<5>()?)?)?;
     Some(side.signum().mul(t.weight))

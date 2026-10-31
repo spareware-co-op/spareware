@@ -111,7 +111,7 @@ mod generated {
 
 /// predicate.rs's code outside its comments and its test module, compiled again so the attack can
 /// call the private fast and total paths, followed by thin wrappers that expose them.
-#[allow(clippy::many_single_char_names)]
+#[allow(clippy::many_single_char_names, dead_code)]
 mod copy {
     use crate::{Pt2, Pt3};
 
