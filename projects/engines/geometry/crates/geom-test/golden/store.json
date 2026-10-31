@@ -224,9 +224,15 @@
               "kind": "corpus",
               "piece": "G43",
               "why": "ExactSum's Debug text, by which canonical.rs encodes a sum, now writes the sum's value only (its digits after a carry propagation, its special values and its lost flag, and `..` for the rest), not the raw chunks and the additions left before a propagation (chapter 28.8; Gate 1's ledger review): the 12 exact_sum digests moved, the results of add, add_slice and add_iter, the inputs of round and round_ieee, and both of merge; no result changed, and every other benchmark's digests are the same; merged after G53's 6 isolate and ball benchmarks, whose rows are kept unchanged"
+            },
+            {
+              "sha256": "a333cd51bc9ab310418e88347fcc516abf6e9822dda90aa44ed998df9b1bf96b",
+              "kind": "corpus",
+              "piece": "G70",
+              "why": "26 new count benchmarks on the hot paths of phase 2's code pieces (decision 32.44): geom-math 7, geom-curve 5, geom-surface 5, geom-nurbs 3, geom-linalg 2, geom-bvh 2, geom-num 2; no existing digest moved"
             }
           ],
-          "sha256": "a333cd51bc9ab310418e88347fcc516abf6e9822dda90aa44ed998df9b1bf96b"
+          "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6"
         },
         {
           "id": "geom-nurbs/operations",
