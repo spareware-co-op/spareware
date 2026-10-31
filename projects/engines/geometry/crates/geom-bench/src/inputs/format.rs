@@ -11,8 +11,9 @@
 //! chunk, as an edit in place does. Only the typical class exists: a key's cost does not depend on
 //! its bytes.
 //!
-//! Method: none; seeded draws of calls, as every input of this crate, with no published method to
-//! follow.
+//! Method: the cases of `geom-format`'s own tests (`tests/cache.rs`, `tests/versions.rs`), at one
+//! size each, each measured as chapter 28.14 sets benchmarks out,
+//! `projects/engines/geometry/architecture/28-testing.md`.
 //!
 //! Cost: O(`BATCH`) draws; a batch of versions shares one body's chunks.
 

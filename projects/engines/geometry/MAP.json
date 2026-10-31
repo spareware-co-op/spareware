@@ -575,6 +575,26 @@
           "target": "lib"
         },
         {
+          "cost": "O(`BATCH`) draws; a batch of versions shares one body's chunks.",
+          "does": "[`cache_key`] gives an edition and an input's seed per call; [`memo_get`] gives the place of a key in the store [`store`] fills; [`next_version`] gives a first version of the body [`faces`] with a body one row changed from it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/format.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`), so each benchmark measures the path that succeeds: every key is found, and a new version hashes one chunk, as an edit in place does. Only the typical class exists: a key's cost does not depend on its bytes."
+          ],
+          "job": "Inputs for `geom-format`'s hot paths (piece G105, decision 32.44): calls whose cache keys differ by edition and input, keys to look up in a memo store, and new versions of a body, each one row of its last chunk moved to another surface.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-format`'s own tests (`tests/cache.rs`, `tests/versions.rs`), at one size each, each measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::format",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "that of the builder it shares, once per batch, outside every measured run.",
           "does": "every builder draws the batch its predicate's benchmark in [`super::predicate`] (or [`super::plane::side`]) draws, from a seed named after the generated function instead, so the classes mean the same and the batches differ. On typical inputs a filter decides; on nearly degenerate ones it cannot, and returns `None`, leaving the exact value to decide; on degenerate ones the exact value is zero; on extreme ones every intermediate is near the bound its certificate states.",
           "family": [],
@@ -3329,7 +3349,7 @@
       "provenance": [],
       "sections": "12.12, 16.1, 18.10, 21, 23.8, 23.11 and 24.1 to 24.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); cache keys and the reference memo store built (G105); the rest by pieces G94, G95, G96, G108, G112, G175, G318, G405, G410, G411, G459.",
+      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); cache keys, the reference memo store, body versions and restamping built (G105); the rest by pieces G94, G95, G96, G108, G112, G175, G318, G405, G410, G411, G459.",
       "summary": "Spare Kit geometry kernel: the native file format."
     },
     {
@@ -3351,6 +3371,28 @@
       "kind": "development",
       "layer": "Development",
       "modules": [
+        {
+          "cost": "at most [`MAX_ROWS`] rows per arena and [`MAX_EDITS`] edits: a few hundred column writes and one publish per version; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a row count for each of the eleven arenas, a value for every link of every row (inside its arena, at its end, far past it, or absent where the link may be), a column that is one row longer or shorter than its arena, the outside region, and edits to make to a published body. [`check`] fills the arenas, publishes them, and compares the answer with an independent reading of `geom-topo`'s rules (the length of every column, then every link in the order of `Link::ALL`, then the outside region): the same body or the same first fault. When the body publishes, it checks that every index it holds is inside its arenas, that an edit starting from it publishes the same body, and that the edits leave the first version unchanged. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/arenas.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each link is read through a rule byte that makes the boundaries common: the last row, the first row past the end, `u32::MAX − 1`, or absent.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-topo`'s arenas publish exactly the bodies their rules allow, and a body's versions never see each other's edits.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "differential testing against an independent reading of chapter 8.2's rules as `geom-topo`'s `builder` module states them (`projects/engines/geometry/architecture/08-topology.md`), written here from the rules, not from the code: lengths per arena from region to edge, then the links in their published order, rows ascending, then the outside region."
+          },
+          "path": "geom_fuzz::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "at most [`MAX_OPS`] calls on a store of at most [`MAX_KEYS`] entries, each checked against a list of at most as many; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a byte bound and up to [`MAX_OPS`] calls on one store (insert an entry of some size whose run used some work, get under some work budget, forget), each on a key from a small alphabet so that keys repeat. [`check`] runs the calls on a `MemoStore` and, beside it, on a list kept in order of use, written here from chapter 23.8's rule; after every call it compares the answer, the keys in order of use, the bytes held and the count. [`check_with`] takes the rule that picks the entry to forget, so a test shows a wrong rule is caught. [`harness`] is `decode` then `check`.",
