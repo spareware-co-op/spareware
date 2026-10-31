@@ -15,6 +15,7 @@ use core::cmp::Ordering;
 
 use geom_num::grid::COORD_MAX;
 use geom_num::plane::{Plane, Tpi};
+use geom_num::step::Step;
 use geom_num::{NumError, P3, Sign};
 use geom_poly::order::{
     Flap, Line, Ray, about, along, around, normals_det, same_point, turn, turn_about,
