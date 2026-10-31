@@ -12,6 +12,8 @@ geom-num = { path = "../geom-num" }
 # The native format, for fixtures' operation logs (src/fixture, piece G97): a log is a standalone
 # `.skgf` file of operation records, so a fixture is held to the format's own rules.
 geom-format = { path = "../geom-format" }
+# The curves the first outside oracle is compared with (src/oracle/geomdl.rs, piece G113).
+geom-nurbs = { path = "../geom-nurbs" }
 geom-run = { path = "../geom-run" }
 # The operation contract, for the history-law kit (src/history.rs, piece G88): the kit checks
 # histories through geom-op's own checker, so every operation's tests use the same laws.
@@ -99,10 +101,6 @@ unicode-normalization = "0.1.26"
 num-rational = "0.4.2"
 # The workflow test reads `.github/workflows/kernel-quality.yml` as YAML (G21). MIT OR Apache-2.0.
 yaml-rust2 = { version = "0.13.0", default-features = false }
-# The kernel crates the NURBS reference is compared with on every pull request (G57,
-# tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
-# MPL-2.0; development dependencies, so no kernel crate comes to depend on this one.
-geom-nurbs = { path = "../geom-nurbs" }
 
 [lints.rust]
 unsafe_code = "forbid"

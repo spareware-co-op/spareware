@@ -213,6 +213,11 @@ jobs:
       - name: Every fixture holds its rules
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin fixture -- check
+      # The oracle catalogue and the triage register (28.10; piece G113): each holds its rules, and
+      # Cargo.lock holds no package an out-of-process oracle would bring in.
+      - name: No oracle is linked
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --bin oracle -- check
       - name: The fast fixtures pass
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin fixture -- run --tier fast
