@@ -2316,6 +2316,29 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/boxtree.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Coordinates are small whole numbers most of the time, so boxes touch, nest and coincide often, with the frame's far reaches through a rule byte; keys are distinct. A tree or index `geom-bvh` refuses to build is legal.",
+            "**A panic is a failure; a different answer is a [`Finding`].**",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units, serially.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below."
+          ],
+          "job": "Fuzz target: the box tree and the cell index answer every query as brute force does, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "the queries' definitions in chapter 19 (closed boxes meet when they meet on every axis; Euclidean distance at most r, compared as squared integers; `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`), checked by all-pairs brute force as 28.3's row for spatial queries asks, driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::boxtree",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.44).",
           "family": [],

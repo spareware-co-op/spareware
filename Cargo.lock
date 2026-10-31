@@ -979,6 +979,7 @@ dependencies = [
  "bolero",
  "dashu-ratio",
  "geom-bench",
+ "geom-bvh",
  "geom-curve",
  "geom-gen",
  "geom-math",
