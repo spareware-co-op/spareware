@@ -360,7 +360,10 @@ fn an_image_strays_from_its_ideal_as_far_as_the_plane_it_came_from() {
             image.deviation
         );
         for (q, was) in moved.iter().zip(&extent) {
-            assert_eq!(image.plane.side(*q).unwrap(), base.plane.side(*was).unwrap());
+            assert_eq!(
+                image.plane.side(*q).unwrap(),
+                base.plane.side(*was).unwrap()
+            );
         }
     }
 }
