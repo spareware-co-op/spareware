@@ -49,7 +49,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 5] = [
+const TARGETS: [(&str, Harness); 6] = [
     ("arenas", arenas::harness),
     ("cbor", cbor::harness),
     ("orient2d", orient2d::harness),

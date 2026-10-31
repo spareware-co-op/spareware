@@ -223,11 +223,11 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-fuzz --
-          cargo kani --tests -p geom-fuzz --harness orient2d_fuzz --exact
+          cargo kani --tests -p geom-fuzz -Z stubbing --harness orient2d_fuzz --exact
       - name: Prove ${{ matrix.harness }}
         run: |
           start=$(date +%s)
-          cargo kani --tests -p geom-fuzz --harness "${{ matrix.harness }}" --exact
+          cargo kani --tests -p geom-fuzz -Z stubbing --harness "${{ matrix.harness }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
@@ -362,7 +362,8 @@ jobs:
   # Kani's overflow, bounds and panic checks on; -Z stubbing lets the operators' proofs stand in for
   # the geometry pools, which no operator reads. geom-topo's tests/kani_harnesses.rs holds this list
   # to the harnesses in the source. The budget is kani-num's; an operators' proof takes about 15
-  # minutes and under 12 GB on a development machine.
+  # minutes on a development machine, and --no-assertion-reach-checks leaves out a solve and a trace
+  # for every assertion, which ran a runner out of memory.
   kani-topo:
     name: Kani, geom-topo (${{ matrix.proof }})
     runs-on: ubuntu-latest
@@ -406,11 +407,11 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-topo --
-          cargo kani -p geom-topo -Z stubbing --harness ix::proofs::every_row_round_trips --exact
+          cargo kani -p geom-topo -Z stubbing --no-assertion-reach-checks --harness ix::proofs::every_row_round_trips --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
-          cargo kani -p geom-topo -Z stubbing --harness "${{ matrix.proof }}" --exact
+          cargo kani -p geom-topo -Z stubbing --no-assertion-reach-checks --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
