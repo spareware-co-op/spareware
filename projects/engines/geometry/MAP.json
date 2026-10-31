@@ -6535,7 +6535,7 @@
           "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
           "kinds": [
             {
-              "doc": "The numbers layer refused: a side parallel to the face, or two adjacent sides on one line.",
+              "doc": "The numbers layer refused: a side parallel to the face, two adjacent sides on one line, or rings that leave a piece without an end.",
               "name": "Num",
               "shape": "tuple"
             },
@@ -6598,7 +6598,7 @@
             "**A partition of the face.** The pieces are convex, cover the face and overlap nowhere, each side of the partition being a half-plane of the cut (tested against exact areas).",
             "**The same pieces every time.** Pieces depend only on the planes and the order of the sides; nothing is hashed, and every decision is an exact predicate.",
             "**No recursion.** The tree is an explicit stack, so its depth never threatens a WebAssembly stack (principle 13).",
-            "**Refused, never guessed.** A side parallel to the face is `Degenerate`; so are two adjacent sides on one line, which leave a corner undefined. Merge such sides first: the corner they share is no corner."
+            "**Refused, never guessed.** A side parallel to the face is `Degenerate`; so are two adjacent sides on one line, which leave a corner undefined. Merge such sides first: the corner they share is no corner. So are rings that leave a piece without an end, such as a hole with no outline around it."
           ],
           "job": "Plane-based faces into convex polygons: the autopartition of 11.3, which lets a face with notches and holes enter the arrangement without one number growing.",
           "method": {
