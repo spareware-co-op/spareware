@@ -270,20 +270,23 @@ fn a_long_edge_on_an_integer_plane_is_judged_exactly() {
             "{w} {lean}: {:?}",
             exact.faults()
         );
-        // One end of a long edge a step off its faces: caught at bound 0, passed at a bound of 1.
-        let mut bent = r.clone();
+        // Either end of a long edge a step off its faces is caught at bound 0.
         let [start, end] = [points[0], points[1]];
+        let [sx, sy, sz] = start;
         let [ex, ey, ez] = end;
-        bent.curves[0] = line(start, [ex, ey, ez - 1]);
-        let faults = report(&bent, BodyKind::Solid, Exactness::Exact);
-        assert!(
-            faults
-                .faults()
-                .iter()
-                .any(|f| f.kind == FaultKind::EdgeOffSurface),
-            "{w} {lean}: {:?}",
-            faults.faults()
-        );
+        for bent_line in [line(start, [ex, ey, ez - 1]), line([sx, sy, sz - 1], end)] {
+            let mut bent = r.clone();
+            bent.curves[0] = bent_line;
+            let faults = report(&bent, BodyKind::Solid, Exactness::Exact);
+            assert!(
+                faults
+                    .faults()
+                    .iter()
+                    .any(|f| f.kind == FaultKind::EdgeOffSurface),
+                "{w} {lean}: {:?}",
+                faults.faults()
+            );
+        }
     }
 }
 
