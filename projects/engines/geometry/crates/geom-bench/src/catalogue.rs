@@ -554,6 +554,7 @@ pub fn prepare_named(name: &str) -> Option<Prepared> {
 /// `tests/coverage.rs` checks that each constant still refuses, so its entry cannot outlive it.
 #[rustfmt::skip]
 pub static UNMEASURED: &[(&str, &str)] = &[
+    ("plane::determinant", "the generated tpi_side, measured as generated/tpi_side"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),

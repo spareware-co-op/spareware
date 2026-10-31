@@ -906,6 +906,35 @@ fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     Some(side.mul(t.weight))
 }
 
+/// The sign of the 4 × 4 determinant of four planes' coefficients, rows in the order given and the
+/// offset last, which is n · X + d · w for the point where the first three meet, and is defined
+/// whether or not they meet in one point. Through the generated predicate: its filter, then its
+/// exact path (chapter 6.2).
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] if the exact path does not fit its certified types, which no planes
+/// within budget cause.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the four planes, as in the formulas above"
+)]
+pub fn determinant(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Result<Sign, NumError> {
+    let ([ax, ay, az], ad) = (p.n, p.d);
+    let ([bx, by, bz], bd) = (q.n, q.d);
+    let ([cx, cy, cz], cd) = (r.n, r.d);
+    let ([sx, sy, sz], sd) = (s.n, s.d);
+    generated::tpi_side::filter(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )
+    .or_else(|| {
+        generated::tpi_side::exact(
+            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+        )
+    })
+    .ok_or(NumError::BudgetExceeded)
+}
+
 /// The sign of n · X + d · w times the sign of w, in `Wide<L>`: [`I384`] on the budgeted path,
 /// [`I512`] on the total path. `None` if a step does not fit. Budgets for both on
 /// [`Plane::side_of_tpi`].
