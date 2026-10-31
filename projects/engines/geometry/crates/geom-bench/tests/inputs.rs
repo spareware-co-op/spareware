@@ -2375,3 +2375,16 @@ fn roots_typical_batches_all_succeed() {
         &m::gauss_legendre(Typical),
     );
 }
+
+/// Every typical batch of `geom-intersect`'s benchmarks (decision 32.44) orders every list and
+/// reads every key.
+#[test]
+fn intersect_typical_batches_all_succeed() {
+    use geom_bench::inputs::intersect as m;
+    use geom_bench::kernels::intersect as k;
+    all_ok("sort_items", k::sorted, &m::items(Typical));
+    all_ok("key_circle", k::keys, &m::circles(Typical));
+    all_ok("pair_lines", k::paired, &m::lines(Typical));
+    all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
+    all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
+}
