@@ -22,6 +22,7 @@ use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_curve::{Axes, Basis, CurveKind, Ellipse, Frame, Line, Trimmed};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::BudgetKind;
+use geom_surface::Cone;
 use geom_surface::{Extrusion, Plane, SurfaceKind, Torus};
 use geom_topo::BodyKind;
 
@@ -140,6 +141,16 @@ fn a_vertex_off_a_cylinder_sphere_or_torus_is_caught_exactly_at_the_bound() {
     dome.points[0] = P3::new(8, 0, 0).unwrap();
     let mut torus = ring_torus();
     torus.points[0] = P3::new(16, 0, 0).unwrap();
+    // Off the bottom circle's start, where the vertex was, by the same 3 steps.
+    let mut lifted = seamed_cylinder();
+    lifted.points[0] = P3::new(8, 0, 0).unwrap();
+    let two = at(&lifted, 2);
+    assert!(
+        two.contains(
+            &Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(ix(0))).with(Entity::Edge(ix(0)))
+        ),
+        "{two:?}"
+    );
     for (name, rows, face) in [
         ("cylinder", cylinder, 2),
         ("hemisphere", dome, 1),
@@ -194,6 +205,29 @@ fn an_edge_off_its_face_is_caught() {
     r.curves[1] = round([0.0, 0.0, 3.0], 5.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
     assert!(edge_off(&at(&r, 2), 1, 1));
     assert!(!edge_off(&at(&r, 3), 1, 1));
+    // A circle of radius 30 about a wide cone's axis, tilted so that its normal is (4, 0, 3) / 5:
+    // its lowest point, 24 steps down and 18 from the axis, is 54 steps inside the cone's radius
+    // there, about 48 steps from the cone. The bound must cover the whole height the circle
+    // spans, not only its top, where it is about 40 steps from the cone.
+    let mut r = common::bare_cone();
+    r.surfaces[1] = SurfaceKind::Cone(
+        Cone::new(
+            [0.0; 3],
+            60.0,
+            -0.5,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 120.0)),
+        )
+        .unwrap(),
+    );
+    r.curves[0] = round([0.0; 3], 30.0, [1.0, 0.0, 0.0], [4.0, 0.0, 3.0]);
+    assert!(edge_off(&at(&r, 45), 0, 1));
+    // A line from a corner on the bottom face's plane to a point 5 steps above it: its start is
+    // on the plane, its end is not.
+    let mut r = cube();
+    r.curves[0] = CurveKind::Line(Line::new([0.0; 3], [0.0, 10.0, 5.0], (0.0, 1.0)).unwrap());
+    let faults = at(&r, 1);
+    assert!(edge_off(&faults, 0, 0), "{faults:?}");
     // A line can lie on neither a sphere nor a torus.
     let mut r = ring_torus();
     r.curves[1] = line([13, 0, 0], [13, 0, 0]);
@@ -264,6 +298,22 @@ fn carriers_without_a_certified_check_are_reported_never_passed() {
         Torus::new(
             [0.0; 3],
             2.0,
+            3.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 2.0)),
+        )
+        .unwrap(),
+    );
+    only(
+        &r,
+        Fault::at(FaultKind::Unchecked, Entity::Surface(ix(0))).with(Entity::Face(ix(0))),
+    );
+    // A horn torus, its two radii equal.
+    let mut r = ring_torus();
+    r.surfaces[0] = SurfaceKind::Torus(
+        Torus::new(
+            [0.0; 3],
+            3.0,
             3.0,
             Frame::standard().unwrap(),
             ((0.0, 2.0), (0.0, 2.0)),

@@ -170,6 +170,30 @@ fn faces_that_cross_or_touch_are_caught() {
 }
 
 #[test]
+fn simple_polygons_pass_in_planes_of_every_slope() {
+    // A polygon whose side from (0, 0) to (10, 0) has both ends on either side of the line of the
+    // side from (5, 5) to (5, 1), which stops short of it: they do not meet. On the plane
+    // z = x + y every coordinate projection is one to one.
+    let slanted = sheet(
+        &[[0, 0, 0], [10, 0, 10], [10, 10, 20], [5, 5, 10], [5, 1, 6]],
+        &[&[0, 1, 2, 3, 4]],
+    );
+    // A quadrilateral whose diagonal side from (0, 0) to (10, 10) and side from (0, 10) to (4, 6)
+    // do not meet, in the planes y = 0 and x = 0, where two coordinate projections are lines on
+    // which they overlap.
+    let upright = |to: fn([i64; 2]) -> [i64; 3]| {
+        let points = [[0, 0], [10, 10], [4, 6], [0, 10]].map(to);
+        sheet(&points, &[&[0, 1, 2, 3]])
+    };
+    let in_y = upright(|[a, b]| [a, 0, b]);
+    let in_x = upright(|[a, b]| [0, a, b]);
+    for (name, r) in [("slanted", slanted), ("y = 0", in_y), ("x = 0", in_x)] {
+        let report = report(&r, BodyKind::Sheet, Exactness::Exact);
+        assert!(report.passed(), "{name}: {:?}", report.faults());
+    }
+}
+
+#[test]
 fn faces_whose_planes_cross_but_which_do_not_meet_pass() {
     // A square in z = 0, and one in x = 5 beyond it in y: each crosses the other's plane outside
     // the other.
@@ -278,6 +302,36 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
             Entity::Face(ix(1))
         )]
     );
+    // Two squares on parallel planes z = 0 and z = 5 given by doubles whose normal is not one: the
+    // product of their spanning vectors is enclosed, not known, so the planes are not certified
+    // parallel and not certified crossing.
+    let mut r = sheets(&[
+        &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
+        &[[0, 0, 5], [10, 0, 5], [10, 10, 5], [0, 10, 5]],
+    ]);
+    for (s, z) in [(0, 0.0), (1, 5.0)] {
+        r.surfaces[s] = SurfaceKind::Plane(
+            Plane::new(
+                [0.0, 0.0, z],
+                [0.1, 0.0, 0.0],
+                [0.0, 0.1, 0.0],
+                ((0.0, 1.0), (0.0, 1.0)),
+            )
+            .unwrap(),
+        );
+    }
+    assert_eq!(
+        at(&r, BodyKind::General, 1),
+        [fault(
+            FaultKind::PairUnchecked,
+            Entity::Face(ix(0)),
+            Entity::Face(ix(1))
+        )]
+    );
+    // A hole touching the square's sides: a line at exactly its radius is not certified apart.
+    let mut r = holed_sheet();
+    r.curves[4] = round([5.0, 5.0, 0.0], 5.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    unchecked(&r, BodyKind::Sheet, 1);
     // A side of one square lying in the other's plane, on their planes' line, but not an edge of
     // both.
     let r = sheets(&[
@@ -313,8 +367,13 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
     );
     unchecked(&r, BodyKind::Solid, 1);
     // A capsule: a cylinder's side meets a dome, two curved faces, and the bottom cap and the
-    // dome share no edge.
+    // dome share no edge (the bottom circle has fins on the cap and the side, not the dome).
     unchecked(&capsule(), BodyKind::Solid, 1);
+    assert!(at(&capsule(), BodyKind::Solid, 1).contains(&fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(2))
+    )));
     // A torus whose two seams are closed circles without vertices, in crossing planes.
     unchecked(&loose_seams(), BodyKind::Solid, 1);
     // A face holding a circle and a line edge without vertices.
@@ -459,6 +518,9 @@ fn circles_of_one_face_are_separated_where_certified() {
         r
     };
     assert_eq!(at(&ring([0.0; 3]), BodyKind::Sheet, 1), []);
+    // The hole moved until it touches the rim from inside: not certified apart.
+    let faults = at(&ring([3.0, 0.0, 0.0]), BodyKind::Sheet, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
     // The hole moved across the rim.
     let faults = at(&ring([4.0, 0.0, 0.0]), BodyKind::Sheet, 1);
     assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");

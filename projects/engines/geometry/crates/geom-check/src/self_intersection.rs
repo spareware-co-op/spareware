@@ -211,22 +211,23 @@ fn segments_meet(first: [End; 2], second: [End; 2]) -> Meet {
     let shared = [(p, q, r, s), (p, q, s, r), (q, p, r, s), (q, p, s, r)]
         .into_iter()
         .find(|(v, _, w, _)| v.vertex == w.vertex);
+    // Two edges between the same two vertices have their other ends at one point too, so they
+    // run along each other: `fold_back` says so.
     match shared {
-        // Both ends shared: two edges between the same two vertices run along each other.
-        Some((_, x, _, y)) if x.vertex == y.vertex => Meet::Cross,
         Some((v, x, _, y)) => fold_back(v.at, x.at, y.at),
         None => cross_3d([p.at, q.at], [r.at, s.at]),
     }
 }
 
 /// Whether segments from `v` to `x` and from `v` to `y` run along each other: `Cross` if their
-/// directions are parallel and point the same way.
+/// directions are parallel and point the same way. (Both are segments of positive length, so
+/// parallel directions have a dot product that is not zero.)
 fn fold_back(v: P3, x: P3, y: P3) -> Meet {
     let found = || {
         let (u, w) = (diff(x, v)?, diff(y, v)?);
         let turn = cross(u, w)?;
         let along = dot(u, w)?;
-        Some(turn == [0; 3] && along > 0)
+        Some(turn == [0; 3] && along.is_positive())
     };
     found().map_or(Meet::Unknown, cross_if)
 }
