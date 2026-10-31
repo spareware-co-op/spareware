@@ -26,6 +26,28 @@ geom-sketch = { path = "../geom-sketch" }
 geom-subd = { path = "../geom-subd" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
+# CRC-32C (Castagnoli), every record's check (24.2): the `crc` crate, MIT OR Apache-2.0,
+# no_std and forbid(unsafe_code), with its catalogue crc-catalog. On the vetted allow-list in
+# deny-no-std.toml, with its audit (projects/kit/notes/G92-crc-audit.md).
+crc = "3.4.0"
+
+[dev-dependencies]
+# Property tests only, never linked into the kernel. MIT OR Apache-2.0. Without its default fork and
+# timeout features, so the tests also run on wasm32-wasip1.
+proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
+# The tests' seeded generator and seed printing (geom_test::rng and geom_test::seed).
+geom-test = { path = "../geom-test" }
+# Reads the cbor2 cross-check vectors, tests/cbor2/vectors.jsonl (MIT OR Apache-2.0).
+serde_json = "1.0.154"
+
+[[bench]]
+name = "cbor"
+harness = false
+
+# The record layer's benchmarks (piece G92), with the standard library's clock only.
+[[bench]]
+name = "records"
+harness = false
 
 [lints.rust]
 unsafe_code = "forbid"

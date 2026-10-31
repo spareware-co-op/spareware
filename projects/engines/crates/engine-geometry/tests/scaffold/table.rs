@@ -268,7 +268,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-run",       1, Amended27, Elsewhere("G04"), ""),
     kernel("geom-num",       1, Accepted,   Elsewhere("G02"), "run"),
     kernel("geom-linalg",    1, Amended27, Elsewhere("G49"), "num"),
-    kernel("geom-op",        1, Amended27, Here, "run num"),
+    kernel("geom-op",        1, Amended27, Elsewhere("G86"), "run num"),
     // 2. Geometry.
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
     kernel("geom-bvh",       2, Amended27, Elsewhere("G54"), "run num math"),
@@ -328,7 +328,7 @@ const ROWS: &[Row<'static>] = &[
     // 12. Format and exchange. geom-format's "everything stored" is section 24.4's list; the
     // format crates' "kinds they map" are section 24.11's; p21, exchange and heal carry chapter
     // 30.5's amendments.
-    kernel("geom-format",   12, Accepted,   Here,
+    kernel("geom-format",   12, Accepted,   Elsewhere("G91"),
         "base math curve surface topo poly name mesh subd field 2d cloud draw sketch"),
     kernel("geom-exchange", 12, Amended27, Here,
         "base math curve surface topo format p21 intersect check"),
@@ -413,11 +413,18 @@ const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
 /// Layer line, the last gap.
 const HEADER_GAPS: &[HeaderGap<'static>] = &[];
 
-/// Inside kernel crates the only published crate used as it is, is `libm` (29.1), and every maths
-/// function reaches the kernel through `geom_num::math` (21), so only `geom-num` names it. The
-/// `std` crates (`geom-pool`, with rayon, and the facade) and the development crates are left to
-/// the merge gate's dependency rules (G12).
-const REGISTRY: &[(&str, &str)] = &[("num", "libm")];
+/// Inside kernel crates the published crates used as they are, are `libm` (29.1) and `sha2`
+/// (owner action G79, 32.20). Every maths function reaches the kernel through `geom_num::math`
+/// (21), so only `geom-num` names `libm`; SHA-256 hashes names in `geom-op` and content in
+/// `geom-format`, so those two name `sha2` (32.20); records' CRC-32C is `geom-format`'s, so it
+/// alone names `crc` (24.2, piece G92). The `std` crates (`geom-pool`, with rayon, and
+/// the facade) and the development crates are left to the merge gate's dependency rules (G12).
+const REGISTRY: &[(&str, &str)] = &[
+    ("num", "libm"),
+    ("op", "sha2"),
+    ("format", "sha2"),
+    ("format", "crc"),
+];
 
 /// The kernel's one lint posture is `geom-num`'s: the numbers layer set it first, with chapter 21's
 /// disallowed methods and types and chapter 27's denials, and every crate that ships is built with
