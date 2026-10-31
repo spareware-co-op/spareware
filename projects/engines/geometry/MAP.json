@@ -257,12 +257,12 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
           "guarantees": [
-            "**Exact, for every count.** Every limit is tested in integers ([`Change::rose_over`]): 100 · head > (100 + p) · base, and a count resolves p% exactly when it is at least ⌈100 / p⌉. Percentages are computed, as floating point, for display only.",
+            "**Exact, for every count.** Every limit is tested in integers ([`Change::rose_over`]): 100 · head > (100 + p) · base. Percentages are computed, as floating point, for display only.",
             "**Every benchmark judged, or no verdict.** Every benchmark the run lists has exactly one summary, every summary is a benchmark the run lists and of the schema version the gate's Gungraun writes, and every summary carries a whole count for each of the eight judged measures, from the pull request and, for a benchmark the merge base has, from the merge base; anything else is an error, never a pass.",
             "**Deterministic reports.** Benchmarks are judged and reported in name order, and measures in the order of [`JUDGED`], the same on every run and every platform.",
             "**Totality.** No input makes [`parse_summary`], [`judge`] or [`read_summaries`] panic."
           ],
-          "job": "The instruction-and-cache gate's verdict, read from Gungraun's machine-readable summaries: instructions and estimated cycles are gated at the gate's percentage on every benchmark, and each L1 and last-level miss count is gated at that percentage only where its merge-base count can resolve it; a smaller miss count is listed and judged through estimated cycles.",
+          "job": "The instruction-and-cache gate's verdict, read from Gungraun's machine-readable summaries: instructions and estimated cycles are gated at the gate's percentage on every benchmark, and every L1 and last-level miss count is listed when it changes and judged through estimated cycles.",
           "method": {
             "links": [
               "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358",
@@ -270,7 +270,7 @@
               "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126",
               "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md"
             ],
-            "text": "the summary files Gungraun writes with `--save-summary`, one per benchmark in its output folder (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358>), read through Gungraun's own typed summary model (`gungraun_runner::summary::model`, schema version 7, <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29>; the `summary` feature of the `gungraun-runner` crate at exactly the version the gate runs) and `serde_json`; estimated cycles as Gungraun computes them (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126>); the percentage limit of Gungraun's soft limits (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>), applied exactly; the resolution floor is ours, derived above, because no source sets a floor for a percentage limit on small counts."
+            "text": "the summary files Gungraun writes with `--save-summary`, one per benchmark in its output folder (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358>), read through Gungraun's own typed summary model (`gungraun_runner::summary::model`, schema version 7, <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29>; the `summary` feature of the `gungraun-runner` crate at exactly the version the gate runs) and `serde_json`; estimated cycles as Gungraun computes them (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126>); the percentage limit of Gungraun's soft limits (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>), applied exactly to instructions and estimated cycles; judging the miss counts through estimated cycles alone is the kernel owners' decision, from the evidence above (23.13)."
           },
           "path": "geom_bench::callgrind",
           "provenance": [
