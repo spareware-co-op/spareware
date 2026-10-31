@@ -20,8 +20,8 @@
 //! Two modes:
 //!
 //! - [`Mode::Diff`], on a pull request (`cargo mutants --in-diff`): only the mutants in the diff
-//!   ran. A ledger entry those mutants match must not match more of them than it counts, and must
-//!   not match a mutant that is now caught (the entry is stale: remove it). A survivor may be kept
+//!   ran. A ledger entry those mutants match must not match more survivors than it counts, and if
+//!   every mutant it matches is now caught or unviable, it is stale: remove it. A survivor may be kept
 //!   as `known` only by an entry the base branch's ledger already holds (`base`): a `known` entry
 //!   is an old gap the weekly run found, so a pull request that adds one for a survivor it made
 //!   would merge a new unexplained survivor, which 28.8 forbids. A ledger-only pull request may
@@ -41,6 +41,14 @@
 //! In both modes every entry's file must exist and hold its `line_text` on some line, and every
 //! entry's kind must be allowed where its file is.
 //!
+//! A key (file, mutant, line text) cannot tell apart two places on one line where cargo-mutants
+//! makes the same change. In sincospi.rs's
+//! `let p = x2 * ((C[0] + x2 * C[1]) + x4 * (C[2] + x2 * C[3]));` all four `*` become
+//! `replace * with / in cospi`, one key: two of those mutants are caught and two are equivalent.
+//! So a caught or unviable mutant beside surviving key-mates is not a sign of a stale entry: the
+//! entry explains the survivors, and `occurrences` counts exactly those. An entry is stale only
+//! when no mutant of its key survives (owner decision of 2026-10-31, 28.8).
+//!
 //! What makes a run whole ([`read_run`]): `mutants.json` lists the mutants the run was given;
 //! `outcomes.json` must then exist (cargo-mutants writes none when it was given no mutants), hold
 //! a passing baseline, have an end time (written only when the run finished), give every listed
@@ -56,8 +64,8 @@
 //!   error at a source location; any other failed build fails the gate.
 //! - **28.8's rules, exactly.** In the foundation set a missed mutant passes only as `equivalent`;
 //!   elsewhere also as `harmless`, or as `known` when the base branch's ledger already kept it; a
-//!   timeout only as `hangs`. A ledger entry that matches more mutants than it counts, or a caught
-//!   or unviable one, or (in the full run) fewer, fails as stale.
+//!   timeout only as `hangs`. A ledger entry that matches more survivors than it counts, or (in the
+//!   full run) fewer, fails; one whose matched mutants are all caught or unviable fails as stale.
 //! - **Reasons follow the code.** Entries are keyed by the mutated line's text, so editing that
 //!   line puts the mutant before the gate again.
 //!
@@ -549,7 +557,9 @@ fn line_of(
 /// Whether the ledger's `kind` may keep a mutant with `outcome` in `set`.
 fn allowed(kind: Kind, outcome: Outcome, set: Set) -> bool {
     match (kind, outcome) {
-        (Kind::Hangs, Outcome::Timeout) | (Kind::Equivalent, Outcome::Missed) => true,
+        (Kind::Hangs, Outcome::Timeout) | (Kind::Equivalent | Kind::Proved, Outcome::Missed) => {
+            true
+        }
         (Kind::Harmless | Kind::Known, Outcome::Missed) => set == Set::Elsewhere,
         _ => false,
     }
@@ -575,8 +585,10 @@ fn check_entries(ledger: &Ledger, repo: &Path, failures: &mut Vec<String>) {
                 s.file
             )),
         }
-        let present = std::fs::read_to_string(repo.join(&s.file))
-            .is_ok_and(|t| t.lines().any(|l| l.trim() == s.line_text));
+        let text = std::fs::read_to_string(repo.join(&s.file)).ok();
+        let present = text
+            .as_ref()
+            .is_some_and(|t| t.lines().any(|l| l.trim() == s.line_text));
         if !present {
             failures.push(format!(
                 "ledger: {} has no line {:?} (for {}): the code changed, so judge the mutant again \
@@ -584,7 +596,34 @@ fn check_entries(ledger: &Ledger, repo: &Path, failures: &mut Vec<String>) {
                 s.file, s.line_text, s.mutant
             ));
         }
+        if let Some(proof) = &s.proof {
+            let name = proof.rsplit_once("::").map_or(proof.as_str(), |(_, n)| n);
+            if !text.as_ref().is_some_and(|t| is_harness(t, name)) {
+                failures.push(format!(
+                    "ledger: {} in {} is kept as proved by {proof}, but that file has no \
+                     #[kani::proof] function {name}",
+                    s.mutant, s.file
+                ));
+            }
+        }
     }
+}
+
+/// Whether `text` has a function `name` marked `#[kani::proof]` (other attributes may stand
+/// between the two).
+fn is_harness(text: &str, name: &str) -> bool {
+    let head = format!("fn {name}(");
+    let mut marked = false;
+    for line in text.lines().map(str::trim) {
+        if line == "#[kani::proof]" {
+            marked = true;
+        } else if marked && line.starts_with(&head) {
+            return true;
+        } else if !line.starts_with("#[") {
+            marked = false;
+        }
+    }
+    false
 }
 
 /// Every mutant of every run once, with its key; shards that overlap and lines that cannot be
@@ -661,10 +700,13 @@ struct Rules<'l> {
 }
 
 /// Judges one mutant: updates its tally, records a failure, and counts the ledger entry it uses.
+/// A caught or unviable mutant that an entry's key matches goes to `stale`, which [`judge`] fails
+/// only when no mutant of that key survives (see the module documentation).
 fn judge_one(
     j: &Judged,
     rules: &Rules<'_>,
     matched: &mut BTreeMap<Key, u64>,
+    stale: &mut Vec<(Key, String)>,
     verdict: &mut Verdict,
 ) {
     let Place::Kernel { krate, set } = &j.place else {
@@ -750,10 +792,14 @@ fn judge_one(
         }
     };
     if let Some((s, now)) = failure {
-        verdict.failures.push(format!(
-            "{}: the ledger keeps it as {}, but it is now {now}: remove the stale entry",
-            j.mutant.name,
-            s.kind.name()
+        stale.push((
+            j.key.clone(),
+            format!(
+                "{}: the ledger keeps it as {}, but it is now {now} and no mutant of its key \
+                 survives: remove the stale entry",
+                j.mutant.name,
+                s.kind.name()
+            ),
         ));
     }
 }
@@ -799,8 +845,15 @@ pub fn judge(
             .unwrap_or_default(),
     };
     let mut matched: BTreeMap<Key, u64> = BTreeMap::new();
+    let mut stale = Vec::new();
     for j in &judged {
-        judge_one(j, &rules, &mut matched, &mut verdict);
+        judge_one(j, &rules, &mut matched, &mut stale, &mut verdict);
+    }
+    // A caught key-mate beside a survivor the entry explains is not stale.
+    for (key, why) in stale {
+        if matched.get(&key).copied().unwrap_or(0) == 0 {
+            verdict.failures.push(why);
+        }
     }
     for s in &ledger.survivors {
         if mode == Mode::Full && files.is_some_and(|re| !re.is_match(&s.file)) {
@@ -1104,5 +1157,18 @@ mod tests {
         assert!(!allowed(Kind::Hangs, Outcome::Missed, Set::Elsewhere));
         assert!(!allowed(Kind::Equivalent, Outcome::Timeout, Set::Elsewhere));
         assert!(allowed(Kind::Known, Outcome::Missed, Set::Elsewhere));
+        assert!(allowed(Kind::Proved, Outcome::Missed, Set::Foundation));
+        assert!(!allowed(Kind::Proved, Outcome::Timeout, Set::Foundation));
+    }
+
+    #[test]
+    fn a_proof_must_be_a_harness_of_its_file() {
+        let text = "fn f() {}\n#[kani::proof]\n#[kani::unwind(3)]\nfn f_is_exact() {}\n";
+        assert!(is_harness(text, "f_is_exact"));
+        assert!(!is_harness(text, "f"));
+        assert!(!is_harness(
+            "#[kani::proof]\nconst X: u8 = 0;\nfn g() {}\n",
+            "g"
+        ));
     }
 }
