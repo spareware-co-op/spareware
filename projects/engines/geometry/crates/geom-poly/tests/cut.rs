@@ -135,6 +135,23 @@ fn a_cut_past_a_triangles_first_corner_keeps_the_quadrilateral_in_turn() {
 }
 
 #[test]
+fn a_cut_gives_the_same_parts_from_any_first_bound() {
+    let base = vec![Plane::new([-1, -1, 0], 4).unwrap(), up(0, 0), up(1, 0)];
+    for start in 0..3 {
+        let mut bounds = base.clone();
+        bounds.rotate_left(start);
+        let triangle = Piece {
+            face: up(2, 0),
+            bounds,
+        };
+        let (front, back) = split(&triangle, &up(0, 1));
+        assert_eq!((doubled_area(&front), doubled_area(&back)), (9, 7));
+        let (front, back) = split(&triangle, &down(0, 1));
+        assert_eq!((doubled_area(&front), doubled_area(&back)), (7, 9));
+    }
+}
+
+#[test]
 fn a_plane_that_only_touches_leaves_the_piece_whole() {
     let piece = rect(2, 0, (0, 4), (0, 4));
     assert_eq!(clip(&piece, &up(0, -1)), Ok(Clipped::Front));
@@ -218,6 +235,15 @@ fn a_polygon_nothing_crosses_stays_whole() {
     let cut = local_cuts(&[a.clone(), b], &mut meter()).unwrap();
     assert_eq!(cut[0], [a]);
     assert_eq!(cut[1].len(), 1);
+}
+
+#[test]
+fn a_polygon_beyond_the_edge_cuts_nothing_though_its_plane_passes_through() {
+    let a = rect(2, 0, (-4, 4), (-4, 4));
+    let b = rect(0, 0, (5, 7), (-2, 2));
+    let cut = local_cuts(&[a.clone(), b.clone()], &mut meter()).unwrap();
+    assert_eq!(cut[0], [a]);
+    assert_eq!(cut[1], [b]);
 }
 
 #[test]
