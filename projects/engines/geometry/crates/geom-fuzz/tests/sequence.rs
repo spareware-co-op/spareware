@@ -29,7 +29,7 @@ use geom_fuzz::make::{Motion, Shape, Step};
 use geom_fuzz::seeded;
 use geom_fuzz::sequence::{
     Case, Entry, Item, MANY_COPIES, MAX_INPUT_BYTES, MAX_OPERATIONS, check, decode, harness, judge,
-    reached,
+    reached, replay_line,
 };
 use geom_make::BoxInput;
 use geom_num::{Exactness, P3, Steps};
@@ -290,4 +290,27 @@ fn a_body_the_checker_fails_is_a_finding() {
         got.contains("every result passes the full checker"),
         "{got}"
     );
+}
+
+/// A replay line says what the log made: reference mode's comparison is only as strong as this.
+#[test]
+fn a_replay_line_follows_the_results() {
+    let mut rng = SplitMix64::new(geom_test::seed::fixed("replay lines", Seed::DEFAULT));
+    let mut lines = std::collections::BTreeSet::new();
+    let mut made = 0;
+    for _ in 0..200 {
+        let mut data = vec![0u8; 300];
+        rng.fill_bytes(&mut data);
+        let (case, _) = decode(&data);
+        // The same case gives the same line, and a line for every case that made something.
+        let line = replay_line(&case);
+        assert_eq!(line, replay_line(&case));
+        if let Some(line) = line {
+            assert!(!line.starts_with("broken"), "{line}");
+            lines.insert(line);
+            made += 1;
+        }
+    }
+    assert!(made > 100, "{made}");
+    assert!(lines.len() > 50, "{}", lines.len());
 }

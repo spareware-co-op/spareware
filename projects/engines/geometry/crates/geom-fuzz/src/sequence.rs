@@ -557,6 +557,25 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     reached(case).map(|_| ())
 }
 
+/// One line for reference mode's comparison (23.13; piece G106): the log's hash, which holds every
+/// operation's bodies, names and history, and the result's measures; `None` for a case with
+/// nothing to replay, or whose run breaks a law, which `check` reports.
+#[must_use]
+pub fn replay_line(case: &Case) -> Option<String> {
+    let done = run(case).ok()?;
+    if done.log.is_empty() {
+        return None;
+    }
+    let log = OpLog::new(Vec::new(), done.log);
+    match replay(&mut Kernel::new(), &log) {
+        Replayed::Done { hash, measures } => Some(format!("{} {measures:?}", String::from(hash))),
+        Replayed::Failed { hash, kind, .. } => {
+            Some(format!("{} {}", String::from(hash), kind.name()))
+        }
+        Replayed::Broken(why) => Some(format!("broken {why}")),
+    }
+}
+
 /// [`check`], and how many of the case's operations succeeded: what a test uses to show that a
 /// generator's cases get past their first step.
 ///
