@@ -26,7 +26,9 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today: [`classify`] (piece G147), where a point is against a closed mesh; [`cdt`] (piece G153), the kernel's one exact constrained Delaunay triangulation,
+//! Modules today: [`hull`], [`slice`] and [`export`] (piece G149), exact hulls, plane slices and
+//! writing at each format's precision; [`classify`] (piece G147), where a point is against a closed
+//! mesh; [`cdt`] (piece G153), the kernel's one exact constrained Delaunay triangulation,
 //! [`exact`] (piece G146), the exact mesh, its checker group and its mass properties, and
 //! [`contact`] (piece G151), exact contact and closest features of triangles, and [`envelope`]
 //! (piece G152), the polyhedral envelope with integer corners.
@@ -43,6 +45,7 @@ pub mod classify;
 pub mod contact;
 pub mod envelope;
 pub mod exact;
+pub mod export;
 pub mod hull;
 pub mod slice;
 

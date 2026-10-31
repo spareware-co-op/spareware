@@ -31,7 +31,7 @@ use geom_test::{Seed, SplitMix64};
 /// A closed solid of about 1,000,000 faces: a rough field of triangles above a flat base.
 fn field(rng: &mut SplitMix64) -> Polygons {
     let side = 501_u32;
-    let rough = NonZeroU64::new(1 << 14).unwrap();
+    let rough = NonZeroU64::new(1 << 6).unwrap();
     let mut vertices = Vec::new();
     for y in 0..side {
         for x in 0..side {

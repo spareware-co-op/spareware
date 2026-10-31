@@ -407,11 +407,11 @@ pub fn slice(
     let found: Result<Vec<Place>, RunError<MeshError>> =
         exec.try_map(meter, PLACES, PLAN, &parts.verts, |_, v, m| {
             m.charge(1)?;
-            Ok(place(parts, v, planes)?)
+            place(parts, v, planes)
         });
-    let places = found.map_err(MeshError::from)?;
+    let spots = found.map_err(MeshError::from)?;
     let face_of = faces_of(parts)?;
-    let (list, first) = crossings(parts, &places, planes.len(), meter)?;
+    let (list, first) = crossings(parts, &spots, planes.len(), meter)?;
     let numbered: Vec<u32> = (0..crate::exact::index(planes.len())?).collect();
     let out: Result<Vec<Vec<Contour>>, RunError<MeshError>> =
         exec.try_map(meter, LAYERS, ONE_LAYER, &numbered, |_, &layer, m| {
@@ -420,7 +420,7 @@ pub fn slice(
             let end = *first.get(row.saturating_add(1)).ok_or(MeshFault::Shape)?;
             let part = list.get(start..end).ok_or(MeshFault::Shape)?;
             let plane = planes.get(row).ok_or(MeshFault::Shape)?;
-            Ok(contours(parts, &places, &face_of, part, plane, layer, m)?)
+            contours(parts, &spots, &face_of, part, plane, layer, m)
         });
     out.map_err(MeshError::from)
 }

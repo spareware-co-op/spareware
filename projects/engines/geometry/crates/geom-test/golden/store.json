@@ -260,9 +260,15 @@
               "kind": "corpus",
               "piece": "G147",
               "why": "1 new count benchmark on point location (decision 32.44): mesh/locate; no existing digest moved"
+            },
+            {
+              "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull, mesh/slice; no existing digest moved"
             }
           ],
-          "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4"
+          "sha256": "4d43f15a70cff72d9ef166728206e0b96c604f99458c4739b86ee28327dc718f"
         },
         {
           "id": "geom-nurbs/operations",

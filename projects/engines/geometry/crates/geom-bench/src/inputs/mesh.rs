@@ -2,7 +2,8 @@
 //! scatter of survey points with breaklines across it; and a small height field, every face on its
 //! own plane, for the exact mesh's build and check.
 //!
-//! For point location (piece G147), that field closed into a solid, with points in its box. For
+//! For point location (piece G147), that field closed into a solid, with points in its box; for
+//! slicing (piece G149), that solid and level planes; for hulls, points of a lattice. For
 //! the distance comparisons of piece G151, grid points in a room a million steps across, each
 //! with a clearance of up to as much; for triangle contact, pairs of triangles in that room whose
 //! planes mostly cut each other.
@@ -28,6 +29,7 @@ use geom_mesh::exact::build::{Corner, Polygons, Source, build};
 use geom_mesh::exact::{ExactMesh, PropTable, Role};
 use geom_num::Exactness;
 use geom_num::grid::{P2, P3};
+use geom_num::plane::Plane;
 use geom_op::NameId;
 use geom_run::{Budget, Exec, WorkMeter};
 
@@ -48,6 +50,18 @@ pub const FACES: usize = 98;
 
 /// The points of one [`Probe`].
 pub const PROBES: usize = 64;
+
+/// The planes of one [`Layers`].
+pub const LAYERS: usize = 8;
+
+/// What `geom_mesh::slice::slice` takes.
+#[derive(Clone, Debug)]
+pub struct Layers {
+    /// A closed solid.
+    pub solid: ExactMesh,
+    /// Level planes, rising, across its top.
+    pub planes: Vec<Plane>,
+}
 
 /// What `geom_mesh::classify` takes.
 #[derive(Clone, Debug)]
@@ -225,6 +239,49 @@ pub fn locate(class: Class) -> Vec<Probe> {
             points.push(P3::new(x, y, within(&mut g, 8192)).ok()?);
         }
         Some(Probe { solid, points })
+    })
+}
+
+/// Points of a small lattice, many on one plane, for `geom_mesh::hull::Hull::of`.
+#[must_use]
+pub fn hull(class: Class) -> Vec<Vec<P3>> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::hull", class);
+    batch_of(|_| {
+        let mut points = Vec::with_capacity(PROBES);
+        for _ in 0..PROBES {
+            points.push(p3(
+                within(&mut g, 16),
+                within(&mut g, 16),
+                within(&mut g, 16),
+            ));
+        }
+        Some(points)
+    })
+}
+
+/// A closed solid and level planes across it for `geom_mesh::slice::slice`.
+#[must_use]
+pub fn slice(class: Class) -> Vec<Layers> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::slice", class);
+    batch_of(|_| {
+        let mut planes = Vec::with_capacity(LAYERS);
+        for k in 0..LAYERS {
+            let height = i128::try_from(k)
+                .ok()?
+                .saturating_mul(512)
+                .saturating_add(256);
+            planes.push(Plane::new([0, 0, 1], height.saturating_neg()).ok()?);
+        }
+        Some(Layers {
+            solid: solid(&mut g)?,
+            planes,
+        })
     })
 }
 

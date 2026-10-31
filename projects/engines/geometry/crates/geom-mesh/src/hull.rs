@@ -414,7 +414,7 @@ impl Quick<'_> {
 
     /// Runs the search: every point inside the faces, or a corner of them.
     fn run(&mut self, meter: &mut WorkMeter<'_>) -> Result<(), HullError> {
-        let mut pending: Vec<u32> = (0..4).collect();
+        let mut pending: Vec<u32> = (0_u32..4).collect();
         let mut marks = Vec::new();
         let mut round = 0_u32;
         while let Some(start) = pending.pop() {
@@ -443,6 +443,22 @@ fn plan_axes(n: [i128; 3]) -> ([usize; 2], bool) {
     }
 }
 
+/// The half of a monotone chain along `points`: the corners that turn left, without its last.
+fn chain(points: &[(i64, i64, u32, P2)]) -> Result<Vec<(u32, P2)>, HullError> {
+    let mut held: Vec<(u32, P2)> = Vec::new();
+    for &(_, _, c, p) in points {
+        while let [.., (_, a), (_, b)] = held.as_slice() {
+            if orient2d(*a, *b, p)? == Sign::Positive {
+                break;
+            }
+            held.pop();
+        }
+        held.push((c, p));
+    }
+    held.pop();
+    Ok(held)
+}
+
 /// The ring round `corners`, which lie on a plane with outward normal `n`: counter-clockwise from
 /// outside, with no three on a line.
 fn ring(points: &[P3], mut corners: Vec<u32>, n: [i128; 3]) -> Result<Vec<u32>, HullError> {
@@ -461,22 +477,9 @@ fn ring(points: &[P3], mut corners: Vec<u32>, n: [i128; 3]) -> Result<Vec<u32>, 
     }
     planned.sort_unstable_by_key(|&(x, y, c, _)| (x, y, c));
     planned.dedup_by_key(|&mut (_, _, c, _)| c);
-    let chain = |walk: &mut dyn Iterator<Item = &(i64, i64, u32, P2)>| -> Result<Vec<(u32, P2)>, HullError> {
-        let mut held: Vec<(u32, P2)> = Vec::new();
-        for &(_, _, c, p) in walk {
-            while let [.., (_, a), (_, b)] = held.as_slice() {
-                if orient2d(*a, *b, p)? == Sign::Positive {
-                    break;
-                }
-                held.pop();
-            }
-            held.push((c, p));
-        }
-        held.pop();
-        Ok(held)
-    };
-    let mut out = chain(&mut planned.iter())?;
-    out.append(&mut chain(&mut planned.iter().rev())?);
+    let mut out = chain(&planned)?;
+    planned.reverse();
+    out.append(&mut chain(&planned)?);
     let mut rung: Vec<u32> = out.into_iter().map(|(c, _)| c).collect();
     if !up {
         rung.reverse();
@@ -579,15 +582,24 @@ impl Hull {
             rings.retain(|((_, flipped), _)| !*flipped);
         }
         if rings.is_empty() {
-            let ends = [sorted.first(), sorted.last()];
-            let mut points: Vec<P3> = ends.into_iter().flatten().copied().collect();
-            points.dedup();
+            let mut points = Vec::with_capacity(2);
+            if let Some(first) = sorted.first() {
+                points.push(*first);
+            }
+            if let Some(last) = sorted.last()
+                && sorted.len() > 1
+            {
+                points.push(*last);
+            }
             return Ok(Self {
                 points,
                 faces: Vec::new(),
             });
         }
-        let mut used: Vec<u32> = rings.iter().flat_map(|(_, r)| r.iter().copied()).collect();
+        let mut used: Vec<u32> = Vec::new();
+        for (_, ring) in &rings {
+            used.extend_from_slice(ring);
+        }
         used.sort_unstable();
         used.dedup();
         let mut corners = Vec::with_capacity(used.len());

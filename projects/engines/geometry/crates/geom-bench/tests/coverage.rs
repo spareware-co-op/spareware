@@ -517,6 +517,8 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
             ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),
             ("classify", include_str!("../../geom-mesh/src/classify.rs")),
             ("contact", include_str!("../../geom-mesh/src/contact.rs")),
+            ("hull", include_str!("../../geom-mesh/src/hull.rs")),
+            ("slice", include_str!("../../geom-mesh/src/slice.rs")),
             ("envelope", include_str!("../../geom-mesh/src/envelope.rs")),
             (
                 "exact::build",
