@@ -224,7 +224,7 @@ fn a_log_replays_each_operation_on_the_body_before_it() {
         n,
     ]);
     let got = replay(&mut Kernel::new(), &whole);
-    let Replayed::Done { hash, measures } = &got else {
+    let Replayed::Done { hash, measures, .. } = &got else {
         panic!("{got:?}");
     };
     assert_eq!(measures.counts.bodies, 1);

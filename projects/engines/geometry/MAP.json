@@ -5699,7 +5699,7 @@
           "guarantees": [
             "**Names, not positions.** Every index of the body follows its entities' names, and every name comes from the operation's path, a role and the names it is relative to: never from the order the rows were written in (8.2, 20.2).",
             "**Checked before returned.** A body that does not pass the checker at the build's level is never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.",
-            "**Charged by what it builds.** One meter unit per row built ([`PER_ROW`]), before it is built (23.10), and the publishing and the checker charge their own rows to the same meter.",
+            "**Charged by what it builds.** One meter unit ([`PER_ROW`]) and 64 logical bytes per row built, before it is built (23.10), and the publishing charges its own rows to the same meter. The postcondition check runs on a meter of its own, cancellable and without a limit: its level differs between a test build and a shipped one, and a budget must stop an operation the same way in both.",
             "**Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation did not report, returns no body (`OpContext::run`)."
           ],
           "job": "Assembling what a Make or Transform operation returns: a body's rows, each entity named by its role, published in name order, checked, and the history that says where each entity came from.",
@@ -11295,7 +11295,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/fixture.rs",
           "guarantees": [
-            "only `improve` and `seeds` write a file, and `improve` only the fixture named. Exit codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file or command that cannot be read or run."
+            "only `improve`, `seeds` and `record` write files; `improve` and `record` only the fixture named. Exit codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file or command that cannot be read or run."
           ],
           "job": "`fixture`: the fixtures' tool: list them, check them, run them, hold a pull request to their rules, and carry out what a run asks for.",
           "method": {
@@ -11661,7 +11661,8 @@
           "guarantees": [
             "**An unknown operation is refused, never guessed**: a name or version not in the table, or parameters that are not its one writing, give [`Ran::Refused`], which no status accepts. So does an operation that names a body the log has not made.",
             "**No state survives [`Engine::start`]**: a fresh run begins from the log's own inputs.",
-            "**A body is its stored bytes.** A result's hash in the step is its content ID (24.2)."
+            "**A body is its stored bytes.** A result's hash in the step is its content ID (24.2).",
+            "**Counts are the kernel's own**: each operation's work and logical bytes come from its meter through `OpContext::with_tally`, the same charges that decide a budget (G98)."
           ],
           "job": "The kernel as a fixture's [`Engine`]: one operation record in, the operation's canonical parts out (chapter 28.16; pieces G97 and G116).",
           "method": {
@@ -11717,6 +11718,29 @@
             "text": "Zeller and Hildebrandt, \"Simplifying and Isolating Failure-Inducing Input\", IEEE TSE 28(2), 2002, for 1-minimality; chapter 28.16 for the units removed (`projects/engines/geometry/architecture/28-testing.md`). Written here: the units are this crate's, and the loop is shorter than any adapter to a delta-debugging crate."
           },
           "path": "geom_test::fixture::minimise",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one replay of every case.",
+          "does": "[`seeded`] draws a family's logs from [`SEED`]: `box` is one box of known size, `make` runs every primitive, `transform` builds a body and moves, mirrors and rotates it, and `budget` runs out of its work and of its logical memory, so a stop by a budget is held to one hash on every target. [`digest`] replays the corpus and hashes what it gave: each case's id, its hash and its two counts, in order. `tests/determinism.rs` holds that digest as the golden `geom-test/replay-corpus`, which `golden run` then carries through every target and build mode, the release build as shipped among them, whose checker runs only the cheap groups: one digest across the legs proves the checker changes nothing (28.4).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/replay.rs",
+          "guarantees": [
+            "**Fixed seeds.** The corpus is a pure function of [`SEED`] and the stored fixtures.",
+            "**Work and logical bytes are in the digest**, so a count that moves is a changed golden.",
+            "**Budget stops are errors like any other**: the two `budget` logs end in `BudgetExceeded`, and their hashes go into the digest.",
+            "**A broken case stops the corpus**, so a digest never hides one."
+          ],
+          "job": "The replay corpus: every fixture and a seeded operation log per family, the determinism matrix's input (chapters 21 and 28.13; piece G98).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.13's replay corpus and budgets (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::fixture::replay",
           "provenance": [],
           "spdx": null,
           "target": "lib"

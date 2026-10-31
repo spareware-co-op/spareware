@@ -13,12 +13,15 @@
 //!   does an operation that names a body the log has not made.
 //! - **No state survives [`Engine::start`]**: a fresh run begins from the log's own inputs.
 //! - **A body is its stored bytes.** A result's hash in the step is its content ID (24.2).
+//! - **Counts are the kernel's own**: each operation's work and logical bytes come from its meter
+//!   through `OpContext::with_tally`, the same charges that decide a budget (G98).
 //!
 //! Method: chapter 21's replay (`projects/engines/geometry/architecture/21-determinism.md`).
 //!
 //! Cost: one match per operation, plus the operation, plus one write of each result to hash it.
 
 use std::collections::BTreeMap;
+use std::sync::Mutex;
 
 use geom_format::body::write_body;
 use geom_format::content::ContentId;
@@ -28,13 +31,38 @@ use geom_format::record::Record;
 use geom_make::Made;
 use geom_num::Steps;
 use geom_op::history::Record as HistoryRecord;
-use geom_op::{Exactness, History, NameId, NameSet, OpContext};
-use geom_run::{Budget, WorkMeter};
+use geom_op::{Exactness, History, NameId, NameSet, OpContext, Tally};
+use geom_run::{Budget, BudgetKind, Usage, WorkMeter};
 use geom_topo::Body;
 
 use super::calls::Call;
 use super::run::{Engine, Ran, Step};
-use super::{Class, Counts, Measures};
+use super::{Class, Counts, Measures, Spend};
+
+/// What an operation charged, as its context reports it.
+#[derive(Debug, Default)]
+struct Spent(Mutex<Usage>);
+
+impl Tally for Spent {
+    fn add(&self, used: Usage) {
+        if let Ok(mut total) = self.0.lock() {
+            *total = total.plus(used);
+        }
+    }
+}
+
+impl Spent {
+    fn total(&self) -> Spend {
+        let wide = |n: u128| u64::try_from(n).unwrap_or(u64::MAX);
+        self.0.lock().map_or_else(
+            |_| Spend::default(),
+            |total| Spend {
+                work: wide(total.get(BudgetKind::Work)),
+                logical_bytes: wide(total.get(BudgetKind::LogicalBytes)),
+            },
+        )
+    }
+}
 
 /// The kernel, replaying a log.
 #[derive(Clone, Debug, Default)]
@@ -111,6 +139,7 @@ impl Kernel {
             history: Some(history),
             exactness,
             diagnostics,
+            work: Spend::default(),
         })
     }
 }
@@ -158,7 +187,8 @@ impl Engine for Kernel {
         if call.takes_a_body() != body.is_some() {
             return Ran::Refused("inputs its schema does not take".to_owned());
         }
-        let ctx = OpContext::new(operation.op.clone(), operation.budget);
+        let spent = Spent::default();
+        let ctx = OpContext::new(operation.op.clone(), operation.budget).with_tally(&spent);
         let Some(answer) = call.run(&ctx, body.as_ref()) else {
             return Ran::Refused("parameters no input can hold".to_owned());
         };
@@ -166,11 +196,14 @@ impl Engine for Kernel {
             Ok(output) => {
                 let (exactness, diagnostics) = (output.exactness, output.diagnostics);
                 match self.keep(body.as_ref(), output.result, exactness, diagnostics) {
-                    Ok(step) => Ran::Done(step),
+                    Ok(step) => Ran::Done(Step {
+                        work: spent.total(),
+                        ..step
+                    }),
                     Err(why) => Ran::Refused(why),
                 }
             }
-            Err(error) => Ran::Failed(error),
+            Err(error) => Ran::Failed(error, spent.total()),
         }
     }
 

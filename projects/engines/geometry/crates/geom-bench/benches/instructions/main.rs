@@ -26,10 +26,10 @@ use gate::{
     attributes::attributes, ball::ball, batch::batch, brent::brent, bvh::bvh, crossing::crossing,
     curve::curve, dd::dd, dual::dual, eft::eft, exact_sum::exact_sum, exactness::exactness,
     format::format, generated::generated, grid::grid, growth::growth, interval::interval,
-    isolate::isolate, linalg::linalg, make::make, math::math,
-    math_types::math_types, newton::newton, nurbs::nurbs, perturb::perturb, plane::plane,
-    predicate::predicate, quadrature::quadrature, real::real, rng::rng, sign::sign,
-    surface::surface, topo::topo, unproven::unproven, wide::wide, wide32::wide32,
+    isolate::isolate, linalg::linalg, make::make, math::math, math_types::math_types,
+    newton::newton, nurbs::nurbs, perturb::perturb, plane::plane, predicate::predicate,
+    quadrature::quadrature, real::real, rng::rng, sign::sign, surface::surface, topo::topo,
+    unproven::unproven, wide32::wide32, wide::wide,
 };
 
 #[cfg(target_os = "linux")]

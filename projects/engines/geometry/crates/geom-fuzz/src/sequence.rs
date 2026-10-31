@@ -484,7 +484,7 @@ fn run(case: &Case) -> Result<Run, Finding> {
                 run.steps.push((history, names));
                 run.log.push(operation);
             }
-            Ran::Failed(e) => refused(case, &e)?,
+            Ran::Failed(e, _) => refused(case, &e)?,
             Ran::Refused(why) => {
                 return Err(Finding::new("the kernel runs what a log writes", || {
                     format!("{why}: {case:?}")
