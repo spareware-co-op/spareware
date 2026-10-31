@@ -58,8 +58,8 @@ fn a_generated_entity_has_its_role() {
     let made = history(vec![generated(1, "top")]);
     assert_eq!(roles(1, &[&made]), ["top"]);
     // No history covers another name.
-    assert!(roles(2, &[&made]).is_empty());
-    assert!(roles(1, &[]).is_empty());
+    assert_eq!(roles(2, &[&made]).len(), 0);
+    assert_eq!(roles(1, &[]).len(), 0);
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn a_body_without_names_lists_no_names_and_no_roles() {
         .publish(BodyKind::General, Ix::new(0).unwrap(), &mut meter())
         .unwrap();
     let out = faces(&ctx(Budget::UNLIMITED), &empty, &[], Exactness::Exact).unwrap();
-    assert!(out.result.is_empty());
+    assert_eq!(out.result.len(), 0);
 }
 
 #[test]
