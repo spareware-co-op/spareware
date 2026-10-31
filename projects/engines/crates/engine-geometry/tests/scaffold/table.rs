@@ -287,7 +287,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-bool",      6, Accepted,   Here, "base poly intersect topo name check bvh"),
     kernel("geom-2d",        6, Accepted,   Here, "base math curve topo name intersect bvh"),
     // 7. Meshes and spatial.
-    kernel("geom-mesh",      7, Accepted,   Here,
+    kernel("geom-mesh",      7, Accepted,   Elsewhere("G153"),
         "base math topo poly curve surface intersect bvh linalg 2d"),
     kernel("geom-spatial",   7, Accepted,   Here, "base math mesh bvh poly intersect"),
     // 8. Other representations.

@@ -759,6 +759,7 @@ dependencies = [
  "geom-curve",
  "geom-linalg",
  "geom-math",
+ "geom-mesh",
  "geom-num",
  "geom-nurbs",
  "geom-run",
@@ -985,7 +986,9 @@ dependencies = [
  "bolero",
  "geom-bench",
  "geom-gen",
+ "geom-mesh",
  "geom-num",
+ "geom-run",
  "geom-test",
  "num-bigint",
 ]
@@ -1120,7 +1123,9 @@ dependencies = [
  "geom-poly",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]
