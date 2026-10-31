@@ -26,6 +26,10 @@ geom-topo = { path = "../geom-topo" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
+# The arenas target (G80): geom-topo's arenas and builder, under test, and the kernel crates
+# whose values fill them (ours, MPL-2.0).
+geom-curve = { path = "../geom-curve" }
+geom-surface = { path = "../geom-surface" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

@@ -240,6 +240,23 @@ fn two_faces_on_one_integer_plane_stay_unchecked() {
         &group_3(&at(&r, BodyKind::Sheet, 0)),
         FaultKind::PairUnchecked
     ));
+    // Two faces on one plane that is not given by integers are left unchecked too.
+    let mut r = sheets(&[
+        &[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]],
+        &[[9, 0, 0], [13, 0, 0], [13, 4, 0], [9, 4, 0]],
+    ]);
+    for k in 0..2 {
+        r.surfaces[k] = SurfaceKind::Plane(
+            Plane::new(
+                [0.25, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                ((0.0, 1.0), (0.0, 1.0)),
+            )
+            .unwrap(),
+        );
+    }
+    assert!(only(&group_3(&at(&r, BodyKind::Sheet, 1)), FaultKind::PairUnchecked));
     // Parallel planes a step apart pass.
     let r = sheets(&[
         &[[0, 0, 1], [4, 0, 1], [4, 4, 1], [0, 4, 1]],
