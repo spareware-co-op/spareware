@@ -169,8 +169,8 @@ fn length(curve: &[V3]) -> f64 {
 }
 
 /// `curve` with an end at `at`, if it passes within `cov` of it: an open curve in two, a closed one
-/// in one, started there.
-fn cut(curve: &[V3], at: V3, cov: f64) -> Option<Vec<Vec<V3>>> {
+/// in one, started there, unless it already starts at one of `kept`, an end to keep.
+fn cut(curve: &[V3], at: V3, kept: &[V3], cov: f64) -> Option<Vec<Vec<V3>>> {
     let mut nearest: Option<(f64, usize)> = None;
     for (index, (a, b)) in curve.iter().zip(curve.iter().skip(1)).enumerate() {
         let distance = to_segment(at, *a, *b);
@@ -183,7 +183,8 @@ fn cut(curve: &[V3], at: V3, cov: f64) -> Option<Vec<Vec<V3>>> {
         return None;
     }
     let (before, after) = curve.split_at(index.saturating_add(1));
-    let closed = norm(sub(*curve.first()?, *curve.last()?)) <= cov;
+    let (first, last) = (*curve.first()?, *curve.last()?);
+    let closed = norm(sub(first, last)) <= cov && !kept.iter().any(|p| norm(sub(first, *p)) <= cov);
     let mut tail = vec![at];
     tail.extend_from_slice(after);
     if closed {
@@ -198,8 +199,9 @@ fn cut(curve: &[V3], at: V3, cov: f64) -> Option<Vec<Vec<V3>>> {
 
 /// Gives `curves` an end at `at`, which is all a singular point asks: one curve in the cut that
 /// leaves its shortest piece longest, so that crossings close together leave no scrap that runs
-/// along another curve. Curves that already end there stay whole.
-fn end_at(curves: &mut Vec<Curve>, at: V3, cov: f64) {
+/// along another curve. Curves that already end there stay whole, and the ends `kept` for earlier
+/// singular points stay.
+fn end_at(curves: &mut Vec<Curve>, at: V3, kept: &[V3], cov: f64) {
     let near = |p: Option<&V3>| p.is_some_and(|p| norm(sub(*p, at)) <= cov);
     if curves
         .iter()
@@ -209,7 +211,7 @@ fn end_at(curves: &mut Vec<Curve>, at: V3, cov: f64) {
     }
     let mut best: Option<(f64, usize, Vec<Vec<V3>>)> = None;
     for (index, curve) in curves.iter().enumerate() {
-        if let Some(pieces) = cut(&curve.xyz, at, cov) {
+        if let Some(pieces) = cut(&curve.xyz, at, kept, cov) {
             let shortest = pieces
                 .iter()
                 .fold(f64::INFINITY, |least, piece| smaller(least, length(piece)));
@@ -252,8 +254,11 @@ fn truth(case: &Case, placed: &Placed) -> Output {
             kind: name.into(),
         });
     }
+    let mut kept = Vec::with_capacity(case.expected.singular_points.len());
     for singular in &case.expected.singular_points {
-        end_at(&mut out.curves, placed.snapped(*singular), case.cov_tol);
+        let at = placed.snapped(*singular);
+        end_at(&mut out.curves, at, &kept, case.cov_tol);
+        kept.push(at);
     }
     out
 }

@@ -916,6 +916,54 @@ fn a_closed_curve_starts_at_its_singular_point() {
 }
 
 #[test]
+fn a_closed_curve_keeps_the_end_its_first_singular_point_gave_it() {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    let corners = [
+        [-1.0, 0.0, 0.0],
+        [0.0, 0.5, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, -0.5, 0.0],
+        [-1.0, 0.0, 0.0],
+    ];
+    case.expected.branches[0].points = corners.to_vec();
+    case.expected.branches[0].closed = true;
+    case.surfaces[1] = case.surfaces[0].clone();
+    case.expected.singular_points = vec![[0.5, 0.25, 0.0], [-0.5, -0.25, 0.0]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(out.curves.len(), 2);
+    let ends: Vec<[f64; 3]> = out
+        .curves
+        .iter()
+        .flat_map(|c| [c.xyz[0], c.xyz[c.xyz.len() - 1]])
+        .collect();
+    for singular in [[0.5, 0.25, 0.0], [-0.5, -0.25, 0.0]] {
+        assert_eq!(
+            ends.iter().filter(|e| **e == singular).count(),
+            2,
+            "{ends:?}"
+        );
+    }
+    // Two loops crossing twice: each takes one, and neither is cut.
+    let mut other = case.expected.branches[0].clone();
+    other.points = vec![
+        [-0.5, -0.25, 0.0],
+        [0.5, -1.0, 0.0],
+        [0.5, 0.25, 0.0],
+        [-0.5, 1.0, 0.0],
+        [-0.5, -0.25, 0.0],
+    ];
+    case.expected.branches.push(other);
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(out.curves.len(), 2, "{:?}", out.curves);
+}
+
+#[test]
 fn a_singular_point_cuts_one_curve_where_it_leaves_the_longest_pieces() {
     // Two lines crossing near one's end: cutting the other leaves nothing short.
     let mut case = Case::parse(SMALL).expect("it fits");
