@@ -207,7 +207,7 @@ fn operations(
 
 /// The map's `operations` and `kinds`, in name order, and a [`Rule::Covers`] problem for every claim
 /// that names neither.
-pub(crate) fn values(
+pub(super) fn values(
     registry: &Registry,
     crates: &[&CrateInput],
     collected: &mut Collected,

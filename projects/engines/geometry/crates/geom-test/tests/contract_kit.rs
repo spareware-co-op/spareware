@@ -53,6 +53,19 @@ const SCHEMA: OpSchema = OpSchema {
     example: "seeded.op { size: 3 } gives a solid of 6 faces and 8 vertices, Exact.",
 };
 
+const WRONG: OpSchema = OpSchema {
+    errors: &[ErrorSpec {
+        kind: ErrorKind::InvalidInput,
+        ..ZERO
+    }],
+    ..SCHEMA
+};
+
+const SILENT: OpSchema = OpSchema {
+    example: "seeded.op { size: 3 }",
+    ..SCHEMA
+};
+
 fn certified(bound: u64) -> Exactness {
     Exactness::Certified {
         bound: Steps(bound),
@@ -128,7 +141,7 @@ fn an_operation_that_ignores_a_stop_is_caught() {
     assert_eq!((reads.reads, reads.work), (0, 0));
     // One that counts its budget itself and answers anyway publishes past it.
     let stubborn = Subject::new("stubborn", |c| {
-        let spent = run(c, 5).map(|d| d.answer).unwrap_or(10);
+        let spent = run(c, 5).map_or(10, |d| d.answer);
         Ok(Done {
             answer: spent,
             exactness: Exactness::Exact,
@@ -223,13 +236,6 @@ fn a_trigger_that_succeeds_is_caught_and_so_is_a_wrong_kind() {
     )
     .unwrap_err();
     assert!(e.why.contains("succeeded"), "{e}");
-    const WRONG: OpSchema = OpSchema {
-        errors: &[ErrorSpec {
-            kind: ErrorKind::InvalidInput,
-            ..ZERO
-        }],
-        ..SCHEMA
-    };
     let e = errors_tell_the_truth(
         &WRONG,
         &[Trigger {
@@ -369,9 +375,5 @@ fn an_example_is_held_to_what_the_call_gave() {
     let e = example_holds(&SCHEMA, &[("vertex", 9)], Exactness::Exact).unwrap_err();
     assert!(e.why.contains("vertex"), "{e}");
     assert!(example_holds(&SCHEMA, &[], certified(1)).is_err());
-    const SILENT: OpSchema = OpSchema {
-        example: "seeded.op { size: 3 }",
-        ..SCHEMA
-    };
     assert!(example_holds(&SILENT, &[], Exactness::Exact).is_err());
 }
