@@ -222,26 +222,20 @@ fn large_flat_bodies_are_compared_exactly() {
 }
 
 #[test]
-fn two_faces_on_one_integer_plane_stay_unchecked() {
-    // Two sheets on the plane z = 0, side by side: the same plane, so nothing certifies them.
+fn two_faces_on_one_plane_are_decided() {
+    // Two sheets on the plane z = 0, side by side: the same plane, and apart on it.
     let r = sheets(&[
         &[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]],
         &[[9, 0, 0], [13, 0, 0], [13, 4, 0], [9, 4, 0]],
     ]);
-    assert!(only(
-        &group_3(&at(&r, BodyKind::Sheet, 0)),
-        FaultKind::PairUnchecked
-    ));
+    assert_eq!(group_3(&at(&r, BodyKind::Sheet, 0)), []);
     // The same on the plane z = 1, scaled: an integer multiple of a plane is the same plane.
     let r = sheets(&[
         &[[0, 0, 1], [4, 0, 1], [4, 4, 1], [0, 4, 1]],
         &[[9, 0, 1], [18, 0, 1], [18, 9, 1], [9, 9, 1]],
     ]);
-    assert!(only(
-        &group_3(&at(&r, BodyKind::Sheet, 0)),
-        FaultKind::PairUnchecked
-    ));
-    // Two faces on one plane that is not given by integers are left unchecked too.
+    assert_eq!(group_3(&at(&r, BodyKind::Sheet, 0)), []);
+    // Two faces on one plane that is not given by integers: their grid corners fix it.
     let mut r = sheets(&[
         &[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]],
         &[[9, 0, 0], [13, 0, 0], [13, 4, 0], [9, 4, 0]],
@@ -257,10 +251,7 @@ fn two_faces_on_one_integer_plane_stay_unchecked() {
             .unwrap(),
         );
     }
-    assert!(only(
-        &group_3(&at(&r, BodyKind::Sheet, 1)),
-        FaultKind::PairUnchecked
-    ));
+    assert_eq!(group_3(&at(&r, BodyKind::Sheet, 1)), []);
     // Parallel planes a step apart pass.
     let r = sheets(&[
         &[[0, 0, 1], [4, 0, 1], [4, 4, 1], [0, 4, 1]],
@@ -304,9 +295,28 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
     unchecked(&cylinder(), BodyKind::Solid, 1);
     unchecked(&torus(), BodyKind::Solid, 1);
     unchecked(&annulus_sheet(), BodyKind::Sheet, 1);
-    // Against a crossing plane: a face that is not convex, one with a hole, one whose first corner
-    // is straight, and one that is not flat.
+    // Against a crossing plane, a face of any shape is decided: not convex, with a first corner
+    // that is straight, and bent, which stands for its fan of triangles. A bent face no fan from
+    // its first corner can stand for is not.
     let crossing = [[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]];
+    let bent = [
+        [10, 0, 0],
+        [10, 5, 1],
+        [5, 5, 0],
+        [5, 10, 0],
+        [0, 10, 0],
+        [0, 0, 0],
+    ];
+    let mut r = sheets(&[&bent[..], &crossing[..]]);
+    r.surfaces[0] = level(0.0);
+    assert_eq!(
+        at(&r, BodyKind::General, 1),
+        [fault(
+            FaultKind::PairUnchecked,
+            Entity::Face(ix(0)),
+            Entity::Face(ix(1))
+        )]
+    );
     for (name, face) in [
         (
             "not convex",
@@ -329,16 +339,7 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
         ),
     ] {
         let r = sheets(&[&face[..], &crossing[..]]);
-        let faults = at(&r, BodyKind::General, 1);
-        assert_eq!(
-            faults,
-            [fault(
-                FaultKind::PairUnchecked,
-                Entity::Face(ix(0)),
-                Entity::Face(ix(1))
-            )],
-            "{name}"
-        );
+        assert_eq!(at(&r, BodyKind::General, 1), [], "{name}");
     }
     let mut r = holed_sheet();
     let s = r.shell(0);
@@ -370,17 +371,9 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
     }
     let s = r.shell(0);
     face_of(&mut r, s, &[&[4, 5, 6, 7], &[8, 9, 10, 11]]);
-    assert_eq!(
-        at(&r, BodyKind::General, 1),
-        [fault(
-            FaultKind::PairUnchecked,
-            Entity::Face(ix(0)),
-            Entity::Face(ix(1))
-        )]
-    );
-    // Two squares on parallel planes z = 0 and z = 5 given by doubles whose normal is not one: the
-    // product of their spanning vectors is enclosed, not known, so the planes are not certified
-    // parallel and not certified crossing.
+    assert_eq!(at(&r, BodyKind::General, 1), []);
+    // Two squares on parallel planes z = 0 and z = 5 given by doubles whose normal is not one: their
+    // grid corners fix the planes.
     let mut r = sheets(&[
         &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
         &[[0, 0, 5], [10, 0, 5], [10, 10, 5], [0, 10, 5]],
@@ -396,28 +389,18 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
             .unwrap(),
         );
     }
-    assert_eq!(
-        at(&r, BodyKind::General, 1),
-        [fault(
-            FaultKind::PairUnchecked,
-            Entity::Face(ix(0)),
-            Entity::Face(ix(1))
-        )]
-    );
+    assert_eq!(at(&r, BodyKind::General, 1), []);
     // A hole touching the square's sides: a line at exactly its radius is not certified apart.
     let mut r = holed_sheet();
     r.curves[4] = round([5.0, 5.0, 0.0], 5.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
     unchecked(&r, BodyKind::Sheet, 1);
-    // A side of one square lying in the other's plane, on their planes' line, but not an edge of
-    // both.
+    // A side of one square lying along the other's, but not an edge of both: they meet other than
+    // at anything they share.
     let r = sheets(&[
         &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
         &[[10, 0, 0], [10, 10, 0], [10, 10, 10], [10, 0, 10]],
     ]);
-    assert!(only(
-        &at(&r, BodyKind::General, 0),
-        FaultKind::PairUnchecked
-    ));
+    assert!(only(&at(&r, BodyKind::General, 0), FaultKind::FacesCross));
     // A cylinder's top cap tilted: no longer perpendicular to the axis.
     let mut r = round_cylinder();
     r.surfaces[0] = SurfaceKind::Plane(

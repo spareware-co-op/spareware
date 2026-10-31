@@ -265,7 +265,7 @@ fn any_arenas(rng: &mut SplitMix64, dangling: bool, uneven: bool) -> Arenas {
     }
     for _ in 0..r(Arena::Point) {
         a.points
-            .push(geom_num::grid::P3::new(0, 0, 0).unwrap())
+            .push(geom_num::grid::P3::new(0, 0, 0).unwrap().into())
             .unwrap();
     }
     a

@@ -161,7 +161,8 @@ impl Rows {
     /// Adds the plane through three grid points; its row.
     pub fn plane_through(&mut self, [a, b, c]: [[i64; 3]; 3]) -> u32 {
         let p = |q: [i64; 3]| P3::new(q[0], q[1], q[2]).unwrap();
-        self.planes.push(GridPlane::through(p(a), p(b), p(c)).unwrap());
+        self.planes
+            .push(GridPlane::through(p(a), p(b), p(c)).unwrap());
         self.planes.len() as u32 - 1
     }
 
@@ -171,7 +172,8 @@ impl Rows {
         let [p, q, r] = planes.map(|k| self.planes[k as usize]);
         let at = Tpi::new(p, q, r).ok().and_then(|t| t.to_grid().ok());
         let origin = P3::new(0, 0, 0).unwrap();
-        self.points.push(at.map_or(origin, |rounded| rounded.value()));
+        self.points
+            .push(at.map_or(origin, |rounded| rounded.value()));
         let row = self.points.len() as u32 - 1;
         self.meets.push((row, planes));
         let v = self.vertices.len() as u32;
@@ -338,7 +340,8 @@ impl Rows {
     /// third about the second's way, with a box a step wider than its corners rounded.
     pub fn face_on(&mut self, s: u32, loops: &[&[(u32, Sense)]], on: [[i64; 3]; 3]) -> u32 {
         let (_, bound) = self.carrier(loops);
-        let wider = |p: P3, by: i64| P3::new(p.x.get() + by, p.y.get() + by, p.z.get() + by).unwrap();
+        let wider =
+            |p: P3, by: i64| P3::new(p.x.get() + by, p.y.get() + by, p.z.get() + by).unwrap();
         let bound = Box3::new(wider(bound.min(), -1), wider(bound.max(), 1)).unwrap();
         let [o, a, b] = on.map(|q| q.map(|x| x as f64));
         let minus = |p: [f64; 3], q: [f64; 3]| [p[0] - q[0], p[1] - q[1], p[2] - q[2]];

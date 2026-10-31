@@ -23,10 +23,10 @@
 //!   point subtracts a weight of 2^252 times a coordinate of 2^40 from each coordinate, a
 //!   numerator two bits wider at most, which the same width holds. [`QueryError::Overflow`] reports
 //!   what cannot happen, never a wrong value.
-//! - **As sharp near the origin as far from it.** The area of a closed loop and the volume of a
-//!   closed shell do not depend on where they are measured from, so [`about`] one of its own grid
-//!   points, a small shape far from the origin keeps its sign: rounded terms are the shape's size,
-//!   not the distance to the origin.
+//! - **As sharp far from the origin as near it.** The area of a closed loop and the volume of a
+//!   closed shell do not depend on where they are measured from, so measured from a grid point of
+//!   its own ([`about`]), with [`loop_area_from`] and [`add_loop_volume`], a small shape far from
+//!   the origin keeps its sign: rounded terms are the shape's size, not the distance to the origin.
 //! - **Charged, nothing allocated.** One unit of work per corner visited.
 //!
 //! Method: chapter 19.2's mass properties for implicit vertices
@@ -41,7 +41,7 @@
 
 use geom_num::interval::Interval;
 use geom_num::plane::{Lpi, Plane, Tpi};
-use geom_num::{ExactSum, NumError, P3, Sign, Wide};
+use geom_num::{Coord, ExactSum, NumError, P3, Sign, Wide};
 use geom_run::{LogicalSize, WorkMeter};
 
 use crate::query::QueryError;
@@ -124,7 +124,7 @@ impl Corner {
     /// Its homogeneous coordinates measured from `origin`: x − o w in each coordinate.
     fn seen_from(&self, origin: P3) -> Result<Homogeneous, QueryError> {
         let Homogeneous { x: [px, py, pz], w } = self.homogeneous()?;
-        let moved = |c: Big, o: geom_num::Coord| -> Result<Big, QueryError> {
+        let moved = |c: Big, o: Coord| -> Result<Big, QueryError> {
             c.checked_sub(&mul(&Big::from_i64(o.get()), &w)?)
                 .ok_or(QueryError::Overflow)
         };
@@ -233,18 +233,20 @@ fn triple(p: &Homogeneous, q: &Homogeneous, r: &Homogeneous) -> Result<Interval,
 /// The answer is a function of the corners alone, so every target measures from the same point.
 #[must_use]
 pub fn about(corners: &[Corner]) -> P3 {
-    let origin = P3 {
-        x: geom_num::Coord::ZERO,
-        y: geom_num::Coord::ZERO,
-        z: geom_num::Coord::ZERO,
-    };
     match corners.first() {
         Some(Corner::Grid(p)) => *p,
-        Some(Corner::Tpi(t)) => t.to_grid().map_or(origin, |r| r.value()),
-        Some(Corner::Lpi(l)) => l.to_grid().map_or(origin, |r| r.value()),
-        None => origin,
+        Some(Corner::Tpi(t)) => t.to_grid().map_or(ORIGIN, |r| r.value()),
+        Some(Corner::Lpi(l)) => l.to_grid().map_or(ORIGIN, |r| r.value()),
+        None => ORIGIN,
     }
 }
+
+/// The origin of the grid, where [`loop_area`] and [`shell_volume`] measure from.
+const ORIGIN: P3 = P3 {
+    x: Coord::ZERO,
+    y: Coord::ZERO,
+    z: Coord::ZERO,
+};
 
 /// Twice the area vector of the closed polygon through `corners`: Σ pᵢ × pᵢ₊₁, each component a
 /// certified interval.
@@ -257,7 +259,21 @@ pub fn loop_area(
     corners: &[Corner],
     meter: &mut WorkMeter<'_>,
 ) -> Result<[Interval; 3], QueryError> {
-    let origin = about(corners);
+    loop_area_from(corners, ORIGIN, meter)
+}
+
+/// Twice the area vector of the closed polygon through `corners`, measured from `origin`: the same
+/// value from any point, and sharpest from one of its own ([`about`]).
+///
+/// # Errors
+///
+/// A corner the numbers layer cannot put in homogeneous form, as [`QueryError::Overflow`], and the
+/// meter's stop.
+pub fn loop_area_from(
+    corners: &[Corner],
+    origin: P3,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; 3], QueryError> {
     let mut sum = [Interval::point(0.0)?; 3];
     for (p, q) in corners.iter().zip(corners.iter().cycle().skip(1)) {
         meter.charge(1)?;
@@ -268,20 +284,21 @@ pub fn loop_area(
     Ok(sum)
 }
 
-/// What one loop adds to six times a closed shell's volume, measured from `origin`: Σ over its fan
-/// of triangles from its first corner of p₀ · (pᵢ × pᵢ₊₁), a certified interval. A shell's volume
-/// is the sum over its loops, all from one origin.
+/// `sum` with what one loop adds to six times a closed shell's volume, measured from `origin`:
+/// Σ over its fan of triangles from its first corner of p₀ · (pᵢ × pᵢ₊₁), a certified interval. A
+/// shell's volume is the sum over its loops, all from one origin, which gives the same value from
+/// any point, and sharpest from one of its own ([`about`]).
 ///
 /// # Errors
 ///
 /// A corner the numbers layer cannot put in homogeneous form, as [`QueryError::Overflow`], and the
 /// meter's stop.
-pub fn loop_volume(
+pub fn add_loop_volume(
+    mut sum: Interval,
     corners: &[Corner],
     origin: P3,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Interval, QueryError> {
-    let mut sum = Interval::point(0.0)?;
     let Some((first, rest)) = corners.split_first() else {
         return Ok(sum);
     };
@@ -307,12 +324,9 @@ pub fn shell_volume(
     loops: &[&[Corner]],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Interval, QueryError> {
-    let origin = loops
-        .first()
-        .map_or_else(|| about(&[]), |corners| about(corners));
     let mut sum = Interval::point(0.0)?;
     for corners in loops {
-        sum = plus(sum, loop_volume(corners, origin, meter)?)?;
+        sum = add_loop_volume(sum, corners, ORIGIN, meter)?;
     }
     Ok(sum)
 }

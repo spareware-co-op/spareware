@@ -65,7 +65,11 @@ fn region(a: &Arenas, s: ShellIx) -> Option<RegionIx> {
 
 /// The word for a shell of a sign.
 fn word_of(sign: Sign) -> u32 {
-    if sign == Sign::Positive { OUTER } else { CAVITY }
+    if sign == Sign::Positive {
+        OUTER
+    } else {
+        CAVITY
+    }
 }
 
 /// The word for shell `s`, which has a vertex where three planes meet, by its certified volume.

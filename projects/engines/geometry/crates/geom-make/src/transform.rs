@@ -55,7 +55,7 @@ use geom_surface::{ParamSurface, SurfaceKind};
 use geom_topo::ix::Arena;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Body, Builder, Edge, Face, Fin, Ix, Loop, Region, Sense, Shell, TopoError, Vertex,
+    Body, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, Sense, Shell, TopoError, Vertex,
 };
 
 use crate::build::{Made, Motion, PER_ROW, PHASE, fail, finish, unbuilt};
@@ -412,8 +412,12 @@ pub(crate) fn moved_copy(
         bounds.push(moved_box(t, bound).map_err(num)?);
     }
     let exactness = record(ctx, input, stretch, rounded, deviation)?;
-    let awaits =
-        (rounded || deviation > 0.0).then_some(if curved(input.body) { "G177" } else { "G134" });
+    let awaits = (rounded || deviation > 0.0).then_some(if curved(input.body) {
+        "G177"
+    } else {
+        // A flat face no fan of triangles can stand for: one with a hole or a reflex corner.
+        "G417"
+    });
     // Rows: copied, each pointing at its moved geometry; a mirror reverses faces and loops.
     let flip = |s: Sense| match s {
         Sense::Forward => Sense::Reversed,
@@ -513,7 +517,7 @@ pub(crate) fn moved_copy(
         out.surfaces.extend(surfaces)?;
         out.curves.extend(curves)?;
         out.pcurves.extend(pcurves)?;
-        out.points.extend(points)
+        out.points.extend(points.into_iter().map(PointKind::Grid))
     };
     fill().map_err(|e| unbuilt(ctx, meter, e))?;
     // Names: each renamed, and its record.

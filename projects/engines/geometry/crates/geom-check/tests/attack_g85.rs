@@ -494,20 +494,27 @@ fn groups_2_and_3_charge_one_unit_per_row_and_pair_visited() {
     // its box; group 3, one per face, per pair of a face's edges, per pair of faces and per edge
     // tested against a face, then one per face and fin for the loops, and one per shell, face,
     // loop and fin for the volume, one per shell of its region. The cube: 6 faces, 24 fins and 12
-    // edges, 6 and 24; 6 faces, 6 pairs of edges in each, 15 pairs of faces, and each of the 12
-    // pairs that meet at an edge tests its 8 edges, then 6 and 24, and 1, 6, 6, 24 and 1. The
-    // cylinder with a seam: 3 faces, 6 fins and 3 edges, 3 and the caps' 2 fins; 3 faces, the 3
+    // edges and 8 vertices, 6 and 24; each fin outlined, 6 faces, 6 pairs of edges in each, 15
+    // pairs of faces, and each of the 12 pairs that meet at an edge crosses its 4 sides each way
+    // for each face, compares its one stretch and looks for what its faces share, the parallel
+    // pairs' boxes settling them, then 6 and 24, and 1, 6, 6, 24 and 1. The
+    // cylinder with a seam: 2 vertices, 3 faces, 6 fins and 3 edges, 3 and the caps' 2 fins; the
+    // caps' 2 fins, which no outline takes, 3 faces, the 3
     // pairs of the side's edges, 3 pairs of faces (parallel caps, and caps that share a circle with
     // the side, tested without their edges), then 3 and the caps' 2, and the shell, its first
     // face, cap and circle, and 1.
     for (rows, rows_visited) in [
         (
             cube(),
-            (6 + 24 + 12) + (6 + 24) + (6 + 6 * 6 + 15 + 12 * 8) + (6 + 24) + (1 + 6 + 6 + 24 + 1),
+            (8 + 6 + 24 + 12)
+                + (6 + 24)
+                + (24 + 6 + 6 * 6 + 15 + 12 * (16 + 1 + 4))
+                + (6 + 24)
+                + (1 + 6 + 6 + 24 + 1),
         ),
         (
             seamed_cylinder(),
-            (3 + 6 + 3) + (3 + 2) + (3 + 3 + 3) + (3 + 2) + (1 + 3 + 1),
+            (2 + 3 + 6 + 3) + (3 + 2) + (2 + 3 + 3 + 3) + (3 + 2) + (1 + 3 + 1),
         ),
     ] {
         assert_eq!(

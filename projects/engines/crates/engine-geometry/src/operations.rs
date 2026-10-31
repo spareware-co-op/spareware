@@ -901,6 +901,21 @@ const CURVED_EDGE: ErrorSpec = ErrorSpec {
           curved bodies come with piece G177.",
 };
 
+/// A vertex with no grid point for the exact sums.
+const IMPLICIT_VERTEX: ErrorSpec = ErrorSpec {
+    detail: "ImplicitVertex",
+    kind: ErrorKind::Unsupported,
+    data: &[Field {
+        name: "vertex",
+        ty: "u32",
+        unit: Unit::None,
+        optional: false,
+        doc: "The vertex's row.",
+    }],
+    doc: "A vertex is where three planes meet, so the exact sums have no grid point for it; \
+          the rebuild that first makes such a body brings its mass properties with piece G129.",
+};
+
 /// A face a polygon cannot lie on.
 const CURVED_FACE: ErrorSpec = ErrorSpec {
     detail: "CurvedFace",
@@ -969,6 +984,7 @@ const AREA: OpSchema = OpSchema {
     errors: &[
         MALFORMED,
         CURVED_EDGE,
+        IMPLICIT_VERTEX,
         CURVED_FACE,
         NO_LOOPS,
         OVERFLOW,
@@ -1139,6 +1155,7 @@ const VOLUME: OpSchema = OpSchema {
     errors: &[
         MALFORMED,
         CURVED_EDGE,
+        IMPLICIT_VERTEX,
         CURVED_FACE,
         NO_LOOPS,
         ErrorSpec {

@@ -21,8 +21,8 @@
 //!   with the body; each write copies only the chunk it lands in, so a version made by editing ten
 //!   faces of a million-face body shares all but at most ten chunks per column written (23.9).
 //! - **Metered.** Publishing charges one work unit for every chunk of every link column it
-//!   checks and of the point pool, whose meetings of planes are links too, to the caller's meter,
-//!   which polls the caller's cancellation (23.10).
+//!   checks, and of the meetings of planes in the point pool, which are links too, to the caller's
+//!   meter, which polls the caller's cancellation (23.10).
 //!
 //! Method: Parasolid's model structure, made immutable after building (chapter 8.2;
 //! `projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), with the validation
@@ -187,16 +187,20 @@ pub(crate) fn inside(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), T
 }
 
 /// [`TopoError::NoSuchRow`] for the first meeting of planes, by row, that names a plane past the
-/// end of the plane pool, charging one unit to `meter` for each chunk.
+/// end of the plane pool, charging one unit to `meter` for each chunk's worth of meetings, so a
+/// body of grid points costs what it did (26.2).
 fn meets(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), TopoError> {
     let rows = arenas.rows(Arena::Plane);
-    for (point, row) in arenas.points.iter().zip(0_u32..) {
-        if row % CHUNK_ROWS == 0 {
+    let mut seen = 0_u32;
+    for point in arenas.points.iter() {
+        let PointKind::Meet(planes) = point else {
+            continue;
+        };
+        if seen.is_multiple_of(CHUNK_ROWS) {
             meter.charge(1)?;
         }
-        if let PointKind::Meet(planes) = point
-            && let Some(far) = planes.iter().find(|p| p.row() >= rows)
-        {
+        seen = seen.saturating_add(1);
+        if let Some(far) = planes.iter().find(|p| p.row() >= rows) {
             return Err(TopoError::NoSuchRow {
                 arena: Arena::Plane,
                 row: far.row(),

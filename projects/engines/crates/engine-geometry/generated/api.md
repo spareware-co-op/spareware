@@ -366,6 +366,7 @@ Twice the area vector of a flat face, exact on its grid vertices: Σ pᵢ × p�
 | --- | --- | --- | --- |
 | `Malformed` | `InvalidInput` | - | A link into a row its arena does not have, or a list that does not end. |
 | `CurvedEdge` | `Unsupported` | `edge: u32` | An edge is not a straight line between two vertices; certified mass properties of curved bodies come with piece G177. |
+| `ImplicitVertex` | `Unsupported` | `vertex: u32` | A vertex is where three planes meet, so the exact sums have no grid point for it; the rebuild that first makes such a body brings its mass properties with piece G129. |
 | `CurvedFace` | `Unsupported` | `face: u32` | A face is not on a plane; certified mass properties of curved bodies come with piece G177. |
 | `NoLoops` | `Unsupported` | `face: u32` | A face has no loop, so no polygon to measure; such faces are curved today, and piece G177 measures them. |
 | `Overflow` | `Internal` | - | A sum went past its integer's width: never for a body within its arenas' limits. |
@@ -587,6 +588,7 @@ Six times the volume of a flat solid, exact on its grid vertices: Σ over its fa
 | --- | --- | --- | --- |
 | `Malformed` | `InvalidInput` | - | A link into a row its arena does not have, or a list that does not end. |
 | `CurvedEdge` | `Unsupported` | `edge: u32` | An edge is not a straight line between two vertices; certified mass properties of curved bodies come with piece G177. |
+| `ImplicitVertex` | `Unsupported` | `vertex: u32` | A vertex is where three planes meet, so the exact sums have no grid point for it; the rebuild that first makes such a body brings its mass properties with piece G129. |
 | `CurvedFace` | `Unsupported` | `face: u32` | A face is not on a plane; certified mass properties of curved bodies come with piece G177. |
 | `NoLoops` | `Unsupported` | `face: u32` | A face has no loop, so no polygon to measure; such faces are curved today, and piece G177 measures them. |
 | `NotSolid` | `InvalidInput` | - | The body is not a solid. |

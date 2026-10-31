@@ -308,9 +308,9 @@ pub fn corner(body: &Body, v: VertexIx) -> Result<Corner, QueryError> {
     match place(body, v)? {
         PointKind::Grid(p) => Ok(Corner::Grid(p)),
         PointKind::Meet(planes) => {
-            let [p, q, r] = planes.map(|ix| a.planes.get(ix).copied());
-            let plane = |x: Option<geom_num::plane::Plane>| x.ok_or(QueryError::NoSuchRow);
-            Ok(Corner::Tpi(Tpi::new(plane(p)?, plane(q)?, plane(r)?)?))
+            let [first, second, third] =
+                planes.map(|ix| a.planes.get(ix).copied().ok_or(QueryError::NoSuchRow));
+            Ok(Corner::Tpi(Tpi::new(first?, second?, third?)?))
         }
     }
 }
@@ -491,11 +491,12 @@ pub fn certified_loop_area(
     l: LoopIx,
     meter: &mut WorkMeter<'_>,
 ) -> Result<[Interval; 3], QueryError> {
-    mass::loop_area(&loop_corners(body, l, meter)?, meter)
+    let corners = loop_corners(body, l, meter)?;
+    mass::loop_area_from(&corners, mass::about(&corners), meter)
 }
 
 /// Six times the signed volume shell `s` encloses, whatever its vertices, as a certified interval
-/// measured from a point of its own (`crate::mass::loop_volume`), so that a small shell far from
+/// measured from a point of its own (`crate::mass::add_loop_volume`), so that a small shell far from
 /// the origin keeps its sign.
 ///
 /// # Errors
@@ -520,7 +521,7 @@ pub fn certified_shell_volume(
         while let Some(l) = next_loop(body, &mut loops, meter)? {
             let corners = loop_corners(body, l, meter)?;
             let from = *origin.get_or_insert_with(|| mass::about(&corners));
-            sum = sum.add(mass::loop_volume(&corners, from, meter)?)?;
+            sum = mass::add_loop_volume(sum, &corners, from, meter)?;
         }
     }
     Ok(sum)

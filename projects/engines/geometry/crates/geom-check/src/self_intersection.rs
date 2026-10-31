@@ -76,12 +76,14 @@ pub(crate) fn check(
     let a = body.arenas();
     let exact = matches!(exactness, Exactness::Exact);
     let outlines = planar::outlines(a, exact, sink)?;
-    let outline = |f: Ix<Face>| -> Option<&Outline> {
-        outlines.get(f.to_usize()).and_then(|slot| slot.0.as_ref())
+    let pieces = |f: Ix<Face>| -> &[Outline] {
+        outlines
+            .get(f.to_usize())
+            .map_or(&[], |slot| slot.0.as_slice())
     };
     for f in rows::<Face>(a.rows(Arena::Face)) {
         sink.charge()?;
-        let implicit = outline(f).filter(|o| o.implicit);
+        let implicit = pieces(f).first().filter(|o| o.implicit);
         for (i, first) in edges(a, f).enumerate() {
             for second in edges(a, f).skip(i).skip(1) {
                 sink.charge()?;
@@ -96,9 +98,10 @@ pub(crate) fn check(
     for (i, f) in rows::<Face>(a.rows(Arena::Face)).enumerate() {
         for g in rows::<Face>(a.rows(Arena::Face)).skip(i).skip(1) {
             sink.charge()?;
-            let found = match outline(f).zip(outline(g)) {
-                Some((p, q)) => planar::faces_meet(a, p, q, sink)?,
-                None => other_faces_meet(a, f, g, exact),
+            let found = if pieces(f).is_empty() || pieces(g).is_empty() {
+                other_faces_meet(a, f, g, exact)
+            } else {
+                planar::slots_meet(a, pieces(f), pieces(g), sink)?
             };
             report(sink, found, Entity::Face(f), Entity::Face(g));
         }

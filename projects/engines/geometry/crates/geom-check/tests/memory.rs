@@ -29,15 +29,18 @@ static ALLOCATOR: Cap<System> = Cap::new(System, usize::MAX);
 fn a_refused_reservation_stops_the_check() {
     let body = cube().body(BodyKind::Solid);
     let faults = MAX_FAULTS * size_of::<Fault>();
-    // The cube's scratch: three words per vertex and one per edge, its largest need.
+    // The cube's scratch: three words per vertex and one per edge, its largest need. Then group
+    // 3's outlines: a list of six, and for each face a list of its one outline and of its four
+    // sides.
     let scratch = (3 * 8 + 12) * size_of::<u32>();
+    let outlines = 6 * size_of::<Vec<u8>>() + 6 * 128 + 6 * 4 * 512;
     let mut outcomes = Vec::new();
     for room in [
         0,
         faults - 1,
         faults,
         faults + scratch - 1,
-        faults + scratch,
+        faults + scratch + 4 * outlines,
     ] {
         let mut m = meter();
         ALLOCATOR.set_limit(ALLOCATOR.allocated() + room).unwrap();

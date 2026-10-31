@@ -28,7 +28,7 @@ name: Kernel fuzzing and proofs
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
 # every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
-# geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-num, geom-nurbs, geom-op,
+# geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-name, geom-num, geom-nurbs, geom-op,
 # geom-poly, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with engine-geometry and
 # kit-core through geom-gen's facade generators;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
@@ -61,6 +61,7 @@ on:
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
+      - "projects/engines/geometry/crates/geom-name/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-topo/**"
@@ -94,6 +95,7 @@ on:
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
+      - "projects/engines/geometry/crates/geom-name/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-topo/**"

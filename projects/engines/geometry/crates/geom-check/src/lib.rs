@@ -44,13 +44,15 @@
 //!   each lying where its region allows (G102).
 //! - `exactness`: group 4, the exactness record against the geometry.
 //! - [`query`]: the exactness report and the validity report, as operations (G102).
+//! - `planar`: group 3 on flat faces of any shape, by the signs of planes (G134).
 //! - `sink`: the faults found so far, capped at [`MAX_FAULTS`], and the caller's meter.
 //!
 //! Status: the framework and groups 1 and 4 (G84) and groups 2 and 3 for primitive bodies (G85)
 //! built. Group 3 tests primitives with its own exact predicates and closed forms, as
-//! `geom-intersect` is not built yet. Flat bodies' orientation and nesting are built (G102);
-//! plane-based bodies, pcurves, general surfaces and the same checks on curved faces come in G134,
-//! G177 and G322, and a report counts what it left for them ([`Report::deferred`]).
+//! `geom-intersect` is not built yet. Flat bodies' orientation and nesting are built (G102), and
+//! plane-based bodies, with their vertices where three planes meet and faces of any shape (G134);
+//! pcurves, general surfaces and the same checks on curved faces come in G177 and G322, and a report
+//! counts what it left for them ([`Report::deferred`]).
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 

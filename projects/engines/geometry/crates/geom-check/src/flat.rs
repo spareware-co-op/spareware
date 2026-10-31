@@ -32,10 +32,10 @@
 //! Cost: each linear in faces and fins; nothing allocated. Recursion: none.
 
 use geom_curve::tight;
-use geom_num::{Coord, P3, Sign};
 use geom_num::interval::Interval;
 use geom_num::plane::Plane;
 use geom_num::wide::I256;
+use geom_num::{Coord, P3, Sign};
 use geom_run::Stopped;
 use geom_topo::entity::{Face, LoopIx};
 use geom_topo::ix::Arena;
@@ -188,7 +188,9 @@ fn in_box(low: P3, high: P3, at: Option<&Corner>) -> bool {
             ([0, 0, 1], low.z, high.z),
         ]
         .into_iter()
-        .all(|(normal, lo, hi)| face(normal, lo, Sign::Positive) && face(normal, hi, Sign::Negative))
+        .all(|(normal, lo, hi)| {
+            face(normal, lo, Sign::Positive) && face(normal, hi, Sign::Negative)
+        })
     })
 }
 
