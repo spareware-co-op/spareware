@@ -8,7 +8,7 @@
 //! the rows (one solid region and the void outside it, one shell, a ring of fins round each edge),
 //! publishes them in name order (`geom_topo::Builder::publish_named`), runs the checker on the
 //! result as the operation's postcondition (8.3) and records each entity's origin. [`Made`] is
-//! what comes back: the body and its history.
+//! what comes back: the body, its history and, from a transform, which one it was.
 //!
 //! Guarantees:
 //!
@@ -17,9 +17,10 @@
 //!   order the rows were written in (8.2, 20.2).
 //! - **Checked before returned.** A body that does not pass the checker at the build's level is
 //!   never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.
-//! - **Charged by what it builds.** One meter unit per row built, before it is built (23.10), and
-//!   the publishing and the checker charge their own rows to the same meter.
-//! - **Transactional.** Nothing the caller holds is changed; a failure returns no body.
+//! - **Charged by what it builds.** One meter unit per row built ([`PER_ROW`]), before it is built
+//!   (23.10), and the publishing and the checker charge their own rows to the same meter.
+//! - **Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation
+//!   did not report, returns no body (`OpContext::run`).
 //!
 //! Method: chapter 8's arenas and name order (8.2), chapter 20's names by role and history
 //! records (20.2, 20.3), and the checker's postcondition (8.3)
@@ -37,18 +38,36 @@ use geom_math::Box3;
 use geom_num::{Exactness, P3};
 use geom_op::history::{History, Origin, Record};
 use geom_op::{
-    MakeDetail, NameId, NameList, NameSet, OpContext, OpError, OpErrorDetail, OpOutput, OpPath,
-    Role, TopoName,
+    Charge, MakeDetail, NameId, NameList, NameSet, OpContext, OpError, OpOutput, OpPath, Role,
+    TopoName,
 };
-use geom_run::{Phase, Stopped, WorkMeter};
+use geom_run::{Phase, WorkMeter};
 use geom_surface::SurfaceKind;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense, Shell, Vertex,
+    Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense, Shell,
+    TopoError, Vertex,
 };
 
 /// The phase every Make and Transform operation charges in.
-pub(crate) const PHASE: Phase = Phase::new("make");
+pub const PHASE: Phase = Phase::new("make");
+
+/// The line of each Make and Transform operation's charge schedule (23.10): one unit per row
+/// built. Publishing and the checker charge their own rows to the same meter.
+pub const PER_ROW: Charge = Charge::new(PHASE, "row built", 1);
+
+/// Which transform a body went through, for the attribute event `Transformed` (8.4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Motion {
+    /// A translation.
+    Move,
+    /// A rotation.
+    Rotate,
+    /// A mirror.
+    Mirror,
+    /// A scale.
+    Scale,
+}
 
 /// What a Make or Transform operation returns: the body, and the history of its entities.
 #[derive(Clone, Debug)]
@@ -57,6 +76,9 @@ pub struct Made {
     pub body: Body,
     /// Where each region, face, edge and vertex of the body came from (20.3).
     pub history: History,
+    /// Which transform it went through: `None` for a primitive and for a pattern's copy, whose
+    /// role `copy` is its attribute event (8.4).
+    pub motion: Option<Motion>,
 }
 
 /// A vertex of a part: its point and its role.
@@ -88,26 +110,22 @@ pub(crate) struct Part {
     pub(crate) faces: Vec<PartFace>,
 }
 
-/// The meter of an operation run with `ctx`: its budget and its cancellation.
-pub(crate) fn meter<'c>(ctx: &OpContext<'c>) -> WorkMeter<'c> {
-    let meter = WorkMeter::new(ctx.budget());
-    match ctx.cancel() {
-        Some(cancel) => meter.with_cancel(cancel),
-        None => meter,
-    }
-}
-
-/// The error for a stop of `meter`.
-pub(crate) fn stopped(ctx: &OpContext<'_>, meter: &WorkMeter<'_>, stop: Stopped) -> OpError {
-    OpError::new(
-        ctx.path().clone(),
-        OpErrorDetail::from(meter.error::<OpErrorDetail>(stop, PHASE)),
-    )
-}
-
 /// The error for `detail`.
 pub(crate) fn fail(ctx: &OpContext<'_>, detail: MakeDetail) -> OpError {
     OpError::new(ctx.path().clone(), detail)
+}
+
+/// The error for rows that did not reach a body: the meter's stop, an allocation refused, or a
+/// defect.
+pub(crate) fn unbuilt(ctx: &OpContext<'_>, meter: &mut WorkMeter<'_>, e: TopoError) -> OpError {
+    let stop = match e {
+        TopoError::OutOfMemory => Some(meter.out_of_memory()),
+        _ => meter.check().err(),
+    };
+    match stop {
+        Some(stop) => ctx.stopped(meter, stop, PHASE),
+        None => fail(ctx, MakeDetail::BuildFailed),
+    }
 }
 
 /// The name of what operation `op` creates by `role`, from nothing.
@@ -163,7 +181,16 @@ pub(crate) fn assemble(
     part: Part,
     exactness: Exactness,
 ) -> Result<OpOutput<Made>, OpError> {
-    let mut meter = meter(ctx);
+    ctx.run(|meter| built(ctx, meter, part, exactness))
+}
+
+/// [`assemble`]'s body, on the operation's meter.
+fn built(
+    ctx: &OpContext<'_>,
+    meter: &mut WorkMeter<'_>,
+    part: Part,
+    exactness: Exactness,
+) -> Result<OpOutput<Made>, OpError> {
     let defect = || fail(ctx, MakeDetail::BuildFailed);
     let op = ctx.path();
     let outside = plain("region.outside").ok_or_else(defect)?;
@@ -181,9 +208,9 @@ pub(crate) fn assemble(
         .try_fold(roles.len(), |n, l| n.checked_add(1)?.checked_add(l.len()))
         .and_then(|n| u64::try_from(n).ok())
         .ok_or_else(defect)?;
-    meter
-        .charge(rows)
-        .map_err(|stop| stopped(ctx, &meter, stop))?;
+    PER_ROW
+        .charge(meter, rows)
+        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
     let mut names = Names {
         regions: Vec::new(),
         faces: Vec::new(),
@@ -208,19 +235,23 @@ pub(crate) fn assemble(
             },
         });
     }
-    let builder = rows_of(part).ok_or_else(defect)?;
+    let rows = rows_of(&part).ok_or_else(defect)?;
     let outside_row = ix::<Region>(0).ok_or_else(defect)?;
-    let body = builder
-        .publish_named(&names, BodyKind::Solid, outside_row, &mut meter)
-        .map_err(|_| defect())?;
-    finish(
-        ctx,
-        &mut meter,
-        body,
-        records,
-        NameSet::new([]).map_err(|_| defect())?,
-        exactness,
-    )
+    let body = filled(&rows, part)
+        .and_then(|b| b.publish_named(&names, BodyKind::Solid, outside_row, meter))
+        .map_err(|e| unbuilt(ctx, meter, e))?;
+    finish(ctx, meter, body, records, None, exactness)
+}
+
+/// A solid's topology, as rows.
+struct Rows {
+    regions: [Region; 2],
+    shells: [Shell; 1],
+    faces: Vec<Face>,
+    loops: Vec<Loop>,
+    fins: Vec<Fin>,
+    edges: Vec<Edge>,
+    vertices: Vec<Vertex>,
 }
 
 /// Which arena a name belongs to.
@@ -232,8 +263,8 @@ enum Kind {
     Vertex,
 }
 
-/// Checks `body` as the postcondition, and returns it with the history of `records` and the
-/// `deleted` inputs.
+/// Checks `body` as the postcondition, and returns it with the history of `records` (no input is
+/// deleted: a Make operation has none, and a transform keeps every entity).
 ///
 /// # Errors
 ///
@@ -244,11 +275,11 @@ pub(crate) fn finish(
     meter: &mut WorkMeter<'_>,
     body: Body,
     records: Vec<Record>,
-    deleted: NameSet,
+    motion: Option<Motion>,
     exactness: Exactness,
 ) -> Result<OpOutput<Made>, OpError> {
     let report = check(&body, exactness, Level::of_build(), meter)
-        .map_err(|stop| stopped(ctx, meter, stop))?;
+        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
     if !report.passed() {
         let first = report.faults().first().map_or_else(
             || alloc::string::String::from("the checker reported faults"),
@@ -256,9 +287,15 @@ pub(crate) fn finish(
         );
         return Err(fail(ctx, MakeDetail::ResultInvalid).with_message(first));
     }
-    let history =
-        History::new(records, deleted, []).map_err(|_| fail(ctx, MakeDetail::BuildFailed))?;
-    Ok(OpOutput::new(Made { body, history }, exactness))
+    let defect = || fail(ctx, MakeDetail::BuildFailed);
+    let none = NameSet::new([]).map_err(|_| defect())?;
+    let history = History::new(records, none, []).map_err(|_| defect())?;
+    let made = Made {
+        body,
+        history,
+        motion,
+    };
+    Ok(OpOutput::new(made, exactness))
 }
 
 #[allow(
@@ -268,34 +305,28 @@ pub(crate) fn finish(
 /// The rows of `part`: the void outside (region 0), the solid (region 1), one shell, and the
 /// faces, loops, fins, edges and vertices in the part's order, each edge's fins in one radial ring
 /// in the order the loops use them.
-fn rows_of(part: Part) -> Option<Builder> {
-    let mut b = Builder::new();
-    let a = &mut b.arenas;
+fn rows_of(part: &Part) -> Option<Rows> {
     let shell = ix::<Shell>(0)?;
     let first_face = if part.faces.is_empty() {
         None
     } else {
         Some(ix::<Face>(0)?)
     };
-    a.regions
-        .extend(&[
-            Region {
-                kind: RegionKind::Void,
-                first_shell: None,
-            },
-            Region {
-                kind: RegionKind::Solid,
-                first_shell: Some(shell),
-            },
-        ])
-        .ok()?;
-    a.shells
-        .extend(&[Shell {
-            region: ix(1)?,
-            next: None,
-            first_face,
-        }])
-        .ok()?;
+    let regions = [
+        Region {
+            kind: RegionKind::Void,
+            first_shell: None,
+        },
+        Region {
+            kind: RegionKind::Solid,
+            first_shell: Some(shell),
+        },
+    ];
+    let shells = [Shell {
+        region: ix(1)?,
+        next: None,
+        first_face,
+    }];
     let mut faces = Vec::new();
     let mut loops = Vec::new();
     let mut fins: Vec<Fin> = Vec::new();
@@ -372,19 +403,31 @@ fn rows_of(part: Part) -> Option<Builder> {
     let vertices: Vec<Vertex> = (0..part.vertices.len())
         .map(|v| Some(Vertex { point: ix(v)? }))
         .collect::<Option<_>>()?;
-    a.faces.extend(&faces).ok()?;
-    a.loops.extend(&loops).ok()?;
-    a.fins.extend(&fins).ok()?;
-    a.edges.extend(&edges).ok()?;
-    a.vertices.extend(&vertices).ok()?;
+    Some(Rows {
+        regions,
+        shells,
+        faces,
+        loops,
+        fins,
+        edges,
+        vertices,
+    })
+}
+
+/// The arenas of `rows` and `part`'s geometry.
+fn filled(rows: &Rows, part: Part) -> Result<Builder, TopoError> {
+    let mut b = Builder::new();
+    let a = &mut b.arenas;
+    a.regions.extend(&rows.regions)?;
+    a.shells.extend(&rows.shells)?;
+    a.faces.extend(&rows.faces)?;
+    a.loops.extend(&rows.loops)?;
+    a.fins.extend(&rows.fins)?;
+    a.edges.extend(&rows.edges)?;
+    a.vertices.extend(&rows.vertices)?;
     a.surfaces
-        .extend(part.faces.into_iter().map(|f| f.surface))
-        .ok()?;
-    a.curves
-        .extend(part.edges.into_iter().map(|e| e.curve))
-        .ok()?;
-    a.points
-        .extend(part.vertices.into_iter().map(|v| v.at))
-        .ok()?;
-    Some(b)
+        .extend(part.faces.into_iter().map(|f| f.surface))?;
+    a.curves.extend(part.edges.into_iter().map(|e| e.curve))?;
+    a.points.extend(part.vertices.into_iter().map(|v| v.at))?;
+    Ok(b)
 }

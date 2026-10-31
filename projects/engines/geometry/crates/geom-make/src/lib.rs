@@ -29,7 +29,7 @@
 //! Modules (piece G101):
 //!
 //! - `build`: a solid's rows, named by role, published in name order, checked, with its history;
-//!   [`Made`], what every operation here returns.
+//!   [`Made`], what every operation here returns, and [`PER_ROW`], their charge schedule.
 //! - [`primitive`]: box, prism, cylinder, cone, sphere and torus.
 //! - [`transform`]: move, rotate, mirror and scale.
 //! - [`pattern`]: copies of a body, one per transform, each keyed by the caller.
@@ -46,10 +46,10 @@ pub mod pattern;
 pub mod primitive;
 pub mod transform;
 
-pub use build::Made;
-pub use pattern::{Instance, pattern};
+pub use build::{Made, Motion, PER_ROW, PHASE};
+pub use pattern::{Copies, Instance, pattern};
 pub use primitive::{
     BoxInput, PrismInput, RoundInput, SphereInput, TorusInput, cone, cylinder, make_box, prism,
     sphere, torus,
 };
-pub use transform::{Motion, Moved, mirror, move_by, rotate, scale};
+pub use transform::{Moved, mirror, move_by, rotate, scale};

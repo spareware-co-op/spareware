@@ -37,14 +37,15 @@
 //! (`projects/engines/geometry/architecture/10-operations.md`), on chapter 7's analytic surfaces
 //! (`geom_surface::analytic`).
 //!
-//! Cost: constant per primitive, linear in a prism's corners (quadratic in them for its convexity
-//! and edge lookups, at most a few hundred corners in practice). Recursion: none.
+//! Cost: constant per primitive; O(n log n) for a prism of n corners, whose edges are found through
+//! an ordered map. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
     reason = "the names are the geometry's: o, t and c points, r and h radius and height, x and z axes, a, b and n corners"
 )]
 
+use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -316,8 +317,10 @@ fn polyhedron(ctx: &OpContext<'_>, corners: &[P3], faces: &[(Vec<usize>, Role)])
         .iter()
         .map(|(_, r)| created(op, r))
         .collect::<Option<_>>()?;
+    let mut edge_of: BTreeMap<(usize, usize), usize> = BTreeMap::new();
     let mut ends: Vec<(usize, usize)> = Vec::new();
     let mut edge_faces: Vec<Vec<NameId>> = Vec::new();
+    let mut corner_faces: Vec<Vec<NameId>> = corners.iter().map(|_| Vec::new()).collect();
     let mut part_faces = Vec::with_capacity(faces.len());
     for ((ring, role), &name) in faces.iter().zip(&face_names) {
         let n = ring.len();
@@ -325,13 +328,16 @@ fn polyhedron(ctx: &OpContext<'_>, corners: &[P3], faces: &[(Vec<usize>, Role)])
         for k in 0..n {
             let a = *ring.get(k)?;
             let b = *ring.get(k.checked_add(1)?.checked_rem(n)?)?;
+            corner_faces.get_mut(a)?.push(name);
             let key = (a.min(b), a.max(b));
-            let e = if let Some(e) = ends.iter().position(|&x| x == key) {
+            let e = if let Some(&e) = edge_of.get(&key) {
                 e
             } else {
+                let e = ends.len();
+                edge_of.insert(key, e);
                 ends.push(key);
                 edge_faces.push(Vec::new());
-                ends.len().checked_sub(1)?
+                e
             };
             edge_faces.get_mut(e)?.push(name);
             let sense = if a < b {
@@ -382,16 +388,11 @@ fn polyhedron(ctx: &OpContext<'_>, corners: &[P3], faces: &[(Vec<usize>, Role)])
         .collect::<Option<Vec<_>>>()?;
     let vertices = corners
         .iter()
-        .enumerate()
-        .map(|(c, &at)| {
-            let incident = faces
-                .iter()
-                .zip(&face_names)
-                .filter(|((ring, _), _)| ring.contains(&c))
-                .map(|(_, &name)| name);
+        .zip(corner_faces)
+        .map(|(&at, names)| {
             Some(PartVertex {
                 at,
-                role: role_of("corner", incident)?,
+                role: role_of("corner", names)?,
             })
         })
         .collect::<Option<Vec<_>>>()?;
