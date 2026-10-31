@@ -35,6 +35,7 @@ use crate::names::{NAMES_SCHEMA, NAMES_TAG};
 use crate::operation::{OPERATION_SCHEMA, OPERATION_TAG};
 use crate::recipe::{RECIPE_SCHEMA, RECIPE_TAG};
 use crate::record::REQUIRED;
+use crate::{body, kinds};
 
 /// One field of a record or payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -168,12 +169,77 @@ pub const RECORDS: &[RecordType] = &[
         ],
     },
     RecordType {
+        tag: body::BODY_TAG,
+        name: "body",
+        schemas: &[body::SCHEMA],
+        flags: REQUIRED,
+        cddl: "body.cddl",
+        section: "10",
+        fields: &[
+            Field {
+                name: "kind",
+                cddl: "0..4",
+                meaning: "solid, sheet, wire, acorn or general (8.1)",
+            },
+            Field {
+                name: "outside",
+                cddl: "uint",
+                meaning: "the infinite void region, as a reference: its row plus one",
+            },
+            Field {
+                name: "tables",
+                cddl: "[* [table: uint, rows: uint, chunks: [* content-id]]]",
+                meaning: "each table by code, in order, with its rows and its chunks' content IDs in order",
+            },
+            Field {
+                name: "named",
+                cddl: "0 / 1",
+                meaning: "1 if the body was published by name, when tables 12 to 15 hold its names",
+            },
+            Field {
+                name: "extensions",
+                cddl: "{}",
+                meaning: "none in schema 1",
+            },
+        ],
+    },
+    RecordType {
+        tag: body::CHUNK_TAG,
+        name: "chunk",
+        schemas: &[body::SCHEMA],
+        flags: REQUIRED,
+        cddl: "body.cddl",
+        section: "10",
+        fields: &[
+            Field {
+                name: "table",
+                cddl: "uint",
+                meaning: "the table's code",
+            },
+            Field {
+                name: "position",
+                cddl: "uint",
+                meaning: "the chunk's place in its table, from 0",
+            },
+            Field {
+                name: "rows",
+                cddl: "1..4096",
+                meaning: "its rows: 4,096 in every chunk but a table's last",
+            },
+            Field {
+                name: "columns",
+                cddl: "[+ refs / i64-column / bstr / [+ surface] / [+ curve]]",
+                meaning: "the table's columns over those rows, in the table's order",
+            },
+        ],
+    },
+    RecordType {
         tag: NAMES_TAG,
         name: "names",
         schemas: &[NAMES_SCHEMA],
         flags: REQUIRED,
         cddl: "names.cddl",
-        section: "10",
+        section: "12",
         fields: &[Field {
             name: "nodes",
             cddl: "[* [id: name-id, name: topo-name]]",
@@ -186,7 +252,7 @@ pub const RECORDS: &[RecordType] = &[
         schemas: &[HISTORY_SCHEMA],
         flags: REQUIRED,
         cddl: "history.cddl",
-        section: "11",
+        section: "13",
         fields: &[
             Field {
                 name: "op",
@@ -216,7 +282,7 @@ pub const RECORDS: &[RecordType] = &[
         schemas: &[RECIPE_SCHEMA],
         flags: REQUIRED,
         cddl: "recipe.cddl",
-        section: "12",
+        section: "14",
         fields: &[
             Field {
                 name: "owner",
@@ -262,7 +328,7 @@ pub const RECORDS: &[RecordType] = &[
         schemas: &[ATTRIBUTES_SCHEMA],
         flags: REQUIRED,
         cddl: "attributes.cddl",
-        section: "13",
+        section: "15",
         fields: &[
             Field {
                 name: "definitions",
@@ -284,7 +350,7 @@ pub const RECORDS: &[RecordType] = &[
         schemas: &[OPERATION_SCHEMA],
         flags: REQUIRED,
         cddl: "operation.cddl",
-        section: "14",
+        section: "16",
         fields: &[
             Field {
                 name: "op",
@@ -367,13 +433,198 @@ pub fn knows(tag: u64, schema: u64) -> bool {
         .any(|r| r.tag == tag && r.schemas.contains(&schema))
 }
 
+/// A body's tables (24.2): code, arena and columns, in the order a chunk holds them.
+pub const TABLES: &[(u64, &str, &str)] = &[
+    (
+        body::table::REGIONS,
+        "regions",
+        "kind (0 solid, 1 void), first shell",
+    ),
+    (body::table::SHELLS, "shells", "region, next, first face"),
+    (
+        body::table::FACES,
+        "faces",
+        "shell, next, surface, sense, first loop, bound (an `i64` column of six per face)",
+    ),
+    (body::table::LOOPS, "loops", "face, next, first fin"),
+    (
+        body::table::FINS,
+        "fins",
+        "loop, next, previous, edge, sense, radial, pcurve",
+    ),
+    (body::table::EDGES, "edges", "first fin, start, end, curve"),
+    (body::table::VERTICES, "vertices", "point"),
+    (
+        body::table::POINTS,
+        "points",
+        "x, y, z in grid steps (an `i64` column of three per point)",
+    ),
+    (
+        body::table::SURFACES,
+        "surfaces",
+        "one surface kind per row",
+    ),
+    (body::table::CURVES, "curves", "one 3D curve kind per row"),
+    (body::table::PCURVES, "pcurves", "one 2D curve kind per row"),
+    (
+        body::table::REGION_NAMES,
+        "region names",
+        "16 bytes per region, one byte string",
+    ),
+    (
+        body::table::FACE_NAMES,
+        "face names",
+        "16 bytes per face, one byte string",
+    ),
+    (
+        body::table::EDGE_NAMES,
+        "edge names",
+        "16 bytes per edge, one byte string",
+    ),
+    (
+        body::table::VERTEX_NAMES,
+        "vertex names",
+        "16 bytes per vertex, one byte string",
+    ),
+];
+
+/// The curve kinds (7.1): code, kind and fields after the code.
+pub const CURVES: &[(u64, &str, &str)] = &[
+    (
+        kinds::curve::NURBS,
+        "NURBS",
+        "degree, knots, homogeneous points, weights",
+    ),
+    (
+        kinds::curve::LINE,
+        "line, ray or segment",
+        "origin, direction, domain",
+    ),
+    (
+        kinds::curve::CIRCLE,
+        "circle",
+        "centre, radius, frame, domain",
+    ),
+    (kinds::curve::ELLIPSE, "ellipse", "centre, axes, domain"),
+    (kinds::curve::HYPERBOLA, "hyperbola", "centre, axes, domain"),
+    (kinds::curve::PARABOLA, "parabola", "vertex, axes, domain"),
+    (kinds::curve::HELIX, "helix", "centre, helix axes, domain"),
+    (
+        kinds::curve::POLYNOMIAL,
+        "polynomial",
+        "coefficients, domain",
+    ),
+    (kinds::curve::INVOLUTE, "involute", "centre, axes, domain"),
+    (
+        kinds::curve::BULGE,
+        "bulge polyline",
+        "vertices, bulges, widths, closed, start",
+    ),
+    (
+        kinds::curve::TRIMMED,
+        "trimmed",
+        "a leaf kind (codes 1 to 10 and 15), interval",
+    ),
+    (
+        kinds::curve::COMPOSITE,
+        "composite",
+        "trimmed segments, starts",
+    ),
+    (
+        kinds::curve::OFFSET,
+        "offset",
+        "trimmed basis, offset law, cached",
+    ),
+    (
+        kinds::curve::ON_SURFACE,
+        "on a surface",
+        "trimmed pcurve, surface, 3D curve (NURBS fields), error",
+    ),
+    (
+        kinds::curve::TRANSITION,
+        "transition",
+        "start, direction, length, curvature law, window, reversed",
+    ),
+];
+
+/// The surface kinds (7.2): code, kind and fields after the code.
+pub const SURFACES: &[(u64, &str, &str)] = &[
+    (
+        kinds::surface::NURBS,
+        "NURBS",
+        "u degree, u knots, v degree, v knots, homogeneous points, weights",
+    ),
+    (kinds::surface::PLANE, "plane", "origin, a, b, domain"),
+    (
+        kinds::surface::CYLINDER,
+        "cylinder",
+        "centre, radius, frame, domain, axial sign",
+    ),
+    (
+        kinds::surface::CONE,
+        "cone",
+        "centre, radius, slope, frame, domain, axial sign",
+    ),
+    (
+        kinds::surface::SPHERE,
+        "sphere",
+        "centre, radius, frame, domain, axial sign",
+    ),
+    (
+        kinds::surface::TORUS,
+        "torus",
+        "centre, major radius, minor radius, frame, domain, axial sign",
+    ),
+    (
+        kinds::surface::AFFINE,
+        "affine image",
+        "centre, terms, domain, angular u, angular v",
+    ),
+    (
+        kinds::surface::REVOLUTION,
+        "revolution",
+        "profile, axis, frame, angles, placement",
+    ),
+    (
+        kinds::surface::EXTRUSION,
+        "extrusion",
+        "profile, direction, extent, placement",
+    ),
+    (
+        kinds::surface::RULED,
+        "ruled",
+        "first profile, second profile, extent, sigma, placement",
+    ),
+    (
+        kinds::surface::OFFSET,
+        "offset",
+        "base, distance, domain, cached",
+    ),
+];
+
+/// A table of codes, as `format/SPEC.md` holds it: `head` names the second and third columns.
+#[must_use]
+pub fn code_table(head: (&str, &str), rows: &[(u64, &str, &str)]) -> String {
+    let mut out = format!("| Code | {} | {} |\n| --- | --- | --- |\n", head.0, head.1);
+    for &(code, name, what) in rows {
+        let _ = writeln!(out, "| {code} | {name} | {what} |");
+    }
+    out
+}
+
 /// The registry's table, as `format/REGISTRY.md` holds it.
 #[must_use]
 pub fn registry_table() -> String {
+    table_of(RECORDS)
+}
+
+/// The registry's table of `records`, as [`registry_table`] renders [`RECORDS`].
+#[must_use]
+pub fn table_of(records: &[RecordType]) -> String {
     let mut out = String::from(
         "| Tag | Name | Schemas | Flags | CDDL | Defined in |\n| --- | --- | --- | --- | --- | --- |\n",
     );
-    for r in RECORDS {
+    for r in records {
         let schemas: String = r
             .schemas
             .iter()

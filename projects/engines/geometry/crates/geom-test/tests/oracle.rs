@@ -37,7 +37,9 @@ use geom_nurbs::{Basis, Curve, Limit};
 use geom_op::ErrorKind;
 use geom_run::{Budget, WorkMeter};
 use geom_test::fixture::run::Replayed;
-use geom_test::fixture::{Class, Counts, Expect, Hash, Measures, OpLog, Source, Status, Triage};
+use geom_test::fixture::{
+    Class, Counts, Expect, Hash, Measures, OpLog, Source, Spend, Status, Triage,
+};
 use geom_test::oracle::catalogue::{Catalogue, CatalogueError, Oracle, Run, State, audit, linked};
 use geom_test::oracle::compare::{Allowance, exact, within};
 use geom_test::oracle::exact::{float, read_float, steps, to_millimetres};
@@ -403,6 +405,7 @@ fn done() -> Replayed {
             bounds: None,
             exactness: Class::Exact,
         },
+        work: Spend::default(),
     }
 }
 
@@ -436,6 +439,7 @@ fn every_outcome_ends_as_its_fixture() {
         hash: Hash([2; 32]),
         kind: ErrorKind::Degenerate,
         entities: Vec::new(),
+        work: Spend::default(),
     };
     let f = fixture(&r, log(), key.clone(), &failed).unwrap();
     assert!(matches!(
@@ -741,4 +745,37 @@ fn truth_settles_either_way() {
     }
     let both = settle(job, &right, &right, limit).unwrap();
     assert!(both.starts_with("both"), "{both}");
+}
+
+#[test]
+fn a_triaged_job_replays_as_a_fixture() {
+    use geom_test::fixture::kernel::Kernel;
+    use geom_test::fixture::run::{Verdict, replay, run};
+    use geom_test::oracle::geomdl::operation;
+    for job in jobs(Seed(8), 30) {
+        let log = OpLog::new(Vec::new(), vec![operation(&job).unwrap()]);
+        assert_eq!(OpLog::decode(&log.encode().unwrap()).unwrap(), log);
+        let got = replay(&mut Kernel::new(), &log);
+        assert!(matches!(got, Replayed::Done { .. }), "{got:?}");
+        let key = ("pre-edition".to_owned(), log.versions());
+        let mut r = record(&job.family, Triage::Theirs, Some("upstream #1"));
+        r.signature.operation = job.op.name().to_owned();
+        let f = fixture(&r, log, key, &got).unwrap();
+        assert_eq!(run(&f, "pre-edition", &mut Kernel::new()), Verdict::Pass);
+    }
+    // A job the kernel refuses, or another version, is no replay.
+    let mut bad = jobs(Seed(8), 1).remove(0);
+    bad.at = "9".to_owned();
+    let log = OpLog::new(Vec::new(), vec![operation(&bad).unwrap()]);
+    assert!(matches!(
+        replay(&mut Kernel::new(), &log),
+        Replayed::Broken(_)
+    ));
+    let mut op = operation(&jobs(Seed(8), 1).remove(0)).unwrap();
+    op.version = 2;
+    let log = OpLog::new(Vec::new(), vec![op]);
+    assert!(matches!(
+        replay(&mut Kernel::new(), &log),
+        Replayed::Broken(_)
+    ));
 }

@@ -26,9 +26,25 @@
 //! the simulation engine.
 //!
 //! Its direct dependencies are `kit-core`, `geom-pool` behind the `threads` feature, and every
-//! kernel crate it re-exports (none yet: G100 adds them), checked by the scaffold test in
-//! `tests/scaffold`, which holds the kernel's crate table.
+//! kernel crate it re-exports: `geom-num`, `geom-math`, `geom-curve`, `geom-surface`, `geom-topo`,
+//! `geom-run`, `geom-op` and `geom-make`, checked by the scaffold test in `tests/scaffold`, which holds the
+//! kernel's crate table.
 //!
-//! Status: scaffold only; built by pieces G100 and G482, and every operation piece adds its schema
-//! here (chapter 30.1, the standard bar).
+//! Modules today (piece G100):
+//!
+//! - [`value`]: the stable value types of chapter 25: grid points and steps, exactness, curves,
+//!   surfaces, bodies, names and history, errors, and an operation's context and output.
+//! - [`schema`]: chapter 22's schema types, the [`schema::Operation`] entry that gives a schema its
+//!   [`schema::Tier`], and nothing else.
+//! - [`operations`]: [`operations::OPERATIONS`], every operation's schema as data, from which
+//!   `geom-gen` writes the API documentation and the MCP tool descriptions (`generated/`), and the
+//!   operations themselves, re-exported.
+//!
+//! Every operation piece adds its schema to [`operations::OPERATIONS`] (chapter 30.1, the standard
+//! bar). `kit-core`'s permanent IDs and units are converted here once `kit-core` has them: it holds
+//! no code until its program reaches the Design stage (31.7).
 #![forbid(unsafe_code)]
+
+pub mod operations;
+pub mod schema;
+pub mod value;

@@ -30,7 +30,7 @@ use geom_op::{OpId, OpPath};
 use geom_run::Budget;
 use geom_test::fixture::repo::DIR;
 use geom_test::fixture::{
-    Change, Class, Counts, Expect, Fixture, Hash, Measures, OpLog, Source, Speed, Status,
+    Change, Class, Counts, Expect, Fixture, Hash, Measures, OpLog, Source, Speed, Spend, Status,
 };
 use geom_test::golden::store::ChangeKind;
 
@@ -99,6 +99,10 @@ fn fixture(id: &str, fixed_by: Option<&str>) -> Fixture {
 fn expect(byte: u8) -> Expect {
     Expect::Ok {
         hash: Some(Hash([byte; 32])),
+        work: Some(Spend {
+            work: 1,
+            logical_bytes: 0,
+        }),
         measures: Measures {
             volume6: None,
             area2: None,

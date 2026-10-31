@@ -16,6 +16,11 @@ geom-test = { path = "../geom-test" }
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
 
+# The facade, whose operation schemas the facade generators read (piece G100), and serde_json
+# (MIT OR Apache-2.0) to write the MCP tool descriptions, at the version the workspace pins.
+engine-geometry = { path = "../../../crates/engine-geometry" }
+serde_json = "=1.0.154"
+
 [dev-dependencies]
 # Rust's tokens, so tests/verus_twin.rs compares the Verus twin's `value` with the shipped one
 # token for token (piece G36). MIT OR Apache-2.0. Without its default `proc-macro` feature: a test,
@@ -27,7 +32,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.

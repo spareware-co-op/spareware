@@ -9,6 +9,7 @@
 //! - [`log`]: the operation log, written as a standalone `.skgf` file.
 //! - [`run`]: replaying a log through an [`run::Engine`] and judging it: Pass, Fail or Improved.
 //! - [`kernel`]: the kernel as that engine.
+//! - [`replay`]: the replay corpus of the determinism matrix.
 //! - [`minimise`]: removing operations and inputs one at a time while the failure persists.
 //! - [`diff`]: what a pull request may do to the fixtures already stored.
 //! - [`repo`]: the fixtures folder, its embedded copy, and the fails-on-base list.
@@ -24,6 +25,9 @@
 //! - A fix is recorded in `fixed_by`, beside the source, because any source can lead to one.
 //! - [`Speed`] says which tier a fixture runs in, since 28.17 runs fast fixtures on every pull
 //!   request and slow ones nightly.
+//! - Golden counts sit beside each hash (G98): work units and logical bytes. A change of either with
+//!   no change of operation version fails, though the results are the same, because budgets decide
+//!   replayable outcomes.
 //! - `history` records every change to a stored expectation in an open edition, as the golden
 //!   store's does, with the expectation it replaced.
 //!
@@ -57,10 +61,12 @@ use serde::{Deserialize, Serialize};
 use crate::golden::Digest;
 use crate::golden::store::ChangeKind;
 
+pub mod calls;
 pub mod diff;
 pub mod kernel;
 pub mod log;
 pub mod minimise;
+pub mod replay;
 pub mod repo;
 pub mod run;
 
@@ -261,6 +267,27 @@ pub struct Measures {
     pub exactness: Class,
 }
 
+/// What a run charged: the two counts 23.13 keeps per operation, the same on every machine.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Spend {
+    /// Work units.
+    pub work: u64,
+    /// Logical bytes reserved.
+    pub logical_bytes: u64,
+}
+
+impl Spend {
+    /// `self` and `other` together.
+    #[must_use]
+    pub const fn plus(self, other: Spend) -> Spend {
+        Spend {
+            work: self.work.saturating_add(other.work),
+            logical_bytes: self.logical_bytes.saturating_add(other.logical_bytes),
+        }
+    }
+}
+
 /// What a replay of a fixture's log must give.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
@@ -273,6 +300,8 @@ pub enum Expect {
     Ok {
         /// The golden hash ([`run`]); left out only of a `Known` fixture's `wanted`.
         hash: Option<Hash>,
+        /// The golden counts, as the kernel's meter tallies them; left out only of `wanted`.
+        work: Option<Spend>,
         /// The measures.
         measures: Measures,
     },
@@ -282,6 +311,8 @@ pub enum Expect {
         kind: Kind,
         /// The entities it names, in its order.
         entities: Vec<Name>,
+        /// The golden counts.
+        work: Option<Spend>,
     },
 }
 
@@ -649,6 +680,12 @@ impl Fixture {
             expect.check()?;
             if matches!(expect, Expect::Ok { hash: None, .. }) {
                 return Err("an expectation without a hash".to_owned());
+            }
+            if matches!(
+                expect,
+                Expect::Ok { work: None, .. } | Expect::Err { work: None, .. }
+            ) {
+                return Err("an expectation without a work count".to_owned());
             }
         }
         let own = self.log.versions();

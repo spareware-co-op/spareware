@@ -24,7 +24,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 # The kernel's one lint posture: exactly geom-num's settings, here and in clippy.toml (the scaffold
@@ -55,3 +55,16 @@ cast_sign_loss = "deny"
 # and certified bounds (principles 1 and 2), so clippy's advice to compare within an epsilon does
 # not apply.
 float_cmp = "allow"
+
+[dev-dependencies]
+# Property tests only, never linked into the kernel (chapter 29: a development dependency).
+# MIT OR Apache-2.0. Without its default fork and timeout features, which pull in code that has no
+# WebAssembly (WASI) build, so the tests also run on wasm32-wasip1.
+proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
+# The kernel development crate: the history laws kit (piece G88), a development dependency only
+# (chapter 28.1).
+geom-test = { path = "../geom-test" }
+# The side a test reads a surface from at a break.
+geom-nurbs = { path = "../geom-nurbs" }
+# Every test build runs all four checker groups (chapter 28.4), release builds included.
+geom-check = { path = "../geom-check", features = ["full"] }
