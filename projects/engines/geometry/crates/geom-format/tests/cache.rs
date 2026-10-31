@@ -239,6 +239,8 @@ fn the_store_keeps_to_its_bound_and_forgets_the_oldest_use_first() {
     assert!(store.is_empty());
     assert_eq!(store.bound(), 10);
     assert!(store.insert(k(1), entry(1), 4));
+    let empty = store.is_empty();
+    assert!(!empty);
     assert!(store.insert(k(2), entry(2), 4));
     assert_eq!((store.len(), store.held()), (2, 8));
     // A hit on 1 makes 2 the oldest use, so 2 goes when 3 needs room.
