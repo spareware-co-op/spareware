@@ -1,7 +1,7 @@
 //! One-root numbers in 2D, exact: where a line meets a circle, and every question about such points.
 //!
-//! A line and a circle meet where a quadratic with whole-number coefficients has its roots, so the
-//! two coordinates of a crossing are (a + b√k) / w with one square root shared by both (chapter
+//! A line and a circle or ellipse meet where a quadratic with whole-number coefficients has its
+//! roots, so the two coordinates of a crossing are (a + b√k) / w with one square root shared by both (chapter
 //! 14.2). [`Crossing2`] holds that form and the [`Root`] it stands for, and is never rounded. Every
 //! question about it is the sign of a + b√k, or of a + b√k₁ + c√k₂ + d√(k₁k₂) when two crossings
 //! are compared, decided by squaring in fixed-width integers. So order along a line or an arc,
@@ -21,14 +21,14 @@
 //!
 //!   | Quantity | Bits | Where |
 //!   | --- | --- | --- |
-//!   | a, of a crossing | 209 | cx · N + a · h |
-//!   | b, of a crossing | 42 | the carrier's own coefficients |
-//!   | k, of a crossing | 336 | rr · N − h² |
-//!   | w, of a crossing | 166 | cw · N |
+//!   | a, of a crossing | 209, or 252 with an ellipse | cx · N + a · h |
+//!   | b, of a crossing | 42, or 147 with an ellipse | the carrier's own coefficients |
+//!   | k, of a crossing | 336, or 209 with an ellipse | rr · N − h² |
+//!   | w, of a crossing | 166, or 209 with an ellipse | cw · N |
 //!   | Side of a carrier | 505 | E² − F²k, E = a · x + b · y − c · w |
 //!   | Against a circle | 1,010 | E² − F²k, E and F from (Z − P) · (Z + P − 2C) |
 //!   | Two crossings' coordinates | 1,506 | A² − B²k₁, A and B from the first squaring |
-//!   | The turn of a grid point and two crossings | 1,688 | the same, with the fourth term |
+//!   | The turn of a grid point and two crossings | 2,024 | the same, with the fourth term |
 //!
 //!   The last sets [`BIG_LIMBS`]. Rendering these by the description language of `geom-gen` would
 //!   take inputs wider than its `i128`, and a filter of `f64`s past 2^1023, which is why this one
@@ -42,20 +42,22 @@
 //! <https://doi.org/10.1007/978-3-642-17283-0>), from their book; CGAL's source not read (29.2).
 //!
 //! Cost: constant time and no allocation: a square root and a few dozen interval operations to make
-//! a crossing, two subtractions for a filtered comparison, and at worst about thirty products of 28
+//! a crossing, two subtractions for a filtered comparison, and at worst about thirty products of 32
 //! limbs on the exact path.
 
 use crate::arc::{Arc2, Circle2, Round};
 use crate::carrier::{Carrier, Rational2};
+use crate::conic::Ellipse2;
 use crate::error::NumError;
 use crate::interval::Interval;
 use crate::sign::Sign;
 use crate::wide::{I384, Wide};
 
-/// Limbs of the widest exact step: the turn of a grid point and two crossings, 1,688 bits.
-pub const BIG_LIMBS: usize = 28;
+/// Limbs of the widest exact step: the turn of a grid point and two crossings of an ellipse, 2,024
+/// bits.
+pub const BIG_LIMBS: usize = 32;
 
-const _: () = assert!(1_688 < BIG_LIMBS * 64);
+const _: () = assert!(2_010 < BIG_LIMBS * 64);
 
 /// Integers wide enough for every step here.
 type Big = Wide<BIG_LIMBS>;
@@ -187,6 +189,17 @@ fn two_roots_sign(terms: &[Big; 4], k1: &Big, k2: &Big) -> Result<Sign, NumError
     Ok(root_sign(&whole, &twice, k1)?.mul(p))
 }
 
+/// An ellipse's quadratic form, at this module's width.
+fn form_of(ellipse: &Ellipse2) -> Result<[Big; 3], NumError> {
+    let [a, b, c] = ellipse.form()?;
+    Ok([big(&a)?, big(&b)?, big(&c)?])
+}
+
+/// An ellipse's level, at this module's width.
+fn level_of(ellipse: &Ellipse2) -> Result<Big, NumError> {
+    big(&ellipse.level()?)
+}
+
 /// An interval holding `v`: its limbs, the highest first, each step rounded outward.
 fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError> {
     let negative = v.is_negative();
@@ -220,7 +233,7 @@ fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError> {
 #[derive(Clone, Copy, Debug)]
 pub struct Crossing2 {
     a: [I384; 2],
-    b: [i128; 2],
+    b: [I384; 2],
     k: I384,
     w: I384,
     /// Where it lies, certainly: the filter's whole answer.
@@ -237,15 +250,15 @@ struct Part {
 
 impl Crossing2 {
     /// Makes a crossing from its integers, its enclosure from theirs.
-    fn from_parts(a: [I384; 2], b: [i128; 2], k: I384, w: I384) -> Result<Crossing2, NumError> {
+    fn from_parts(a: [I384; 2], b: [I384; 2], k: I384, w: I384) -> Result<Crossing2, NumError> {
         let root = enclose(&k)?.sqrt()?;
         let weight = enclose(&w)?;
-        let coordinate = |a: &I384, b: i128| -> Result<Interval, NumError> {
-            let along = enclose(&I384::from_i128(b))?.mul(root)?;
+        let coordinate = |a: &I384, b: &I384| -> Result<Interval, NumError> {
+            let along = enclose(b)?.mul(root)?;
             enclose(a)?.add(along)?.div(weight)
         };
         let [ax, ay] = &a;
-        let [bx, by] = b;
+        let [bx, by] = &b;
         let at = [coordinate(ax, bx)?, coordinate(ay, by)?];
         Ok(Crossing2 { a, b, k, w, at })
     }
@@ -279,7 +292,8 @@ impl Crossing2 {
         let bs = match root {
             Root::First => [turned(ahead)?, across],
             Root::Second => [ahead, turned(across)?],
-        };
+        }
+        .map(I384::from_i128);
         Crossing2::from_parts([ax, ay], bs, stored(k)?, stored(mul(&cw, &n)?)?)
     }
 
@@ -320,7 +334,7 @@ impl Crossing2 {
         let ([x, y], w) = p.coordinates();
         Crossing2::from_parts(
             [I384::from_i128(x), I384::from_i128(y)],
-            [0, 0],
+            [I384::from_i64(0), I384::from_i64(0)],
             I384::from_i64(0),
             I384::from_i128(w),
         )
@@ -328,7 +342,7 @@ impl Crossing2 {
 
     /// Its homogeneous parts: `[aₓ, a_y]`, `[bₓ, b_y]`, k and w, w positive.
     #[must_use]
-    pub const fn parts(&self) -> ([I384; 2], [i128; 2], I384, I384) {
+    pub const fn parts(&self) -> ([I384; 2], [I384; 2], I384, I384) {
         (self.a, self.b, self.k, self.w)
     }
 
@@ -345,7 +359,7 @@ impl Crossing2 {
         };
         Ok(Part {
             a: big(a)?,
-            b: Big::from_i128(*b),
+            b: big(b)?,
             k: big(&self.k)?,
             w: big(&self.w)?,
         })
@@ -490,6 +504,95 @@ impl Crossing2 {
             &mul(&rw, &rw)?,
         )?;
         let half = dot(&u, &b)?;
+        root_sign(&whole, &add(&half, &half)?, &x.k)
+    }
+
+    /// Where the carrier `l` meets the ellipse `e`, `root` choosing which. With S the ellipse's form,
+    /// M its major axis, L = ‖M‖², n the carrier's normal, d = (b, −a), h = c − n · C, e = S(d) and
+    /// k = e − q²h², it is C + (h · adj(S) n ± p · L · d√k) / e, as the discriminant's square factors
+    /// cancel.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::of_round`].
+    pub fn of_ellipse(l: &Carrier, ellipse: &Ellipse2, root: Root) -> Result<Crossing2, NumError> {
+        let ([a, b], c) = l.coefficients();
+        let (a, b, c) = (Big::from_i128(a), Big::from_i128(b), Big::from_i128(c));
+        let centre = ellipse.centre();
+        let (cx, cy) = (Big::from_i64(centre.x.get()), Big::from_i64(centre.y.get()));
+        let [fa, fb, fc] = form_of(ellipse)?;
+        let h = sub(&sub(&c, &mul(&a, &cx)?)?, &mul(&b, &cy)?)?;
+        // S on d = (b, −a); B is the form's x y coefficient, twice the matrix's.
+        let e = add(
+            &sub(&mul(&fa, &mul(&b, &b)?)?, &mul(&fb, &mul(&a, &b)?)?)?,
+            &mul(&fc, &mul(&a, &a)?)?,
+        )?;
+        let (p, q) = ellipse.ratio();
+        let (p, q) = (Big::from_i64(p), Big::from_i64(q));
+        let qh = mul(&q, &h)?;
+        let k = sub(&e, &mul(&qh, &qh)?)?;
+        if k.is_negative() {
+            return Err(NumError::Degenerate);
+        }
+        // adj(S) n, twice it to clear the half of B, is (2C · a − B · b, 2A · b − B · a).
+        let twice = |v: &Big| add(v, v);
+        let adj = [
+            sub(&mul(&twice(&fc)?, &a)?, &mul(&fb, &b)?)?,
+            sub(&mul(&twice(&fa)?, &b)?, &mul(&fb, &a)?)?,
+        ];
+        let [ax, ay] = &adj;
+        let [mx, my] = ellipse.major().map(Big::from_i64);
+        let length = add(&mul(&mx, &mx)?, &mul(&my, &my)?)?;
+        let scale = twice(&mul(&p, &length)?)?;
+        let stored = |v: Big| -> Result<I384, NumError> {
+            v.resize().ok_or(NumError::BudgetExceeded)
+        };
+        let weight = twice(&e)?;
+        let lead_x = add(&mul(&cx, &weight)?, &mul(&h, ax)?)?;
+        let lead_y = add(&mul(&cy, &weight)?, &mul(&h, ay)?)?;
+        let along = [mul(&scale, &b)?, neg(&mul(&scale, &a)?)?];
+        let [bx, by] = along;
+        let bs = match root {
+            Root::First => [stored(neg(&bx)?)?, stored(neg(&by)?)?],
+            Root::Second => [stored(bx)?, stored(by)?],
+        };
+        Crossing2::from_parts([stored(lead_x)?, stored(lead_y)?], bs, stored(k)?, stored(weight)?)
+    }
+
+    /// Where it lies against the ellipse `e`: [`Sign::Negative`] inside, [`Sign::Zero`] on it,
+    /// [`Sign::Positive`] outside. With U = A − W · C, the ellipse's form S and level ℓ, the value
+    /// S(Z − C) − ℓ, times W², is E + F√k with E = S(U) + S(B)k − ℓW² and F = 2S(U, B).
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::cmp_x`].
+    pub fn against_ellipse(&self, ellipse: &Ellipse2) -> Result<Sign, NumError> {
+        let (x, y) = (self.part(0)?, self.part(1)?);
+        let centre = ellipse.centre();
+        let scale_w = |v: i64| mul(&Big::from_i64(v), &x.w);
+        let u = [
+            sub(&x.a, &scale_w(centre.x.get())?)?,
+            sub(&y.a, &scale_w(centre.y.get())?)?,
+        ];
+        let b = [x.b, y.b];
+        let [fa, fb, fc] = form_of(ellipse)?;
+        let shape = |p: &[Big; 2], q: &[Big; 2]| -> Result<Big, NumError> {
+            // Twice the form's bilinear value: 2A p₀q₀ + B(p₀q₁ + p₁q₀) + 2C p₁q₁.
+            let ([p0, p1], [q0, q1]) = (p, q);
+            let ends = add(&mul(&fa, &mul(p0, q0)?)?, &mul(&fc, &mul(p1, q1)?)?)?;
+            add(
+                &add(&ends, &ends)?,
+                &mul(&fb, &add(&mul(p0, q1)?, &mul(p1, q0)?)?)?,
+            )
+        };
+        let level = level_of(ellipse)?;
+        let twice_level = add(&level, &level)?;
+        let w2 = mul(&x.w, &x.w)?;
+        let whole = sub(
+            &add(&shape(&u, &u)?, &mul(&shape(&b, &b)?, &x.k)?)?,
+            &mul(&twice_level, &w2)?,
+        )?;
+        let half = shape(&u, &b)?;
         root_sign(&whole, &add(&half, &half)?, &x.k)
     }
 

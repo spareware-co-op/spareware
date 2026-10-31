@@ -933,6 +933,114 @@ pub fn circle_gap_value(a: P2, b: P2, t: i128) -> Option<i128> {
     s.to_i128()
 }
 
+/// `ellipse_side`'s exact value in width-aware limbs (chapter 23.3): each step in `i64`, or in a
+/// `Wide32` of as many 32-bit limbs as its operands' certified bits need, with checked arithmetic,
+/// and the result in the shipped path's type; `None` only if a step overflowed, which the
+/// certificate rules out; `None` also for a rounded input outside its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn ellipse_side_value(
+    x: i128,
+    y: i128,
+    w: i128,
+    k: P2,
+    mx: i128,
+    my: i128,
+    p: i128,
+    q: i128,
+) -> Option<I384> {
+    let x = Wide32::<4>::from_i128(within(x, 124)?)?;
+    let w = Wide32::<3>::from_i128(within(w, 83)?)?;
+    let k_x = k.x.get();
+    let ux_1 = Wide32::<4>::product_by_i64(&w, k_x)?;
+    let ux = x.checked_sub(&ux_1)?;
+    let y = Wide32::<4>::from_i128(within(y, 124)?)?;
+    let k_y = k.y.get();
+    let uy_1 = Wide32::<4>::product_by_i64(&w, k_y)?;
+    let uy = y.checked_sub(&uy_1)?;
+    let mx = i64::try_from(within(mx, 41)?).ok()?;
+    let along_1 = Wide32::<6>::product_by_i64(&ux, mx)?;
+    let my = i64::try_from(within(my, 41)?).ok()?;
+    let along_2 = Wide32::<6>::product_by_i64(&uy, my)?;
+    let along = along_1.checked_add(&along_2)?;
+    let across_1 = Wide32::<6>::product_by_i64(&uy, mx)?;
+    let across_2 = Wide32::<6>::product_by_i64(&ux, my)?;
+    let across = across_1.checked_sub(&across_2)?;
+    let p = i64::try_from(within(p, 22)?).ok()?;
+    let pa = Wide32::<6>::product_by_i64(&along, p)?;
+    let q = i64::try_from(within(q, 22)?).ok()?;
+    let qa = Wide32::<6>::product_by_i64(&across, q)?;
+    let nn_1 = Wide32::<3>::product_i64(mx, mx)?;
+    let nn_2 = Wide32::<3>::product_i64(my, my)?;
+    let nn = nn_1.checked_add(&nn_2)?;
+    let level_1 = Wide32::<4>::product_by_i64(&nn, p)?;
+    let level = Wide32::<6>::product(&level_1, &w)?;
+    let s_1 = Wide32::<12>::product(&pa, &pa)?;
+    let s_2 = Wide32::<12>::product(&qa, &qa)?;
+    let s_3 = s_1.checked_add(&s_2)?;
+    let s_4 = Wide32::<12>::product(&level, &level)?;
+    let s = s_3.checked_sub(&s_4)?;
+    s.to_wide::<6>()
+}
+
+/// `ellipse_line`'s exact value in width-aware limbs (chapter 23.3): each step in `i64`, or in a
+/// `Wide32` of as many 32-bit limbs as its operands' certified bits need, with checked arithmetic,
+/// and the result in the shipped path's type; `None` only if a step overflowed, which the
+/// certificate rules out; `None` also for a rounded input outside its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn ellipse_line_value(
+    a: i128,
+    b: i128,
+    d: i128,
+    k: P2,
+    mx: i128,
+    my: i128,
+    p: i128,
+    q: i128,
+) -> Option<I256> {
+    let b = i64::try_from(within(b, 41)?).ok()?;
+    let mx = i64::try_from(within(mx, 41)?).ok()?;
+    let along_1 = Wide32::<3>::product_i64(b, mx)?;
+    let a = i64::try_from(within(a, 41)?).ok()?;
+    let my = i64::try_from(within(my, 41)?).ok()?;
+    let along_2 = Wide32::<3>::product_i64(a, my)?;
+    let along = along_1.checked_sub(&along_2)?;
+    let across_1 = Wide32::<3>::product_i64(a, mx)?;
+    let across_2 = Wide32::<3>::product_i64(b, my)?;
+    let across = across_1.checked_add(&across_2)?;
+    let d = Wide32::<3>::from_i128(within(d, 82)?)?;
+    let k_x = k.x.get();
+    let h_1 = Wide32::<3>::product_i64(a, k_x)?;
+    let h_2 = d.checked_sub(&h_1)?;
+    let k_y = k.y.get();
+    let h_3 = Wide32::<3>::product_i64(b, k_y)?;
+    let h = h_2.checked_sub(&h_3)?;
+    let p = i64::try_from(within(p, 22)?).ok()?;
+    let pa = Wide32::<4>::product_by_i64(&along, p)?;
+    let q = i64::try_from(within(q, 22)?).ok()?;
+    let qa = Wide32::<4>::product_by_i64(&across, q)?;
+    let qh = Wide32::<4>::product_by_i64(&h, q)?;
+    let s_1 = Wide32::<7>::product(&pa, &pa)?;
+    let s_2 = Wide32::<7>::product(&qa, &qa)?;
+    let s_3 = s_1.checked_add(&s_2)?;
+    let s_4 = Wide32::<7>::product(&qh, &qh)?;
+    let s = s_3.checked_sub(&s_4)?;
+    s.to_wide::<4>()
+}
+
 /// Bounded proofs (chapter 23.3; piece G42): every kind of limb step the functions above perform,
 /// on every operand its certified bits allow, never returns `None`.
 #[cfg(kani)]
@@ -994,6 +1102,20 @@ mod proofs {
     fn rounded_125_in_4() {
         let v = wide_input(125);
         assert!(Wide32::<4>::from_i128(v).is_some());
+    }
+
+    #[kani::proof]
+    fn mul_i64x22_w3x83_in_4() {
+        let (l, r) = (small(22), big::<3>(83));
+        let step = || -> Option<Wide32<4>> { Some(Wide32::<4>::product_by_i64(&r, l)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn mul_i64x22_w6x167_in_6() {
+        let (l, r) = (small(22), big::<6>(167));
+        let step = || -> Option<Wide32<6>> { Some(Wide32::<6>::product_by_i64(&r, l)?) };
+        assert!(step().is_some());
     }
 
     #[kani::proof]
@@ -1109,6 +1231,20 @@ mod proofs {
     }
 
     #[kani::proof]
+    fn mul_w4x105_w3x83_in_6() {
+        let (l, r) = (big::<4>(105), big::<3>(83));
+        let step = || -> Option<Wide32<6>> { Some(Wide32::<6>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn mul_w4x105_w4x105_in_7() {
+        let (l, r) = (big::<4>(105), big::<4>(105));
+        let step = || -> Option<Wide32<7>> { Some(Wide32::<7>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
     fn mul_w4x124_w3x83_in_7() {
         let (l, r) = (big::<4>(124), big::<3>(83));
         let step = || -> Option<Wide32<7>> { Some(Wide32::<7>::product(&l, &r)?) };
@@ -1119,6 +1255,13 @@ mod proofs {
     fn mul_w4x124_w4x124_in_8() {
         let (l, r) = (big::<4>(124), big::<4>(124));
         let step = || -> Option<Wide32<8>> { Some(Wide32::<8>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn mul_w4x125_i64x41_in_6() {
+        let (l, r) = (big::<4>(125), small(41));
+        let step = || -> Option<Wide32<6>> { Some(Wide32::<6>::product_by_i64(&l, r)?) };
         assert!(step().is_some());
     }
 
@@ -1168,6 +1311,20 @@ mod proofs {
     fn mul_w6x167_w6x167_in_11() {
         let (l, r) = (big::<6>(167), big::<6>(167));
         let step = || -> Option<Wide32<11>> { Some(Wide32::<11>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn mul_w6x188_w6x188_in_12() {
+        let (l, r) = (big::<6>(188), big::<6>(188));
+        let step = || -> Option<Wide32<12>> { Some(Wide32::<12>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn mul_w6x189_w6x189_in_12() {
+        let (l, r) = (big::<6>(189), big::<6>(189));
+        let step = || -> Option<Wide32<12>> { Some(Wide32::<12>::product(&l, &r)?) };
         assert!(step().is_some());
     }
 
@@ -1270,6 +1427,13 @@ mod proofs {
     }
 
     #[kani::proof]
+    fn add_w7x210_w7x210_in_7() {
+        let (l, r) = (big::<7>(210), big::<7>(210));
+        let step = || -> Option<Wide32<7>> { Some(l.checked_add(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
     fn add_w7x211_w7x210_in_7() {
         let (l, r) = (big::<7>(211), big::<7>(210));
         let step = || -> Option<Wide32<7>> { Some(l.checked_add(&r)?) };
@@ -1319,8 +1483,29 @@ mod proofs {
     }
 
     #[kani::proof]
+    fn add_w12x378_w12x378_in_12() {
+        let (l, r) = (big::<12>(378), big::<12>(378));
+        let step = || -> Option<Wide32<12>> { Some(l.checked_add(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn sub_w3x82_w3x81_in_3() {
+        let (l, r) = (big::<3>(82), big::<3>(81));
+        let step = || -> Option<Wide32<3>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
     fn sub_w3x82_w3x82_in_3() {
         let (l, r) = (big::<3>(82), big::<3>(82));
+        let step = || -> Option<Wide32<3>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn sub_w3x83_w3x81_in_3() {
+        let (l, r) = (big::<3>(83), big::<3>(81));
         let step = || -> Option<Wide32<3>> { Some(l.checked_sub(&r)?) };
         assert!(step().is_some());
     }
@@ -1461,6 +1646,13 @@ mod proofs {
     #[kani::proof]
     fn sub_w12x378_w12x377_in_12() {
         let (l, r) = (big::<12>(378), big::<12>(377));
+        let step = || -> Option<Wide32<12>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn sub_w12x379_w12x376_in_12() {
+        let (l, r) = (big::<12>(379), big::<12>(376));
         let step = || -> Option<Wide32<12>> { Some(l.checked_sub(&r)?) };
         assert!(step().is_some());
     }

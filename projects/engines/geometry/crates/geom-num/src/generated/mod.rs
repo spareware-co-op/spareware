@@ -95,6 +95,8 @@
 //! | [`circle_side`] | 16 | `I256` | 7.993605777301138e-15 · max{v^2·r^2, p^2, y·p·v, y^2·v^2, x·p·v, x^2·v^2} | — (not in predicates.c) | — (Geogram has no integer 2D carrier) |
 //! | [`circle_line`] | 17 | `I256` | 1.0658141036401519e-14 · max{d^2, n^2·r^2, y·n·d, y^2·n^2, x·n·d, x·y·n^2, x^2·n^2} | — (not in predicates.c) | — (Geogram has no integer 2D carrier) |
 //! | [`circle_gap`] | 8 | `i128` | 1.1102230246251573e-15 · max{t^2, y^2, x^2} | — (not in predicates.c) | — (Geogram has no integer 2D carrier) |
+//! | [`ellipse_side`] | 31 | `I384` | 7.194245199571036e-14 · max{w^2·m^4·r^2, a^2·m^2·r^2, y·a·w·m^2·r^2, y^2·w^2·m^2·r^2, x·a·w·m^2·r^2, x·y·w^2·m^2·r^2, x^2·w^2·m^2·r^2} | — (not in predicates.c) | — (Geogram has no integer 2D carrier) |
+//! | [`ellipse_line`] | 27 | `I256` | 2.597921877622872e-14 · max{d^2·r^2, n^2·m^2·r^2, y·n·d·r^2, y^2·n^2·r^2, x·n·d·r^2, x·y·n^2·r^2, x^2·n^2·r^2} | — (not in predicates.c) | — (Geogram has no integer 2D carrier) |
 //!
 //! Method: Meyer and Pion's almost-static filters, which chapter 6.2 calls semi-static (*FPG: A
 //! code generator for fast and certified geometric predicates*, Real Numbers and Computers 2008,
@@ -129,6 +131,8 @@ pub mod carrier_side;
 pub mod circle_gap;
 pub mod circle_line;
 pub mod circle_side;
+pub mod ellipse_line;
+pub mod ellipse_side;
 pub mod incircle;
 pub mod insphere;
 pub mod limbs;

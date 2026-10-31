@@ -4,13 +4,15 @@
 //! `predicate-carrier-side`, `predicate-carrier-order`, `predicate-rational-cmp`,
 //! `predicate-rational-orient`, `predicate-round-grid`, `predicate-round-rational`,
 //! `predicate-round-line`, `predicate-circle-side`, `predicate-circle-line`,
-//! `predicate-circle-gap`, `predicate-variant-plain` and `predicate-variant-limbs`: the
+//! `predicate-circle-gap`, `predicate-ellipse-side`, `predicate-ellipse-line`,
+//! `predicate-variant-plain` and `predicate-variant-limbs`: the
 //! kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`,
 //! `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`,
 //! `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight`, `verus-ssi-side`,
 //! `verus-carrier-side`, `verus-carrier-order`, `verus-rational-cmp`, `verus-rational-orient`,
 //! `verus-round-grid`, `verus-round-rational`, `verus-round-line`, `verus-circle-side`,
-//! `verus-circle-line` and `verus-circle-gap`, the Verus twins of the predicates' exact paths; and
+//! `verus-circle-line`, `verus-circle-gap`, `verus-ellipse-side` and `verus-ellipse-line`, the Verus
+//! twins of the predicates' exact paths; and
 //! `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`,
 //! `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`,
 //! `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`,
@@ -22,7 +24,8 @@
 //! `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-carrier-side`,
 //! `fptaylor-carrier-order`, `fptaylor-rational-cmp`, `fptaylor-rational-orient`,
 //! `fptaylor-round-grid`, `fptaylor-round-rational`, `fptaylor-round-line`,
-//! `fptaylor-circle-side`, `fptaylor-circle-line` and `fptaylor-circle-gap`, the problems that
+//! `fptaylor-circle-side`, `fptaylor-circle-line`, `fptaylor-circle-gap`, `fptaylor-ellipse-side` and
+//! `fptaylor-ellipse-line`, the problems that
 //! machine-check the filters' error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
@@ -39,7 +42,7 @@
 //! chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the
 //! four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane
 //! ones, `crossing.rs` the 2D crossing ones, `carrier.rs` the carrier and rational-point ones and
-//! `arc.rs` the circle and arc ones.
+//! `arc.rs` the circle and arc ones and `conic.rs` the ellipse ones.
 //!
 //! Guarantees:
 //!
@@ -70,7 +73,7 @@
 //!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
 //!   for its one description per predicate. No code copied.
 //!
-//! Cost: each generator derives one predicate, or all twenty-one for the parent module and each
+//! Cost: each generator derives one predicate, or all twenty-three for the parent module and each
 //! variant: a few hundred exact operations each.
 
 use crate::generator::GenError;
@@ -515,6 +518,53 @@ let s = dx * dx + dy * dy - t * t
 sign s
 ";
 
+/// `ellipse_side`: where a rational point lies against an ellipse.
+pub const ELLIPSE_SIDE: &str = "\
+# ellipse_side: where the rational point (x / w, y / w), w > 0, lies against the ellipse about the
+# grid point k with major axis (mx, my) and axis ratio p / q: the sign of
+# p^2 (u . m)^2 + q^2 (u . m')^2 - p^2 |m|^4, for u the point less k, times w^2, as
+# geom_num::conic::Ellipse2::side asks it.
+predicate ellipse_side
+input x y: rounded 124 in a
+input w: rounded 83 in w
+input k: point2
+input mx my: rounded 41 in m
+input p q: rounded 22 in r
+let ux = x - w * k.x
+let uy = y - w * k.y
+let along = ux * mx + uy * my
+let across = uy * mx - ux * my
+let pa = p * along
+let qa = q * across
+let nn = mx * mx + my * my
+let level = p * nn * w
+let s = pa * pa + qa * qa - level * level
+sign s
+";
+
+/// `ellipse_line`: how a carrier meets an ellipse.
+pub const ELLIPSE_LINE: &str = "\
+# ellipse_line: how the carrier a x + b y = d meets the ellipse about the grid point k with major
+# axis (mx, my) and axis ratio p / q: the sign of e - q^2 h^2, with e the ellipse's form on the
+# line's direction and h = d - (a, b) . k, as geom_num::conic::Ellipse2::meets asks it. Positive
+# for a crossing, negative for none, and zero for a tangency: the discriminant of where they meet,
+# over its square factors.
+predicate ellipse_line
+input a b: rounded 41 in n
+input d: rounded 82 in d
+input k: point2
+input mx my: rounded 41 in m
+input p q: rounded 22 in r
+let along = b * mx - a * my
+let across = a * mx + b * my
+let h = d - a * k.x - b * k.y
+let pa = p * along
+let qa = q * across
+let qh = q * h
+let s = pa * pa + qa * qa - qh * qh
+sign s
+";
+
 /// One predicate: its generator's name, the description's constant name, the description, its
 /// output file, and the comparison row of the parent module.
 pub struct Predicate {
@@ -531,7 +581,7 @@ pub struct Predicate {
 }
 
 /// The predicates, in the order the registry runs them.
-pub const PREDICATES: [Predicate; 21] = [
+pub const PREDICATES: [Predicate; 23] = [
     Predicate {
         generator: "predicate-orient2d",
         constant: "ORIENT2D",
@@ -834,6 +884,32 @@ pub const PREDICATES: [Predicate; 21] = [
             fpg: "— (Geogram has no integer 2D carrier)",
         },
     },
+    Predicate {
+        generator: "predicate-ellipse-side",
+        constant: "ELLIPSE_SIDE",
+        text: ELLIPSE_SIDE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ellipse_side.rs",
+        comparison: Comparison {
+            name: "ellipse_side",
+            serves: "where a rational point lies against an ellipse (chapter 14.2). [`crate::conic::Ellipse2::side`] \
+                     calls it, filter first",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-ellipse-line",
+        constant: "ELLIPSE_LINE",
+        text: ELLIPSE_LINE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ellipse_line.rs",
+        comparison: Comparison {
+            name: "ellipse_line",
+            serves: "how a carrier meets an ellipse, tangency being this value exactly zero (chapter 14.2). \
+                     [`crate::conic::Ellipse2::meets`] calls it, filter first",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
 ];
 
 /// The parent module's generator.
@@ -1056,13 +1132,31 @@ pub fn generate_circle_gap() -> Result<Vec<u8>, GenError> {
     module_of(named("circle_gap")?)
 }
 
+/// Generator `predicate-ellipse-side`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_ellipse_side() -> Result<Vec<u8>, GenError> {
+    module_of(named("ellipse_side")?)
+}
+
+/// Generator `predicate-ellipse-line`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_ellipse_line() -> Result<Vec<u8>, GenError> {
+    module_of(named("ellipse_line")?)
+}
+
 /// The folder of `geom-num`'s Verus crate that the predicate twins are generated into: modules of
 /// `verus/lib.rs`, outside every crate's sources, so Cargo never builds them;
 /// `kernel-dev.yml`'s `verus` job verifies the crate.
 pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
 
 /// The predicates with a Verus twin (pieces G36, G38 and G39), by name.
-pub const VERUS_TWINS: [&str; 21] = [
+pub const VERUS_TWINS: [&str; 23] = [
     "orient2d",
     "orient3d",
     "incircle",
@@ -1084,6 +1178,8 @@ pub const VERUS_TWINS: [&str; 21] = [
     "circle_side",
     "circle_line",
     "circle_gap",
+    "ellipse_side",
+    "ellipse_line",
 ];
 
 /// The twin of the predicate called `name`, as bytes.
@@ -1285,6 +1381,24 @@ pub fn generate_verus_circle_line() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_circle_gap() -> Result<Vec<u8>, GenError> {
     twin_of("circle_gap")
+}
+
+/// Generator `verus-ellipse-side`: `ellipse_side`'s exact path as a Verus-annotated twin.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_ellipse_side() -> Result<Vec<u8>, GenError> {
+    twin_of("ellipse_side")
+}
+
+/// Generator `verus-ellipse-line`: `ellipse_line`'s exact path as a Verus-annotated twin.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_ellipse_line() -> Result<Vec<u8>, GenError> {
+    twin_of("ellipse_line")
 }
 
 /// Generator `verus-plane-side`: `plane_side`'s exact path as a Verus-annotated twin
@@ -1818,6 +1932,26 @@ pub fn generate_fptaylor_circle_gap() -> Result<Vec<u8>, GenError> {
     certificate("circle_gap", "fptaylor-circle-gap", fptaylor_problem)
 }
 
+/// Generator `fptaylor-ellipse-side`: `ellipse_side`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_ellipse_side() -> Result<Vec<u8>, GenError> {
+    certificate("ellipse_side", "fptaylor-ellipse-side", fptaylor_problem)
+}
+
+/// Generator `fptaylor-ellipse-line`: `ellipse_line`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_ellipse_line() -> Result<Vec<u8>, GenError> {
+    certificate("ellipse_line", "fptaylor-ellipse-line", fptaylor_problem)
+}
+
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.
 ///
 /// # Errors
@@ -1854,7 +1988,7 @@ mod tests {
     type Generate = fn() -> Result<Vec<u8>, GenError>;
 
     /// Each generator with its committed output, built into the test.
-    const COMMITTED: [(&str, Generate, &[u8]); 22] = [
+    const COMMITTED: [(&str, Generate, &[u8]); 24] = [
         (
             "mod.rs",
             generate_module,
@@ -1964,6 +2098,16 @@ mod tests {
             "circle_gap.rs",
             generate_circle_gap,
             include_bytes!("../../geom-num/src/generated/circle_gap.rs"),
+        ),
+        (
+            "ellipse_side.rs",
+            generate_ellipse_side,
+            include_bytes!("../../geom-num/src/generated/ellipse_side.rs"),
+        ),
+        (
+            "ellipse_line.rs",
+            generate_ellipse_line,
+            include_bytes!("../../geom-num/src/generated/ellipse_line.rs"),
         ),
     ];
 
