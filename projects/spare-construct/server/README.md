@@ -93,25 +93,27 @@ This is the owner's test of the whole stack, and it stays the test as the stack 
 | --- | --- | --- |
 | 1 | Anna logs in and lands in Company 1 | Passes. Someone not on the server is refused, and nothing opens without signing in |
 | 2 | Dan switches between Company 2 and Company 1 | Passes. Each hub shows only the projects he is on |
-| 3 | Two browsers editing Example model 1 each see the other's edit in under 200 ms | Passes. Real browsers: median 24 ms, worst 50 ms. Test clients, 200 edits each way: median 20 ms, worst 29 ms |
+| 3 | Two browsers editing Example model 1 each see the other's edit in under 200 ms | Passes. Real browsers: median 24 ms, worst 67 ms. Test clients, 200 edits each way: median 20 ms, worst 56 ms |
 | 4 | Dan can't see the Architecture team's WIP; Arch v12 can be shared, bridged and consumed | Passes. A bridge to Company 3 is refused because only one hub permits it. What Dan consumes has the same hash as what Anna shared |
 | 5 | Killing and restarting the server mid-edit loses nothing | Passes. 400 edits through 2 hard kills: exactly 400 log entries, and the log replays to exactly what is stored. The real page reconnects by itself mid-drag |
 | 6 | A backup restores | Passes. After wiping TiKV and RustFS, every key and file came back byte for byte, the logs replay, and work carries on |
 
+Shapes run through all of it. Every `verify` above also rebuilds each stored shape from its recipe and compares the bytes. In real browsers, every body built on the page matched the server's checkpoint, and a browser that can't load the geometry still draws the stored shapes and sends no edits.
+
 ### Moving to three machines, by settings alone
 
-The whole checklist passes on three copies of PD and TiKV, with three copies of every write, changing only `STACK_NODES`, `STACK_PD` and the replica count. One TiKV is killed with 175 of the 400 edits still to come: nothing is lost, and the run takes 4.9 s instead of 1.3 s while the other two take over.
+The whole checklist passes on three copies of PD and TiKV, with three copies of every write, changing only `STACK_NODES`, `STACK_PD` and the replica count. One TiKV is killed with 175 of the 400 edits still to come: nothing is lost, and the run takes 1.9 s instead of 1.7 s while the other two take over.
 
 ### Load on the direct TiKV route
 
-Each writer sends an edit and waits for it to be confirmed, as a busy browser does. These run the orderer directly on TiKV, with no web server. Every edit is checked afterwards: none lost, none doubled.
+Each writer sends an edit and waits for it to be confirmed, as a busy browser does. These run the orderer directly on TiKV, with no web server and no regeneration, which runs after each commit and holds nothing up. Every edit is checked afterwards: none lost, none doubled. Through the real server, with regeneration keeping up behind them, eight tabs on two servers reach 82 edits/s on one node and 67 on three.
 
 | Run | One node | Three nodes |
 | --- | --- | --- |
-| 1 project, 8 writers, 1 server | 174 edits/s, 99% in 97 ms | 211 edits/s, 99% in 43 ms |
-| 1 project, 8 writers, 2 servers | 100 edits/s, 99% in 1,043 ms, worst 3.8 s | 101 edits/s, 99% in 780 ms, worst 4.3 s |
-| 8 projects, 8 writers, 1 server | 236 edits/s, 99% in 91 ms | 174 edits/s, 99% in 131 ms |
-| 32 projects, 64 writers, 2 servers | 277 edits/s, 99% in 576 ms | 420 edits/s, 99% in 347 ms |
+| 1 project, 8 writers, 1 server | 188 edits/s, 99% in 58 ms | 178 edits/s, 99% in 61 ms |
+| 1 project, 8 writers, 2 servers | 99 edits/s, 99% in 1,270 ms, worst 3.4 s | 69 edits/s, 99% in 1,120 ms, worst 6.1 s |
+| 8 projects, 8 writers, 1 server | 241 edits/s, 99% in 61 ms | 163 edits/s, 99% in 65 ms |
+| 32 projects, 64 writers, 2 servers | 426 edits/s, 99% in 285 ms | 337 edits/s, 99% in 410 ms |
 
 What these say:
 
