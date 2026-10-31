@@ -353,7 +353,7 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
 
 /// `order`, with a failure written down: a sort's comparison cannot return one.
 fn noted(order: Option<Ordering>, failed: &Once<bool>) -> Ordering {
-    failed.set(failed.get() || order.is_none());
+    failed.set(failed.get().max(order.is_none()));
     order.unwrap_or(Ordering::Equal)
 }
 

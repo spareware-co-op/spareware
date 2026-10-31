@@ -414,6 +414,16 @@ fn a_piece_turned_against_its_neighbours_is_refused() {
 }
 
 #[test]
+fn a_piece_with_its_bounds_in_the_wrong_turn_is_refused() {
+    let mut pieces = kept(&scene(&[A]), &WindingTest::unite(), LEAF_POLYGONS);
+    pieces[0].piece.bounds.reverse();
+    assert_eq!(
+        merge(&pieces, Merge::RemoveRedundant, &mut meter()),
+        Err(MergeError::Open)
+    );
+}
+
+#[test]
 fn pieces_that_overlap_are_refused() {
     let mut pieces = kept(&scene(&[A]), &WindingTest::unite(), LEAF_POLYGONS);
     let copy = pieces[0].clone();
