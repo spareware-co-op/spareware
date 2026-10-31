@@ -252,8 +252,13 @@ impl Rows {
                     ];
                     if cross != [0; 3] {
                         let f = |w: [i64; 3]| w.map(|x| x as f64);
-                        let turn = cross[0] * area[0] + cross[1] * area[1] + cross[2] * area[2];
-                        let (a, b) = if turn < 0 { (v, u) } else { (u, v) };
+                        // In doubles: a fixture's areas and normals pass an i128's product, and
+                        // only the sign matters.
+                        let dot = |p: i128, q: i128| p as f64 * q as f64;
+                        let turn = dot(cross[0], area[0])
+                            + dot(cross[1], area[1])
+                            + dot(cross[2], area[2]);
+                        let (a, b) = if turn < 0.0 { (v, u) } else { (u, v) };
                         let surface = SurfaceKind::Plane(
                             Plane::new(f(o), f(a), f(b), ((0.0, 1.0), (0.0, 1.0))).unwrap(),
                         );

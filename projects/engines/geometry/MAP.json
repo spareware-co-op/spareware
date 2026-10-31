@@ -1639,7 +1639,7 @@
         },
         {
           "cost": "linear in faces and fins for the volumes; quadratic in shells, each pair linear in the second shell's fins, for the nesting; nothing allocated (one word per shell of the shared scratch). Recursion: none.",
-          "does": "[`check`] takes the sign of each shell's exact six-times volume (`geom_topo::query::shell_volume`): positive faces outward, negative is a cavity's, zero encloses nothing and is a fault. A solid region must have exactly one shell facing outward. Then, on a body with no fault so far, it compares shells by which side of each other they lie (`geom_topo::query::shell_side`): a cavity lies inside its region's outer shell and outside the region's other cavities, and a solid region's outer shell inside another's lies inside one of that region's cavities. A shell with a curved face or edge is left for G177 and counted in the report ([`crate::Report::deferred`]), and judges nothing else.",
+          "does": "[`check`] takes the sign of each shell's exact six-times volume (`geom_topo::query::shell_volume`): positive faces outward, and anything else is a cavity's. A solid region must have exactly one shell facing outward. Then, on a body with no fault so far, it compares shells by which side of each other they lie (`geom_topo::query::shell_side`): a cavity lies inside its region's outer shell and outside the region's other cavities, and a solid region's outer shell inside another's lies inside one of that region's cavities. A shell with a curved face or edge is left for G177 and counted in the report ([`crate::Report::deferred`]), and judges nothing else.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/orientation.rs",
           "guarantees": [

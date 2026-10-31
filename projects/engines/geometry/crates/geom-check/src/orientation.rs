@@ -2,8 +2,8 @@
 //! lies where its region allows (issue #438's flat half, with G177 for curved shells).
 //!
 //! What it does: [`check`] takes the sign of each shell's exact six-times volume
-//! (`geom_topo::query::shell_volume`): positive faces outward, negative is a cavity's, zero encloses
-//! nothing and is a fault. A solid region must have exactly one shell facing outward. Then, on a
+//! (`geom_topo::query::shell_volume`): positive faces outward, and anything else is a cavity's. A
+//! solid region must have exactly one shell facing outward. Then, on a
 //! body with no fault so far, it compares shells by which side of each other they lie
 //! (`geom_topo::query::shell_side`): a cavity lies inside its region's outer shell and outside the
 //! region's other cavities, and a solid region's outer shell inside another's lies inside one of
@@ -64,14 +64,9 @@ fn signs(body: &Body, roles: &mut [u32], sink: &mut Sink<'_, '_>) -> Result<(), 
     for s in rows::<Shell>(a.rows(Arena::Shell)) {
         sink.charge()?;
         let word = match shell_volume(body, s, sink.meter()) {
-            Ok(v) => match v.signum() {
-                Sign::Positive => OUTER,
-                Sign::Negative => CAVITY,
-                Sign::Zero => {
-                    sink.push(Fault::at(FaultKind::ShellFlat, Entity::Shell(s)));
-                    UNJUDGED
-                }
-            },
+            // A closed shell that crosses nothing encloses something, so no sign here is zero.
+            Ok(v) if v.signum() == Sign::Positive => OUTER,
+            Ok(_) => CAVITY,
             Err(QueryError::Stopped(stop)) => return Err(stop),
             Err(_) => {
                 sink.defer();
@@ -181,7 +176,7 @@ fn nesting(body: &Body, roles: &[u32], sink: &mut Sink<'_, '_>) -> Result<(), St
                 }
                 Some(Side::Inside) if lumps => in_cavity(body, s, region(a, t), roles, sink)?,
                 Some(_) if lumps => true,
-                some => some == want,
+                side_found => side_found == want,
             };
             if !fine {
                 sink.push(

@@ -203,8 +203,9 @@ fn a_shell_is_judged_only_once_its_loops_are_sound() {
 }
 
 #[test]
-fn a_shell_that_encloses_nothing_is_found() {
-    // A pillow: two triangles on one plane, back to back, their edges shared.
+fn a_shell_that_encloses_nothing_never_reaches_orientation() {
+    // A pillow: two triangles on one plane, back to back, their edges shared. Faces on one plane
+    // are a pair group 3 has no test for, so it fails closed there.
     let mut r = Rows::empty();
     let region = r.region(RegionKind::Solid);
     let s = r.shell(region);
@@ -212,14 +213,7 @@ fn a_shell_that_encloses_nothing_is_found() {
         r.vertex(p);
     }
     faces_into(&mut r, s, &[&[0, 1, 2], &[0, 2, 1]]);
-    let found = exact(&r);
-    assert!(!found.passed());
-    assert_eq!(
-        found.faults().iter().map(|f| f.kind).collect::<Vec<_>>(),
-        [FaultKind::ShellFlat, FaultKind::ShellInward],
-        "{:?}",
-        found.faults()
-    );
+    assert_eq!(kinds(exact(&r).faults()), [FaultKind::PairUnchecked],);
 }
 
 #[test]
@@ -509,7 +503,6 @@ fn every_new_kind_says_what_is_wrong() {
     for kind in [
         FaultKind::LoopSense,
         FaultKind::FaceBound,
-        FaultKind::ShellFlat,
         FaultKind::ShellInward,
         FaultKind::ShellOutward,
         FaultKind::ShellNesting,

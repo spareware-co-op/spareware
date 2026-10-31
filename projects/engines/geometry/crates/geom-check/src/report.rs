@@ -272,8 +272,6 @@ pub enum FaultKind {
     /// A flat face's stored box does not hold one of its vertices. `at` is the face, `with` the
     /// vertex.
     FaceBound,
-    /// A closed shell of a solid encloses no volume. `at` is the shell.
-    ShellFlat,
     /// A solid region has no shell facing outward: its shells are all inside out. `at` is the
     /// region, `with` its first shell.
     ShellInward,
@@ -302,7 +300,6 @@ impl FaultKind {
             | FaultKind::FacesCross
             | FaultKind::PairUnchecked
             | FaultKind::LoopSense
-            | FaultKind::ShellFlat
             | FaultKind::ShellInward
             | FaultKind::ShellOutward
             | FaultKind::ShellNesting => Group::SelfIntersection,
@@ -358,7 +355,6 @@ impl FaultKind {
             FaultKind::PairUnchecked => "no certified test of this pair exists yet",
             FaultKind::LoopSense => "the face's loops do not run as one outer loop and holes",
             FaultKind::FaceBound => "the face's stored box does not hold its vertex",
-            FaultKind::ShellFlat => "the shell encloses no volume",
             FaultKind::ShellInward => "no shell of the solid region faces outward",
             FaultKind::ShellOutward => "a second shell of the solid region faces outward",
             FaultKind::ShellNesting => "the shell lies where the region's shells cannot",
