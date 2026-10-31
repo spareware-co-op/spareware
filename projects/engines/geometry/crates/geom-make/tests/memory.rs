@@ -1,7 +1,8 @@
 //! A refused allocation stops an operation with `OutOfMemory`, never an abort and never a defect
-//! (23.10). A column's chunk is the first allocation an operation makes that is larger than a few
-//! kilobytes, so an allocator capped [`ROOM`] bytes above what is in use refuses it, and nothing
-//! the operation allocates before it.
+//! (23.10). The checker's reservation is the first allocation an operation makes that is larger
+//! than a few kilobytes, so an allocator capped [`ROOM`] bytes above what is in use refuses it, and
+//! nothing the operation allocates before it. A refusal in a column is `geom-topo`'s to report, as
+//! `TopoError::stop` (`geom-topo`'s `tests/stop.rs`).
 //!
 //! The cap is the `cap` crate's (MIT OR Apache-2.0), around the system allocator, for this test
 //! binary only: it is the process's allocator, so this file holds one test.
@@ -22,8 +23,7 @@ use geom_run::Budget;
 #[global_allocator]
 static ALLOCATOR: Cap<System> = Cap::new(System, usize::MAX);
 
-/// More than the small lists an operation builds first, less than a chunk of 4,096 rows of a
-/// column of four-byte links.
+/// More than the small lists an operation builds first, less than the checker's reservation.
 const ROOM: usize = 12 * 1024;
 
 #[test]
