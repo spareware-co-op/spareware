@@ -564,6 +564,16 @@
           "sha256": "24ff775319022741d62b771ab3c5e33beba0ff2da29bb39b005f30778c7c73e1"
         },
         {
+          "id": "geom-poly/commits",
+          "what": "geom-poly's committed planes (piece G142): seeded commits of a plane through an edge and a free plane, and their images under a quarter turn and a mirror, every coefficient and every deviation's bits.",
+          "check": {
+            "crate": "geom-poly",
+            "test": "commit_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "6cf5c186dfbe9dccc0f128643959d7c5f55872be7a2cc78b29f353bbe29bc2ba"
+        },
+        {
           "id": "geom-test/replay-corpus",
           "what": "The replay corpus (piece G98): every stored fixture and the seeded logs of the box, make, transform and budget families, each by its id, log hash, work units and logical bytes.",
           "check": {

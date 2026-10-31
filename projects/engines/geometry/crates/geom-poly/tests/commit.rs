@@ -236,9 +236,9 @@ proptest! {
 /// Whether `a` is the nearest whole number to √`square`.
 fn nearest_root(a: &BigInt, square: &BigInt) -> bool {
     let two = BigInt::from(2);
-    let low = &two * a - 1;
-    let high = &two * a + 1;
-    let four = square * 4;
+    let low = &two * a - BigInt::from(1);
+    let high = &two * a + BigInt::from(1);
+    let four = square * BigInt::from(4);
     &low * &low <= four && four <= &high * &high
 }
 
@@ -256,9 +256,11 @@ fn a_moved_plane_takes_the_nearest_whole_offset() {
     for (direction, distance) in cases {
         let c = moved_along(direction, point, distance, &[point]).unwrap();
         let n = c.plane.n().map(BigInt::from);
-        let on_point = &n[0] * 10 + &n[1] * -20 + &n[2] * 30;
-        let moved = -(BigInt::from(c.plane.d()) + on_point);
-        let square = (&n[0] * &n[0] + &n[1] * &n[1] + &n[2] * &n[2]) * distance * distance;
+        let on_point: BigInt =
+            &n[0] * BigInt::from(10) + &n[1] * BigInt::from(-20) + &n[2] * BigInt::from(30);
+        let moved: BigInt = -(BigInt::from(c.plane.d()) + on_point);
+        let along = BigInt::from(distance);
+        let square: BigInt = (&n[0] * &n[0] + &n[1] * &n[1] + &n[2] * &n[2]) * &along * &along;
         assert!(
             nearest_root(&moved.magnitude().clone().into(), &square),
             "{direction:?}"
@@ -357,11 +359,8 @@ fn an_image_strays_from_its_ideal_as_far_as_the_plane_it_came_from() {
             "{}",
             image.deviation
         );
-        for q in &moved {
-            assert_eq!(
-                image.plane.side(*q).unwrap(),
-                base.plane.side(extent[0]).unwrap()
-            );
+        for (q, was) in moved.iter().zip(&extent) {
+            assert_eq!(image.plane.side(*q).unwrap(), base.plane.side(*was).unwrap());
         }
     }
 }
@@ -411,7 +410,7 @@ fn a_commits_term_adds_along_the_face_it_made() {
     let committed = through_edge(a, b, [0.0, 0.7, 0.7], &extent).unwrap();
     let face = NameId::from_bytes([1; 16]);
     let step = OpPath::new(OpId::from_bytes([2; 16]));
-    let empty = NameSet::new([]).unwrap();
+    let empty = NameSet::new(Vec::<NameId>::new()).unwrap();
     let made = History::new(
         [Record {
             output: face,

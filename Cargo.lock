@@ -1387,6 +1387,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
  "geom-topo",
  "num-bigint",
  "proptest",

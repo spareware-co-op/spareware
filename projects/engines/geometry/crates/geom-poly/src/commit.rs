@@ -6,9 +6,10 @@
 //! edge: its normal is the edge crossed with the integer vector nearest the ideal tilt, and its
 //! offset comes from a point of the edge, so the edge lies on it exactly. [`moved_along`] commits a
 //! free plane moved a whole number of steps along its normal. Each proves how far the committed
-//! plane strays from the ideal one over the face's extent. [`vertex_slide`] bounds how far a vertex
-//! moves when its three planes move, and [`check_flip`] compares a decision on the committed planes
-//! with the same decision on the ideal ones.
+//! plane strays from the ideal one over the face's extent. [`PlaneClass`] is the symmetric mode: one
+//! commit for a class of planes, whose images under the grid's symmetries are exact. [`vertex_slide`]
+//! bounds how far a vertex moves when its three planes move, and [`check_flip`] compares a decision
+//! on the committed planes with the same decision on the ideal ones.
 //!
 //! Guarantees:
 //!
@@ -25,8 +26,14 @@
 //! - **The same plane on every target.** Scaling by a power of two and rounding ties to even are
 //!   exact in IEEE 754, and the rest is integer arithmetic.
 //! - **A commit that changes the shape fails.** [`check_flip`] is [`CommitError::Flip`] when the
-//!   ideal sign is certain and the committed sign differs. If the ideal sign cannot be certified, a
-//!   designed tie, the committed sign stands (13.2).
+//!   ideal sign is certain and the committed sign differs, and that is `ExactnessNotAccepted`
+//!   (`CommitFlip`) as an operation's error. If the ideal sign cannot be certified, a designed tie,
+//!   the committed sign stands (13.2).
+//! - **Symmetric roofs stay symmetric.** Every plane of a [`PlaneClass`] has one normal, and an
+//!   image's normal is that normal under a signed permutation, so no rounding happens twice and
+//!   designed ties survive (13.15).
+//! - **Certified, always.** [`Committed::class`] is Certified with the proven deviation, however
+//!   small it is: a commit rounds, so it is never Exact (32.21).
 //!
 //! Method: chapter 13.2's "Committed planes" and decision 32.21
 //! (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`). The bound on a vertex is
@@ -34,15 +41,17 @@
 //! Knuth, *The Art of Computer Programming*, volume 2, section 4.3.1, exercise 4.3.3; intervals are
 //! Moore's, 1966, as in `geom_num::interval`, <https://doi.org/10.1137/1.9780898717716>.
 //!
-//! Cost: a constant number of wide products per plane, 85 of them for the square root in
+//! Cost: a constant number of wide products per plane, 125 of them for the square root in
 //! [`moved_along`], and a dozen interval operations per corner of an extent.
 
 use core::fmt;
 
+use geom_math::GridTransform;
 use geom_num::interval::Interval;
-use geom_num::math::round_ties_even;
+use geom_num::math::{ceil, round_ties_even};
 use geom_num::plane::Plane;
-use geom_num::{I256, NumError, P3, Real, Sign};
+use geom_num::{Exactness, GridStep, I256, NumError, P3, Real, Sign, Steps};
+use geom_op::{BoundDetail, OpErrorDetail};
 
 /// Why a plane could not be committed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,6 +80,15 @@ impl From<NumError> for CommitError {
     }
 }
 
+impl From<CommitError> for OpErrorDetail {
+    fn from(e: CommitError) -> Self {
+        match e {
+            CommitError::Num(e) => OpErrorDetail::Num(e.into()),
+            CommitError::Flip => OpErrorDetail::Bound(BoundDetail::CommitFlip),
+        }
+    }
+}
+
 /// A committed plane and what it costs.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Committed {
@@ -78,6 +96,30 @@ pub struct Committed {
     pub plane: Plane,
     /// How far it strays from the ideal plane over the extent, at most, in grid steps.
     pub deviation: f64,
+}
+
+impl Committed {
+    /// The deviation in whole steps, rounded up: the term this commit adds to its face's bound.
+    #[must_use]
+    pub fn term(&self) -> Steps {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a whole, non-negative double, far under 2^64 anywhere in the grid's range"
+        )]
+        let whole = ceil(self.deviation).map_or(u64::MAX, |x| x.get() as u64);
+        Steps(whole)
+    }
+
+    /// The class of what this commit makes: Certified with the proven deviation, as every commit
+    /// is (32.21).
+    #[must_use]
+    pub fn class(&self, step: GridStep) -> Exactness {
+        Exactness::Certified {
+            bound: self.term(),
+            step,
+        }
+    }
 }
 
 /// An ideal plane: its unit normal and offset, enclosed.
@@ -227,12 +269,12 @@ fn offset_through(n: &[i128; 3], p: P3, extra: i128) -> Result<i128, NumError> {
         .ok_or(NumError::BudgetExceeded)
 }
 
-/// The largest r with r² ≤ `square`, for a square below 2^170. The kernel carries no big-integer
+/// The largest r with r² ≤ `square`, for a square below 2^250. The kernel carries no big-integer
 /// crate, and an interval's square root brackets only to a unit in the last place, where 13.2 asks
 /// for the bracket of an exact integer root.
 fn integer_root(square: &I256) -> Option<i128> {
     let mut root = 0i128;
-    for bit in (0..=84u32).rev() {
+    for bit in (0..=124u32).rev() {
         let trial = root.checked_add(1i128.checked_shl(bit)?)?;
         let wide = I256::from_i128(trial);
         if !square.checked_sub(&wide.checked_mul(&wide)?)?.is_negative() {
@@ -240,6 +282,28 @@ fn integer_root(square: &I256) -> Option<i128> {
         }
     }
     Some(root)
+}
+
+/// `distance` · |`n`|, to the nearest whole number: 13.2's offset for a free plane, |N| bracketed
+/// exactly by taking the root of N²·δ² in one, and the nearest by testing (2r + 1)² against 4·N²·δ².
+fn moved_by(normal: &[i128; 3], distance: i64) -> Option<i128> {
+    let [x, y, z] = normal.map(I256::from_i128);
+    let steps = I256::from_i128(i128::from(distance));
+    let square = |v: &I256| v.checked_mul(v);
+    let product = square(&x)?
+        .checked_add(&square(&y)?)?
+        .checked_add(&square(&z)?)?
+        .checked_mul(&square(&steps)?)?;
+    let root = integer_root(&product)?;
+    let odd = I256::from_i128(root.checked_mul(2)?.checked_add(1)?);
+    let four = product.checked_mul(&I256::from_i128(4))?;
+    let up = !four.checked_sub(&square(&odd)?)?.is_negative();
+    let nearest = root.checked_add(i128::from(up))?;
+    if distance < 0 {
+        nearest.checked_neg()
+    } else {
+        Some(nearest)
+    }
 }
 
 /// The most `plane` strays from `ideal` over the convex hull of `extent`, in grid steps. On
@@ -260,6 +324,95 @@ fn deviation(plane: &Plane, ideal: &Ideal, extent: &[P3]) -> Result<f64, NumErro
     Ok(worst.get())
 }
 
+/// One commit shared by every plane of a class (13.15): one integer normal, rounded once. Its planes
+/// are exactly parallel, and a grid symmetry maps it exactly, so a footprint's symmetric planes come
+/// out exact images of each other and the ties their design makes survive.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlaneClass {
+    normal: [i128; 3],
+    ideal: [Interval; 3],
+}
+
+impl PlaneClass {
+    /// The planes that hold lines along `edge` and the direction `tilt`: an eave direction and a
+    /// slope.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] in a [`CommitError`] for a tilt along the edge.
+    pub fn holding(edge: [i128; 3], tilt: [f64; 3]) -> Result<PlaneClass, CommitError> {
+        let largest = edge.iter().map(|v| v.unsigned_abs()).fold(0u128, u128::max);
+        // A component of the normal is a difference of two products of a tilt and an edge component.
+        let bits = 82u32.saturating_sub(128u32.saturating_sub(largest.leading_zeros()));
+        let t = scaled(tilt, bits)?;
+        let ([ex, ey, ez], [tx, ty, tz]) = (edge, t);
+        let minor =
+            |p: i128, q: i128, r: i128, s: i128| p.checked_mul(q)?.checked_sub(r.checked_mul(s)?);
+        let normal = [
+            minor(ey, tz, ez, ty).ok_or(NumError::BudgetExceeded)?,
+            minor(ez, tx, ex, tz).ok_or(NumError::BudgetExceeded)?,
+            minor(ex, ty, ey, tx).ok_or(NumError::BudgetExceeded)?,
+        ];
+        if normal == [0; 3] {
+            return Err(NumError::Degenerate.into());
+        }
+        let [x, y, z] = tilt.map(Interval::point);
+        let along = [enclosed(ex)?, enclosed(ey)?, enclosed(ez)?];
+        let ideal = unit(&cross(&along, &[x?, y?, z?])?)?;
+        Ok(PlaneClass { normal, ideal })
+    }
+
+    /// The planes with their normal along `direction`.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] in a [`CommitError`] for a direction of no length.
+    pub fn along(direction: [f64; 3]) -> Result<PlaneClass, CommitError> {
+        let normal = scaled(direction, 82)?;
+        let [x, y, z] = direction.map(Interval::point);
+        let ideal = unit(&[x?, y?, z?])?;
+        Ok(PlaneClass { normal, ideal })
+    }
+
+    /// The class `symmetry` carries this one to. Only its signed permutation counts: a plane says
+    /// where it goes by [`PlaneClass::plane`]'s point.
+    #[must_use]
+    pub fn image(&self, symmetry: &GridTransform) -> PlaneClass {
+        PlaneClass {
+            normal: symmetry.apply_signed(self.normal, i128::saturating_neg),
+            ideal: symmetry.apply_signed(self.ideal, Interval::neg),
+        }
+    }
+
+    /// The integer normal.
+    #[must_use]
+    pub const fn normal(&self) -> [i128; 3] {
+        self.normal
+    }
+
+    /// The plane of this class through `point`, moved `distance` whole steps along its normal,
+    /// committed over `extent`. Its offset is the nearest whole number to the exact one, so the plane
+    /// sits at most 1/(2|N|) of a step from the exact move.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] in a [`CommitError`] for no extent;
+    /// [`NumError::BudgetExceeded`] for a move past the plane budget.
+    pub fn plane(&self, point: P3, distance: i64, extent: &[P3]) -> Result<Committed, CommitError> {
+        let along = moved_by(&self.normal, distance).ok_or(NumError::BudgetExceeded)?;
+        let plane = Plane::new(self.normal, offset_through(&self.normal, point, along)?)?;
+        let reading = dot(&self.ideal, &enclosed_point(point)?)?;
+        let ideal = Ideal {
+            normal: self.ideal,
+            offset: reading.add(enclosed(i128::from(distance))?)?.neg(),
+        };
+        Ok(Committed {
+            plane,
+            deviation: deviation(&plane, &ideal, extent)?,
+        })
+    }
+}
+
 /// A plane through the edge from `a` to `b` that holds the direction `tilt`, as near as the budget
 /// allows, committed over `extent`: the corners of the face, or of anything that holds it.
 ///
@@ -272,29 +425,11 @@ pub fn through_edge(a: P3, b: P3, tilt: [f64; 3], extent: &[P3]) -> Result<Commi
         i128::from(b.y.get()).saturating_sub(i128::from(a.y.get())),
         i128::from(b.z.get()).saturating_sub(i128::from(a.z.get())),
     ];
-    let largest = edge.iter().map(|v| v.unsigned_abs()).fold(0u128, u128::max);
-    // A component of the normal is a difference of two products of a tilt and an edge component.
-    let bits = 82u32.saturating_sub(128u32.saturating_sub(largest.leading_zeros()));
-    let t = scaled(tilt, bits)?;
-    let ([ex, ey, ez], [tx, ty, tz]) = (edge, t);
-    let minor =
-        |p: i128, q: i128, r: i128, s: i128| p.checked_mul(q)?.checked_sub(r.checked_mul(s)?);
-    let normal = [
-        minor(ey, tz, ez, ty).ok_or(NumError::BudgetExceeded)?,
-        minor(ez, tx, ex, tz).ok_or(NumError::BudgetExceeded)?,
-        minor(ex, ty, ey, tx).ok_or(NumError::BudgetExceeded)?,
-    ];
-    let plane = Plane::new(normal, offset_through(&normal, a, 0)?)?;
-    let ideal = Ideal::through_edge(a, b, tilt)?;
-    Ok(Committed {
-        plane,
-        deviation: deviation(&plane, &ideal, extent)?,
-    })
+    PlaneClass::holding(edge, tilt)?.plane(a, 0, extent)
 }
 
 /// The plane through `point` with normal along `direction`, moved `distance` whole steps along it,
-/// as near as the budget allows, committed over `extent`. Its offset takes |N| from below by the
-/// integer root, so the plane sits at most (|distance| + 1) / |N| of a step from the exact move.
+/// as near as the budget allows, committed over `extent`.
 ///
 /// # Errors
 ///
@@ -305,24 +440,7 @@ pub fn moved_along(
     distance: i64,
     extent: &[P3],
 ) -> Result<Committed, CommitError> {
-    let normal = scaled(direction, 82)?;
-    let [x, y, z] = normal.map(I256::from_i128);
-    let square = |v: &I256| v.checked_mul(v);
-    let length = square(&x)
-        .zip(square(&y))
-        .zip(square(&z))
-        .and_then(|((a, b), c)| a.checked_add(&b)?.checked_add(&c))
-        .and_then(|sum| integer_root(&sum))
-        .ok_or(NumError::BudgetExceeded)?;
-    let along = length
-        .checked_mul(i128::from(distance))
-        .ok_or(NumError::BudgetExceeded)?;
-    let plane = Plane::new(normal, offset_through(&normal, point, along)?)?;
-    let ideal = Ideal::moved(direction, point, distance)?;
-    Ok(Committed {
-        plane,
-        deviation: deviation(&plane, &ideal, extent)?,
-    })
+    PlaneClass::along(direction)?.plane(point, distance, extent)
 }
 
 /// How far the point where three planes meet moves, at most, in grid steps, when each plane moves
