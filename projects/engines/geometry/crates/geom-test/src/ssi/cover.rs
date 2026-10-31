@@ -34,9 +34,7 @@ use super::{larger, smaller};
 #[must_use]
 pub fn effective(case: &Case, accuracy: Option<f64>) -> f64 {
     match (case.ill_cond, accuracy) {
-        (Some(ill), Some(accuracy)) if accuracy > 0.0 => {
-            larger(case.cov_tol, smaller(0.5, 2.0 * accuracy * ill))
-        }
+        (Some(ill), Some(accuracy)) => larger(case.cov_tol, smaller(0.5, 2.0 * accuracy * ill)),
         _ => case.cov_tol,
     }
 }
@@ -139,9 +137,9 @@ pub fn compare(case: &Case, out: &Output, cov: f64) -> Seen {
     let truth = Nearest::of(
         features
             .iter()
-            .filter(|f| judged(f.contact) && f.contact != Contact::Isolated)
+            .filter(|f| judged(f.contact))
             .map(|f| f.points),
-        &case.expected.isolated_points,
+        &[],
     );
     let curves = out
         .curves

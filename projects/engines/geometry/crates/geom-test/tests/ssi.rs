@@ -33,7 +33,9 @@ use geom_num::{Exactness, P3, Steps};
 use geom_run::{Budget, WorkMeter};
 use geom_test::corpus::{EMBEDDED, Manifest};
 use geom_test::ssi::SsiError;
-use geom_test::ssi::case::{Case, Class, Contact, Expected, Implicit, Surface};
+use geom_test::ssi::case::{
+    Case, Class, Contact, Expected, Implicit, Surface, along, cross, dot, norm, sub, unit,
+};
 use geom_test::ssi::catalogue;
 use geom_test::ssi::cover::{Seen, compare, effective};
 use geom_test::ssi::gate::{
@@ -237,6 +239,246 @@ fn each_closed_form_gives_the_distance_to_its_surface() {
     close(torus.distance([4.0, 0.0, 0.0]), 0.0);
     close(torus.distance([3.0, 0.0, 2.0]), 1.0);
     close(torus.distance([3.0, 0.0, 0.0]), 1.0);
+}
+
+#[test]
+fn the_vector_helpers_keep_every_component() {
+    let (a, b) = ([1.0, 2.0, 3.0], [4.0, -5.0, 6.0]);
+    assert_eq!(sub(a, b), [-3.0, 7.0, -3.0]);
+    assert_eq!(along(a, 2.0, b), [9.0, -8.0, 15.0]);
+    assert_eq!(dot(a, b), 12.0);
+    assert_eq!(cross(a, b), [27.0, 6.0, -13.0]);
+    assert_eq!(norm([3.0, 0.0, 4.0]), 5.0);
+    assert_eq!(unit([0.0, 0.0, 2.0]), [0.0, 0.0, 1.0]);
+}
+
+/// `surface` alone in a case, and how far it can reach.
+fn reach_of(surface: Surface) -> f64 {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    case.expected = Expected::default();
+    case.cov_tol = 1.0;
+    case.surfaces = [surface.clone(), surface];
+    let placed = place(&case, None).expect("placed");
+    placed.extent / placed.scale()
+}
+
+#[test]
+fn each_kind_reaches_as_far_as_it_says() {
+    let (x, y) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let plane = Surface::Plane {
+        origin: [1.0, 2.0, 0.0],
+        xaxis: x,
+        yaxis: y,
+        u: [-5.0, 2.0],
+        v: [-1.0, 3.0],
+    };
+    assert_eq!(reach_of(plane), 5.0);
+    let sphere = Surface::Sphere {
+        center: [0.0, -3.0, 1.0],
+        xaxis: x,
+        yaxis: y,
+        radius: 2.0,
+        lon: [0.0, 360.0],
+        lat: [-90.0, 90.0],
+    };
+    assert_eq!(reach_of(sphere), 5.0);
+    let cylinder = Surface::Cylinder {
+        origin: [1.0, 0.0, 2.0],
+        xaxis: x,
+        yaxis: y,
+        radius: 3.0,
+        angle: [0.0, 360.0],
+        height: [-4.0, 1.0],
+    };
+    assert_eq!(reach_of(cylinder), 9.0);
+    let cone = Surface::Cone {
+        apex: [0.0, 0.0, 1.0],
+        xaxis: x,
+        yaxis: y,
+        half_angle_deg: 45.0,
+        height: [0.0, 2.0],
+    };
+    assert!((reach_of(cone) - 5.0).abs() < 1e-12);
+    let torus = Surface::Torus {
+        center: [2.0, 0.0, 0.0],
+        xaxis: x,
+        yaxis: y,
+        big: 3.0,
+        small: 1.0,
+        major: [0.0, 360.0],
+        minor: [0.0, 360.0],
+    };
+    assert_eq!(reach_of(torus), 6.0);
+    let net = Surface::Nurbs {
+        label: "a".into(),
+        degree: [1, 1],
+        knots_u: vec![0.0, 0.0, 1.0, 1.0],
+        knots_v: vec![0.0, 0.0, 1.0, 1.0],
+        nu: 2,
+        nv: 2,
+        points: vec![
+            [0.0, 0.0, 0.0],
+            [0.0, -7.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+        ],
+        weights: vec![1.0; 4],
+    };
+    assert_eq!(reach_of(net), 7.0);
+}
+
+/// How far `x` moves on a grid of `scale` steps to the unit.
+fn off(x: f64, scale: f64) -> f64 {
+    ((x * scale).round_ties_even() - x * scale).abs()
+}
+
+#[test]
+fn every_rounded_part_of_a_kind_counts() {
+    let (x, y) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let moved_of = |surface: Surface| {
+        let mut case = Case::parse(SMALL).expect("it fits");
+        case.expected = Expected::default();
+        case.cov_tol = 0.001;
+        case.surfaces = [
+            surface,
+            Surface::Plane {
+                origin: [0.0; 3],
+                xaxis: x,
+                yaxis: y,
+                u: [-1.0, 1.0],
+                v: [-1.0, 1.0],
+            },
+        ];
+        let placed = place(&case, None).expect("placed");
+        (placed.moved[0], placed.scale())
+    };
+    let (moved, scale) = moved_of(Surface::Sphere {
+        center: [0.1, 0.0, 0.0],
+        xaxis: x,
+        yaxis: y,
+        radius: 0.3,
+        lon: [0.0, 360.0],
+        lat: [-90.0, 90.0],
+    });
+    assert_eq!(moved, off(0.1, scale) + off(0.3, scale));
+    let (moved, scale) = moved_of(Surface::Cylinder {
+        origin: [0.1, 0.0, 0.0],
+        xaxis: x,
+        yaxis: y,
+        radius: 0.3,
+        angle: [0.0, 360.0],
+        height: [0.0, 1.0],
+    });
+    assert_eq!(moved, off(0.1, scale) + off(0.3, scale));
+    let (moved, scale) = moved_of(Surface::Torus {
+        center: [0.1, 0.0, 0.0],
+        xaxis: x,
+        yaxis: y,
+        big: 0.3,
+        small: 0.07,
+        major: [0.0, 360.0],
+        minor: [0.0, 360.0],
+    });
+    assert_eq!(moved, off(0.1, scale) + off(0.3, scale) + off(0.07, scale));
+}
+
+#[test]
+fn a_tolerance_exactly_at_the_fit_bound_goes_at_once() {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    case.cov_tol = 1.0 / 1_024.0;
+    assert_eq!(place(&case, None).expect("placed").log2, 16);
+}
+
+#[test]
+fn the_grids_range_is_a_limit_on_the_reach_in_steps() {
+    // Reach 2 at 2^39 steps is 2^40, one past the range; at 2^38 it fits. The tolerance sets which.
+    let mut case = Case::parse(SMALL).expect("it fits");
+    case.cov_tol = 64.0 / 549_755_813_888.0;
+    case.expected = Expected::default();
+    if let Surface::Plane { u, .. } = &mut case.surfaces[0] {
+        *u = [-2.0, 2.0];
+    }
+    assert!(matches!(place(&case, None), Err(SsiError::Unplaced { .. })));
+    case.cov_tol *= 2.0;
+    let placed = place(&case, None).expect("placed");
+    assert_eq!(placed.log2, 38);
+    assert_eq!(placed.extent, 2.0 * placed.scale());
+}
+
+/// The smallest scale at least `from` whose movement of `x` meets `holds`.
+fn first_scale(from: u32, x: f64, holds: impl Fn(f64, f64) -> bool) -> u32 {
+    (from..60)
+        .find(|k| {
+            let scale = 2.0_f64.powi(*k as i32);
+            holds(off(x, scale), scale)
+        })
+        .expect("a scale")
+}
+
+/// A case whose only inexact datum is the plane's x at `x`.
+fn tilted_by(x: f64) -> Case {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    case.expected = Expected::default();
+    case.class = "7 near-degenerate".into();
+    if let Surface::Plane { origin, .. } = &mut case.surfaces[0] {
+        *origin = [x, 0.0, 0.0];
+    }
+    case
+}
+
+#[test]
+fn a_stated_conditioning_multiplies_the_movement() {
+    let mut case = tilted_by(0.1);
+    case.ill_cond = Some(50_000.0);
+    let want = first_scale(16, 0.1, |moved, scale| moved * 50_000.0 <= 0.001 * scale);
+    assert_eq!(place(&case, None).expect("placed").log2, want);
+}
+
+#[test]
+fn a_stated_feature_holds_four_movements() {
+    let mut case = tilted_by(0.1);
+    case.feature_size = Some(0.000_2);
+    let want = first_scale(16, 0.1, |moved, scale| moved * 4.0 <= 0.000_2 * scale);
+    assert_eq!(place(&case, None).expect("placed").log2, want);
+}
+
+#[test]
+fn a_shifted_answer_moves_four_tolerances_and_a_spurious_one_lies_eight_off() {
+    let case = named("f_seam_line");
+    let placed = place(&case, ACCURACY).expect("placed");
+    let truth = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let shifted = StandIn::Shifted
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let moved = norm(sub(shifted.curves[0].xyz[0], truth.curves[0].xyz[0]));
+    assert!((moved - 0.004).abs() < 1e-9, "{moved}");
+    let spurious = StandIn::Spurious
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let extra = spurious.curves.last().expect("a curve");
+    let far = case
+        .features()
+        .iter()
+        .flat_map(|f| f.points.iter())
+        .fold(0.0_f64, |m, p| m.max(norm(*p)));
+    assert_eq!(extra.xyz[0], [far + 0.008; 3]);
+    assert_eq!(extra.xyz[1], [far + 0.016, far + 0.008, far + 0.008]);
+}
+
+#[test]
+fn the_catalogue_is_pinned() {
+    let all = catalogue::all();
+    let text = serde_json::to_string(&all).expect("written");
+    let checked = geom_test::golden::check("geom-test/ssi-catalogue", || {
+        (geom_test::golden::sha256(text.as_bytes()), ())
+    });
+    println!(
+        "ssi catalogue: {}",
+        geom_test::golden::hex(checked.digest.0)
+    );
+    checked.verdict().unwrap();
 }
 
 #[test]
@@ -695,6 +937,89 @@ fn at(u: f64) -> ParamBox {
 }
 
 #[test]
+fn an_answers_curve_is_sampled_over_its_own_domain() {
+    let case = Case::parse(SMALL).expect("it fits");
+    let placed = place(&case, None).expect("placed");
+    let scale = placed.scale();
+    let curve = CurveKind::Line(
+        Line::new([0.0; 3], [1.0, 0.0, 0.0], (scale, 3.0 * scale)).expect("a line"),
+    );
+    let item = Item::Curve {
+        at: at(2.0),
+        curve: Box::new(curve),
+        contact: CurveContact::Crossing,
+        ends: [CurveEnd::Boundary, CurveEnd::Boundary],
+        class: Exactness::Exact,
+    };
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let result = Intersection::new(
+        vec![item],
+        Coverage::TopologyCertified,
+        Vec::new(),
+        &mut meter,
+    )
+    .expect("in order");
+    let out = Output::of_intersection(&result, &placed, "tiny").expect("read");
+    let xyz = &out.curves[0].xyz;
+    assert_eq!(xyz[0], [1.0, 0.0, 0.0]);
+    assert_eq!(xyz[xyz.len() - 1], [3.0, 0.0, 0.0]);
+}
+
+#[test]
+fn a_flag_one_step_off_its_feature_still_holds_it() {
+    // Exact data moves nothing, so the margin is the one step commit rounding may take.
+    let case = named("f16_cylinders_external");
+    let placed = place(&case, ACCURACY).expect("placed");
+    let mut out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let z = placed.steps([0.0, 0.0, 1.0]);
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "a whole number of steps in range"
+    )]
+    let height = z[2] as i64;
+    let near = |x: i64| Flag {
+        why: Why::TangentBand,
+        lo: [x, -1, height],
+        hi: [x + 2, 1, height + 2],
+    };
+    out.flagged.push(near(1));
+    assert_eq!(
+        broken(&case, &placed, Mode::Default, &out, &open()),
+        Vec::<String>::new()
+    );
+    out.flagged[0] = near(2);
+    assert_eq!(
+        broken(&case, &placed, Mode::Default, &out, &open()),
+        ["no-feature"]
+    );
+}
+
+#[test]
+fn a_gap_one_step_past_its_flag_is_still_inside_it() {
+    let case = named("f16_cylinders_external");
+    let placed = place(&case, ACCURACY).expect("placed");
+    let mut out = StandIn::Flagged
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(
+        broken(&case, &placed, Mode::Default, &out, &open()),
+        Vec::<String>::new()
+    );
+    // Slide every box a step off the line: each still counts, by the margin.
+    for flag in &mut out.flagged {
+        flag.lo[0] += flag.hi[0] - flag.lo[0] + 1;
+        flag.hi[0] += flag.hi[0] - flag.lo[0];
+    }
+    let broke = broken(&case, &placed, Mode::Default, &out, &open());
+    assert!(
+        !broke.contains(&"uncovered".to_owned()) || broke.len() > 1,
+        "{broke:?}"
+    );
+}
+
+#[test]
 fn the_kernels_result_reaches_the_scorer_as_its_contract_says() {
     let case = Case::parse(SMALL).expect("it fits");
     let placed = place(&case, None).expect("placed");
@@ -880,6 +1205,115 @@ fn the_truth_splits_at_a_singular_point() {
             &[[-0.25, 0.0, 0.0], [0.0, 0.0, 0.0], [0.75, 0.0, 0.0]][..],
             &[[0.75, 0.0, 0.0], [1.0, 0.0, 0.0]][..]
         ]
+    );
+}
+
+#[test]
+fn a_closed_curve_starts_at_its_singular_point() {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    let corners = [
+        [-1.0, 0.0, 0.0],
+        [0.0, 0.5, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, -0.5, 0.0],
+        [-1.0, 0.0, 0.0],
+    ];
+    case.expected.branches[0].points = corners.to_vec();
+    case.expected.branches[0].closed = true;
+    case.surfaces[1] = case.surfaces[0].clone();
+    case.expected.singular_points = vec![[0.5, 0.25, 0.0]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(out.curves.len(), 1);
+    assert_eq!(
+        out.curves[0].xyz,
+        [
+            [0.5, 0.25, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, -0.5, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 0.5, 0.0],
+            [0.5, 0.25, 0.0]
+        ]
+    );
+}
+
+#[test]
+fn a_closed_curve_keeps_the_end_its_first_singular_point_gave_it() {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    let corners = [
+        [-1.0, 0.0, 0.0],
+        [0.0, 0.5, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, -0.5, 0.0],
+        [-1.0, 0.0, 0.0],
+    ];
+    case.expected.branches[0].points = corners.to_vec();
+    case.expected.branches[0].closed = true;
+    case.surfaces[1] = case.surfaces[0].clone();
+    case.expected.singular_points = vec![[0.5, 0.25, 0.0], [-0.5, -0.25, 0.0]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(out.curves.len(), 2);
+    let ends: Vec<[f64; 3]> = out
+        .curves
+        .iter()
+        .flat_map(|c| [c.xyz[0], c.xyz[c.xyz.len() - 1]])
+        .collect();
+    for singular in [[0.5, 0.25, 0.0], [-0.5, -0.25, 0.0]] {
+        assert_eq!(
+            ends.iter().filter(|e| **e == singular).count(),
+            2,
+            "{ends:?}"
+        );
+    }
+    // Two loops crossing twice: each takes one, and neither is cut.
+    let mut other = case.expected.branches[0].clone();
+    other.points = vec![
+        [-0.5, -0.25, 0.0],
+        [0.5, -1.0, 0.0],
+        [0.5, 0.25, 0.0],
+        [-0.5, 1.0, 0.0],
+        [-0.5, -0.25, 0.0],
+    ];
+    case.expected.branches.push(other);
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(out.curves.len(), 2, "{:?}", out.curves);
+}
+
+#[test]
+fn a_singular_point_cuts_one_curve_where_it_leaves_the_longest_pieces() {
+    // Two lines crossing near one's end: cutting the other leaves nothing short.
+    let mut case = Case::parse(SMALL).expect("it fits");
+    case.surfaces[1] = case.surfaces[0].clone();
+    case.expected.branches[0].points = vec![[-1.0, 0.0, 0.0], [0.9, 0.0, 0.0]];
+    let other = geom_test::ssi::case::Branch {
+        closed: false,
+        kind: Contact::Crossing,
+        points: vec![[0.8, -1.0, 0.0], [0.8, 1.0, 0.0]],
+    };
+    case.expected.branches.push(other);
+    case.expected.singular_points = vec![[0.8, 0.0, 0.0]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(out.curves.len(), 3);
+    assert_eq!(out.curves[0].xyz.len(), 2, "the first line stays whole");
+    assert_eq!(
+        out.curves[1].xyz.last(),
+        Some(&placed.snapped([0.8, 0.0, 0.0]))
+    );
+    assert_eq!(
+        out.curves[2].xyz.first(),
+        Some(&placed.snapped([0.8, 0.0, 0.0]))
     );
 }
 
@@ -1473,6 +1907,41 @@ fn a_report_publishes_every_case() {
     assert_eq!(held.failed(), 1);
     assert!(held.broke("over-ceiling"));
     assert!(!held.broke("too-wide"));
+    fs::remove_dir_all(&dir).expect("removed");
+}
+
+#[test]
+fn a_scorers_infinity_is_not_a_reason_to_stop() {
+    let dir = scratch("infinity");
+    let case = named("f_seam_line");
+    let ceilings = Ceilings::parse(CEILINGS).expect("the register");
+    judged_run(
+        &dir,
+        core::slice::from_ref(&case),
+        StandIn::Truth,
+        &ceilings,
+    );
+    let scores = dir.join("scores.json");
+    let text = fs::read_to_string(&scores).expect("read");
+    let python = text.replace(
+        "\"verdict\"",
+        "\"far\": Infinity, \"near\": -Infinity, \"nan\": NaN, \"verdict\"",
+    );
+    assert_ne!(python, text);
+    fs::write(&scores, python).expect("wrote");
+    let (cases, raw) = (dir.join("cases"), dir.join("raw"));
+    let report = run(&Run {
+        cases: &cases,
+        raw: &raw,
+        scores: &scores,
+        engine: "a test",
+        mode: Mode::Default,
+        tolerance: 1e-6,
+        ceilings: &ceilings,
+        credit: "",
+    })
+    .expect("judged");
+    assert_eq!(report.failed(), 0);
     fs::remove_dir_all(&dir).expect("removed");
 }
 

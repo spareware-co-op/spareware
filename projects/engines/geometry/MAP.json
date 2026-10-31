@@ -12317,6 +12317,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the jobs; a removal job costs one knot insertion to draw.",
+          "does": "[`jobs`] draws a night's seeded curves and what to do with each: evaluate a point, insert a knot, remove one, or raise the degree, the layers decision 32.23 allows. A job is the same line [`super::geomdl`] writes, and an answer is judged the same way ([`super::geomdl::judge_for`]). A knot removal needs a knot that can go, so its curve is drawn and then refined by that knot.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/smlib.rs",
+          "guarantees": [
+            "**Only what 32.23 allows.** No job reaches fitting, booleans, validity or the intersector, and the harness in the oracle repository compiles none of the routines 29.6 bars.",
+            "**Truth settles it.** A point, an insertion and an elevation are settled in exact rationals; a removal has no exact answer to settle against, so it is held to the kernel's stated bound.",
+            "**Repeated runs agree.** The nightly runs the oracle twice in fresh processes and refuses any answer that differs bit for bit, since 32.23 counts a class only while its runs agree."
+          ],
+          "job": "The second NURBS oracle: `SMLib`'s `NLib` layer, out of process (chapter 28.10; decision 32.23; piece G161).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "chapter 28.10's oracle list and decision 32.23 (`projects/engines/geometry/architecture/28-testing.md`, `projects/engines/geometry/architecture/32-decisions.md`)."
+          },
+          "path": "geom_test::oracle::smlib",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the register for each lookup.",
           "does": "a [`Signature`] groups differences: operation, oracle, kind of difference, input family. [`Register`] is the record of triaged signatures (`oracles/triaged.json`, [`REGISTER_PATH`]): [`Register::new_signatures`] says which of a night's are new, and only those fail it. [`fixture`] turns a triaged case into the [`Fixture`] 28.16 asks for.",
           "family": [],
@@ -13101,7 +13124,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/ssi/place.rs",
           "guarantees": [
-            "**`ε_fit`**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale.",
+            "**`ε_fit`**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale: [`place`] starts there.",
             "**The range**: every coordinate is inside the grid's range.",
             "**The truth is still on the surfaces**: every truth sample is within the tolerance of each analytic surface as placed, by its closed form. A NURBS surface cannot move further than its furthest control point did, since a point on it is a convex combination of its net with the same weights; that bound is the surface's `moved`.",
             "**The answer did not move past the tolerance**: where a case states how far a residual moves the answer, `moved` × that factor is within the tolerance the scorer applies to that case, which widens with the same factor ([`effective`]).",
