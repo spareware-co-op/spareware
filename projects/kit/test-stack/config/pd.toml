@@ -1,0 +1,4 @@
+# PD, TiKV's coordinator. One copy of every piece on the free server, three in production
+# (deploy/README.md); scripts/stack-up.sh sets the count to match STACK_NODES.
+[replication]
+max-replicas = 1

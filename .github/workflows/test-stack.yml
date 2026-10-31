@@ -1,0 +1,79 @@
+name: Test stack
+
+# Spare Construct's cloud test stack, on fresh ARM Ubuntu machines like the free server it is meant
+# for: the whole checklist, and the install script as deploy.sh runs it on a server.
+
+on:
+  pull_request:
+    paths:
+      - "projects/kit/test-stack/**"
+      - "projects/spare-construct/demo/index.html"
+      - "design/ribbon/**"
+      - ".github/workflows/test-stack.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  checklist:
+    name: The checklist on ARM Linux
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: projects/kit/test-stack
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install TiKV, PD and RustFS
+        run: bash scripts/install-binaries.sh
+      - name: Run the checklist
+        run: bash scripts/run-checklist.sh
+      - name: Run it again on three nodes, by settings alone
+        env:
+          STACK_NODES: "3"
+          STACK_PD: 127.0.0.1:2379,127.0.0.1:2389,127.0.0.1:2399
+        run: bash scripts/run-checklist.sh
+
+  install:
+    name: The install script on a fresh ARM server
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lay out the server as deploy.sh does
+        run: |
+          sudo mkdir -p /opt/spare-stack/src /etc/spare-stack
+          git archive HEAD projects/kit/test-stack projects/spare-construct/demo/index.html design/ribbon \
+            | sudo tar -x -C /opt/spare-stack/src
+          sudo tee /etc/spare-stack/owner.env <<'EOF'
+          STACK_PUBLIC_URL=http://localhost:8088
+          OIDC_CLIENT_ID=not-set-in-this-test
+          OIDC_CLIENT_SECRET=not-set-in-this-test
+          STACK_PEOPLE=anna=someone@example.test
+          EOF
+          sudo sed -i 's/^ *//' /etc/spare-stack/owner.env
+      - name: Install
+        run: sudo bash /opt/spare-stack/src/projects/kit/test-stack/deploy/install-on-server.sh
+      - name: Install again, as an update does
+        run: sudo bash /opt/spare-stack/src/projects/kit/test-stack/deploy/install-on-server.sh
+      - name: The web proxy reaches the server
+        run: curl -fsS http://localhost:8088/health
+      - name: The seeded model checks out against its log
+        run: |
+          sudo systemd-run --wait --pipe --uid=spare \
+            --property=EnvironmentFile=/etc/spare-stack/stack.env \
+            /opt/spare-stack/bin/test-stack verify
+      - name: The daily backup runs
+        run: |
+          sudo systemctl start spare-backup.service
+          sudo systemctl is-enabled spare-backup.timer
+          sudo ls /opt/spare-stack/backups/*/manifest.json
+      - name: Everything comes back after a restart of every service
+        run: |
+          sudo systemctl restart spare-pd spare-tikv spare-rustfs spare-server
+          for _ in $(seq 1 60); do curl -fs http://localhost:8088/health && break; sleep 2; done
+          curl -fsS http://localhost:8088/health
+      - name: Show the logs on failure
+        if: failure()
+        run: |
+          sudo journalctl -n 80 --no-pager -u spare-pd -u spare-tikv -u spare-rustfs -u spare-server -u caddy
