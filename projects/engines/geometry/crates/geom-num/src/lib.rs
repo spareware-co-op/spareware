@@ -98,6 +98,7 @@ pub mod ball;
 pub mod brent;
 pub mod crossing;
 pub mod dd;
+pub mod distance;
 pub mod dual;
 pub mod eft;
 pub mod error;

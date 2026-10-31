@@ -39,6 +39,11 @@ geom-pool = { path = "../geom-pool" }
 name = "cdt"
 harness = false
 
+# The triangle contact test's timing (piece G151).
+[[bench]]
+name = "contact"
+harness = false
+
 [[bench]]
 name = "exact"
 harness = false
