@@ -23,6 +23,12 @@
 //! recursion.
 
 #![allow(
+    clippy::many_single_char_names,
+    clippy::cast_precision_loss,
+    clippy::indexing_slicing,
+    reason = "a test crate's fixtures: points by their letters, whole numbers far below 2^53, and rows it built itself"
+)]
+#![allow(
     clippy::arithmetic_side_effects,
     reason = "test fixtures: coordinates in the hundreds and rows in the dozens"
 )]
@@ -234,7 +240,6 @@ pub const fn still(_: usize, _: usize) -> [i64; 3] {
 
 /// A step or so each way, a different move at every anchor of every face, from `seed`
 /// (`SplitMix64`'s finaliser mixes the three together).
-#[must_use]
 pub fn scaled_jog(seed: u64) -> impl Fn(usize, usize) -> [i64; 3] {
     move |face, anchor| {
         let mix = |k: u64| {
@@ -464,7 +469,7 @@ impl Rows {
 }
 
 /// Every face of `spec`, in order.
-fn faces<'a>(spec: Spec<'a>) -> Vec<FaceSpec<'a>> {
+fn faces(spec: Spec<'_>) -> Vec<FaceSpec<'_>> {
     spec.regions
         .iter()
         .flat_map(|shells| shells.iter())

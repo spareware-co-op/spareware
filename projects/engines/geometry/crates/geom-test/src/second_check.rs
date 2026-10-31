@@ -51,6 +51,10 @@
     clippy::many_single_char_names,
     reason = "the names are the formulas': a to d points, n a normal, d an offset, s and t parameters"
 )]
+#![allow(
+    clippy::indexing_slicing,
+    reason = "every index is 0, 1 or 2 on an array of three, or 0 or 1 on an array of two"
+)]
 
 use core::cmp::Ordering;
 
