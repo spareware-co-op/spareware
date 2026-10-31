@@ -151,6 +151,7 @@ const fn schema(name: &'static str, version: u32) -> OpSchema {
         errors: &[],
         diagnostics: &[],
         classes: &[Class::Exact],
+    charges: &[],
         batch: false,
         example: "",
     }

@@ -253,6 +253,16 @@ pub fn api(ops: &[Operation]) -> Result<Vec<u8>, GenError> {
             }
             out.push('\n');
         }
+        out.push_str("**Charges**");
+        if s.charges.is_empty() {
+            out.push_str(": none.\n\n");
+        } else {
+            out.push_str("\n\n");
+            for c in s.charges {
+                let _ = writeln!(out, "- `{}`: {} for each {}", c.phase, c.units, c.per);
+            }
+            out.push('\n');
+        }
         let classes: Vec<&str> = s.classes.iter().map(|c| class(*c)).collect();
         let _ = write!(
             out,
@@ -282,6 +292,18 @@ fn type_schema(ty: &str) -> Result<Value, GenError> {
             json!({ "type": "integer", "minimum": 0 })
         }
         "i8" | "i16" | "i32" | "i64" | "Coord" => json!({ "type": "integer" }),
+        "i128" | "I256" => json!({
+            "type": "string",
+            "pattern": "^-?[0-9]+$",
+            "description": "an exact integer, past a JSON number's range, in decimal"
+        }),
+        "AreaVector" => json!({
+            "type": "array",
+            "items": { "type": "string", "pattern": "^-?[0-9]+$" },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "x, y and z, exact integers in decimal"
+        }),
         "f64" => json!({ "type": "number" }),
         "&str" | "String" | "Label" => json!({ "type": "string" }),
         "P2" => json!({
@@ -299,7 +321,8 @@ fn type_schema(ty: &str) -> Result<Value, GenError> {
             "description": "a grid point, x, y and z in whole grid steps"
         }),
         "Body" | "CurveKind" | "SurfaceKind" | "NameId" | "TopoName" | "Role" | "PieceKey"
-        | "Exactness" | "GridStep" => json!({
+        | "Exactness" | "GridStep" | "History" | "Level" | "BoundingBox" | "NamedFace"
+        | "Report" | "ExactnessReport" => json!({
             "type": "object",
             "title": ty,
             "description": format!(

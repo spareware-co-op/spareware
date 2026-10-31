@@ -40,6 +40,8 @@ pub(crate) struct Sink<'m, 'c> {
     pub(crate) faults: Vec<Fault>,
     /// How many more were found.
     pub(crate) more: u64,
+    /// How many faces and shells were left for the pieces that certify curved ones.
+    pub(crate) deferred: u64,
     /// The caller's meter.
     meter: &'m mut WorkMeter<'c>,
 }
@@ -54,6 +56,7 @@ impl<'m, 'c> Sink<'m, 'c> {
         Ok(Sink {
             faults,
             more: 0,
+            deferred: 0,
             meter,
         })
     }
@@ -61,6 +64,16 @@ impl<'m, 'c> Sink<'m, 'c> {
     /// Charges one work unit, for one row visited.
     pub(crate) fn charge(&mut self) -> Result<(), Stopped> {
         self.meter.charge(1)
+    }
+
+    /// The caller's meter, for what charges its own rows.
+    pub(crate) fn meter(&mut self) -> &mut WorkMeter<'c> {
+        self.meter
+    }
+
+    /// Counts one face or shell left for the pieces that certify curved ones.
+    pub(crate) fn defer(&mut self) {
+        self.deferred = self.deferred.saturating_add(1);
     }
 
     /// Records a fault: kept while fewer than [`MAX_FAULTS`] are, counted otherwise.

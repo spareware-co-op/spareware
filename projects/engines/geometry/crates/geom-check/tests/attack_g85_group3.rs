@@ -21,6 +21,7 @@ use common::{
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_curve::{Circle, CurveKind, Frame};
+use geom_math::Box3;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 use geom_topo::{BodyKind, RegionKind, Sense};
@@ -569,15 +570,24 @@ fn group_3_runs_only_on_a_body_groups_1_and_2_passed() {
         &[&[0, 1, 2, 3]],
     );
     r.points[3] = P3::new(0, 10, 3).unwrap();
+    r.faces[0].bound = r.faces[0]
+        .bound
+        .union(&Box3::new(r.points[3], r.points[3]).unwrap());
     let body = r.body(BodyKind::Sheet);
     let full = check(&body, Exactness::Exact, Level::Full, &mut meter()).unwrap();
     assert!(!full.ran().any(|g| g == Group::SelfIntersection));
     assert!(!full.missing().any(|g| g == Group::SelfIntersection));
     assert_eq!(group_3(full.faults()), []);
-    // With a bound that covers the corner, group 3 runs: the sides that crossed are now skew.
+    // With a bound that covers the corner, group 3 runs: the sides that crossed are now skew, and
+    // the bow tie, as much clockwise as counter-clockwise, encloses no area.
     let lifted = check(&body, certified_to(3), Level::Full, &mut meter()).unwrap();
     assert!(lifted.ran().any(|g| g == Group::SelfIntersection));
-    assert!(lifted.passed(), "{:?}", lifted.faults());
+    assert_eq!(
+        lifted.faults(),
+        [Fault::at(FaultKind::LoopSense, Entity::Face(ix(0)))
+            .with(Entity::Loop(ix(0)))
+            .value(0)]
+    );
     // A cube passes all four groups.
     let full = check(
         &cube().body(BodyKind::Solid),

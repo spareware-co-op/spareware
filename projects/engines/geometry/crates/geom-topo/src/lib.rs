@@ -42,11 +42,14 @@
 //! - [`attributes`]: [`attributes::Attributes`], values keyed by persistent name, and the split and
 //!   merge classes that say what they do when their entity is split or merged (8.4).
 //! - [`query`]: the core queries of 10.2 on topology and points (G102): faces listed, the bounding
-//!   box, and exact twice-area vectors and six-times volumes of flat bodies.
+//!   box, exact twice-area vectors and six-times volumes of flat bodies, and which side of a flat
+//!   shell a point or another shell lies on.
+//! - [`mass`]: certified mass properties of flat polygons whose corners may be implicit (G102).
+//! - [`query_ops`]: the queries in the operation contract, with the error every query shares.
 //!
-//! Status: the arenas, their typed indices and the publishing builder (G80) built; the Euler
-//! operators, name order, attributes, regions and cells, queries, proofs and instances to come in
-//! G81, G90, G102, G111, G112, G143, G145, G247 and G398.
+//! Status: the arenas, their typed indices and the publishing builder (G80) and the core queries
+//! (G102) built; the Euler operators, name order, attributes, regions and cells, proofs and
+//! instances to come in G81, G90, G111, G112, G143, G145, G247 and G398.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -60,8 +63,10 @@ pub mod column;
 pub mod entity;
 pub mod error;
 pub mod ix;
+pub mod mass;
 pub mod order;
 pub mod query;
+pub mod query_ops;
 
 pub use arenas::{Arenas, Pool};
 pub use body::{Body, BodyKind};

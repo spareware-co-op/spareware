@@ -56,6 +56,7 @@ static BOX: OpSchema = OpSchema {
         doc: "The box is thinner than a millimetre.",
     }],
     classes: &[Class::Exact],
+    charges: &[],
     batch: true,
     example: "make.box { corner: [0, 0, 0], size: 10 }",
 };
@@ -70,6 +71,7 @@ static PLAIN: OpSchema = OpSchema {
     errors: &[],
     diagnostics: &[],
     classes: &[Class::Certified, Class::Approximate],
+    charges: &[],
     batch: false,
     example: "query.count {}",
 };
