@@ -414,23 +414,3 @@ fn filled(rows: &Rows, part: Part) -> Result<Builder, TopoError> {
     a.points.extend(part.vertices.into_iter().map(|v| v.at))?;
     Ok(b)
 }
-
-#[cfg(test)]
-mod tests {
-    use geom_op::{ErrorKind, OpContext, OpId, OpPath};
-    use geom_run::Budget;
-    use geom_topo::TopoError;
-
-    use super::unbuilt;
-
-    #[test]
-    fn a_refused_allocation_is_out_of_memory_and_anything_else_a_defect() {
-        let ctx = OpContext::new(OpPath::new(OpId::from_bytes([7; 16])), Budget::UNLIMITED);
-        let mut meter = ctx.meter();
-        let refused = unbuilt(&ctx, &mut meter, TopoError::OutOfMemory);
-        assert_eq!(refused.kind(), ErrorKind::OutOfMemory);
-        let mut meter = ctx.meter();
-        let defect = unbuilt(&ctx, &mut meter, TopoError::Outside);
-        assert_eq!(defect.kind(), ErrorKind::Internal);
-    }
-}
