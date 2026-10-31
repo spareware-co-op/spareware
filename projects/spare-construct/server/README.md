@@ -58,7 +58,7 @@ Sign-in is one path: OpenID Connect. Tests talk to a [stand-in provider](tests/s
 
 ## Running it
 
-TiKV needs Linux: use WSL or any Linux machine, with Rust and a C compiler. Nothing needs root.
+TiKV needs Linux: use WSL or any Linux machine, with Rust and a C compiler. Nothing needs root, unless your limit on open files is under TiKV's 123,880, which `stack-up.sh` checks.
 
 ```bash
 cd projects/spare-construct/server

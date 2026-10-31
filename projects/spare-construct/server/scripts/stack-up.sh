@@ -14,6 +14,14 @@ data="$STACK_HOME/data"
 log="$STACK_HOME/log"
 mkdir -p "$data/rustfs" "$log"
 
+# TiKV won't start with fewer open files than this, and says so only in its log.
+files=123880
+if ! ulimit -Sn "$files" 2>/dev/null; then
+  echo "TiKV needs $files open files, and this shell may have $(ulimit -Hn)." >&2
+  echo "Raise it with: sudo prlimit --pid \$\$ --nofile=1000000:1000000" >&2
+  exit 1
+fi
+
 running() { pgrep -u "$(id -u)" -x "$1" >/dev/null; }
 pd_client() { echo $((2379 + ($1 - 1) * 10)); }
 pd_peer() { echo $((2380 + ($1 - 1) * 10)); }
@@ -61,7 +69,11 @@ for _ in $(seq 1 90); do
   [ "$(stores)" -ge "$STACK_NODES" ] && break
   sleep 1
 done
-[ "$(stores)" -ge "$STACK_NODES" ] || { echo "TiKV did not come up; see $log" >&2; exit 1; }
+if [ "$(stores)" -lt "$STACK_NODES" ]; then
+  echo "TiKV did not come up; see $log" >&2
+  tail -n 5 "$log"/tikv*.log >&2
+  exit 1
+fi
 if [ "$STACK_NODES" -gt 1 ]; then
   curl -fsS -X POST http://127.0.0.1:2379/pd/api/v1/config/replicate \
     -H 'content-type: application/json' -d "{\"max-replicas\": $STACK_NODES}" >/dev/null

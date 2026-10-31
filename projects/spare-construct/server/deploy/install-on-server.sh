@@ -13,7 +13,7 @@ apt-get update -qq
 apt-get install -y -qq build-essential pkg-config curl unzip caddy iptables-persistent
 
 id spare >/dev/null 2>&1 || useradd --system --home-dir "$home" --shell /usr/sbin/nologin spare
-mkdir -p "$home/bin" "$home/data" "$home/log" "$home/backups" "$home/config"
+mkdir -p "$home/bin" "$home/data/rustfs" "$home/log" "$home/backups" "$home/config"
 cp "$src"/config/pd.toml "$src"/config/tikv.toml "$home/config/"
 
 # The server's own settings, generated once and kept on the server.

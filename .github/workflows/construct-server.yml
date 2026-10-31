@@ -86,15 +86,21 @@ jobs:
           cargo test --locked --manifest-path ../../kit/services/Cargo.toml --workspace
       - name: Install TiKV, PD and RustFS
         run: bash scripts/install-binaries.sh
+      # TiKV refuses to start below 123,880 open files, and a runner allows 65,536.
       - name: On one node
-        run: bash scripts/run-checklist.sh
+        run: |
+          sudo prlimit --pid $$ --nofile=1000000:1000000
+          bash scripts/run-checklist.sh
       - name: On three nodes, by settings alone, with one killed mid-edit
         env:
           STACK_NODES: "3"
           STACK_PD: 127.0.0.1:2379,127.0.0.1:2389,127.0.0.1:2399
-        run: bash scripts/run-checklist.sh
+        run: |
+          sudo prlimit --pid $$ --nofile=1000000:1000000
+          bash scripts/run-checklist.sh
       - name: In real browsers
         run: |
+          sudo prlimit --pid $$ --nofile=1000000:1000000
           bash scripts/run-browser-test.sh
           cd tests/browser
           npm ci
