@@ -43,8 +43,8 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use geom_num::plane::{Plane, determinant};
-use geom_num::{NumError, Sign};
+use geom_num::plane::Plane;
+use geom_num::{NumError, Sign, generated};
 use geom_run::{Stopped, WorkMeter};
 
 use crate::convex::{ConvexError, Piece};
@@ -169,6 +169,29 @@ impl Moved {
             by: Sign::Zero,
         }
     }
+}
+
+/// The sign of the 4 × 4 determinant of four planes' coefficients, rows in the order given and the
+/// offset last, through the generated predicate: its filter, then its exact path (6.2). It is
+/// n · X + d · w for the point where the first three meet, and is defined whether they meet or not.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, and a, b and c the first three's normals"
+)]
+fn determinant(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Result<Sign, NumError> {
+    let ([ax, ay, az], ad) = (p.n(), p.d());
+    let ([bx, by, bz], bd) = (q.n(), q.d());
+    let ([cx, cy, cz], cd) = (r.n(), r.d());
+    let ([sx, sy, sz], sd) = (s.n(), s.d());
+    generated::tpi_side::filter(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )
+    .or_else(|| {
+        generated::tpi_side::exact(
+            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+        )
+    })
+    .ok_or(NumError::BudgetExceeded)
 }
 
 /// The sign of the 4 × 4 determinant of the four planes' coefficients, each moved. The determinant
