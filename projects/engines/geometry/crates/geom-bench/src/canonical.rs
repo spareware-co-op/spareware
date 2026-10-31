@@ -25,6 +25,7 @@
 
 use core::cmp::Ordering;
 
+use geom_num::arc::{Circle2, Contact, Round};
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::crossing::Ssi;
 use geom_num::dd::DD;
@@ -236,6 +237,32 @@ impl Canonical for Rational2 {
         x.encode(h);
         y.encode(h);
         w.encode(h);
+    }
+}
+
+impl Canonical for Round {
+    // A round is exactly the grid point it passes through and its centre.
+    fn encode(&self, h: &mut Sha256) {
+        self.on().encode(h);
+        self.centre().encode(h);
+    }
+}
+
+impl Canonical for Circle2 {
+    fn encode(&self, h: &mut Sha256) {
+        self.centre().encode(h);
+        self.radius().encode(h);
+    }
+}
+
+impl Canonical for Contact {
+    fn encode(&self, h: &mut Sha256) {
+        let tag: u32 = match self {
+            Contact::Apart => 0,
+            Contact::Tangent => 1,
+            Contact::Crossing => 2,
+        };
+        tag.encode(h);
     }
 }
 

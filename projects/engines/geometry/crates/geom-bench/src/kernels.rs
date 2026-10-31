@@ -357,6 +357,46 @@ pub mod carrier {
     }
 }
 
+/// Circles and arcs in the plane: `geom_num::arc` (G188).
+pub mod arc {
+    use geom_num::arc::{Circle2, Contact, Round};
+    use geom_num::carrier::{Carrier, Rational2};
+    use geom_num::grid::P2;
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `Round::side_of_grid` on each (round, point).
+    #[inline(never)]
+    pub fn round_grid(batch: &[(Round, P2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(r, z)| r.side_of_grid(*z));
+    }
+
+    /// `Round::side` on each (round, point).
+    #[inline(never)]
+    pub fn round_side(batch: &[(Round, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(r, z)| r.side(z));
+    }
+
+    /// `Round::meets` on each (round, carrier).
+    #[inline(never)]
+    pub fn round_meets(batch: &[(Round, Carrier)], out: &mut Vec<Result<Contact, NumError>>) {
+        run(batch, out, |(r, l)| r.meets(l));
+    }
+
+    /// `Circle2::side` on each (circle, point).
+    #[inline(never)]
+    pub fn circle_side(batch: &[(Circle2, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(c, z)| c.side(z));
+    }
+
+    /// `Circle2::meets` on each (circle, carrier).
+    #[inline(never)]
+    pub fn circle_meets(batch: &[(Circle2, Carrier)], out: &mut Vec<Result<Contact, NumError>>) {
+        run(batch, out, |(c, l)| c.meets(l));
+    }
+}
+
 /// Where two lines cross in the plane: `geom_num::crossing` (G29).
 pub mod crossing {
     use geom_num::crossing::Ssi;
@@ -1002,8 +1042,9 @@ pub mod exact_sum {
 pub mod generated {
     use geom_num::Sign;
     use geom_num::generated::{
-        carrier_order, carrier_side, incircle, insphere, lpi_side, lpi_weight, orient2d, orient3d,
-        plane_side, rational_cmp, rational_orient, ssi_side, ssi_weight, tpi_side, tpi_weight,
+        carrier_order, carrier_side, circle_gap, circle_line, circle_side, incircle, insphere,
+        lpi_side, lpi_weight, orient2d, orient3d, plane_side, rational_cmp, rational_orient,
+        round_grid, round_line, round_rational, ssi_side, ssi_weight, tpi_side, tpi_weight,
     };
     use geom_num::grid::{P2, P3};
     use geom_num::wide::{I256, I384};
@@ -1271,6 +1312,102 @@ pub mod generated {
             rational_orient::value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
         });
     }
+
+    /// `generated::round_grid::filter` on each (z, p, centre).
+    #[inline(never)]
+    pub fn round_grid_filter(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&(z, p, [cx, cy, w])| {
+            round_grid::filter(z, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_grid::value` on each (z, p, centre).
+    #[inline(never)]
+    pub fn round_grid_value(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&(z, p, [cx, cy, w])| {
+            round_grid::value(z, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_rational::filter` on each (point, q, centre).
+    #[inline(never)]
+    pub fn round_rational_filter(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
+            round_rational::filter(x, y, v, q, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_rational::value` on each (point, q, centre).
+    #[inline(never)]
+    pub fn round_rational_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
+            round_rational::value(x, y, v, q, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_line::filter` on each (carrier, p, centre).
+    #[inline(never)]
+    pub fn round_line_filter(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([a, b, d], p, [cx, cy, w])| {
+            round_line::filter(a, b, d, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_line::value` on each (carrier, p, centre).
+    #[inline(never)]
+    pub fn round_line_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([a, b, d], p, [cx, cy, w])| {
+            round_line::value(a, b, d, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::circle_side::filter` on each (point, centre, radius).
+    #[inline(never)]
+    pub fn circle_side_filter(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([x, y, v], k, r)| {
+            circle_side::filter(x, y, v, k, r)
+        });
+    }
+
+    /// `generated::circle_side::value` on each (point, centre, radius).
+    #[inline(never)]
+    pub fn circle_side_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([x, y, v], k, r)| {
+            circle_side::value(x, y, v, k, r)
+        });
+    }
+
+    /// `generated::circle_line::filter` on each (carrier, centre, radius).
+    #[inline(never)]
+    pub fn circle_line_filter(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([a, b, d], k, r)| {
+            circle_line::filter(a, b, d, k, r)
+        });
+    }
+
+    /// `generated::circle_line::value` on each (carrier, centre, radius).
+    #[inline(never)]
+    pub fn circle_line_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, r)| {
+            circle_line::value(a, b, d, k, r)
+        });
+    }
+
+    /// `generated::circle_gap::filter` on each (a, b, length).
+    #[inline(never)]
+    pub fn circle_gap_filter(batch: &[(P2, P2, i128)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&(a, b, t)| {
+            circle_gap::filter(a, b, t)
+        });
+    }
+
+    /// `generated::circle_gap::value` on each (a, b, length).
+    #[inline(never)]
+    pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&(a, b, t)| {
+            circle_gap::value(a, b, t)
+        });
+    }
 }
 
 /// The plain-`i128` variant of the generated exact paths (chapter 23.3; piece G42), on the same
@@ -1420,6 +1557,54 @@ pub mod plain {
             plain::rational_orient_value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
         });
     }
+
+    /// `generated::plain::round_grid_value` on each (z, p, centre).
+    #[inline(never)]
+    pub fn round_grid_value(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&(z, p, [cx, cy, w])| {
+            plain::round_grid_value(z, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::plain::round_rational_value` on each (point, q, centre).
+    #[inline(never)]
+    pub fn round_rational_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
+            plain::round_rational_value(x, y, v, q, cx, cy, w)
+        });
+    }
+
+    /// `generated::plain::round_line_value` on each (carrier, p, centre).
+    #[inline(never)]
+    pub fn round_line_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([a, b, d], p, [cx, cy, w])| {
+            plain::round_line_value(a, b, d, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::plain::circle_side_value` on each (point, centre, radius).
+    #[inline(never)]
+    pub fn circle_side_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([x, y, v], k, r)| {
+            plain::circle_side_value(x, y, v, k, r)
+        });
+    }
+
+    /// `generated::plain::circle_line_value` on each (carrier, centre, radius).
+    #[inline(never)]
+    pub fn circle_line_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, r)| {
+            plain::circle_line_value(a, b, d, k, r)
+        });
+    }
+
+    /// `generated::plain::circle_gap_value` on each (a, b, length).
+    #[inline(never)]
+    pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&(a, b, t)| {
+            plain::circle_gap_value(a, b, t)
+        });
+    }
 }
 
 /// The width-aware limb variant of the generated exact paths (chapter 23.3; piece G42), on its own
@@ -1567,6 +1752,54 @@ pub mod limbs {
     pub fn rational_orient_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I384>>) {
         run(batch, out, |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
             limbs::rational_orient_value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+        });
+    }
+
+    /// `generated::limbs::round_grid_value` on each (z, p, centre).
+    #[inline(never)]
+    pub fn round_grid_value(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&(z, p, [cx, cy, w])| {
+            limbs::round_grid_value(z, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::limbs::round_rational_value` on each (point, q, centre).
+    #[inline(never)]
+    pub fn round_rational_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
+            limbs::round_rational_value(x, y, v, q, cx, cy, w)
+        });
+    }
+
+    /// `generated::limbs::round_line_value` on each (carrier, p, centre).
+    #[inline(never)]
+    pub fn round_line_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([a, b, d], p, [cx, cy, w])| {
+            limbs::round_line_value(a, b, d, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::limbs::circle_side_value` on each (point, centre, radius).
+    #[inline(never)]
+    pub fn circle_side_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([x, y, v], k, r)| {
+            limbs::circle_side_value(x, y, v, k, r)
+        });
+    }
+
+    /// `generated::limbs::circle_line_value` on each (carrier, centre, radius).
+    #[inline(never)]
+    pub fn circle_line_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, r)| {
+            limbs::circle_line_value(a, b, d, k, r)
+        });
+    }
+
+    /// `generated::limbs::circle_gap_value` on each (a, b, length).
+    #[inline(never)]
+    pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&(a, b, t)| {
+            limbs::circle_gap_value(a, b, t)
         });
     }
 }
