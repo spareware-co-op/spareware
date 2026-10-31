@@ -265,7 +265,8 @@ impl Header {
             r.skip(meter)?;
             ignored.push(key);
         }
-        r.end()?;
+        // `check` found the payload to be one item, which the fields above have read whole: no
+        // byte follows them.
         Ok(Header {
             format: (major, minor),
             edition,
@@ -294,12 +295,10 @@ impl<'a> Fields<'a> {
             offset,
             expected: "an item",
         })?;
-        let used = match item {
-            // A container's head: step over the head only; its items are read one by one.
-            Item::Array(_) | Item::Map(_) | Item::Tag(_) => head_len(rest),
-            _ => d.offset(),
-        };
-        self.at = self.at.saturating_add(used);
+        // After a container's or a tag's head the decoder stands at the first item inside, so
+        // this steps over the head alone (those items are read one by one), and over a scalar
+        // whole.
+        self.at = self.at.saturating_add(d.offset());
         Ok(item)
     }
 
@@ -377,28 +376,5 @@ impl<'a> Fields<'a> {
         let len = item_len(rest, PAYLOAD_DEPTH, meter)?;
         self.at = self.at.saturating_add(len);
         Ok(())
-    }
-
-    /// The payload must end here.
-    fn end(&self) -> Result<(), HeaderError> {
-        if self.at == self.bytes.len() {
-            Ok(())
-        } else {
-            Err(HeaderError::Shape {
-                offset: self.at,
-                expected: "the end of the header",
-            })
-        }
-    }
-}
-
-/// The length of the head at the start of `bytes`: 1, 2, 3, 5 or 9 bytes (RFC 8949 section 3).
-fn head_len(bytes: &[u8]) -> usize {
-    match bytes.first().map(|b| b & 0x1f) {
-        Some(24) => 2,
-        Some(25) => 3,
-        Some(26) => 5,
-        Some(27) => 9,
-        _ => 1,
     }
 }

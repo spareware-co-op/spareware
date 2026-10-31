@@ -459,10 +459,16 @@ pub fn code_table(head: (&str, &str), rows: &[(u64, &str, &str)]) -> String {
 /// The registry's table, as `format/REGISTRY.md` holds it.
 #[must_use]
 pub fn registry_table() -> String {
+    table_of(RECORDS)
+}
+
+/// The registry's table of `records`, as [`registry_table`] renders [`RECORDS`].
+#[must_use]
+pub fn table_of(records: &[RecordType]) -> String {
     let mut out = String::from(
         "| Tag | Name | Schemas | Flags | CDDL | Defined in |\n| --- | --- | --- | --- | --- | --- |\n",
     );
-    for r in RECORDS {
+    for r in records {
         let schemas: String = r
             .schemas
             .iter()
