@@ -348,6 +348,7 @@ impl FaultKind {
             FaultKind::VertexOffSurface => {
                 "the vertex is not on the face's surface within the bound"
             }
+            FaultKind::MeetSingular => "the vertex's three planes do not meet in one point",
             FaultKind::VertexOffCurve => {
                 "the vertex is not at the edge's curve end within the bound"
             }

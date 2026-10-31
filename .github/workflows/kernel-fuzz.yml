@@ -29,7 +29,7 @@ name: Kernel fuzzing and proofs
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
 # every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
 # geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-num, geom-nurbs, geom-op,
-# geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with engine-geometry and
+# geom-poly, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with engine-geometry and
 # kit-core through geom-gen's facade generators;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
 # its job kani-op, the workspace
@@ -68,9 +68,12 @@ on:
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -98,9 +101,12 @@ on:
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -135,7 +141,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, make_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, make_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

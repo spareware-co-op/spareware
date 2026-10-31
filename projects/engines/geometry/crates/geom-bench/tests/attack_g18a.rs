@@ -1,11 +1,12 @@
-//! Attacks on G18a (issue #215): the instruction-and-cache gate judges a cache-miss count too small
-//! to resolve 5% through estimated cycles, keeps 5% on counts of 20 or more, reads Gungraun's
-//! machine-readable summaries with a real parser, and applies one rule on every leg.
+//! Attacks on G18a (issue #215) and on the kernel owners' decision that followed it (23.13): the
+//! instruction-and-cache gate judges every cache-miss count through estimated cycles, keeps
+//! instructions and estimated cycles at 5% on every benchmark, reads Gungraun's machine-readable
+//! summaries with a real parser, and applies one rule on every leg.
 //!
-//! Each test tries to break one claim of the done-when or of `geom_bench::callgrind`'s guarantees:
-//! the seeded cases the issue names (a +1 miss on a count of 2 passes, a real rise in estimated
-//! cycles fails, a rise over 5% on a count of 200 fails), the floor's derivation at and around its
-//! boundary for every percentage, the parser against every malformed summary, the judgement's
+//! Each test tries to break one claim of `geom_bench::callgrind`'s guarantees: the seeded cases (a
+//! +1 miss on a count of 2 passes, a miss-only rise passes at every size, the layout rises the merge
+//! records of #404, #408, #420 and #421 name pass, a real rise in estimated cycles fails), the rule
+//! on every miss kind and count, the parser against every malformed summary, the judgement's
 //! completeness, the command line's exit statuses, and the workflow's wiring on both legs.
 //!
 //! The summaries are written here in Gungraun's schema, and one test proves they are exactly what
@@ -27,7 +28,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use geom_bench::callgrind::{
-    JUDGED, MISSES, Verdict, floor, judge, parse_summary, read_summaries, verdict,
+    JUDGED, MISSES, Verdict, judge, parse_summary, read_summaries, verdict,
 };
 use geom_bench::counts::Change;
 use gungraun_runner::api::EventKind;
@@ -203,7 +204,7 @@ fn a_one_event_rise_on_a_count_of_2_passes_and_is_listed() {
     assert!(j.passed(), "{}", j.report("t"));
     assert!(j.regressions.is_empty());
     let listed: Vec<(&str, u64, u64)> = j
-        .unresolved
+        .listed
         .iter()
         .map(|m| (m.metric, m.change.base, m.change.head))
         .collect();
@@ -215,7 +216,7 @@ fn a_one_event_rise_on_a_count_of_2_passes_and_is_listed() {
         "{report}"
     );
     assert!(
-        report.contains("Miss counts under 20 that changed (judged through estimated cycles)"),
+        report.contains("Miss counts that changed (judged through estimated cycles)"),
         "{report}"
     );
 }
@@ -256,41 +257,93 @@ fn a_real_rise_in_estimated_cycles_fails() {
         ["EstimatedCycles"]
     );
     assert_eq!(
-        j.unresolved.iter().map(|m| m.metric).collect::<Vec<_>>(),
+        j.listed.iter().map(|m| m.metric).collect::<Vec<_>>(),
         ["D1mr", "DLmr"]
     );
 }
 
 #[test]
-fn a_rise_over_5_percent_on_a_count_of_200_fails() {
-    // 5% of 200 is 10 events: 210 is at the limit and passes, 211 is over it and fails, on every
-    // miss kind, while estimated cycles hold.
+fn a_miss_only_rise_passes_at_every_size() {
+    // A rise in one miss count, of any kind and any size, with instructions and estimated cycles
+    // held, passes and is listed: the count of 200 + 11 (5.5%) that failed before, 20 + 2, and a
+    // doubling of a million.
     for (kind, &(_, name)) in MISSES.iter().enumerate() {
-        let j = judge_5(&[(
-            "wide",
-            "add",
-            "w4",
-            Counts::steady(200).miss(kind, 200, 211),
-        )]);
-        assert!(!j.passed(), "{name}");
-        assert_eq!(j.regressions.len(), 1);
-        assert_eq!(j.regressions[0].metric, name);
-        assert_eq!(
-            (j.regressions[0].change.base, j.regressions[0].change.head),
-            (200, 211)
-        );
-        let j = judge_5(&[(
-            "wide",
-            "add",
-            "w4",
-            Counts::steady(200).miss(kind, 200, 210),
-        )]);
-        assert!(j.passed(), "{name}: {}", j.report("t"));
-        assert!(
-            j.unresolved.is_empty(),
-            "a resolved count is not listed as unresolved"
-        );
+        for (base, head) in [
+            (2, 3),
+            (20, 22),
+            (200, 211),
+            (622, 683),
+            (1_000_000, 2_000_000),
+        ] {
+            let j = judge_5(&[(
+                "wide",
+                "add",
+                "w4",
+                Counts::steady(base).miss(kind, base, head),
+            )]);
+            assert!(j.passed(), "{name} {base} -> {head}: {}", j.report("t"));
+            assert!(j.regressions.is_empty());
+            let listed: Vec<(&str, u64, u64)> = j
+                .listed
+                .iter()
+                .map(|m| (m.metric, m.change.base, m.change.head))
+                .collect();
+            assert_eq!(listed, [(name, base, head)]);
+        }
     }
+}
+
+#[test]
+fn the_layout_rises_of_the_merge_records_pass() {
+    // The counts each merge record named, with instructions unchanged and estimated cycles moved by
+    // what the record says, at the record's size: x86-64 `exact_sum/add_slice/typical` D1mr
+    // 622 -> 683 with cycles +0.19% (#420, which changed only manifests), `newton/krawczyk_4` I1mr
+    // +135% with cycles +0.29% (#421), `isolate/cubic_1/typical` D1mr 45 -> 49 (#408), and
+    // `dual/jacobian_interval/extreme` D1mr 20 -> 22 with D1mw 106 -> 114 (#404).
+    let cycles = |per_ten_thousand: u64| 1_000_000 + 100 * per_ten_thousand;
+    let seeded = [
+        (
+            "exact_sum",
+            "add_slice",
+            "typical",
+            Counts::steady(0)
+                .miss(1, 622, 683)
+                .cycles(1_000_000, cycles(19)),
+        ),
+        (
+            "newton",
+            "krawczyk_4",
+            "typical",
+            Counts::steady(0)
+                .miss(0, 100, 235)
+                .cycles(1_000_000, cycles(29)),
+        ),
+        (
+            "isolate",
+            "cubic_1",
+            "typical",
+            Counts::steady(0)
+                .miss(1, 45, 49)
+                .cycles(1_000_000, cycles(2)),
+        ),
+        (
+            "dual",
+            "jacobian_interval",
+            "extreme",
+            Counts::steady(0)
+                .miss(1, 20, 22)
+                .miss(2, 106, 114)
+                .cycles(1_000_000, cycles(11)),
+        ),
+    ];
+    let j = judge_5(&seeded);
+    assert!(j.passed(), "{}", j.report("t"));
+    assert_eq!(j.listed.len(), 5);
+    let report = j.report("Instructions, estimated cycles and cache misses on x86-64");
+    assert!(
+        report.contains("| exact_sum/add_slice/typical | D1mr | 622 | 683 | +9.81% | +0.19% |"),
+        "{report}"
+    );
 }
 
 #[test]
@@ -319,79 +372,38 @@ fn instructions_are_gated_at_every_size() {
 }
 
 // ------------------------------------------------------------------------------------------------
-// The floor: derived, exact, at its boundary.
+// The rule on every miss kind and count.
 // ------------------------------------------------------------------------------------------------
 
 #[test]
-fn the_floor_is_the_least_count_on_which_one_event_is_within_the_limit() {
-    assert_eq!(floor(5), Some(20));
-    assert_eq!(floor(0), None);
-    assert_eq!(floor(1), Some(100));
-    assert_eq!(floor(3), Some(34));
-    assert_eq!(floor(100), Some(1));
-    assert_eq!(floor(u64::MAX), Some(1));
-    for p in 1..=1000u64 {
-        let f = floor(p).unwrap();
-        // One event within p% of f: 100 ≤ p · f; and not of f − 1.
-        assert!(100 <= p * f, "{p}");
-        assert!(f == 1 || 100 > p * (f - 1), "{p}");
-        // The judge agrees with the derivation: a one-event rise on a count of f passes, one on
-        // f − 1 is not gated (listed instead).
-        assert_eq!(
-            verdict(EventKind::D1mr, &change(f, f + 1), p),
-            Verdict::Within,
-            "{p}"
-        );
-        if f > 1 {
-            assert_eq!(
-                verdict(EventKind::D1mr, &change(f - 1, f), p),
-                Verdict::Unresolved,
-                "{p}"
-            );
-        }
-    }
-}
-
-#[test]
-fn every_count_at_the_floor_or_above_still_resolves_5_percent() {
-    // From 20 up, the old rule stands exactly: a miss count fails when it rises over 5%, and one
-    // event never does. Below 20, no change fails on its own and every change is listed.
-    for &(kind, name) in &MISSES {
-        for base in 0..2_000u64 {
-            for head in base.saturating_sub(3)..=base + base / 10 + 3 {
-                let v = verdict(kind, &change(base, head), 5);
-                if base >= 20 {
-                    let over = 100 * head > 105 * base;
-                    assert_eq!(v == Verdict::Rose, over, "{name} {base} -> {head}");
-                    assert_ne!(v, Verdict::Unresolved);
-                    if head == base + 1 {
-                        assert_eq!(v, Verdict::Within, "{name}: one event on {base}");
-                    }
-                } else {
+fn every_miss_change_is_listed_and_none_is_gated() {
+    // At every size and every percentage: a miss count that changes is listed, one that does not is
+    // within, and no miss count fails on its own.
+    for p in [0, 1, 5, 100] {
+        for &(kind, name) in &MISSES {
+            for base in 0..2_000u64 {
+                for head in base.saturating_sub(3)..=base + base / 4 + 3 {
                     let expected = if head == base {
                         Verdict::Within
                     } else {
-                        Verdict::Unresolved
+                        Verdict::Listed
                     };
-                    assert_eq!(v, expected, "{name} {base} -> {head}");
+                    assert_eq!(
+                        verdict(kind, &change(base, head), p),
+                        expected,
+                        "{name} {base} -> {head} at {p}%"
+                    );
                 }
             }
         }
     }
-    // The boundary the issue names: 19 + 1 is listed, 20 + 1 (exactly 5%) passes, 20 + 2 fails,
-    // 39 + 2 (5.1%) fails, 40 + 2 (5%) passes.
     let d1mr = |b, h| verdict(EventKind::D1mr, &change(b, h), 5);
-    assert_eq!(d1mr(19, 20), Verdict::Unresolved);
-    assert_eq!(d1mr(19, 1_000), Verdict::Unresolved);
-    assert_eq!(d1mr(20, 21), Verdict::Within);
-    assert_eq!(d1mr(20, 22), Verdict::Rose);
-    assert_eq!(d1mr(39, 41), Verdict::Rose);
-    assert_eq!(d1mr(40, 42), Verdict::Within);
-    // From zero: listed, never gated on its own.
-    assert_eq!(d1mr(0, 1), Verdict::Unresolved);
+    assert_eq!(d1mr(19, 20), Verdict::Listed);
+    assert_eq!(d1mr(20, 22), Verdict::Listed);
+    assert_eq!(d1mr(339, 355), Verdict::Listed);
+    assert_eq!(d1mr(0, 1), Verdict::Listed);
+    assert_eq!(d1mr(3, 2), Verdict::Listed);
     assert_eq!(d1mr(0, 0), Verdict::Within);
-    // Falls below the floor are listed too.
-    assert_eq!(d1mr(3, 2), Verdict::Unresolved);
 }
 
 #[test]
@@ -404,11 +416,11 @@ fn the_rule_is_exact_at_the_extremes_of_its_types() {
             assert_ne!(verdict(kind, &change(max, 0), p), Verdict::Rose);
         }
     }
-    // With a limit of 0, no count resolves it: misses are never gated on their own, instructions
-    // fail on one event.
+    // With a limit of 0, misses are still listed, never gated on their own; instructions fail on
+    // one event.
     assert_eq!(
         verdict(EventKind::I1mr, &change(1_000_000, 1_000_001), 0),
-        Verdict::Unresolved
+        Verdict::Listed
     );
     assert_eq!(
         verdict(EventKind::Ir, &change(1_000_000, 1_000_001), 0),
@@ -425,7 +437,7 @@ fn the_rule_is_exact_at_the_extremes_of_its_types() {
     assert!(j.passed());
     assert!(
         j.report("t")
-            .contains("No count resolves a limit of 0%, so every miss count's changes are listed")
+            .contains("gated at 0% on every benchmark. Every miss count that changed is listed")
     );
 }
 
@@ -613,21 +625,24 @@ fn reports_are_in_name_order_and_measure_order() {
         .iter()
         .map(|m| (m.change.name.as_str(), m.metric))
         .collect();
-    assert_eq!(rises, [("z/o/c", "Ir"), ("z/o/c", "DLmw")]);
+    assert_eq!(rises, [("z/o/c", "Ir")]);
     let listed: Vec<(&str, &str)> = j
-        .unresolved
+        .listed
         .iter()
         .map(|m| (m.change.name.as_str(), m.metric))
         .collect();
-    assert_eq!(listed, [("a/o/c", "I1mr"), ("a/o/c", "D1mw")]);
+    assert_eq!(
+        listed,
+        [("a/o/c", "I1mr"), ("a/o/c", "D1mw"), ("z/o/c", "DLmw")]
+    );
     let report = j.report("t");
     assert!(
-        report.contains("**Failed:** 2 rise(s) over 5%."),
+        report.contains("**Failed:** 1 rise(s) over 5%."),
         "{report}"
     );
     assert!(report.contains("| z/o/c | DLmw | 100 | 200 | +100.00% | +0.00% |"));
     assert!(
-        report.contains("its merge-base count is 20 or more"),
+        report.contains("judged through estimated cycles, which price every miss"),
         "{report}"
     );
 }
@@ -725,7 +740,7 @@ fn the_command_line_passes_fails_and_refuses_as_the_rule_says() {
         &[("wide", "add", "w4", Counts::steady(200).miss(1, 200, 211))],
     );
     let (status, report) = run_counts(&out, &names);
-    assert_eq!(status, Some(1));
+    assert_eq!(status, Some(0), "{report}");
     assert!(
         report.contains("| wide/add/w4 | D1mr | 200 | 211 | +5.50% |"),
         "{report}"
@@ -843,26 +858,27 @@ fn the_rule_is_written_in_chapter_23_13_and_the_gate_header() {
         .find("## 23.14")
         .map_or(CHAPTER.len(), |e| at + e)];
     assert!(
-        section.contains("**Miss counts too small to resolve 5%.**"),
-        "chapter 23.13 does not derive the rule"
+        section.contains("**Miss counts are judged through estimated cycles.**"),
+        "chapter 23.13 does not state the rule"
     );
     for needle in [
-        "below 20",
-        "100 / p",
-        "estimated cycles",
+        "35 · RAM hits",
         "every leg",
         "40136795440",
+        "339 to 355",
+        "#420",
+        "#421",
     ] {
         assert!(section.contains(needle), "23.13 lacks {needle:?}");
     }
     let header = include_str!("../src/callgrind.rs");
-    for needle in ["⌈100 / p⌉", "20 for the gate's 5%", "35 · RAM hits", "#212"] {
+    for needle in ["35 · RAM hits", "#212", "#420", "622 → 683"] {
         assert!(
             header.contains(needle),
             "the gate's header lacks {needle:?}"
         );
     }
-    assert!(GATE.contains("a count below 20"));
+    assert!(GATE.contains("every miss count is listed and judged"));
     // The code of the measured binary is the merge base's: the bare-run limits stay, and the
     // workflow's replace them.
     for &(_, miss) in &MISSES {

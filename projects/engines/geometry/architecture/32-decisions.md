@@ -816,7 +816,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-golden.yml` | `store` | J: `geom-test/tests/attack_g19.rs::seeded_violations_of_the_real_tree_are_found`; R: `geom-test/tests/attack_g19.rs::golden_diff_holds_a_change_to_the_owner_rule_end_to_end` |
 | `kernel-bench.yml` | `scope` | Not a gate: it decides which count jobs run, from the same paths as the workflow's trigger |
 | `kernel-bench.yml` | `checks` | The tools of `kernel.yml`'s `lint`: `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
-| `kernel-bench.yml` | `instructions` | `trip gungraun`, on both legs; J: `geom-bench/tests/attack_g18a.rs::a_rise_over_5_percent_on_a_count_of_200_fails`, `geom-bench/tests/attack_g18a.rs::the_command_line_passes_fails_and_refuses_as_the_rule_says` |
+| `kernel-bench.yml` | `instructions` | `trip gungraun`, on both legs; J: `geom-bench/tests/attack_g18a.rs::a_real_rise_in_estimated_cycles_fails`, `geom-bench/tests/attack_g18a.rs::the_command_line_passes_fails_and_refuses_as_the_rule_says` |
 | `kernel-bench.yml` | `fuel` | `trip fuel`; J: `geom-bench/src/counts.rs::growth_passes_the_stated_order_and_fails_the_next`, `geom-bench/src/counts.rs::compare_finds_rises_listings_removals_and_additions` |
 | `kernel-fuzz.yml` | `libfuzzer` | `trip libfuzzer` |
 | `kernel-fuzz.yml` | `kani` | `trip kani-fuzz` |
