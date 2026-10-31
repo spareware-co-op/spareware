@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (piece G158, decision 32.44): a list of items put in canonical order, a circle's canonical key, and a pair of lines put in canonical order.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, and a point projected on an arc and on a band of a sphere.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2567,6 +2567,29 @@
             "text": "the algebraic laws of section 28.6 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`, \"Swapping two points flips the sign\"). Each predicate is the sign of a determinant with one row per point (the points lifted onto the paraboloid z = |p|² for in-circle and in-sphere), as in Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", Discrete & Computational Geometry 18, 1997 (<https://doi.org/10.1007/PL00009321>), which `geom_num::predicate` follows. Exchanging two points exchanges two rows, and by the Leibniz formula an exchange of two rows negates a determinant, so every transposition must flip the sign. The board names orient2d's swap; the same law is checked on the other three predicates, whose points the harness decodes anyway."
           },
           "path": "geom_fuzz::predicates",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one search and one budgeted rerun (chapter 12.4's cost), and at most [`CURVE_SAMPLES`] or [`SURFACE_SAMPLES`] squared evaluations of the kind.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of eight kinds on small lattice sizes and domains, and a point on a coarse lattice, so points on an axis, ties and feet on an end are common. [`check`] projects the point and holds the answer to the laws below, with a dense sample of the kind as the oracle: the search bounds and prunes, and the oracle only evaluates, so the two share nothing but the kind. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/project.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a sample nearer than the distance reported, a nearest point that is not on the kind where it says or not in the domain, points out of parameter order, a typed set whose members are not all at its distance, an internal error, or a budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s nearest points are never beaten by a sample, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.4's projection (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`). A sample bounds the minimum from above, which is all a sample can do: the law cannot be broken by a true answer, and a wrong one is caught once a sample lands nearer than it."
+          },
+          "path": "geom_fuzz::project",
           "provenance": [],
           "spdx": null,
           "target": "lib"

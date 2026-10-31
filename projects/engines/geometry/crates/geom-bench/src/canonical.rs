@@ -873,6 +873,18 @@ impl Canonical for geom_curve::CurveKind<3> {
     }
 }
 
+impl Canonical for geom_surface::SurfaceKind {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<const N: usize, const D: usize> Canonical for geom_intersect::Projection<N, D> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_intersect::Item {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);

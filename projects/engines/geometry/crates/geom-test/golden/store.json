@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G158",
               "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
+            },
+            {
+              "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63",
+              "kind": "corpus",
+              "piece": "G162",
+              "why": "2 new count benchmarks on geom-intersect's projection (decision 32.44): the search on an arc and on a band of a sphere; no existing digest moved"
             }
           ],
-          "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63"
+          "sha256": "c6ad6ae11db193fbb5f9ca80bf84189b6ef77a320dc0a152592e208d889d487d"
         },
         {
           "id": "geom-nurbs/operations",

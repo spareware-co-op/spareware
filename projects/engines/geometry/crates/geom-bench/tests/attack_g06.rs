@@ -1269,6 +1269,18 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 )
             }))
         }
+        ("intersect", "project_arc") => {
+            fold(inputs::intersect::arcs(class).iter().map(|(curve, p)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::project_curve(curve, p, 1e-6, &mut meter)
+            }))
+        }
+        ("intersect", "project_sphere") => fold(inputs::intersect::spheres(class).iter().map(
+            |(surface, p)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::project_surface(surface, p, 1e-6, &mut meter)
+            },
+        )),
         ("intersect", "key_circle") => fold(inputs::intersect::circles(class).iter().map(|c| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_intersect::CanonicalKey::of_curve(c, &mut meter)
