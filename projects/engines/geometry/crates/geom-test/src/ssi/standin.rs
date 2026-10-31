@@ -277,13 +277,15 @@ fn around(p: V3, half: f64, why: Why, placed: &Placed) -> Flag {
     }
 }
 
-/// The half-width of a box whose corner stays within `reach` of what it holds.
+/// The half-width of a box whose corner stays within `reach` of what it holds, once [`around`] has
+/// rounded it out by up to a step on each axis.
 fn half_for(reach: f64) -> f64 {
-    larger(1.0, (reach / 3.0_f64.sqrt() * 0.9).floor())
+    larger(1.0, (reach / 3.0_f64.sqrt() - 1.0).floor())
 }
 
 /// Leaves out what a method may flag, and flags it: isolated points, singular points, and a stretch
-/// of the first tangent curve.
+/// of each tangent curve. Each, since near-tangent curves can lie closer than the scorer's coverage:
+/// one left whole would cover the other's gap, and the gap would read as a third curve, not a miss.
 fn flagged(case: &Case, placed: &Placed, cov: f64, out: &mut Output) {
     let floor = half_for(floor_reach(placed));
     out.points.clear();
@@ -294,8 +296,10 @@ fn flagged(case: &Case, placed: &Placed, cov: f64, out: &mut Output) {
     for p in &case.expected.singular_points {
         out.flagged.push(around(*p, floor, Why::NonSmooth, placed));
     }
-    if let Some(index) = out.curves.iter().position(|c| c.kind == "TANGENT") {
-        stretch(index, placed, cov, out);
+    for index in (0..out.curves.len()).rev() {
+        if out.curves.get(index).is_some_and(|c| c.kind == "TANGENT") {
+            stretch(index, placed, cov, out);
+        }
     }
 }
 
