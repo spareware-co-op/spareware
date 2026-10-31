@@ -108,10 +108,7 @@ fn a_line_meets_a_plane_once() {
     near(p[0][1], 3.0);
     near(p[0][2], 4.0);
     // A segment that stops short, and one that ends on it.
-    is_empty(&meet(
-        &segment([3.0, 4.0, 10.0], [3.0, 4.0, 5.0]),
-        &plane(),
-    ));
+    is_empty(&meet(&segment([3.0, 4.0, 10.0], [3.0, 4.0, 5.0]), &plane()));
     let r = meet(&segment([3.0, 4.0, 10.0], [3.0, 4.0, 0.0]), &plane());
     assert_eq!(contacts(&r), [PointContact::BoundaryTouch]);
     // Past the plane's domain.
@@ -143,7 +140,13 @@ fn a_parallel_line_misses_a_plane_or_lies_in_it() {
 fn a_tilted_plane_is_met_on_its_own_vectors() {
     let side = (-1000.0, 1000.0);
     let p = SurfaceKind::Plane(
-        Plane::new([1.0, 1.0, 1.0], [1.0, 1.0, 0.0], [0.0, 1.0, 1.0], (side, side)).unwrap(),
+        Plane::new(
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 1.0],
+            (side, side),
+        )
+        .unwrap(),
     );
     let r = meet(&line([1.0, 4.0, 1.0], [1.0, -1.0, 1.0]), &p);
     let q = points(&r);
@@ -190,7 +193,11 @@ fn a_line_meets_a_cylinder() {
     // Along the axis, off the surface: never. On a ruling: all of it.
     is_empty(&meet(&line([1.0, 1.0, 0.0], [0.0, 0.0, 1.0]), &c));
     let r = meet(&segment([5.0, 0.0, -9.0], [5.0, 0.0, 9.0]), &c);
-    assert!(matches!(r.items(), [Item::Overlap { .. }]), "{:?}", r.items());
+    assert!(
+        matches!(r.items(), [Item::Overlap { .. }]),
+        "{:?}",
+        r.items()
+    );
     // Past the cylinder's height.
     is_empty(&meet(&line([-9.0, 3.0, 60.0], [1.0, 0.0, 0.0]), &c));
 }
@@ -198,9 +205,8 @@ fn a_line_meets_a_cylinder() {
 #[test]
 fn a_line_meets_a_cone() {
     // Radius 2 + v about z, for v from −10 to 10: the apex is at z = −2.
-    let c = SurfaceKind::Cone(
-        Cone::new([0.0; 3], 2.0, 1.0, frame(), (ROUND, (-10.0, 10.0))).unwrap(),
-    );
+    let c =
+        SurfaceKind::Cone(Cone::new([0.0; 3], 2.0, 1.0, frame(), (ROUND, (-10.0, 10.0))).unwrap());
     let p = points(&meet(&line([-9.0, 0.0, 1.0], [1.0, 0.0, 0.0]), &c));
     assert_eq!(p.len(), 2);
     near(p[0][0], 6.0);
@@ -317,26 +323,17 @@ fn a_curve_goes_through_a_patch_once_or_twice() {
     let down = bezier(&[[100.0, 100.0, 2000.0], [100.0, 100.0, -2000.0]]);
     let p = points(&meet(&down, &bowl()));
     assert_eq!(p.len(), 1);
-    let flat = bezier(&[
-        [-2000.0, 0.0, 500.0],
-        [2000.0, 0.0, 500.0],
-    ]);
+    let flat = bezier(&[[-2000.0, 0.0, 500.0], [2000.0, 0.0, 500.0]]);
     let r = meet(&flat, &bowl());
     assert_eq!(contacts(&r), [PointContact::Crossing; 2], "{:?}", r.items());
-    let above = bezier(&[
-        [-2000.0, 0.0, 1500.0],
-        [2000.0, 0.0, 1500.0],
-    ]);
+    let above = bezier(&[[-2000.0, 0.0, 1500.0], [2000.0, 0.0, 1500.0]]);
     is_empty(&meet(&above, &bowl()));
 }
 
 #[test]
 fn a_grazing_curve_is_flagged_with_its_band() {
     // Tangent to the top of the bowl, z = 1000 at the middle.
-    let graze = bezier(&[
-        [-2000.0, 0.0, 1000.0],
-        [2000.0, 0.0, 1000.0],
-    ]);
+    let graze = bezier(&[[-2000.0, 0.0, 1000.0], [2000.0, 0.0, 1000.0]]);
     let r = meet(&graze, &bowl());
     assert!(
         r.items().iter().any(|i| matches!(
@@ -351,11 +348,7 @@ fn a_grazing_curve_is_flagged_with_its_band() {
     );
     assert_eq!(r.coverage(), Coverage::CompleteOutsideFlagged);
     // A curve bent as the surface is cannot be told from it at second order.
-    let same = bezier(&[
-        [-1000.0, 0.0, 0.0],
-        [0.0, 0.0, 2000.0],
-        [1000.0, 0.0, 0.0],
-    ]);
+    let same = bezier(&[[-1000.0, 0.0, 0.0], [0.0, 0.0, 2000.0], [1000.0, 0.0, 0.0]]);
     let r = meet(&same, &bowl());
     assert!(
         r.items().iter().any(|i| matches!(
@@ -471,13 +464,7 @@ fn no_root_is_lost_on_10_000_curves_through_patches() {
         let (k, m) = (0.1 + 0.4 * unit(&mut rng), 0.4 * unit(&mut rng));
         let g = [k, m];
         let graph = plus(
-            &plus(
-                &[e],
-                &plus(
-                    &[0.0, 0.0, a],
-                    &times(&[b], &times(&g, &g)),
-                ),
-            ),
+            &plus(&[e], &plus(&[0.0, 0.0, a], &times(&[b], &times(&g, &g)))),
             &times(&[0.0, f], &g),
         );
         let difference = roots.iter().fold(vec![c], |p, r| times(&p, &[-r, 1.0]));

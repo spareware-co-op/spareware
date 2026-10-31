@@ -73,7 +73,7 @@ pub const ROUTE: &str = "closed-form-to-engine";
 const REACH: f64 = COORD_MAX as f64;
 
 /// The sign of Σ aᵢ·bᵢ, exactly: each product is a double and its error, and their sum is exact.
-fn sign_of(terms: &[(f64, f64)]) -> Sign {
+pub(crate) fn sign_of(terms: &[(f64, f64)]) -> Sign {
     let mut sum = ExactSum::new();
     for &(a, b) in terms {
         let (p, e) = two_prod(a, b);
@@ -91,12 +91,15 @@ fn sign_of(terms: &[(f64, f64)]) -> Sign {
 }
 
 /// The answer for items that all stand proven.
-fn proven(items: Vec<Item>, meter: &mut WorkMeter<'_>) -> Result<Intersection, IntersectError> {
+pub(crate) fn proven(
+    items: Vec<Item>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Intersection, IntersectError> {
     Intersection::new(items, Coverage::TopologyCertified, Vec::new(), meter)
 }
 
 /// A box of grid points around `lo..hi`, whole steps outward.
-fn grid_box<const D: usize>(b: &Bounds<D>) -> Result<Box3, IntersectError> {
+pub(crate) fn grid_box<const D: usize>(b: &Bounds<D>) -> Result<Box3, IntersectError> {
     let side = |x: &[f64; D], i: usize, up: bool| -> Result<i64, IntersectError> {
         let v = x.get(i).copied().unwrap_or(0.0);
         let r = if up { math::ceil(v)? } else { math::floor(v)? };
@@ -123,7 +126,7 @@ const fn exact_i64(v: f64) -> i64 {
 }
 
 /// A certified class of one step, for a box the engine refined to the floor.
-const fn certified() -> Exactness {
+pub(crate) const fn certified() -> Exactness {
     Exactness::Certified {
         bound: Steps(1),
         step: GridStep::Q0,
@@ -131,7 +134,7 @@ const fn certified() -> Exactness {
 }
 
 /// The widest side of `b`.
-fn widest<const D: usize>(b: &Bounds<D>) -> f64 {
+pub(crate) fn widest<const D: usize>(b: &Bounds<D>) -> f64 {
     let mut out = 0.0;
     for (lo, hi) in b.lo.iter().zip(&b.hi) {
         let w = hi - lo;
@@ -143,7 +146,7 @@ fn widest<const D: usize>(b: &Bounds<D>) -> f64 {
 }
 
 /// `x`'s ends.
-fn span(x: Interval) -> (f64, f64) {
+pub(crate) fn span(x: Interval) -> (f64, f64) {
     (x.lo(), x.hi())
 }
 
@@ -174,7 +177,7 @@ fn coordinate<const D: usize>(
 }
 
 /// A's Bézier pieces, where it has them.
-fn pieces<const D: usize>(
+pub(crate) fn pieces<const D: usize>(
     curve: &CurveKind<D>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<BernsteinCurve<D>>, IntersectError> {
@@ -283,7 +286,7 @@ impl Seam {
 }
 
 /// `curve`'s seam over `domain`.
-fn seam_of<const D: usize>(curve: &CurveKind<D>, domain: (f64, f64)) -> Seam {
+pub(crate) fn seam_of<const D: usize>(curve: &CurveKind<D>, domain: (f64, f64)) -> Seam {
     match curve {
         CurveKind::Circle(_) | CurveKind::Ellipse(_) => Seam::turns(domain),
         _ => Seam::open(domain),
@@ -291,7 +294,7 @@ fn seam_of<const D: usize>(curve: &CurveKind<D>, domain: (f64, f64)) -> Seam {
 }
 
 /// A box around `curve` over `x`, across its join if `x` is.
-fn bound_over<const D: usize>(
+pub(crate) fn bound_over<const D: usize>(
     curve: &CurveKind<D>,
     seam: Seam,
     x: Interval,
@@ -310,7 +313,7 @@ fn bound_over<const D: usize>(
 
 /// A box around `curve`'s first derivative over `x`, across its join if `x` is; `None` where it has
 /// none.
-fn slope_over<const D: usize>(
+pub(crate) fn slope_over<const D: usize>(
     curve: &CurveKind<D>,
     seam: Seam,
     x: Interval,
@@ -341,7 +344,10 @@ struct Gap<'a, const D: usize> {
 }
 
 /// The piece that holds `x` whole, cut to it.
-fn cut<const D: usize>(pieces: &[BernsteinCurve<D>], x: Interval) -> Option<BernsteinCurve<D>> {
+pub(crate) fn cut<const D: usize>(
+    pieces: &[BernsteinCurve<D>],
+    x: Interval,
+) -> Option<BernsteinCurve<D>> {
     let piece = pieces.iter().find(|p| {
         let (lo, hi) = p.domain();
         lo <= x.lo() && x.hi() <= hi
@@ -616,7 +622,7 @@ fn second_order<const D: usize>(
     clippy::cast_sign_loss,
     reason = "a size in a frame's steps, below 2^53; a saturating cast is right for one past that"
 )]
-fn exact_steps(v: f64) -> u64 {
+pub(crate) fn exact_steps(v: f64) -> u64 {
     math::ceil(v).map_or(u64::MAX, |r| r.get() as u64)
 }
 
@@ -716,7 +722,7 @@ fn line_line<const D: usize>(
 }
 
 /// The turn of `(alpha, beta)`, in half-turns, kept away from atan2's cut.
-fn turn_of(alpha: Interval, beta: Interval) -> Result<Interval, IntersectError> {
+pub(crate) fn turn_of(alpha: Interval, beta: Interval) -> Result<Interval, IntersectError> {
     if alpha.hi() < 0.0 {
         let opposite = Interval::atan2(beta.neg(), alpha.neg())?.div(Interval::PI)?;
         Ok(opposite.add(Interval::point(1.0)?)?)
@@ -746,7 +752,7 @@ fn at<T: Copy, const N: usize>(v: &[T; N], k: usize) -> Result<T, IntersectError
 }
 
 /// `t`, a number of half-turns, moved by whole turns onto `domain`, if any of it lands there.
-fn onto(t: Interval, (lo, hi): (f64, f64)) -> Result<Option<Interval>, IntersectError> {
+pub(crate) fn onto(t: Interval, (lo, hi): (f64, f64)) -> Result<Option<Interval>, IntersectError> {
     let mut turns = math::floor((lo - t.hi()) / 2.0)?.get();
     for _ in 0..3 {
         let moved = t.add(Interval::point(2.0 * turns)?)?;
@@ -759,7 +765,7 @@ fn onto(t: Interval, (lo, hi): (f64, f64)) -> Result<Option<Interval>, Intersect
 }
 
 /// `x`, cut to `domain`, which it meets.
-fn held(x: Interval, (lo, hi): (f64, f64)) -> Result<Interval, IntersectError> {
+pub(crate) fn held(x: Interval, (lo, hi): (f64, f64)) -> Result<Interval, IntersectError> {
     let (a, b) = (
         if x.lo() < lo { lo } else { x.lo() },
         if x.hi() > hi { hi } else { x.hi() },
@@ -1034,19 +1040,19 @@ fn one_circle<const D: usize>(
 }
 
 /// `v` as a grid coordinate, if it is a whole number in reach.
-fn whole(v: f64) -> Option<i64> {
+pub(crate) fn whole(v: f64) -> Option<i64> {
     let floor = math::floor(v).ok()?.get();
     (floor == v && v.abs() <= REACH).then(|| exact_i64(v))
 }
 
 /// `v`'s coordinates as a grid point, if they are whole.
-fn grid_point<const D: usize>(v: &[f64; D]) -> Option<P3> {
+pub(crate) fn grid_point<const D: usize>(v: &[f64; D]) -> Option<P3> {
     let at = |k: usize| whole(v.get(k).copied().unwrap_or(0.0));
     P3::new(at(0)?, at(1)?, at(2)?).ok()
 }
 
 /// The line's two points, `o` and `o + d`, if they are on the grid.
-fn grid_line<const D: usize>(line: &Line<D>) -> Option<quadric::Line> {
+pub(crate) fn grid_line<const D: usize>(line: &Line<D>) -> Option<quadric::Line> {
     let (o, d) = (line.origin(), line.direction());
     let mut far = o;
     for (x, y) in far.iter_mut().zip(&d) {
@@ -1152,7 +1158,7 @@ fn conic_of<const D: usize>(
 
 /// The roots of a·s² + 2b·s + c, in order, by the count `exact` gives or the discriminant's sign.
 /// `None` where an interval cannot tell.
-fn quadratic(
+pub(crate) fn quadratic(
     [a, b, c]: [Interval; 3],
     exact: Option<Meeting>,
 ) -> Result<Option<Vec<Interval>>, IntersectError> {
@@ -1508,7 +1514,7 @@ fn closed_form<const D: usize>(
 }
 
 /// `line`'s domain, an infinite end moved to where it leaves the grid, past which nothing lies.
-fn line_span<const D: usize>(line: &Line<D>) -> Result<(f64, f64), IntersectError> {
+pub(crate) fn line_span<const D: usize>(line: &Line<D>) -> Result<(f64, f64), IntersectError> {
     let (mut lo, mut hi) = ParamCurve::domain(line);
     if lo.is_finite() && hi.is_finite() {
         return Ok((lo, hi));
@@ -1534,7 +1540,7 @@ fn line_span<const D: usize>(line: &Line<D>) -> Result<(f64, f64), IntersectErro
 }
 
 /// `curve`'s domain, finite.
-fn finite<const D: usize>(curve: &CurveKind<D>) -> Result<(f64, f64), IntersectError> {
+pub(crate) fn finite<const D: usize>(curve: &CurveKind<D>) -> Result<(f64, f64), IntersectError> {
     match curve {
         CurveKind::Line(line) => line_span(line),
         _ => Ok(curve.domain()),

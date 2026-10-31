@@ -96,7 +96,11 @@ fn minus(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], IntersectE
 /// `v` enclosed.
 fn lift(v: [f64; 3]) -> Result<[Interval; 3], IntersectError> {
     let [x, y, z] = v;
-    Ok([Interval::point(x)?, Interval::point(y)?, Interval::point(z)?])
+    Ok([
+        Interval::point(x)?,
+        Interval::point(y)?,
+        Interval::point(z)?,
+    ])
 }
 
 /// A box as its three sides.
@@ -211,7 +215,11 @@ fn plane_parameters(
     let (o, d) = (lift(line.origin())?, lift(line.direction())?);
     let [ox, oy, oz] = o;
     let [dx, dy, dz] = d;
-    let at = [ox.add(t.mul(dx)?)?, oy.add(t.mul(dy)?)?, oz.add(t.mul(dz)?)?];
+    let at = [
+        ox.add(t.mul(dx)?)?,
+        oy.add(t.mul(dy)?)?,
+        oz.add(t.mul(dz)?)?,
+    ];
     let w = minus(at, lift(c)?)?;
     let (a, b) = (lift(a)?, lift(b)?);
     let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
@@ -266,8 +274,10 @@ fn in_plane(
         )
     };
     let domain = ParamSurface::domain(plane);
-    let (Some(u), Some(v)) = (within(hull(u0, u1)?, domain.0)?, within(hull(v0, v1)?, domain.1)?)
-    else {
+    let (Some(u), Some(v)) = (
+        within(hull(u0, u1)?, domain.0)?,
+        within(hull(v0, v1)?, domain.1)?,
+    ) else {
         return proven(Vec::new(), meter);
     };
     let at = ParamBox::new(&[Interval::new(span_t.0, span_t.1)?, u, v])?;
@@ -468,7 +478,7 @@ fn along_ruling(
     let sign = Interval::point(cylinder.axial_sign())?;
     let (start, end) = finite_line(line)?;
     let v_of = |t: f64| -> Result<Interval, IntersectError> {
-        along(oz, dz, Interval::point(t)?)?.mul(sign).map_err(Into::into)
+        Ok(along(oz, dz, Interval::point(t)?)?.mul(sign)?)
     };
     let (first, last) = (v_of(start)?, v_of(end)?);
     let (lo, hi) = if first.lo() < last.lo() {
@@ -652,7 +662,8 @@ fn line_torus(
     let (o, d) = local(line, torus.center(), &torus.frame())?;
     let (major, minor) = torus.radii();
     let (big, small) = (Interval::point(major)?, Interval::point(minor)?);
-    let Some(stretch) = near_origin(line, (o, d), big.add(small)?.add(Interval::point(1.0)?)?)? else {
+    let Some(stretch) = near_origin(line, (o, d), big.add(small)?.add(Interval::point(1.0)?)?)?
+    else {
         return proven(Vec::new(), meter);
     };
     let [ox, oy, oz] = o;
@@ -729,9 +740,7 @@ fn line_torus(
             at: ParamBox::new(&[t, u, v])?,
             xyz: grid_box(&line.bound(span(t), meter)?)?,
             why: Unresolved::TangentBand {
-                width: Steps(exact_steps(
-                    (t.hi() - t.lo()) * quartic.speed,
-                )),
+                width: Steps(exact_steps((t.hi() - t.lo()) * quartic.speed)),
             },
         });
     }
@@ -754,11 +763,7 @@ struct Contact<'a> {
 }
 
 /// The patch of `patches` that holds `u` × `v` whole, cut to it.
-fn cut_patch(
-    patches: &[BernsteinPatch<3>],
-    u: Interval,
-    v: Interval,
-) -> Option<BernsteinPatch<3>> {
+fn cut_patch(patches: &[BernsteinPatch<3>], u: Interval, v: Interval) -> Option<BernsteinPatch<3>> {
     let patch = patches.iter().find(|p| {
         let ((a, b), (c, d)) = p.domain();
         a <= u.lo() && u.hi() <= b && c <= v.lo() && v.hi() <= d
@@ -1189,7 +1194,9 @@ fn helix_on_cylinder(
     let rise = dot(m, n)?.mul(Interval::point(pitch * 0.5)?)?;
     let sign = Interval::point(cylinder.axial_sign())?;
     let (t0, t1) = curve.domain();
-    let v_at = |t: f64| along(start, rise, Interval::point(t)?)?.mul(sign).map_err(IntersectError::from);
+    let v_at = |t: f64| -> Result<Interval, IntersectError> {
+        Ok(along(start, rise, Interval::point(t)?)?.mul(sign)?)
+    };
     let (first, last) = (v_at(t0)?, v_at(t1)?);
     let (lo, hi) = if first.lo() < last.lo() {
         (first.lo(), last.hi())
@@ -1201,11 +1208,7 @@ fn helix_on_cylinder(
         return proven(Vec::new(), meter).map(Some);
     };
     let overlap = Item::Overlap {
-        at: ParamBox::new(&[
-            Interval::new(t0, t1)?,
-            Interval::new(u.0, u.1)?,
-            v,
-        ])?,
+        at: ParamBox::new(&[Interval::new(t0, t1)?, Interval::new(u.0, u.1)?, v])?,
         region: OverlapRegion {
             boundary: Vec::new(),
         },

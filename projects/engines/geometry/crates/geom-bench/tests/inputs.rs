@@ -2390,6 +2390,9 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("curve_line_circle", k::met, &m::line_circles(Typical));
     all_ok("curve_cubics", k::met, &m::cubic_pairs(Typical));
     all_ok("curve_loop", k::crossed, &m::loops(Typical));
+    all_ok("surface_plane", k::pierced, &m::line_planes(Typical));
+    all_ok("surface_torus", k::pierced, &m::line_tori(Typical));
+    all_ok("surface_patch", k::pierced, &m::cubic_patches(Typical));
     all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
     all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
 }
