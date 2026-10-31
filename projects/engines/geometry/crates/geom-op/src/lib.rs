@@ -89,7 +89,7 @@ pub mod remedy;
 pub mod schema;
 
 pub use context::{OpContext, Precision};
-pub use detail::{NumDetail, OpErrorDetail, RunDetail};
+pub use detail::{MakeDetail, NumDetail, OpErrorDetail, RunDetail};
 pub use error::OpError;
 pub use evidence::{Evidence, Value};
 pub use geom_num::Exactness;
