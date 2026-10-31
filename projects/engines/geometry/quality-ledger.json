@@ -5150,14 +5150,6 @@
       "reason": "Without pushing the frame or moving past the container's head, the next call of next reads the same head again, for ever under the tests' unlimited meter (a metered read stops at its budget). It hangs; it never accepts bytes the original refuses."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
-      "mutant": "replace Decoder<'a>::complete -> Result<(), CborError> with Ok(())",
-      "line_text": "self.at = end;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Without moving past the item it just read, the next call of next reads the same head again, for ever under the tests' unlimited meter. It hangs; it never accepts bytes the original refuses."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-format/src/cbor/float.rs",
       "mutant": "replace | with ^ in half",
       "line_text": "u16::try_from(magnitude >> 13).ok().map(|m| m | sign)",
