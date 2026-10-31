@@ -10,7 +10,7 @@ This file is for every agent and person who changes anything in `projects/engine
 6. [How to add a predicate](#6-how-to-add-a-predicate).
 7. [How to add a crate](#7-how-to-add-a-crate).
 8. [The randomised-method rule](#8-the-randomised-method-rule): the rule every kernel method that uses random numbers follows.
-9. [Playbooks still to come](#9-playbooks-still-to-come).
+9. [Playbooks](#9-playbooks).
 10. [When something does not fit](#10-when-something-does-not-fit).
 
 Words you do not know are in [GLOSSARY.md](GLOSSARY.md). The ten-minute tour is [README.md](README.md). A path in backticks is written from the repository root when it starts with `projects/` or `.github/`, and from this folder, `projects/engines/geometry/`, otherwise.
@@ -298,15 +298,51 @@ still holds, because what a randomised method draws is a fixed function of its r
 That reading is piece G32's, not an owner's decision. It is raised for chapter 31.7's open
 questions, and the rule stands provisionally until it is decided.
 
-## 9. Playbooks still to come
+## 9. Playbooks
 
 Chapter 26.3 asks this file for a playbook for each kind of addition. Each arrives with the piece that builds what it adds to, and is proven by a dry run:
 
 | Playbook | Piece | Until then |
 | --- | --- | --- |
-| Add an operation, add a query | G117 | Chapter 26.1's table says what each must come with; chapter 28.2 lists what the completeness gate will require |
+| Add an operation, add a query | G117: below, "How to add an operation" and "How to add a query" | Done |
 | Add a curve or surface kind | G60: below, "How to add a curve or surface kind" | Done |
 | Add an exchange format, a representation or a domain toolkit | G480 | Chapter 26.1, and chapter 24 for formats |
+
+### How to add an operation
+
+An operation is a function in the crate of its family, with its schema in the facade's registry. The contract laws and the completeness gate read that registry, so registering an operation is what holds it to everything below. The first operations, `make.*` and `transform.*` in `geom-make`, are the worked example of every step.
+
+1. **Find its crate.** Chapter 10.2's family names it, and `MAP.json` says which crate holds the family. If no crate does, stop: section 7.
+2. **Write the operation.** `pub fn <name>(ctx: &OpContext<'_>, input: ...) -> Result<OpOutput<R>, OpError>`, in a module with a header (section 5). Do the work inside `ctx.run`, so nothing is published past a stop. Charge the meter as you go: what each phase charges is part of the version (`geom_op::Charge`). Reserve with `geom_op::reserve`, never with a bare `Vec::with_capacity`.
+3. **Refuse with a typed error.** Each refusal is a detail in the family's enum in `geom-op/src/detail.rs`, with its base kind and, where it can give one, a remedy with a number. A coordinate past the grid is the numbers layer's `OutOfRange`, never a defect. `Internal` is for defects only.
+4. **Keep its promises.** Run `geom-check` on every body it returns. Record a history (chapter 20) that keeps the laws of `geom_test::history::check_laws`. State the exactness: no more exact than the least exact input, and refuse a less exact result with `ExactnessNotAccepted` unless the caller accepted it.
+5. **Register it.** Add its `OpSchema` to `projects/engines/crates/engine-geometry/src/operations.rs`, in name order, as `Tier::Preview { since }`: inputs with units, outputs, the roles it names, its errors, its exactness classes, its charges, and an example whose text after `gives` states what the call gives. List only errors it can return: the laws require a trigger for each. Re-export its function and input types there.
+6. **Regenerate.** `cargo run --locked -p geom-gen -- write` rewrites the API documentation and the MCP tool descriptions.
+7. **Drive it through the laws.** Add a `Driver` and a row of `drivers()` to `engine-geometry/tests/contract_laws.rs`. An operation with no driver fails `every_registered_operation_has_a_driver`. The driver gives:
+   - calls that succeed, each with its inputs' exactness: `transactional` injects a cancellation at each read and every budget below the least that passes;
+   - a `Trigger` for each error the schema lists, except `Internal` and `BudgetExceeded`;
+   - each remedy that gives a number: the input, a failing value, and the call at a value, which must pass at the number and fail one step beyond it;
+   - for an operation that can round, the call under an accepted class;
+   - a call reaching 2^40 − 1 steps and one reaching 2^40;
+   - what the schema's example gave.
+8. **Write what the gate looks for.** Each file claims what it covers in its header, in a paragraph of its own, with the operation's registered name:
+   - unit and property tests: `Covers: make.box.` in `tests/<name>.rs`; a file holding `proptest!` counts as both;
+   - the family's laws (28.3): `Family laws: Make.` in the test that checks them;
+   - a fuzz target: `Covers:` in its module in `geom-fuzz/src`, one target may serve several;
+   - a benchmark: `Covers:` in `geom-bench/src/catalogue.rs`, for the benchmark added there as `geom-bench`'s crate header says;
+   - the contract: `Covers:` in `tests/contract_laws.rs`.
+9. **Regenerate the map and read what is missing.** `cargo run --locked -p geom-test --bin map -- write` lists the operation in `MAP.json`, with `evidence` and `missing`. A Preview operation may ship with parts missing, each listed there; `tests/completeness.rs` refuses a Stable one that lacks any. It graduates to `Tier::Stable` by an owner's decision within 12 months, or it is dropped (chapter 25).
+10. **Run every gate** in section 3, then commit (`git commit -s`).
+
+### How to add a query
+
+A query reads a body and changes nothing, so it has no history and no budget of parts to publish, but it keeps the rest of the contract. Chapter 26.1 asks for less of it, and more of its cost.
+
+1. **Put it in the crate that owns the data** (chapter 27), and expose its schema from the facade with the operations (accepted in 32.13).
+2. **Follow steps 2, 3, 5 and 6 above.** Its `OpOutput` holds the answer, with its exactness.
+3. **State its cost bound** in the module header's `Cost:`, and benchmark it with a benchmark that checks that bound (section 6 of `geom-bench`'s header).
+4. **Write its tests**, one for each error its schema lists, and regenerate the map.
+5. **Run every gate** in section 3, then commit. The completeness gate reads queries once the registry lists them; until then, this list is the check.
 
 ### How to add a curve or surface kind
 
