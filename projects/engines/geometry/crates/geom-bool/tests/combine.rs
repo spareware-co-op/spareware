@@ -11,7 +11,9 @@
 )]
 
 use geom_bool::combine::{COMBINE, combine, intersect, subtract, unite};
+use geom_bool::half_space::half_space;
 use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection, Term};
+use geom_bool::rebuild::RebuildError;
 use geom_check::{Level, check};
 use geom_make::{BoxInput, Made, cylinder, make_box, prism};
 use geom_num::{Exactness, P3, Steps};
@@ -178,8 +180,8 @@ fn a_tilted_prism_cuts_and_comes_back() {
         &[solid(1, &block), solid(2, &tool)],
     )
     .unwrap();
-    // The triangle's area is 800, through all 60 of the block.
-    assert_eq!(sixfold(&out.result), 6 * (216_000 - 800 * 60));
+    // The triangle's area is 700, through all 60 of the block.
+    assert_eq!(sixfold(&out.result), 6 * (216_000 - 700 * 60));
     checked(&out.result);
     let again = cuboid([20, 20, 20], [60, 60, 60]);
     let more = unite(&ctx(), &SERIAL, &[solid(1, &out.result), solid(2, &again)]).unwrap();
@@ -263,6 +265,106 @@ fn refusals_name_what_is_wrong() {
     assert_eq!(
         detail(unbounded),
         OpErrorDetail::Combine(CombineDetail::UnboundedResult)
+    );
+}
+
+#[test]
+fn a_half_space_clips_a_block_under_a_roof() {
+    let block = cuboid([0, 0, 0], [60, 60, 60]);
+    let roof = half_space([p(60, 0, 0), p(60, 60, 0), p(0, 0, 60)], &mut meter()).unwrap();
+    checked(&roof);
+    let out = intersect(&ctx(), &SERIAL, &[solid(1, &block), solid(2, &roof)]).unwrap();
+    assert_eq!(sixfold(&out.result), 6 * 108_000);
+    checked(&out.result);
+}
+
+#[test]
+fn half_spaces_face_every_way_and_steep_ones_too() {
+    let block = cuboid([0, 0, 0], [60, 60, 60]);
+    // Behind x = 20, y = 30 and z = 45, each way round, and a plane steepest along each axis.
+    let cases: [([P3; 3], i128); 8] = [
+        ([p(20, 0, 0), p(20, 1, 0), p(20, 0, 1)], 20 * 3600),
+        ([p(20, 0, 0), p(20, 0, 1), p(20, 1, 0)], 40 * 3600),
+        ([p(0, 30, 0), p(0, 30, 1), p(1, 30, 0)], 30 * 3600),
+        ([p(0, 30, 0), p(1, 30, 0), p(0, 30, 1)], 30 * 3600),
+        ([p(0, 0, 45), p(1, 0, 45), p(0, 1, 45)], 45 * 3600),
+        ([p(0, 0, 45), p(0, 1, 45), p(1, 0, 45)], 15 * 3600),
+        // The plane x + y = 60, halving the block either way.
+        ([p(60, 0, 0), p(0, 60, 0), p(60, 0, 1)], 108_000),
+        ([p(60, 0, 0), p(60, 0, 1), p(0, 60, 0)], 108_000),
+    ];
+    for (points, want) in cases {
+        let space = half_space(points, &mut meter()).unwrap();
+        let out = intersect(&ctx(), &SERIAL, &[solid(1, &block), solid(2, &space)]).unwrap();
+        assert_eq!(sixfold(&out.result), 6 * want, "{points:?}");
+        checked(&out.result);
+    }
+}
+
+#[test]
+fn a_half_space_needs_three_points_that_make_a_plane() {
+    let line = [p(0, 0, 0), p(1, 1, 1), p(2, 2, 2)];
+    assert!(matches!(
+        half_space(line, &mut meter()),
+        Err(RebuildError::Num(_))
+    ));
+}
+
+#[test]
+fn a_result_less_exact_than_the_caller_takes_is_refused() {
+    let a = cuboid([0, 0, 0], [40, 40, 40]);
+    let b = cuboid([20, 20, 20], [40, 40, 40]);
+    let step = geom_num::GridStep::Q0;
+    let rough = Exactness::Certified {
+        bound: Steps(4),
+        step,
+    };
+    let loose = Operand {
+        exactness: rough,
+        ..solid(2, &b)
+    };
+    let input = |accept| BooleanInput {
+        operands: vec![solid(1, &a), loose],
+        select: vec![Selection::Unite],
+        merge: Merge::RemoveRedundant,
+        accept,
+    };
+    let taken = combine(&ctx(), &SERIAL, &input(None)).unwrap();
+    assert_eq!(taken.exactness, rough);
+    let wide = Exactness::Certified {
+        bound: Steps(4),
+        step,
+    };
+    assert!(combine(&ctx(), &SERIAL, &input(Some(wide))).is_ok());
+    let tight = Exactness::Certified {
+        bound: Steps(1),
+        step,
+    };
+    for accept in [Exactness::Exact, tight] {
+        let refused = combine(&ctx(), &SERIAL, &input(Some(accept))).unwrap_err();
+        assert_eq!(refused.kind(), ErrorKind::ExactnessNotAccepted);
+        assert_eq!(
+            *refused.detail(),
+            OpErrorDetail::Combine(CombineDetail::NotAccepted { would: rough })
+        );
+    }
+    let over = Exactness::Certified {
+        bound: Steps(1000),
+        step,
+    };
+    let far = Operand {
+        exactness: over,
+        ..solid(2, &b)
+    };
+    let beyond = BooleanInput {
+        operands: vec![solid(1, &a), far],
+        select: vec![Selection::Unite],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    assert_eq!(
+        combine(&ctx(), &SERIAL, &beyond).unwrap_err().kind(),
+        ErrorKind::ExactnessNotAccepted
     );
 }
 

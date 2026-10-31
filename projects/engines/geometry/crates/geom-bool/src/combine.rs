@@ -169,7 +169,7 @@ fn arranged(ctx: &OpContext<'_>, error: RunError<TraceError>, meter: &WorkMeter<
 }
 
 /// Whether the caller takes a result of class `would`: anything Exact, and otherwise a class at
-/// least as loose and a bound at least its own, ε_fit unless the caller said (11.1).
+/// least as loose and a bound at least its own, `ε_fit` unless the caller said (11.1).
 fn accepted(would: Exactness, accept: Option<Exactness>) -> bool {
     match (would.bound(), accept) {
         (None, _) => true,
@@ -248,6 +248,7 @@ fn one(
         mut result,
         exactness,
         diagnostics,
+        ..
     } = combine(ctx, exec, &input)?;
     let body = result
         .pop()

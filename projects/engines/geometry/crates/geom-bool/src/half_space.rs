@@ -33,8 +33,7 @@ use geom_poly::cut::{Clipped, clip};
 use geom_poly::merge::{Merge, Outward};
 use geom_poly::winding::Winding;
 use geom_run::WorkMeter;
-use geom_surface::Plane as Flat;
-use geom_topo::{Body, Sense, SurfaceKind};
+use geom_topo::{Body, FlatSurface as Flat, Sense, SurfaceKind};
 
 use crate::rebuild::{Carrier, RebuildError, rebuild};
 
@@ -104,11 +103,13 @@ fn cap_carrier(points: [P3; 3]) -> Result<Carrier, NumError> {
     })
 }
 
-/// What of `piece` lies on the positive side of `plane`, and whether it was all of it.
-fn kept_of(piece: Piece, plane: &Plane) -> Result<Option<Piece>, NumError> {
+/// What of `piece` lies on the positive side of `plane`, the whole of it if it lies in the plane
+/// and `on`.
+fn kept_of(piece: Piece, plane: &Plane, on: bool) -> Result<Option<Piece>, NumError> {
     Ok(match clip(&piece, plane)? {
         Clipped::Front => Some(piece),
         Clipped::Split(front, _) => Some(front),
+        Clipped::On if on => Some(piece),
         Clipped::Back | Clipped::On => None,
     })
 }
@@ -131,9 +132,10 @@ fn cap(plane: &Plane) -> Result<Option<Piece>, NumError> {
         face: *plane,
         bounds,
     };
-    let piece = kept_of(piece, &square(axis, COORD_MAX, false)?)?;
+    // A plane on a side of the box is that side: the cap takes its place.
+    let piece = kept_of(piece, &square(axis, COORD_MAX, false)?, true)?;
     piece
-        .map(|p| kept_of(p, &square(axis, -COORD_MAX, true)?))
+        .map(|p| kept_of(p, &square(axis, -COORD_MAX, true)?, true))
         .transpose()
         .map(Option::flatten)
 }
@@ -173,7 +175,7 @@ pub fn half_space(points: [P3; 3], meter: &mut WorkMeter<'_>) -> Result<Body, Re
                 face: square(axis, at, upward)?,
                 bounds,
             };
-            if let Some(kept) = kept_of(side, &behind)? {
+            if let Some(kept) = kept_of(side, &behind, false)? {
                 keep(kept, side_carrier(axis, upward)?);
             }
         }

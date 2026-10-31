@@ -113,7 +113,7 @@ pub struct BooleanInput<'b> {
     pub select: Vec<Selection>,
     /// What merges.
     pub merge: Merge,
-    /// The least exact result taken; `None` takes anything within ε_fit (11.1).
+    /// The least exact result taken; `None` takes anything within `ε_fit` (11.1).
     pub accept: Option<Exactness>,
 }
 
@@ -231,6 +231,10 @@ fn point_of(a: &Arenas, v: Ix<Vertex>) -> Option<PointKind> {
 }
 
 /// A plane through `v` that crosses the line where `p` and `q` meet.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p and q are the planes, v the vertex, and g, x, y, z and n the grid point it stands on"
+)]
 fn crossing(a: &Arenas, v: Ix<Vertex>, p: &Plane, q: &Plane) -> Result<Option<Plane>, NumError> {
     let candidates: Vec<Plane> = match point_of(a, v) {
         Some(PointKind::Grid(g)) => {
@@ -283,7 +287,8 @@ fn stood_on(
             )?;
             Ok(Some(Plane::through(p, q, above)?))
         }
-        (Some(PointKind::Meet(planes)), Some(other)) | (Some(other), Some(PointKind::Meet(planes))) => {
+        (Some(PointKind::Meet(planes)), Some(other))
+        | (Some(other), Some(PointKind::Meet(planes))) => {
             for ix in planes {
                 let Some(plane) = a.planes.get(ix).copied() else {
                     continue;
