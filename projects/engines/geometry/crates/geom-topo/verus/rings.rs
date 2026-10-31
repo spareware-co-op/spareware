@@ -1040,7 +1040,7 @@ impl Rings {
         let k = self.place[x].0;
         assert(self.at(k, self.place[x].1));
         assert(r.rings.dom() =~= self.rings.dom().remove(k));
-        assert forall|y: Fin| self.place.dom().contains(y) && y != x implies self.place[y].0 != k by {
+        assert forall|y: Fin| #[trigger] self.place.dom().contains(y) && y != x implies self.place[y].0 != k by {
             self.lemma_alone(x, y);
         }
         assert forall|m: nat| #[trigger] r.rings.dom().contains(m) implies r.rings[m].len() > 0 by {

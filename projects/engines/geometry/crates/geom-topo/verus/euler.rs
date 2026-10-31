@@ -211,13 +211,13 @@ impl Body {
         assert(f1.rings.dom() == self.fans.rings.dom().insert(v0));
         assert(!f1.place.dom().contains(h));
         f1.lemma_fresh(v1, h);
-        assert forall|x: Fin| b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.loops.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
             }
         }
-        assert forall|x: Fin| b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.fans.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
@@ -317,13 +317,13 @@ impl Body {
         assert(self.face.dom().contains(k));
         assert(self.shell.dom().contains(f));
         assert(self.shells.contains(s));
-        assert forall|x: Fin| b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.loops.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
             }
         }
-        assert forall|x: Fin| b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.fans.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
@@ -401,13 +401,13 @@ impl Body {
         self.fans.lemma_ins(q, g);
         let f1 = self.fans.ins(q, g);
         f1.lemma_fresh(w, h);
-        assert forall|x: Fin| b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.loops.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
             }
         }
-        assert forall|x: Fin| b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.fans.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
@@ -475,13 +475,13 @@ impl Body {
         assert(f1.place.dom().contains(x));
         assert(f1.succ[x] == self.fans.succ[x]);
         f1.lemma_del(x);
-        assert forall|u: Fin| b.loops.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
+        assert forall|u: Fin| #[trigger] b.loops.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
             assert(self.loops.place.dom().contains(u) <==> self.edges.contains(u.edge));
             if u.edge == e {
                 assert(u == x || u == y);
             }
         }
-        assert forall|u: Fin| b.fans.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
+        assert forall|u: Fin| #[trigger] b.fans.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
             assert(self.fans.place.dom().contains(u) <==> self.edges.contains(u.edge));
             if u.edge == e {
                 assert(u == x || u == y);
@@ -573,13 +573,13 @@ impl Body {
         assert(f1.place.dom().contains(q2));
         assert(!f1.place.dom().contains(h));
         f1.lemma_ins(q2, h);
-        assert forall|x: Fin| b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.loops.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
             }
         }
-        assert forall|x: Fin| b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.fans.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
@@ -680,13 +680,13 @@ impl Body {
         let f1 = self.fans.del(gone);
         assert(f1.place.dom().contains(stay));
         f1.lemma_del(stay);
-        assert forall|u: Fin| b.loops.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
+        assert forall|u: Fin| #[trigger] b.loops.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
             assert(self.loops.place.dom().contains(u) <==> self.edges.contains(u.edge));
             if u.edge == e {
                 assert(u == gone || u == stay);
             }
         }
-        assert forall|u: Fin| b.fans.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
+        assert forall|u: Fin| #[trigger] b.fans.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
             assert(self.fans.place.dom().contains(u) <==> self.edges.contains(u.edge));
             if u.edge == e {
                 assert(u == gone || u == stay);
@@ -786,13 +786,13 @@ impl Body {
         assert(f1.place.dom().contains(q2));
         assert(!f1.place.dom().contains(h));
         f1.lemma_ins(q2, h);
-        assert forall|x: Fin| b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.loops.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.loops.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
             }
         }
-        assert forall|x: Fin| b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
+        assert forall|x: Fin| #[trigger] b.fans.place.dom().contains(x) <==> b.edges.contains(x.edge) by {
             assert(self.fans.place.dom().contains(x) <==> self.edges.contains(x.edge));
             if x.edge == e {
                 assert(x == g || x == h);
@@ -880,13 +880,13 @@ impl Body {
         let f1 = self.fans.del(x);
         assert(f1.place.dom().contains(y));
         f1.lemma_del(y);
-        assert forall|u: Fin| b.loops.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
+        assert forall|u: Fin| #[trigger] b.loops.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
             assert(self.loops.place.dom().contains(u) <==> self.edges.contains(u.edge));
             if u.edge == e {
                 assert(u == x || u == y);
             }
         }
-        assert forall|u: Fin| b.fans.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
+        assert forall|u: Fin| #[trigger] b.fans.place.dom().contains(u) <==> b.edges.contains(u.edge) by {
             assert(self.fans.place.dom().contains(u) <==> self.edges.contains(u.edge));
             if u.edge == e {
                 assert(u == x || u == y);

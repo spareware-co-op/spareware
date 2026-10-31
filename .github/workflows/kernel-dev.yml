@@ -63,8 +63,9 @@ name: Kernel development crates
 #   negate, multiply and compare exact for every width; tests/verus_twin.rs holds it to the code
 #   token for token too.
 # - Verus on geom-topo's model of the Euler operators (chapter 28.7, "Topology, by a model"; piece
-#   G111), projects/engines/geometry/crates/geom-topo/verus/lib.rs: loops as cyclic sequences of
-#   fin uses, with proofs that each operator keeps every loop closed.
+#   G111), projects/engines/geometry/crates/geom-topo/verus/lib.rs: a body's loops and vertex fans
+#   as rings of fins, and every operator proved to keep every fin's partner, every loop and
+#   Euler's formula.
 #
 # The dependency rule, the fuzz target, the generator check, the map check, the ledger check and the
 # banned-source scan run natively on every operating system kernel.yml tests, the same six runners,
