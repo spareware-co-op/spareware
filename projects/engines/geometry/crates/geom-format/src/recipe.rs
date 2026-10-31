@@ -166,7 +166,7 @@ impl Recipe {
         owners
             .iter()
             .copied()
-            .find(|o| o.owner() == self.owner && o.reads(self.owner_schema))
+            .find(|o| o.owner() == self.owner.as_str() && o.reads(self.owner_schema))
             .ok_or_else(|| RecipeError::RecipeOwnerMissing {
                 owner: self.owner.clone(),
                 schema: self.owner_schema,

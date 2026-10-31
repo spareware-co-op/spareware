@@ -133,7 +133,17 @@ fn attr_id(e: &mut Encoder, attr: &AttrId) -> Result<(), EncodeError> {
 fn definition(e: &mut Encoder, d: &Definition) -> Result<(), EncodeError> {
     e.array(4)?;
     attr_id(e, d.attr())?;
-    let kinds: Vec<EntityKind> = d.kinds().collect();
+    // In `EntityKind`'s order, as `Definition::kinds` gives them.
+    let kinds: Vec<EntityKind> = [
+        EntityKind::Body,
+        EntityKind::Region,
+        EntityKind::Face,
+        EntityKind::Edge,
+        EntityKind::Vertex,
+    ]
+    .into_iter()
+    .filter(|&kind| d.allows(kind))
+    .collect();
     e.array(count(kinds.len())?)?;
     for kind in kinds {
         e.uint(kind_code(kind))?;
