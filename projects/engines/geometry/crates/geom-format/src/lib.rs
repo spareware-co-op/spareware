@@ -35,12 +35,14 @@
 //!
 //! Status: the strict CBOR decoder, its columns and the text form built (G91); the record layer,
 //! byte sources, files, salvage, chunks and range checks built (G92); the header record and the
-//! registry built (G93); the rest by pieces G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.
+//! registry built (G93); cache keys and the reference memo store built (G105); the rest by pieces
+//! G94, G95, G96, G108, G112, G175, G318, G405, G410, G411, G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
+pub mod cache;
 pub mod cbor;
 pub mod checksum;
 pub mod chunk;

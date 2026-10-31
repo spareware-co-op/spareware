@@ -2630,6 +2630,31 @@
       "layer": "12",
       "modules": [
         {
+          "cost": "a key is one encoding and one SHA-256 pass over it: linear in the path's labels and the number of inputs. A store lookup, insertion or eviction is O(log n) in the entries held.",
+          "does": "[`CacheKey::new`] is the SHA-256 of the canonical encoding of `[edition, name, version, path, precision, [input content IDs]]`: the kernel edition, the operation's name and version from its schema, its `OpPath` (every name the operation creates holds it, 20.2), its precision (a preview and a final result never share a key, 23.6) and the content ID of each input, in the operation's order. [`CacheKey::name_free`] is the same without the path, for the operations whose schema says their geometry does not depend on names; its inputs are then the content IDs of their geometry without names. [`CacheEntry`] holds a result with the budget its run had and what the run used. [`MemoStore`] is the caller's store of entries: bounded by bytes, it forgets the entry used longest ago first, and it is a value the caller owns.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cache.rs",
+          "guarantees": [
+            "**A hit is the same bits as a fresh run.** [`CacheEntry::answer`] answers only when a fresh run under the caller's budget would give exactly the stored answer: a stored result, or a stored deterministic error, when the budget covers everything the run used (a run stops only when a charge passes its cap, and charges only add); a stored budget failure only under the same budget, since a smaller one can stop the run sooner with other numbers. Every other call misses, and the caller's own run gives the exact `BudgetExceeded`.",
+            "**What is never stored.** [`CacheEntry::new`] refuses `Cancelled`, `OutOfMemory` and a batch's total: none is the operation's deterministic answer (23.10).",
+            "**One encoding.** A key is `geom-op`'s canonical encoding and SHA-256 (32.20), and its path is written by [`OpPath::encode`], as names write it. Every field changes the key; a key with a path and a name-free key differ in length, so they never collide by construction.",
+            "**Bounded, and deterministic.** A [`MemoStore`] never holds more than its byte bound. Which entry it forgets depends only on the order of the calls made on it, never on time, addresses or a hash seed. It holds no global state (principle 7)."
+          ],
+          "job": "Cache keys and the reference memo store: an operation's result named by everything it depends on, so that a hit is the same bits as running the operation again (23.8).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final"
+            ],
+            "text": "chapter 23.8's `CacheKey`, `CacheEntry` and memo store (`projects/engines/geometry/architecture/23-performance.md`), with the content IDs of 24.2 (`projects/engines/geometry/architecture/24-file-format-exchange.md`) and SHA-256 by NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, through `geom_op::hash`. 23.8 fixes only that the store is bounded by bytes and owned by the caller; forgetting the entry used longest ago first is this piece's choice, deterministic because its clock counts calls."
+          },
+          "path": "geom_format::cache",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "see each module.",
           "does": "SKG's bytes are deterministic CBOR (RFC 8949, section 4.2.1) with the rules of 24.3. [`decode`] reads them head by head and refuses any other encoding; [`column`] reads the `i64` and `f64` columns coordinates and reals are stored in; [`text`] writes the diagnostic text form of 24.6, and [`parse`] reads it back into the same bytes. The canonical encoder that writes SKG's bytes from values is `geom-op`'s (piece G86), so that `NameId` hashing below this crate uses it too (30.5, \"Placed to keep the crate graph acyclic\").",
           "family": [],
@@ -3017,7 +3042,7 @@
       "provenance": [],
       "sections": "12.12, 16.1, 18.10, 21, 23.8, 23.11 and 24.1 to 24.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); the rest by pieces G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.",
+      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); cache keys and the reference memo store built (G105); the rest by pieces G94, G95, G96, G108, G112, G175, G318, G405, G410, G411, G459.",
       "summary": "Spare Kit geometry kernel: the native file format."
     },
     {

@@ -56,7 +56,7 @@ use core::fmt;
 
 use crate::cbor::{EncodeError, Encoder, Item};
 use crate::hash::Sha256;
-use crate::id::{Label, NameId, OpPath};
+use crate::id::{NameId, OpPath};
 
 /// The bytes hashed before every name's canonical encoding under `NameScheme v1`: the 17 ASCII
 /// bytes `SKG NameScheme v1` and one zero byte (32.19).
@@ -422,19 +422,9 @@ fn one_more(n: usize) -> Result<u64, NameError> {
         .ok_or(NameError::Encode(EncodeError::TooLong))
 }
 
-/// Writes an `OpPath`: its `OpId`'s 16 bytes, then each label, a step as text and a key as its 16
-/// bytes.
+/// Writes an `OpPath` as [`OpPath::encode`] does.
 fn op_path(e: &mut Encoder, op: &OpPath) -> Result<(), NameError> {
-    let labels = op.labels();
-    e.array(one_more(labels.len())?)?;
-    e.bytes(&op.op().to_bytes())?;
-    for label in labels {
-        match label {
-            Label::Step(step) => e.text(step)?,
-            Label::Key(key) => e.bytes(key)?,
-        }
-    }
-    Ok(())
+    Ok(op.encode(e)?)
 }
 
 /// Writes a role: its name, then its arguments.
