@@ -5011,12 +5011,100 @@
       "reason": "Only the scan's start moves, and it still meets the same member. last_within is private; members, its one caller, passes it only periodic families from Scalar::critical, whose lower ends c lie in [−1.5, 2.5] up to a rounding (φ = atan2/π in [−1, 1], plus ψ in [−½, ½], 1 − ψ or 1, or the involute's ½ and 3/2), and extent sends spans past 2⁵⁰ to the pieces' route first. With X = (t₁ − c)/2, the answer is ⌊X⌋, or ⌊X⌋ + 1 when rounding a member down lets it meet t₁ (only for X within ¼ below a whole number). The mutant starts at ⌊(t₁ + c)/2⌋ + 2 = ⌊X + c + e⌋ + 2 with |e| ≤ 1/16 (the roundings of t₁ + c, below 2⁵¹, and of its half), which lies at or above the answer and at most ⌊X⌋ + 5: inside the scan's six steps down. The scan returns the first m from the top whose member's lower end is at most t₁, so both return the same m."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+      "mutant": "replace match guard node.bytes == bytes with true in NameGraph::insert",
+      "line_text": "Some(node) if node.bytes == bytes => Ok(id),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard decides only when the graph already holds the NameId being interned. Through the public interface that NameId is the 128-bit cut of SHA-256 over the prefix and the name's canonical bytes, so a node held under it with different bytes needs two encodings whose truncated hashes agree: no such pair is known, and finding one costs about 2^64 hashes (32.19). So no input through the public interface tells the mutant from the original; the unit test graph::tests::a_second_encoding_under_a_held_name_id_is_refused forges the collision directly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with <= in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With <=, the loop makes one more pass when width equals the number of entities. That pass has one chunk, split at its full length, so the right run is empty and the merge copies the left run unchanged. The order, and every comparison's outcome, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with > in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With >, for no entity or one the condition 1 > 0 or 1 > 1 holds and stays true as width doubles and saturates at usize::MAX, so the loop never ends and the tests stop it by their timeout. For two or more entities the loop does not run and the unsorted order fails the tests. It hangs or is caught; it never returns a wrong order unnoticed."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/ball.rs",
       "mutant": "replace > with >= in <impl Scalar for Ball>::sqrt",
       "line_text": "let spread = if root_floor > 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(major | b7);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head. Here the argument is below 24, so b7 is the whole argument."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x18, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x19, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1a, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1b, b0, b1, b2, b3, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "(exponent.checked_sub(format.rebias)? << format.fraction) | (fraction >> format.dropped)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow exponent field is shifted left by the narrow format's fraction width M, so its low M bits are zero, and the narrow fraction is the binary64 fraction shifted right by 52 - M, so it is below 2^M. The two never share a bit, so | and ^ give the same bits for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "let q = (1 << 52) | fraction;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction is the binary64's low 52 bits (bits & (2^52 - 1)), so it is below 2^52 and never has bit 52, the implicit leading bit set here; | and ^ give the same q for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "Some(sign | magnitude)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
     }
   ],
   "coverage_off": [
