@@ -466,6 +466,16 @@
           "sha256": "f167e9fa37b10ef0ce740530d38e5333363d430fc3d081bd6555ae45fbb9fc1c"
         },
         {
+          "id": "geom-num/carrier",
+          "what": "Integer carriers and rational points (piece G187): 600 seeded carriers and 600 seeded points at every scale up to each budget, the meetings of neighbouring carriers, and the extreme values, every question of geom_num::carrier asked of them, each answer and error one byte and each point its integers, in tests/carrier_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "carrier_determinism",
+            "function": "carrier_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "89a8f906d45699813237faacf81cf7ecdabd392d96397381913ad260a0cda2c0"
+        },
+        {
           "id": "geom-math/rotations",
           "what": "geom-math's rational rotations (piece G46): 2D searches for 175 directions at seven bounds, 3D searches for 129 quaternion targets at five bounds, 300 compositions at three bounds (exact and re-approximated) and as typed transforms, images of grid points at the frame's edges, every result's matrix, inverse, direction, rational and floating-point forms, and typed transforms of every variant composed, as tests/rotation_determinism.rs records them.",
           "check": {
