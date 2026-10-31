@@ -53,6 +53,7 @@ pub mod kinds;
 pub mod names;
 pub mod payload;
 pub mod range;
+pub mod recipe;
 pub mod record;
 pub mod registry;
 pub mod source;
