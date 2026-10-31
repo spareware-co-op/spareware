@@ -266,6 +266,17 @@ fn every_multiplicity_is_found() {
         found(&quartic(&[a, a, (1, -2), (3, 7)], &[])),
         [(FarBelow, 1), (Above, 2), (FarAbove, 1)]
     );
+    // Multiple at a point bisection lands on.
+    let (half, three) = ((2, 1), (4, 3));
+    assert_eq!(
+        found(&quartic(&[half, half, half, three], &[])),
+        [(Above, 3), (Above, 1)]
+    );
+    assert_eq!(
+        found(&quartic(&[half, half, three, three], &[])),
+        [(Above, 2), (Above, 2)]
+    );
+    assert_eq!(found(&quartic(&[half; 4], &[])), [(Above, 4)]);
     assert_eq!(found(&quartic(&[(1, 0); 4], &[])), [(Zero, 4)]);
     assert_eq!(found(&quartic(&[(0, -1); 4], &[])), [(Infinity, 4)]);
     assert_eq!(
@@ -358,10 +369,10 @@ fn random_quartics_give_back_their_roots() {
         let mut roots: Vec<(i128, i128, u8)> = Vec::new();
         for &multiplicity in pattern {
             loop {
-                let (q, p) = if rng.next() % 16 == 0 {
-                    (0, -1)
-                } else {
-                    (1 + rng.signed(58).abs(), rng.signed(58))
+                let (q, p) = match rng.next() % 16 {
+                    0 => (0, -1),
+                    1..=3 => (1_i128 << (rng.next() % 58), rng.signed(58)),
+                    _ => (1 + rng.signed(58).abs(), rng.signed(58)),
                 };
                 let same = roots
                     .iter()
@@ -1134,6 +1145,16 @@ fn ellipses_keep_their_laws() {
         // One curve, whichever way its axis is written.
         assert_eq!(e.side(&z).unwrap(), reversed.side(&z).unwrap());
         assert_eq!(e.meets(&l).unwrap(), reversed.meets(&l).unwrap());
+        // A crossing is where it is, whichever way the axis of what it is asked of is written.
+        let m = rng.carrier_across(&e);
+        let on = Crossing2::of_ellipse(&m, &e, Root::First).unwrap();
+        let other = rng.ellipse();
+        let (r, s) = other.ratio();
+        let back = Ellipse2::new(other.centre(), other.major().map(|v| -v), r, s).unwrap();
+        assert_eq!(
+            on.against_ellipse(&other).unwrap(),
+            on.against_ellipse(&back).unwrap()
+        );
         // A carrier turned is the same line.
         let ([a, b], c) = l.coefficients();
         let turned = Carrier::new(-a, -b, -c).unwrap();

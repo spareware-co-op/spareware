@@ -27,6 +27,8 @@ use core::cmp::Ordering;
 
 use geom_num::arc::{Arc2, Circle2, Contact, Round};
 use geom_num::carrier::{Carrier, Rational2};
+use geom_num::conic::{Ellipse2, Meeting};
+use geom_num::quartic::{Quartic, RealRoot};
 use geom_num::one_root::Crossing2;
 use geom_num::crossing::Ssi;
 use geom_num::dd::DD;
@@ -285,6 +287,43 @@ impl Canonical for Crossing2 {
         by.encode(h);
         k.encode(h);
         w.encode(h);
+    }
+}
+
+impl Canonical for Ellipse2 {
+    fn encode(&self, h: &mut Sha256) {
+        self.centre().encode(h);
+        self.major().encode(h);
+        self.ratio().0.encode(h);
+        self.ratio().1.encode(h);
+    }
+}
+
+impl Canonical for Quartic {
+    fn encode(&self, h: &mut Sha256) {
+        self.coefficients().encode(h);
+    }
+}
+
+impl Canonical for RealRoot {
+    // A root is its stretch and multiplicity; its interval follows from its quartic.
+    fn encode(&self, h: &mut Sha256) {
+        (self.piece() as u32).encode(h);
+        u32::from(self.multiplicity()).encode(h);
+    }
+}
+
+impl Canonical for Meeting {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Meeting::Same => 0_u32.encode(h),
+            Meeting::At { roots, .. } => {
+                (1 + roots.count() as u32).encode(h);
+                for root in roots.iter() {
+                    root.encode(h);
+                }
+            }
+        }
     }
 }
 

@@ -22,7 +22,7 @@
 
 use geom_num::grid::{P2, P3};
 
-use super::{Class, arc, carrier, crossing, plane, predicate};
+use super::{Class, arc, carrier, conic, crossing, plane, predicate};
 
 /// Point triples for `generated::orient2d::filter`.
 #[must_use]
@@ -737,4 +737,75 @@ pub fn circle_gap_value_plain(class: Class) -> Vec<(P2, P2, i128)> {
 #[must_use]
 pub fn circle_gap_value_limbs(class: Class) -> Vec<(P2, P2, i128)> {
     circle_gap("generated::limbs::circle_gap_value", class)
+}
+
+/// An ellipse's axis and ratio.
+fn shape(e: &geom_num::conic::Ellipse2) -> [i128; 4] {
+    let [mx, my] = e.major();
+    let (p, q) = e.ratio();
+    [mx, my, p, q].map(i128::from)
+}
+
+/// [`conic::side_from`]'s batch as the predicate's integers.
+fn ellipse_side(op: &str, class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    conic::side_from(op, class)
+        .iter()
+        .map(|(e, z)| (point(z), e.centre(), shape(e)))
+        .collect()
+}
+
+/// [`conic::meets_from`]'s batch as the predicate's integers.
+fn ellipse_line(op: &str, class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    conic::meets_from(op, class)
+        .iter()
+        .map(|(e, l)| (line(l), e.centre(), shape(e)))
+        .collect()
+}
+
+/// Inputs for `generated::ellipse_side::filter`.
+#[must_use]
+pub fn ellipse_side_filter(class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    ellipse_side("generated::ellipse_side::filter", class)
+}
+
+/// Inputs for `generated::ellipse_side::value`.
+#[must_use]
+pub fn ellipse_side_value(class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    ellipse_side("generated::ellipse_side::value", class)
+}
+
+/// Inputs for `generated::plain::ellipse_side_value`.
+#[must_use]
+pub fn ellipse_side_value_plain(class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    ellipse_side("generated::plain::ellipse_side_value", class)
+}
+
+/// Inputs for `generated::limbs::ellipse_side_value`.
+#[must_use]
+pub fn ellipse_side_value_limbs(class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    ellipse_side("generated::limbs::ellipse_side_value", class)
+}
+
+/// Inputs for `generated::ellipse_line::filter`.
+#[must_use]
+pub fn ellipse_line_filter(class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    ellipse_line("generated::ellipse_line::filter", class)
+}
+
+/// Inputs for `generated::ellipse_line::value`.
+#[must_use]
+pub fn ellipse_line_value(class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    ellipse_line("generated::ellipse_line::value", class)
+}
+
+/// Inputs for `generated::plain::ellipse_line_value`.
+#[must_use]
+pub fn ellipse_line_value_plain(class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    ellipse_line("generated::plain::ellipse_line_value", class)
+}
+
+/// Inputs for `generated::limbs::ellipse_line_value`.
+#[must_use]
+pub fn ellipse_line_value_limbs(class: Class) -> Vec<([i128; 3], P2, [i128; 4])> {
+    ellipse_line("generated::limbs::ellipse_line_value", class)
 }

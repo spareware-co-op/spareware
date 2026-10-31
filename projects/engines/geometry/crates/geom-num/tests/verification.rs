@@ -1444,7 +1444,8 @@ struct Row {
 }
 
 /// Every test file the matrix names, read when the test is built.
-const FILES: [(&str, &str); 9] = [
+const FILES: [(&str, &str); 10] = [
+    ("attack_g190.rs", include_str!("attack_g190.rs")),
     ("attack_g189.rs", include_str!("attack_g189.rs")),
     ("attack_g188.rs", include_str!("attack_g188.rs")),
     ("attack_g187.rs", include_str!("attack_g187.rs")),
@@ -1457,10 +1458,12 @@ const FILES: [(&str, &str); 9] = [
 ];
 
 /// The sources whose public predicates the matrix must list.
-const SOURCES: [(&str, &str); 7] = [
+const SOURCES: [(&str, &str); 9] = [
     ("arc", include_str!("../src/arc.rs")),
     ("carrier", include_str!("../src/carrier.rs")),
+    ("conic", include_str!("../src/conic.rs")),
     ("one_root", include_str!("../src/one_root.rs")),
+    ("quartic", include_str!("../src/quartic.rs")),
     ("predicate", include_str!("../src/predicate.rs")),
     ("plane", include_str!("../src/plane.rs")),
     ("crossing", include_str!("../src/crossing.rs")),
@@ -1588,6 +1591,41 @@ fn on_carrier(
                     "order_and_turn_change_sign_as_they_should",
                 ),
             ),
+        ],
+    }
+}
+
+/// A predicate of a conic: every class in `attack_g190.rs`.
+fn on_conic(
+    predicate: &'static str,
+    call: &'static str,
+    random: &'static str,
+    boundary: Where,
+    laws: &'static str,
+) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (Random, Test("attack_g190.rs", random)),
+            (
+                OneStep,
+                Test(
+                    "attack_g190.rs",
+                    "one_step_from_an_ellipse_is_decided_by_the_exact_path",
+                ),
+            ),
+            (Boundary, boundary),
+            (
+                Corners,
+                Test(
+                    "attack_g190.rs",
+                    "the_extreme_values_reach_every_width_and_every_step_fits",
+                ),
+            ),
+            (Laws, Test("attack_g190.rs", laws)),
         ],
     }
 }
@@ -1788,6 +1826,30 @@ fn matrix() -> Vec<Row> {
             "Rational2::orient",
             "one_step_along_a_carrier_is_decided_by_the_exact_path",
             "orient_filter_boundary_crossed_both_ways",
+        ),
+        on_conic(
+            "conic::Ellipse2::side",
+            ".side",
+            "random_inputs_at_every_scale_match_the_oracle",
+            Where::Test(
+                "attack_g190.rs",
+                "ellipse_filters_cross_their_boundary_both_ways",
+            ),
+            "ellipses_keep_their_laws",
+        ),
+        on_conic(
+            "one_root::Crossing2::against_ellipse",
+            ".against_ellipse",
+            "random_inputs_at_every_scale_match_the_oracle",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+            "ellipses_keep_their_laws",
+        ),
+        on_conic(
+            "quartic::compare",
+            "compare",
+            "random_quartics_give_back_their_roots",
+            Where::NotApplicable("no filter: stretches apart are its first step, and exact"),
+            "roots_of_two_quartics_compare_exactly",
         ),
         on_root(
             "one_root::sign_of_root",

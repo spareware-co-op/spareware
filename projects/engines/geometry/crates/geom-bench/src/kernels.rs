@@ -443,6 +443,59 @@ pub mod one_root {
     }
 }
 
+/// Conics: `geom_num::conic` and `geom_num::quartic` (G190).
+pub mod conic {
+    use geom_num::arc::Contact;
+    use geom_num::carrier::{Carrier, Rational2};
+    use geom_num::conic::{Conic, Ellipse2, Meeting};
+    use geom_num::one_root::{Crossing2, Root};
+    use geom_num::quartic::{self, Quartic, RealRoot};
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `Ellipse2::side` on each pair.
+    #[inline(never)]
+    pub fn side(batch: &[(Ellipse2, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(e, z)| e.side(z));
+    }
+
+    /// `Ellipse2::meets` on each pair.
+    #[inline(never)]
+    pub fn meets(batch: &[(Ellipse2, Carrier)], out: &mut Vec<Result<Contact, NumError>>) {
+        run(batch, out, |(e, l)| e.meets(l));
+    }
+
+    /// `Crossing2::of_ellipse` on each pair.
+    #[inline(never)]
+    pub fn of_ellipse(batch: &[(Carrier, Ellipse2)], out: &mut Vec<Result<Crossing2, NumError>>) {
+        run(batch, out, |(l, e)| Crossing2::of_ellipse(l, e, Root::First));
+    }
+
+    /// `Crossing2::against_ellipse` on each pair.
+    #[inline(never)]
+    pub fn against_ellipse(batch: &[(Crossing2, Ellipse2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, e)| p.against_ellipse(e));
+    }
+
+    /// `Ellipse2::meeting` on each pair.
+    #[inline(never)]
+    pub fn meeting(batch: &[(Ellipse2, Ellipse2)], out: &mut Vec<Result<Meeting, NumError>>) {
+        run(batch, out, |(e, o)| {
+            Conic::of_ellipse(o).and_then(|c| e.meeting(&c))
+        });
+    }
+
+    /// `quartic::compare` on each pair of roots.
+    #[inline(never)]
+    pub fn compare(
+        batch: &[(Quartic, RealRoot, Quartic, RealRoot)],
+        out: &mut Vec<Result<Sign, NumError>>,
+    ) {
+        run(batch, out, |(p, a, q, b)| quartic::compare(p, a, q, b));
+    }
+}
+
 /// Where two lines cross in the plane: `geom_num::crossing` (G29).
 pub mod crossing {
     use geom_num::crossing::Ssi;
@@ -1088,7 +1141,8 @@ pub mod exact_sum {
 pub mod generated {
     use geom_num::Sign;
     use geom_num::generated::{
-        carrier_order, carrier_side, circle_gap, circle_line, circle_side, incircle, insphere,
+        carrier_order, carrier_side, circle_gap, circle_line, circle_side, ellipse_line,
+        ellipse_side, incircle, insphere,
         lpi_side, lpi_weight, orient2d, orient3d, plane_side, rational_cmp, rational_orient,
         round_grid, round_line, round_rational, ssi_side, ssi_weight, tpi_side, tpi_weight,
     };
@@ -1359,6 +1413,38 @@ pub mod generated {
         });
     }
 
+    /// `generated::ellipse_side::filter` on each (point, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_side_filter(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([x, y, w], k, [mx, my, p, q])| {
+            ellipse_side::filter(x, y, w, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::ellipse_side::value` on each (point, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_side_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, w], k, [mx, my, p, q])| {
+            ellipse_side::value(x, y, w, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::ellipse_line::filter` on each (carrier, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_line_filter(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([a, b, d], k, [mx, my, p, q])| {
+            ellipse_line::filter(a, b, d, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::ellipse_line::value` on each (carrier, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_line_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, [mx, my, p, q])| {
+            ellipse_line::value(a, b, d, k, mx, my, p, q)
+        });
+    }
+
     /// `generated::round_grid::filter` on each (z, p, centre).
     #[inline(never)]
     pub fn round_grid_filter(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<Sign>>) {
@@ -1604,6 +1690,22 @@ pub mod plain {
         });
     }
 
+    /// `generated::plain::ellipse_side_value` on each (point, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_side_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, w], k, [mx, my, p, q])| {
+            plain::ellipse_side_value(x, y, w, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::plain::ellipse_line_value` on each (carrier, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_line_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, [mx, my, p, q])| {
+            plain::ellipse_line_value(a, b, d, k, mx, my, p, q)
+        });
+    }
+
     /// `generated::plain::round_grid_value` on each (z, p, centre).
     #[inline(never)]
     pub fn round_grid_value(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<I256>>) {
@@ -1798,6 +1900,22 @@ pub mod limbs {
     pub fn rational_orient_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I384>>) {
         run(batch, out, |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
             limbs::rational_orient_value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+        });
+    }
+
+    /// `generated::limbs::ellipse_side_value` on each (point, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_side_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, w], k, [mx, my, p, q])| {
+            limbs::ellipse_side_value(x, y, w, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::limbs::ellipse_line_value` on each (carrier, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_line_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, [mx, my, p, q])| {
+            limbs::ellipse_line_value(a, b, d, k, mx, my, p, q)
         });
     }
 
