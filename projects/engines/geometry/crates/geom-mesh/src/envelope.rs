@@ -29,6 +29,11 @@
 //! Cost: 26 planes a triangle at most, each one or two greatest common divisors. A containment test
 //! is a tree query and up to 26 signs for each triangle whose box holds the point.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "the names of the geometry: a triangle's corners, a normal's parts, a point"
+)]
+
 use alloc::vec::Vec;
 
 use geom_bvh::{Aabb, BoxTree, BvhError, Entry};
@@ -157,6 +162,21 @@ fn facet(m: [i128; 3], t: [P3; 3], h: u64) -> Result<Plane, NumError> {
     Plane::new(m, offset)
 }
 
+/// The low and high corners of the box around `t`, `pad` clear of it on every side.
+fn reach(t: [P3; 3], pad: i64) -> ([i64; 3], [i64; 3]) {
+    let [a, b, c] = t;
+    let axis = |x: i64, y: i64, z: i64| {
+        (
+            x.min(y).min(z).saturating_sub(pad),
+            x.max(y).max(z).saturating_add(pad),
+        )
+    };
+    let (low_x, high_x) = axis(a.x.get(), b.x.get(), c.x.get());
+    let (low_y, high_y) = axis(a.y.get(), b.y.get(), c.y.get());
+    let (low_z, high_z) = axis(a.z.get(), b.z.get(), c.z.get());
+    ([low_x, low_y, low_z], [high_x, high_y, high_z])
+}
+
 /// A convex polyhedron with grid corners around one triangle, inscribed in its ε-offset.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TriangleEnvelope {
@@ -271,14 +291,10 @@ impl Envelope {
         for (t, key) in triangles.iter().zip(0_u64..) {
             meter.charge(1)?;
             bodies.push(TriangleEnvelope::new(*t, h)?);
-            let [a, b, c] = *t;
-            let low = |f: fn(P3) -> i64| f(a).min(f(b)).min(f(c)).saturating_sub(pad);
-            let high = |f: fn(P3) -> i64| f(a).max(f(b)).max(f(c)).saturating_add(pad);
-            let (x, y, z): (fn(P3) -> i64, fn(P3) -> i64, fn(P3) -> i64) =
-                (|p| p.x.get(), |p| p.y.get(), |p| p.z.get());
+            let (low, high) = reach(*t, pad);
             entries.push(Entry {
                 key,
-                bbox: Aabb::new([low(x), low(y), low(z)], [high(x), high(y), high(z)])?,
+                bbox: Aabb::new(low, high)?,
             });
         }
         let tree = BoxTree::build(&entries, exec, meter)?;
@@ -306,7 +322,9 @@ impl Envelope {
         let mut out = Vec::with_capacity(keys.len());
         for key in keys {
             let i = usize::try_from(key).map_err(|_| EnvelopeError::Full)?;
-            out.extend(self.triangles.get(i));
+            if let Some(body) = self.triangles.get(i) {
+                out.push(body);
+            }
         }
         Ok(out)
     }

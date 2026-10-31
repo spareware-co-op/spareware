@@ -1773,6 +1773,7 @@ pub mod bvh {
 
 /// The triangulation's hot path (piece G153, decision 32.44).
 pub mod mesh {
+    use geom_mesh::envelope::TriangleEnvelope;
     use geom_mesh::exact::build::{Polygons, build};
     use geom_mesh::exact::{ExactMesh, MeshError};
     use geom_mesh::{Cdt, CdtError, contact, triangulate};
@@ -1820,6 +1821,14 @@ pub mod mesh {
             let (x, y) = (distance::dot_from(a, b, p), distance::dot_from(b, d, p));
             let (u, v) = (distance::dot_from(d, a, p), distance::dot_from(a, d, p));
             distance::product_difference(x, y, u, v)
+        });
+    }
+
+    /// `geom_mesh::envelope::TriangleEnvelope`: one built and asked about each point.
+    #[inline(never)]
+    pub fn envelope(batch: &[([P3; 3], P3)], out: &mut Vec<Result<bool, NumError>>) {
+        run(batch, out, |&(t, p)| {
+            TriangleEnvelope::new(t, 1 << 16)?.contains(p)
         });
     }
 
