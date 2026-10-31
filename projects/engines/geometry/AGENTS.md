@@ -310,7 +310,7 @@ Chapter 26.3 asks this file for a playbook for each kind of addition. Each arriv
 
 ### How to add an operation
 
-An operation is a function in the crate of its family, with its schema in the facade's registry. The contract laws and the completeness gate read that registry, so registering an operation is what holds it to everything below. The first operations, `make.*` and `transform.*` in `geom-make`, are the worked example of every step.
+An operation is a function in the crate of its family, with its schema in the facade's registry. The contract laws and the completeness gate read that registry, so registering an operation is what holds it to everything below. The first operations, `make.*` and `transform.*` in `geom-make`, are the worked example of every step. A dry run of these steps added a toy `make.cube`: it passed the laws and the gate as Preview, with `benchmark`, `fuzz`, `property` and `unit` listed as missing, and as Stable the gate refused it, naming those four.
 
 1. **Find its crate.** Chapter 10.2's family names it, and `MAP.json` says which crate holds the family. If no crate does, stop: section 7.
 2. **Write the operation.** `pub fn <name>(ctx: &OpContext<'_>, input: ...) -> Result<OpOutput<R>, OpError>`, in a module with a header (section 5). Do the work inside `ctx.run`, so nothing is published past a stop. Charge the meter as you go: what each phase charges is part of the version (`geom_op::Charge`). Reserve with `geom_op::reserve`, never with a bare `Vec::with_capacity`.
