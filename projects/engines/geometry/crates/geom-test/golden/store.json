@@ -230,9 +230,15 @@
               "kind": "corpus",
               "piece": "G70",
               "why": "26 new count benchmarks on the hot paths of phase 2's code pieces (decision 32.44): geom-math 7, geom-curve 5, geom-surface 5, geom-nurbs 3, geom-linalg 2, geom-bvh 2, geom-num 2; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G153",
+              "why": "1 new count benchmark on the triangulation (decision 32.44): mesh/cdt; no existing digest moved"
             }
           ],
-          "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6"
+          "sha256": "591c8cc8b5d9b5ed578aa5bbe8adb8ea6b3c26fbc7e7d8fac2581c29d1a92e5d"
         },
         {
           "id": "geom-nurbs/operations",
@@ -484,6 +490,16 @@
             "function": "dense_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-mesh/cdt",
+          "what": "The constrained Delaunay triangulation of geom-mesh (piece G153): cocircular grids of 2 to 32 points a side, plain and with crossing constraints; 16 scatters with constraints between random points; 8 outlines refined to a quality. Vertices, triangles and constrained edges in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "cdt_determinism",
+            "function": "cdt_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e785c8bb58ed861f1eafccaa437e35dca30ec69a695ddf3abb238d1db057cb11"
         }
       ]
     }

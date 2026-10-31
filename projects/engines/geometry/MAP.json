@@ -735,6 +735,26 @@
           "target": "lib"
         },
         {
+          "cost": "one pass over the points per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/mesh.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the triangulation's hot path (piece G153, decision 32.44): a small terrain, a scatter of survey points with breaklines across it.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the board's scatter with breaklines (chapter 19.2's target) at a size a count run can afford, measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::mesh",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "building a batch takes O([`BATCH`]) generator draws (at most `ATTEMPTS` = 64 · [`BATCH`] candidates, so it always ends), once per benchmark, outside every measured run.",
           "does": null,
           "family": [],
@@ -2456,6 +2476,29 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "at most [`MAX_POINTS`] points and [`MAX_CONSTRAINTS`] constraints, two triangulations, and one pass over each edge and constraint of the result.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_POINTS`] points on an 8 × 8 lattice, where ties and collinear points are the rule, scaled by one of [`SCALES`], and up to [`MAX_CONSTRAINTS`] constraints between them. [`check`] triangulates the case, holds the result to the definitions of chapter 17.3, written here without the code's help, and triangulates it again with the sites turned and the constraints reversed. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/cdt.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case: a repeated point is dropped, and so is a constraint from a point to itself.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic or an error is a failure.** Every decoded case is valid, so an error is a [`Finding`].",
+            "**A broken law is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-mesh`'s triangulation is a true constrained Delaunay triangulation, and one answer whatever order its input comes in.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md"
+            ],
+            "text": "the laws, by exact predicates and exact integers. Every triangle is counter-clockwise, no edge is used twice one way, and the triangles' area is the hull's, so they fill it without overlap. Every edge that is not constrained is locally Delaunay: the far corner is outside the circle, and at a tie the edge misses the lowest-ranked of the four corners, which simulation of simplicity raises most (chapter 17.3, `projects/engines/geometry/architecture/17-survey-terrain-civil.md`). Each constraint's two ends are joined by constrained edges. The turned input gives the same result: the same value, so the same bytes."
+          },
+          "path": "geom_fuzz::cdt",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
@@ -3926,7 +3969,62 @@
         24
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why no triangulation came out.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+          "kinds": [
+            {
+              "doc": "Two sites carry one key.",
+              "name": "DuplicateKey",
+              "shape": "struct"
+            },
+            {
+              "doc": "Two sites are at one point.",
+              "name": "DuplicatePoint",
+              "shape": "struct"
+            },
+            {
+              "doc": "A constraint names a site that does not exist, or the same site twice.",
+              "name": "BadConstraint",
+              "shape": "struct"
+            },
+            {
+              "doc": "Crossings did not settle within [`ROUNDS`] rounds.",
+              "name": "Crossings",
+              "shape": "unit"
+            },
+            {
+              "doc": "More vertices or triangles than a 32-bit index reaches.",
+              "name": "Full",
+              "shape": "unit"
+            },
+            {
+              "doc": "The numbers layer refused: a crossing outside the frame.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The box tree refused.",
+              "name": "Bvh",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A broken invariant of this module.",
+              "name": "Internal",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_mesh::cdt",
+          "name": "CdtError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Mesh"
       ],
@@ -3942,12 +4040,52 @@
       "job": "Exact meshes, watertight tessellation, the exact constrained Delaunay triangulation, levels of detail and display meshes, mesh booleans and modelling, repair, volume meshes, parameterisation and flattening.",
       "kind": "kernel",
       "layer": "7",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "Points are inserted along a Morton curve, each walked to from the last, O(n log n) expected on points that are not adversarial (sorting, then a short walk and a few flips each). Each constraint costs its length in triangles. Crossings cost a box tree of the constraints per round. Nothing recurses.",
+          "does": "[`triangulate`] takes grid points in the plane, each with a key from the caller, and constraints between them, and returns the triangles that keep every constraint as edges and are otherwise as close to equal-sided as the points allow. Constraints that cross are cut where they cross, each crossing constructed exactly from the two constraints' ends and committed to the grid before any circle test, so every circle test runs on grid points. With a [`Quality`] it then adds points until every triangle meets it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+          "guarantees": [
+            "**One answer.** Every tie breaks by the caller's keys: four points exactly on one circle are separated by Simulation of Simplicity in key order, never by insertion order or address. So the triangles depend only on the points, keys and constraints: shuffling the input changes no byte of the result, which is in canonical order ([`Cdt`]). Cocircular grids are the hard case: tests hold their results to a golden digest, the same on every target.",
+            "**Exact.** Every decision is `geom-num`'s exact `orient2d` or `incircle`. Nothing is compared against a tolerance, and no point moves but a crossing, by the one rounding of [`Ssi::to_grid`].",
+            "**Constraints kept.** Every constraint is a chain of edges of the result. A point exactly on a constraint splits it there; collinear constraints that overlap share their pieces.",
+            "**Crossings gone before the first circle test.** After [`commit_crossings`] no two constraints cross in their interiors. A rounded crossing bends its two constraints a little, which can make a new crossing with a third; that one is committed in the next round, and rounds go on until none is left. Each round works on the whole set in rank order, so the result does not depend on the input's order.",
+            "**Metered.** One work unit for each point, each flip and each constraint piece, and each round of crossings charges one for each constraint. A stopped meter stops the triangulation."
+          ],
+          "job": "The kernel's one exact constrained Delaunay triangulation (piece G153; chapters 17.3 and 19.3).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0045-7949(93",
+              "https://doi.org/10.1145/77635.77639",
+              "https://doi.org/10.1016/j.comgeo.2010.09.010",
+              "https://doi.org/10.1006/jagm.1995.1021",
+              "https://doi.org/10.1016/S0925-7721(01"
+            ],
+            "text": "Bowyer and Watson's incremental insertion in Lawson's flip form (Lawson, \"Software for C¹ surface interpolation\", 1977); constraints by flips, Sloan's method (\"A fast algorithm for generating constrained Delaunay triangulations\", Computers & Structures 47(3), 441-450, 1993, <https://doi.org/10.1016/0045-7949(93)90239-A>), as Geogram's `CDT_2d` does. A crossing from the two original constraint ends, as its `create_intersection` does. Unlike it, a tie is broken by Simulation of Simplicity (Edelsbrunner and Mücke, 1990, <https://doi.org/10.1145/77635.77639>, in the form Devillers and Teillaud give for Delaunay, 2011, <https://doi.org/10.1016/j.comgeo.2010.09.010>): each lifted height is raised by an infinitesimal that is larger the lower the vertex's rank, so the sign of a tie is the sign of the cofactor of the lowest-ranked vertex. Three distinct points on a circle are never collinear, so that cofactor is never zero, and the triangulation of generic lifted points is unique, which is why the insertion order cannot show. Refinement is Ruppert's (\"A Delaunay refinement algorithm for quality 2-dimensional mesh generation\", 1995, <https://doi.org/10.1006/jagm.1995.1021>) with Shewchuk's priorities (2002, <https://doi.org/10.1016/S0925-7721(01)00047-5>): encroached segments first, then bad triangles, in canonical order. Geometry beyond the hull is handled with one ghost vertex, as in CGAL and Shewchuk's Triangle: every hull edge has a ghost triangle, so neighbours always exist."
+          },
+          "path": "geom_mesh::cdt",
+          "provenance": [
+            {
+              "licence": "BSD-3-Clause",
+              "link": "https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/delaunay/CDT_2d.cpp",
+              "method_note": null,
+              "name": "Geogram `CDT_2d`",
+              "notice": [],
+              "pinned": true,
+              "purpose": "> for Sloan's flip insertion of constraints and the exact construction of a crossing from the two original constraint ends; its method, not its code.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-mesh",
       "provenance": [],
       "sections": "16.4, 16.6, 17.3, 19.2 to 19.8, 19.14, 23.11 and 24.4; open questions OQ-16.1 and OQ-19.2, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288, G289, G290, G291, G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411.",
+      "status": "built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288, G289, G290, G291, G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411; G153 is in.",
       "summary": "Spare Kit geometry kernel: exact meshes."
     },
     {
@@ -9653,6 +9791,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-gen/src/predicate_emit.rs"
+      ]
+    },
+    {
+      "licence": "BSD-3-Clause",
+      "link": "https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/delaunay/CDT_2d.cpp",
+      "method_note": null,
+      "name": "Geogram `CDT_2d`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-mesh/src/cdt.rs"
       ]
     },
     {

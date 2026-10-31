@@ -2276,6 +2276,22 @@ fn bvh_typical_batches_all_succeed() {
     all_ok("cells_within", k::cells_within, &m::cells_within(Typical));
 }
 
+/// Every typical batch of the triangulation's benchmark (decision 32.44) triangulates.
+#[test]
+fn mesh_typical_batches_all_succeed() {
+    use geom_bench::inputs::mesh as m;
+    use geom_bench::kernels::mesh as k;
+    let batch = m::cdt(Typical);
+    all_ok("cdt", k::cdt, &batch);
+    let mut out = Vec::new();
+    k::cdt(&batch, &mut out);
+    assert!(
+        out.iter()
+            .flatten()
+            .all(|c| c.triangles.len() >= usize::from(m::POINTS))
+    );
+}
+
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
 /// bounds every input.
 #[test]
