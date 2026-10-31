@@ -99,9 +99,8 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
         .map(|_| {
             let k = src.byte();
             let w = src.byte();
-            let mut key = [0u8; 16];
             // Keys from an alphabet of 32, so that repeats come up.
-            key[15] = k % 32;
+            let key = u128::from(k % 32).to_be_bytes();
             Item {
                 key,
                 work: u64::from(w % 64),
