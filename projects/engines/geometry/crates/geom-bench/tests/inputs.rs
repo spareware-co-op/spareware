@@ -2441,7 +2441,7 @@ fn the_carrier_classes_are_what_they_say() {
     assert!(
         c::meet(Degenerate)
             .iter()
-            .all(|(l, m)| l.meet(m) == Err(NumError::Degenerate))
+            .all(|(l, m)| l.meet(m).err() == Some(NumError::Degenerate))
     );
     assert!(c::meet(Typical).iter().all(|(l, m)| l.meet(m).is_ok()));
 
