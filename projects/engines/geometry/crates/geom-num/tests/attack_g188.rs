@@ -234,6 +234,17 @@ fn random_inputs_at_every_scale_match_the_oracle() {
             circle.meets(&l).unwrap(),
             circle_contact_oracle(&circle, &l)
         );
+        // Two points in order along an arc: the turn of its start and them.
+        let (s, e, q) = (rng.grid(), rng.grid(), rng.point());
+        let arc = Arc2::bisector(s, e)
+            .and_then(|b| b.meet(&l))
+            .and_then(|c| Arc2::new(s, e, c));
+        if let Ok(arc) = arc {
+            assert_eq!(
+                arc.order(&p, &q).unwrap(),
+                Rational2::orient(&s.into(), &p, &q).unwrap()
+            );
+        }
     }
 }
 
@@ -284,6 +295,17 @@ fn the_extreme_values_reach_every_width_and_every_step_fits() {
         }
         let other = Circle2::new(z, R - 1).unwrap();
         assert!(circle.against(&other).is_ok());
+    }
+    let arc = Arc2::new(p2(M, M), p2(-M, M), p2(0, 0).into()).unwrap();
+    for [x, y, w] in corners([P, P, W]) {
+        let (a, b) = (
+            Rational2::new(x, y, w).unwrap(),
+            Rational2::new(-y, x, w).unwrap(),
+        );
+        assert_eq!(
+            arc.order(&a, &b).unwrap(),
+            Rational2::orient(&arc.start().into(), &a, &b).unwrap()
+        );
     }
     // One past a budget is outside each predicate's domain, never a wrapped answer.
     let (o, big_p) = (p2(0, 0), P + 1);

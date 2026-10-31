@@ -1873,9 +1873,9 @@ fn matrix() -> Vec<Row> {
             classes: [
                 (
                     Random,
-                    NotApplicable(
-                        "it is `Rational2::orient` of the arc's start and two points, whose row \
-                         covers random inputs",
+                    Test(
+                        "attack_g188.rs",
+                        "random_inputs_at_every_scale_match_the_oracle",
                     ),
                 ),
                 (
@@ -1890,7 +1890,10 @@ fn matrix() -> Vec<Row> {
                 ),
                 (
                     Corners,
-                    NotApplicable("`Rational2::orient`'s corners are its"),
+                    Test(
+                        "attack_g188.rs",
+                        "the_extreme_values_reach_every_width_and_every_step_fits",
+                    ),
                 ),
                 (
                     Laws,
