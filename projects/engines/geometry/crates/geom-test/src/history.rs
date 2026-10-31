@@ -142,12 +142,8 @@ fn law_two(relations: &Relations, at: Option<usize>) -> Result<(), ChainBreak> {
 /// A fresh name: step `step`, position `at`, tagged so it never equals another's.
 fn fresh(step: u8, at: u16, tag: u8) -> NameId {
     let [hi, lo] = at.to_be_bytes();
-    let mut bytes = [0xA5; 16];
-    bytes[0] = step;
-    bytes[1] = tag;
-    bytes[2] = hi;
-    bytes[3] = lo;
-    NameId::from_bytes(bytes)
+    let f = 0xA5;
+    NameId::from_bytes([step, tag, hi, lo, f, f, f, f, f, f, f, f, f, f, f, f])
 }
 
 /// What becomes of one input in a generated step.
