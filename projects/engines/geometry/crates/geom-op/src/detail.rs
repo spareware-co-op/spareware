@@ -595,6 +595,10 @@ pub enum CombineDetail {
     NotPlaneBased,
     /// The selection would include the outside.
     UnboundedResult,
+    /// A seed lies on the boundary between two pieces.
+    SeedOnBoundary,
+    /// A seed lies on no piece.
+    SeedOutside,
     /// The result would be less exact than the caller accepts.
     NotAccepted {
         /// The class and bound it would have.
@@ -613,6 +617,8 @@ impl CombineDetail {
             | CombineDetail::UnknownOperand
             | CombineDetail::BadSelection
             | CombineDetail::InvalidOperand
+            | CombineDetail::SeedOnBoundary
+            | CombineDetail::SeedOutside
             | CombineDetail::UnboundedResult => ErrorKind::InvalidInput,
             CombineDetail::NotPlaneBased => ErrorKind::Unsupported,
             CombineDetail::NotAccepted { .. } => ErrorKind::ExactnessNotAccepted,
@@ -628,7 +634,10 @@ impl CombineDetail {
             CombineDetail::DuplicateOperand
             | CombineDetail::UnknownOperand
             | CombineDetail::InvalidOperand => vec![change("operands")],
-            CombineDetail::BadSelection | CombineDetail::UnboundedResult => {
+            CombineDetail::BadSelection
+            | CombineDetail::UnboundedResult
+            | CombineDetail::SeedOnBoundary
+            | CombineDetail::SeedOutside => {
                 vec![change("select")]
             }
             CombineDetail::NotPlaneBased => vec![Remedy::AwaitPiece { piece: "G242" }],
@@ -653,6 +662,8 @@ impl fmt::Display for CombineDetail {
             CombineDetail::UnboundedResult => {
                 f.write_str("the selection would include the outside")
             }
+            CombineDetail::SeedOnBoundary => f.write_str("a seed lies between two pieces"),
+            CombineDetail::SeedOutside => f.write_str("a seed lies on no piece"),
             CombineDetail::NotAccepted { would } => {
                 write!(
                     f,

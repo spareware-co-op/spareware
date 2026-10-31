@@ -158,6 +158,7 @@ pub fn half_space(points: [P3; 3], meter: &mut WorkMeter<'_>) -> Result<Body, Re
         pieces.push(Outward {
             piece,
             polygon: carriers.len(),
+            source: carriers.len(),
             turned: false,
             front: Winding::new(),
             back: Winding::new(),

@@ -87,8 +87,7 @@ pub enum Term {
     Not,
 }
 
-/// What to keep of the arrangement. The flat path's winding selections; cells, imprint, split, keep
-/// and trim join with their pieces (G137, G138).
+/// What to keep of the arrangement (11.1). General fuse and cells come with their regions (G137).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Selection {
     /// Inside any solid.
@@ -102,6 +101,32 @@ pub enum Selection {
     Intersect,
     /// Passing a test on winding numbers.
     Where(Vec<Term>),
+    /// The target, its faces split where the others meet it, its shape unchanged.
+    Imprint {
+        /// The target.
+        target: OperandKey,
+    },
+    /// The target, cut into separate bodies by the others.
+    Split {
+        /// The target.
+        target: OperandKey,
+    },
+    /// The pieces of a sheet target that pass a test on the solids.
+    Keep {
+        /// The sheet.
+        target: OperandKey,
+        /// The test.
+        test: Vec<Term>,
+    },
+    /// A sheet target cut by the others, keeping the pieces that hold the seeds.
+    Trim {
+        /// The sheet.
+        target: OperandKey,
+        /// Points on the pieces to keep.
+        seeds: Vec<P3>,
+    },
+    /// Only the curves where operands meet, as a wire body.
+    Section,
 }
 
 /// A boolean's input, without the budget and exactness its caller's context holds.
@@ -177,8 +202,14 @@ pub struct Prepared {
     pub polygons: Vec<Polygon>,
     /// Each polygon's carrier.
     pub carriers: Vec<Carrier>,
+    /// Each polygon's operand, as a place in `keys`.
+    pub owners: Vec<usize>,
+    /// Each polygon's face, counted over every operand.
+    pub sources: Vec<usize>,
     /// One test per selection.
     pub tests: Vec<WindingTest>,
+    /// One place in `keys` per selection that names a target.
+    pub targets: Vec<Option<usize>>,
 }
 
 /// `plane`, facing the other way.
@@ -390,12 +421,12 @@ fn joined(face: &Plane, sides: Vec<Side>) -> Result<Vec<Side>, NumError> {
     Ok(ring)
 }
 
-/// The polygons of `operand`, with their carriers.
+/// `operand`'s polygons added to `ready`, with their carriers, its owner and its faces.
 fn polygons_of(
     operand: &Operand<'_>,
     entry: Option<Entry>,
-    polygons: &mut Vec<Polygon>,
-    carriers: &mut Vec<Carrier>,
+    owner: usize,
+    ready: &mut Prepared,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(), PrepareError> {
     let a = operand.body.arenas();
@@ -434,15 +465,43 @@ fn polygons_of(
         }
         let surface = a.surfaces.get(face.surface).ok_or(broken)?;
         let pieces: Vec<Piece> = convex_pieces(plane, &rings, meter)?;
+        let source = ready
+            .sources
+            .last()
+            .map_or(0, |last| last.saturating_add(1));
         for piece in pieces {
-            polygons.push(Polygon { piece, entry });
-            carriers.push(Carrier {
+            ready.polygons.push(Polygon { piece, entry });
+            ready.carriers.push(Carrier {
                 surface: surface.clone(),
                 sense: face.sense,
             });
+            ready.owners.push(owner);
+            ready.sources.push(source);
         }
     }
     Ok(())
+}
+
+/// The operand `selection` names as its target, as a place in `entries`.
+fn target_of(
+    selection: &Selection,
+    entries: &[(OperandKey, Option<Entry>)],
+) -> Result<Option<usize>, PrepareError> {
+    let key = match selection {
+        Selection::Subtract { target }
+        | Selection::Imprint { target }
+        | Selection::Split { target }
+        | Selection::Keep { target, .. }
+        | Selection::Trim { target, .. } => target,
+        Selection::Unite | Selection::Intersect | Selection::Where(_) | Selection::Section => {
+            return Ok(None);
+        }
+    };
+    entries
+        .iter()
+        .position(|(k, _)| k == key)
+        .map(Some)
+        .ok_or(PrepareError::UnknownOperand(*key))
 }
 
 /// The test of `selection`, given each solid's entry.
@@ -459,10 +518,14 @@ fn test_of(
             .ok_or(PrepareError::UnknownOperand(*key))
     };
     Ok(match selection {
-        Selection::Unite => WindingTest::unite(),
+        Selection::Unite | Selection::Trim { .. } | Selection::Section => WindingTest::unite(),
         Selection::Intersect => WindingTest::intersect(solids),
         Selection::Subtract { target } => WindingTest::subtract(entry_of(target)?),
-        Selection::Where(terms) => {
+        Selection::Imprint { target } | Selection::Split { target } => {
+            WindingTest::new(alloc::vec![Inner::Inside(entry_of(target)?)])
+                .map_err(PrepareError::BadTest)?
+        }
+        Selection::Where(terms) | Selection::Keep { test: terms, .. } => {
             let mut inner = Vec::with_capacity(terms.len());
             for term in terms {
                 inner.push(match term {
@@ -503,18 +566,24 @@ pub fn prepare(
         solids = solids.saturating_add(u32::from(entry.is_some()));
         keys.push((operand.key, entry));
     }
-    let (mut polygons, mut carriers) = (Vec::new(), Vec::new());
-    for (operand, (_, entry)) in order.iter().zip(&keys) {
-        polygons_of(operand, *entry, &mut polygons, &mut carriers, meter)?;
-    }
     let mut tests = Vec::with_capacity(input.select.len());
+    let mut targets = Vec::with_capacity(input.select.len());
     for selection in &input.select {
         tests.push(test_of(selection, &keys, solids)?);
+        targets.push(target_of(selection, &keys)?);
     }
-    Ok(Prepared {
+    let entries: Vec<Option<Entry>> = keys.iter().map(|(_, entry)| *entry).collect();
+    let mut ready = Prepared {
         keys,
-        polygons,
-        carriers,
+        polygons: Vec::new(),
+        carriers: Vec::new(),
+        owners: Vec::new(),
+        sources: Vec::new(),
         tests,
-    })
+        targets,
+    };
+    for (owner, (operand, entry)) in order.iter().zip(entries).enumerate() {
+        polygons_of(operand, entry, owner, &mut ready, meter)?;
+    }
+    Ok(ready)
 }

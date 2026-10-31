@@ -3,8 +3,11 @@
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
     clippy::disallowed_methods,
     clippy::indexing_slicing,
+    clippy::many_single_char_names,
     clippy::panic,
     clippy::unwrap_used,
     reason = "tests: native arithmetic, and a failure stops the test"
@@ -13,15 +16,18 @@
 use geom_bool::combine::{COMBINE, combine, intersect, subtract, unite};
 use geom_bool::half_space::half_space;
 use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection, Term};
-use geom_bool::rebuild::RebuildError;
+use geom_bool::rebuild::{Carrier, RebuildError, rebuild_with};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, Made, cylinder, make_box, prism};
+use geom_num::plane::Plane;
 use geom_num::{Exactness, P3, Steps};
 use geom_op::{CombineDetail, ErrorKind, OpContext, OpErrorDetail, OpId, OpPath};
-use geom_poly::merge::Merge;
+use geom_poly::convex::Piece;
+use geom_poly::merge::{Merge, Outward, Rules};
+use geom_poly::winding::Winding;
 use geom_run::{Budget, Exec, WorkMeter};
-use geom_topo::Body;
 use geom_topo::query::volume;
+use geom_topo::{Body, BodyKind, FlatSurface, Sense, SurfaceKind};
 use proptest::prelude::*;
 
 fn ctx() -> OpContext<'static> {
@@ -121,7 +127,7 @@ fn one_arrangement_gives_every_selection() {
         accept: None,
     };
     let out = combine(&ctx(), &SERIAL, &input).unwrap();
-    let volumes: Vec<i128> = out.result.iter().map(sixfold).collect();
+    let volumes: Vec<i128> = out.result.iter().flatten().map(sixfold).collect();
     assert_eq!(volumes, [6 * 120_000, 6 * 8_000, 6 * 56_000, 6 * 56_000]);
 }
 
@@ -207,7 +213,11 @@ fn seams_stay_and_come_back_in() {
         merge: Merge::KeepSeams,
         accept: None,
     };
-    let seamed = combine(&ctx(), &SERIAL, &input).unwrap().result.remove(0);
+    let seamed = combine(&ctx(), &SERIAL, &input)
+        .unwrap()
+        .result
+        .remove(0)
+        .remove(0);
     checked(&seamed);
     let tool = cuboid([30, 10, 10], [20, 20, 40]);
     let out = subtract(
@@ -368,6 +378,217 @@ fn a_result_less_exact_than_the_caller_takes_is_refused() {
     );
 }
 
+/// A plane square to an axis, its normal along +`axis` when `sign` is 1.
+fn square(axis: usize, sign: i128, at: i64) -> Plane {
+    let mut n = [0; 3];
+    n[axis] = sign;
+    Plane::new(n, -sign * i128::from(at)).unwrap()
+}
+
+/// A rectangular sheet square to `axis` at `at`, over `low` to `high` on the next two axes.
+fn sheet(axis: usize, at: i64, low: [i64; 2], high: [i64; 2]) -> Body {
+    let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+    let piece = Piece {
+        face: square(axis, 1, at),
+        bounds: vec![
+            square(v, 1, low[1]),
+            square(u, -1, high[0]),
+            square(v, -1, high[1]),
+            square(u, 1, low[0]),
+        ],
+    };
+    let unit = |k: usize| [0, 1, 2].map(|i| if i == k { 1.0 } else { 0.0 });
+    let mut origin = [0.0; 3];
+    origin[axis] = at as f64;
+    let wide = (-1e9, 1e9);
+    let surface = FlatSurface::new(origin, unit(u), unit(v), (wide, wide)).unwrap();
+    let carrier = Carrier {
+        surface: SurfaceKind::Plane(surface),
+        sense: Sense::Forward,
+    };
+    let pieces = [Outward {
+        piece,
+        polygon: 0,
+        turned: false,
+        source: 0,
+        front: Winding::new(),
+        back: Winding::new(),
+    }];
+    let rules = Rules {
+        cuts: &[],
+        open: true,
+    };
+    let body = rebuild_with(
+        &pieces,
+        &[carrier],
+        Merge::RemoveRedundant,
+        rules,
+        &mut meter(),
+    );
+    let body = body.unwrap();
+    assert_eq!(body.kind(), BodyKind::Sheet);
+    checked(&body);
+    body
+}
+
+fn cutter(n: u8, body: &Body) -> Operand<'_> {
+    Operand {
+        kind: OperandKind::Cutter,
+        ..solid(n, body)
+    }
+}
+
+/// `selection` of `operands`, in one call.
+fn picked(operands: Vec<Operand<'_>>, selection: Selection) -> geom_op::OpOutput<Vec<Vec<Body>>> {
+    let input = BooleanInput {
+        operands,
+        select: vec![selection],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    combine(&ctx(), &SERIAL, &input).unwrap()
+}
+
+#[test]
+fn an_imprint_splits_faces_and_changes_no_shape() {
+    let slab = cuboid([0, 0, 0], [100, 100, 20]);
+    let column = cuboid([40, 40, 20], [20, 20, 50]);
+    let selection = Selection::Imprint { target: key(1) };
+    let out = picked(vec![solid(1, &slab), solid(2, &column)], selection.clone());
+    let body = &out.result[0][0];
+    assert_eq!(sixfold(body), 6 * 200_000);
+    assert_eq!(body.arenas().faces.len(), 7);
+    checked(body);
+    let line = sheet(0, 30, [-10, -10], [110, 110]);
+    let cut = picked(vec![solid(1, &slab), cutter(2, &line)], selection.clone());
+    let body = &cut.result[0][0];
+    assert_eq!(sixfold(body), 6 * 200_000);
+    // Top, bottom and the two long sides each in two.
+    assert_eq!(body.arenas().faces.len(), 10);
+    checked(body);
+    // A line that stops inside a face leaves the face whole.
+    let short = sheet(0, 30, [10, -10], [50, 110]);
+    let cut = picked(vec![solid(1, &slab), cutter(2, &short)], selection);
+    let body = &cut.result[0][0];
+    assert_eq!(body.arenas().faces.len(), 6);
+    checked(body);
+}
+
+#[test]
+fn a_split_gives_one_body_per_cell() {
+    let wall = cuboid([0, 0, 0], [100, 10, 60]);
+    let tool = cuboid([40, -5, -5], [20, 20, 70]);
+    let selection = Selection::Split { target: key(1) };
+    let out = picked(vec![solid(1, &wall), solid(2, &tool)], selection.clone());
+    let mut volumes: Vec<i128> = out.result[0].iter().map(sixfold).collect();
+    volumes.sort_unstable();
+    assert_eq!(
+        volumes,
+        [6 * 12_000, 6 * 24_000, 6 * 24_000],
+        "both ends and the middle"
+    );
+    out.result[0].iter().for_each(checked);
+    let line = sheet(0, 30, [-10, -10], [20, 70]);
+    let out = picked(vec![solid(1, &wall), cutter(2, &line)], selection.clone());
+    let mut volumes: Vec<i128> = out.result[0].iter().map(sixfold).collect();
+    volumes.sort_unstable();
+    assert_eq!(volumes, [6 * 18_000, 6 * 42_000]);
+    out.result[0].iter().for_each(checked);
+    let inside = cuboid([10, 2, 10], [20, 6, 20]);
+    let out = picked(vec![solid(1, &wall), solid(2, &inside)], selection);
+    let mut volumes: Vec<i128> = out.result[0].iter().map(sixfold).collect();
+    volumes.sort_unstable();
+    assert_eq!(volumes, [6 * 2_400, 6 * (60_000 - 2_400)]);
+    out.result[0].iter().for_each(checked);
+}
+
+#[test]
+fn a_cutter_that_stops_short_leaves_the_target_whole_and_says_so() {
+    let wall = cuboid([0, 0, 0], [100, 10, 60]);
+    let short = sheet(0, 30, [-10, -10], [20, 30]);
+    let selection = Selection::Split { target: key(1) };
+    let out = picked(vec![solid(1, &wall), cutter(2, &short)], selection);
+    assert_eq!(out.result[0].len(), 1);
+    assert_eq!(sixfold(&out.result[0][0]), 6 * 60_000);
+    assert_eq!(out.result[0][0].arenas().faces.len(), 6);
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "bool.cutter_does_not_separate")
+    );
+}
+
+#[test]
+fn keep_clips_a_sheet_to_a_solid() {
+    let block = cuboid([0, 0, 0], [40, 40, 40]);
+    let facade = sheet(0, 20, [-10, -10], [50, 50]);
+    let selection = Selection::Keep {
+        target: key(2),
+        test: vec![Term::Inside(key(1))],
+    };
+    let out = picked(vec![solid(1, &block), cutter(2, &facade)], selection);
+    let kept = &out.result[0][0];
+    assert_eq!(kept.kind(), BodyKind::Sheet);
+    assert_eq!(kept.arenas().faces.len(), 1);
+    assert_eq!(kept.arenas().edges.len(), 4);
+    checked(kept);
+}
+
+#[test]
+fn trim_keeps_the_pieces_that_hold_the_seeds() {
+    let target = sheet(0, 0, [0, 0], [40, 40]);
+    let knife = sheet(1, 20, [-10, -10], [50, 50]);
+    let operands = || vec![cutter(1, &target), cutter(2, &knife)];
+    let trim = |seed: P3| Selection::Trim {
+        target: key(1),
+        seeds: vec![seed],
+    };
+    let out = picked(operands(), trim(p(0, 10, 10)));
+    let kept = &out.result[0][0];
+    assert_eq!(kept.kind(), BodyKind::Sheet);
+    assert_eq!(kept.arenas().faces.len(), 1);
+    checked(kept);
+    let input = |selection| BooleanInput {
+        operands: operands(),
+        select: vec![selection],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    let refused = |seed| {
+        let err = combine(&ctx(), &SERIAL, &input(trim(seed))).unwrap_err();
+        *err.detail()
+    };
+    assert_eq!(
+        refused(p(5, 10, 10)),
+        OpErrorDetail::Combine(CombineDetail::SeedOutside)
+    );
+    assert_eq!(
+        refused(p(0, 20, 10)),
+        OpErrorDetail::Combine(CombineDetail::SeedOnBoundary)
+    );
+}
+
+#[test]
+fn a_section_is_the_curve_where_operands_meet() {
+    let a = cuboid([0, 0, 0], [40, 40, 40]);
+    let b = cuboid([20, 20, 20], [40, 40, 40]);
+    let out = picked(vec![solid(1, &a), solid(2, &b)], Selection::Section);
+    let curves = &out.result[0][0];
+    assert_eq!(curves.kind(), BodyKind::Wire);
+    assert_eq!(curves.arenas().edges.len(), 6);
+    assert_eq!(curves.arenas().vertices.len(), 6);
+    checked(curves);
+    let plan = sheet(2, 20, [-10, -10], [50, 50]);
+    let out = picked(vec![solid(1, &a), cutter(2, &plan)], Selection::Section);
+    let curves = &out.result[0][0];
+    assert_eq!(curves.arenas().edges.len(), 4);
+    checked(curves);
+    let apart = cuboid([100, 0, 0], [10, 10, 10]);
+    let out = picked(vec![solid(1, &a), solid(2, &apart)], Selection::Section);
+    assert_eq!(out.result[0][0].arenas().edges.len(), 0);
+    assert!(out.diagnostics.iter().any(|d| d.code == "bool.empty_result"));
+}
+
 #[test]
 fn a_curved_operand_waits_for_the_curved_path() {
     let round = cylinder(
@@ -429,7 +650,7 @@ proptest! {
             }
         }
         let out = unite(&ctx(), &SERIAL, &operands).unwrap();
-        if out.result.kind() == geom_topo::BodyKind::Solid {
+        if out.result.kind() == BodyKind::Solid {
             prop_assert_eq!(sixfold(&out.result), 6 * count);
             checked(&out.result);
         }
