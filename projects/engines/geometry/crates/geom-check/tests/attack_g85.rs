@@ -7,6 +7,7 @@
     clippy::unwrap_used,
     clippy::indexing_slicing,
     clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
     reason = "test code: a failure should stop loudly"
 )]
 
@@ -122,7 +123,7 @@ fn carriers_without_a_certified_check_are_reported_never_passed() {
     );
     // A plane past the grid's range, 2^41 steps out.
     let mut r = cube();
-    let far = 2_f64.powi(41);
+    let far = 2_199_023_255_552.0; // 2^41
     r.surfaces[0] = SurfaceKind::Plane(
         Plane::new(
             [far, 0.0, 0.0],
