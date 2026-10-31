@@ -2311,6 +2311,7 @@ fn mesh_typical_batches_all_succeed() {
     let mut found = Vec::new();
     k::locate(&probes, &mut found);
     assert!(found.iter().flatten().all(|l| l.len() == m::PROBES));
+    all_ok("boolean", k::boolean, &m::boolean(Typical));
     all_ok("point_point", k::point_point, &m::point_point(Typical));
     all_ok("point_line", k::point_line, &m::point_line(Typical));
     all_ok("point_plane", k::point_plane, &m::point_plane(Typical));

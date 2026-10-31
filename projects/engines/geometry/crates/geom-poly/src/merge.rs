@@ -238,6 +238,8 @@ pub struct Merged {
     pub faces: Vec<Face>,
     /// The shells.
     pub shells: Vec<Shell>,
+    /// The face of each piece given: a piece wholly inside a face has no fin to say so.
+    pub piece_face: Vec<usize>,
 }
 
 /// A piece on a sheet.
@@ -976,6 +978,10 @@ pub fn merge(
     for id in &used {
         vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
     }
+    let mut piece_face = alloc::vec![0; pieces.len()];
+    for (at, item) in held.iter().enumerate() {
+        *piece_face.get_mut(item.given).ok_or(MergeError::Open)? = face_of(at)?;
+    }
     Ok(Merged {
         sheets,
         vertices,
@@ -983,5 +989,6 @@ pub fn merge(
         fins,
         faces,
         shells,
+        piece_face,
     })
 }

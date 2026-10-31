@@ -48,6 +48,7 @@ use geom_num::grid::{P3, Steps};
 use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError};
 use geom_op::NameId;
+use geom_poly::merge::MergeError;
 use geom_run::{ChunkPlan, Exceeded, Exec, RunError, Stop, Stopped, WorkMeter};
 
 pub mod build;
@@ -364,8 +365,14 @@ pub enum MeshError {
     },
     /// More items than 32-bit indices can name.
     Full,
-    /// Inside and outside are undefined for an open mesh.
+    /// Inside and outside are undefined for an open mesh. Heal it first.
     NotClosed,
+    /// The outside passes this test of a boolean, so its result has no finite boundary. Intersect
+    /// it with a box first.
+    UnboundedResult {
+        /// The test, by its place in the list given.
+        test: u32,
+    },
     /// The box tree refused.
     Bvh(BvhError),
     /// The numbers layer refused: a plane over budget, or a fault of its own.
@@ -391,7 +398,11 @@ impl fmt::Display for MeshError {
                 write!(f, "corner {corner} needs its edge plane")
             }
             MeshError::Full => f.write_str("more items than 32-bit indices can name"),
-            MeshError::NotClosed => f.write_str("an open mesh has no inside"),
+            MeshError::NotClosed => f.write_str("an open mesh has no inside: heal it first"),
+            MeshError::UnboundedResult { test } => write!(
+                f,
+                "test {test} passes outside everything, so its result has no boundary: intersect it with a box first"
+            ),
             MeshError::Bvh(e) => write!(f, "{e}"),
             MeshError::Num(e) => write!(f, "{e}"),
             MeshError::Stopped(e) => write!(f, "the mesh stopped: {e}"),
@@ -407,6 +418,19 @@ impl core::error::Error for MeshError {}
 impl From<MeshFault> for MeshError {
     fn from(e: MeshFault) -> MeshError {
         MeshError::Fault(e)
+    }
+}
+
+impl From<MergeError> for MeshError {
+    fn from(e: MergeError) -> Self {
+        match e {
+            MergeError::Num(e) => MeshError::Num(e),
+            MergeError::Stopped(s) => s.into(),
+            // Closed inputs give closed pieces.
+            MergeError::Trace(_) | MergeError::Overlap | MergeError::Open | MergeError::Inside => {
+                MeshError::Defect
+            }
+        }
     }
 }
 

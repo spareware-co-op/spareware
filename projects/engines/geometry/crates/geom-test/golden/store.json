@@ -94,9 +94,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4",
+              "kind": "corpus",
+              "piece": "G148",
+              "why": "Count benchmarks of two stacks joined, and 1 new on mesh booleans (decision 32.44): mesh/boolean; no existing digest moved"
             }
           ],
-          "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4"
+          "sha256": "34578be2ad605ad7842a25d149edfcf271c21d869c257e8e4fdc00a19738e3b8"
         },
         {
           "id": "geom-bvh/cells",

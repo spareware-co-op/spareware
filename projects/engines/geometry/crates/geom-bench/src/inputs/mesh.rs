@@ -2,7 +2,8 @@
 //! scatter of survey points with breaklines across it; and a small height field, every face on its
 //! own plane, for the exact mesh's build and check.
 //!
-//! For point location (piece G147), that field closed into a solid, with points in its box. For
+//! For point location (piece G147), that field closed into a solid, with points in its box; for
+//! booleans (piece G148), two such solids. For
 //! the distance comparisons of piece G151, grid points in a room a million steps across, each
 //! with a clearance of up to as much; for triangle contact, pairs of triangles in that room whose
 //! planes mostly cut each other.
@@ -48,6 +49,15 @@ pub const FACES: usize = 98;
 
 /// The points of one [`Probe`].
 pub const PROBES: usize = 64;
+
+/// What `geom_mesh::boolean::boolean` takes.
+#[derive(Clone, Debug)]
+pub struct Pair {
+    /// One solid.
+    pub first: ExactMesh,
+    /// The other, of the same ground plan and other heights.
+    pub second: ExactMesh,
+}
 
 /// What `geom_mesh::classify` takes.
 #[derive(Clone, Debug)]
@@ -225,6 +235,21 @@ pub fn locate(class: Class) -> Vec<Probe> {
             points.push(P3::new(x, y, within(&mut g, 8192)).ok()?);
         }
         Some(Probe { solid, points })
+    })
+}
+
+/// Two closed solids that cross, for `geom_mesh::boolean::boolean`.
+#[must_use]
+pub fn boolean(class: Class) -> Vec<Pair> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::boolean", class);
+    batch_of(|_| {
+        Some(Pair {
+            first: solid(&mut g)?,
+            second: solid(&mut g)?,
+        })
     })
 }
 

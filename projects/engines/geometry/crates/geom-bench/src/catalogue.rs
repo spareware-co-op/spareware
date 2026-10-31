@@ -400,6 +400,7 @@ pub static OPS: &[Op] = &[
     Op { group: "mesh", name: "cdt", measures: "geom_mesh::cdt::triangulate", classes: T, prepare: |c| bind(inputs::mesh::cdt(c), kernels::mesh::cdt) },
     Op { group: "mesh", name: "exact_build", measures: "geom_mesh::exact::build::build", classes: T, prepare: |c| bind(inputs::mesh::exact_build(c), kernels::mesh::exact_build) },
     Op { group: "mesh", name: "locate", measures: "geom_mesh::Classifier::locate_all", classes: T, prepare: |c| bind(inputs::mesh::locate(c), kernels::mesh::locate) },
+    Op { group: "mesh", name: "boolean", measures: "geom_mesh::boolean::boolean", classes: T, prepare: |c| bind(inputs::mesh::boolean(c), kernels::mesh::boolean) },
     Op { group: "mesh", name: "point_point", measures: "distance::point_point", classes: T, prepare: |c| bind(inputs::mesh::point_point(c), kernels::mesh::point_point) },
     Op { group: "mesh", name: "point_line", measures: "distance::point_line", classes: T, prepare: |c| bind(inputs::mesh::point_line(c), kernels::mesh::point_line) },
     Op { group: "mesh", name: "point_plane", measures: "distance::point_plane", classes: T, prepare: |c| bind(inputs::mesh::point_plane(c), kernels::mesh::point_plane) },
