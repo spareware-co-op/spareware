@@ -4029,7 +4029,51 @@
         24
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why the graph refused a name or could not answer.",
+          "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+          "kinds": [
+            {
+              "doc": "A name whose `NameId` the graph already holds with different canonical bytes.",
+              "name": "Collision",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A name the walk reached that the graph does not hold.",
+              "name": "Missing",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The name could not be encoded.",
+              "name": "Name",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_name::graph",
+          "name": "GraphError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why the colliding entities could not be given ordinals.",
+          "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+          "kinds": [
+            {
+              "doc": "Two entities, by their positions in the input, whose order could not be decided exactly, or that tie on every step of the rule (20.2).",
+              "name": "UndecidedOrder",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More entities than a `u32` ordinal counts.",
+              "name": "TooMany",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_name::ordinal",
+          "name": "OrderError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-name/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-name",
@@ -4043,12 +4087,82 @@
       "job": "The name graph and its hash-consing; references, their resolution and the walk through history; surface groups and placement references.",
       "kind": "kernel",
       "layer": "3",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "interning is one encoding and one SHA-256 of a few hundred bytes, then a `BTreeMap` lookup, O(log n). [`NameGraph::is_weak`] visits each reachable node once, O(r log n) for r reachable nodes, with a stack and a visited set of at most r entries. Recursion: none.",
+          "does": "a [`NameGraph`] holds name nodes keyed by their [`NameId`]. [`NameGraph::intern`] encodes a [`TopoName`], hashes it under `NameScheme v1` and keeps the node; interning the same name again returns the same `NameId` and stores nothing new. A name refers to its parents by `NameId` ([`parents`]), so the nodes form a shared graph rather than nested trees. [`NameGraph::is_weak`] says whether a name is a `Weak` node or is built on one at any depth.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+          "guarantees": [
+            "**One encoding per `NameId`.** A node keeps its canonical bytes beside its `NameId`. A second, different encoding under a `NameId` already held is refused with [`GraphError::Collision`], never merged with the first (32.19).",
+            "**Name order.** Nodes are held and listed in the byte order of their `NameId`s (20.2: \"everything is sorted by name\"), whatever order they were interned in.",
+            "**Weakness is exact.** A name is weak exactly when it is a `Weak` node or reaches one through its parents. A parent the graph does not hold is [`GraphError::Missing`], never assumed strong.",
+            "**No recursion.** The walk through parents uses an explicit stack and visits each node once."
+          ],
+          "job": "The name graph: every persistent name once, hash-consed, with the canonical bytes its `NameId` was hashed from.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "hash-consing, as the shared name graph of chapter 20.1 (`projects/engines/geometry/architecture/20-naming-history.md`), with decision 32.19's rule that the graph keeps each node's canonical bytes and refuses a second encoding under one `NameId` (`projects/engines/geometry/architecture/32-decisions.md`); the weakness rule of 20.2."
+          },
+          "path": "geom_name::graph",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) comparisons and two buffers of n (position, reference) pairs. Recursion: none.",
+          "does": "when an operation's names still collide, the colliding entities share the collided name as `base` and take `Weak { base, ord }` names, the `n`-th of `of` (chapter 20.2). [`ordinals`] puts the entities in 20.2's order and gives each its [`Ordinal`]; [`weak_names`] makes their `Weak` names. The order is the rule's table, step by step:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+          "guarantees": [
+            "**The order is the entities', not the input's.** Any permutation of the same entities gives each entity the same ordinal: the order depends only on the keys the operation computes, never on the order an algorithm reported its results in (20.2).",
+            "**Ordinals are a permutation of `0..of`**, with `of` the number of entities, which must fit in a `u32` (20.2).",
+            "**Undecided or tied is an error.** If any comparison the sort makes is undecided, or two entities compare equal on every step, the result is [`OrderError::UndecidedOrder`] naming two such entities by their positions in the input.",
+            "**Deterministic and bounded.** A bottom-up merge sort, stable and without recursion, makes at most about n log2 n comparisons."
+          ],
+          "job": "The ordinal order of `NameScheme v1`: how entities that would share a name are told apart by `Weak` names, and the one order their ordinals follow.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "chapter 20.2's ordinal order (the rule's four steps), `projects/engines/geometry/architecture/20-naming-history.md`; bottom-up merge sort, Knuth, *The Art of Computer Programming*, vol. 3, section 5.2.4 (straight two-way merging, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
+          },
+          "path": "geom_name::ordinal",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) time and one copy of the list. Recursion: none.",
+          "does": "[`first_duplicate`] finds the lowest name that appears more than once in a list. [`expect_unique`] is what an operation calls on the names it made before publishing them: in a build with debug assertions, every test build, it refuses a list with a duplicate; in a release build it checks nothing, because there a collision still becomes a `Weak` name, never a random suffix (20.2), and the operation's own naming has already done that.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/unique.rs",
+          "guarantees": [
+            "**Exact.** [`first_duplicate`] returns `Some` exactly when a name appears twice, and the lowest such name, whatever the list's order.",
+            "**On in every test build.** Under `debug_assertions`, [`expect_unique`] is [`first_duplicate`]'s answer as an error; the kernel's test legs build with debug assertions on."
+          ],
+          "job": "The duplicate-name detector: a name an operation gives twice, which its contract does not expect, is a bug that tests must catch (chapter 20.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "sort and compare neighbours, the duplicate test any sorted sequence allows; chapter 20.2's rule that an unexpected duplicate name is a bug caught by tests, `projects/engines/geometry/architecture/20-naming-history.md`."
+          },
+          "path": "geom_name::unique",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-name",
       "provenance": [],
       "sections": "8.4, 17.12, 20 and 24.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G87, G89, G90, G109, G374.",
+      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution in G89, attribute classes in G90, `PruneHistory` in G109 and placement references in G374.",
       "summary": "Spare Kit geometry kernel: persistent names and references."
     },
     {
@@ -6611,6 +6725,16 @@
           "pinned": false,
           "purpose": "0.11.0",
           "take": "depend"
+        },
+        {
+          "licence": "(Apache-2.0 OR MIT) AND Unicode-3.0",
+          "link": "https://crates.io/crates/unicode-normalization",
+          "manifest": "projects/engines/geometry/crates/geom-op/Cargo.toml",
+          "method_note": null,
+          "name": "unicode-normalization",
+          "pinned": false,
+          "purpose": "=0.1.26",
+          "take": "depend"
         }
       ],
       "errors": [
@@ -6871,6 +6995,40 @@
           "module": "geom_op::kind",
           "name": "ErrorKind",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a name could not be made or encoded.",
+          "file": "projects/engines/geometry/crates/geom-op/src/name.rs",
+          "kinds": [
+            {
+              "doc": "A role name that is empty.",
+              "name": "EmptyRole",
+              "shape": "unit"
+            },
+            {
+              "doc": "A role name not in Unicode Normalization Form C (32.19).",
+              "name": "NotNfc",
+              "shape": "unit"
+            },
+            {
+              "doc": "A set with the same name twice.",
+              "name": "Repeated",
+              "shape": "unit"
+            },
+            {
+              "doc": "An ordinal whose `n` is not below its `of`.",
+              "name": "Ordinal",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder refused a value; only a defect in this module can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_op::name",
+          "name": "NameError",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -7088,6 +7246,31 @@
           "target": "lib"
         },
         {
+          "cost": "encoding a name allocates its bytes once and one small item per element of each set; hashing is one SHA-256 pass over at most a few hundred bytes. The NFC check is linear in a role name's length. Recursion: none; a name refers to other names by `NameId`, never by nesting.",
+          "does": "a [`TopoName`] says how an entity was made: created by an operation step in a [`Role`], split from one input by cutting faces ([`PieceKey`]), merged from several, bounded by the faces it lies between and those that end it, or, where entities would still collide, the [`Ordinal`]-th of a [`TopoName::Weak`] group (chapter 20.2). [`TopoName::encode`] writes its canonical bytes and [`TopoName::id`] hashes them to the 128-bit [`NameId`] (32.19): the first 16 bytes of SHA-256 over [`NAME_SCHEME_V1_PREFIX`] and those bytes. Sets of names are [`NameSet`]s, sorted lists [`NameList`]s, both in name order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/name.rs",
+          "guarantees": [
+            "**One name, one encoding, one `NameId`.** A `TopoName` can only hold sets without repeats, lists in order, ordinals with `n < of` and role names in Normalization Form C, so its encoding is a pure function of the name, and so is its `NameId`, on every target.",
+            "**Text is NFC under Unicode 18.0.0** (32.19): a role name not in Normalization Form C is refused when the role is made, never normalised behind the caller's back. Step labels are printable ASCII ([`crate::id`]), which is NFC under every Unicode version.",
+            "**Names never collide with other hashes.** The prefix `SKG NameScheme v1` and a zero byte go before every name's bytes, so no name hashes like a content ID (32.20) or a later scheme."
+          ],
+          "job": "Persistent names: how an operation names what it makes, and the `NameId` each name hashes to under `NameScheme v1`.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "https://csrc.nist.gov/pubs/sp/800/107/r1/final",
+              "https://www.unicode.org/reports/tr15/"
+            ],
+            "text": "chapter 20.2's `TopoName` and decision 32.19 (`NameScheme v1`), `projects/engines/geometry/architecture/20-naming-history.md` and `projects/engines/geometry/architecture/32-decisions.md`; FIPS 180-4's SHA-256 truncated to its leftmost 128 bits as NIST SP 800-107 Rev. 1 section 5.1 allows (<https://csrc.nist.gov/pubs/sp/800/107/r1/final>); and Unicode's Normalization Form C, UAX #15 (<https://www.unicode.org/reports/tr15/>), checked with the `unicode-normalization` crate at 0.1.26, whose tables are Unicode 18.0.0."
+          },
+          "path": "geom_op::name",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "an output is its result plus one vector of diagnostics; a diagnostic owns its message and two short vectors.",
           "does": "an [`OpOutput`] is chapter 10.1's `OpOutput`: the operation's own result (bodies, meshes, a solved sketch: each crate's type), with the parts every operation shares. This piece builds two of them: the result's [`Exactness`] and its [`Diagnostic`]s, warnings with the entities they concern (\"a short edge\", \"a near-tangency handled\"). The other two shared parts, the new persistent names and the history of chapter 20.3, join it with their types, in pieces G87 and G88.",
           "family": [],
@@ -7182,7 +7365,7 @@
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); names to come in G87, history in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
+      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history to come in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {
@@ -10440,6 +10623,17 @@
       "link": "https://crates.io/crates/sha2/0.11.0",
       "method_note": null,
       "name": "sha2",
+      "pinned": false,
+      "take": "depend",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-op/Cargo.toml"
+      ]
+    },
+    {
+      "licence": "(Apache-2.0 OR MIT) AND Unicode-3.0",
+      "link": "https://crates.io/crates/unicode-normalization",
+      "method_note": null,
+      "name": "unicode-normalization",
       "pinned": false,
       "take": "depend",
       "used_by": [

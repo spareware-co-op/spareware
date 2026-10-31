@@ -1173,6 +1173,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
  "geom-topo",
 ]
 
@@ -1235,6 +1236,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "sha2",
+ "unicode-normalization",
 ]
 
 [[package]]
