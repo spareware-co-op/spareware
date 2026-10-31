@@ -698,6 +698,8 @@ fn the_bound_is_the_one_geom_nurbs_states() {
     let u = f64::EPSILON / 2.0;
     assert!(gamma(1) >= u && gamma(1) < 1.001 * u);
     assert!(gamma(1000) >= 1000.0 * u && gamma(1000) < 1000.001 * u);
+    let nu = 1000.0 * u;
+    assert_eq!(gamma(1000), (nu / (1.0 - nu)).next_up());
     let plain = jobs(Seed(6), 100)
         .into_iter()
         .find(|j| j.weights.is_none() && j.degree == 2)
@@ -720,6 +722,59 @@ fn the_bound_is_the_one_geom_nurbs_states() {
     // gamma(14p + 3) and the largest weight over the least.
     let want = gamma(31) * 4.0;
     assert!(bound(&rational, 1.0) >= want && bound(&rational, 1.0) < want * 1.0001);
+    // Their ratio, whatever the least weight is.
+    let mut heavier = rational.clone();
+    heavier.weights = rational.weights.as_ref().map(|list| {
+        list.iter()
+            .map(|w| w.replace("1e0", "2e0").replace("4e0", "8e0"))
+            .collect()
+    });
+    assert_eq!(bound(&heavier, 1.0), bound(&rational, 1.0));
+}
+
+/// The straight line from (0, 0) to (1, 0), at a half: its point is exactly (1/2, 0).
+fn straight() -> Job {
+    let mut job = jobs(Seed(7), 200)
+        .into_iter()
+        .find(|j| j.op == Op::Point)
+        .unwrap();
+    job.degree = 1;
+    job.knots = ["0e0", "0e0", "1e0", "1e0"].map(str::to_owned).to_vec();
+    job.points = vec![
+        vec!["0e0".to_owned(), "0e0".to_owned()],
+        vec!["1e0".to_owned(), "0e0".to_owned()],
+    ];
+    job.weights = None;
+    job.at = "5e-1".to_owned();
+    job
+}
+
+#[test]
+fn a_gap_of_exactly_the_limit_is_within_it() {
+    let job = straight();
+    let limit = 1.0 / 1024.0;
+    let edge = [0.5 + limit, 0.0];
+    let past = [0.5 + 2.0 * limit, 0.0];
+    let settled = settle(&job, &edge, &past, limit).unwrap();
+    assert!(settled.starts_with("theirs"), "{settled}");
+    let settled = settle(&job, &past, &edge, limit).unwrap();
+    assert!(settled.starts_with("ours: geomdl"), "{settled}");
+}
+
+#[test]
+fn a_replay_answers_in_the_jobs_own_dimension() {
+    use geom_test::fixture::run::Ran;
+    use geom_test::golden::Sha256;
+    use geom_test::oracle::geomdl::operation;
+    let answer = geom_test::oracle::geomdl::replay(&operation(&straight()).unwrap());
+    let Some(Ran::Done(step)) = answer else {
+        panic!("{answer:?}");
+    };
+    let mut sha = Sha256::new();
+    for value in [0.5_f64, 0.0] {
+        sha.write(&value.to_bits().to_be_bytes());
+    }
+    assert_eq!(step.bodies, vec![sha.finish()]);
 }
 
 #[test]
