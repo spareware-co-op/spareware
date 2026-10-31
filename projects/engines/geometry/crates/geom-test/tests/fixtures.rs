@@ -1170,7 +1170,6 @@ fn a_box_may_be_flat() {
         key(&f.log),
         Expect::Ok {
             hash: Some(Hash([0; 32])),
-            work: Some(1),
             measures: m,
         },
     );
