@@ -96,6 +96,8 @@ geom-run = { path = "../geom-run" }
 geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 geom-math = { path = "../geom-math" }
+# tests/second_mesh.rs: a mesh's runs are named.
+geom-op = { path = "../geom-op" }
 
 [lints.rust]
 unsafe_code = "forbid"

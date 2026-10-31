@@ -1448,6 +1448,7 @@ dependencies = [
  "geom-mesh",
  "geom-num",
  "geom-nurbs",
+ "geom-op",
  "geom-run",
  "geom-surface",
  "lcov",
