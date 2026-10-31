@@ -10,7 +10,7 @@
 use geom_name::{faces, roles_of};
 use geom_num::Exactness;
 use geom_op::history::{History, Origin, Record};
-use geom_op::{ErrorKind, NameId, NameSet, OpContext, OpId, OpPath, Role};
+use geom_op::{ErrorKind, NameId, NameSet, OpContext, OpId, OpPath, PieceKey, Role};
 use geom_run::{Budget, Stop, WorkMeter};
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{BodyKind, Builder, Face, Ix, Region, RegionKind, Sense, Shell, SurfaceKind};
@@ -118,6 +118,22 @@ fn a_merged_entity_has_every_role_sorted_and_without_repeats() {
         },
     }]);
     assert_eq!(roles(4, &[&made, &merged]), ["cap", "side"]);
+}
+
+#[test]
+fn a_split_piece_has_the_role_of_what_it_was_split_from() {
+    let made = history(vec![generated(1, "side")]);
+    let split = history(vec![Record {
+        output: id(2),
+        origin: Origin::Split {
+            of: id(1),
+            piece: PieceKey::ByTools {
+                tools: set(&[id(9)]),
+                side: geom_op::Side::Front,
+            },
+        },
+    }]);
+    assert_eq!(roles(2, &[&made, &split]), ["side"]);
 }
 
 #[test]

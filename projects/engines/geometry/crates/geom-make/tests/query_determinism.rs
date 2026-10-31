@@ -13,6 +13,7 @@
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
+    clippy::many_single_char_names,
     reason = "the corpus generator; the rules are for kernel code"
 )]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
@@ -51,7 +52,7 @@ fn record(out: &mut Vec<u8>, made: &OpOutput<Made>, histories: &[&History]) {
     };
     let listed = faces(&ctx(1), body, histories, recorded).unwrap();
     for f in &listed.result {
-        let roles: Vec<&str> = f.roles.iter().map(|r| r.name()).collect();
+        let roles: Vec<&str> = f.roles.iter().map(geom_op::Role::name).collect();
         line(format!(
             "face {} shell {} surface {} {:?} loops {} name {:?} roles {roles:?}",
             f.row.face.row(),

@@ -91,9 +91,8 @@ fn spanned(u: [f64; 3], v: [f64; 3], area: [i128; 3]) -> Option<Sign> {
     let along_x = tight::mul(ax?, minor(uy, vz, uz, vy)?).ok()?;
     let along_y = tight::mul(ay?, minor(uz, vx, ux, vz)?).ok()?;
     let along_z = tight::mul(az?, minor(ux, vy, uy, vx)?).ok()?;
-    tight::add(tight::add(along_x, along_y).ok()?, along_z)
-        .ok()?
-        .certain_sign()
+    let dot = tight::add(tight::add(along_x, along_y).ok()?, along_z).ok()?;
+    dot.certain_sign()
 }
 
 /// What one face's loops came to.
@@ -147,13 +146,11 @@ fn loops(
 
 /// The face's box against every vertex of its loops.
 fn stored_box(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<(), Stopped> {
-    let Some(bound) = a.faces.bound.get(f).copied() else {
-        return Ok(());
-    };
+    let bound = a.faces.bound.get(f).copied();
     for n in face_fins(a, f) {
         sink.charge()?;
         if let Some((v, _)) = fin_ends(a, n)
-            && !bound.contains(point(a, v))
+            && bound.is_some_and(|b| !b.contains(point(a, v)))
         {
             sink.push(Fault::at(FaultKind::FaceBound, Entity::Face(f)).with(Entity::Vertex(v)));
         }
