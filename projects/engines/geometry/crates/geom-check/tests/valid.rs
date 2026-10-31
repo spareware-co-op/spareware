@@ -96,6 +96,14 @@ fn curved_bodies_recorded_exact_fail_only_where_their_bound_is_needed() {
 fn flat_bodies_pass_recorded_exact() {
     for (name, rows, kind) in [
         ("cube", cube(), BodyKind::Solid),
+        (
+            "tetrahedron",
+            common::polyhedron(
+                &[[0, 0, 0], [10, 0, 0], [0, 10, 0], [0, 0, 10]],
+                &[&[0, 2, 1], &[0, 1, 3], &[0, 3, 2], &[1, 2, 3]],
+            ),
+            BodyKind::Solid,
+        ),
         ("square sheet", square_sheet(), BodyKind::Sheet),
         ("wire", wire(), BodyKind::Wire),
         ("acorn", acorn(), BodyKind::Acorn),
