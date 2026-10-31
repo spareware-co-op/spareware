@@ -67,6 +67,8 @@ pub enum OpErrorDetail {
     Make(MakeDetail),
     /// A batch that could not run its items (piece G104).
     Batch(BatchDetail),
+    /// A failure of a query (chapter 22; piece G102).
+    Query(QueryDetail),
 }
 
 impl OpErrorDetail {
@@ -78,6 +80,7 @@ impl OpErrorDetail {
             OpErrorDetail::Num(detail) => detail.kind(),
             OpErrorDetail::Make(detail) => detail.kind(),
             OpErrorDetail::Batch(detail) => detail.kind(),
+            OpErrorDetail::Query(detail) => detail.kind(),
         }
     }
 
@@ -89,6 +92,7 @@ impl OpErrorDetail {
             OpErrorDetail::Num(detail) => detail.remedies(),
             OpErrorDetail::Make(detail) => detail.remedies(),
             OpErrorDetail::Batch(detail) => detail.remedies(),
+            OpErrorDetail::Query(detail) => detail.remedies(),
         }
     }
 }
@@ -100,6 +104,7 @@ impl fmt::Display for OpErrorDetail {
             OpErrorDetail::Num(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Make(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Batch(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Query(detail) => fmt::Display::fmt(detail, f),
         }
     }
 }
@@ -493,6 +498,84 @@ impl fmt::Display for MakeDetail {
 }
 
 impl core::error::Error for MakeDetail {}
+
+/// Why a query could not answer (chapter 22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum QueryDetail {
+    /// A link into a row its arena does not have, or a list that does not end: never in a body
+    /// published by the builder and passed by the checker.
+    Malformed,
+    /// An edge is not a straight line between two vertices, and the query needs polygons.
+    CurvedEdge {
+        /// The edge's row.
+        edge: u32,
+    },
+    /// A face is not on a plane, and the query needs polygons.
+    CurvedFace {
+        /// The face's row.
+        face: u32,
+    },
+    /// A face has no loop, and the query needs polygons.
+    NoLoops {
+        /// The face's row.
+        face: u32,
+    },
+    /// A volume asked of a body that is not a solid.
+    NotSolid,
+    /// A sum past its integer's width: never for a body within its arenas' limits.
+    Overflow,
+}
+
+impl QueryDetail {
+    /// The base kind.
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
+        match self {
+            QueryDetail::Malformed | QueryDetail::NotSolid => ErrorKind::InvalidInput,
+            QueryDetail::CurvedEdge { .. }
+            | QueryDetail::CurvedFace { .. }
+            | QueryDetail::NoLoops { .. } => ErrorKind::Unsupported,
+            QueryDetail::Overflow => ErrorKind::Internal,
+        }
+    }
+
+    /// The remedies this detail knows: the input to change, the piece that adds a route, or a
+    /// report.
+    #[must_use]
+    pub fn remedies(&self) -> Vec<Remedy> {
+        let change = |input: &'static str| Remedy::ChangeInput { input, to: None };
+        match self {
+            QueryDetail::Malformed | QueryDetail::NotSolid => vec![change("body")],
+            QueryDetail::CurvedEdge { .. }
+            | QueryDetail::CurvedFace { .. }
+            | QueryDetail::NoLoops { .. } => vec![Remedy::AwaitPiece { piece: "G177" }],
+            QueryDetail::Overflow => vec![Remedy::Report],
+        }
+    }
+}
+
+impl fmt::Display for QueryDetail {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            QueryDetail::Malformed => f.write_str("the body's links do not make a body"),
+            QueryDetail::CurvedEdge { edge } => {
+                write!(f, "edge {edge} is not a straight line between two vertices")
+            }
+            QueryDetail::CurvedFace { face } => write!(f, "face {face} is not on a plane"),
+            QueryDetail::NoLoops { face } => write!(f, "face {face} has no loop"),
+            QueryDetail::NotSolid => f.write_str("the body is not a solid"),
+            QueryDetail::Overflow => f.write_str("a sum went past its integer's width"),
+        }
+    }
+}
+
+impl core::error::Error for QueryDetail {}
+
+impl From<QueryDetail> for OpErrorDetail {
+    fn from(detail: QueryDetail) -> Self {
+        OpErrorDetail::Query(detail)
+    }
+}
 
 impl From<MakeDetail> for OpErrorDetail {
     fn from(detail: MakeDetail) -> Self {

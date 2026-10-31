@@ -13,7 +13,8 @@
 //!
 //! - **Nothing hidden.** A [`Report`] passes only when it found no fault, kept or counted; a group
 //!   the level asked for but which is not built yet is listed in [`Report::missing`], never
-//!   counted as passed.
+//!   counted as passed, and what a curved face or shell leaves unjudged is counted in
+//!   [`Report::deferred`].
 //! - **One order.** Faults are listed in the order the checks find them, which is fixed (each
 //!   check runs over rows in ascending order), so the same body gives the same report everywhere.
 //! - **Plain words.** Every [`FaultKind`] has a sentence saying what is wrong ([`FaultKind::what`]),
@@ -267,8 +268,25 @@ pub enum FaultKind {
     /// A pair group 3 has no certified test for: two edges of one face or two faces whose
     /// carriers no closed form here separates (a face with holes or not convex against a crossing
     /// plane, two curved faces, a circle crossing a plane's line). Reported, never passed. `at`
-    /// and `with` are the two edges or the two faces.
+    /// and `with` are the two edges, the two faces or the two shells.
     PairUnchecked,
+    /// A flat face does not have exactly one loop running counter-clockwise seen from outside the
+    /// material with the rest clockwise, or a loop encloses no area. `at` is the face, `with` the
+    /// first loop that is wrong, if one is; the fault's value is how many loops run
+    /// counter-clockwise.
+    LoopSense,
+    /// A flat face's stored box does not hold one of its vertices. `at` is the face, `with` the
+    /// vertex.
+    FaceBound,
+    /// A solid region has no shell facing outward: its shells are all inside out. `at` is the
+    /// region, `with` its first shell.
+    ShellInward,
+    /// A solid region has a second shell facing outward. `at` is the shell, `with` the first.
+    ShellOutward,
+    /// A shell lies where it cannot: a cavity outside its region's outer shell or inside another
+    /// cavity of its region, or a solid region's outer shell inside another's material. `at` is
+    /// the shell, `with` the shell it is judged against.
+    ShellNesting,
 }
 
 impl FaultKind {
@@ -282,10 +300,15 @@ impl FaultKind {
             FaultKind::VertexOffSurface
             | FaultKind::VertexOffCurve
             | FaultKind::EdgeOffSurface
-            | FaultKind::Unchecked => Group::Geometric,
-            FaultKind::EdgesCross | FaultKind::FacesCross | FaultKind::PairUnchecked => {
-                Group::SelfIntersection
-            }
+            | FaultKind::Unchecked
+            | FaultKind::FaceBound => Group::Geometric,
+            FaultKind::EdgesCross
+            | FaultKind::FacesCross
+            | FaultKind::PairUnchecked
+            | FaultKind::LoopSense
+            | FaultKind::ShellInward
+            | FaultKind::ShellOutward
+            | FaultKind::ShellNesting => Group::SelfIntersection,
             _ => Group::Combinatorial,
         }
     }
@@ -336,6 +359,11 @@ impl FaultKind {
             FaultKind::EdgesCross => "two edges of the face meet other than at a shared vertex",
             FaultKind::FacesCross => "the two faces meet other than along a shared edge or vertex",
             FaultKind::PairUnchecked => "no certified test of this pair exists yet",
+            FaultKind::LoopSense => "the face's loops do not run as one outer loop and holes",
+            FaultKind::FaceBound => "the face's stored box does not hold its vertex",
+            FaultKind::ShellInward => "no shell of the solid region faces outward",
+            FaultKind::ShellOutward => "a second shell of the solid region faces outward",
+            FaultKind::ShellNesting => "the shell lies where the region's shells cannot",
         }
     }
 }
@@ -350,7 +378,8 @@ pub struct Fault {
     /// A second entity the fault involves, where there is one.
     pub with: Option<Entity>,
     /// A count the fault reports, where there is one: an edge's fins ([`FaultKind::FinCount`]),
-    /// a shell's characteristic ([`FaultKind::Euler`]).
+    /// a shell's characteristic ([`FaultKind::Euler`]), a face's counter-clockwise loops
+    /// ([`FaultKind::LoopSense`]).
     pub value: Option<i64>,
 }
 
@@ -404,6 +433,7 @@ impl fmt::Display for Fault {
 pub struct Report {
     pub(crate) faults: Vec<Fault>,
     pub(crate) more: u64,
+    pub(crate) deferred: u64,
     pub(crate) ran: [bool; 4],
     pub(crate) missing: [bool; 4],
 }
@@ -425,6 +455,14 @@ impl Report {
     #[must_use]
     pub const fn more(&self) -> u64 {
         self.more
+    }
+
+    /// How many faces and shells had their loop sense, stored box or orientation left unjudged
+    /// because they are curved: pieces G177 and on. They are not faults, and nothing about them is
+    /// claimed.
+    #[must_use]
+    pub const fn deferred(&self) -> u64 {
+        self.deferred
     }
 
     /// The groups that ran, in 8.3's order.

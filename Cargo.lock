@@ -696,6 +696,7 @@ dependencies = [
  "geom-curve",
  "geom-make",
  "geom-math",
+ "geom-name",
  "geom-num",
  "geom-op",
  "geom-pool",
@@ -1283,9 +1284,11 @@ dependencies = [
 name = "geom-name"
 version = "0.0.0"
 dependencies = [
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-surface",
  "geom-test",
  "geom-topo",
  "proptest",
@@ -1594,6 +1597,9 @@ dependencies = [
  "geom-run",
  "geom-surface",
  "geom-test",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
  "proptest",
 ]
 

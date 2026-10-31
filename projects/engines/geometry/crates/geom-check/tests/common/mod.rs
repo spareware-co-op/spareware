@@ -188,9 +188,10 @@ impl Rows {
     }
 
     /// The plane a face with `loops` lies on, and the box of its vertices: the plane through the
-    /// first three of its vertices that are not on one line, spanned by their differences, so
-    /// every vertex of a flat polygon lies on it exactly; `plane()`, z = 0, for loops of closed
-    /// edges without vertices (the circles all lie in z = 0).
+    /// first three of its vertices that are not on one line, spanned by their differences the way
+    /// that makes its first loop run counter-clockwise, so every vertex of a flat polygon lies on
+    /// it exactly and a forward face's first loop is its outer loop; `plane()`, z = 0, for loops
+    /// of closed edges without vertices (the circles all lie in z = 0).
     fn carrier(&self, loops: &[&[(u32, Sense)]]) -> (SurfaceKind, Box3) {
         let mut points: Vec<P3> = Vec::new();
         for ring in loops {
@@ -213,6 +214,30 @@ impl Rows {
             P3::new(c[0], c[1], c[2]).unwrap()
         };
         let bound = Box3::new(corner(i64::min), corner(i64::max)).unwrap();
+        let starts: Vec<[i64; 3]> = loops
+            .first()
+            .into_iter()
+            .flat_map(|ring| ring.iter())
+            .filter_map(|&(e, sense)| {
+                let edge = self.edges[e as usize];
+                let v = if sense == Sense::Forward {
+                    edge.start
+                } else {
+                    edge.end
+                }?;
+                Some(xyz(
+                    self.points[self.vertices[v.row() as usize].point.row() as usize]
+                ))
+            })
+            .collect();
+        let mut area = [0_i128; 3];
+        for (k, p) in starts.iter().enumerate() {
+            let p = p.map(i128::from);
+            let q = starts[(k + 1) % starts.len()].map(i128::from);
+            area[0] += p[1] * q[2] - p[2] * q[1];
+            area[1] += p[2] * q[0] - p[0] * q[2];
+            area[2] += p[0] * q[1] - p[1] * q[0];
+        }
         for i in 0..points.len() {
             for j in i + 1..points.len() {
                 for k in j + 1..points.len() {
@@ -227,8 +252,15 @@ impl Rows {
                     ];
                     if cross != [0; 3] {
                         let f = |w: [i64; 3]| w.map(|x| x as f64);
+                        // In doubles: a fixture's areas and normals pass an i128's product, and
+                        // only the sign matters.
+                        let dot = |p: i128, q: i128| p as f64 * q as f64;
+                        let turn = dot(cross[0], area[0])
+                            + dot(cross[1], area[1])
+                            + dot(cross[2], area[2]);
+                        let (a, b) = if turn < 0.0 { (v, u) } else { (u, v) };
                         let surface = SurfaceKind::Plane(
-                            Plane::new(f(o), f(u), f(v), ((0.0, 1.0), (0.0, 1.0))).unwrap(),
+                            Plane::new(f(o), f(a), f(b), ((0.0, 1.0), (0.0, 1.0))).unwrap(),
                         );
                         return (surface, bound);
                     }

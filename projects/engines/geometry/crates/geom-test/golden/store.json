@@ -604,6 +604,16 @@
             "function": "prune_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "f04dd902446d1ee7162c648b8191dbdb359dd34ba7ab5e4bb4b8610e9354790c"
+        },
+        {
+          "id": "geom-make/queries",
+          "what": "The core queries (piece G102) over 32 boxes, each also moved, 32 prisms and 8 cylinders from a fixed stream: every face's row, name and roles, twice-area vectors, the bounding box, six times the volume, the exactness report's counts and the validity report's deferred count, as tests/query_determinism.rs records them.",
+          "check": {
+            "crate": "geom-make",
+            "test": "query_determinism",
+            "function": "queries_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "b8f2e38d41f1e8a7dacd616b124f55c6b7b46cc691203456872debd94e8f9c4f"
         }
       ]
     }

@@ -5363,46 +5363,6 @@
       "reason": "The mutant's find returns only from a row that is not a root and loops at a root, where up == row makes grand = row forever. shells() calls find on every valid body (attack_g85.rs's first test builds cubes), so the first test binary never ends: caught as a hang."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace Sets<'s>::size -> u32 with 0",
-      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace Sets<'s>::size -> u32 with 1",
-      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with == in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with > in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with <= in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
       "mutant": "replace * with / in carrier",
       "line_text": "slope: slope * s.axial_sign(),",

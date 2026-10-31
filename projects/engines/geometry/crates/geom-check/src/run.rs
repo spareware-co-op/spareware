@@ -22,9 +22,9 @@
 //! 28.4 run it (`projects/engines/geometry/architecture/08-topology.md`,
 //! `projects/engines/geometry/architecture/28-testing.md`).
 //!
-//! Cost: the sum of the groups run, each linear in the body's rows; it reserves
-//! [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most three per
-//! vertex and one per edge), shared by every check.
+//! Cost: the sum of the groups run, each linear in the body's rows except group 3, quadratic in
+//! faces and in shells; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few
+//! words per row (at most three per vertex and one per edge), shared by every check.
 
 use alloc::vec::Vec;
 
@@ -34,7 +34,7 @@ use geom_topo::Body;
 
 use crate::report::{Group, Level, Report};
 use crate::sink::Sink;
-use crate::{combinatorial, exactness};
+use crate::{combinatorial, exactness, flat, orientation};
 use crate::{geometric, self_intersection};
 
 /// Checks `body`, recorded with `exactness`, at `level`.
@@ -78,6 +78,7 @@ pub fn check(
                     continue;
                 }
                 geometric::check(body, exactness, &mut sink)?;
+                flat::boxes(body.arenas(), &mut sink)?;
                 &mut ran
             }
             // Group 3 compares the carriers group 2 certified, so it runs only on a body groups 1
@@ -87,6 +88,13 @@ pub fn check(
                     continue;
                 }
                 self_intersection::check(body, exactness, &mut sink)?;
+                // Which way a loop runs means something only for a loop that does not cross
+                // itself, and which way a shell faces and where it lies only for shells that do
+                // not cross.
+                if sink.found() == 0 {
+                    flat::sense(body, &mut sink)?;
+                    orientation::check(body, &mut scratch, &mut sink)?;
+                }
                 &mut ran
             }
         };
@@ -95,6 +103,7 @@ pub fn check(
     Ok(Report {
         faults: sink.faults,
         more: sink.more,
+        deferred: sink.deferred,
         ran,
         missing,
     })

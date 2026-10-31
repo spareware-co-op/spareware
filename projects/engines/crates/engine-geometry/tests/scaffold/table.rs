@@ -354,7 +354,7 @@ const ROWS: &[Row<'static>] = &[
     // scaffolded here: G04 built only geom-run; G33 wrote its native pool (rayon), and G456 adds
     // Web Workers.
     Row { name: "engine-geometry", layer: Layer::N(13), kind: Kind::Facade, origin: Accepted,
-          state: Elsewhere("G100"), deps: Deps::Exact("pool num math curve surface topo run op make"),
+          state: Elsewhere("G100"), deps: Deps::Exact("pool num math curve surface topo run op make check name"),
           external: "kit-core" },
     Row { name: "geom-pool", layer: Layer::N(13), kind: Kind::KernelStd, origin: Amended27,
           state: Elsewhere("G33"), deps: Deps::Exact("run"), external: "" },

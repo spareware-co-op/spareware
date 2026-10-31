@@ -10,9 +10,11 @@ license.workspace = true
 # facade re-exports (src/value.rs and src/schema.rs, piece G100), and geom-pool behind the
 # `threads` feature. Checked by tests/scaffold, which holds the kernel's crate table (chapter 27).
 kit-core = { path = "../../../kit/crates/kit-core" }
+geom-check = { path = "../../geometry/crates/geom-check" }
 geom-curve = { path = "../../geometry/crates/geom-curve" }
 geom-make = { path = "../../geometry/crates/geom-make" }
 geom-math = { path = "../../geometry/crates/geom-math" }
+geom-name = { path = "../../geometry/crates/geom-name" }
 geom-num = { path = "../../geometry/crates/geom-num" }
 geom-op = { path = "../../geometry/crates/geom-op" }
 geom-run = { path = "../../geometry/crates/geom-run" }

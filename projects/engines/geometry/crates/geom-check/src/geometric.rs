@@ -306,7 +306,7 @@ pub(crate) fn point(a: &Arenas, v: Ix<Vertex>) -> P3 {
 
 /// The integer plane of a surface that is a plane given by integers: its origin and two spanning
 /// vectors, every coordinate a whole number of steps within the grid's range.
-fn plane(surface: &SurfaceKind) -> Option<GridPlane> {
+pub(crate) fn plane(surface: &SurfaceKind) -> Option<GridPlane> {
     let SurfaceKind::Plane(flat) = surface else {
         return None;
     };
