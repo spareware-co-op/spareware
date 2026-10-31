@@ -35,7 +35,7 @@ use geom_format::operation::Operation;
 use geom_format::record::Record;
 use geom_op::{Diagnostic, ErrorKind, Exactness, History, NameId, NameSet, OpError};
 
-use super::{Expect, Fixture, Hash, Kind, Measures, Name, OpLog, OpVersions, Status};
+use super::{Expect, Fixture, Hash, Kind, Measures, Name, OpLog, OpVersions, Spend, Status};
 use crate::canonical::{CanonicalError, Outcome, canonical_output};
 use crate::golden::Sha256;
 use crate::golden::check::{PERTURBATION_SEEDS, REPEATS};
@@ -57,6 +57,8 @@ pub struct Step {
     pub exactness: Exactness,
     /// Its warnings, in the order it gave them.
     pub diagnostics: Vec<Diagnostic>,
+    /// What it charged.
+    pub work: Spend,
 }
 
 /// How an operation ended.
@@ -64,8 +66,8 @@ pub struct Step {
 pub enum Ran {
     /// It succeeded.
     Done(Step),
-    /// It failed with a typed error.
-    Failed(OpError),
+    /// It failed with a typed error, having charged this much.
+    Failed(OpError, Spend),
     /// The engine cannot run it at all: an unknown operation or version, or a broken input. No
     /// operation of the kernel reported this; the log did.
     Refused(String),
@@ -96,6 +98,8 @@ pub enum Replayed {
         hash: Hash,
         /// The measures of the result.
         measures: Measures,
+        /// What the log charged.
+        work: Spend,
     },
     /// An operation failed with a typed error, and the log stopped there.
     Failed {
@@ -105,9 +109,40 @@ pub enum Replayed {
         kind: ErrorKind,
         /// The entities it names.
         entities: Vec<NameId>,
+        /// What the log charged.
+        work: Spend,
     },
     /// A panic, an input the engine refused, or an output that has no encoding.
     Broken(String),
+}
+
+impl Replayed {
+    /// What a fixture holds of this run; `None` for a broken run, which no fixture may hold.
+    #[must_use]
+    pub fn expectation(&self) -> Option<Expect> {
+        match self {
+            Replayed::Done {
+                hash,
+                measures,
+                work,
+            } => Some(Expect::Ok {
+                hash: Some(*hash),
+                work: Some(*work),
+                measures: measures.clone(),
+            }),
+            Replayed::Failed {
+                kind,
+                entities,
+                work,
+                ..
+            } => Some(Expect::Err {
+                kind: Kind(*kind),
+                entities: entities.iter().copied().map(Name).collect(),
+                work: Some(*work),
+            }),
+            Replayed::Broken(_) => None,
+        }
+    }
 }
 
 /// The log's hash, from each operation's canonical output.
@@ -143,6 +178,7 @@ fn panic_text(payload: &(dyn core::any::Any + Send)) -> String {
 /// Runs `log` through `engine`, stopping at the first typed error.
 pub fn replay(engine: &mut dyn Engine, log: &OpLog) -> Replayed {
     let mut outputs = Vec::with_capacity(log.operations.len());
+    let mut work = Spend::default();
     if let Err(why) = engine.start(log.heal, &log.inputs) {
         return Replayed::Broken(format!("the inputs: {why}"));
     }
@@ -160,10 +196,13 @@ pub fn replay(engine: &mut dyn Engine, log: &OpLog) -> Replayed {
         };
         match ran {
             Ran::Done(step) => match output_of(operation, &step) {
-                Ok(output) => outputs.push(output),
+                Ok(output) => {
+                    outputs.push(output);
+                    work = work.plus(step.work);
+                }
                 Err(e) => return Replayed::Broken(format!("operation {at}: {e}")),
             },
-            Ran::Failed(error) => {
+            Ran::Failed(error, charged) => {
                 return match canonical_output(&Outcome::Error(&error)) {
                     Ok(output) => {
                         outputs.push(output);
@@ -171,6 +210,7 @@ pub fn replay(engine: &mut dyn Engine, log: &OpLog) -> Replayed {
                             hash: combine(&outputs),
                             kind: error.kind(),
                             entities: error.entities().to_vec(),
+                            work: work.plus(charged),
                         }
                     }
                     Err(e) => Replayed::Broken(format!("operation {at}: {e}")),
@@ -188,6 +228,7 @@ pub fn replay(engine: &mut dyn Engine, log: &OpLog) -> Replayed {
         Ok(measures) => Replayed::Done {
             hash: combine(&outputs),
             measures,
+            work,
         },
         Err(payload) => Replayed::Broken(format!(
             "the measures panicked: {}",
@@ -196,15 +237,26 @@ pub fn replay(engine: &mut dyn Engine, log: &OpLog) -> Replayed {
     }
 }
 
-/// Whether `got` is what `want` states. A hash left out of `want` is not compared.
+/// The work count `want` states, if it states one, when `got` gave another.
+fn moved_work(got: &Replayed, want: &Expect) -> Option<(Spend, Spend)> {
+    let (Replayed::Done { work, .. } | Replayed::Failed { work, .. }) = got else {
+        return None;
+    };
+    let (Expect::Ok { work: stated, .. } | Expect::Err { work: stated, .. }) = want;
+    stated.filter(|s| s != work).map(|s| (*work, s))
+}
+
+/// Whether `got` is what `want` states, the work count aside. A hash left out of `want` is not
+/// compared.
 #[must_use]
 pub fn matches(got: &Replayed, want: &Expect) -> bool {
     match (got, want) {
         (
-            Replayed::Done { hash, measures },
+            Replayed::Done { hash, measures, .. },
             Expect::Ok {
                 hash: want_hash,
                 measures: want_measures,
+                ..
             },
         ) => want_hash.is_none_or(|h| h == *hash) && measures == want_measures,
         (
@@ -212,6 +264,7 @@ pub fn matches(got: &Replayed, want: &Expect) -> bool {
             Expect::Err {
                 kind: want_kind,
                 entities: want_entities,
+                ..
             },
         ) => {
             Kind(*kind) == *want_kind
@@ -253,6 +306,16 @@ pub enum Failure {
         /// The run that differs.
         other: Box<Replayed>,
     },
+    /// The results match, but the work count moved: a change of schedule, which ships only as a
+    /// new operation version (23.10, 26.2).
+    Work {
+        /// The key's versions.
+        operations: OpVersions,
+        /// What it charged.
+        got: Spend,
+        /// The golden counts.
+        want: Spend,
+    },
     /// The run does not match.
     Mismatch {
         /// The key's versions.
@@ -277,6 +340,7 @@ impl Failure {
         match self {
             Failure::NoGolden { .. } => "no golden".to_owned(),
             Failure::Repeat { .. } => "not repeatable".to_owned(),
+            Failure::Work { .. } => "work count".to_owned(),
             Failure::Mismatch { got, .. } => of(got),
         }
     }
@@ -295,6 +359,15 @@ impl fmt::Display for Failure {
             } => write!(
                 f,
                 "two runs at {operations:?} differ: {first:?} and {other:?}"
+            ),
+            Failure::Work {
+                operations,
+                got,
+                want,
+            } => write!(
+                f,
+                "at {operations:?}: charged {got:?}, the golden is {want:?}, and a count changes \
+                 only with a new operation version"
             ),
             Failure::Mismatch {
                 operations,
@@ -329,7 +402,14 @@ fn judge(fixture: &Fixture, operations: &OpVersions, want: &Expect, got: Replaye
         return Verdict::Improved;
     }
     if matches(&got, want) {
-        return Verdict::Pass;
+        return match moved_work(&got, want) {
+            None => Verdict::Pass,
+            Some((got, want)) => Verdict::Fail(Failure::Work {
+                operations: operations.clone(),
+                got,
+                want,
+            }),
+        };
     }
     Verdict::Fail(Failure::Mismatch {
         operations: operations.clone(),

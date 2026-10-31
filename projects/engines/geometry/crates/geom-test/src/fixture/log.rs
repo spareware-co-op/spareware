@@ -35,6 +35,7 @@ use geom_op::cbor::EncodeError;
 use geom_run::{Budget, WorkMeter};
 
 use super::OpVersions;
+use super::run::Ran;
 
 /// The program a log's header names.
 pub const PROGRAM: &str = "spare-kit fixture";
@@ -172,6 +173,21 @@ impl OpLog {
         } else {
             Err(LogError::NotCanonical)
         }
+    }
+
+    /// Adds `operation` to the log unless it must not stay there: `ran` says how it ended. A run
+    /// stopped by its caller or its machine (`Cancelled`, `OutOfMemory`) is never the operation's
+    /// result (28.13), and an operation the engine refused never ran. Whether it was added.
+    pub fn record(&mut self, operation: &Operation, ran: &Ran) -> bool {
+        let stays = match ran {
+            Ran::Done(_) => true,
+            Ran::Failed(error, _) => error.kind().is_replayable(),
+            Ran::Refused(_) => false,
+        };
+        if stays {
+            self.operations.push(operation.clone());
+        }
+        stays
     }
 
     /// The operation versions the log names. An operation that runs twice at two versions keeps

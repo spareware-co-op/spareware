@@ -17,8 +17,11 @@
 //!   order the rows were written in (8.2, 20.2).
 //! - **Checked before returned.** A body that does not pass the checker at the build's level is
 //!   never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.
-//! - **Charged by what it builds.** One meter unit per row built ([`PER_ROW`]), before it is built
-//!   (23.10), and the publishing and the checker charge their own rows to the same meter.
+//! - **Charged by what it builds.** One meter unit ([`PER_ROW`]) and 64 logical bytes per row built,
+//!   before it is built (23.10), and the publishing charges its own rows to the same meter. The
+//!   postcondition check runs on a meter of its own, cancellable and without a limit: its level
+//!   differs between a test build and a shipped one, and a budget must stop an operation the same way
+//!   in both.
 //! - **Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation
 //!   did not report, returns no body (`OpContext::run`).
 //!
@@ -41,7 +44,7 @@ use geom_op::{
     Charge, MakeDetail, NameId, NameList, NameSet, OpContext, OpError, OpOutput, OpPath, Role,
     TopoName,
 };
-use geom_run::{Phase, WorkMeter};
+use geom_run::{LogicalSize, Phase, WorkMeter};
 use geom_surface::SurfaceKind;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
@@ -184,6 +187,28 @@ pub(crate) fn assemble(
     ctx.run(|meter| built(ctx, meter, part, exactness))
 }
 
+/// One row of a body, for the logical-memory budget (23.10): the size of the widest record any
+/// arena holds, fixed by the operation's version, whatever a row takes on this machine.
+struct Row;
+
+impl LogicalSize for Row {
+    const LOGICAL_BYTES: u64 = 64;
+}
+
+/// Charges `rows` rows to `meter`: their work, then their logical memory, before they are built.
+pub(crate) fn charge_rows(
+    ctx: &OpContext<'_>,
+    meter: &mut WorkMeter<'_>,
+    rows: u64,
+) -> Result<(), OpError> {
+    PER_ROW
+        .charge(meter, rows)
+        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
+    meter
+        .reserve_for::<Row>(rows)
+        .map_err(|stop| ctx.stopped(meter, stop, PHASE))
+}
+
 /// [`assemble`]'s body, on the operation's meter.
 fn built(
     ctx: &OpContext<'_>,
@@ -208,9 +233,7 @@ fn built(
         .try_fold(roles.len(), |n, l| n.checked_add(1)?.checked_add(l.len()))
         .and_then(|n| u64::try_from(n).ok())
         .ok_or_else(defect)?;
-    PER_ROW
-        .charge(meter, rows)
-        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
+    charge_rows(ctx, meter, rows)?;
     let mut names = Names {
         regions: Vec::new(),
         faces: Vec::new(),
@@ -240,7 +263,7 @@ fn built(
     let body = filled(&rows, part)
         .and_then(|b| b.publish_named(&names, BodyKind::Solid, outside_row, meter))
         .map_err(|e| unbuilt(ctx, meter, e))?;
-    finish(ctx, meter, body, records, None, exactness)
+    finish(ctx, body, records, None, exactness)
 }
 
 /// A solid's topology, as rows.
@@ -268,18 +291,19 @@ enum Kind {
 ///
 /// # Errors
 ///
-/// The meter's stop; [`MakeDetail::ResultInvalid`] if the body does not pass the checker;
+/// `Cancelled`; [`MakeDetail::ResultInvalid`] if the body does not pass the checker;
 /// [`MakeDetail::BuildFailed`] if the history cannot be formed.
 pub(crate) fn finish(
     ctx: &OpContext<'_>,
-    meter: &mut WorkMeter<'_>,
     body: Body,
     records: Vec<Record>,
     motion: Option<Motion>,
     exactness: Exactness,
 ) -> Result<OpOutput<Made>, OpError> {
-    let report = check(&body, exactness, Level::of_build(), meter)
-        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
+    // The check's level differs by build, so its work stays off the operation's budget.
+    let mut checking = ctx.unbudgeted_meter();
+    let report = check(&body, exactness, Level::of_build(), &mut checking)
+        .map_err(|stop| ctx.stopped(&checking, stop, PHASE))?;
     if !report.passed() {
         let first = report.faults().first().map_or_else(
             || alloc::string::String::from("the checker reported faults"),

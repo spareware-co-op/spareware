@@ -17,6 +17,8 @@
 //! - **`Known` becomes `Pass` freely** when the new expectation is the one it wanted: that is
 //!   [`super::run::Verdict::Improved`] being carried out, and no result anyone relied on moves.
 //! - **History is only added to.**
+//! - **A work count moves only with a new operation version** (G98): an expectation that differs in
+//!   its count and nothing else is refused, recorded or not.
 //!
 //! Guarantees: every change to a stored fixture is sorted, so one that fits no rule is refused;
 //! the answer depends only on the two sets given; nothing reads a clock or the network.
@@ -29,7 +31,7 @@
 use std::collections::BTreeMap;
 
 use super::run::{Replayed, matches};
-use super::{Expect, Fixture, Status};
+use super::{Expect, Fixture, Spend, Status};
 use crate::golden::store::State;
 
 /// What a pull request does to the fixtures.
@@ -59,13 +61,47 @@ fn is_wanted(head: &Expect, wanted: &Expect) -> bool {
         Expect::Ok {
             hash: Some(hash),
             measures,
+            ..
         } => matches(
             &Replayed::Done {
                 hash: *hash,
                 measures: measures.clone(),
+                work: Spend::default(),
             },
             wanted,
         ),
+        _ => false,
+    }
+}
+
+/// Whether two expectations differ in their work count and nothing else.
+fn only_work_moved(was: &Expect, now: &Expect) -> bool {
+    let moved = |before: &Option<Spend>, after: &Option<Spend>| before != after;
+    match (was, now) {
+        (
+            Expect::Ok {
+                hash,
+                work,
+                measures,
+            },
+            Expect::Ok {
+                hash: new_hash,
+                work: new_work,
+                measures: new_measures,
+            },
+        ) => hash == new_hash && measures == new_measures && moved(work, new_work),
+        (
+            Expect::Err {
+                kind,
+                entities,
+                work,
+            },
+            Expect::Err {
+                kind: new_kind,
+                entities: new_entities,
+                work: new_work,
+            },
+        ) => kind == new_kind && entities == new_entities && moved(work, new_work),
         _ => false,
     }
 }
@@ -127,6 +163,12 @@ fn compare(
             Some(now) => match state_of(edition) {
                 Some(State::Open) if improved.is_some_and(|wanted| is_wanted(now, wanted)) => {
                     out.free.push(format!("{id}: Known moved to Pass at {operations:?}"));
+                }
+                Some(State::Open) if only_work_moved(was, now) => {
+                    out.refused.push(format!(
+                        "{id}: the work count of {edition} at {operations:?} moved; a count \
+                         changes only with a new operation version"
+                    ));
                 }
                 Some(State::Open) => {
                     changes = changes.saturating_add(1);
