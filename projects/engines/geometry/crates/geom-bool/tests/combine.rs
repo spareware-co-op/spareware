@@ -586,7 +586,11 @@ fn a_section_is_the_curve_where_operands_meet() {
     let apart = cuboid([100, 0, 0], [10, 10, 10]);
     let out = picked(vec![solid(1, &a), solid(2, &apart)], Selection::Section);
     assert_eq!(out.result[0][0].arenas().edges.len(), 0);
-    assert!(out.diagnostics.iter().any(|d| d.code == "bool.empty_result"));
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "bool.empty_result")
+    );
 }
 
 #[test]

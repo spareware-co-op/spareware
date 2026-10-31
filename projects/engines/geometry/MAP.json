@@ -1239,6 +1239,50 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a boolean's input was refused.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
+          "kinds": [
+            {
+              "doc": "Two operands share a key.",
+              "name": "DuplicateOperand",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A selection names a key that no solid operand has.",
+              "name": "UnknownOperand",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A test does not leave one answer, or is too deep.",
+              "name": "BadTest",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A face of this operand is not flat on integers.",
+              "name": "NotPlaneBased",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A face that cannot enter: an edge with no fins of its own, or a corner with no planes.",
+              "name": "Broken",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_bool::operand",
+          "name": "PrepareError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why pieces could not be made into a body.",
           "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
           "kinds": [
@@ -1285,6 +1329,77 @@
       "layer": "6",
       "modules": [
         {
+          "cost": "what [`prepare`], [`arrange`] and [`rebuild`] cost, and the checker per result.",
+          "does": "[`combine`] prepares its operands, arranges their polygons, and for each selection rebuilds what it keeps and holds the body to the checker. [`unite`], [`subtract`] and [`intersect`] are its three commonest calls. [`COMBINE`] is its schema.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+          "guarantees": [
+            "**One arrangement, several results.** The selections share every clip, cut and trace (11.1).",
+            "**One list per selection.** Most selections give one body, split one per cell, and each selection's list stands in its place.",
+            "**Inputs are never changed, and nothing is returned unchecked.** A result that fails the checker is an error, never a body (11.10).",
+            "**As exact as the least exact operand.** A flat arrangement adds no error of its own (11.3).",
+            "**The same bytes on any threads, and in any order of the operands.** The order is the keys', and the work is deterministic (23.4)."
+          ],
+          "job": "The boolean's entry: one arrangement, one body per selection (11.1).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "chapter 11.1's selections on 11.3's exact polyhedral path (`projects/engines/geometry/architecture/11-booleans.md`), EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+          },
+          "path": "geom_bool::combine",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant, and what [`rebuild`] costs on seven pieces.",
+          "does": "[`half_space`] builds the solid bounded by a plane and the frame's range box, with corners at ±(2^40 − 1) steps. It is a body like any other, so it enters a boolean as a solid and stays exact: IFC's half-space that clips a wall under a roof is one of these, and its boxed half-space is the same one, since the box there is only a search aid.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
+          "guarantees": [
+            "**Exact.** The plane is the one through three grid points, and every corner is a meeting of integer planes.",
+            "**Below the normal.** The material lies on the plane's negative side, so a plane through `a`, `b`, `c` keeps what is behind (b − a) × (c − a).",
+            "**Refused, never guessed.** Three points on one line are [`RebuildError::Num`]."
+          ],
+          "job": "Half-spaces: everything on one side of a plane, as a solid operand (11.1).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://github.com/buildingSMART/IFC4.3.x-development/blob/5d08761e63557bd3ded140139eede665ec31511c/docs/schemas/resource/IfcGeometricModelResource/Entities/IfcBoxedHalfSpace.md"
+            ],
+            "text": "chapter 11.1 (`projects/engines/geometry/architecture/11-booleans.md`), and the IFC entities it cites ([IfcBoxedHalfSpace](https://github.com/buildingSMART/IFC4.3.x-development/blob/5d08761e63557bd3ded140139eede665ec31511c/docs/schemas/resource/IfcGeometricModelResource/Entities/IfcBoxedHalfSpace.md))."
+          },
+          "path": "geom_bool::half_space",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the operands' fins, and what [`convex_pieces`] costs per face. Charges the meter what that does.",
+          "does": "an [`Operand`] is a body with a stable key and a kind, and a [`Selection`] says what to keep. [`prepare`] checks them, orders the operands by key, gives each solid an entry of the arrangement, turns each selection into a [`WindingTest`], and converts every face into the convex [`Polygon`]s the arrangement takes, each with the [`Carrier`] its pieces will return to.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
+          "guarantees": [
+            "**The order of the operands does not count.** Entries follow the keys, and every later step follows the entries (11.1).",
+            "**Refused, never guessed.** Two operands with one key are [`PrepareError::DuplicateOperand`], a target that is no operand is [`PrepareError::UnknownOperand`], and a face that is not flat on integers is [`PrepareError::NotPlaneBased`], which the curved path will take (11.4).",
+            "**Nothing new.** Every bound of every polygon is a plane of the operand, or one stood on a seam between grid points, so 6.2's budget holds."
+          ],
+          "job": "Operands and selections: what a boolean takes, and an operand's faces as polygons (11.1, 11.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "chapter 11.1 and 11.3's \"How faces enter\" (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's section 3.2 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+          },
+          "path": "geom_bool::operand",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in what [`merge`] returns, after its cost.",
           "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge`] make them faces, edges and shells, and writes those into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.",
           "family": [],
@@ -1312,7 +1427,7 @@
       "provenance": [],
       "sections": "10.2, 11, 13 (introduction), 13.14, 16.1, 22, 23.5 and 23.6, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the rebuild built (G129); the rest by pieces G130, G131, G132, G133, G137, G138, G139, G144, G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.",
+      "status": "the rebuild (G129), operands and selections (G130) and the entry (G131) built; the rest by pieces G132, G133, G137, G138, G139, G144, G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.",
       "summary": "Spare Kit geometry kernel: the arrangement engine."
     },
     {
@@ -7434,6 +7549,12 @@
               "doc": "A failure of a query (chapter 22; piece G102).",
               "name": "Query",
               "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A failure of the Combine family (`geom-bool`, chapter 11.11).",
+              "name": "Combine",
+              "shape": "tuple"
             }
           ],
           "module": "geom_op::detail",
@@ -8498,6 +8619,7 @@
             "**Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by their Plücker coordinates, in at most 576 bits, and nothing is rounded.",
             "**Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has no partner across it, mean the pieces are no closed boundary: [`MergeError`].",
             "**Each fin knows its piece.** [`Fin::piece`] is an index into the pieces given, whose [`Outward::polygon`] names where it came from, for a caller's history.",
+            "**Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut that ends inside a face leaves it whole, with no slit.",
             "**No recursion.** Disjoint sets and rings are walked in loops (principle 13)."
           ],
           "job": "The maximal-face merge: the pieces a selection keeps, as faces, edges, rings and shells (11.3, step 5), shared by `geom-bool` and `geom-mesh` (19.5, 27).",
