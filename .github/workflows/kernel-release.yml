@@ -23,7 +23,8 @@ name: Kernel release
 # compares the store with the one already attached and fails if they differ, so a release's record
 # never changes.
 #
-# Not here yet, and why: the format museum (28.13) has no files before the native format's first
+# The format museum (28.13) runs here as a golden and a test of geom-test, with every other golden.
+# Not here yet, and why: nothing in the museum is a released version before the native format's first
 # version (chapter 24), and a tag cannot yet name a frozen edition of the store, because editions
 # begin with the first Stable release (board piece G482; chapter 32.12): until then the store has
 # one open edition, `pre-edition`, and a tag records it as it stands.

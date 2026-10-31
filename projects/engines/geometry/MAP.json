@@ -10806,6 +10806,31 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the exhibits' bytes and in what their logs run.",
+          "does": "`museum/catalogue.json` lists one [`Exhibit`] per file in `museum/`, compiled into this crate so every target reads them, WebAssembly and big-endian ones included. [`open`] holds one exhibit to its record: its bytes are the ones stored, a file reads whole and writes back byte for byte, and an operation log decodes as its one encoding and replays to its hash. [`visit`] does that for every exhibit, and its [`Visit::digest`] covers them all, so the golden `geom-test/museum` holds the museum to the same matrix as every other golden: any change to the compiler, the lock file or vendored numeric code that moves a hash fails there (28.13, the toolchain guard). [`repo`] checks the folder against the catalogue and against `geom-format`'s own archive of each format version.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/museum.rs",
+          "guarantees": [
+            "**Exhibits never change.** A byte changed in a stored file is [`MuseumError::Changed`], and nothing else about that exhibit is read. An exhibit taken out, or a recorded hash edited, changes the digest, which is a golden and so needs its record and a kernel owner's approval.",
+            "**A file reads whole, and writes back the same.** Every record is known to the reader, the count is the recorded one, and [`geom_format::file::write`] gives the same bytes.",
+            "**A log replays to its hash.** A log that does not replay, whether the kernel refuses an operation or gives another hash, is [`MuseumError::Replay`]; the kernel must keep every version of every operation an exhibit names (26.2).",
+            "**Nothing is left out.** Every `.skgf` file in the museum has an exhibit, every exhibit a file, and every file of `geom-format`'s archive is in the museum byte for byte ([`repo`]).",
+            "**No file system at run time.** [`visit`] reads only what is compiled in, so it runs on every target; [`repo`] alone reads the tree, natively."
+          ],
+          "job": "The format museum: sample files and operation logs of every released format version and edition, each opened and replayed to its recorded hash forever (chapter 28.13; 24.6's archive corpus; piece G99).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 28.13's format museum and chapter 24.6's rule that files are read forever (`projects/engines/geometry/architecture/28-testing.md`, `projects/engines/geometry/architecture/24-file-format-exchange.md`), replaying through `crate::fixture::run` as chapter 21 says."
+          },
+          "path": "geom_test::museum",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the size of the output files, plus one read of each mutated source file and of each unviable mutant's log.",
           "does": "[`read_run`] reads one cargo-mutants output directory (`mutants.out`, or one shard's), checking that the run is whole; [`judge`] puts the runs of one gate together and decides, mutant by mutant, under the rules of section 28.8:",
           "family": [],

@@ -1,0 +1,4 @@
+# Exhibits are compared byte for byte and must never change line ends.
+* -text
+.gitattributes text eol=lf
+catalogue.json text eol=lf

@@ -53,6 +53,9 @@
 //!   operation log in the native format; the runner's Pass, Fail and Improved; the operation-log
 //!   minimiser; what a pull request may do to a stored fixture; the fails-on-base list. The binary
 //!   `fixture` lists, checks and runs them.
+//! - [`museum`]: the format museum (28.13, 24.6; G99): sample files and operation logs of every
+//!   released format version and edition, compiled in and held to their recorded hashes on every
+//!   target.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -221,6 +224,7 @@ pub mod ledger;
 pub mod licence;
 pub mod map;
 pub mod miri;
+pub mod museum;
 pub mod mutants;
 pub mod nurbs_reference;
 pub mod prop;

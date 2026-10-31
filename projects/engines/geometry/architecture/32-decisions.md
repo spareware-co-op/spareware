@@ -798,6 +798,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel.yml` | `test` | J: `geom-test/tests/attack_g19.rs::a_run_that_does_not_prove_its_goldens_is_refused`; R: the job `guard` |
 | `kernel.yml` | `guard` | R: the job itself (`libm`'s `sin` changed by one bit must fail a golden); J: `geom-test/tests/attack_g20.rs::a_trip_counts_only_for_the_right_reason` |
 | `kernel.yml` | `wasm` | R: each leg first runs `guard prove --golden-run --target wasm32-wasip1 --release`: `libm`'s `sin` changed by one bit must make the leg's own `golden run` fail, under wasmtime and under Node, with `geom-num/determinism`'s digest differing from the store's; J: `geom-test/tests/attack_g19.rs::a_run_that_does_not_prove_its_goldens_is_refused` |
+| `kernel.yml` | `big-endian` | J: `geom-test/tests/museum.rs::a_byte_changed_in_a_stored_file_is_caught_first`, one byte's order moved in an exhibit, and `geom-test/tests/museum.rs::format_round_trips_run_on_a_big_endian_target`, which holds the job's commands (G99) |
 | `kernel.yml` | `lint` | `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
 | `kernel-build.yml` | `list` | Not a gate: it lists the crates the other jobs build, and fails when it lists none |
 | `kernel-build.yml` | `build` | R: `engine-geometry/tests/scaffold/gate.rs::gate_build_fails_on_seeded_violations` |

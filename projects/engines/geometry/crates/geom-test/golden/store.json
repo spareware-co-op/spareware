@@ -494,6 +494,16 @@
             "function": "dense_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-test/museum",
+          "what": "The format museum (piece G99): every exhibit of geom-test/museum held to its record on this target, each file read whole and written back byte for byte and each log replayed to its hash, the digest of every exhibit's id, bytes and hash.",
+          "check": {
+            "crate": "geom-test",
+            "test": "museum",
+            "function": "every_exhibit_opens_and_replays_on_this_target"
+          },
+          "sha256": "209b85c07bf9e41d6a4255b8a09d85d82a9ad314b24ab67afcb5778d7a06424d"
         }
       ]
     }
