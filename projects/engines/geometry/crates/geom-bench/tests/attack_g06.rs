@@ -1283,6 +1283,38 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
             fold(pairs.into_iter().map(|(u, v)| s.point(u, v, sides)))
         }
+        ("surface", "torus_second_bound") => {
+            use geom_surface::ParamSurface;
+            let s = inputs::surface::torus().unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(
+                inputs::surface::torus_second_bound(class)
+                    .into_iter()
+                    .map(|region| {
+                        s.second_derivative_bound(
+                            region,
+                            sides,
+                            &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                        )
+                    }),
+            )
+        }
+        ("surface", "torus_normal_bound") => {
+            use geom_surface::ParamSurface;
+            let s = inputs::surface::torus().unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(
+                inputs::surface::torus_normal_bound(class)
+                    .into_iter()
+                    .map(|region| {
+                        s.normal_derivative_bound(
+                            region,
+                            sides,
+                            &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                        )
+                    }),
+            )
+        }
         ("surface", "torus_enclose") => {
             use geom_surface::ParamSurface;
             let s = inputs::surface::torus().unwrap();

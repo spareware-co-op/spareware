@@ -779,6 +779,32 @@ impl<const D: usize> Canonical for geom_nurbs::Bounds<D> {
     }
 }
 
+impl<const D: usize> Canonical for geom_curve::DerivativeBound<D> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            geom_curve::DerivativeBound::Bounded(b) => {
+                h.update(&[0]);
+                b.encode(h);
+            }
+            geom_curve::DerivativeBound::Unbounded => h.update(&[1]),
+        }
+    }
+}
+
+impl Canonical for geom_surface::SecondDerivativeBound {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            geom_surface::SecondDerivativeBound::Bounded(p) => {
+                h.update(&[0]);
+                p.uu.encode(h);
+                p.uv.encode(h);
+                p.vv.encode(h);
+            }
+            geom_surface::SecondDerivativeBound::Unbounded => h.update(&[1]),
+        }
+    }
+}
+
 impl<const D: usize> Canonical for geom_nurbs::CurveFit<D> {
     // Its curve's basis and coefficients, its parameters and its stated error, all in its `Debug`
     // text, which prints each double in the shortest form that reads back to the same bits.

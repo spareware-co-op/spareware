@@ -948,7 +948,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-surface`'s hot paths (pieces G65 to G67, decision 32.44): parameter pairs on a torus (its point, and its certified enclosure with first partials) and on an offset cylinder (its point).",
+          "job": "Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.44): parameter pairs on a torus (its point, and its certified enclosure with first partials) and on an offset cylinder (its point).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"

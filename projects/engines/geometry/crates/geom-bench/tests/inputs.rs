@@ -2333,6 +2333,33 @@ fn surface_typical_batches_all_succeed() {
         &m::torus_enclose(Typical),
     );
     all_ok("offset_point", k::offset_point, &m::offset_point(Typical));
+    all_ok(
+        "torus_second_bound",
+        k::torus_second_bound,
+        &m::torus_second_bound(Typical),
+    );
+    all_ok(
+        "torus_normal_bound",
+        k::torus_normal_bound,
+        &m::torus_normal_bound(Typical),
+    );
+    // The torus has no pole, so every box bounds both partials and the normal's.
+    let mut seconds = Vec::new();
+    k::torus_second_bound(&m::torus_second_bound(Typical), &mut seconds);
+    assert!(
+        seconds
+            .iter()
+            .all(|r| matches!(r, Ok(geom_surface::SecondDerivativeBound::Bounded(_))))
+    );
+    let mut normals = Vec::new();
+    k::torus_normal_bound(&m::torus_normal_bound(Typical), &mut normals);
+    assert!(normals.iter().all(|r| matches!(
+        r,
+        Ok([
+            geom_curve::DerivativeBound::Bounded(_),
+            geom_curve::DerivativeBound::Bounded(_)
+        ])
+    )));
 }
 
 /// Every typical batch of the root-finding and quadrature benchmarks (decision 32.44) finds every

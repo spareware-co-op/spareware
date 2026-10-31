@@ -1,4 +1,4 @@
-//! Inputs for `geom-surface`'s hot paths (pieces G65 to G67, decision 32.44): parameter pairs on
+//! Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.44): parameter pairs on
 //! a torus (its point, and its certified enclosure with first partials) and on an offset cylinder
 //! (its point).
 //!
@@ -21,7 +21,7 @@
 use super::{Class, batch_of, rng};
 use crate::rng::SplitMix64;
 use geom_curve::Frame;
-use geom_surface::{Cylinder, Offset, SurfaceKind, Torus};
+use geom_surface::{Cylinder, Offset, ParamBox, SurfaceKind, Torus};
 
 /// A value in [0, 1) at 2^−52 resolution.
 fn unit(g: &mut SplitMix64) -> f64 {
@@ -52,6 +52,53 @@ pub fn torus_point(class: Class) -> Vec<(f64, f64)> {
 #[must_use]
 pub fn torus_enclose(class: Class) -> Vec<(f64, f64)> {
     pairs("surface::torus_enclose", class, (0.0, 1.5), (-1.0, 1.0))
+}
+
+/// Parameter boxes inside `((u0, u1), (v0, v1))`, each side at most `side` long, for the operation
+/// named `op`.
+fn boxes(
+    op: &str,
+    class: Class,
+    (u0, u1): (f64, f64),
+    (v0, v1): (f64, f64),
+    side: f64,
+) -> Vec<ParamBox> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng(op, class);
+    batch_of(|_| {
+        // A width in (0, side], then a start that keeps the box inside.
+        let du = side * (1.0 - unit(&mut g));
+        let dv = side * (1.0 - unit(&mut g));
+        let u = u0 + (u1 - u0 - du) * unit(&mut g);
+        let v = v0 + (v1 - v0 - dv) * unit(&mut g);
+        Some(((u, u + du), (v, v + dv)))
+    })
+}
+
+/// Boxes for `ParamSurface::second_derivative_bound` on [`torus`] (piece G68).
+#[must_use]
+pub fn torus_second_bound(class: Class) -> Vec<ParamBox> {
+    boxes(
+        "surface::torus_second_bound",
+        class,
+        (0.0, 1.5),
+        (-1.0, 1.0),
+        0.1,
+    )
+}
+
+/// Boxes for `ParamSurface::normal_derivative_bound` on [`torus`] (piece G68).
+#[must_use]
+pub fn torus_normal_bound(class: Class) -> Vec<ParamBox> {
+    boxes(
+        "surface::torus_normal_bound",
+        class,
+        (0.0, 1.5),
+        (-1.0, 1.0),
+        0.1,
+    )
 }
 
 /// Pairs for `SurfaceKind::point` on [`offset_cylinder`].

@@ -1906,10 +1906,11 @@ pub mod curve {
 /// `tests/inputs.rs` catch.
 pub mod surface {
     use geom_curve::CurveError;
+    use geom_curve::DerivativeBound;
     use geom_num::interval::Interval;
     use geom_nurbs::Limit;
     use geom_run::{Budget, WorkMeter};
-    use geom_surface::{ParamSurface, SurfaceKind};
+    use geom_surface::{ParamBox, ParamSurface, SecondDerivativeBound, SurfaceKind};
 
     use super::run;
 
@@ -1947,6 +1948,38 @@ pub mod surface {
         };
         run(batch, out, |&(u, v)| {
             s.enclose(u, v, SIDES, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+
+    /// `ParamSurface::second_derivative_bound` on [`crate::inputs::surface::torus`] over each box
+    /// (piece G68): certified bounds on its second partials.
+    #[inline(never)]
+    pub fn torus_second_bound(
+        batch: &[ParamBox],
+        out: &mut Vec<Result<SecondDerivativeBound, CurveError>>,
+    ) {
+        let Some(s) = crate::inputs::surface::torus() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&region| {
+            s.second_derivative_bound(region, SIDES, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+
+    /// `ParamSurface::normal_derivative_bound` on [`crate::inputs::surface::torus`] over each box
+    /// (piece G68): certified bounds on its unit normal's partials.
+    #[inline(never)]
+    pub fn torus_normal_bound(
+        batch: &[ParamBox],
+        out: &mut Vec<Result<[DerivativeBound<3>; 2], CurveError>>,
+    ) {
+        let Some(s) = crate::inputs::surface::torus() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&region| {
+            s.normal_derivative_bound(region, SIDES, &mut WorkMeter::new(Budget::UNLIMITED))
         });
     }
 

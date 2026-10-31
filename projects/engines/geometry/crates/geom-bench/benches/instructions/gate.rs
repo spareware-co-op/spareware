@@ -2648,7 +2648,7 @@ pub mod curve {
     );
 }
 
-/// geom-surface's hot paths (pieces G65 to G67; decision 32.44).
+/// geom-surface's hot paths (pieces G65 to G68; decision 32.44).
 pub mod surface {
     use super::*;
 
@@ -2673,9 +2673,23 @@ pub mod surface {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("surface/torus_second_bound/typical"))]
+    fn torus_second_bound(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("surface/torus_normal_bound/typical"))]
+    fn torus_normal_bound(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = surface;
-        benchmarks = torus_point, torus_enclose, offset_point
+        benchmarks = torus_point, torus_enclose, offset_point, torus_second_bound, torus_normal_bound
     );
 }
 

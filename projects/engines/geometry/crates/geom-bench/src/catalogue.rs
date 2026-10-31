@@ -409,11 +409,13 @@ pub static OPS: &[Op] = &[
     Op { group: "curve", name: "bulge_to_nurbs", measures: "geom_curve::CurveKind::to_nurbs", classes: T, prepare: |c| bind(inputs::curve::bulge_to_nurbs(c), kernels::curve::bulge_to_nurbs) },
     Op { group: "curve", name: "transition_point", measures: "geom_curve::Transition::point", classes: T, prepare: |c| bind(inputs::curve::transition_point(c), kernels::curve::transition_point) },
     Op { group: "curve", name: "transition_to_nurbs", measures: "geom_curve::Transition::to_nurbs", classes: T, prepare: |c| bind(inputs::curve::transition_to_nurbs(c), kernels::curve::transition_to_nurbs) },
-    // geom-surface's hot paths (pieces G65 to G67; decision 32.44), through the kind contract: a
+    // geom-surface's hot paths (pieces G65 to G68; decision 32.44), through the kind contract: a
     // torus's point and enclosure, and an offset cylinder's point.
     Op { group: "surface", name: "torus_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::torus_point(c), kernels::surface::torus_point) },
     Op { group: "surface", name: "torus_enclose", measures: "geom_surface::SurfaceKind::enclose", classes: T, prepare: |c| bind(inputs::surface::torus_enclose(c), kernels::surface::torus_enclose) },
     Op { group: "surface", name: "offset_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::offset_point(c), kernels::surface::offset_point) },
+    Op { group: "surface", name: "torus_second_bound", measures: "geom_surface::ParamSurface::second_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_second_bound(c), kernels::surface::torus_second_bound) },
+    Op { group: "surface", name: "torus_normal_bound", measures: "geom_surface::ParamSurface::normal_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_normal_bound(c), kernels::surface::torus_normal_bound) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },

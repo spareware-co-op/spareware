@@ -543,6 +543,20 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
 fn crate_functions(module: &str, source: &str) -> Vec<String> {
     let mut out = public_functions(module, source);
     for item in &parse(module, source).items {
+        // A public trait's methods with a default body, which every implementing kind runs.
+        if let syn::Item::Trait(tr) = item
+            && is_pub(&tr.vis)
+            && !is_test(&tr.attrs)
+        {
+            for inner in &tr.items {
+                if let syn::TraitItem::Fn(f) = inner
+                    && f.default.is_some()
+                {
+                    out.push(format!("{}::{}", tr.ident, f.sig.ident));
+                }
+            }
+            continue;
+        }
         let syn::Item::Impl(block) = item else {
             continue;
         };
