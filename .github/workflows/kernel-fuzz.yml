@@ -356,11 +356,13 @@ jobs:
         run: git diff --exit-code -- Cargo.lock
 
   # Bounded proofs beside geom-topo's own code (chapter 28.7; piece G112): the arenas' typed
-  # indices and columns, and the two checks publishing makes, which keep every index of a body
-  # inside its arenas. Each
+  # indices and columns, the two checks publishing makes, which keep every index of a body inside
+  # its arenas, and short sequences of Euler operators, which keep the combinatorial rules. Each
   # harness of a module's `#[cfg(kani)] mod proofs`, proven for every case of its stated bound, with
-  # Kani's overflow, bounds and panic checks on. geom-topo's tests/kani_harnesses.rs holds this list
-  # to the harnesses in the source. The budget is kani-num's.
+  # Kani's overflow, bounds and panic checks on; -Z stubbing lets the operators' proofs stand in for
+  # the geometry pools, which no operator reads. geom-topo's tests/kani_harnesses.rs holds this list
+  # to the harnesses in the source. The budget is kani-num's; an operators' proof takes about 15
+  # minutes and under 12 GB on a development machine.
   kani-topo:
     name: Kani, geom-topo (${{ matrix.proof }})
     runs-on: ubuntu-latest
@@ -369,6 +371,13 @@ jobs:
       fail-fast: false
       matrix:
         proof:
+          - builder::euler::proofs::kemr_and_mekr
+          - builder::euler::proofs::kill_wire_leaves_nothing
+          - builder::euler::proofs::mef_and_kef
+          - builder::euler::proofs::mef_closes_an_edge
+          - builder::euler::proofs::mev_and_kev
+          - builder::euler::proofs::mfkrh_and_kfmrh
+          - builder::euler::proofs::refusals_change_nothing
           - builder::proofs::the_length_check_accepts_exactly_even_columns
           - builder::proofs::the_link_check_accepts_exactly_the_links_inside_their_arena
           - column::proofs::get_is_in_bounds
@@ -397,11 +406,11 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-topo --
-          cargo kani -p geom-topo --harness ix::proofs::every_row_round_trips --exact
+          cargo kani -p geom-topo -Z stubbing --harness ix::proofs::every_row_round_trips --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
-          cargo kani -p geom-topo --harness "${{ matrix.proof }}" --exact
+          cargo kani -p geom-topo -Z stubbing --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
@@ -492,10 +501,12 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
-  # Bounded proofs beside geom-format's own code (chapter 28.7; piece G92): the range checks of
-  # 24.7, proven for every value of their domain, so the frame's edge at ±(2^40 − 1) and one beyond
-  # are covered by the proof, not only by tests. geom-format's tests/kani_harnesses.rs holds this
-  # list to the harnesses in the source.
+  # Bounded proofs beside geom-format's own code (chapter 28.7; pieces G92 and G112): the range
+  # checks of 24.7, proven for every value of their domain, so the frame's edge at ±(2^40 − 1) and
+  # one beyond are covered by the proof, not only by tests; and the native reader: one head of any
+  # bytes and a record read over any heads, never a panic, with -Z
+  # stubbing standing in for the checks each proof leaves to tests. geom-format's
+  # tests/kani_harnesses.rs holds this list to the harnesses in the source.
   kani-format:
     name: Kani, geom-format (${{ matrix.proof }})
     runs-on: ubuntu-latest
@@ -504,9 +515,11 @@ jobs:
       fail-fast: false
       matrix:
         proof:
+          - cbor::decode::proofs::one_head_never_panics
           - range::proofs::bits_is_the_magnitude_width
           - range::proofs::grid_accepts_exactly_the_frame
           - range::proofs::real_accepts_exactly_the_finite_frame
+          - record::proofs::decode_never_panics
     defaults:
       run:
         shell: bash
@@ -529,11 +542,11 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-format --
-          cargo kani -p geom-format --harness range::proofs::real_accepts_exactly_the_finite_frame --exact
+          cargo kani -p geom-format -Z stubbing --harness range::proofs::real_accepts_exactly_the_finite_frame --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
-          cargo kani -p geom-format --harness "${{ matrix.proof }}" --exact
+          cargo kani -p geom-format -Z stubbing --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock

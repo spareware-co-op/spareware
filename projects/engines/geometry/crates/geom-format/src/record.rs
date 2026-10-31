@@ -34,6 +34,12 @@
 //!   ways, before anything is allocated for it when reading from a source.
 //! - **No panic.** Every refusal is a [`RecordError`] with the byte offset at fault.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7) that reading a
+//! record of any eight bytes, whatever heads the decoder hands out, gives a record that ends inside
+//! them or a refusal, never a panic; `cbor`'s header says what is proven of the heads. Real
+//! records end to end, `depends` and long payloads are tested (`tests/record_layer.rs`,
+//! `tests/fuzz_records.rs`).
+//!
 //! Method: chapter 24.2 of the kernel architecture,
 //! `projects/engines/geometry/architecture/24-file-format-exchange.md`; PNG's critical and
 //! safe-to-copy chunk rule (<https://www.w3.org/TR/png-3/#5Chunk-naming-conventions>), which 24.2's
@@ -340,42 +346,28 @@ mod proofs {
     use geom_run::{Budget, WorkMeter};
 
     use super::Record;
+    use crate::cbor::decode::{self, proofs as heads};
 
-    /// Any bytes up to 4, every head and refusal of an envelope's start, decode to a record or a
-    /// refusal, never a panic. Longer raw bytes are beyond a bounded proof (every head branches
-    /// on every byte): `tests/fuzz_records.rs` and `tests/record_layer.rs` cover them.
-    #[kani::proof]
-    #[kani::unwind(6)]
-    fn decode_never_panics() {
-        const LEN: usize = 4;
-        let bytes: [u8; LEN] = kani::any();
-        let len: usize = kani::any();
-        kani::assume(len <= LEN);
-        let mut meter = WorkMeter::new(Budget::UNLIMITED);
-        if let Ok((_, end)) = Record::decode(&bytes[..len], &mut meter) {
-            assert!(end <= len);
-        }
+    /// Stands in for `crc32c`: the `crc` crate's table walk, any value.
+    fn any_check(_: &[u8]) -> u32 {
+        kani::any()
     }
 
-    /// A shortest record, heads fixed and every value any byte, its check any four bytes: decoding
-    /// reaches every field, the flags, the checksum and the payload's own check, and gives a
-    /// record or a refusal, never a panic.
+    /// Whatever heads the decoder hands out over any eight bytes, reading a record gives a record
+    /// that ends inside them, or a refusal, never a panic: the envelope's shape, the `depends`
+    /// order, the cap and the check. `cbor::decode::proofs` proves the decoder's heads themselves;
+    /// a real record's many heads, each a symbolic step, ran CBMC past its budget.
     #[kani::proof]
-    #[kani::unwind(14)]
-    #[kani::stub(crate::cbor::decode::check_tagged, crate::cbor::decode::proofs::any_tagged)]
-    #[kani::stub(crate::cbor::decode::utf8, crate::cbor::decode::proofs::any_text)]
-    #[kani::stub(crate::cbor::decode::key_order, crate::cbor::decode::proofs::any_order)]
-    fn decode_of_a_shaped_record_never_panics() {
-        let (tag, flags, schema, payload): (u8, u8, u8, u8) = kani::any();
-        kani::assume(tag < 24 && flags < 24 && schema < 24 && payload < 24);
-        let check: [u8; 4] = kani::any();
-        let bytes = [
-            0x86, tag, flags, schema, 0x80, 0x41, payload, 0x1a, check[0], check[1], check[2],
-            check[3],
-        ];
+    #[kani::unwind(4)]
+    #[kani::stub(decode::Decoder::next, heads::any_head)]
+    #[kani::stub(decode::Decoder::end, heads::any_end)]
+    #[kani::stub(decode::check, heads::any_check)]
+    #[kani::stub(crate::checksum::crc32c, any_check)]
+    fn decode_never_panics() {
+        let bytes: [u8; 8] = kani::any();
         let mut meter = WorkMeter::new(Budget::UNLIMITED);
         if let Ok((_, end)) = Record::decode(&bytes, &mut meter) {
-            assert!(end == bytes.len());
+            assert!(end <= bytes.len());
         }
     }
 }

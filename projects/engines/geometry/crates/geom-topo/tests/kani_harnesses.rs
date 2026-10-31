@@ -16,7 +16,7 @@
 )]
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The workflow that proves them.
 const WORKFLOW: &str = include_str!("../../../../../../.github/workflows/kernel-fuzz.yml");
@@ -59,6 +59,31 @@ fn matrix(yaml: &str) -> BTreeSet<String> {
         .collect()
 }
 
+/// Every `.rs` file under `src`, with its module path relative to `src`.
+fn sources(src: &Path) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut folders: Vec<PathBuf> = vec![src.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in std::fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                folders.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let module = path
+                    .strip_prefix(src)
+                    .unwrap()
+                    .with_extension("")
+                    .components()
+                    .map(|c| c.as_os_str().to_str().unwrap().to_owned())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                out.push((module, std::fs::read_to_string(&path).unwrap()));
+            }
+        }
+    }
+    out
+}
+
 #[test]
 #[cfg_attr(
     target_os = "wasi",
@@ -70,16 +95,10 @@ fn matrix(yaml: &str) -> BTreeSet<String> {
 )]
 fn every_harness_is_in_the_kani_job_and_every_entry_is_a_harness() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut found = BTreeSet::new();
-    for entry in std::fs::read_dir(&src).unwrap() {
-        let path = entry.unwrap().path();
-        assert!(
-            !path.is_dir(),
-            "geom-topo's source has no folders yet: {path:?}"
-        );
-        let module = path.file_stem().unwrap().to_str().unwrap().to_owned();
-        found.extend(harnesses(&module, &std::fs::read_to_string(&path).unwrap()));
-    }
+    let found: BTreeSet<String> = sources(&src)
+        .iter()
+        .flat_map(|(module, text)| harnesses(module, text))
+        .collect();
     assert!(found.len() >= 5, "{found:?}");
     assert_eq!(
         found,

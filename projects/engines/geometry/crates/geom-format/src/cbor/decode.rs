@@ -37,6 +37,13 @@
 //! - **Independent of how the input arrives.** The decoder reads a byte slice and nothing else; the
 //!   items, the errors and the offsets depend only on the bytes.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7) that one head
+//! of any nine bytes, the most a head takes, at any nesting allowance up to 2, ends inside them or
+//! is refused, never a panic. The tagged columns' checks, UTF-8 validation and key order, which
+//! the head only calls, are stood in for, and a second head ran CBMC out of memory, so whole
+//! items are tested (`tests/attack_g91.rs`, `tests/cbor2.rs`) and fuzzed (`geom-fuzz`'s `cbor`
+//! target).
+//!
 //! Method: RFC 8949 (Concise Binary Object Representation), sections 3 (encoding), 3.4.3
 //! (bignums), 4.1 (preferred serialization) and 4.2.1 (core deterministic encoding requirements),
 //! <https://www.rfc-editor.org/rfc/rfc8949>; RFC 8746 (typed arrays as byte strings), section 2,
@@ -571,7 +578,7 @@ pub(crate) mod proofs {
 
     use geom_run::{Budget, WorkMeter};
 
-    use super::{CborError, CborErrorKind, Decoder, TagRule};
+    use super::{CborError, CborErrorKind, Decoder, Item, TagRule};
 
     /// Stands in for `check_tagged`: the tagged columns' own checks, which are tested
     /// (`tests/attack_g91.rs`), either way.
@@ -606,6 +613,64 @@ pub(crate) mod proofs {
         if kani::any() { Some("") } else { None }
     }
 
+    /// Stands in for [`Decoder::next`] in the proofs of what reads a decoder's heads: any head,
+    /// the end of the item, or a refusal, the offset moved anywhere up to the end of the input.
+    /// `one_head_never_panics` proves the real one a head at a time.
+    pub(crate) fn any_head<'a>(
+        decoder: &mut Decoder<'a>,
+        _: &mut WorkMeter<'_>,
+    ) -> Result<Option<Item<'a>>, CborError>
+    where
+        // Kani matches a stub's generics with the original's: this makes `'a` one of them.
+        'a: 'a,
+    {
+        let bytes = decoder.bytes;
+        let to: usize = kani::any();
+        kani::assume(decoder.at <= to && to <= bytes.len());
+        decoder.at = to;
+        match kani::any::<u8>() {
+            0 => Ok(Some(Item::Uint(kani::any()))),
+            1 => {
+                let n: u64 = kani::any();
+                kani::assume(n <= 2);
+                Ok(Some(Item::Array(n)))
+            }
+            2 => Ok(Some(Item::Bytes(bytes.get(..to).unwrap_or_default()))),
+            3 => Ok(None),
+            _ => Err(CborError {
+                offset: to,
+                kind: CborErrorKind::TagContent,
+            }),
+        }
+    }
+
+    /// Stands in for [`Decoder::end`]: where the offset is, or a refusal.
+    pub(crate) fn any_end<'a>(decoder: &Decoder<'a>) -> Result<usize, CborError>
+    where
+        'a: 'a,
+    {
+        if kani::any() {
+            Ok(decoder.at)
+        } else {
+            Err(CborError {
+                offset: decoder.at,
+                kind: CborErrorKind::TagContent,
+            })
+        }
+    }
+
+    /// Stands in for `check`: the payload's own check, either way.
+    pub(crate) fn any_check(_: &[u8], _: usize, _: &mut WorkMeter<'_>) -> Result<(), CborError> {
+        if kani::any() {
+            Ok(())
+        } else {
+            Err(CborError {
+                offset: 0,
+                kind: CborErrorKind::TagContent,
+            })
+        }
+    }
+
     /// One head of any bytes up to the nine a head can take, at any nesting allowance up to 2:
     /// an item that ends inside them, or a refusal, never a panic.
     #[kani::proof]
@@ -619,22 +684,6 @@ pub(crate) mod proofs {
         kani::assume(depth <= 2);
         let mut decoder = Decoder::new(&bytes, depth);
         let mut meter = WorkMeter::new(Budget::UNLIMITED);
-        let _ = decoder.next(&mut meter);
-        assert!(decoder.offset() <= bytes.len());
-    }
-
-    /// Two heads of any four bytes, the second under whatever the first opened (an array, a map
-    /// or a tag), never a panic.
-    #[kani::proof]
-    #[kani::unwind(6)]
-    #[kani::stub(super::check_tagged, any_tagged)]
-    #[kani::stub(super::utf8, any_text)]
-    #[kani::stub(super::key_order, any_order)]
-    fn two_heads_never_panic() {
-        let bytes: [u8; 4] = kani::any();
-        let mut decoder = Decoder::new(&bytes, 2);
-        let mut meter = WorkMeter::new(Budget::UNLIMITED);
-        let _ = decoder.next(&mut meter);
         let _ = decoder.next(&mut meter);
         assert!(decoder.offset() <= bytes.len());
     }
