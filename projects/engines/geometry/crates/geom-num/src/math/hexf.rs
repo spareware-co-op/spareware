@@ -64,7 +64,10 @@ const fn digit_value(c: u8) -> u32 {
 /// step keep it in range, so `None` never comes; if it did, the assertion here fails, and since
 /// [`parse`] runs only inside `const { }` (the macro), that is a build error, never a run-time
 /// panic. (`?` and `Option::expect` are not available or allowed here: the first is not `const`,
-/// and the crate denies the second.)
+/// and the crate denies the second.) So the `None` arm can never run: `None` fails the assertion
+/// first, as Kani proves for it, and the function is marked for the coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/src/math/hexf.rs::step_never_returns_none
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn step(v: Option<i64>) -> i64 {
     assert!(v.is_some(), "hex float out of range");
     match v {
@@ -73,7 +76,9 @@ const fn step(v: Option<i64>) -> i64 {
     }
 }
 
-/// [`step`] for the 128-bit significand.
+/// [`step`] for the 128-bit significand; its `None` arm can never run either.
+// proof: projects/engines/geometry/crates/geom-num/src/math/hexf.rs::step_u128_never_returns_none
+#[cfg_attr(coverage_nightly, coverage(off))]
 const fn step_u128(v: Option<u128>) -> u128 {
     assert!(v.is_some(), "hex float significand out of range");
     match v {
@@ -98,9 +103,8 @@ pub(crate) const fn parse(s: &str) -> f64 {
         matches!(rest, [b'0', b'x' | b'X', ..]),
         "a hex float starts with 0x"
     );
-    if let [_, _, tail @ ..] = rest {
-        rest = tail;
-    }
+    // At least the two bytes just matched: `split_at` cannot fail.
+    rest = rest.split_at(2).1;
 
     let (significand, point_exponent, rest) = significand(rest);
     let exponent = step(point_exponent.checked_add(binary_exponent(rest)));
@@ -134,10 +138,9 @@ const fn significand(rest: &[u8]) -> (u128, i64, &[u8]) {
                 digits = step(digits.checked_add(1));
                 assert!(digits <= 30, "too many hex digits");
                 // At most 30 digits: below 2^120, so neither step overflows.
-                significand = step_u128(match significand.checked_mul(16) {
-                    Some(v) => v.checked_add(digit_value(*c) as u128),
-                    None => None,
-                });
+                significand = step_u128(
+                    step_u128(significand.checked_mul(16)).checked_add(digit_value(*c) as u128),
+                );
                 if seen_point {
                     exponent = step(exponent.checked_sub(4));
                 }
@@ -158,9 +161,8 @@ const fn binary_exponent(rest: &[u8]) -> i64 {
         matches!(rest, [b'p' | b'P', ..]),
         "a hex float needs a binary exponent"
     );
-    if let [_, tail @ ..] = rest {
-        rest = tail;
-    }
+    // At least the byte just matched: `split_at` cannot fail.
+    rest = rest.split_at(1).1;
     let negative = matches!(rest, [b'-', ..]);
     if let [b'-' | b'+', tail @ ..] = rest {
         rest = tail;
@@ -171,10 +173,7 @@ const fn binary_exponent(rest: &[u8]) -> i64 {
         digits = step(digits.checked_add(1));
         assert!(digits <= 5, "exponent too long");
         // At most 5 decimal digits: below 10^5, so neither step overflows.
-        written = step(match written.checked_mul(10) {
-            Some(v) => v.checked_add(c.abs_diff(b'0') as i64),
-            None => None,
-        });
+        written = step(step(written.checked_mul(10)).checked_add(c.abs_diff(b'0') as i64));
         rest = tail;
     }
     assert!(digits > 0, "the binary exponent needs digits");
@@ -289,8 +288,38 @@ mod tests {
             ("0X1.8P-1", UPPER),
             ("0x.8p1", LEADING_POINT),
             ("+0x1.ABCDEFp-3", hf!("0x1.abcdefp-3")),
+            // More digits than the double needs, the extra low bits zero: a normal result
+            // (four bits dropped) and a subnormal one (four bits dropped below 2^−1074).
+            ("0x1.00000000000000p+0", SHORT),
+            ("0x1.0p-1074", TINY),
+            ("0x8.00000000000000000000000000p-3", SHORT),
         ] {
             assert_eq!(parse(text).to_bits(), value.to_bits(), "{text}");
         }
+    }
+}
+
+/// Bounded proofs (chapter 28.7): [`step`] and [`step_u128`] never return for `None`, so their
+/// `None` arms cannot run; the `coverage(off)` marks on both cite these (28.8).
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::{step, step_u128};
+
+    /// `step(None)` panics at its assertion: its `None` arm never runs.
+    #[kani::proof]
+    #[kani::should_panic]
+    fn step_never_returns_none() {
+        let _ = step(None);
+    }
+
+    /// `step_u128(None)` panics at its assertion: its `None` arm never runs.
+    #[kani::proof]
+    #[kani::should_panic]
+    fn step_u128_never_returns_none() {
+        let _ = step_u128(None);
     }
 }

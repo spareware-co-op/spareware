@@ -30,6 +30,28 @@ bench = false
 geom-num = { path = "../geom-num" }
 # The work meter the root-isolation engine runs under (its benchmarks, G53).
 geom-run = { path = "../geom-run" }
+# Cache keys, the memo store and body versions (piece G105), with the crates their inputs need.
+geom-format = { path = "../geom-format" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
+# The math types of phase 2 (pieces G45, G46 and G48): their count benchmarks, as decision 32.44
+# asks of every phase-2 code piece.
+geom-math = { path = "../geom-math" }
+# The box tree and cell index of phase 2 (pieces G54 and G55), for the same count benchmarks.
+geom-bvh = { path = "../geom-bvh" }
+# NURBS, its fitting and the Bernstein toolkit of phase 2 (pieces G56, G58 and G59).
+geom-nurbs = { path = "../geom-nurbs" }
+# The curve kinds of phase 2 (pieces G60 to G64, G67 and G68).
+geom-curve = { path = "../geom-curve" }
+# The surface kinds of phase 2 (pieces G65 to G68).
+geom-surface = { path = "../geom-surface" }
+# The dense linear algebra of phase 2 (pieces G49 and G50), for the same count benchmarks.
+geom-linalg = { path = "../geom-linalg" }
+# The intersection results and canonical order of phase 4 (piece G158), for the same count benchmarks.
+geom-intersect = { path = "../geom-intersect" }
+# The primitives and transforms of phase 3 (piece G101), and the context and output they take and
+# give, for the same count benchmarks.
+geom-make = { path = "../geom-make" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
 # crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
 # sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which

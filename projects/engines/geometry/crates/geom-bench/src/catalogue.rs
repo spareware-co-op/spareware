@@ -47,11 +47,13 @@ fn bind<T: Canonical + 'static, R: Canonical + 'static>(
 
 /// One operation and the classes it is measured on.
 pub struct Op {
-    /// The group: the `geom-num` module the operation belongs to.
+    /// The group: the `geom-num` module the operation belongs to, or, for another kernel crate's
+    /// hot paths (decision 32.44), a group named for that crate.
     pub group: &'static str,
     /// The operation's name within its group, as in [`crate::kernels`].
     pub name: &'static str,
-    /// The `geom-num` function measured, as `module::function` or `Type::method`.
+    /// The `geom-num` function measured, as `module::function` or `Type::method`; a function of
+    /// another kernel crate is written with its crate's path, `geom_math::Type::method`.
     pub measures: &'static str,
     /// The input classes, in the order they are reported.
     pub classes: &'static [Class],
@@ -379,10 +381,65 @@ pub static OPS: &[Op] = &[
     Op { group: "isolate", name: "cubic_1", measures: "isolate::isolate", classes: TE, prepare: |c| bind(inputs::isolate::cubic_1(c), kernels::isolate::cubic_1) },
     Op { group: "isolate", name: "circle_line_2", measures: "isolate::isolate", classes: TE, prepare: |c| bind(inputs::isolate::circle_line_2(c), kernels::isolate::circle_line_2) },
     Op { group: "ball", name: "cubic", measures: "Ball::from_interval", classes: TE, prepare: |c| bind(inputs::isolate::ball_cubic(c), kernels::ball::cubic) },
+    // geom-math's hot paths (pieces G45, G46 and G48; decision 32.44): the typed transforms, the
+    // rational rotation and its search, a frame's map conversion and the decimal reader.
+    Op { group: "math_types", name: "apply_exact", measures: "geom_math::TypedTransform::apply", classes: T, prepare: |c| bind(inputs::math_types::apply_exact(c), kernels::math_types::apply_exact) },
+    Op { group: "math_types", name: "apply_rational", measures: "geom_math::TypedTransform::apply", classes: T, prepare: |c| bind(inputs::math_types::apply_rational(c), kernels::math_types::apply_rational) },
+    Op { group: "math_types", name: "apply_certified", measures: "geom_math::TypedTransform::apply", classes: T, prepare: |c| bind(inputs::math_types::apply_certified(c), kernels::math_types::apply_certified) },
+    Op { group: "math_types", name: "rotation_apply", measures: "geom_math::RationalRotation::apply", classes: T, prepare: |c| bind(inputs::math_types::rotation_apply(c), kernels::math_types::rotation_apply) },
+    Op { group: "math_types", name: "plane_within", measures: "geom_math::RationalRotation::plane_within", classes: T, prepare: |c| bind(inputs::math_types::plane_within(c), kernels::math_types::plane_within) },
+    Op { group: "math_types", name: "to_map", measures: "geom_math::FrameRecord::to_map", classes: T, prepare: |c| bind(inputs::math_types::to_map(c), kernels::math_types::to_map) },
+    // geom-linalg's hot paths (pieces G49 and G50; decision 32.44): the pivoted QR and the SVD.
+    Op { group: "linalg", name: "pivoted_qr", measures: "geom_linalg::PivotedQr::factor", classes: T, prepare: |c| bind(inputs::linalg::pivoted_qr(c), kernels::linalg::pivoted_qr) },
+    Op { group: "linalg", name: "svd_jacobi", measures: "geom_linalg::Svd::jacobi", classes: T, prepare: |c| bind(inputs::linalg::svd_jacobi(c), kernels::linalg::svd_jacobi) },
+    // geom-bvh's hot paths (pieces G54 and G55; decision 32.44): the box tree and the cell index,
+    // each built for a scene and queried.
+    Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
+    Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
+    // and the Bernstein bound.
+    Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
+    Op { group: "nurbs", name: "interpolate", measures: "geom_nurbs::Curve::interpolate", classes: T, prepare: |c| bind(inputs::nurbs::interpolate(c), kernels::nurbs::interpolate) },
+    Op { group: "nurbs", name: "bernstein_bound", measures: "geom_nurbs::BernsteinCurve::bound", classes: T, prepare: |c| bind(inputs::nurbs::bernstein_bound(c), kernels::nurbs::bernstein_bound) },
+    // geom-curve's hot paths (pieces G60 to G64 and G67; decision 32.44), through the kind
+    // contract: a helix's point and enclosure, a bulge polyline's and a transition's conversion to
+    // NURBS, and a transition's point.
+    Op { group: "curve", name: "helix_point", measures: "geom_curve::CurveKind::point", classes: T, prepare: |c| bind(inputs::curve::helix_point(c), kernels::curve::helix_point) },
+    Op { group: "curve", name: "helix_enclose", measures: "geom_curve::CurveKind::enclose", classes: T, prepare: |c| bind(inputs::curve::helix_enclose(c), kernels::curve::helix_enclose) },
+    Op { group: "curve", name: "bulge_to_nurbs", measures: "geom_curve::CurveKind::to_nurbs", classes: T, prepare: |c| bind(inputs::curve::bulge_to_nurbs(c), kernels::curve::bulge_to_nurbs) },
+    Op { group: "curve", name: "transition_point", measures: "geom_curve::Transition::point", classes: T, prepare: |c| bind(inputs::curve::transition_point(c), kernels::curve::transition_point) },
+    Op { group: "curve", name: "transition_to_nurbs", measures: "geom_curve::Transition::to_nurbs", classes: T, prepare: |c| bind(inputs::curve::transition_to_nurbs(c), kernels::curve::transition_to_nurbs) },
+    // geom-surface's hot paths (pieces G65 to G68; decision 32.44), through the kind contract: a
+    // torus's point and enclosure, and an offset cylinder's point.
+    Op { group: "surface", name: "torus_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::torus_point(c), kernels::surface::torus_point) },
+    Op { group: "surface", name: "torus_enclose", measures: "geom_surface::SurfaceKind::enclose", classes: T, prepare: |c| bind(inputs::surface::torus_enclose(c), kernels::surface::torus_enclose) },
+    Op { group: "surface", name: "offset_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::offset_point(c), kernels::surface::offset_point) },
+    Op { group: "surface", name: "torus_second_bound", measures: "geom_surface::ParamSurface::second_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_second_bound(c), kernels::surface::torus_second_bound) },
+    Op { group: "surface", name: "torus_normal_bound", measures: "geom_surface::ParamSurface::normal_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_normal_bound(c), kernels::surface::torus_normal_bound) },
+    // geom-format's hot paths (piece G105; decision 32.44): a cache key, a memo store's lookup and
+    // a body's next version.
+    Op { group: "format", name: "cache_key", measures: "geom_format::CacheKey::new", classes: T, prepare: |c| bind(inputs::format::cache_key(c), kernels::format::cache_key) },
+    Op { group: "format", name: "memo_get", measures: "geom_format::MemoStore::get", classes: T, prepare: |c| bind(inputs::format::memo_get(c), kernels::format::memo_get) },
+    Op { group: "format", name: "next_version", measures: "geom_format::BodyVersion::next", classes: T, prepare: |c| bind(inputs::format::next_version(c), kernels::format::next_version) },
+    // geom-intersect's canonical order (piece G158; decision 32.44): a list of items sorted and
+    // proven disjoint, a key read through a circle's NURBS form, and a pair of keys put in order.
+    Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
+    Op { group: "intersect", name: "key_circle", measures: "geom_intersect::CanonicalKey::of_curve", classes: T, prepare: |c| bind(inputs::intersect::circles(c), kernels::intersect::keys) },
+    Op { group: "intersect", name: "pair_lines", measures: "geom_intersect::order::pair", classes: T, prepare: |c| bind(inputs::intersect::lines(c), kernels::intersect::paired) },
+    // geom-make's hot paths (piece G101; decision 32.44): a primitive built and a body moved, named,
+    // published and checked.
+    Op { group: "make", name: "build_box", measures: "geom_make::primitive::make_box", classes: T, prepare: |c| bind(inputs::make::boxes(c), kernels::make::boxes) },
+    Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
+    Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
+    Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
+    // Root finding and quadrature (piece G51; decision 32.44).
+    Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
+    Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
+    Op { group: "math_types", name: "decimal_parse", measures: "geom_math::Decimal::parse", classes: T, prepare: |c| bind(inputs::math_types::decimal_parse(c), kernels::math_types::decimal_parse) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 22] = [
+pub const GROUPS: [&str; 33] = [
     "predicate",
     "sign",
     "wide",
@@ -405,6 +462,17 @@ pub const GROUPS: [&str; 22] = [
     "dual",
     "isolate",
     "ball",
+    "math_types",
+    "bvh",
+    "nurbs",
+    "curve",
+    "format",
+    "surface",
+    "brent",
+    "quadrature",
+    "linalg",
+    "intersect",
+    "make",
 ];
 
 /// The group of the growth checks.
@@ -601,9 +669,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Exactness::rank", "one match on a three-valued enum"),
     ("Exactness::bound", "one match on a three-valued enum"),
     ("Steps::checked_add", "one match on one checked addition, inside Exactness::combine's benchmark"),
-    ("brent::zero", "a search: its cost is its count of the caller's function's evaluations, at most the cap, which the result reports and tests/brent.rs checks, plus a few dozen f64 operations per evaluation"),
     ("brent::minimum", "a search: its cost is its count of the caller's function's evaluations, at most the cap, which the result reports and tests/brent.rs checks, plus a few dozen f64 operations per evaluation"),
-    ("quadrature::gauss_legendre", "n evaluations of the caller's function and one exact sum of n terms: the cost is the function's"),
     ("quadrature::integrate", "2n + 1 evaluations of the caller's function per panel, counted in the result, and exact sums: the cost is the function's"),
     ("Dual::new", "a constructor: stores its two arguments"),
     ("Dual::value", "field accessor"),

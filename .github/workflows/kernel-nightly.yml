@@ -15,8 +15,21 @@ name: Kernel nightly
 # oracle run out of process (28.10's differential testing; 17.8): Bertolazzi and Frego's Clothoids
 # library, built from source at a pinned commit in a container pinned by digest, evaluates the
 # night's seeded clothoids, and geom-curve's tests/clothoids_oracle.rs compares every point with
-# the kernel's certified enclosure, settling any difference by a fixed-point truth. Later pieces add
-# the rest of 28.17's nightly list (hours of fuzzing, slow fixtures, the other outside oracles).
+# the kernel's certified enclosure, settling any difference by a fixed-point truth. Piece G69 adds
+# the law catalogue of 28.3 for the curve and surface kinds and NURBS (geom-test's tests/laws_nurbs.rs,
+# laws_curves.rs and laws_surfaces.rs), each law's dense refutation sampler drawing from the night's
+# seed. Piece G86 adds Python's cbor2, run the same way: geom-op's tests/cbor2_oracle.rs writes the
+# night's seeded values of SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by
+# hash) encodes each value in its canonical mode in a container pinned by digest and reads the
+# kernel's bytes back, and the test fails on any byte that differs. Piece G97 adds the slow fixtures
+# (28.16): geom-test's `fixture run --tier slow`. Piece G114 adds the fetched corpora (28.12):
+# geom-test's `corpus fetch` downloads each at its pinned source and checks it against the register's
+# digest, so a source that moves or disappears shows up the night it happens. Piece G160 adds the
+# intersection acceptance harness (12.17): the ssi-corpus and our failure catalogue, scored by the
+# corpus's own scorer in a container pinned by digest, and held to the gate. There is no
+# surface/surface method yet, so the stand-ins in geom-test's ssi module answer: the truth must pass,
+# and each perturbation must break the rule it names. Later pieces add the rest of 28.17's nightly
+# list (hours of fuzzing, the other outside oracles).
 #
 # --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
 # guard).
@@ -42,6 +55,86 @@ env:
   RUST_TOOLCHAIN: "1.99.0"
 
 jobs:
+  slow-fixtures:
+    name: Slow fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Every slow fixture
+        run: cargo run --locked --release -p geom-test --bin fixture -- run --tier slow
+
+  corpora:
+    name: Fetched corpora, by their digests
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Every fetched corpus, unmodified
+        run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora"
+
+  ssi-acceptance:
+    name: Intersection acceptance harness, on the ssi-corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # python:3.13-slim, pinned by digest, as the cbor2 job; geom-test's ssi/score.sh pins numpy and
+      # scipy's wheels by SHA-256.
+      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+      SSI_DIR: projects/engines/geometry/crates/geom-test/ssi
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The corpus, unmodified, with the failure catalogue beside its cases
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p geom-test --bin corpus --bin ssi
+          target/release/corpus fetch --cache "$RUNNER_TEMP/corpora" ssi-corpus
+          cp -r "$RUNNER_TEMP/corpora/ssi-corpus" "$RUNNER_TEMP/ssi"
+          chmod -R u+w "$RUNNER_TEMP/ssi"
+          mkdir -p "$RUNNER_TEMP/ssi/results"
+          target/release/ssi catalogue --out "$RUNNER_TEMP/ssi/cases/data"
+          target/release/ssi list --cases "$RUNNER_TEMP/ssi/cases/data"
+      - name: Every case on the grid, with its truth kept
+        run: target/release/ssi place --cases "$RUNNER_TEMP/ssi/cases/data"
+      # The container's C library is not this runner's, so the runner links its own.
+      - name: The runner, linked statically
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --target x86_64-unknown-linux-gnu -p geom-test --bin ssi-runner
+          cp target/x86_64-unknown-linux-gnu/release/ssi-runner "$RUNNER_TEMP/ssi/ssi-runner"
+      - name: The corpus's scorer, in the container
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/ssi:/corpus" -w /work "$PYTHON_IMAGE" \
+            bash "$SSI_DIR/score.sh" /corpus /corpus/ssi-runner
+      - name: The gate
+        run: bash "$SSI_DIR/gates.sh" "$RUNNER_TEMP/ssi" target/release/ssi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ssi-reports
+          path: |
+            ${{ runner.temp }}/ssi/results/report_*.json
+            ${{ runner.temp }}/ssi/results/score_*.json
+          if-no-files-found: warn
+
   predicates:
     name: Predicates with a fresh seed
     runs-on: ubuntu-latest
@@ -63,6 +156,28 @@ jobs:
         run: >-
           cargo test --locked --release -p geom-num
           --test verification --test attack_g28 --test attack_g29 --test attack_g30
+
+  laws:
+    name: Kind and NURBS laws with a fresh seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Tonight's seed, printed
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+      - name: The law catalogue for NURBS and the curve and surface kinds (28.3)
+        run: >-
+          cargo test --locked --release -p geom-test
+          --test laws_nurbs --test laws_curves --test laws_surfaces
 
   maths:
     name: Proven maths against the oracle
@@ -159,3 +274,73 @@ jobs:
         run: >-
           cargo test --locked --release -p geom-curve --test clothoids_oracle
           -- --ignored --exact compare_with_the_answers --nocapture
+
+  cbor2:
+    name: Canonical CBOR against cbor2, out of process
+    runs-on: ubuntu-latest
+    # The kernel's cases build and run in a few minutes; cbor2 installs from one wheel and encodes
+    # them in seconds.
+    timeout-minutes: 30
+    env:
+      # python:3.13-slim, pinned by digest; oracles/cbor2.sh pins cbor2 6.1.5's wheel by SHA-256.
+      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Tonight's seed, printed, and the files
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+          mkdir -p "$RUNNER_TEMP/cbor2"
+          echo "CBOR2_CASES=$RUNNER_TEMP/cbor2/cases.txt" >> "$GITHUB_ENV"
+          echo "CBOR2_ANSWERS=$RUNNER_TEMP/cbor2/answers.txt" >> "$GITHUB_ENV"
+      - name: Tonight's cases
+        run: >-
+          cargo test --locked --release -p geom-op --test cbor2_oracle
+          -- --ignored --exact write_the_cases --nocapture
+      - name: cbor2 6.1.5, in the container
+        run: |
+          set -euo pipefail
+          docker run --rm -i -v "$PWD:/work:ro" -w /work "$PYTHON_IMAGE" \
+            bash projects/engines/geometry/crates/geom-op/oracles/cbor2.sh \
+            < "$CBOR2_CASES" > "$CBOR2_ANSWERS"
+      - name: The kernel against cbor2's encodings
+        run: >-
+          cargo test --locked --release -p geom-op --test cbor2_oracle
+          -- --ignored --exact compare_with_the_answers --nocapture
+
+  zcbor:
+    name: Body records and kinds against their CDDL, with zcbor
+    runs-on: ubuntu-latest
+    # The writers build and run in a few minutes; zcbor validates each file in well under a second.
+    timeout-minutes: 30
+    env:
+      # python:3.13-slim, pinned by digest, as the cbor2 job; oracles/zcbor.sh pins zcbor 0.9.1 and
+      # its three dependencies' wheels by SHA-256.
+      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: The archived body records and every kind, one file each
+        run: |
+          set -euo pipefail
+          echo "ZCBOR_DIR=$RUNNER_TEMP/zcbor" >> "$GITHUB_ENV"
+          export ZCBOR_DIR="$RUNNER_TEMP/zcbor"
+          cargo test --locked --release -p geom-format --test registry --test kinds \
+            -- --ignored --exact write_the_body_payloads write_the_kinds --nocapture
+      - name: zcbor 0.9.1, in the container
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/work:ro" -v "$ZCBOR_DIR:/cases:ro" -w /work "$PYTHON_IMAGE" \
+            bash projects/engines/geometry/crates/geom-format/oracles/zcbor.sh \
+            projects/engines/geometry/format/cddl/body.cddl /cases

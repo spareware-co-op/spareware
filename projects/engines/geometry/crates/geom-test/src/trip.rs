@@ -71,7 +71,7 @@ pub struct Violation {
 }
 
 /// The planted violations, one for each gate that runs an outside tool on the kernel's code.
-pub const VIOLATIONS: [Violation; 11] = [
+pub const VIOLATIONS: [Violation; 13] = [
     Violation {
         name: "fmt",
         gate: "kernel.yml lint",
@@ -94,6 +94,22 @@ pub const VIOLATIONS: [Violation; 11] = [
         file: "projects/engines/geometry/crates/geom-num/src/sign.rs",
         anchor: "        } else if v > 0 {",
         planted: "        } else if v > 1 {",
+        caught: &["VERIFICATION:- FAILED"],
+    },
+    Violation {
+        name: "kani-op",
+        gate: "kernel-fuzz.yml kani-op",
+        file: "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+        anchor: "        if fraction.trailing_zeros() < format.dropped {",
+        planted: "        if fraction.trailing_zeros() + 1 < format.dropped {",
+        caught: &["VERIFICATION:- FAILED"],
+    },
+    Violation {
+        name: "kani-format",
+        gate: "kernel-fuzz.yml kani-format",
+        file: "projects/engines/geometry/crates/geom-format/src/range.rs",
+        anchor: "    v.unsigned_abs().bit_width()",
+        planted: "    v.unsigned_abs().bit_width() + 1",
         caught: &["VERIFICATION:- FAILED"],
     },
     Violation {

@@ -9,8 +9,8 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 35 | 33 |
-| DEPEND | 2 | 2 |
+| PORT METHOD | 38 | 40 |
+| DEPEND | 5 | 4 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
 
@@ -50,6 +50,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | cargo-bolero 0.13.5 `bin/cargo-bolero/src/test.rs` | MIT | allowed | <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/test.rs> | none | `projects/engines/geometry/crates/geom-fuzz/src/lib.rs`: for its run limits above: `-T`, `--runs`, `--jobs` and `--max-input-length`. No code copied. |
 | cargo-mutants | MIT | allowed | <https://github.com/sourcefrog/cargo-mutants/tree/8ab1dc786a1f61a4e370416cc6c68b81a704e917> | none | `projects/engines/geometry/crates/geom-test/src/mutants.rs`: for the format of the output files this module reads (`book/src/mutants-out.md`, `src/outcome.rs`, `src/mutant.rs` and `src/output.rs` at its v27.1.0 tag). No code copied. |
 | CGAL `FPU.h` | LGPL-3.0-or-later OR LicenseRef-Commercial | method only | <https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h> | `projects/engines/geometry/methods/cgal-nextafter-widening.md` | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its widening with `nextafter` when the rounding mode cannot change, which the Method above names. |
+| ciborium-ll | Apache-2.0 | allowed | <https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs> | none | `projects/engines/geometry/crates/geom-op/src/cbor.rs`: its choice of the shortest float that keeps a double's bits; used as a test oracle only. |
 | Clippy's `clippy_dev` token cursor | MIT OR Apache-2.0 | allowed | <https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs> | none | `projects/engines/geometry/crates/geom-test/src/map/errors.rs`: for the approach of finding declarations with a token cursor. No code copied. |
 | Geogram `interval_nt.h` | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h> | none | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its round-to-nearest interval class `intervalRN`, which the Method above compares. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient2d.pck> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_lang.rs`: for the form of its predicate descriptions. No code copied. |
@@ -78,6 +79,8 @@ Each kernel file implements a published method in its own code and copied nothin
 | Shewchuk's `predicates.c` | public domain | readable | <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs`: for its error constants (`exactinit`), a cross-check of the analysis here. No code copied.<br>`projects/engines/geometry/crates/geom-num/src/predicate.rs`: for the determinant forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions above follow; chapter 29.3 asks for this credit line. |
 | shuffling-allocator | MPL-2.0 | allowed | <https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs> | none | `projects/engines/geometry/crates/geom-test/src/golden/perturb.rs`: for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied. |
 | SPDX License List 3.29.0 | CC-BY-3.0 | readable | <https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json> | none | `projects/engines/geometry/crates/geom-test/src/map/classes.rs`: to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences. |
+| ssi-corpus | MIT OR Apache-2.0 | allowed | <https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9> | none | `projects/engines/geometry/crates/geom-test/src/bin/ssi-runner.rs`: for its case schema, its runner contract and its scoring rules.<br>`projects/engines/geometry/crates/geom-test/src/ssi.rs`: for its case schema, its runner contract and its scoring rules.<br>`projects/engines/geometry/crates/geom-test/src/ssi/case.rs`: for its case schema, its runner contract and its scoring rules.<br>`projects/engines/geometry/crates/geom-test/src/ssi/cover.rs`: for its case schema, its runner contract and its scoring rules.<br>`projects/engines/geometry/crates/geom-test/src/ssi/output.rs`: for its case schema, its runner contract and its scoring rules. |
+| the Model Context Protocol specification | Apache-2.0 AND MIT | allowed | <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts> | none | `projects/engines/geometry/crates/geom-gen/src/facade.rs`: for the fields of a tool description and their rules. No code copied. |
 | Vigna's SplitMix64 reference code | public domain | readable | <https://prng.di.unimi.it/splitmix64.c> | none | `projects/engines/geometry/crates/geom-bench/src/rng.rs`: for the constants and steps of SplitMix64, which the tests check against its published outputs. No code copied. |
 | Wasmtime | Apache-2.0 WITH LLVM-exception | allowed | <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs> | none | `projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs`: for what fuel counts and how `Config::consume_fuel` meters it. No code copied.<br>`projects/engines/geometry/crates/geom-bench/src/guest.rs`: for what fuel counts and how `Config::consume_fuel` meters it. No code copied. |
 
@@ -87,9 +90,12 @@ A kernel crate may depend only on `libm` (29.1); the development crates' own dep
 
 | Crate | Licence | Class (29.2) | Link | Manifest | Version requirement |
 | --- | --- | --- | --- | --- | --- |
+| crc | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/crc/3.4.0> | `projects/engines/geometry/crates/geom-format/Cargo.toml` | 3.4.0 |
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | rayon | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/rayon/1.12.0> | `projects/engines/geometry/crates/geom-pool/Cargo.toml` | 1.12.0 |
+| sha2 | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/sha2/0.11.0> | `projects/engines/geometry/crates/geom-op/Cargo.toml` | 0.11.0 |
+| unicode-normalization | (Apache-2.0 OR MIT) AND Unicode-3.0 | allowed | <https://crates.io/crates/unicode-normalization> | `projects/engines/geometry/crates/geom-op/Cargo.toml` | =0.1.26 |
 
 ## Method notes
 
