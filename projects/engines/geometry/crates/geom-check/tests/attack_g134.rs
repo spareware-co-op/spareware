@@ -788,7 +788,10 @@ fn a_bent_face_with_a_hole_has_no_fan() {
     let (outer, inner) = (fins(&mut r, &outer), fins(&mut r, &inner));
     r.face(shell, &[&outer, &inner]);
     let shell = r.shell(0);
-    let beside = numbers(&mut r, &[[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]]);
+    let beside = numbers(
+        &mut r,
+        &[[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]],
+    );
     let beside = fins(&mut r, &beside);
     r.face(shell, &[&beside]);
     r.surfaces[0] = level(0.0);
