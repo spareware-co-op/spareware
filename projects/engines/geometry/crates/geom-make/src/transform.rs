@@ -289,7 +289,7 @@ fn run(
     };
     ctx.run(|meter| {
         let copy = moved_copy(ctx, meter, input, &t, &names, &keep)?;
-        settle(ctx, meter, copy, Some(motion))
+        settle(ctx, copy, Some(motion))
     })
 }
 
@@ -308,7 +308,6 @@ pub(crate) struct Copied {
 /// where groups 2 and 3 follow it today.
 pub(crate) fn settle(
     ctx: &OpContext<'_>,
-    meter: &mut WorkMeter<'_>,
     copy: Copied,
     motion: Option<Motion>,
 ) -> Result<OpOutput<Made>, OpError> {

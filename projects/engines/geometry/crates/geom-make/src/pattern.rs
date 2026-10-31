@@ -107,7 +107,7 @@ fn copies(
             Some((name, Origin::Generated { from, role }))
         };
         let copied = moved_copy(ctx, meter, input, &instance.transform, names, &copy)?;
-        let made = settle(ctx, meter, copied, None)?;
+        let made = settle(ctx, copied, None)?;
         least = less_exact(least, made.exactness);
         out.push((instance.key, made.result));
     }
