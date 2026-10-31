@@ -38,7 +38,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
-use geom_fuzz::{Harness, arenas, orient2d, predicates, variants, wide};
+use geom_fuzz::{Harness, arenas, cbor, orient2d, predicates, variants, wide};
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
 use geom_num::grid::{COORD_MAX, P2};
@@ -51,6 +51,7 @@ use geom_test::{Seed, SplitMix64};
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
 const TARGETS: [(&str, Harness); 5] = [
     ("arenas", arenas::harness),
+    ("cbor", cbor::harness),
     ("orient2d", orient2d::harness),
     ("predicates", predicates::harness),
     ("variants", variants::harness),
@@ -538,8 +539,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
 
     // Seeded violations: each must be reported.
     let drop_fuzz = workflow.replace(
-        "[arenas_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]",
-        "[arenas_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]",
+        "[arenas_fuzz, cbor_fuzz, orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]",
+        "[arenas_fuzz, cbor_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]",
     );
     assert_ne!(drop_fuzz, workflow);
     assert!(
