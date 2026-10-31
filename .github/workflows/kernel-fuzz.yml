@@ -363,6 +363,13 @@ jobs:
           cargo kani setup
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, Ix::row
+      # giving one row too few (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-topo --
+          cargo kani -p geom-topo --harness ix::proofs::every_row_round_trips --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
