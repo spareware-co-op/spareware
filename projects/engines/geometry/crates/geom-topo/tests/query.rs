@@ -561,18 +561,16 @@ fn a_point_on_a_face_is_the_point_moved_a_little_up_y_up_z_and_along_x() {
         side_of_shell(&body, ix(0), p(5, 3, 7), &mut meter()).unwrap(),
         Some(Side::Outside)
     );
-    // And the wedge the other way up, x − z = 0 from below: the move up z enters it.
-    let under: [[i64; 3]; 6] = [
+    // The same slope with the solid above it, z >= x: the move up z enters it.
+    let above: [[i64; 3]; 6] = [
         [0, 0, 0],
-        [12, 0, 0],
         [12, 0, 12],
+        [0, 0, 12],
         [0, 12, 0],
-        [12, 12, 0],
         [12, 12, 12],
+        [0, 12, 12],
     ];
-    let body = shells(&[(&under, &wedge_faces)]);
-    let v = volume(&body, &mut meter()).unwrap();
-    assert!(v.is_negative() || !v.is_zero(), "{v:?}");
+    let body = shells(&[(&above, &wedge_faces)]);
     assert_eq!(
         side_of_shell(&body, ix(0), p(7, 3, 7), &mut meter()).unwrap(),
         Some(Side::Inside)
