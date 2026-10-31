@@ -10,6 +10,7 @@
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
     reason = "test code: a failure should stop loudly"
 )]
 
