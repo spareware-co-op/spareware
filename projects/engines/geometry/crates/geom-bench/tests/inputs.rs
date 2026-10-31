@@ -2375,3 +2375,137 @@ fn roots_typical_batches_all_succeed() {
         &m::gauss_legendre(Typical),
     );
 }
+
+/// The carrier and rational-point batches are what their classes claim, for the module and for the
+/// generated functions it calls (piece G187).
+#[test]
+fn the_carrier_classes_are_what_they_say() {
+    use geom_bench::inputs::{carrier as c, generated as i};
+    use geom_num::carrier::Rational2;
+    use geom_num::generated as gp;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(c::side(class).len(), BATCH, "{class}");
+        assert_eq!(c::order(class).len(), BATCH, "{class}");
+        assert_eq!(c::cmp_x(class).len(), BATCH, "{class}");
+        assert_eq!(c::orient(class).len(), BATCH, "{class}");
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        assert_eq!(c::meet(class).len(), BATCH, "{class}");
+    }
+    assert!(
+        c::side(Degenerate)
+            .iter()
+            .all(|(l, p)| l.side(p) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::side(Typical)
+            .iter()
+            .all(|(l, p)| l.side(p) != Ok(Sign::Zero))
+    );
+    assert!(
+        c::side(NearlyDegenerate)
+            .iter()
+            .all(|(l, p)| l.side(p) != Ok(Sign::Zero))
+    );
+    assert!(
+        c::order(Degenerate)
+            .iter()
+            .all(|(l, p, q)| l.order(p, q) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::order(NearlyDegenerate)
+            .iter()
+            .all(|(l, p, q)| l.order(p, q) != Ok(Sign::Zero))
+    );
+    assert!(
+        c::cmp_x(Degenerate)
+            .iter()
+            .all(|(p, q)| p.cmp_x(q) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::cmp_x(NearlyDegenerate)
+            .iter()
+            .all(|(p, q)| p.cmp_x(q) != Ok(Sign::Zero))
+    );
+    let turn = |[p, q, r]: &[Rational2; 3]| Rational2::orient(p, q, r);
+    assert!(
+        c::orient(Degenerate)
+            .iter()
+            .all(|t| turn(t) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::orient(NearlyDegenerate)
+            .iter()
+            .all(|t| turn(t) != Ok(Sign::Zero))
+    );
+    assert!(
+        c::meet(Degenerate)
+            .iter()
+            .all(|(l, m)| l.meet(m) == Err(NumError::Degenerate))
+    );
+    assert!(c::meet(Typical).iter().all(|(l, m)| l.meet(m).is_ok()));
+
+    assert!(
+        i::carrier_side_filter(Typical)
+            .iter()
+            .all(|&([a, b, l], [x, y, w])| gp::carrier_side::filter(a, b, l, x, y, w).is_some())
+    );
+    assert!(
+        i::carrier_side_filter(NearlyDegenerate)
+            .iter()
+            .all(|&([a, b, l], [x, y, w])| gp::carrier_side::filter(a, b, l, x, y, w).is_none())
+    );
+    assert!(
+        i::carrier_side_value(Degenerate)
+            .iter()
+            .all(
+                |&([a, b, l], [x, y, w])| gp::carrier_side::exact(a, b, l, x, y, w)
+                    == Some(Sign::Zero)
+            )
+    );
+    assert!(i::carrier_order_filter(Typical).iter().all(
+        |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            gp::carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq).is_some()
+        }
+    ));
+    assert!(i::carrier_order_filter(NearlyDegenerate).iter().all(
+        |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            gp::carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq).is_none()
+        }
+    ));
+    assert!(i::carrier_order_value(Degenerate).iter().all(
+        |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            gp::carrier_order::exact(a, b, xp, yp, xq, yq, wp, wq) == Some(Sign::Zero)
+        }
+    ));
+    assert!(
+        i::rational_cmp_filter(Typical)
+            .iter()
+            .all(|&[p, q, wp, wq]| gp::rational_cmp::filter(p, q, wp, wq).is_some())
+    );
+    assert!(
+        i::rational_cmp_filter(NearlyDegenerate)
+            .iter()
+            .all(|&[p, q, wp, wq]| gp::rational_cmp::filter(p, q, wp, wq).is_none())
+    );
+    assert!(
+        i::rational_cmp_value(Degenerate)
+            .iter()
+            .all(|&[p, q, wp, wq]| gp::rational_cmp::exact(p, q, wp, wq) == Some(Sign::Zero))
+    );
+    assert!(i::rational_orient_filter(Typical).iter().all(
+        |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            gp::rational_orient::filter(xa, ya, xb, yb, xc, yc, wa, wb, wc).is_some()
+        }
+    ));
+    assert!(i::rational_orient_filter(NearlyDegenerate).iter().all(
+        |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            gp::rational_orient::filter(xa, ya, xb, yb, xc, yc, wa, wb, wc).is_none()
+        }
+    ));
+    assert!(i::rational_orient_value(Degenerate).iter().all(
+        |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            gp::rational_orient::exact(xa, ya, xb, yb, xc, yc, wa, wb, wc) == Some(Sign::Zero)
+        }
+    ));
+}

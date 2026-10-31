@@ -1517,8 +1517,8 @@ fn spec_expression(step: &Step, d: &Derivation) -> Result<String, EmitError> {
 /// # Errors
 ///
 /// An [`EmitError`] for a description the twin does not cover: a step wider than `I384` (the
-/// widest budgeted width), a wide step made from an `i64` operand (`from_i64` has no proof yet),
-/// or no inputs.
+/// widest budgeted width), a wide sum or difference with an `i64` operand (`from_i64` has no proof
+/// yet), or no inputs.
 #[allow(
     clippy::too_many_lines,
     reason = "one straight sequence of the twin's refusals, header and items, in the order they are written"
@@ -1532,7 +1532,10 @@ pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<Stri
         ));
     }
     for (step, cert) in d.steps.iter().zip(&d.certs) {
-        if let StepKind::Op { left, right, .. } = &step.kind {
+        // A wide product takes an `i64` factor as an `i128` ([`wide_product`]), which is proven.
+        if let StepKind::Op { op, left, right } = &step.kind
+            && *op != Op::Mul
+        {
             for i in [*left, *right] {
                 if cert.width > Width::I128 && d.certs.get(i).is_some_and(|c| c.width == Width::I64)
                 {

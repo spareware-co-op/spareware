@@ -22,7 +22,7 @@
 
 use geom_num::grid::{P2, P3};
 
-use super::{Class, crossing, plane, predicate};
+use super::{Class, carrier, crossing, plane, predicate};
 
 /// Point triples for `generated::orient2d::filter`.
 #[must_use]
@@ -396,4 +396,151 @@ pub fn orient2d_avnaim(class: Class) -> Vec<[P2; 3]> {
 #[must_use]
 pub fn orient3d_avnaim(class: Class) -> Vec<[P3; 4]> {
     predicate::orient3d_from("avnaim::orient3d", class)
+}
+
+/// A carrier's a, b and c.
+fn line(l: &geom_num::carrier::Carrier) -> [i128; 3] {
+    let ([a, b], c) = l.coefficients();
+    [a, b, c]
+}
+
+/// A rational point's X, Y and W.
+fn point(p: &geom_num::carrier::Rational2) -> [i128; 3] {
+    let ([x, y], w) = p.coordinates();
+    [x, y, w]
+}
+
+/// [`carrier::side_from`]'s batch as the predicate's integers.
+fn carrier_side(op: &str, class: Class) -> Vec<([i128; 3], [i128; 3])> {
+    carrier::side_from(op, class)
+        .iter()
+        .map(|(l, p)| (line(l), point(p)))
+        .collect()
+}
+
+/// [`carrier::order_from`]'s batch as the predicate's integers.
+fn carrier_order(op: &str, class: Class) -> Vec<([i128; 2], [i128; 3], [i128; 3])> {
+    carrier::order_from(op, class)
+        .iter()
+        .map(|(l, p, q)| {
+            let [a, b, _] = line(l);
+            ([a, b], point(p), point(q))
+        })
+        .collect()
+}
+
+/// [`carrier::cmp_from`]'s batch as the predicate's integers: the two x coordinates and weights.
+fn rational_cmp(op: &str, class: Class) -> Vec<[i128; 4]> {
+    carrier::cmp_from(op, class)
+        .iter()
+        .map(|(p, q)| {
+            let ([xp, _], wp) = p.coordinates();
+            let ([xq, _], wq) = q.coordinates();
+            [xp, xq, wp, wq]
+        })
+        .collect()
+}
+
+/// [`carrier::orient_from`]'s batch as the predicate's integers.
+fn rational_orient(op: &str, class: Class) -> Vec<[[i128; 3]; 3]> {
+    carrier::orient_from(op, class)
+        .iter()
+        .map(|t| t.each_ref().map(point))
+        .collect()
+}
+
+/// Inputs for `generated::carrier_side::filter`.
+#[must_use]
+pub fn carrier_side_filter(class: Class) -> Vec<([i128; 3], [i128; 3])> {
+    carrier_side("generated::carrier_side::filter", class)
+}
+
+/// Inputs for `generated::carrier_side::value`.
+#[must_use]
+pub fn carrier_side_value(class: Class) -> Vec<([i128; 3], [i128; 3])> {
+    carrier_side("generated::carrier_side::value", class)
+}
+
+/// Inputs for `generated::plain::carrier_side_value`.
+#[must_use]
+pub fn carrier_side_value_plain(class: Class) -> Vec<([i128; 3], [i128; 3])> {
+    carrier_side("generated::plain::carrier_side_value", class)
+}
+
+/// Inputs for `generated::limbs::carrier_side_value`.
+#[must_use]
+pub fn carrier_side_value_limbs(class: Class) -> Vec<([i128; 3], [i128; 3])> {
+    carrier_side("generated::limbs::carrier_side_value", class)
+}
+
+/// Inputs for `generated::carrier_order::filter`.
+#[must_use]
+pub fn carrier_order_filter(class: Class) -> Vec<([i128; 2], [i128; 3], [i128; 3])> {
+    carrier_order("generated::carrier_order::filter", class)
+}
+
+/// Inputs for `generated::carrier_order::value`.
+#[must_use]
+pub fn carrier_order_value(class: Class) -> Vec<([i128; 2], [i128; 3], [i128; 3])> {
+    carrier_order("generated::carrier_order::value", class)
+}
+
+/// Inputs for `generated::plain::carrier_order_value`.
+#[must_use]
+pub fn carrier_order_value_plain(class: Class) -> Vec<([i128; 2], [i128; 3], [i128; 3])> {
+    carrier_order("generated::plain::carrier_order_value", class)
+}
+
+/// Inputs for `generated::limbs::carrier_order_value`.
+#[must_use]
+pub fn carrier_order_value_limbs(class: Class) -> Vec<([i128; 2], [i128; 3], [i128; 3])> {
+    carrier_order("generated::limbs::carrier_order_value", class)
+}
+
+/// Inputs for `generated::rational_cmp::filter`.
+#[must_use]
+pub fn rational_cmp_filter(class: Class) -> Vec<[i128; 4]> {
+    rational_cmp("generated::rational_cmp::filter", class)
+}
+
+/// Inputs for `generated::rational_cmp::value`.
+#[must_use]
+pub fn rational_cmp_value(class: Class) -> Vec<[i128; 4]> {
+    rational_cmp("generated::rational_cmp::value", class)
+}
+
+/// Inputs for `generated::plain::rational_cmp_value`.
+#[must_use]
+pub fn rational_cmp_value_plain(class: Class) -> Vec<[i128; 4]> {
+    rational_cmp("generated::plain::rational_cmp_value", class)
+}
+
+/// Inputs for `generated::limbs::rational_cmp_value`.
+#[must_use]
+pub fn rational_cmp_value_limbs(class: Class) -> Vec<[i128; 4]> {
+    rational_cmp("generated::limbs::rational_cmp_value", class)
+}
+
+/// Inputs for `generated::rational_orient::filter`.
+#[must_use]
+pub fn rational_orient_filter(class: Class) -> Vec<[[i128; 3]; 3]> {
+    rational_orient("generated::rational_orient::filter", class)
+}
+
+/// Inputs for `generated::rational_orient::value`.
+#[must_use]
+pub fn rational_orient_value(class: Class) -> Vec<[[i128; 3]; 3]> {
+    rational_orient("generated::rational_orient::value", class)
+}
+
+/// Inputs for `generated::plain::rational_orient_value`.
+#[must_use]
+pub fn rational_orient_value_plain(class: Class) -> Vec<[[i128; 3]; 3]> {
+    rational_orient("generated::plain::rational_orient_value", class)
+}
+
+/// Inputs for `generated::limbs::rational_orient_value`.
+#[must_use]
+pub fn rational_orient_value_limbs(class: Class) -> Vec<[[i128; 3]; 3]> {
+    rational_orient("generated::limbs::rational_orient_value", class)
 }

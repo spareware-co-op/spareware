@@ -1,32 +1,38 @@
 //! Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`,
 //! `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`,
 //! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`,
-//! `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their
-//! descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`,
-//! `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`,
-//! `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and
+//! `predicate-carrier-side`, `predicate-carrier-order`, `predicate-rational-cmp`,
+//! `predicate-rational-orient`, `predicate-variant-plain` and `predicate-variant-limbs`: the
+//! kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`,
+//! `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`,
+//! `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight`, `verus-ssi-side`,
+//! `verus-carrier-side`, `verus-carrier-order`, `verus-rational-cmp` and `verus-rational-orient`,
+//! the Verus twins of the predicates' exact paths; and
 //! `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`,
 //! `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`,
 //! `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`,
 //! `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`,
-//! `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
+//! `gappa-carrier-side-p-n`, `gappa-carrier-side-w-d`, `gappa-carrier-order`, `gappa-rational-cmp`,
+//! `gappa-rational-orient`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
 //! `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`,
-//! `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that
-//! machine-check the filters' error bounds ([`crate::predicate_certificates`]).
+//! `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-carrier-side`,
+//! `fptaylor-carrier-order`, `fptaylor-rational-cmp` and `fptaylor-rational-orient`, the problems
+//! that machine-check the filters' error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
 //! orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose
 //! coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the
 //! predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a
 //! three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane
-//! (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the
+//! (or, in 2D, of a line) each lies on; and of the predicates on 2D carriers and rational points
+//! (chapters 14.2 and 15.10, piece G187), in the language of [`crate::predicate_lang`], and the
 //! generators that derive each one ([`crate::predicate_derive`]) and write its module into
 //! `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and
 //! [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] and
 //! [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of
 //! chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the
 //! four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane
-//! ones, and `crossing.rs` the 2D crossing ones.
+//! ones, `crossing.rs` the 2D crossing ones and `carrier.rs` the carrier and rational-point ones.
 //!
 //! Guarantees:
 //!
@@ -57,7 +63,7 @@
 //!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
 //!   for its one description per predicate. No code copied.
 //!
-//! Cost: each generator derives one predicate, or all eleven for the parent module and each
+//! Cost: each generator derives one predicate, or all fifteen for the parent module and each
 //! variant: a few hundred exact operations each.
 
 use crate::generator::GenError;
@@ -333,6 +339,65 @@ let s = oa * ob2 - ob * oa2
 sign s
 ";
 
+/// `carrier_side`: which side of a carrier a rational point lies on.
+pub const CARRIER_SIDE: &str = "\
+# carrier_side: which side of the carrier a x + b y = c the rational point (x / w, y / w) lies on,
+# for w > 0: the sign of a x + b y - c w, as geom_num::carrier::Carrier::side asks it. The
+# budgets are chapter 15.10's: |a|, |b| < 2^41, |c| < 2^82, |x|, |y| < 2^124, |w| < 2^83, whose
+# f64 copies are rounded (chapter 23.2). With its sign bit the value takes 15.10's 168 bits.
+predicate carrier_side
+input a b: rounded 41 in n
+input c: rounded 82 in d
+input x y: rounded 124 in p
+input w: rounded 83 in w
+let s = a * x + b * y - c * w
+sign s
+";
+
+/// `carrier_order`: which way along a carrier one rational point lies from another.
+pub const CARRIER_ORDER: &str = "\
+# carrier_order: which way along the carrier a x + b y = c, running along (b, -a), the rational
+# point q lies from the rational point p, for wp, wq > 0: the sign of (q - p) . (b, -a) times
+# wp wq, as geom_num::carrier::Carrier::order asks it. Chapter 15.10's budgets; with its sign bit
+# the value takes 15.10's 251 bits.
+predicate carrier_order
+input a b: rounded 41 in n
+input xp yp xq yq: rounded 124 in p
+input wp wq: rounded 83 in w
+let dx = xq * wp - xp * wq
+let dy = yq * wp - yp * wq
+let s = b * dx - a * dy
+sign s
+";
+
+/// `rational_cmp`: how two rational numbers of one coordinate compare.
+pub const RATIONAL_CMP: &str = "\
+# rational_cmp: how the fractions p / wp and q / wq compare, for wp, wq > 0: the sign of
+# p wq - q wp, as geom_num::carrier::Rational2::cmp_x and cmp_y ask it, which is all that equality
+# of two rational points needs. Chapter 15.10's budgets.
+predicate rational_cmp
+input p q: rounded 124 in c
+input wp wq: rounded 83 in w
+let s = p * wq - q * wp
+sign s
+";
+
+/// `rational_orient`: which way three rational points turn.
+pub const RATIONAL_ORIENT: &str = "\
+# rational_orient: which way the rational points a, b and c turn, for wa, wb, wc > 0: the sign of
+# the determinant of their homogeneous rows, as geom_num::carrier::Rational2::orient asks it,
+# positive for a counter-clockwise turn as orient2d is. Chapter 15.10's budgets; with its sign bit
+# the value takes 15.10's 335 bits.
+predicate rational_orient
+input xa ya xb yb xc yc: rounded 124 in p
+input wa wb wc: rounded 83 in w
+let bc = xb * yc - xc * yb
+let ac = xa * yc - xc * ya
+let ab = xa * yb - xb * ya
+let det = wa * bc - wb * ac + wc * ab
+sign det
+";
+
 /// One predicate: its generator's name, the description's constant name, the description, its
 /// output file, and the comparison row of the parent module.
 pub struct Predicate {
@@ -349,7 +414,7 @@ pub struct Predicate {
 }
 
 /// The predicates, in the order the registry runs them.
-pub const PREDICATES: [Predicate; 11] = [
+pub const PREDICATES: [Predicate; 15] = [
     Predicate {
         generator: "predicate-orient2d",
         constant: "ORIENT2D",
@@ -515,6 +580,62 @@ pub const PREDICATES: [Predicate; 11] = [
             fpg: "— (Geogram has no implicit crossing point)",
         },
     },
+    Predicate {
+        generator: "predicate-carrier-side",
+        constant: "CARRIER_SIDE",
+        text: CARRIER_SIDE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/carrier_side.rs",
+        comparison: Comparison {
+            name: "carrier_side",
+            serves: "which side of a 2D carrier a rational point lies on (chapters 14.2 and 15.10). \
+                     [`crate::carrier::Carrier::side`] calls it, filter first; its documentation \
+                     states the predicate and its bit budget",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-carrier-order",
+        constant: "CARRIER_ORDER",
+        text: CARRIER_ORDER,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/carrier_order.rs",
+        comparison: Comparison {
+            name: "carrier_order",
+            serves: "the order of two rational points along a 2D carrier (chapters 14.2 and \
+                     15.10). [`crate::carrier::Carrier::order`] calls it, filter first; its \
+                     documentation states the predicate and its bit budget",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-rational-cmp",
+        constant: "RATIONAL_CMP",
+        text: RATIONAL_CMP,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/rational_cmp.rs",
+        comparison: Comparison {
+            name: "rational_cmp",
+            serves: "how two fractions of a rational point's coordinates compare (chapter 14.2). \
+                     [`crate::carrier::Rational2::cmp_x`] and `cmp_y` call it, filter first, and \
+                     equality of rational points rests on it",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-rational-orient",
+        constant: "RATIONAL_ORIENT",
+        text: RATIONAL_ORIENT,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/rational_orient.rs",
+        comparison: Comparison {
+            name: "rational_orient",
+            serves: "which way three rational points turn (chapters 14.2 and 15.10). \
+                     [`crate::carrier::Rational2::orient`] calls it, filter first; its documentation \
+                     states the predicate and its bit budget",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
 ];
 
 /// The parent module's generator.
@@ -647,13 +768,49 @@ pub fn generate_ssi_side() -> Result<Vec<u8>, GenError> {
     module_of(named("ssi_side")?)
 }
 
+/// Generator `predicate-carrier-side`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_carrier_side() -> Result<Vec<u8>, GenError> {
+    module_of(named("carrier_side")?)
+}
+
+/// Generator `predicate-carrier-order`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_carrier_order() -> Result<Vec<u8>, GenError> {
+    module_of(named("carrier_order")?)
+}
+
+/// Generator `predicate-rational-cmp`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_rational_cmp() -> Result<Vec<u8>, GenError> {
+    module_of(named("rational_cmp")?)
+}
+
+/// Generator `predicate-rational-orient`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_rational_orient() -> Result<Vec<u8>, GenError> {
+    module_of(named("rational_orient")?)
+}
+
 /// The folder of `geom-num`'s Verus crate that the predicate twins are generated into: modules of
 /// `verus/lib.rs`, outside every crate's sources, so Cargo never builds them;
 /// `kernel-dev.yml`'s `verus` job verifies the crate.
 pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
 
 /// The predicates with a Verus twin (pieces G36, G38 and G39), by name.
-pub const VERUS_TWINS: [&str; 11] = [
+pub const VERUS_TWINS: [&str; 15] = [
     "orient2d",
     "orient3d",
     "incircle",
@@ -665,6 +822,10 @@ pub const VERUS_TWINS: [&str; 11] = [
     "tpi_side",
     "lpi_weight",
     "lpi_side",
+    "carrier_side",
+    "carrier_order",
+    "rational_cmp",
+    "rational_orient",
 ];
 
 /// The twin of the predicate called `name`, as bytes.
@@ -776,6 +937,42 @@ pub fn generate_verus_ssi_weight() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_ssi_side() -> Result<Vec<u8>, GenError> {
     twin_of("ssi_side")
+}
+
+/// Generator `verus-carrier-side`: `carrier_side`'s exact path as a Verus-annotated twin (piece G187).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_carrier_side() -> Result<Vec<u8>, GenError> {
+    twin_of("carrier_side")
+}
+
+/// Generator `verus-carrier-order`: `carrier_order`'s exact path as a Verus-annotated twin (piece G187).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_carrier_order() -> Result<Vec<u8>, GenError> {
+    twin_of("carrier_order")
+}
+
+/// Generator `verus-rational-cmp`: `rational_cmp`'s exact path as a Verus-annotated twin (piece G187).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_rational_cmp() -> Result<Vec<u8>, GenError> {
+    twin_of("rational_cmp")
+}
+
+/// Generator `verus-rational-orient`: `rational_orient`'s exact path as a Verus-annotated twin (piece G187).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_rational_orient() -> Result<Vec<u8>, GenError> {
+    twin_of("rational_orient")
 }
 
 /// Generator `verus-plane-side`: `plane_side`'s exact path as a Verus-annotated twin
@@ -992,6 +1189,53 @@ pub fn generate_gappa_ssi_side() -> Result<Vec<u8>, GenError> {
     certificate("ssi_side", "gappa-ssi-side", gappa_problem)
 }
 
+/// Generator `gappa-carrier-side-p-n`: `carrier_side`'s filter for Gappa in the case where
+/// `m_p * m_n` is the largest term of its scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_carrier_side_p_n() -> Result<Vec<u8>, GenError> {
+    case_certificate("carrier_side", "gappa-carrier-side-p-n", "p-n")
+}
+
+/// Generator `gappa-carrier-side-w-d`: `carrier_side`'s filter for Gappa in the case where
+/// `m_w * m_d` is the largest term of its scale.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_carrier_side_w_d() -> Result<Vec<u8>, GenError> {
+    case_certificate("carrier_side", "gappa-carrier-side-w-d", "w-d")
+}
+
+/// Generator `gappa-carrier-order`: `carrier_order`'s filter for Gappa, whose proof Rocq checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_carrier_order() -> Result<Vec<u8>, GenError> {
+    certificate("carrier_order", "gappa-carrier-order", gappa_problem)
+}
+
+/// Generator `gappa-rational-cmp`: `rational_cmp`'s filter for Gappa, whose proof Rocq checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_rational_cmp() -> Result<Vec<u8>, GenError> {
+    certificate("rational_cmp", "gappa-rational-cmp", gappa_problem)
+}
+
+/// Generator `gappa-rational-orient`: `rational_orient`'s filter for Gappa, whose proof Rocq checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_gappa_rational_orient() -> Result<Vec<u8>, GenError> {
+    certificate("rational_orient", "gappa-rational-orient", gappa_problem)
+}
+
 /// Generator `gappa-lpi-weight-z-n`: `lpi_weight`'s filter for Gappa in the case where `m_z * m_n` is
 /// the largest term of its scale.
 ///
@@ -1132,6 +1376,46 @@ pub fn generate_fptaylor_ssi_side() -> Result<Vec<u8>, GenError> {
     certificate("ssi_side", "fptaylor-ssi-side", fptaylor_problem)
 }
 
+/// Generator `fptaylor-carrier-side`: `carrier_side`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_carrier_side() -> Result<Vec<u8>, GenError> {
+    certificate("carrier_side", "fptaylor-carrier-side", fptaylor_problem)
+}
+
+/// Generator `fptaylor-carrier-order`: `carrier_order`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_carrier_order() -> Result<Vec<u8>, GenError> {
+    certificate("carrier_order", "fptaylor-carrier-order", fptaylor_problem)
+}
+
+/// Generator `fptaylor-rational-cmp`: `rational_cmp`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_rational_cmp() -> Result<Vec<u8>, GenError> {
+    certificate("rational_cmp", "fptaylor-rational-cmp", fptaylor_problem)
+}
+
+/// Generator `fptaylor-rational-orient`: `rational_orient`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_rational_orient() -> Result<Vec<u8>, GenError> {
+    certificate("rational_orient", "fptaylor-rational-orient", fptaylor_problem)
+}
+
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.
 ///
 /// # Errors
@@ -1168,7 +1452,7 @@ mod tests {
     type Generate = fn() -> Result<Vec<u8>, GenError>;
 
     /// Each generator with its committed output, built into the test.
-    const COMMITTED: [(&str, Generate, &[u8]); 12] = [
+    const COMMITTED: [(&str, Generate, &[u8]); 16] = [
         (
             "mod.rs",
             generate_module,
@@ -1228,6 +1512,26 @@ mod tests {
             "ssi_side.rs",
             generate_ssi_side,
             include_bytes!("../../geom-num/src/generated/ssi_side.rs"),
+        ),
+        (
+            "carrier_side.rs",
+            generate_carrier_side,
+            include_bytes!("../../geom-num/src/generated/carrier_side.rs"),
+        ),
+        (
+            "carrier_order.rs",
+            generate_carrier_order,
+            include_bytes!("../../geom-num/src/generated/carrier_order.rs"),
+        ),
+        (
+            "rational_cmp.rs",
+            generate_rational_cmp,
+            include_bytes!("../../geom-num/src/generated/rational_cmp.rs"),
+        ),
+        (
+            "rational_orient.rs",
+            generate_rational_orient,
+            include_bytes!("../../geom-num/src/generated/rational_orient.rs"),
         ),
     ];
 
@@ -1300,7 +1604,8 @@ mod tests {
     /// The bit budgets `predicate.rs` derives by hand (and asserts when `geom-num` compiles) are
     /// what the certificate derives: 83 bits for orient2d, 126 for orient3d, 168 for incircle's
     /// sum and 212 for insphere's, with the factors of the wide products in `i128` and the
-    /// differences, 41 bits, in `i64`; and `plane.rs`'s 126 bits for a plane's side.
+    /// differences, 41 bits, in `i64`; `plane.rs`'s 126 bits for a plane's side; and chapter
+    /// 15.10's widths on carriers and rational points, there written with their sign bit.
     #[test]
     fn the_certificates_match_predicate_rs_budgets() {
         let bits = |p: &Predicate, step: &str| {
@@ -1324,5 +1629,9 @@ mod tests {
         assert_eq!(bits(&PREDICATES[4], "nx"), (83, "i128"));
         assert_eq!(bits(&PREDICATES[4], "d"), (125, "i128"));
         assert_eq!(bits(&PREDICATES[4], "s"), (126, "i128"));
+        assert_eq!(bits(&PREDICATES[11], "s"), (167, "I256"));
+        assert_eq!(bits(&PREDICATES[12], "s"), (250, "I256"));
+        assert_eq!(bits(&PREDICATES[13], "s"), (208, "I256"));
+        assert_eq!(bits(&PREDICATES[14], "det"), (334, "I384"));
     }
 }

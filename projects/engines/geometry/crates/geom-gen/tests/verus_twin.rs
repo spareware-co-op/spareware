@@ -259,7 +259,7 @@ fn the_twin_is_current() {
 const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
 
 /// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
-const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
+const PREDICATE_TWINS: [(&str, &str, &str); 15] = [
     (
         "orient2d",
         include_str!("../../geom-num/verus/generated/orient2d.rs"),
@@ -315,6 +315,26 @@ const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
         include_str!("../../geom-num/verus/generated/lpi_side.rs"),
         include_str!("../../geom-num/src/generated/lpi_side.rs"),
     ),
+    (
+        "carrier_side",
+        include_str!("../../geom-num/verus/generated/carrier_side.rs"),
+        include_str!("../../geom-num/src/generated/carrier_side.rs"),
+    ),
+    (
+        "carrier_order",
+        include_str!("../../geom-num/verus/generated/carrier_order.rs"),
+        include_str!("../../geom-num/src/generated/carrier_order.rs"),
+    ),
+    (
+        "rational_cmp",
+        include_str!("../../geom-num/verus/generated/rational_cmp.rs"),
+        include_str!("../../geom-num/src/generated/rational_cmp.rs"),
+    ),
+    (
+        "rational_orient",
+        include_str!("../../geom-num/verus/generated/rational_orient.rs"),
+        include_str!("../../geom-num/src/generated/rational_orient.rs"),
+    ),
 ];
 
 /// The Verus crate's root, which must hold every predicate twin as a module.
@@ -334,6 +354,10 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         geom_gen::predicates::generate_verus_tpi_side,
         geom_gen::predicates::generate_verus_lpi_weight,
         geom_gen::predicates::generate_verus_lpi_side,
+        geom_gen::predicates::generate_verus_carrier_side,
+        geom_gen::predicates::generate_verus_carrier_order,
+        geom_gen::predicates::generate_verus_rational_cmp,
+        geom_gen::predicates::generate_verus_rational_orient,
     ];
     for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
         let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));

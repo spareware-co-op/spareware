@@ -1444,7 +1444,8 @@ struct Row {
 }
 
 /// Every test file the matrix names, read when the test is built.
-const FILES: [(&str, &str); 6] = [
+const FILES: [(&str, &str); 7] = [
+    ("attack_g187.rs", include_str!("attack_g187.rs")),
     ("attack_g28.rs", include_str!("attack_g28.rs")),
     ("attack_g29.rs", include_str!("attack_g29.rs")),
     ("attack_g30.rs", include_str!("attack_g30.rs")),
@@ -1454,7 +1455,8 @@ const FILES: [(&str, &str); 6] = [
 ];
 
 /// The sources whose public predicates the matrix must list.
-const SOURCES: [(&str, &str); 4] = [
+const SOURCES: [(&str, &str); 5] = [
+    ("carrier", include_str!("../src/carrier.rs")),
     ("predicate", include_str!("../src/predicate.rs")),
     ("plane", include_str!("../src/plane.rs")),
     ("crossing", include_str!("../src/crossing.rs")),
@@ -1546,6 +1548,46 @@ fn implicit(
     }
 }
 
+/// A predicate of `carrier`: every class in `attack_g187.rs`, by one test each but the boundary.
+fn on_carrier(
+    predicate: &'static str,
+    call: &'static str,
+    one_step: &'static str,
+    boundary: &'static str,
+) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (
+                Random,
+                Test(
+                    "attack_g187.rs",
+                    "random_inputs_at_every_scale_match_the_oracle",
+                ),
+            ),
+            (OneStep, Test("attack_g187.rs", one_step)),
+            (Boundary, Test("attack_g187.rs", boundary)),
+            (
+                Corners,
+                Test(
+                    "attack_g187.rs",
+                    "the_extreme_values_reach_every_width_and_every_step_fits",
+                ),
+            ),
+            (
+                Laws,
+                Test(
+                    "attack_g187.rs",
+                    "order_and_turn_change_sign_as_they_should",
+                ),
+            ),
+        ],
+    }
+}
+
 fn perturbed(
     predicate: &'static str,
     call: &'static str,
@@ -1631,6 +1673,36 @@ fn matrix() -> Vec<Row> {
             ".orient2d",
             "ssi_orient2d_filter_boundary_crossed_both_ways",
             ("verification.rs", "crossing_laws"),
+        ),
+        on_carrier(
+            "carrier::Carrier::side",
+            ".side",
+            "one_step_from_a_carrier_is_decided_by_the_exact_path",
+            "side_filter_boundary_crossed_both_ways",
+        ),
+        on_carrier(
+            "carrier::Carrier::order",
+            ".order",
+            "one_step_along_a_carrier_is_decided_by_the_exact_path",
+            "order_filter_boundary_crossed_both_ways",
+        ),
+        on_carrier(
+            "carrier::Rational2::cmp_x",
+            ".cmp_x",
+            "one_step_along_a_carrier_is_decided_by_the_exact_path",
+            "cmp_filter_boundary_crossed_both_ways",
+        ),
+        on_carrier(
+            "carrier::Rational2::cmp_y",
+            ".cmp_y",
+            "one_step_along_a_carrier_is_decided_by_the_exact_path",
+            "cmp_filter_boundary_crossed_both_ways",
+        ),
+        on_carrier(
+            "carrier::Rational2::orient",
+            "Rational2::orient",
+            "one_step_along_a_carrier_is_decided_by_the_exact_path",
+            "orient_filter_boundary_crossed_both_ways",
         ),
         perturbed(
             "perturb::orient2d",

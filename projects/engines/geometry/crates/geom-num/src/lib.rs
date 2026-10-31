@@ -96,6 +96,7 @@ extern crate alloc;
 
 pub mod ball;
 pub mod brent;
+pub mod carrier;
 pub mod crossing;
 pub mod dd;
 pub mod dual;

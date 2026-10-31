@@ -77,7 +77,7 @@ struct Filter {
 }
 
 /// Every generated predicate, each with every problem committed for it.
-const FILTERS: [Filter; 11] = [
+const FILTERS: [Filter; 15] = [
     Filter {
         name: "orient2d",
         module: include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -242,6 +242,60 @@ const FILTERS: [Filter; 11] = [
         fptaylor: (
             "fptaylor-ssi-side.fpt",
             include_str!("../generated/fptaylor-ssi-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "carrier_side",
+        module: include_str!("../../geom-num/src/generated/carrier_side.rs"),
+        gappa: &[
+            (
+                "gappa-carrier-side-p-n.g",
+                include_str!("../generated/gappa-carrier-side-p-n.g"),
+            ),
+            (
+                "gappa-carrier-side-w-d.g",
+                include_str!("../generated/gappa-carrier-side-w-d.g"),
+            ),
+        ],
+        fptaylor: (
+            "fptaylor-carrier-side.fpt",
+            include_str!("../generated/fptaylor-carrier-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "carrier_order",
+        module: include_str!("../../geom-num/src/generated/carrier_order.rs"),
+        gappa: &[(
+            "gappa-carrier-order.g",
+            include_str!("../generated/gappa-carrier-order.g"),
+        )],
+        fptaylor: (
+            "fptaylor-carrier-order.fpt",
+            include_str!("../generated/fptaylor-carrier-order.fpt"),
+        ),
+    },
+    Filter {
+        name: "rational_cmp",
+        module: include_str!("../../geom-num/src/generated/rational_cmp.rs"),
+        gappa: &[(
+            "gappa-rational-cmp.g",
+            include_str!("../generated/gappa-rational-cmp.g"),
+        )],
+        fptaylor: (
+            "fptaylor-rational-cmp.fpt",
+            include_str!("../generated/fptaylor-rational-cmp.fpt"),
+        ),
+    },
+    Filter {
+        name: "rational_orient",
+        module: include_str!("../../geom-num/src/generated/rational_orient.rs"),
+        gappa: &[(
+            "gappa-rational-orient.g",
+            include_str!("../generated/gappa-rational-orient.g"),
+        )],
+        fptaylor: (
+            "fptaylor-rational-orient.fpt",
+            include_str!("../generated/fptaylor-rational-orient.fpt"),
         ),
     },
 ];
