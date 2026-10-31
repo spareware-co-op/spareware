@@ -992,6 +992,7 @@ const AREA: OpSchema = OpSchema {
         Charge::new(QUERY, "fin of its loops", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.area { body: the box of 10 by 20 by 30, face: its min.z face, exactness: \
               Exact } gives [0, 0, -400] and Exact.",
 };
@@ -1021,6 +1022,7 @@ const BOUNDING_BOX: OpSchema = OpSchema {
         Charge::new(QUERY, "fin", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.bounding_box { body: the box of 10 by 20 by 30 at the origin, exactness: \
               Exact } gives (0, 0, 0) to (10, 20, 30), tight, and Exact.",
 };
@@ -1051,6 +1053,7 @@ const QUERY_EXACTNESS: OpSchema = OpSchema {
         Charge::new(QUERY, "row of the checker's cheap groups", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 \
               curved face, 0 straight edges, 2 curved edges, and a report that passed.",
 };
@@ -1091,6 +1094,7 @@ const FACES: OpSchema = OpSchema {
         Charge::new(QUERY, "history entry a face's name reaches", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.faces { body: a box, histories: [its make.box history], exactness: Exact } \
               gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z.",
 };
@@ -1127,6 +1131,7 @@ const VALIDITY: OpSchema = OpSchema {
     classes: ANY_CLASS,
     charges: &[Charge::new(QUERY, "row the checker visits", 1)],
     batch: false,
+    name_free: false,
     example: "query.validity { body: a box, exactness: Exact, level: Full } gives a report with \
               no faults, all four groups run and nothing deferred.",
 };
@@ -1169,6 +1174,7 @@ const VOLUME: OpSchema = OpSchema {
         Charge::new(QUERY, "fin", 1),
     ],
     batch: false,
+    name_free: false,
     example: "query.volume { body: the box of 10 by 20 by 30, exactness: Exact } gives 36000 and \
               Exact.",
 };

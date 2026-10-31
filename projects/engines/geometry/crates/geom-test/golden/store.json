@@ -238,37 +238,19 @@
               "why": "2 new count benchmarks on the topology's hot paths (decision 32.44): topo/column_edit and topo/publish; no existing digest moved"
             },
             {
-              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
-              "kind": "corpus",
-              "piece": "G90",
-              "why": "1 new count benchmark on the attribute step (decision 32.44): attributes/apply; no existing digest moved"
-            },
-            {
-              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
-              "kind": "corpus",
-              "piece": "G105",
-              "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
-            },
-            {
-              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
-              "kind": "corpus",
-              "piece": "G104",
-              "why": "3 new count benchmarks on the batch runner (decision 32.44): batch/run_items, batch/curve_points and batch/surface_points; no existing digest moved"
-            },
-            {
-              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
-              "kind": "corpus",
-              "piece": "G101",
-              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
-            },
-            {
               "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812",
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "4317728ecf9ac1024b3975b2d93bd840a2a5f301c21598506f7abf6b450fff1b",
+              "kind": "corpus",
+              "piece": "G111",
+              "why": "the phase 3 integration train: every piece's count benchmarks together, no existing digest moved"
             }
           ],
-          "sha256": "4317728ecf9ac1024b3975b2d93bd840a2a5f301c21598506f7abf6b450fff1b"
+          "sha256": "c2c5ed32a0431e2eaf5d9f1e791d6d9d11f5cfb28e88cd5acc8454160c92e50e"
         },
         {
           "id": "geom-nurbs/operations",

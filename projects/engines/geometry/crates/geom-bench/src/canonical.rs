@@ -975,21 +975,6 @@ impl Canonical for geom_op::OpOutput<geom_make::Made> {
     }
 }
 
-impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
-    fn encode(&self, h: &mut Sha256) {
-        match self {
-            Ok(v) => {
-                h.update(&[0]);
-                v.encode(h);
-            }
-            Err(e) => {
-                h.update(&[1]);
-                debug_text(e, h);
-            }
-        }
-    }
-}
-
 // Root finding and quadrature (decision 32.44's count benchmark for piece G51).
 
 impl Canonical for geom_num::brent::Zero {
