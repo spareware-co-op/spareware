@@ -24,7 +24,7 @@
 //!
 //! Cost: the sum of the groups run, each linear in the body's rows except group 3, quadratic in
 //! faces and in shells; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few
-//! words per row (at most four per vertex and one per edge), shared by every check.
+//! words per row (at most three per vertex and one per edge), shared by every check.
 
 use alloc::vec::Vec;
 

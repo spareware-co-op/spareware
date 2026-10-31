@@ -1356,7 +1356,7 @@
       "layer": "5",
       "modules": [
         {
-          "cost": "linear in the body's rows, plus the near-constant time of each set union; memory: a few words per row of each arena, reserved before use.",
+          "cost": "linear in the body's rows, plus each set operation's time with path halving, logarithmic amortised at worst (Tarjan and van Leeuwen); memory: a few words per row of each arena, reserved before use.",
           "does": "the check runs in two stages, as Parasolid gates its body check. The first follows every list and ring of the body once: each region's shells, each shell's faces and each face's loops (a first child and a `next` chain, each child naming its parent), each loop's fins (a ring both ways), each edge's fins (a radial ring), and each edge's two ends. It finds a list that comes back on itself, a child listed twice or by the wrong parent or by none, a ring that does not close, a fin off its edge's ring, and an edge with one end. Only a body whose lists and rings are sound goes on to the second stage, which reads them:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
@@ -1374,7 +1374,7 @@
               "https://pi.math.cornell.edu/~hatcher/AT/AT.pdf",
               "https://doi.org/10.1145/62.2160"
             ],
-            "text": "Parasolid's published body check, its loop, fin and shell checks and its gating (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5, and the checking chapter it links, <http://www.q-solid.com/Parasolid_Docs/chapters/fd_chap.09.html>); the shell check of Open CASCADE, each edge used exactly twice in a closed shell (`BRepCheck_Shell`, linked from the same section); and the Euler–Poincaré formula for boundary representations, V − E + F − (L − F) = 2(S − G): M. Mäntylä, *An Introduction to Solid Modeling*, Computer Science Press, 1988, chapter 3. A. Hatcher, *Algebraic Topology*, Cambridge University Press, 2002, section 2.2 (the Euler characteristic of a compact surface, 2 − 2g − b), <https://pi.math.cornell.edu/~hatcher/AT/AT.pdf>. R. E. Tarjan and J. van Leeuwen, \"Worst-case analysis of set union algorithms\", *Journal of the ACM* 31 (1984), 245–281, <https://doi.org/10.1145/62.2160>, for the connected sets (union by size, path halving)."
+            "text": "Parasolid's published body check, its loop, fin and shell checks and its gating (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5, and the checking chapter it links, <http://www.q-solid.com/Parasolid_Docs/chapters/fd_chap.09.html>); the shell check of Open CASCADE, each edge used exactly twice in a closed shell (`BRepCheck_Shell`, linked from the same section); and the Euler–Poincaré formula for boundary representations, V − E + F − (L − F) = 2(S − G): M. Mäntylä, *An Introduction to Solid Modeling*, Computer Science Press, 1988, chapter 3. A. Hatcher, *Algebraic Topology*, Cambridge University Press, 2002, section 2.2 (the Euler characteristic of a compact surface, 2 − 2g − b), <https://pi.math.cornell.edu/~hatcher/AT/AT.pdf>. R. E. Tarjan and J. van Leeuwen, \"Worst-case analysis of set union algorithms\", *Journal of the ACM* 31 (1984), 245–281, <https://doi.org/10.1145/62.2160>, for the connected sets (path halving)."
           },
           "path": "geom_check::combinatorial",
           "provenance": [],
@@ -1547,7 +1547,7 @@
           "target": "lib"
         },
         {
-          "cost": "the sum of the groups run, each linear in the body's rows except group 3, quadratic in faces and in shells; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most four per vertex and one per edge), shared by every check.",
+          "cost": "the sum of the groups run, each linear in the body's rows except group 3, quadratic in faces and in shells; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most three per vertex and one per edge), shared by every check.",
           "does": "[`check`] runs, for each group of [`Group::ALL`] the [`Level`] asks for, the group's checks on the body and the exactness the body is recorded with, and reports every fault in the order found. A group the level asks for that this checker does not have yet is listed as missing in the report, never run and never counted as passed. An operation calls it on its result before returning it, at [`Level::of_build`] (8.3; principle 4); an import, and any caller who asks, call it at [`Level::Full`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/run.rs",
