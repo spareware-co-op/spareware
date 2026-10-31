@@ -2364,6 +2364,27 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`PLANES`]³ predicates on each case; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into [`PLANES`] planes through grid points on the hard cases of chapter 28.5: small, on coarse sub-grids, one step off them, at the grid's edge. [`check`] holds the planes to the laws below, which hold whatever the planes are. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/planes.rs",
+          "guarantees": [
+            "**Any bytes are a case**, and [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a canonical form that moves, a plane given two entries or two planes one, a flip that does not say which way a plane faced; an order that is not antisymmetric or not transitive; a turn that changes when its sides swap; a point that is not the point it was made as. No law may panic or return `BudgetExceeded`: every plane here is within budget."
+          ],
+          "job": "Fuzz target: `geom-poly`'s canonical planes and arrangement predicates, on any bytes, give one entry to one plane and one order to any points, rays or flaps.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`), with the laws of an order: antisymmetry and transitivity."
+          },
+          "path": "geom_fuzz::planes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "4 + 3 + 6 + 6 + 10 = 29 predicate calls per input, each constant time, and at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`check`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
@@ -5112,7 +5133,7 @@
           "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
           "guarantees": [
             "Every result is exact, or an error. A [`Sign`] is decided by integer arithmetic alone; no rounding ever decides it. Only [`Tpi::to_grid`] rounds: it rounds the exact rational point to the nearest grid point (ties to even) and says whether it rounded, moving each coordinate by at most [`COMMIT_PER_AXIS`](crate::ladder::COMMIT_PER_AXIS), half a step.",
-            "Nothing overflows, and nothing could wrap silently if it did. A [`Plane`] can only be made by [`Plane::through`] from grid points (within 2^40 − 1 steps of the origin), which checks the plane's budget below at construction (chapter 6.2); a [`Tpi`] can only be made by [`Tpi::new`], which checks that its homogeneous coordinates fit their types. Every intermediate fits its type by the derivation written on each function; the arithmetic of every derivation, and every figure in the table below, is asserted when the crate compiles (the budget exponents in the source, from `GRID_DIFFERENCE_BITS` on); and every operation, on `i128` and on wide integers alike, is checked, so none of this depends on a build with overflow checks. In summary, with B = 40 and every coordinate below 2^B in magnitude: | Quantity | Bound | Type | | --- | --- | --- | | Plane normal n | 2^(2B+3) = 2^83 | `i128` | | Plane offset d | 2^(3B+5) = 2^125 | `i128` | | Grid point against a plane, n · p + d | 2^126 | `i128` | | Three-plane denominator w | 2^(6B+12) = 2^252 | [`I256`] | | Three-plane numerators X | 2^(7B+14) = 2^294 | [`I320`] | | Three-plane point against a plane, n · X + d · w | 2^(9B+19) = 2^379 | [`I384`] | At B = 26 the same formulas give 9B + 19 = 253 bits, within the 256 bits EMBER uses for its 26-bit inputs (evidence note 05, section 4). The bounds are safe rather than tight: they bound every factor separately, and a triangle inside the frame cannot make every product maximal at once. With M = 2^40 − 1, what grid points can reach is |`n_i`| ≤ 4M² and |d| ≤ 4M³ (82 and 122 bits; derivations on [`Plane::through`]), |n · p + d| ≤ 16M³ (124 bits, on [`Plane::side`]), and from the plane bounds, because each of w, `X_i` and n · X + d · w is a determinant whose largest magnitude over a box of entries lies at a corner of the box, |w| ≤ 256M^6, |`X_i`| ≤ 256M^7 and |n · X + d · w| ≤ 4096M^9 (248, 288 and 372 bits; derivations on [`Tpi::homogeneous`] and [`Plane::side_of_tpi`]). Planes and three-plane points built from the corners of the frame's cube reach every one of these exactly (tested).",
+            "Nothing overflows, and nothing could wrap silently if it did. A [`Plane`] can only be made by [`Plane::through`] from grid points (within 2^40 − 1 steps of the origin) or by [`Plane::new`] from coefficients, each of which checks the plane's budget below at construction (chapter 6.2); a [`Tpi`] can only be made by [`Tpi::new`], which checks that its homogeneous coordinates fit their types. Every intermediate fits its type by the derivation written on each function; the arithmetic of every derivation, and every figure in the table below, is asserted when the crate compiles (the budget exponents in the source, from `GRID_DIFFERENCE_BITS` on); and every operation, on `i128` and on wide integers alike, is checked, so none of this depends on a build with overflow checks. In summary, with B = 40 and every coordinate below 2^B in magnitude: | Quantity | Bound | Type | | --- | --- | --- | | Plane normal n | 2^(2B+3) = 2^83 | `i128` | | Plane offset d | 2^(3B+5) = 2^125 | `i128` | | Grid point against a plane, n · p + d | 2^126 | `i128` | | Three-plane denominator w | 2^(6B+12) = 2^252 | [`I256`] | | Three-plane numerators X | 2^(7B+14) = 2^294 | [`I320`] | | Three-plane point against a plane, n · X + d · w | 2^(9B+19) = 2^379 | [`I384`] | At B = 26 the same formulas give 9B + 19 = 253 bits, within the 256 bits EMBER uses for its 26-bit inputs (evidence note 05, section 4). The bounds are safe rather than tight: they bound every factor separately, and a triangle inside the frame cannot make every product maximal at once. With M = 2^40 − 1, what grid points can reach is |`n_i`| ≤ 4M² and |d| ≤ 4M³ (82 and 122 bits; derivations on [`Plane::through`]), |n · p + d| ≤ 16M³ (124 bits, on [`Plane::side`]), and from the plane bounds, because each of w, `X_i` and n · X + d · w is a determinant whose largest magnitude over a box of entries lies at a corner of the box, |w| ≤ 256M^6, |`X_i`| ≤ 256M^7 and |n · X + d · w| ≤ 4096M^9 (248, 288 and 372 bits; derivations on [`Tpi::homogeneous`] and [`Plane::side_of_tpi`]). Planes and three-plane points built from the corners of the frame's cube reach every one of these exactly (tested).",
             "Deterministic: integers only, no floating point, no platform maths, no allocation.",
             "**Bounded proofs, and what is only tested** (chapter 28.7; piece G41 collects them here). Verus proves that the generated exact paths of `plane_side`, `tpi_weight`, `tpi_side`, `lpi_weight` and `lpi_side`, which every answer here rests on, compute their values exactly and never overflow for every input in their declared ranges (piece G39: the twins in `verus/generated/`, token for token the shipped modules), on [`crate::wide`] arithmetic that is itself proven exact (G37). The budgets in the table above are asserted when the crate compiles; the constructors' checks, the routing between filter and exact path and the rounding to the grid are tested against exact oracles, not proven (`tests/plane.rs`, `tests/attack_plane.rs`), and the filters' error bounds are checked until G40 certifies them."
           ],
@@ -6508,7 +6529,32 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a plane could not join a table.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/plane.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused the plane.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The table holds 2^32 planes.",
+              "name": "Full",
+              "shape": "unit"
+            },
+            {
+              "doc": "The allocator refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_poly::plane",
+          "name": "TableError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-poly/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-poly",
@@ -6522,12 +6568,60 @@
       "job": "Exact plane-based polyhedra and their arrangements; plane commit; indicators, early-out derivation and piece selection; the maximal-face merge with T-junction insertion, shared by `geom-bool` and `geom-mesh`.",
       "kind": "kernel",
       "layer": "6",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant and no allocation. [`along`] is two three-plane determinants and one classify; the others are at most three determinants or seven cross products of normals.",
+          "does": "a [`Line`] is where two planes meet. [`along`] orders two points of a line, each the meeting of the line with a third plane. [`same_point`] says whether two three-plane points are one point: 11.3's test, that one lies on all three planes of the other. Within a plane, a [`Ray`] runs from a vertex along the line where that plane meets another, and [`turn`] and [`around`] order rays. About a line, a [`Flap`] is a half-plane bounded by the line, and [`turn_about`] and [`about`] order flaps.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+          "guarantees": [
+            "**Exact, and within the 384-bit budget** (6.2, 11.3). [`along`] and [`same_point`] are `Plane::side_of_tpi`. A determinant of normals is a three-plane point's weight, 252 bits. A component of a cross product of normals is below 2 · 2^166 = 2^167, in `I256`. Rays and flaps compare two such signs, or the signs of two normals' components, and multiply nothing wider.",
+            "**Each order is one order.** [`around`] and [`about`] are a total order on the rays or flaps as angles from `first`, turning positively: `first` itself comes first, then the strict left, the opposite ray, and the strict right, each side by [`turn`] or [`turn_about`].",
+            "**Refused, never guessed.** A plane parallel to a line where a point on it is asked for, and two parallel planes as a line, are [`NumError::Degenerate`]."
+          ],
+          "job": "The arrangement predicates: what EMBER's five steps ask beyond which side of a plane a point lies on (11.3): where points fall along a line, how lines turn about a vertex within a face, and how faces turn about an edge. Each reduces to the classify test or to a sign of normals.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "chapter 11.3's \"The engine also orders points along an edge, edges around a vertex within a face, and faces around an edge\" (`projects/engines/geometry/architecture/11-booleans.md`), on EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); the identities are Binet-Cauchy's and the vector triple product's, re-derived above."
+          },
+          "path": "geom_poly::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`canonical`] is five greatest common divisors of 128-bit values and a few divisions. [`PlaneTable::insert`] adds one lookup, O(log n) in the planes held. A plane whose coefficients all fit `i64` takes 32 bytes, any other 64, beside its index entry.",
+          "does": "[`canonical`] divides a plane's coefficients by their greatest common divisor and fixes its sign, so every plane through the same points has one form; [`Canonical::flipped`] says whether the sign turned, which a face records as the side that is material. A [`PlaneTable`] holds one entry per canonical plane, each at the narrowest width that holds it, and [`PlaneTable::insert`] answers with the entry's index and that flip.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/plane.rs",
+          "guarantees": [
+            "**One form.** Two planes have equal canonical forms exactly when they are the same plane, whatever points made them and whichever way they face: the coefficients of a plane are fixed up to a common factor, and the reduction takes out all of it but the sign, which the first non-zero normal component fixes as positive.",
+            "**Exact, and within budget.** Reduction only shrinks coefficients, so a canonical plane is within 6.2's budget if the plane was; [`Plane::new`] checks it again.",
+            "**Deterministic.** A table's indices count first insertions, and it looks planes up by their coefficients in order, never by a hash.",
+            "**Nothing aborts.** A table grows fallibly: [`TableError::OutOfMemory`] when the allocator refuses, [`TableError::Full`] past 2^32 planes."
+          ],
+          "job": "Canonical planes: one plane, one entry, so that \"is this face on that plane\" is a comparison of indices (23.2, step 1), and two operands on one plane give the arrangement one plane (11.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "https://doi.org/10.1016/j.cad.2021.103015"
+            ],
+            "text": "canonical plane coefficients as chapter 23.2 and 23.9 fix them (`projects/engines/geometry/architecture/23-performance.md`), on the plane-based geometry of Nehring-Wirxel, Trettner and Kobbelt 2021, <https://doi.org/10.1016/j.cad.2021.103015>."
+          },
+          "path": "geom_poly::plane",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-poly",
       "provenance": [],
       "sections": "6.2, 11.3, 11.12, 11.14, 13.2, 19.5 and 23.2; open questions OQ-11.2 and OQ-19.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G123, G124, G125, G126, G127, G128, G142.",
+      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); the rest by pieces G124, G125, G126, G127, G128, G142.",
       "summary": "Spare Kit geometry kernel: exact plane-based polyhedra."
     },
     {
