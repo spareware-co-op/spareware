@@ -67,7 +67,7 @@ fn a_hinge_across_the_frame_stays_within_budget() {
     assert_eq!(got.plane.side(b), Ok(Sign::Zero));
     let far = p(m, -m, 0);
     let wide = through_edge(a, b, [1.0, -1.0, 0.25], &[a, b, far]).unwrap();
-    assert!(wide.deviation > got.deviation || wide.deviation == got.deviation);
+    assert!(wide.deviation >= got.deviation);
 }
 
 #[test]
