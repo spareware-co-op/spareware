@@ -19,6 +19,9 @@
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
+    clippy::cloned_ref_to_slice_refs,
+    clippy::many_single_char_names,
+    clippy::too_many_lines,
     reason = "test cases; the rules are for kernel code"
 )]
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
@@ -531,6 +534,8 @@ fn the_hash_covers_every_operation_in_order() {
     assert_eq!(hash, Hash(sha.finish()));
 }
 
+// WebAssembly aborts on a panic, so the planted one runs natively only.
+#[cfg(not(target_family = "wasm"))]
 #[test]
 fn a_panic_and_a_refusal_are_broken_under_every_status() {
     for name in ["boom", "nope"] {

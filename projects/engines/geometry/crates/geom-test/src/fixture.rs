@@ -27,9 +27,9 @@
 //! - `history` records every change to a stored expectation in an open edition, as the golden
 //!   store's does, with the expectation it replaced.
 //!
-//! Guarantees (each is a [`FixtureError`], never a silent choice):
+//! Guarantees:
 //!
-//! - **Nothing ambiguous parses.** Unknown fields, a missing field, a malformed id, digest, name or
+//! - **Nothing ambiguous parses**, each break a [`FixtureError`], never a silent choice: unknown fields, a missing field, a malformed id, digest, name or
 //!   edition label, a log that is not its one canonical encoding, two entries with one key, and
 //!   text that is not [`Fixture::to_json`]'s one spelling are all refused.
 //! - **Only a typed error can be `Known`.** A `Known` fixture expects `Err` under every key, never

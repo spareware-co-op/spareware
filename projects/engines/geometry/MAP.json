@@ -9595,6 +9595,23 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "`run` replays each fixture of the tier twice per key of the edition; the others read the fixtures once.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/fixture.rs",
+          "guarantees": [
+            "only `improve` and `seeds` write a file, and `improve` only the fixture named. Exit codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file or command that cannot be read or run."
+          ],
+          "job": "`fixture`: the fixtures' tool: list them, check them, run them, hold a pull request to their rules, and carry out what a run asks for.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::fixture`], whose module headers carry the methods."
+          },
+          "path": "fixture",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "`run` costs one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
           "does": null,
           "family": [],
@@ -9801,6 +9818,162 @@
             "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate. The metadata is read into the typed model of the `cargo_metadata` crate (MIT, <https://docs.rs/cargo_metadata/0.23.1/>), which also builds the `cargo metadata` command: piece G12a put it in place of the field-by-field reading of the JSON that was written here (chapter 29.1). [`check`] takes the JSON itself, not the model, so the tests can seed a violation into real metadata as a manifest would and hand it over."
           },
           "path": "geom_test::deps",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the fixture for a parse or a write.",
+          "does": "a [`Fixture`] is one permanent test case: its [`Source`], its [`OpLog`] in the native format, one [`Expect`] per kernel edition and set of operation versions, and its [`Status`]. [`Fixture::parse`] reads one from its JSON text and checks every rule below; [`Fixture::to_json`] writes the one spelling that text may have. The submodules hold the rest:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture.rs",
+          "guarantees": [
+            "**Nothing ambiguous parses**, each break a [`FixtureError`], never a silent choice: unknown fields, a missing field, a malformed id, digest, name or edition label, a log that is not its one canonical encoding, two entries with one key, and text that is not [`Fixture::to_json`]'s one spelling are all refused.",
+            "**Only a typed error can be `Known`.** A `Known` fixture expects `Err` under every key, never of kind `Internal`, and wants a success. A panic, a hang, an invalid body, a broken law, a wrong but valid result, or a disagreement with an exact oracle can never be `Known` (28.16).",
+            "**Only what replays is stored.** `Cancelled` and `OutOfMemory` depend on the caller and the machine and are never logged (chapter 22), so no expectation may name them.",
+            "**The log and the keys agree.** Every key names exactly the operations the log runs, and the log's own versions are one of the keys."
+          ],
+          "job": "Fixtures: the stored test cases every failure ends as, and the rules they keep (chapter 28.16, piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/kit/notes/G01-evidence/08-standards-coverage-testing.md"
+            ],
+            "text": "chapter 28.16's fixtures and statuses (`projects/engines/geometry/architecture/28-testing.md`), which follow `OpenCascade`'s test suite (`projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`, section D). The records are JSON (RFC 8259), read and written with `serde`, as the golden store's are."
+          },
+          "path": "geom_test::fixture",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the two sets.",
+          "does": "[`diff`] compares the fixtures of a base commit with a pull request's and sorts every change into refused, needing a kernel owner's approval, or free. `.github/workflows/` `kernel-golden.yml` runs it through the `fixture diff` binary and holds the pull request to its answer, with the golden store's own approval rule (`golden::diff::approved`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/diff.rs",
+          "guarantees": [
+            "every change to a stored fixture is sorted, so one that fits no rule is refused; the answer depends only on the two sets given; nothing reads a clock or the network."
+          ],
+          "job": "What a pull request may do to the fixtures already stored (chapters 28.13 and 28.16; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapters 28.13 and 28.16 (`projects/engines/geometry/architecture/28-testing.md`), and the golden store's rules in `golden::diff`."
+          },
+          "path": "geom_test::fixture::diff",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one match per operation, plus the operation.",
+          "does": "[`Kernel`] finds an operation by its name and version and runs it. The table is empty until the first operations of the facade are replayable (G101 on), and each piece that adds an operation adds its row here, so until then every log is refused by name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/kernel.rs",
+          "guarantees": [
+            "**An unknown operation is refused, never guessed**: a name or version not in the table gives [`Ran::Refused`], which no status accepts.",
+            "**No state survives [`Engine::start`]**: a fresh run begins from the log's own inputs."
+          ],
+          "job": "The kernel as a fixture's [`Engine`]: one operation record in, the operation's canonical parts out (chapter 28.16; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "chapter 21's replay (`projects/engines/geometry/architecture/21-determinism.md`)."
+          },
+          "path": "geom_test::fixture::kernel",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the log.",
+          "does": "an [`OpLog`] holds the document's healing distance, the records of its stored inputs (bodies a log starts from, by content ID) and its [`Operation`]s, in order. [`OpLog::encode`] writes the file: the header, the inputs, one operation record each, then END; [`OpLog::decode`] reads it back.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/log.rs",
+          "guarantees": [
+            "**The native format, and nothing else.** The file is what `geom_format::file` writes, so a log also seeds the readers' fuzz corpora and lands in the format museum unchanged.",
+            "**One encoding.** Inputs come before operations, and [`OpLog::decode`] refuses bytes that are not [`OpLog::encode`]'s, so a log has one spelling and a fixture's text one form.",
+            "**Versions come from the log**: [`OpLog::versions`] and [`OpLog::at_versions`] are how a fixture's keys and a replay at another version are found."
+          ],
+          "job": "The operation log of a fixture: its stored inputs and its operations, as one standalone `.skgf` file (chapter 28.16: \"operations and inputs, in the native format\"; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "chapter 24.2's file and record layers, chapter 21's replay (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/21-determinism.md`)."
+          },
+          "path": "geom_test::fixture::log",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each pass tries every unit once, so `O(n^2)` predicate calls for `n` units in the worst case and `n + 1` when nothing can go.",
+          "does": "[`minimise`] takes a log and a predicate that says whether a log still fails, and tries, in a fixed order, removing each operation, each input of each operation and each stored input, keeping every removal after which the predicate still holds. It repeats until a whole pass removes nothing. [`same_failure`] is the usual predicate: the log, run as the fixture's, fails in the same class of way.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/minimise.rs",
+          "guarantees": [
+            "**The result still fails**: the predicate held for it, on the last removal kept or on the first call, which refuses a log that does not fail.",
+            "**1-minimal**: removing any one operation, input or stored input from the result makes the predicate false. The method is delta debugging's end state, reached by single removals, which is what the chapter asks for; a log is short, so nothing is gained from removing chunks.",
+            "**Deterministic**: the order of trials is fixed, so one failure minimises to one log.",
+            "**Removal only**: nothing is added or reordered, and no parameter is changed."
+          ],
+          "job": "The operation-log minimiser: `geom-test` removes operations and inputs one at a time while the failure persists (chapter 28.16, step 1; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "Zeller and Hildebrandt, \"Simplifying and Isolating Failure-Inducing Input\", IEEE TSE 28(2), 2002, for 1-minimality; chapter 28.16 for the units removed (`projects/engines/geometry/architecture/28-testing.md`). Written here: the units are this crate's, and the loop is shorter than any adapter to a delta-debugging crate."
+          },
+          "path": "geom_test::fixture::minimise",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the folder.",
+          "does": "[`read_dir`] reads every `.json` file under the fixtures folder ([`DIR`]) from a working tree; [`embedded`] gives the copy compiled into this crate, which every fixture test reads, on every target (WebAssembly test runs have no file system, as for the golden store); [`parse_all`] parses a set of files and checks what no single fixture can: each sits at the path its id names, and no id repeats. [`must_fail_on_base`] lists the fixtures a pull request adds whose source records a fix.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/repo.rs",
+          "guarantees": [
+            "**The compiled copy is the tree's**: `build.rs` walks the folder and reruns when it changes, and the binary's `check` compares the two, so a stale build cannot pass.",
+            "**Every problem is listed**, not only the first.",
+            "**Files in byte order**, so a run reads the same on every machine."
+          ],
+          "job": "The fixtures folder: every stored fixture, on disk and compiled in, and the list the fails-on-base check takes (chapter 28.16; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.16 (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::fixture::repo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the log's cost twice per key, plus the perturbations.",
+          "does": "[`replay`] runs a log through an [`Engine`], operation by operation, hashes each operation's canonical output ([`crate::canonical`]) and combines them into the log's hash; the first operation that fails ends the log. [`judge`] compares a [`Replayed`] with a fixture's expectation. [`run`] runs one fixture under every key of an edition, twice on two perturbed heaps, and returns its [`Verdict`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/run.rs",
+          "guarantees": [
+            "**Exact.** A `Pass` fixture must match `expect` exactly: hash and measures, or kind and entities in order.",
+            "**Only what 28.16 allows is `Known`.** A `Known` fixture passes while it gives its expected typed error, is [`Verdict::Improved`] once it gives its wanted result, and fails on anything else: another error, another success, a panic. A panic or a log the engine refuses is [`Replayed::Broken`], which no status accepts.",
+            "**Twice, on two heaps.** As every golden does (28.13), each key runs [`REPEATS`] times, each time from a fresh [`Engine::start`] on a differently perturbed heap, and every run must agree before the store's value is looked at; a run that differs is [`Failure::Repeat`].",
+            "**Nothing is written**: judging never changes a fixture."
+          ],
+          "job": "Replaying a fixture's log and judging it: Pass, Fail or Improved (chapter 28.16; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.16's statuses, chapter 28.13's canonical output and perturbations (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::fixture::run",
           "provenance": [],
           "spdx": null,
           "target": "lib"

@@ -9,7 +9,7 @@
 //! cargo run -p geom-test --bin fixture -- diff --base <commit> [--root <dir>]
 //!     [--reviews <file> --head <commit> --author <login> [--permissions <file>]]
 //! cargo run -p geom-test --bin fixture -- fixes --base <commit> [--root <dir>]
-//! cargo run -p geom-test --bin fixture -- fails [--timeout-seconds <n>] <id>...
+//! cargo run -p geom-test --bin fixture -- fails [--timeout-seconds <n>] [--root <dir>] <id>...
 //! cargo run -p geom-test --bin fixture -- improve <id> [--root <dir>]
 //! cargo run -p geom-test --bin fixture -- minimise <id> [--root <dir>]
 //! cargo run -p geom-test --bin fixture -- seeds <dir>
@@ -34,7 +34,8 @@
 //! - `minimise` prints the fixture with its log minimised, keeping its failure's class.
 //! - `seeds` writes every fixture's log into `<dir>`, named by its id, for the fuzz corpora.
 //!
-//! Exit codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file
+//! Guarantees: only `improve` and `seeds` write a file, and `improve` only the fixture named. Exit
+//! codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file
 //! or command that cannot be read or run.
 //!
 //! Method: none; it parses its arguments and calls [`geom_test::fixture`], whose module headers
@@ -137,6 +138,8 @@ enum Tool {
         timeout_seconds: u64,
         /// The fixtures.
         ids: Vec<String>,
+        #[command(flatten)]
+        root: Root,
     },
     /// Move a Known fixture that gives its wanted result to Pass.
     Improve {
@@ -400,12 +403,15 @@ fn fixes(base: &str, root: &Root) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn fails(timeout_seconds: u64, ids: &[String]) -> Result<ExitCode, String> {
+fn fails(timeout_seconds: u64, ids: &[String], root: &Root) -> Result<ExitCode, String> {
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
+    let root = root_of(root)?;
     let mut bad = 0_usize;
     for id in ids {
         let mut child = Command::new(&me)
             .args(["one", id])
+            .arg("--root")
+            .arg(&root)
             .stdout(Stdio::inherit())
             .spawn()
             .map_err(|e| format!("{id}: {e}"))?;
@@ -529,7 +535,8 @@ fn command(tool: Tool) -> Result<ExitCode, String> {
         Tool::Fails {
             timeout_seconds,
             ids,
-        } => fails(timeout_seconds, &ids),
+            root,
+        } => fails(timeout_seconds, &ids, &root),
         Tool::Improve { id, root } => improve(&id, &root),
         Tool::Minimise { id, root } => minimise_command(&id, &root),
         Tool::Seeds { dir } => seeds(&dir),
