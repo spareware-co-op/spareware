@@ -701,6 +701,7 @@ dependencies = [
  "geom-pool",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "geom-topo",
  "kit-core",
  "proc-macro2",

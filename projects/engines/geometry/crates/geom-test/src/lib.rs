@@ -209,6 +209,8 @@
 #![forbid(unsafe_code)]
 
 pub mod canonical;
+pub mod completeness;
+pub mod contract;
 pub mod coverage;
 pub mod deps;
 pub mod fixture;

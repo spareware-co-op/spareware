@@ -1502,6 +1502,7 @@ fn every_rule_has_a_seeded_fixture_and_a_label() {
         Rule::ErrorEnum,
         Rule::ErrorDoc,
         Rule::ErrorBase,
+        Rule::Covers,
         Rule::Stale,
         Rule::GapStale,
     ];
