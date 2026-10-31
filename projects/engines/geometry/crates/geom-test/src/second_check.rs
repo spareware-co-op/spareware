@@ -15,7 +15,7 @@
 //!   where two edges meet and the midpoints along each edge, and a point inside each face, found on
 //!   a scan line.
 //! - **Loops and shells.** Each face has one loop turning counter-clockwise from outside and the
-//!   rest clockwise. A solid region has one shell of positive volume and the rest negative, and each
+//!   rest clockwise, and a positive area when they are added. A solid region has one shell of positive volume and the rest negative, and each
 //!   shell lies where its region allows, by the parity of a ray.
 //!
 //! Nothing here calls `geom-check`, its predicates or `geom_num`'s planes: a plane is three rationals
@@ -56,7 +56,7 @@ use core::cmp::Ordering;
 
 use dashu_int::{IBig, UBig};
 use dashu_ratio::RBig;
-use geom_curve::CurveKind;
+use geom_curve::{CurveKind, ParamCurve};
 use geom_num::{Exactness, P3};
 use geom_surface::SurfaceKind;
 use geom_topo::ix::Arena;
@@ -298,7 +298,11 @@ fn lines(a: &Arenas, points: &[Option<V3>], findings: &mut Vec<Finding>, bound: 
                 .get(v)
                 .and_then(|p| a.points.get(*p))
                 .is_some_and(|p| matches!(p, PointKind::Meet(_)));
-            let room = if meeting { bound + q(2) } else { bound.clone() };
+            let room = if meeting {
+                bound + q(3) / q(2)
+            } else {
+                bound.clone()
+            };
             let held = place.is_some_and(|p| {
                 p.iter().zip(&end).all(|(c, e)| {
                     e.as_ref().is_some_and(|e| {
@@ -724,19 +728,21 @@ fn loops(r: &mut Read) {
     for plate in &r.plates {
         let mut outer = 0;
         let mut wrong = false;
+        let mut whole = RBig::ZERO;
         for ring in &plate.rings {
             let Some(vector) = area(r, ring) else {
                 continue;
             };
             let along = dot(&vector, &plate.n);
             let along = if plate.forward { along } else { -along };
+            whole += &along;
             match along.partial_cmp(&RBig::ZERO) {
                 Some(Ordering::Greater) => outer += 1,
                 Some(Ordering::Less) => {}
                 _ => wrong = true,
             }
         }
-        if outer != 1 || wrong {
+        if outer != 1 || wrong || whole <= RBig::ZERO {
             found.push(Finding::LoopSense(plate.row));
         }
     }

@@ -520,8 +520,8 @@ fn past_link<K>(ix: Option<Ix<K>>, by: u32) -> Option<Option<Ix<K>>> {
     }
 }
 
-/// Half the size of the box round `body`'s faces, along each axis.
-fn half_size(a: &Arenas) -> Option<[i64; 3]> {
+/// A quarter of the size of the box round `body`'s faces, along each axis.
+fn quarter_size(a: &Arenas) -> Option<[i64; 3]> {
     let mut low = [i64::MAX; 3];
     let mut high = [i64::MIN; 3];
     for f in (0..a.rows(Arena::Face)).filter_map(Ix::<Face>::new) {
@@ -540,14 +540,15 @@ fn half_size(a: &Arenas) -> Option<[i64; 3]> {
     let [lx, ly, lz] = low;
     let [hx, hy, hz] = high;
     Some([
-        hx.checked_sub(lx)?.checked_div(2)?,
-        hy.checked_sub(ly)?.checked_div(2)?,
-        hz.checked_sub(lz)?.checked_div(2)?,
+        hx.checked_sub(lx)?.checked_div(4)?,
+        hy.checked_sub(ly)?.checked_div(4)?,
+        hz.checked_sub(lz)?.checked_div(4)?,
     ])
 }
 
-/// Two crossing faces: a flat body's solid gains a second shell, a copy of its own moved half its
-/// size along each axis, so faces of the two cross away from any shared edge.
+/// Two crossing faces: a flat body's solid gains a second shell, a copy of its own moved a quarter
+/// of its size along each axis, so faces of the two cross away from any shared edge. Half its size
+/// would seat an L's copy in the L's notch, touching and not crossing.
 #[allow(
     clippy::too_many_lines,
     reason = "one pass copies every arena's rows; split, each piece would carry the same counts"
@@ -557,7 +558,7 @@ fn crossing_faces(body: &Body, exactness: Exactness) -> Option<Broken> {
     if exactness != Exactness::Exact || a.rows(Arena::Shell) != 1 {
         return None;
     }
-    let offset = half_size(a)?;
+    let offset = quarter_size(a)?;
     if offset.contains(&0) {
         return None;
     }

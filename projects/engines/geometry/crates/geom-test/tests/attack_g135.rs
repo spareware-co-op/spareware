@@ -197,21 +197,26 @@ fn both_checkers_find_a_cavity_outside_its_shell() {
 
 #[test]
 fn a_certified_record_is_read_by_both() {
-    // A corner a step off its plane passes at a bound of one step and not at none.
+    // A corner two steps off its plane is on it at a bound of a hundred and not at none. Its faces'
+    // boxes, which hold a corner exactly in every class, still do not hold it, for both.
     let body = grid(CORPUS[0]).unwrap();
     let exact = (CATALOGUE
         .iter()
         .find(|i| i.name.starts_with("a vertex off its surface")))
     .and_then(|i| (i.inject)(&body, Exactness::Exact))
     .unwrap();
-    assert!(!kinds(&exact.body, Exactness::Exact).is_empty());
-    assert!(!check(&exact.body, Exactness::Exact).is_empty());
+    let off_plane = |found: &[Finding]| found.iter().any(|f| matches!(f, Finding::OffPlane(_)));
+    assert!(kinds(&exact.body, Exactness::Exact).contains(&FaultKind::VertexOffSurface));
+    assert!(off_plane(&check(&exact.body, Exactness::Exact)));
     let room = Exactness::Certified {
         bound: Steps(100),
         step: GridStep::Q0,
     };
-    assert_eq!(check(&exact.body, room), []);
-    let _ = kinds(&exact.body, room);
+    let (first, second) = (kinds(&exact.body, room), check(&exact.body, room));
+    assert!(!first.contains(&FaultKind::VertexOffSurface));
+    assert!(first.contains(&FaultKind::FaceBound));
+    assert!(!off_plane(&second));
+    assert!(second.iter().any(|f| matches!(f, Finding::OutOfBox(_))));
 }
 
 #[test]
