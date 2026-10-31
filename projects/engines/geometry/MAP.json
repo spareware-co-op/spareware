@@ -2407,6 +2407,29 @@
           "target": "lib"
         },
         {
+          "cost": "one function call and at most a dozen 400-bit Newton steps or series per input.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a function (sinpi, cospi, exp, ln or atan2, piece G47) and its argument or arguments. [`check`] calls it in `geom_num::math` and holds it to its table's claim, \"correctly rounded\": the result is the double nearest the exact value. The exact value comes from `geom_test::fixed`'s 400-bit fixed point: cos and sin of πt and e^x by their series, ln x by Newton's method on e^y, and atan2 by Newton's method on x·sin θ − y·cos θ. Typed refusals (a NaN or infinite argument, an overflow, a logarithm of a non-positive number) are legal where the table says so.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/maths.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Arguments come through the rule bytes of the `curves` target, and for sinpi and cospi also near whole numbers and halves, where the results are exact or tiny.",
+            "**Decided only where 400 bits can.** A result smaller than 2^−250 in magnitude, or an exact value within the oracle's error of a midpoint between two doubles, is not judged: the oracle could not tell. Everywhere else a result that is not the nearest double is a [`Finding`].",
+            "**A panic is a failure.**",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes."
+          ],
+          "job": "Fuzz target: the proven maths functions are correctly rounded, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "correct rounding as `geom_num::math`'s table states it, checked against independent high-precision evaluation (chapter 28.9's reference implementations; `projects/engines/geometry/architecture/28-testing.md`), driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::maths",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one curve, one insertion, one Bernstein decomposition and one interpolation of at most [`MAX_POINTS`] points per input, each bounded by [`WORK`] work units, and their exact evaluations; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a NURBS curve in two or three dimensions (degree 1 to 4, a clamped or uniform knot vector with repeated knots, rational or not), a parameter, a knot to insert and the curve's control points again as data to interpolate. [`check`] builds it with `geom-nurbs` and holds four laws against `geom_test::nurbs_reference`, which computes the same curves in exact rationals:",
           "family": [],

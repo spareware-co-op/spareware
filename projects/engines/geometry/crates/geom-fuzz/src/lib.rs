@@ -18,7 +18,8 @@
 //! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
-//! zero brackets its sign change (G51, G52, G53). The layout every target follows, and how each engine runs it locally and in CI,
+//! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
+//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -169,6 +170,7 @@ use core::fmt;
 pub mod boxtree;
 pub mod curves;
 pub mod linalg;
+pub mod maths;
 pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;
