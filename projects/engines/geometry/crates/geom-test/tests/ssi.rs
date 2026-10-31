@@ -3,8 +3,24 @@
 //! The scorer itself is Python and runs on CI (`ssi/score.sh`): here its verdict comes from
 //! [`scored`], which reads [`cover`] the way the scorer reads coverage.
 
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    reason = "test cases; the rules are for kernel code"
+)]
+#![allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used
+)]
+
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use geom_curve::{CurveKind, Line};
 use geom_intersect::{
@@ -538,7 +554,7 @@ fn coverage_finds_what_is_missing_and_what_is_extra() {
         [2.0, 0.0, 0.0],
     ]]);
     let seen = compare(&case, &long, cov);
-    assert!(seen.missing.is_empty());
+    assert_eq!(seen.missing.len(), 0);
     // That curve runs past the truth.
     assert_eq!(seen.spurious, 1);
     // Half of it: the far end is missing.
@@ -602,7 +618,7 @@ fn an_isolated_point_is_judged_and_a_singular_point_is_not() {
     assert_eq!(compare(&case, &found, 0.001), Seen::default());
     // A lone sample of an answer curve is still measured.
     let lone = compare(&case, &answer(vec![vec![[0.5, 0.0, 0.0]]]), 0.001);
-    assert!(lone.missing.is_empty());
+    assert_eq!(lone.missing.len(), 0);
 }
 
 #[test]
@@ -996,7 +1012,7 @@ fn a_clean_class_may_not_flag() {
         .answer(&case, &placed, ACCURACY)
         .expect("answered");
     // A box right on the seam, the size of the floor: nothing wrong with it but where it is.
-    let p = placed.steps([1.0, 0.0, 0.0]).map(|x| x.round_ties_even());
+    let p = placed.steps([1.0, 0.0, 0.0]).map(f64::round_ties_even);
     #[allow(
         clippy::cast_possible_truncation,
         reason = "a whole number of steps in range"
@@ -1025,7 +1041,10 @@ fn the_ceilings_hold_the_count_and_the_size_apart() {
         size,
         why: String::new(),
     };
-    assert!(broken(&case, &placed, Mode::Default, &out, &at(count, size)).is_empty());
+    assert_eq!(
+        broken(&case, &placed, Mode::Default, &out, &at(count, size)).len(),
+        0
+    );
     for (count, size) in [(count - 1, size), (count, size - 1), (0, 0)] {
         let broke = broken(&case, &placed, Mode::Default, &out, &at(count, size));
         assert_eq!(broke, ["over-ceiling"], "{count} {size}");
@@ -1075,7 +1094,10 @@ fn a_band_is_measured_to_the_line_not_its_samples() {
         step * placed.scale() > wide,
         "samples sparser than the band"
     );
-    assert!(broken(&case, &placed, Mode::Default, &out, &open()).is_empty());
+    assert_eq!(
+        broken(&case, &placed, Mode::Default, &out, &open()).len(),
+        0
+    );
 }
 
 #[test]
@@ -1176,7 +1198,7 @@ fn both_readings_must_agree() {
         judge(&j, &open()).expect("judged")
     };
     let disagree = |f: &Failure| matches!(f, Failure::Disagree { .. });
-    assert!(rules(&truth, Verdict::Pass).is_empty());
+    assert_eq!(rules(&truth, Verdict::Pass).len(), 0);
     assert!(rules(&dropped, Verdict::Pass).iter().any(disagree));
     assert!(rules(&spurious, Verdict::Pass).iter().any(disagree));
     assert!(rules(&truth, Verdict::Incomplete).iter().any(disagree));
@@ -1250,7 +1272,10 @@ fn something_spurious_beside_a_gap_fails() {
         };
         judge(&j, &open()).expect("judged")
     };
-    assert!(judged(&["branch 0 covered 90%", "topology differs"]).is_empty());
+    assert_eq!(
+        judged(&["branch 0 covered 90%", "topology differs"]).len(),
+        0
+    );
     for flag in [
         "output curve 1 off the true intersection by up to 3e-3",
         "output point 0 off the true intersection by 3e-3",
@@ -1370,7 +1395,7 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 /// A run of `stand_in` over `cases`, judged.
-fn judged_run(dir: &PathBuf, cases: &[Case], stand_in: StandIn, ceilings: &Ceilings) -> Report {
+fn judged_run(dir: &Path, cases: &[Case], stand_in: StandIn, ceilings: &Ceilings) -> Report {
     let mut lines = Vec::new();
     for case in cases {
         let placed = place(case, ACCURACY).expect("placed");
@@ -1431,7 +1456,7 @@ fn a_report_publishes_every_case() {
 
     // The same run again is the same answer, bit for bit; a changed one is named.
     let again = judged_run(&dir, &cases, StandIn::Flagged, &ceilings);
-    assert!(report.differs_from(&again).is_empty());
+    assert_eq!(report.differs_from(&again).len(), 0);
     let other = judged_run(&dir, &cases, StandIn::Truth, &ceilings);
     assert_eq!(report.differs_from(&other), ["f16_cylinders_external"]);
     let mut lost = again.clone();
@@ -1571,8 +1596,8 @@ fn the_catalogue_covers_the_lists_it_rebuilds() {
         let closed = case.expected.branches.iter().filter(|b| b.closed);
         for branch in closed {
             let (a, b) = (branch.points[0], branch.points[branch.points.len() - 1]);
-            let gap = (0..3).map(|i| (a[i] - b[i]).abs()).fold(0.0, f64::max);
-            assert!(gap < 1e-9 * (1.0 + case.cov_tol * 1_024.0), "{}", case.id);
+            let close = (0..3).all(|i| (a[i] - b[i]).abs() < 1e-9 * (1.0 + case.cov_tol * 1_024.0));
+            assert!(close, "{}", case.id);
         }
     }
 }

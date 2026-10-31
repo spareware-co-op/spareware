@@ -180,7 +180,7 @@ fn cases(dir: &Path) -> Result<Vec<Case>, SsiError> {
 /// Every case of `all`, placed and held to its closed forms; prints a line each, and gives how many
 /// failed.
 fn place_all(all: &[Case], tolerance: f64, quiet: bool) -> usize {
-    let mut failed = 0;
+    let mut failed = 0_usize;
     for case in all {
         let result = place(case, Some(accuracy_of(tolerance))).and_then(|placed| {
             let off = disagreement(case, &placed)?;

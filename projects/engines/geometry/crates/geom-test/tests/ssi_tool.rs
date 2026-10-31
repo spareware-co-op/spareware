@@ -1,6 +1,22 @@
 //! The `ssi` and `ssi-runner` binaries (G160): the contract the corpus's scorer calls, the catalogue
 //! as files, and the gate's exit codes.
 
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    reason = "test cases; the rules are for kernel code"
+)]
+#![allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used
+)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output as Ran};

@@ -312,12 +312,12 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
           "guarantees": [
-            "**Exact, for every count.** Every limit is tested in integers ([`Change::rose_over`]): 100 · head > (100 + p) · base, and a count resolves p% exactly when it is at least ⌈100 / p⌉. Percentages are computed, as floating point, for display only.",
+            "**Exact, for every count.** Every limit is tested in integers ([`Change::rose_over`]): 100 · head > (100 + p) · base. Percentages are computed, as floating point, for display only.",
             "**Every benchmark judged, or no verdict.** Every benchmark the run lists has exactly one summary, every summary is a benchmark the run lists and of the schema version the gate's Gungraun writes, and every summary carries a whole count for each of the eight judged measures, from the pull request and, for a benchmark the merge base has, from the merge base; anything else is an error, never a pass.",
             "**Deterministic reports.** Benchmarks are judged and reported in name order, and measures in the order of [`JUDGED`], the same on every run and every platform.",
             "**Totality.** No input makes [`parse_summary`], [`judge`] or [`read_summaries`] panic."
           ],
-          "job": "The instruction-and-cache gate's verdict, read from Gungraun's machine-readable summaries: instructions and estimated cycles are gated at the gate's percentage on every benchmark, and each L1 and last-level miss count is gated at that percentage only where its merge-base count can resolve it; a smaller miss count is listed and judged through estimated cycles.",
+          "job": "The instruction-and-cache gate's verdict, read from Gungraun's machine-readable summaries: instructions and estimated cycles are gated at the gate's percentage on every benchmark, and every L1 and last-level miss count is listed when it changes and judged through estimated cycles.",
           "method": {
             "links": [
               "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358",
@@ -325,7 +325,7 @@
               "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126",
               "https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md"
             ],
-            "text": "the summary files Gungraun writes with `--save-summary`, one per benchmark in its output folder (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358>), read through Gungraun's own typed summary model (`gungraun_runner::summary::model`, schema version 7, <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29>; the `summary` feature of the `gungraun-runner` crate at exactly the version the gate runs) and `serde_json`; estimated cycles as Gungraun computes them (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126>); the percentage limit of Gungraun's soft limits (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>), applied exactly; the resolution floor is ours, derived above, because no source sets a floor for a percentage limit on small counts."
+            "text": "the summary files Gungraun writes with `--save-summary`, one per benchmark in its output folder (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/args.rs#L1325-L1358>), read through Gungraun's own typed summary model (`gungraun_runner::summary::model`, schema version 7, <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/summary/model.rs#L29>; the `summary` feature of the `gungraun-runner` crate at exactly the version the gate runs) and `serde_json`; estimated cycles as Gungraun computes them (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/crates/gungraun-runner/src/runner/callgrind/mod.rs#L110-L126>); the percentage limit of Gungraun's soft limits (<https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>), applied exactly to instructions and estimated cycles; judging the miss counts through estimated cycles alone is the kernel owners' decision, from the evidence above (23.13)."
           },
           "path": "geom_bench::callgrind",
           "provenance": [
@@ -705,6 +705,26 @@
             "text": "the doubling test for empirical growth (run at n, 2n and 4n and compare the ratios with the stated cost; Sedgewick and Wayne, *Algorithms*, 4th edition, section 1.4, <https://algs4.cs.princeton.edu/14analysis/>), on the operand classes of Knuth's schoolbook arithmetic (volume 2, section 4.3.1)."
           },
           "path": "geom_bench::inputs::growth",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/intersect.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-intersect`'s hot paths (piece G158, decision 32.44): a list of items put in canonical order, a circle's canonical key, and a pair of lines put in canonical order.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the calls of `geom-intersect`'s attack tests (`tests/attack_g158.rs`), under an unlimited budget. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::intersect",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1984,7 +2004,7 @@
           "guarantees": [
             "**Exact definition, certified evaluation.** Points, derivatives of every order (Leibniz's rule on W·C = A) and bounds over spans are interval evaluations of those rational functions.",
             "**An exact NURBS form.** The segments are rational quadratic Bezier pieces on the same parameter; an arc whose middle weight is low (a semicircle or more) is first halved, or quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight positive. The deviation bounds only the rounding of the pieces' points and weights.",
-            "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form.",
+            "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form. A grid transform that moves every vertex exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Splits are trimmed polylines.** A split leaves the polyline untouched and trims it (`crate::trimmed`); a reversal reverses the vertices and negates the bulges, exactly."
           ],
           "job": "The bulge polyline kind: lines and arcs through vertices, each arc given by its bulge, with optional widths, as DXF's LWPOLYLINE stores them.",
@@ -2031,7 +2051,7 @@
           "guarantees": [
             "**Stored as themselves.** An arc stays an arc: its center, radius and frame are the stored doubles, exactly (chapter 7).",
             "**Exact NURBS forms.** Circles, ellipses and hyperbolas convert to rational quadratics on the tangent half-angle parameter (`crate::rational`), parabolas to a quadratic on the same parameter; each with a certified deviation, 0 when the doubles hold the conversion exactly.",
-            "**Transforms change kinds explicitly.** A similarity keeps a circle a circle (radius times its scale, frame carried); any other transform makes it an [`Ellipse`] with conjugate axes, on the same parameter; principal axes on a frame stay principal under a similarity.",
+            "**Transforms change kinds explicitly.** A similarity keeps a circle a circle (radius times its scale, frame carried); any other transform makes it an [`Ellipse`] with conjugate axes, on the same parameter; principal axes on a frame stay principal under a similarity. A grid transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Exact split and reversal.** A split changes only the domain; a reversal negates the domain and v (a frame's normal), exactly."
           ],
           "job": "The conic kinds: circle and arc, ellipse and elliptical arc, hyperbola and parabola, each stored as itself.",
@@ -2272,7 +2292,7 @@
             "**Planar kinds see the plane.** For a 2D kind the classification is of the transform's 2×2 block, so a uniform scale of the plane keeps a circle a circle.",
             "**Typed.** A degenerate transform (singular, or too close to it to decide) is refused for the analytic kinds, whose definitions need independent vectors; a 2D kind takes only a transform acting in the plane.",
             "**Normals carried, not reflected.** A normal maps by n ↦ sign(det M)·M·n, so the frame built from the images, x̂′ along M·x and ŷ′ = n̂′ × x̂′, is exactly the image of x̂ and ŷ under a similarity M = s·R: (R·a) × (R·b) = det R · R·(a × b) for an orthogonal R.",
-            "**Exact where the arithmetic is.** The enclosed images use `tight`, so an exact transform of exact data gives exact points."
+            "**Exact where the arithmetic is.** The enclosed images use `tight`, so an exact transform of exact data gives exact points, and [`Motion::exact_for`] says when a grid transform moves a kind's stored points exactly, so that the kind rebuilt from them is exactly its image."
           ],
           "job": "A typed transform as the analytic kinds apply it: its entries, its classification, the images of stored points, vectors and normals, and the exact image of a kind's vectors for the deviation.",
           "method": {
@@ -2309,7 +2329,7 @@
           "target": "lib"
         },
         {
-          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis.",
+          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives.",
           "does": "[`Offset`] stores a trimmed basis curve C and an [`OffsetLaw`]:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
@@ -4057,6 +4077,29 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_ITEMS`] items, compared pairwise by the oracle; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_ITEMS`] items whose enclosures sit on a coarse lattice, so ties, touches and overlaps are common, a coverage, and two operands, each a line, a circle, a plane or a sphere. [`check`] builds the intersection and holds it to the laws below, with an all-pairs oracle that shares nothing with the sweep it judges. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/intersect.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a set of items accepted or refused against the oracle, an order that is not 12.15's, an answer that depends on the order of the items given, swaps that do not undo, a budget that changes an answer instead of stopping it, or two operand orders that make different calls."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s result types keep their invariants and its operand order is one order, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12's result rules and canonical order (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::intersect",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
@@ -4809,7 +4852,47 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an intersection could not be computed.",
+          "file": "projects/engines/geometry/crates/geom-intersect/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The caller asked to stop.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "The pair's own budget ran out, or an allocation was refused.",
+              "name": "BudgetExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "The operands do not fit the finer frame's range (12.1).",
+              "name": "FrameRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "The pair needs a maths function that has no proven error bound yet (12.3).",
+              "name": "UnprovenMaths",
+              "shape": "unit"
+            },
+            {
+              "doc": "A broken precondition, such as an operand with no domain. The checker should already have caught it.",
+              "name": "InvalidInput",
+              "shape": "unit"
+            },
+            {
+              "doc": "A proof did not close, a derived cap was hit, or an invariant failed. A bug, never a success.",
+              "name": "Internal",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_intersect::error",
+          "name": "IntersectError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-intersect/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-intersect",
@@ -4823,12 +4906,80 @@
       "job": "Certified curve-curve, curve-surface and surface-surface intersection; level curves, isoclines and contour generators; closed-form distances.",
       "kind": "kernel",
       "layer": "4",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant.",
+          "does": "[`IntersectError`] names each failure of a pair. Every pair of kinds is supported, so there is no \"unsupported\" error. A flagged region is not one of these: it is part of a complete, honest answer.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/error.rs",
+          "guarantees": [
+            "**Never a partial answer.** A failure returns no items: every error replaces the whole result.",
+            "**A stop keeps its reason.** A meter's stop is [`IntersectError::Cancelled`] or [`IntersectError::BudgetExceeded`], so a caller can tell a request from a limit."
+          ],
+          "job": "Why an intersection could not be computed (12.16).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.16's error kinds, with `geom-run`'s stops (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a key is one conversion to NURBS, charged to the meter; ordering a pair compares two keys, linear in their lengths. Recursion: none.",
+          "does": "a [`CanonicalKey`] orders operands by kind, then by a kernel-internal encoding of their defining data: each kind's NURBS form, which is a function of that data alone, or, for a line or plane that has no such form because it may be unbounded, the data itself. [`pair`] puts two [`Operand`]s in that order, runs a method on them and gives its answer back in the caller's roles. [`pairs`] does so for many pairs on the kernel's parallel helper, each under an equal share of the budget, in canonical pair order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/order.rs",
+          "guarantees": [
+            "**The same items with the roles swapped.** A method only ever sees the canonical order, so `pair(a, b)` and `pair(b, a)` make the same call, and differ only in which operand's unknowns come first in each item's enclosure.",
+            "**No address and no file format.** The key reads the defining data's values and nothing else, so it never depends on memory addresses, nor on file-format bytes, whose version can change independently (12.15). It is versioned with the kernel edition (26.2).",
+            "**The same answers on any thread count.** Pairs run in chunks fixed by [`PLAN`], each under its own budget, and come back in the caller's order. A pair's budget never depends on the others' costs, only on how many pairs there are, so the shares of 12.15 are the same in any order."
+          ],
+          "job": "The canonical order of a pair: which operand goes first, and how a batch of pairs runs (12.15).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.15's canonical operand order and per-pair budgets (`projects/engines/geometry/architecture/12-intersections.md`), on `geom-run`'s batch rule."
+          },
+          "path": "geom_intersect::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) comparisons to order n items, then a sweep to prove them disjoint: for each item, one comparison per later item of its kind that starts before it ends in the first unknown, n²/2 at worst and each charged to the meter. Recursion: none.",
+          "does": "an [`Intersection`] is the items of one pair in canonical order, with its [`Coverage`], its diagnostics and the work it took. An [`Item`] is a point, a curve, an overlap or a flagged region, each with its enclosure on the operands' parameters and in space. A [`ParamBox`] holds one interval per unknown of the pair, the canonical first operand's first, so [`Intersection::swapped`] gives the same items with the roles changed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/result.rs",
+          "guarantees": [
+            "**One order.** [`Intersection::new`] sorts the items by kind, then by their enclosure on the parameters: lower corner, then upper corner, coordinate by coordinate, compared exactly (12.15). Two items of one kind whose enclosures overlap are refused: distinct items are disjoint, so the order is total.",
+            "**Nothing unproven is called certified.** [`Coverage::TopologyCertified`] with a flagged item is refused: a flagged region is what such a result does not have.",
+            "**One shape of box.** Every item of an intersection has as many unknowns as the pair, and a [`ParamBox`] has two, three or four.",
+            "**Flagged items carry no class.** The type gives them none (12.2).",
+            "**Swapping twice is nothing.** [`Intersection::swapped`] moves the unknowns and keeps the items' order, the order of the canonical pair, whichever way round the caller asked."
+          ],
+          "job": "What an intersection returns: its items, how each pair meets, and how much of the answer is proven (12.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.2's result types and 12.15's output order (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::result",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-intersect",
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G158, G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158; the methods come with G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {
@@ -10205,7 +10356,7 @@
             "**Stored as themselves.** Centres, radii, slopes and frames are the stored doubles, exactly.",
             "**Certified, or refused.** Enclosures and bounds are the terms' closed forms in interval arithmetic; the normal bound is the closed-form direction, which survives the poles of a sphere and the apex of a cone (where its sign may be either: then both).",
             "**Exact NURBS forms.** Each converts to a tensor-product rational surface (a circle in each angular direction, a line in each linear one) with a parameter map per direction, its deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).",
-            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, the frame carried, a mirror flipping the axial sign); any other transform gives the moved NURBS form. A plane takes every affine map.",
+            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, the frame carried, a mirror flipping the axial sign); any other transform gives the moved NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Exact split and reversal.**"
           ],
           "job": "The analytic surface kinds: plane, cylinder, cone, sphere and torus, each stored as itself.",
@@ -10427,7 +10578,7 @@
         },
         {
           "cost": "an evaluation is the profiles' plus O(1); a bound O(1) profile bounds per piece; a conversion O(m·n) for its control net, plus the profiles' conversions.",
-          "does": "each kind is a placement c + L·X(u, v) of an unplaced shape X, with L a stored 3 × 3 matrix (the identity when built), so every affine transform keeps the kind on the same parameters (c′ = M·c + t, L′ = M·L):",
+          "does": "each kind is a placement c + L·X(u, v) of an unplaced shape X, with L a stored 3 × 3 matrix (the identity when built) and c a stored point (when built, the origin, or a revolution's axis point a, about which X turns), so every affine transform keeps the kind on the same parameters (c′ = M·c + t, L′ = M·L):",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
           "guarantees": [
@@ -10737,6 +10888,54 @@
           "target": "bin"
         },
         {
+          "cost": "one case's placement, and its answer.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/ssi-runner.rs",
+          "guarantees": [
+            "it writes only `<out.json>`. A case it cannot place is a failure with a message and no answer, which the scorer records as a crash: it is never answered as if it had been placed. Exit codes: 0 when it wrote an answer; 1 when the case could not be placed; 2 for a usage error or a file that cannot be read or written."
+          ],
+          "job": "`ssi-runner`: answers one surface/surface case, under the ssi-corpus's runner contract.",
+          "method": {
+            "links": [
+              "https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/README.md"
+            ],
+            "text": "the runner contract of the corpus's README, <https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/README.md>."
+          },
+          "path": "ssi-runner",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9",
+              "method_note": null,
+              "name": "ssi-corpus",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its case schema, its runner contract and its scoring rules.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
+          "cost": "`gate` costs [`geom_test::ssi::cover`] for each case; the rest are linear.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/ssi.rs",
+          "guarantees": [
+            "`catalogue`, `measure` and `gate --report` write only what they are given; the rest write nothing. Exit codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file that cannot be read or written."
+          ],
+          "job": "`ssi`: the intersection acceptance harness's tool: place the corpus, write the catalogue, and hold a scored run to chapter 12.17's gate.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::ssi`], whose header carries the method."
+          },
+          "path": "ssi",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "one read and two writes of the file, and one run of the command.",
           "does": "finds the violation `<violation>` in [`geom_test::trip::VIOLATIONS`], plants it in the working tree ([`geom_test::trip::apply`]: one line of one kernel file changed), runs the gate's command from the repository root, prints its output, restores the file, and prints [`geom_test::trip::verdict`]'s answer: the command must fail, printing the tool's own report of the violation.",
           "family": [],
@@ -10846,6 +11045,29 @@
             "text": "breadth-first search (Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, 3rd edition, section 22.2) over the union of the declared and resolved graphs from each kernel crate, on the JSON format documented at <https://doc.rust-lang.org/cargo/commands/cargo-metadata.html>. Breadth-first search finds a shortest chain to each development crate. The metadata is read into the typed model of the `cargo_metadata` crate (MIT, <https://docs.rs/cargo_metadata/0.23.1/>), which also builds the `cargo metadata` command: piece G12a put it in place of the field-by-field reading of the JSON that was written here (chapter 29.1). [`check`] takes the JSON itself, not the model, so the tests can seed a violation into real metadata as a manifest would and hand it over."
           },
           "path": "geom_test::deps",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a product or quotient of k-bit numbers is O(k²) at these sizes; [`cos_sin`] and [`exp`] about 150 terms each; no recursion.",
+          "does": "an [`IBig`] n stands for n / 2^400. [`of`] reads a double exactly but for the bits below 2^−400, [`mul`] and [`div`] cut their results to a whole number of 2^−400, [`sqrt`] is the floor of the root, [`cos_sin`] and [`exp`] sum their Taylor series until a term vanishes, and π is read from its first 100 decimal places. [`cos_sin_pi`], [`tan_pi`] and [`tanh`] are built on them, for the half-turn angles and the tangent half-angle maps of the kinds. [`rational`] and [`of_rational`] pass values to and from the exact rationals of [`crate::nurbs_reference`], and [`within`] decides whether two points are at most a distance apart.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixed.rs",
+          "guarantees": [
+            "**Far finer than a double.** Each cut is below 2^−400; a series of up to a few hundred terms adds a few hundred cuts; π's 100 decimal places err by less than 2^−332, which [`cos_sin_pi`] carries once after reducing t exactly to [−1, 1). Values from a few operations on arguments below 2^20 are within 2^−300 of the exact ones, against the 2^−53 relative of a double, so a law checked with a margin of 2^−200 is never decided by the truth's own error.",
+            "**Independent of the kernel.** Integer arithmetic and series only: no call into a kernel crate and no `f64` maths.",
+            "**The same bits on every target.** Integer arithmetic throughout."
+          ],
+          "job": "Fixed-point numbers of 400 fractional bits: the higher precision of the law catalogue's dense refutation sampler (piece G69, chapter 28.3), in which every bound a kind or a NURBS operation states is refuted if it is wrong.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/321941.321944",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the Taylor series of cos, sin and exp in fixed point, the argument of exp halved until it is at most 1 and the result squared back (R. P. Brent, \"Fast multiple-precision evaluation of elementary functions\", *Journal of the ACM* 23 (1976), 242–251, <https://doi.org/10.1145/321941.321944>); the integer square root of dashu; the fixed point of piece G61's attack tests (`geom-curve`'s `tests/attack_g61.rs`), which this module generalises for the law catalogue of chapter 28.3 (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::fixed",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -11916,7 +12138,7 @@
         },
         {
           "cost": "a blossom is O(p²·d) rational operations for dimension d; a point one blossom; insertion and refinement one blossom per new control point; elevation C(p + t, p) blossoms per new control point, which this reference accepts because it runs on small cases only. The rationals grow with the knots' and points' binary expansions; no recursion.",
-          "does": "a [`Spline`] holds a degree, a knot vector and control points as exact rationals, in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a kernel curve holds: every finite double is a binary fraction, so nothing rounds. Everything else comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at (u, …, u); [`Spline::point`] divides by the weight. [`Spline::homogeneous_derivative`] is the blossom with k of its arguments the unit direction (u + 1) − u, times p!/(p − k)!: the k-th derivative of the homogeneous curve (piece G68). A new knot vector over the same domain, finer or of higher degree, gets its control points from the dual functional property: control point i of a spline of degree q is the blossom of any of its pieces in that point's support, at the q knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces' blossoms that way. [`Spline::elevate`] reads the blossom of each piece seen as a polynomial of degree p + t, which is the mean of the original blossom over every choice of p of its p + t arguments, on the knot vector with each distinct knot repeated t more times.",
+          "does": "a [`Spline`] holds a degree, a knot vector and control points as exact rationals, in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a kernel curve holds: every finite double is a binary fraction, so nothing rounds. Everything else comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at (u, …, u); [`Spline::point`] divides by the weight. [`Spline::homogeneous_derivative`] is the blossom with k of its arguments the unit direction (u + 1) − u, times p!/(p − k)!: the k-th derivative of the homogeneous curve (piece G68). A [`Patch`] is the tensor product of two bases, each a spline whose control points are the unit vectors, so its point lists the basis values; the law catalogue checks surfaces against it (piece G69). A new knot vector over the same domain, finer or of higher degree, gets its control points from the dual functional property: control point i of a spline of degree q is the blossom of any of its pieces in that point's support, at the q knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces' blossoms that way. [`Spline::elevate`] reads the blossom of each piece seen as a polynomial of degree p + t, which is the mean of the original blossom over every choice of p of its p + t arguments, on the knot vector with each distinct knot repeated t more times.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/nurbs_reference.rs",
           "guarantees": [
@@ -11924,7 +12146,7 @@
             "**Independent of the kernel.** Written from the definitions below, without reading `geom-nurbs`'s code (chapter 28.9: a different author, a different agent session), and by a different method: blossoms, where the kernel follows The NURBS Book's algorithms as `NLib` implements them. It shares no code with the kernel and calls none.",
             "**Refused, never guessed.** Malformed input (knots out of order, counts that do not match, a weight that is not positive, a value that is not finite), a parameter outside the domain, a knot that cannot be inserted and a curve that cannot be elevated are typed [`ReferenceError`]s."
           ],
-          "job": "The reference implementation of NURBS curves (chapter 28.9): evaluation, knot insertion, refinement and degree elevation in exact rationals, to check `geom-nurbs` against.",
+          "job": "The reference implementation of NURBS curves and surfaces (chapter 28.9): evaluation, knot insertion, refinement and degree elevation in exact rationals, to check `geom-nurbs` against.",
           "method": {
             "links": [
               "https://doi.org/10.1016/0021-9045(72",
@@ -12645,6 +12867,230 @@
             "text": "the replay discipline of sections 28.5 and 28.17 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`): \"Every generator prints its seed, so any failure replays exactly\", and \"Seeds belong to test generators only, and every one is printed\". The environment variable mirrors the seed variables of proptest (`PROPTEST_RNG_SEED`, <https://github.com/proptest-rs/proptest>) and bolero (`BOLERO_RANDOM_SEED`, <https://github.com/camshaft/bolero>), with one name for every Spare Kit test, so one value replays any of them."
           },
           "path": "geom_test::seed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a case's placement is linear in its truth samples, once per scale tried; judging is quadratic in its samples (see [`cover`]).",
+          "does": "the ssi-corpus holds 119 surface/surface cases with exact truth, and a scorer that grades any engine that keeps its runner contract. [`case`] reads a case. [`place`] puts it on the grid, at the smallest scale that keeps its truth. A runner ([`output`]'s contract, the `ssi-runner` binary) answers it. The scorer, which is the corpus's own Python and runs only on CI in a container pinned by digest, gives each answer a verdict. [`gate`] then holds the verdicts and the flagged regions to 12.17, per case and per class. [`catalogue`] rebuilds the published failure lists with inputs of our own, in the corpus's schema, so they run the same way.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi.rs",
+          "guarantees": [
+            "**Two readings.** The scorer's verdict is checked against [`cover`], this crate's own reading of coverage, so a scorer that is wrong or misread shows up as a failure of its own.",
+            "**Attribution travels.** Every report carries the corpus's credit and each case's source: 25 cases derive from Yang, Jia and Yan 2023, CC BY 4.0.",
+            "**Nothing runs on trust of the placement.** A case that cannot be placed with its truth kept is an error naming what failed, never a case quietly left out."
+          ],
+          "job": "The intersection acceptance harness: the ssi-corpus run out of process, and section 12's gate (chapter 12.17; piece G160).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9"
+            ],
+            "text": "chapter 12.17's oracle list and acceptance gate (`projects/engines/geometry/architecture/12-intersections.md`), and the corpus's runner contract and scorer, <https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9>."
+          },
+          "path": "geom_test::ssi",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9",
+              "method_note": null,
+              "name": "ssi-corpus",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its case schema, its runner contract and its scoring rules.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the case's text.",
+          "does": "[`Case`] reads the corpus's JSON schema and writes the same schema back, which is how [`super::catalogue`]'s cases reach the same scorer. [`Implicit`] is a surface's closed form, which gives the distance from a point to it. [`Case::features`] lists what a case's truth is made of, each with its [`Contact`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi/case.rs",
+          "guarantees": [
+            "**A kind or contact it does not know is an error**, except an [`Implicit`] the adapter has no need of, which reads as [`Implicit::Other`]; only the scorer uses those.",
+            "**Distances are the scorer's formulas** (its `ssi_geom.py`), on the same fields."
+          ],
+          "job": "A corpus case: two surfaces, the exact intersection and the tolerance it is judged at (chapter 12.17; piece G160).",
+          "method": {
+            "links": [
+              "https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/README.md"
+            ],
+            "text": "the case schema of the ssi-corpus's README, <https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/README.md>."
+          },
+          "path": "geom_test::ssi::case",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9",
+              "method_note": null,
+              "name": "ssi-corpus",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its case schema, its runner contract and its scoring rules.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the samples; a few thousand per case.",
+          "does": "[`all`] builds one case for each intersection failure the vetted kernels publish: `SMLib`'s issues #1 and #16, the loops its search drops near tangency, the single candidate per patch pair, its fixed tolerances, truncated traces, and the seam and pole defects of its known issues and `OpenCascade`'s own list. Every input is new: the shapes are chosen here, and each truth is a closed form computed here. Nothing is taken from those projects but the failure's description, and each case's `notes` says which it rebuilds. The cases use the corpus's schema, so the corpus's scorer and [`super::gate`] judge them as they do the corpus.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi/catalogue.rs",
+          "guarantees": [
+            "**Closed-form truth**: every sample of every case comes from the case's formula, and `tests/ssi.rs` holds each to both surfaces.",
+            "**Our own inputs**: no fixture of any outside project is read, here or in the tests."
+          ],
+          "job": "The intersection failure catalogues, rebuilt with inputs of our own (chapter 12.17; piece G160).",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/13-vetting-smlib.md",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the failure lists in the evidence review (`projects/kit/notes/G01-evidence/13-vetting-smlib.md`) and chapter 12.17's \"What we take\" (`projects/engines/geometry/architecture/12-intersections.md`); the closed forms are elementary geometry, each stated in its case's `formula`."
+          },
+          "path": "geom_test::ssi::catalogue",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "samples × segments, for each direction.",
+          "does": "[`compare`] measures distances the way the scorer's `score_case` does: each truth feature, thinned to about a thousand samples, against the answer's polylines and points, and each answer curve, thinned the same way, against the truth. A sample further than the effective tolerance ([`effective`]) is missing or spurious. The result names the samples, because the scorer's verdict does not say where a gap is, and the gate needs that to hold it to a flagged region.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi/cover.rs",
+          "guarantees": [
+            "**The scorer's tolerance**: [`effective`] is its `cov_eff`, including the widening for a case that states its conditioning.",
+            "**The scorer's samples**: the same thinning, so the two readings look at the same points."
+          ],
+          "job": "Our own reading of coverage: which of a case's truth an answer misses, and what an answer holds that the truth does not (chapter 12.17; piece G160).",
+          "method": {
+            "links": [
+              "https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/scoring/score.py"
+            ],
+            "text": "`score_case` in the corpus's `scoring/score.py`, <https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/scoring/score.py>, without its spatial hash: this runs on hundreds of cases, not thousands, and a nearest-segment scan cannot be wrong in the ways a hash can."
+          },
+          "path": "geom_test::ssi::cover",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9",
+              "method_note": null,
+              "name": "ssi-corpus",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its case schema, its runner contract and its scoring rules.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for each case, [`super::cover`]'s cost, and regions × samples.",
+          "does": "[`judge`] holds one case's verdict from the scorer, and the answer behind it, to 12.17's rules. [`run`] does so for a whole run and gives a [`Report`], which publishes the flag count, total flagged size and time of every case, the corpus's credit and each case's source. [`Ceilings`] records, per class, the most flagged regions and the largest total size any case in it may have; they may be lowered freely, and raised only with a reason.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi/gate.rs",
+          "guarantees": [
+            "**Certify mode**: the verdict is PASS and nothing is flagged.",
+            "**Default mode**: no crash, no error, no wrong topology, no inaccuracy, and nothing the scorer could not judge. INCOMPLETE passes only in a class that may flag, only with nothing spurious beside it, and only if every missing sample lies inside a flagged region of a matching reason.",
+            "**No flags where 12.17 allows none**: the transversal, seam-and-pole, coincident, patch-boundary and high-degree classes.",
+            "**Every flagged region holds a true feature of a matching kind**, and reaches no further from it than [`allowed`]. A region's reach is how far its furthest corner lies from that feature, so a long contact comes back as a chain of small boxes, not one box around it.",
+            "**The ceilings hold**: the count and total size stay within the class's [`Ceiling`].",
+            "**Both readings agree**: [`super::cover`] and the scorer agree on what is missing."
+          ],
+          "job": "The acceptance gate for surface/surface intersection (chapter 12.17; piece G160).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.17's acceptance gate, 12.3's floor and 12.9's band (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_test::ssi::gate",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the items and samples.",
+          "does": "the corpus calls a runner as `<binary> <case.json> <mode> <tol> <out.json>` and reads [`Output`]: a status, a time, curves as samples and points on their own. The scorer has no notion of a flagged region, so [`Output::flagged`] is a field it ignores, and [`super::gate`] reads it. [`Output::of_intersection`] is the adapter from the kernel's result type: curves are sampled, an overlap's boundary curves are written as curves, and points and flagged regions go across as they are, back in the case's units.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi/output.rs",
+          "guarantees": [
+            "**A flagged region never reaches the scorer as an answer.** The scorer sees only what was proven. What it misses, the gate holds to the flagged regions.",
+            "**The digest is the answer**: [`Output::digest`] hashes every coordinate's bits and every flagged region, and leaves out the time, so two runs of one answer agree bit for bit."
+          ],
+          "job": "What a runner writes: the scorer's output contract, and our flagged regions beside it (chapter 12.17; piece G160).",
+          "method": {
+            "links": [
+              "https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/README.md",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the runner contract of the ssi-corpus's README, <https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/README.md>; the item list of chapter 12.2 (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_test::ssi::output",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9",
+              "method_note": null,
+              "name": "ssi-corpus",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its case schema, its runner contract and its scoring rules.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the case's samples and control points, for each scale tried; at most 40 scales.",
+          "does": "every coordinate the kernel stores is a whole number of grid steps (6.1), and the corpus's are doubles in units of their own. [`place`] maps a case by 2^k steps to the unit, which is exact in doubles, and rounds each point and length to a whole step. Directions, angles, knots and weights are not grid data and stay as they are. It tries k upward from the first scale at which the tolerance is at least `ε_fit`, and takes the smallest that passes [`kept`]'s checks, so a case is never scaled further than it needs: thresholds in steps stay as small as they can.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi/place.rs",
+          "guarantees": [
+            "**`ε_fit`**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale.",
+            "**The range**: every coordinate is inside the grid's range.",
+            "**The truth is still on the surfaces**: every truth sample is within the tolerance of each analytic surface as placed, by its closed form. A NURBS surface cannot move further than its furthest control point did, since a point on it is a convex combination of its net with the same weights; that bound is the surface's `moved`.",
+            "**The answer did not move past the tolerance**: where a case states how far a residual moves the answer, `moved` × that factor is within the tolerance the scorer applies to that case, which widens with the same factor ([`effective`]).",
+            "**Small features survive**: `moved` is at most a quarter of a stated feature size.",
+            "**A contact did not spread past the tolerance**: where surfaces touch, a change of δ moves the contact by about √(2δ/Δκ) (12.9). The harness has no Δκ for a NURBS pair, so it takes the flattest curvature the case's size allows, 1/L, and asks √(2δL) to be within the tolerance. Contacts of higher order are named in [`HIGHER_ORDER`], and the same bound is taken at their order. A case whose data is exact on the grid moves nothing and passes at once. A case that states its conditioning is a shallow crossing, not a touch: its answer moves as δ times that factor, which the check above holds, so this one does not apply to it."
+          ],
+          "job": "Places a corpus case on the grid, and checks that rounding has not changed its truth (chapter 12.17; piece G160).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.17's adapter (`projects/engines/geometry/architecture/12-intersections.md`); the band formula of 12.9; the convex hull property of NURBS (The NURBS Book, P4.2 and P4.11)."
+          },
+          "path": "geom_test::ssi::place",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the case's samples.",
+          "does": "the kernel has no surface/surface method yet, and a gate that has only ever seen one kind of answer proves nothing. So each [`StandIn`] answers a case from its own truth, snapped to the grid: [`StandIn::Truth`] as it is, and each of the others with one thing wrong. 12.17 asks for a test that the gate fails when an answer is perturbed or a flagged region is enlarged; these are those perturbations, and [`StandIn::expected`] names the rule each must break.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi/standin.rs",
+          "guarantees": [
+            "**Never mistaken for the kernel.** A report names its engine, and the runner writes the stand-in's name there.",
+            "**The same answer every run**: a stand-in reads nothing but its case."
+          ],
+          "job": "Stand-ins for a surface/surface method: the truth, and the truth perturbed (chapter 12.17; piece G160).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.17's mutation test (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_test::ssi::standin",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -13548,6 +13994,21 @@
         "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
         "projects/engines/geometry/crates/geom-bench/src/counts.rs",
         "projects/engines/geometry/crates/geom-bench/src/lib.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9",
+      "method_note": null,
+      "name": "ssi-corpus",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/bin/ssi-runner.rs",
+        "projects/engines/geometry/crates/geom-test/src/ssi.rs",
+        "projects/engines/geometry/crates/geom-test/src/ssi/case.rs",
+        "projects/engines/geometry/crates/geom-test/src/ssi/cover.rs",
+        "projects/engines/geometry/crates/geom-test/src/ssi/output.rs"
       ]
     },
     {
