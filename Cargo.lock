@@ -1117,6 +1117,7 @@ dependencies = [
  "geom-check",
  "geom-curve",
  "geom-math",
+ "geom-name",
  "geom-num",
  "geom-op",
  "geom-run",
