@@ -745,7 +745,7 @@ fn straight() -> Job {
         vec!["1e0".to_owned(), "0e0".to_owned()],
     ];
     job.weights = None;
-    job.at = "5e-1".to_owned();
+    "5e-1".clone_into(&mut job.at);
     job
 }
 
