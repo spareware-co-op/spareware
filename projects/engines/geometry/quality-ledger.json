@@ -555,14 +555,6 @@
       "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "let outside = beyond + 1.0;",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
       "mutant": "replace <= with > in check",
       "line_text": "let side = if t <= mid {",
@@ -649,30 +641,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The search keeps a piece only if it also holds t (`inside && a <= t && t <= b`), so the side test only chooses among pieces holding t: inside a piece there is one, and at a break the piece ending at t comes first in the search and passes the original test from the left (a < t, t <= b), as it passes the mutant's."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "past_end + 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace - with + in check",
-      "line_text": "before_start - 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace - with / in check",
-      "line_text": "before_start - 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
     },
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/polynomial.rs",

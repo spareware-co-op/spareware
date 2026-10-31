@@ -5,8 +5,8 @@
 //! returns the first law broken, with where. The laws compare certified objects with each other:
 //! two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split,
 //! a reversal or a transform that is wrong by more than its own stated error is caught wherever a
-//! sample lands on it. Evaluation in doubles is compared with the certified enclosure within a
-//! relative 2^−30, which catches a wrong formula, not rounding.
+//! sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30
+//! of the largest value at that parameter, which catches a wrong formula, not rounding.
 //!
 //! Guarantees:
 //!
@@ -62,10 +62,12 @@ fn meets<const D: usize>(a: &[Interval; D], b: &Bounds<D>) -> bool {
         .all(|(x, (&lo, &hi))| x.lo() <= hi && lo <= x.hi())
 }
 
-/// Whether doubles lie in an enclosure within the relative slack.
-fn near<const D: usize>(v: &[f64; D], a: &[Interval; D]) -> bool {
+/// Whether doubles lie in an enclosure within the relative slack of `largest`, the largest value
+/// at this parameter: a derivative is a difference of values, so its rounding goes with them, not
+/// with the difference (a cubic's end derivative near 1e36 from points near 1e45).
+fn near<const D: usize>(v: &[f64; D], a: &[Interval; D], largest: f64) -> bool {
     v.iter().zip(a).all(|(&x, i)| {
-        let scale = 1.0 + x.abs() + i.lo().abs() + i.hi().abs();
+        let scale = 1.0 + largest + x.abs() + i.lo().abs() + i.hi().abs();
         i.lo() - SLACK * scale <= x && x <= i.hi() + SLACK * scale
     })
 }
@@ -99,32 +101,19 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
     let lo = if a.is_finite() { a } else { first - 1024.0 };
     let hi = if b.is_finite() { b } else { last + 1024.0 };
     // Refusals.
-    // Every step past an end is at least one double: beyond 2^53 in magnitude, adding 1 rounds
-    // back to the end itself, which is inside (piece G69's fuzz target found the kit reporting a
-    // kind that rightly accepted it).
+    // The first double past an end: a step of 1 rounds back inside beyond 2^53 in magnitude, which
+    // the fuzz target found the kit blaming a kind for, and nearer is the sharper test.
     let outside = if b.is_finite() {
-        // One length of the domain and one unit past the end, or the next double where that
-        // overflows.
-        let past_end = tight::larger(b + (b - lo) + 1.0, b.next_up());
-        if past_end.is_finite() {
-            past_end
-        } else {
-            b.next_up()
-        }
+        b.next_up()
     } else if a.is_finite() {
-        let before_start = tight::smaller(a - (hi - a) - 1.0, a.next_down());
-        if before_start.is_finite() {
-            before_start
-        } else {
-            a.next_down()
-        }
+        a.next_down()
     } else {
         f64::NAN
     };
     let beyond = if a.is_finite() {
-        (tight::smaller(a - 1.0, a.next_down()), hi)
+        (a.next_down(), hi)
     } else if b.is_finite() {
-        (lo, tight::larger(b + 1.0, b.next_up()))
+        (lo, b.next_up())
     } else {
         (lo, f64::INFINITY)
     };
@@ -162,8 +151,11 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
         let mut d = [[0.0; D]; 3];
         kind.derivatives(t, Limit::FromRight, &mut d)
             .map_err(call(Law::EvaluationIsEnclosed, t))?;
+        let largest = e.iter().flatten().fold(0.0, |m, i| {
+            tight::larger(m, tight::larger(i.lo().abs(), i.hi().abs()))
+        });
         for (v, enc) in d.iter().zip(&e) {
-            if !near(v, enc) {
+            if !near(v, enc, largest) {
                 return Err(broken(Law::EvaluationIsEnclosed, t, None));
             }
         }
