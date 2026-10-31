@@ -241,46 +241,6 @@ fn inside(known: &Winding, open: &[Entry], entry: Entry) -> Option<bool> {
     (!open.contains(&entry)).then(|| known.count(entry) > 0)
 }
 
-<<<<<<< HEAD
-/// Whether a point is inside at least `n` entries, unless the open ones can change that.
-fn at_least(known: &Winding, open: &[Entry], n: u32) -> Option<bool> {
-    let settled = known
-        .pairs
-        .iter()
-        .filter(|(entry, count)| *count > 0 && !open.contains(entry))
-        .count();
-    let n = usize::try_from(n).unwrap_or(usize::MAX);
-    if settled >= n {
-        Some(true)
-    } else if settled.saturating_add(open.len()) < n {
-        Some(false)
-    } else {
-        None
-    }
-}
-
-/// Kleene's and.
-fn both(a: Option<bool>, b: Option<bool>) -> Option<bool> {
-    match (a, b) {
-        (Some(false), _) | (_, Some(false)) => Some(false),
-        (Some(true), Some(true)) => Some(true),
-        _ => None,
-    }
-}
-
-/// Kleene's or.
-fn either(a: Option<bool>, b: Option<bool>) -> Option<bool> {
-    match (a, b) {
-        (Some(true), _) | (_, Some(true)) => Some(true),
-        (Some(false), Some(false)) => Some(false),
-        _ => None,
-    }
-||||||| 6766ac23
-/// `stack` with its top two answers folded into one by `op`.
-fn fold(stack: u64, op: fn(bool, bool) -> bool) -> u64 {
-    let below = stack.rotate_right(1);
-    (below & !1) | u64::from(op(stack & 1 == 1, below & 1 == 1))
-=======
 /// Whether a point is inside at least `n` entries, unless the open ones can change that.
 fn at_least(known: &Winding, open: &[Entry], n: u32) -> Option<bool> {
     let settled = known
@@ -314,7 +274,6 @@ fn either(a: Option<bool>, b: Option<bool>) -> Option<bool> {
         (Some(false), Some(false)) => Some(false),
         _ => None,
     }
->>>>>>> piece/G127
 }
 
 /// What a test makes of a piece.
