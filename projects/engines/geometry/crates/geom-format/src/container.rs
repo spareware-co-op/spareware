@@ -130,9 +130,7 @@ impl fmt::Display for ContainerError {
         match self {
             ContainerError::Document(e) => write!(f, "the document blob: {e}"),
             ContainerError::Blob(d) => write!(f, "a record the file needs: {}", d.error),
-            ContainerError::Collision(_) => {
-                f.write_str("two different records share a content ID")
-            }
+            ContainerError::Collision(_) => f.write_str("two different records share a content ID"),
             ContainerError::Record(e) => write!(f, "a record: {e}"),
             ContainerError::File(e) => write!(f, "the file: {e}"),
             ContainerError::Stopped(s) => write!(f, "{s}"),
@@ -141,12 +139,6 @@ impl fmt::Display for ContainerError {
 }
 
 impl core::error::Error for ContainerError {}
-
-impl From<FileError> for ContainerError {
-    fn from(e: FileError) -> Self {
-        ContainerError::File(e)
-    }
-}
 
 impl From<RecordError> for ContainerError {
     fn from(e: RecordError) -> Self {
@@ -157,6 +149,15 @@ impl From<RecordError> for ContainerError {
             }) => ContainerError::Stopped(s),
             e => ContainerError::Record(e),
         }
+    }
+}
+
+/// The writer's error, or the meter's stop behind it: the writer reports a stop inside a record's
+/// encoding as that record's error, and the meter latches it.
+fn file_error(e: FileError, meter: &WorkMeter<'_>) -> ContainerError {
+    match meter.check() {
+        Err(s) => ContainerError::Stopped(s),
+        Ok(()) => ContainerError::File(e),
     }
 }
 
@@ -254,7 +255,10 @@ impl Container {
     /// [`ContainerError::Collision`] for two different records with one content ID,
     /// [`ContainerError::Blob`] (as [`BlobError::Missing`]) for a record that depends on one the
     /// file does not hold, and the encoder's and the meter's errors.
-    pub fn from_file(file: &ReadFile, meter: &mut WorkMeter<'_>) -> Result<Container, ContainerError> {
+    pub fn from_file(
+        file: &ReadFile,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Container, ContainerError> {
         let document = file.header.encode(meter)?;
         let mut blobs: BTreeMap<ContentId, Vec<u8>> = BTreeMap::new();
         let mut needed: BTreeSet<ContentId> = BTreeSet::new();
@@ -303,7 +307,7 @@ impl Container {
         if let Some(d) = damaged.into_iter().next() {
             return Err(ContainerError::Blob(d));
         }
-        Ok(write(&header, &records, meter)?)
+        write(&header, &records, meter).map_err(|e| file_error(e, meter))
     }
 
     /// Every intact record as a standalone file: the records the roots reach in
@@ -333,19 +337,18 @@ impl Container {
             }
         }
         Ok(Salvaged {
-            file: write(&header, &records, meter)?,
+            file: write(&header, &records, meter).map_err(|e| file_error(e, meter))?,
             damaged,
         })
     }
 
     /// The document blob as its header record.
     fn header(&self, meter: &mut WorkMeter<'_>) -> Result<Record, ContainerError> {
-        let (record, used) = Record::decode(&self.document, meter).map_err(|e| {
-            match record_error(e) {
+        let (record, used) =
+            Record::decode(&self.document, meter).map_err(|e| match record_error(e) {
                 BlobError::Stopped(s) => ContainerError::Stopped(s),
                 e => ContainerError::Document(e),
-            }
-        })?;
+            })?;
         if used != self.document.len() {
             return Err(ContainerError::Document(BlobError::Trailing));
         }

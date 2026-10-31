@@ -288,7 +288,9 @@ pub fn open<B: Blobs + ?Sized, C: Checker>(
                         if let Err(s) = meter.check() {
                             return Err(s.into());
                         }
-                        opened.entries.push(damaged(root, None, None, Unread::Stamp(e)));
+                        opened
+                            .entries
+                            .push(damaged(root, None, None, Unread::Stamp(e)));
                         continue;
                     }
                 };
@@ -315,9 +317,9 @@ pub fn open<B: Blobs + ?Sized, C: Checker>(
 /// The document blob's header.
 fn header(document: &[u8], meter: &mut WorkMeter<'_>) -> Result<Header, OpenError> {
     let (record, used) = Record::decode(document, meter).map_err(|e| {
-        meter
-            .check()
-            .map_or_else(OpenError::Stopped, |()| OpenError::Document(BlobError::Record(e)))
+        meter.check().map_or_else(OpenError::Stopped, |()| {
+            OpenError::Document(BlobError::Record(e))
+        })
     })?;
     if used != document.len() {
         return Err(OpenError::Document(BlobError::Trailing));

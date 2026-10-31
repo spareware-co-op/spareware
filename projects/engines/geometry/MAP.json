@@ -1351,25 +1351,6 @@
           "target": "lib"
         },
         {
-          "cost": null,
-          "does": null,
-          "family": [],
-          "file": "projects/engines/geometry/crates/geom-check/src/lib.rs",
-          "guarantees": [
-            "Checks run in groups: combinatorial, geometric consistency, self-intersection and the exactness record (8.3).",
-            "Geometric consistency is certified with bounds, never sampled (8.3).",
-            "Self-intersection checks use the same certified intersections the operations do (ARCHITECTURE.md, layers).",
-            "The cheap groups run after every operation in every build; the full set runs in debug builds, in continuous integration, on every import and on request (8.3).",
-            "The checker reports what fails with the entities involved and never modifies a body (principle 4)."
-          ],
-          "job": "Spare Kit geometry kernel: the validity checker.",
-          "method": null,
-          "path": "geom_check",
-          "provenance": [],
-          "spdx": null,
-          "target": "lib"
-        },
-        {
           "cost": "constant time per accessor; a report holds one fault per thing found wrong.",
           "does": "[`Group`] names the four groups of 8.3; [`Level`] says which run ([`Level::Cheap`] after every operation in every build, [`Level::Full`] in debug builds, in continuous integration, on every import and on request); [`Entity`] names one entity of a body by its index; [`Fault`] is one thing found wrong, of a [`FaultKind`], at one entity and possibly naming a second; [`Report`] holds the faults of one check in the order they were found (the first [`crate::MAX_FAULTS`], and a count of the rest), the groups that ran, and the groups the level asked for that this checker does not have yet.",
           "family": [],

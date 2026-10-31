@@ -34,6 +34,7 @@ use geom_run::{Budget, WorkMeter};
 mod topo;
 
 use geom_format::body::{BODY_TAG, CHUNK_TAG, StoredBody, read_body, write_body};
+use geom_format::stamp::{STAMP_TAG, Stamp};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -119,7 +120,19 @@ fn the_registry_agrees_with_the_writers() {
         (HEADER_TAG, header::SCHEMA, REQUIRED)
     );
     assert!(knows(HEADER_TAG, 1) && knows(END_TAG, 1));
-    assert!(!knows(HEADER_TAG, 2) && !knows(5, 1) && !knows(BODY_TAG, 2));
+    assert!(knows(STAMP_TAG, 1) && !knows(STAMP_TAG, 2));
+    assert!(!knows(HEADER_TAG, 2) && !knows(6, 1) && !knows(BODY_TAG, 2));
+    // The stamp writer's record is the registry's.
+    let s = Stamp {
+        body: geom_format::content::ContentId::of_payload(b"a body"),
+        checker: 1,
+        groups: vec![1],
+        edition: 0,
+    }
+    .record()
+    .unwrap();
+    let entry = RECORDS.iter().find(|e| e.tag == s.tag).unwrap();
+    assert_eq!((s.schema, s.flags), (entry.schemas[0], entry.flags));
     // The body writer's records are the registry's.
     let stored = write_body(&named_wall(), &mut meter()).unwrap();
     for r in stored.chunks.iter().chain([&stored.index]) {
@@ -150,12 +163,16 @@ fn the_registry_agrees_with_the_writers() {
     );
 }
 
-/// The archive: every file ever written as an example of a format version.
+/// The archive: every file ever written as an example of a format version, by name.
 fn archive() -> Vec<(&'static str, &'static [u8])> {
     vec![
         (
             "v1/header-only.skgf",
             include_bytes!("archive/v1/header-only.skgf"),
+        ),
+        (
+            "v1/stamped-bodies.skgf",
+            include_bytes!("archive/v1/stamped-bodies.skgf"),
         ),
         (
             "v1/wall-body.skgf",
@@ -199,6 +216,30 @@ fn wall_body() -> Vec<u8> {
     write(&h.record().unwrap(), &records, &mut meter()).unwrap()
 }
 
+/// The archive's third file (G108): the wall's records with a validation stamp from checker 1,
+/// groups 1 and 4, then the named wall's, unstamped. The two bodies share every chunk but the names.
+fn stamped_bodies() -> Vec<u8> {
+    let h = Header::v1("geom-format archive v1", geom_num::ladder::HEAL_DEFAULT);
+    let wall = write_body(&topo::wall(), &mut meter()).unwrap();
+    let stamp = Stamp {
+        body: wall.content_id(),
+        checker: 1,
+        groups: vec![1, 4],
+        edition: geom_format::header::PRE_EDITION,
+    };
+    let mut records = wall.chunks;
+    records.push(wall.index);
+    records.push(stamp.record().unwrap());
+    let named = write_body(&named_wall(), &mut meter()).unwrap();
+    for chunk in named.chunks {
+        if !records.contains(&chunk) {
+            records.push(chunk);
+        }
+    }
+    records.push(named.index);
+    write(&h.record().unwrap(), &records, &mut meter()).unwrap()
+}
+
 /// The archive's first file: format 1's header and nothing else.
 fn header_only() -> Vec<u8> {
     let h = Header::v1("geom-format archive v1", geom_num::ladder::HEAL_DEFAULT);
@@ -212,6 +253,7 @@ fn write_the_archive() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("header-only.skgf"), header_only()).unwrap();
     std::fs::write(dir.join("wall-body.skgf"), wall_body()).unwrap();
+    std::fs::write(dir.join("stamped-bodies.skgf"), stamped_bodies()).unwrap();
 }
 
 #[test]
@@ -227,6 +269,37 @@ fn the_archived_body_reads_back_as_the_wall() {
     assert_eq!(read_body(&stored, &mut meter()).unwrap(), named_wall());
     // Today's writer writes the archived bytes exactly.
     assert_eq!(wall_body(), bytes);
+}
+
+#[test]
+fn the_archived_stamp_reads_back_with_both_walls() {
+    let bytes = include_bytes!("archive/v1/stamped-bodies.skgf");
+    let file = read(&mut SliceSource::new(bytes), knows, &mut meter()).unwrap();
+    let stamps: Vec<&Record> = file.records.iter().filter(|r| r.tag == STAMP_TAG).collect();
+    let stamp = Stamp::read(stamps[0], &mut meter()).unwrap();
+    assert_eq!(stamps.len(), 1);
+    assert_eq!((stamp.checker, stamp.groups.as_slice()), (1, &[1, 4][..]));
+    let chunks: Vec<Record> = file
+        .records
+        .iter()
+        .filter(|r| r.tag == CHUNK_TAG)
+        .cloned()
+        .collect();
+    let indexes: Vec<&Record> = file.records.iter().filter(|r| r.tag == BODY_TAG).collect();
+    assert_eq!(stamp.body, indexes[0].content_id());
+    for (index, body) in indexes.into_iter().zip([topo::wall(), named_wall()]) {
+        let stored = StoredBody {
+            chunks: chunks
+                .iter()
+                .filter(|c| index.depends.contains(&c.content_id()))
+                .cloned()
+                .collect(),
+            index: index.clone(),
+        };
+        assert_eq!(read_body(&stored, &mut meter()).unwrap(), body);
+    }
+    // Today's writer writes the archived bytes exactly.
+    assert_eq!(stamped_bodies(), bytes);
 }
 
 #[test]
@@ -271,6 +344,7 @@ fn every_archived_file_matches_the_cddl() {
     let record = include_str!("../../../format/cddl/record.cddl");
     let header_schema = include_str!("../../../format/cddl/header.cddl");
     let end_schema = include_str!("../../../format/cddl/end.cddl");
+    let stamp_schema = include_str!("../../../format/cddl/stamp.cddl");
     for (name, bytes) in archive() {
         let file = read(&mut SliceSource::new(bytes), knows, &mut meter()).unwrap();
         cddl_cat::validate_cbor_bytes("header", header_schema, &file.header.payload)
@@ -285,6 +359,10 @@ fn every_archived_file_matches_the_cddl() {
             if r.tag == END_TAG {
                 cddl_cat::validate_cbor_bytes("end", end_schema, &r.payload)
                     .unwrap_or_else(|e| panic!("{name}: END: {e:?}"));
+            }
+            if r.tag == STAMP_TAG {
+                cddl_cat::validate_cbor_bytes("stamp", stamp_schema, &r.payload)
+                    .unwrap_or_else(|e| panic!("{name}: stamp at {at}: {e:?}"));
             }
             at += len;
         }

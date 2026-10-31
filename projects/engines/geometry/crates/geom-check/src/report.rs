@@ -33,6 +33,12 @@ use geom_topo::entity::{
     CurveIx, EdgeIx, FaceIx, FinIx, LoopIx, PcurveIx, RegionIx, ShellIx, SurfaceIx, VertexIx,
 };
 
+/// The checker's version, which a validation stamp records (24.7): a stored body from a known
+/// source whose stamp comes from a checker at least this new, and lists every group this one has,
+/// needs only the cheap groups when it is opened. It rises with every group built and every check
+/// made stricter: G84's framework with groups 1 and 4 is version 1.
+pub const VERSION: u64 = 1;
+
 /// One of chapter 8.3's four groups of checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Group {

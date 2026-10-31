@@ -1060,6 +1060,7 @@ dependencies = [
  "cddl-cat",
  "crc",
  "geom-2d",
+ "geom-check",
  "geom-cloud",
  "geom-curve",
  "geom-draw",

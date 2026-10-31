@@ -42,6 +42,9 @@ cddl-cat = { version = "=0.7.1", default-features = false, features = ["ciborium
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 # The tests' seeded generator and seed printing (geom_test::rng and geom_test::seed).
 geom-test = { path = "../geom-test" }
+# The validity checker, as a program passes it to trust on open (tests/trust.rs, G108): chapter 27
+# puts geom-format above no checker, so it is a development dependency only (ours, MPL-2.0).
+geom-check = { path = "../geom-check" }
 # Reads the cbor2 cross-check vectors, tests/cbor2/vectors.jsonl (MIT OR Apache-2.0).
 serde_json = "1.0.154"
 
@@ -53,6 +56,11 @@ harness = false
 # The record layer's benchmarks (piece G92), with the standard library's clock only.
 [[bench]]
 name = "records"
+harness = false
+
+# Trust on open and the reference container (piece G108).
+[[bench]]
+name = "open"
 harness = false
 
 [lints.rust]
