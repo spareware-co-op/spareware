@@ -230,9 +230,21 @@
               "kind": "corpus",
               "piece": "G70",
               "why": "26 new count benchmarks on the hot paths of phase 2's code pieces (decision 32.44): geom-math 7, geom-curve 5, geom-surface 5, geom-nurbs 3, geom-linalg 2, geom-bvh 2, geom-num 2; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G187",
+              "why": "83 new benchmarks: integer carriers and rational points and their generated predicates; no existing digest moved"
+            },
+            {
+              "sha256": "da4fdd58f92a598b3514947db88d705c715ac97910a493f0f37cf41d7c82cc79",
+              "kind": "corpus",
+              "piece": "G188",
+              "why": "116 new benchmarks: rational-centre circles and arcs and their generated predicates; no existing digest moved"
             }
           ],
-          "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6"
+          "sha256": "7b4093180097afa334400fcc6295c5e8e795ef51e2f6f9468b16dd78c21ec30a"
         },
         {
           "id": "geom-nurbs/operations",
