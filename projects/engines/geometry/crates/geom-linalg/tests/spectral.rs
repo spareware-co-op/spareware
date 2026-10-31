@@ -612,3 +612,40 @@ fn rotations_stay_unit_where_the_step_scale_makes_a_pair_subnormal() {
         }
     }
 }
+
+/// Every step of a matrix near the underflow threshold rotates subnormal pairs, so a rotation that
+/// is unit but turns the wrong way, or a wrong `r`, gives wrong eigenvalues here: the second
+/// difference matrix times 2^−1030, whose eigenvalues are 2 and 2 ± √2 times that.
+#[test]
+fn eigenvalues_hold_where_every_rotation_is_of_subnormal_entries() {
+    let t = f64::from_bits(1 << 44);
+    let a = [2.0 * t, -t, 0.0, -t, 2.0 * t, -t, 0.0, -t, 2.0 * t];
+    let m = Matrix::from_rows(3, 3, &a).unwrap();
+    let eig = SymmetricEigen::factor(&m, &mut Work::new(1 << 40)).unwrap();
+    let got: Vec<f64> = eig.values().iter().map(|v| v / t).collect();
+    let root = 2.0f64.sqrt();
+    for (g, want) in got.iter().zip([2.0 - root, 2.0, 2.0 + root]) {
+        assert!((g - want).abs() < 1e-11, "{got:?}");
+    }
+}
+
+/// A tiny pair is scaled only when both of its entries are tiny: beside an entry near the top of the
+/// range, scaling would overflow. The zeros on the diagonal keep 1e−320 from being deflated, so the
+/// step rotates it against an entry near 1e300. The eigenvalues are 1e300 times the golden ratio and
+/// minus its inverse, and one near zero.
+#[test]
+fn a_tiny_entry_beside_a_huge_one_is_not_scaled() {
+    let a = [1e300, 1e300, 0.0, 1e300, 0.0, 1e-320, 0.0, 1e-320, 0.0];
+    let m = Matrix::from_rows(3, 3, &a).unwrap();
+    let eig = SymmetricEigen::factor(&m, &mut Work::new(1 << 40)).unwrap();
+    let values = eig.values();
+    let root = 5.0f64.sqrt();
+    assert!(
+        (values[0] / 1e300 - (1.0 - root) / 2.0).abs() < 1e-12,
+        "{values:?}"
+    );
+    assert!(
+        (values[2] / 1e300 - (1.0 + root) / 2.0).abs() < 1e-12,
+        "{values:?}"
+    );
+}
