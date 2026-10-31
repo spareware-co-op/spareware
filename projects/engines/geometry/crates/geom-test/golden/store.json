@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G105",
               "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
+            },
+            {
+              "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
-          "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812"
+          "sha256": "e3b3c4d5640e0732ef67a71703c45293c184e22eebb19b36220a29626d63c0cc"
         },
         {
           "id": "geom-nurbs/operations",

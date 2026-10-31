@@ -46,6 +46,7 @@ pub mod growth;
 pub mod interval;
 pub mod isolate;
 pub mod linalg;
+pub mod make;
 pub mod math;
 pub mod math_types;
 pub mod newton;
