@@ -21,9 +21,9 @@ use std::path::{Path, PathBuf};
 
 use geom_format::file::{END_TAG, HEADER_TAG, read, write};
 use geom_format::header::{self, Header, rung};
-use geom_format::record::{REQUIRED, Record};
+use geom_format::record::{COPY_ALWAYS, REQUIRED, Record};
 use geom_format::registry::{
-    ENVELOPE, RECORDS, RUNGS, field_table, knows, registry_table, rung_table,
+    ENVELOPE, RECORDS, RUNGS, RecordType, field_table, knows, registry_table, rung_table, table_of,
 };
 use geom_format::source::SliceSource;
 use geom_num::grid::Steps;
@@ -205,4 +205,27 @@ fn every_archived_file_matches_the_cddl() {
             at += len;
         }
     }
+}
+
+/// A record written without the required flag is listed as optional; with it, copy-always beside
+/// it or not, as required.
+#[test]
+fn the_registry_says_which_records_are_required() {
+    let record = |tag: u64, flags: u64| RecordType {
+        tag,
+        name: "test",
+        schemas: &[1],
+        flags,
+        cddl: "test.cddl",
+        section: "0",
+        fields: &[],
+    };
+    let table = table_of(&[
+        record(90, 0),
+        record(91, COPY_ALWAYS),
+        record(92, REQUIRED | COPY_ALWAYS),
+    ]);
+    assert!(table.contains("| 90 | `test` | 1 | optional |"), "{table}");
+    assert!(table.contains("| 91 | `test` | 1 | optional |"), "{table}");
+    assert!(table.contains("| 92 | `test` | 1 | required |"), "{table}");
 }
