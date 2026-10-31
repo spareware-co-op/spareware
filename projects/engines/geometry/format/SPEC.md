@@ -139,7 +139,7 @@ A chunk's payload (CDDL `chunk`):
 | Field | CDDL | Holds |
 | --- | --- | --- |
 | `table` | `uint` | the table's code |
-| `chunk` | `uint` | the chunk's place in its table, from 0 |
+| `position` | `uint` | the chunk's place in its table, from 0 |
 | `rows` | `1..4096` | its rows: 4,096 in every chunk but a table's last |
 | `columns` | `[* column]` | the table's columns over those rows, in the table's order |
 <!-- end generated -->

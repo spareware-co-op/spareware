@@ -11,7 +11,7 @@ body = [
 table-entry = [table: 1..15, rows: uint, chunks: [* content-id]]
 content-id = [alg: uint, digest: bstr]
 
-chunk = [table: 1..15, chunk: uint, rows: 1..4096, columns: [* column]]
+chunk = [table: 1..15, position: uint, rows: 1..4096, columns: [* column]]
 column = refs / i64-column / names / [* surface] / [* curve]
 refs = [* uint]               ; a reference (row plus one, 0 for none), a sense or a kind code
 names = bstr                  ; 16 bytes per row
@@ -53,7 +53,7 @@ bulge = [10, vertices: f64-column, bulges: f64-column, widths: optional-column, 
 trimmed = [11, leaf, interval]
 composite = [12, segments: [+ trimmed], starts: f64-column]
 offset-curve = [13, basis: trimmed, law: offset-law, cached: flag]
-on-surface = [14, pcurve: trimmed, surface: uint, curve3d: [nurbs-fields], error: real]
+on-surface = [14, pcurve: trimmed, surface-ref: uint, curve3d: [nurbs-fields], error: real]
 transition = [15, start: vec, direction: vec, length: real, law: curvature-law,
               window: interval, reversed: flag]
 offset-law = [1, distance: real] / [2, distance: real, direction: [real, real, real]]

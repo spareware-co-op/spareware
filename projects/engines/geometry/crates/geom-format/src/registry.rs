@@ -212,7 +212,7 @@ pub const RECORDS: &[RecordType] = &[
                 meaning: "the table's code",
             },
             Field {
-                name: "chunk",
+                name: "position",
                 cddl: "uint",
                 meaning: "the chunk's place in its table, from 0",
             },
