@@ -2,12 +2,15 @@
 //! `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`,
 //! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`,
 //! `predicate-carrier-side`, `predicate-carrier-order`, `predicate-rational-cmp`,
-//! `predicate-rational-orient`, `predicate-variant-plain` and `predicate-variant-limbs`: the
+//! `predicate-rational-orient`, `predicate-round-grid`, `predicate-round-rational`,
+//! `predicate-round-line`, `predicate-circle-side`, `predicate-circle-line`,
+//! `predicate-circle-gap`, `predicate-variant-plain` and `predicate-variant-limbs`: the
 //! kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`,
 //! `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`,
 //! `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight`, `verus-ssi-side`,
-//! `verus-carrier-side`, `verus-carrier-order`, `verus-rational-cmp` and `verus-rational-orient`,
-//! the Verus twins of the predicates' exact paths; and
+//! `verus-carrier-side`, `verus-carrier-order`, `verus-rational-cmp`, `verus-rational-orient`,
+//! `verus-round-grid`, `verus-round-rational`, `verus-round-line`, `verus-circle-side`,
+//! `verus-circle-line` and `verus-circle-gap`, the Verus twins of the predicates' exact paths; and
 //! `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`,
 //! `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`,
 //! `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`,
@@ -16,8 +19,10 @@
 //! `gappa-rational-orient`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
 //! `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`,
 //! `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-carrier-side`,
-//! `fptaylor-carrier-order`, `fptaylor-rational-cmp` and `fptaylor-rational-orient`, the problems
-//! that machine-check the filters' error bounds ([`crate::predicate_certificates`]).
+//! `fptaylor-carrier-order`, `fptaylor-rational-cmp`, `fptaylor-rational-orient`,
+//! `fptaylor-round-grid`, `fptaylor-round-rational`, `fptaylor-round-line`,
+//! `fptaylor-circle-side`, `fptaylor-circle-line` and `fptaylor-circle-gap`, the problems that
+//! machine-check the filters' error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
 //! orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose
@@ -32,7 +37,8 @@
 //! [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of
 //! chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the
 //! four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane
-//! ones, `crossing.rs` the 2D crossing ones and `carrier.rs` the carrier and rational-point ones.
+//! ones, `crossing.rs` the 2D crossing ones, `carrier.rs` the carrier and rational-point ones and
+//! `arc.rs` the circle and arc ones.
 //!
 //! Guarantees:
 //!
@@ -63,7 +69,7 @@
 //!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
 //!   for its one description per predicate. No code copied.
 //!
-//! Cost: each generator derives one predicate, or all fifteen for the parent module and each
+//! Cost: each generator derives one predicate, or all twenty-one for the parent module and each
 //! variant: a few hundred exact operations each.
 
 use crate::generator::GenError;
@@ -398,6 +404,116 @@ let det = wa * bc - wb * ac + wc * ab
 sign det
 ";
 
+/// `round_grid`: where a grid point lies against the circle about a rational point through a grid point.
+pub const ROUND_GRID: &str = "\
+# round_grid: where the grid point z lies against the circle about the rational point
+# (cx / w, cy / w), w > 0, through the grid point p: the sign of |z - c|^2 - |p - c|^2, written
+# (z - p) . (z + p - 2 c) so that no square of c is taken, times w, as
+# geom_num::arc::Round::side_of_grid asks it. Chapter 15.10's budgets; with its sign bit the value
+# takes 169 bits, within 15.10's 170.
+predicate round_grid
+input z p: point2
+input cx cy: rounded 124 in c
+input w: rounded 83 in w
+let ux = z.x - p.x
+let uy = z.y - p.y
+let tx = w * z.x + w * p.x - cx - cx
+let ty = w * z.y + w * p.y - cy - cy
+let s = ux * tx + uy * ty
+sign s
+";
+
+/// `round_rational`: where a rational point lies against the circle about a rational point through a grid point.
+pub const ROUND_RATIONAL: &str = "\
+# round_rational: where the rational point (x / v, y / v), v > 0, lies against the circle about the
+# rational point (cx / w, cy / w), w > 0, through the grid point q: round_grid's value at that
+# point, times v^2 w, as geom_num::arc::Round::side asks it. Chapter 15.10's budgets; with its sign
+# bit the value takes 336 bits, within 15.10's 337.
+predicate round_rational
+input x y: rounded 124 in p
+input v: rounded 83 in v
+input q: point2
+input cx cy: rounded 124 in c
+input w: rounded 83 in w
+let ux = x - v * q.x
+let uy = y - v * q.y
+let tx = w * x + w * v * q.x - v * cx - v * cx
+let ty = w * y + w * v * q.y - v * cy - v * cy
+let s = ux * tx + uy * ty
+sign s
+";
+
+/// `round_line`: how a carrier meets the circle about a rational point through a grid point.
+pub const ROUND_LINE: &str = "\
+# round_line: how the carrier a x + b y = d meets the circle about the rational point
+# (cx / w, cy / w), w > 0, through the grid point p: the sign of the squared distance from the
+# centre to the line, less the squared radius, each times (a^2 + b^2) w^2, as
+# geom_num::arc::Round::meets asks it. Negative for a crossing, positive for none, and zero for a
+# tangency: the discriminant of where they meet. With its sign bit the value takes 336 bits.
+predicate round_line
+input a b: rounded 41 in n
+input d: rounded 82 in d
+input p: point2
+input cx cy: rounded 124 in c
+input w: rounded 83 in w
+let h = a * cx + b * cy - d * w
+let dx = w * p.x - cx
+let dy = w * p.y - cy
+let rr = dx * dx + dy * dy
+let nn = a * a + b * b
+let s = h * h - rr * nn
+sign s
+";
+
+/// `circle_side`: where a rational point lies against a circle about a grid point with a whole radius.
+pub const CIRCLE_SIDE: &str = "\
+# circle_side: where the rational point (x / v, y / v), v > 0, lies against the circle about the
+# grid point k of radius r: the sign of |x - k|^2 - r^2, times v^2, as
+# geom_num::arc::Circle2::side asks it. With its sign bit the value takes 15.10's 253 bits.
+predicate circle_side
+input x y: rounded 124 in p
+input v: rounded 83 in v
+input k: point2
+input r: rounded 41 in r
+let ux = x - v * k.x
+let uy = y - v * k.y
+let rv = r * v
+let s = ux * ux + uy * uy - rv * rv
+sign s
+";
+
+/// `circle_line`: how a carrier meets a circle about a grid point with a whole radius.
+pub const CIRCLE_LINE: &str = "\
+# circle_line: how the carrier a x + b y = d meets the circle about the grid point k of radius r:
+# the sign of the squared distance from k to the line, less r^2, times a^2 + b^2, as
+# geom_num::arc::Circle2::meets asks it. Negative for a crossing, positive for none, and zero for a
+# tangency.
+predicate circle_line
+input a b: rounded 41 in n
+input d: rounded 82 in d
+input k: point2
+input r: rounded 41 in r
+let h = a * k.x + b * k.y - d
+let nn = a * a + b * b
+let rr = r * r
+let s = h * h - rr * nn
+sign s
+";
+
+/// `circle_gap`: how the distance between two grid points compares with a whole length.
+pub const CIRCLE_GAP: &str = "\
+# circle_gap: how the distance between the grid points a and b compares with the length t, the sum
+# or the difference of two radii: the sign of |a - b|^2 - t^2, as
+# geom_num::arc::Circle2::against asks it. |t| < 2^42.
+predicate circle_gap
+input a b: point2
+input t: rounded 42 in t
+let dx = a.x - b.x
+let dy = a.y - b.y
+let s = dx * dx + dy * dy - t * t
+sign s
+";
+
 /// One predicate: its generator's name, the description's constant name, the description, its
 /// output file, and the comparison row of the parent module.
 pub struct Predicate {
@@ -414,7 +530,7 @@ pub struct Predicate {
 }
 
 /// The predicates, in the order the registry runs them.
-pub const PREDICATES: [Predicate; 15] = [
+pub const PREDICATES: [Predicate; 21] = [
     Predicate {
         generator: "predicate-orient2d",
         constant: "ORIENT2D",
@@ -636,6 +752,87 @@ pub const PREDICATES: [Predicate; 15] = [
             fpg: "— (Geogram has no integer 2D carrier)",
         },
     },
+    Predicate {
+        generator: "predicate-round-grid",
+        constant: "ROUND_GRID",
+        text: ROUND_GRID,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/round_grid.rs",
+        comparison: Comparison {
+            name: "round_grid",
+            serves: "where a grid point lies against the circle about a rational point through a grid point \
+                     (chapters 14.2 and 15.10). [`crate::arc::Round::side_of_grid`] calls it, filter first",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-round-rational",
+        constant: "ROUND_RATIONAL",
+        text: ROUND_RATIONAL,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/round_rational.rs",
+        comparison: Comparison {
+            name: "round_rational",
+            serves: "where a rational point lies against the circle about a rational point through a grid \
+                     point (chapter 15.10). [`crate::arc::Round::side`] calls it, filter first",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-round-line",
+        constant: "ROUND_LINE",
+        text: ROUND_LINE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/round_line.rs",
+        comparison: Comparison {
+            name: "round_line",
+            serves: "how a carrier meets the circle about a rational point through a grid point, tangency \
+                     being this value exactly zero (chapter 14.2). [`crate::arc::Round::meets`] calls it, filter \
+                     first",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-circle-side",
+        constant: "CIRCLE_SIDE",
+        text: CIRCLE_SIDE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/circle_side.rs",
+        comparison: Comparison {
+            name: "circle_side",
+            serves: "where a rational point lies against a circle about a grid point with a whole number of \
+                     steps as its radius (chapter 15.10). [`crate::arc::Circle2::side`] calls it, filter first",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-circle-line",
+        constant: "CIRCLE_LINE",
+        text: CIRCLE_LINE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/circle_line.rs",
+        comparison: Comparison {
+            name: "circle_line",
+            serves: "how a carrier meets a circle about a grid point with a whole number of steps as its \
+                     radius, tangency being this value exactly zero (chapter 14.2). \
+                     [`crate::arc::Circle2::meets`] calls it, filter first",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
+    Predicate {
+        generator: "predicate-circle-gap",
+        constant: "CIRCLE_GAP",
+        text: CIRCLE_GAP,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/circle_gap.rs",
+        comparison: Comparison {
+            name: "circle_gap",
+            serves: "how the distance between two grid points compares with a whole number of steps, which \
+                     is how two circles lie (chapter 14.2). [`crate::arc::Circle2::against`] calls it, filter \
+                     first",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no integer 2D carrier)",
+        },
+    },
 ];
 
 /// The parent module's generator.
@@ -804,13 +1001,67 @@ pub fn generate_rational_orient() -> Result<Vec<u8>, GenError> {
     module_of(named("rational_orient")?)
 }
 
+/// Generator `predicate-round-grid`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_round_grid() -> Result<Vec<u8>, GenError> {
+    module_of(named("round_grid")?)
+}
+
+/// Generator `predicate-round-rational`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_round_rational() -> Result<Vec<u8>, GenError> {
+    module_of(named("round_rational")?)
+}
+
+/// Generator `predicate-round-line`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_round_line() -> Result<Vec<u8>, GenError> {
+    module_of(named("round_line")?)
+}
+
+/// Generator `predicate-circle-side`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_circle_side() -> Result<Vec<u8>, GenError> {
+    module_of(named("circle_side")?)
+}
+
+/// Generator `predicate-circle-line`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_circle_line() -> Result<Vec<u8>, GenError> {
+    module_of(named("circle_line")?)
+}
+
+/// Generator `predicate-circle-gap`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_circle_gap() -> Result<Vec<u8>, GenError> {
+    module_of(named("circle_gap")?)
+}
+
 /// The folder of `geom-num`'s Verus crate that the predicate twins are generated into: modules of
 /// `verus/lib.rs`, outside every crate's sources, so Cargo never builds them;
 /// `kernel-dev.yml`'s `verus` job verifies the crate.
 pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
 
 /// The predicates with a Verus twin (pieces G36, G38 and G39), by name.
-pub const VERUS_TWINS: [&str; 15] = [
+pub const VERUS_TWINS: [&str; 21] = [
     "orient2d",
     "orient3d",
     "incircle",
@@ -826,6 +1077,12 @@ pub const VERUS_TWINS: [&str; 15] = [
     "carrier_order",
     "rational_cmp",
     "rational_orient",
+    "round_grid",
+    "round_rational",
+    "round_line",
+    "circle_side",
+    "circle_line",
+    "circle_gap",
 ];
 
 /// The twin of the predicate called `name`, as bytes.
@@ -973,6 +1230,60 @@ pub fn generate_verus_rational_cmp() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_rational_orient() -> Result<Vec<u8>, GenError> {
     twin_of("rational_orient")
+}
+
+/// Generator `verus-round-grid`: `round_grid`'s exact path as a Verus-annotated twin.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_round_grid() -> Result<Vec<u8>, GenError> {
+    twin_of("round_grid")
+}
+
+/// Generator `verus-round-rational`: `round_rational`'s exact path as a Verus-annotated twin.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_round_rational() -> Result<Vec<u8>, GenError> {
+    twin_of("round_rational")
+}
+
+/// Generator `verus-round-line`: `round_line`'s exact path as a Verus-annotated twin.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_round_line() -> Result<Vec<u8>, GenError> {
+    twin_of("round_line")
+}
+
+/// Generator `verus-circle-side`: `circle_side`'s exact path as a Verus-annotated twin.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_circle_side() -> Result<Vec<u8>, GenError> {
+    twin_of("circle_side")
+}
+
+/// Generator `verus-circle-line`: `circle_line`'s exact path as a Verus-annotated twin.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_circle_line() -> Result<Vec<u8>, GenError> {
+    twin_of("circle_line")
+}
+
+/// Generator `verus-circle-gap`: `circle_gap`'s exact path as a Verus-annotated twin.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_circle_gap() -> Result<Vec<u8>, GenError> {
+    twin_of("circle_gap")
 }
 
 /// Generator `verus-plane-side`: `plane_side`'s exact path as a Verus-annotated twin
@@ -1416,6 +1727,66 @@ pub fn generate_fptaylor_rational_orient() -> Result<Vec<u8>, GenError> {
     certificate("rational_orient", "fptaylor-rational-orient", fptaylor_problem)
 }
 
+/// Generator `fptaylor-round-grid`: `round_grid`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_round_grid() -> Result<Vec<u8>, GenError> {
+    certificate("round_grid", "fptaylor-round-grid", fptaylor_problem)
+}
+
+/// Generator `fptaylor-round-rational`: `round_rational`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_round_rational() -> Result<Vec<u8>, GenError> {
+    certificate("round_rational", "fptaylor-round-rational", fptaylor_problem)
+}
+
+/// Generator `fptaylor-round-line`: `round_line`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_round_line() -> Result<Vec<u8>, GenError> {
+    certificate("round_line", "fptaylor-round-line", fptaylor_problem)
+}
+
+/// Generator `fptaylor-circle-side`: `circle_side`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_circle_side() -> Result<Vec<u8>, GenError> {
+    certificate("circle_side", "fptaylor-circle-side", fptaylor_problem)
+}
+
+/// Generator `fptaylor-circle-line`: `circle_line`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_circle_line() -> Result<Vec<u8>, GenError> {
+    certificate("circle_line", "fptaylor-circle-line", fptaylor_problem)
+}
+
+/// Generator `fptaylor-circle-gap`: `circle_gap`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_circle_gap() -> Result<Vec<u8>, GenError> {
+    certificate("circle_gap", "fptaylor-circle-gap", fptaylor_problem)
+}
+
 /// Generator `predicate-module`: the module that declares the predicates and holds their helpers.
 ///
 /// # Errors
@@ -1452,7 +1823,7 @@ mod tests {
     type Generate = fn() -> Result<Vec<u8>, GenError>;
 
     /// Each generator with its committed output, built into the test.
-    const COMMITTED: [(&str, Generate, &[u8]); 16] = [
+    const COMMITTED: [(&str, Generate, &[u8]); 22] = [
         (
             "mod.rs",
             generate_module,
@@ -1532,6 +1903,36 @@ mod tests {
             "rational_orient.rs",
             generate_rational_orient,
             include_bytes!("../../geom-num/src/generated/rational_orient.rs"),
+        ),
+        (
+            "round_grid.rs",
+            generate_round_grid,
+            include_bytes!("../../geom-num/src/generated/round_grid.rs"),
+        ),
+        (
+            "round_rational.rs",
+            generate_round_rational,
+            include_bytes!("../../geom-num/src/generated/round_rational.rs"),
+        ),
+        (
+            "round_line.rs",
+            generate_round_line,
+            include_bytes!("../../geom-num/src/generated/round_line.rs"),
+        ),
+        (
+            "circle_side.rs",
+            generate_circle_side,
+            include_bytes!("../../geom-num/src/generated/circle_side.rs"),
+        ),
+        (
+            "circle_line.rs",
+            generate_circle_line,
+            include_bytes!("../../geom-num/src/generated/circle_line.rs"),
+        ),
+        (
+            "circle_gap.rs",
+            generate_circle_gap,
+            include_bytes!("../../geom-num/src/generated/circle_gap.rs"),
         ),
     ];
 

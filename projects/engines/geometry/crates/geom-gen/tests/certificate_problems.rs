@@ -77,7 +77,7 @@ struct Filter {
 }
 
 /// Every generated predicate, each with every problem committed for it.
-const FILTERS: [Filter; 15] = [
+const FILTERS: [Filter; 21] = [
     Filter {
         name: "orient2d",
         module: include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -296,6 +296,60 @@ const FILTERS: [Filter; 15] = [
         fptaylor: (
             "fptaylor-rational-orient.fpt",
             include_str!("../generated/fptaylor-rational-orient.fpt"),
+        ),
+    },
+    Filter {
+        name: "round_grid",
+        module: include_str!("../../geom-num/src/generated/round_grid.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-round-grid.fpt",
+            include_str!("../generated/fptaylor-round-grid.fpt"),
+        ),
+    },
+    Filter {
+        name: "round_rational",
+        module: include_str!("../../geom-num/src/generated/round_rational.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-round-rational.fpt",
+            include_str!("../generated/fptaylor-round-rational.fpt"),
+        ),
+    },
+    Filter {
+        name: "round_line",
+        module: include_str!("../../geom-num/src/generated/round_line.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-round-line.fpt",
+            include_str!("../generated/fptaylor-round-line.fpt"),
+        ),
+    },
+    Filter {
+        name: "circle_side",
+        module: include_str!("../../geom-num/src/generated/circle_side.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-circle-side.fpt",
+            include_str!("../generated/fptaylor-circle-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "circle_line",
+        module: include_str!("../../geom-num/src/generated/circle_line.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-circle-line.fpt",
+            include_str!("../generated/fptaylor-circle-line.fpt"),
+        ),
+    },
+    Filter {
+        name: "circle_gap",
+        module: include_str!("../../geom-num/src/generated/circle_gap.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-circle-gap.fpt",
+            include_str!("../generated/fptaylor-circle-gap.fpt"),
         ),
     },
 ];

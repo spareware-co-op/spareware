@@ -29,7 +29,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 72] = [
+pub const GENERATORS: [Generator; 90] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -133,6 +133,42 @@ pub const GENERATORS: [Generator; 72] = [
         generate: Generate::Plain(predicates::generate_rational_orient),
     },
     Generator {
+        name: "predicate-round-grid",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/round_grid.rs",
+        about: "a grid point against a circle about a rational point: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_round_grid),
+    },
+    Generator {
+        name: "predicate-round-rational",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/round_rational.rs",
+        about: "a rational point against a circle about a rational point: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_round_rational),
+    },
+    Generator {
+        name: "predicate-round-line",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/round_line.rs",
+        about: "a carrier against a circle about a rational point: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_round_line),
+    },
+    Generator {
+        name: "predicate-circle-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/circle_side.rs",
+        about: "a rational point against a grid-centred circle: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_circle_side),
+    },
+    Generator {
+        name: "predicate-circle-line",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/circle_line.rs",
+        about: "a carrier against a grid-centred circle: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_circle_line),
+    },
+    Generator {
+        name: "predicate-circle-gap",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/circle_gap.rs",
+        about: "the distance between two grid points against a whole length: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_circle_gap),
+    },
+    Generator {
         name: predicates::PLAIN_GENERATOR,
         output: predicates::PLAIN_OUTPUT,
         about: "every predicate's exact path in plain i128, the baseline of chapter 23.3's variants",
@@ -203,6 +239,42 @@ pub const GENERATORS: [Generator; 72] = [
         output: "projects/engines/geometry/crates/geom-num/verus/generated/rational_orient.rs",
         about: "rational_orient's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_rational_orient),
+    },
+    Generator {
+        name: "verus-round-grid",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/round_grid.rs",
+        about: "round_grid's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_round_grid),
+    },
+    Generator {
+        name: "verus-round-rational",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/round_rational.rs",
+        about: "round_rational's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_round_rational),
+    },
+    Generator {
+        name: "verus-round-line",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/round_line.rs",
+        about: "round_line's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_round_line),
+    },
+    Generator {
+        name: "verus-circle-side",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/circle_side.rs",
+        about: "circle_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_circle_side),
+    },
+    Generator {
+        name: "verus-circle-line",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/circle_line.rs",
+        about: "circle_line's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_circle_line),
+    },
+    Generator {
+        name: "verus-circle-gap",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/circle_gap.rs",
+        about: "circle_gap's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_circle_gap),
     },
     Generator {
         name: "verus-plane-side",
@@ -455,6 +527,42 @@ pub const GENERATORS: [Generator; 72] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-rational-orient.fpt",
         about: "rational_orient's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
         generate: Generate::Plain(predicates::generate_fptaylor_rational_orient),
+    },
+    Generator {
+        name: "fptaylor-round-grid",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-round-grid.fpt",
+        about: "round_grid's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_round_grid),
+    },
+    Generator {
+        name: "fptaylor-round-rational",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-round-rational.fpt",
+        about: "round_rational's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_round_rational),
+    },
+    Generator {
+        name: "fptaylor-round-line",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-round-line.fpt",
+        about: "round_line's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_round_line),
+    },
+    Generator {
+        name: "fptaylor-circle-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-circle-side.fpt",
+        about: "circle_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_circle_side),
+    },
+    Generator {
+        name: "fptaylor-circle-line",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-circle-line.fpt",
+        about: "circle_line's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_circle_line),
+    },
+    Generator {
+        name: "fptaylor-circle-gap",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-circle-gap.fpt",
+        about: "circle_gap's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_circle_gap),
     },
     Generator {
         name: quadrature::NAME,

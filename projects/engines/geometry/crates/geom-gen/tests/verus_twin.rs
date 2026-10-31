@@ -259,7 +259,7 @@ fn the_twin_is_current() {
 const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
 
 /// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
-const PREDICATE_TWINS: [(&str, &str, &str); 15] = [
+const PREDICATE_TWINS: [(&str, &str, &str); 21] = [
     (
         "orient2d",
         include_str!("../../geom-num/verus/generated/orient2d.rs"),
@@ -335,6 +335,36 @@ const PREDICATE_TWINS: [(&str, &str, &str); 15] = [
         include_str!("../../geom-num/verus/generated/rational_orient.rs"),
         include_str!("../../geom-num/src/generated/rational_orient.rs"),
     ),
+    (
+        "round_grid",
+        include_str!("../../geom-num/verus/generated/round_grid.rs"),
+        include_str!("../../geom-num/src/generated/round_grid.rs"),
+    ),
+    (
+        "round_rational",
+        include_str!("../../geom-num/verus/generated/round_rational.rs"),
+        include_str!("../../geom-num/src/generated/round_rational.rs"),
+    ),
+    (
+        "round_line",
+        include_str!("../../geom-num/verus/generated/round_line.rs"),
+        include_str!("../../geom-num/src/generated/round_line.rs"),
+    ),
+    (
+        "circle_side",
+        include_str!("../../geom-num/verus/generated/circle_side.rs"),
+        include_str!("../../geom-num/src/generated/circle_side.rs"),
+    ),
+    (
+        "circle_line",
+        include_str!("../../geom-num/verus/generated/circle_line.rs"),
+        include_str!("../../geom-num/src/generated/circle_line.rs"),
+    ),
+    (
+        "circle_gap",
+        include_str!("../../geom-num/verus/generated/circle_gap.rs"),
+        include_str!("../../geom-num/src/generated/circle_gap.rs"),
+    ),
 ];
 
 /// The Verus crate's root, which must hold every predicate twin as a module.
@@ -358,6 +388,12 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         geom_gen::predicates::generate_verus_carrier_order,
         geom_gen::predicates::generate_verus_rational_cmp,
         geom_gen::predicates::generate_verus_rational_orient,
+        geom_gen::predicates::generate_verus_round_grid,
+        geom_gen::predicates::generate_verus_round_rational,
+        geom_gen::predicates::generate_verus_round_line,
+        geom_gen::predicates::generate_verus_circle_side,
+        geom_gen::predicates::generate_verus_circle_line,
+        geom_gen::predicates::generate_verus_circle_gap,
     ];
     for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
         let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));

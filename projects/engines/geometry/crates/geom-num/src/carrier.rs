@@ -80,7 +80,7 @@ const fn below(bits: u32) -> i128 {
 }
 
 /// Whether `v` is below 2 to `bits` in magnitude.
-const fn fits(v: i128, bits: u32) -> bool {
+pub(crate) const fn fits(v: i128, bits: u32) -> bool {
     v.unsigned_abs() <= below(bits).unsigned_abs()
 }
 
@@ -224,7 +224,7 @@ impl Carrier {
 }
 
 /// p · q − r · s, each product within `i128` for any values in the budget.
-fn product_difference(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumError> {
+pub(crate) fn product_difference(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumError> {
     p.checked_mul(q)
         .zip(r.checked_mul(s))
         .and_then(|(m, n)| m.checked_sub(n))
@@ -232,7 +232,7 @@ fn product_difference(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumErr
 }
 
 /// p · q + r · s, as [`product_difference`].
-fn product_sum(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumError> {
+pub(crate) fn product_sum(p: i128, q: i128, r: i128, s: i128) -> Result<i128, NumError> {
     p.checked_mul(q)
         .zip(r.checked_mul(s))
         .and_then(|(m, n)| m.checked_add(n))
