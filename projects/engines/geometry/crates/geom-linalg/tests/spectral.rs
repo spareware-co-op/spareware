@@ -566,3 +566,49 @@ fn the_eigensolver_refuses_what_is_not_symmetric() {
         Err(LinalgError::OutOfWork)
     );
 }
+
+/// A fuzz finding (Gate 2's `linalg` target): the QR step scales its block to magnitude 1, which
+/// here takes a pair of entries near 1e−127, beside 1e184, into the subnormal range. Rotations built
+/// there were no unit pairs, and Q drifted from orthogonal by over 3,000 units of roundoff.
+#[test]
+fn rotations_stay_unit_where_the_step_scale_makes_a_pair_subnormal() {
+    let a: [f64; 25] = [
+        2.887_395_615_532_085_7e-143,
+        0.000_122_070_312_5,
+        -1.0,
+        -9.399_359_901_127_183e183,
+        524_288.0,
+        0.000_122_070_312_5,
+        0.0,
+        -1.214_611_945_415_162_5e-127,
+        -0.5,
+        0.0,
+        -1.0,
+        -1.214_611_945_415_162_5e-127,
+        0.0,
+        0.0,
+        0.0,
+        -9.399_359_901_127_183e183,
+        -0.5,
+        0.0,
+        0.0,
+        0.0,
+        524_288.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ];
+    let m = Matrix::from_rows(5, 5, &a).unwrap();
+    let eig = SymmetricEigen::factor(&m, &mut Work::new(1 << 40)).unwrap();
+    let q = eig.vectors();
+    for i in 0..5 {
+        for j in 0..5 {
+            let dot: f64 = (0..5)
+                .map(|k| q.get(k, i).unwrap() * q.get(k, j).unwrap())
+                .sum();
+            let want = if i == j { 1.0 } else { 0.0 };
+            assert!((dot - want).abs() < 2e-15, "{i} {j}: {dot}");
+        }
+    }
+}

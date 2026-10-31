@@ -41,11 +41,25 @@ pub(crate) fn hypot(a: f64, b: f64) -> Result<f64, LinalgError> {
     finite(big * math::sqrt(1.0 + q * q)?.get())
 }
 
+/// 2^−1021: at or above this in either input, r is a normal number.
+const TINY: f64 = f64::from_bits(0x0020_0000_0000_0000);
+/// 2^100, which takes any double below [`TINY`] exactly to a normal one.
+const UP: f64 = f64::from_bits(0x4630_0000_0000_0000);
+/// 2^−100, the inverse of [`UP`].
+const DOWN: f64 = f64::from_bits(0x39B0_0000_0000_0000);
+
 /// The rotation that zeroes `z` against `y`: (c, s, r) with c·y + s·z = r, −s·y + c·z = 0 and
 /// c² + s² = 1 to rounding; (1, 0, y) when z is zero.
 pub(crate) fn givens(y: f64, z: f64) -> Result<(f64, f64, f64), LinalgError> {
     if z == 0.0 {
         return Ok((1.0, 0.0, y));
+    }
+    // Where r would be subnormal it keeps too few bits for y/r and z/r to be a unit pair, and the
+    // loss adds up over a run, so such a pair is first scaled by a power of two, which is exact.
+    if y.abs() < TINY && z.abs() < TINY {
+        let (y, z) = (y * UP, z * UP);
+        let r = hypot(y, z)?;
+        return Ok((y / r, z / r, r * DOWN));
     }
     let r = hypot(y, z)?;
     Ok((y / r, z / r, r))
