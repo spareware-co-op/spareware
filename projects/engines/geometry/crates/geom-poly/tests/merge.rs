@@ -536,24 +536,26 @@ fn seams_follow_the_source_a_caller_names() {
 
 #[test]
 fn a_section_runs_where_two_owners_meet() {
-    let pieces = |blocks: &[Block]| -> Vec<(Piece, usize)> {
+    let pieces = |blocks: &[Block], leaf: usize| -> Vec<(Piece, usize)> {
         let polygons = scene(blocks);
         let owner = |c: &Classified| polygons[c.polygon].entry.unwrap_or(0) as usize;
-        let found = classified(&polygons, LEAF_POLYGONS);
+        let found = classified(&polygons, leaf);
         found.iter().map(|c| (c.piece.clone(), owner(c))).collect()
     };
-    let curves = section(&pieces(&[A, B]), &mut meter()).unwrap();
-    assert_eq!((curves.edges.len(), curves.vertices.len()), (6, 6));
-    assert!(curves.edges.iter().all(|(low, high)| low < high));
+    for leaf in [1, LEAF_POLYGONS] {
+        let curves = section(&pieces(&[A, B], leaf), &mut meter()).unwrap();
+        assert_eq!((curves.edges.len(), curves.vertices.len()), (6, 6));
+        assert!(curves.edges.iter().all(|(low, high)| low < high));
+    }
     let flush = block([4, 0, 0], [8, 4, 4]);
-    let curves = section(&pieces(&[A, flush]), &mut meter()).unwrap();
+    let curves = section(&pieces(&[A, flush], LEAF_POLYGONS), &mut meter()).unwrap();
     assert_eq!(curves.edges.len(), 4, "around their contact, not across it");
     let apart = block([9, 9, 9], [12, 12, 12]);
-    let curves = section(&pieces(&[A, apart]), &mut meter()).unwrap();
+    let curves = section(&pieces(&[A, apart], LEAF_POLYGONS), &mut meter()).unwrap();
     assert_eq!((curves.edges.len(), curves.vertices.len()), (0, 0));
     let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
     assert!(matches!(
-        section(&pieces(&[A, B]), &mut small),
+        section(&pieces(&[A, B], LEAF_POLYGONS), &mut small),
         Err(MergeError::Stopped(_))
     ));
 }

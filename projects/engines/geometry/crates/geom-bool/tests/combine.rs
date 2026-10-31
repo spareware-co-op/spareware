@@ -15,12 +15,14 @@
 
 use geom_bool::combine::{COMBINE, combine, intersect, subtract, unite};
 use geom_bool::half_space::half_space;
-use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection, Term};
+use geom_bool::operand::{
+    BooleanInput, Operand, OperandKey, OperandKind, PrepareError, Selection, Term,
+};
 use geom_bool::rebuild::{Carrier, RebuildError, rebuild_with};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, Made, cylinder, make_box, prism};
 use geom_num::plane::Plane;
-use geom_num::{Exactness, P3, Steps};
+use geom_num::{Exactness, NumError, P3, Steps};
 use geom_op::{CombineDetail, ErrorKind, OpContext, OpErrorDetail, OpId, OpPath};
 use geom_poly::convex::Piece;
 use geom_poly::merge::{Merge, Outward, Rules};
@@ -591,6 +593,65 @@ fn a_section_is_the_curve_where_operands_meet() {
             .iter()
             .any(|d| d.code == "bool.empty_result")
     );
+}
+
+#[test]
+fn a_refused_preparation_says_why() {
+    let k = key(1);
+    for (error, text) in [
+        (
+            PrepareError::DuplicateOperand(k),
+            "two operands share a key",
+        ),
+        (
+            PrepareError::UnknownOperand(k),
+            "a selection names no solid operand",
+        ),
+        (
+            PrepareError::NotPlaneBased(k),
+            "an operand has a face not on integers",
+        ),
+        (
+            PrepareError::Broken(k),
+            "an operand has a face that cannot enter",
+        ),
+    ] {
+        assert_eq!(error.to_string(), text);
+    }
+    let num = PrepareError::from(NumError::Degenerate).to_string();
+    assert!(num.starts_with("an operand that cannot enter"));
+    let stopped = WorkMeter::new(Budget::new(0, u64::MAX))
+        .charge(1)
+        .unwrap_err();
+    assert_eq!(
+        PrepareError::Stopped(stopped).to_string(),
+        "the meter stopped the preparation"
+    );
+    let block = cuboid([0, 0, 0], [4, 4, 4]);
+    for selection in [
+        Selection::Imprint { target: key(9) },
+        Selection::Split { target: key(9) },
+        Selection::Keep {
+            target: key(9),
+            test: vec![Term::Inside(key(1))],
+        },
+        Selection::Trim {
+            target: key(9),
+            seeds: Vec::new(),
+        },
+    ] {
+        let input = BooleanInput {
+            operands: vec![solid(1, &block)],
+            select: vec![selection],
+            merge: Merge::RemoveRedundant,
+            accept: None,
+        };
+        let refused = combine(&ctx(), &SERIAL, &input).unwrap_err();
+        assert_eq!(
+            *refused.detail(),
+            OpErrorDetail::Combine(CombineDetail::UnknownOperand)
+        );
+    }
 }
 
 #[test]
