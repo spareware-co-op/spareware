@@ -31,8 +31,8 @@ use geom_op::{
     MakeDetail, NameList, NameSet, OpContext, OpError, OpOutput, Role, RoleArg, TopoName,
 };
 
-use crate::build::{Made, fail, finish, meter};
-use crate::transform::{Moved, moved_copy};
+use crate::build::{Made, fail, meter};
+use crate::transform::{Moved, moved_copy, settle};
 
 /// The copies a pattern returns: each instance's key and what it made, in key order.
 pub type Copies = Vec<([u8; 16], Made)>;
@@ -93,7 +93,7 @@ pub fn pattern(
             let from = NameSet::new([source]).ok()?;
             Some((name, Origin::Generated { from, role }))
         };
-        let (body, records, exactness) = moved_copy(
+        let copied = moved_copy(
             ctx,
             &mut meter,
             input,
@@ -102,15 +102,8 @@ pub fn pattern(
             &names,
             &copy,
         )?;
-        let made = finish(
-            ctx,
-            &mut meter,
-            body,
-            records,
-            NameSet::new([]).map_err(|_| fail(ctx, MakeDetail::BuildFailed))?,
-            exactness,
-        )?;
-        least = less_exact(least, exactness);
+        let made = settle(ctx, &mut meter, copied)?;
+        least = less_exact(least, made.exactness);
         out.push((instance.key, made.result));
     }
     Ok(OpOutput::new(out, least))

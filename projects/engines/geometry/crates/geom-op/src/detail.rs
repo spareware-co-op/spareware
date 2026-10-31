@@ -372,8 +372,13 @@ pub enum MakeDetail {
     /// a scale that is not uniform makes cylinders, cones, spheres and tori affine surfaces and
     /// circles ellipses.
     KindNotCertified,
-    /// The transform does not keep volumes: a scale by zero.
-    SingularTransform,
+    /// A transform that rounds corners or moves curved geometry by a certified deviation gave a
+    /// body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted
+    /// curved face meets its caps where only exact data is followed today.
+    NotCertifiedYet {
+        /// The piece that widens what the checker certifies, by its board number.
+        piece: &'static str,
+    },
     /// The body given carries no names: it was not published in name order, so its entities
     /// cannot keep their names through the transform.
     BodyNotNamed,
@@ -392,7 +397,7 @@ impl MakeDetail {
     #[must_use]
     pub const fn kind(&self) -> ErrorKind {
         match self {
-            MakeDetail::ZeroLength { .. } | MakeDetail::SingularTransform => ErrorKind::Degenerate,
+            MakeDetail::ZeroLength { .. } => ErrorKind::Degenerate,
             MakeDetail::TooFewCorners { .. }
             | MakeDetail::BaseNotLevel
             | MakeDetail::BaseNotConvex
@@ -401,7 +406,9 @@ impl MakeDetail {
             | MakeDetail::EmptyPattern
             | MakeDetail::RepeatedKey => ErrorKind::InvalidInput,
             MakeDetail::NotAccepted { .. } => ErrorKind::ExactnessNotAccepted,
-            MakeDetail::KindNotCertified => ErrorKind::Unsupported,
+            MakeDetail::KindNotCertified | MakeDetail::NotCertifiedYet { .. } => {
+                ErrorKind::Unsupported
+            }
             MakeDetail::ResultInvalid | MakeDetail::BuildFailed => ErrorKind::Internal,
         }
     }
@@ -429,7 +436,7 @@ impl MakeDetail {
             )],
             MakeDetail::NotAccepted { would } => vec![Remedy::Accept { class: *would }],
             MakeDetail::KindNotCertified => vec![Remedy::AwaitPiece { piece: "G177" }],
-            MakeDetail::SingularTransform => vec![change("factor", None)],
+            MakeDetail::NotCertifiedYet { piece } => vec![Remedy::AwaitPiece { piece }],
             MakeDetail::BodyNotNamed => vec![change("body", None)],
             MakeDetail::EmptyPattern | MakeDetail::RepeatedKey => {
                 vec![change("instances", None)]
@@ -459,7 +466,10 @@ impl fmt::Display for MakeDetail {
             MakeDetail::KindNotCertified => f.write_str(
                 "the transform would make curved geometry of a kind the checker cannot certify yet",
             ),
-            MakeDetail::SingularTransform => f.write_str("the transform scales by zero"),
+            MakeDetail::NotCertifiedYet { piece } => write!(
+                f,
+                "the checker cannot certify the transformed body yet; piece {piece} widens it"
+            ),
             MakeDetail::BodyNotNamed => f.write_str("the body carries no names"),
             MakeDetail::EmptyPattern => f.write_str("the pattern has no instance"),
             MakeDetail::RepeatedKey => f.write_str("two instances of the pattern have one key"),

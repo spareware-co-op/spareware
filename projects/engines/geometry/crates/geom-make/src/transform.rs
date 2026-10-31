@@ -41,7 +41,7 @@ use geom_curve::{CurveKind, ParamCurve};
 use geom_math::{Axis, Box3, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::history::{Origin, Record};
-use geom_op::{MakeDetail, NameId, NameSet, OpContext, OpError, OpOutput};
+use geom_op::{MakeDetail, NameId, NameSet, OpContext, OpError, OpErrorDetail, OpOutput};
 use geom_run::WorkMeter;
 use geom_surface::{ParamSurface, SurfaceKind};
 use geom_topo::ix::Arena;
@@ -128,7 +128,7 @@ pub fn mirror(
 ///
 /// # Errors
 ///
-/// As [`move_by`]; [`MakeDetail::SingularTransform`] for a factor of zero;
+/// As [`move_by`] (a factor is never zero: [`Scale`] refuses it);
 /// [`MakeDetail::KindNotCertified`] for factors that are not all equal on a body with curved
 /// geometry; [`MakeDetail::NotAccepted`] for a result less exact than the body that the caller
 /// does not accept.
@@ -138,9 +138,6 @@ pub fn scale(
     factors: [Scale; 3],
     center: P3,
 ) -> Result<OpOutput<Made>, OpError> {
-    if factors.iter().any(|s| s.num() == 0) {
-        return Err(fail(ctx, MakeDetail::SingularTransform));
-    }
     let [sx, sy, sz] = factors;
     let uniform = sx == sy && sy == sz;
     let curved = curved(input.body);
@@ -241,16 +238,37 @@ fn run(
             },
         ))
     };
-    let (body, records, exactness) =
-        moved_copy(ctx, &mut meter, input, &t, stretch, &names, &keep)?;
-    finish(
-        ctx,
-        &mut meter,
-        body,
-        records,
-        NameSet::new([]).map_err(|_| fail(ctx, MakeDetail::BuildFailed))?,
-        exactness,
-    )
+    let copy = moved_copy(ctx, &mut meter, input, &t, stretch, &names, &keep)?;
+    settle(ctx, &mut meter, copy)
+}
+
+/// A moved copy before its check: the body, its records, its exactness, and, when the transform
+/// rounded a corner or moved curved geometry by a deviation, the piece that widens what the
+/// checker certifies for it.
+pub(crate) struct Copied {
+    body: Body,
+    records: Vec<Record>,
+    exactness: Exactness,
+    awaits: Option<&'static str>,
+}
+
+/// Checks `copy` and returns it: a checker failure is a defect when the transform was exact, and
+/// [`MakeDetail::NotCertifiedYet`] when it rounded, since the checker certifies exact data only
+/// where groups 2 and 3 follow it today.
+pub(crate) fn settle(
+    ctx: &OpContext<'_>,
+    meter: &mut WorkMeter<'_>,
+    copy: Copied,
+) -> Result<OpOutput<Made>, OpError> {
+    let none = NameSet::new([]).map_err(|_| fail(ctx, MakeDetail::BuildFailed))?;
+    finish(ctx, meter, copy.body, copy.records, none, copy.exactness).map_err(|e| {
+        match (e.detail(), copy.awaits) {
+            (OpErrorDetail::Make(MakeDetail::ResultInvalid), Some(piece)) => {
+                fail(ctx, MakeDetail::NotCertifiedYet { piece }).with_message(e.message())
+            }
+            _ => e,
+        }
+    })
 }
 
 #[allow(
@@ -267,7 +285,7 @@ pub(crate) fn moved_copy(
     stretch: (u64, u64),
     names: &Names,
     rename: &dyn Fn(NameId) -> Option<(NameId, Origin)>,
-) -> Result<(Body, Vec<Record>, Exactness), OpError> {
+) -> Result<Copied, OpError> {
     let defect = || fail(ctx, MakeDetail::BuildFailed);
     let num = |e| OpError::new(ctx.path().clone(), e);
     let mirror = t.classify().map_err(num)?.mirror;
@@ -330,6 +348,8 @@ pub(crate) fn moved_copy(
         surfaces.push(moved.value);
     }
     let exactness = record(ctx, input, stretch, rounded, deviation)?;
+    let awaits =
+        (rounded || deviation > 0.0).then_some(if curved(input.body) { "G177" } else { "G134" });
     // Rows: copied, each pointing at its moved geometry; a mirror reverses faces and loops.
     let flip = |s: Sense| match s {
         Sense::Forward => Sense::Reversed,
@@ -452,7 +472,12 @@ pub(crate) fn moved_copy(
     let body = b
         .publish_named(&renamed, input.body.kind(), input.body.outside(), meter)
         .map_err(|_| defect())?;
-    Ok((body, records, exactness))
+    Ok(Copied {
+        body,
+        records,
+        exactness,
+        awaits,
+    })
 }
 
 /// Every row of an arena of `n` rows.
