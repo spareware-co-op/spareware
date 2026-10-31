@@ -1780,7 +1780,7 @@
         },
         {
           "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times.",
-          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within a relative 2^−30, which catches a wrong formula, not rounding.",
+          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30 of the largest value at that parameter, which catches a wrong formula, not rounding.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
           "guarantees": [
@@ -7602,7 +7602,7 @@
         },
         {
           "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform.",
-          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
+          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within 2^−30 of the largest value there (a wrong formula, not rounding).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
           "guarantees": [
