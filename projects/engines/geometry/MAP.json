@@ -10107,7 +10107,7 @@
             "**Never less than the library calls.** Each modelled function's body calls every closure it is handed and every trait method of its type parameters that the documented function may call; adapters that defer a call (an iterator's `map`) keep the closure in their result and call it where the library does (in `next`). By parametricity, code that does not know the kernel's types reaches kernel code only through the values and bounds it is handed (J. C. Reynolds, \"Types, abstraction and parametric polymorphism\", IFIP 1983; P. Wadler, \"Theorems for free!\", FPCA 1989, <https://doi.org/10.1145/99370.99404>), so these are all the calls it can make into the kernel.",
             "**What is not modelled is reported.** A path into the standard library that names nothing in the model resolves to nothing, and the type checker reports it as code it cannot read; the model is extended rather than guessed."
           ],
-          "job": "The recursion check's model of the standard library, of `libm`, of the part of `rayon` that `geom-pool` calls, and of the parts of `sha2` and `unicode-normalization` that `geom-op` calls: Rust source the check reads in place of theirs, so a call into them is checked as any other call is.",
+          "job": "The recursion check's model of the standard library, of `libm` and of the part of `rayon` that `geom-pool` calls: Rust source the check reads in place of theirs, so a call into them is checked as any other call is.",
           "method": {
             "links": [
               "https://doc.rust-lang.org/std/",

@@ -1010,6 +1010,7 @@ dependencies = [
  "geom-gen",
  "geom-mesh",
  "geom-num",
+ "geom-poly",
  "geom-run",
  "geom-test",
  "num-bigint",
@@ -1274,6 +1275,8 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-topo",
+ "num-bigint",
+ "proptest",
 ]
 
 [[package]]
