@@ -1774,6 +1774,7 @@ pub mod bvh {
 /// The triangulation's hot path (piece G153, decision 32.44).
 pub mod mesh {
     use geom_mesh::classify::{Classifier, Located};
+    use geom_mesh::envelope::TriangleEnvelope;
     use geom_mesh::exact::build::{Polygons, build};
     use geom_mesh::exact::{ExactMesh, MeshError};
     use geom_mesh::{Cdt, CdtError, contact, triangulate};
@@ -1824,6 +1825,14 @@ pub mod mesh {
         });
     }
 
+    /// `geom_mesh::envelope::TriangleEnvelope`: one built and asked about each point.
+    #[inline(never)]
+    pub fn envelope(batch: &[([P3; 3], P3)], out: &mut Vec<Result<bool, NumError>>) {
+        run(batch, out, |&(t, p)| {
+            TriangleEnvelope::new(t, 1 << 16)?.contains(p)
+        });
+    }
+
     /// `geom_mesh::contact::triangles` on each pair.
     #[inline(never)]
     pub fn triangles(batch: &[[[P3; 3]; 2]], out: &mut Vec<Result<Sign, NumError>>) {
@@ -1849,7 +1858,10 @@ pub mod mesh {
     /// `geom_mesh::classify::Classifier::locate_all` on each solid's points, its tree built first,
     /// serially, under an unlimited budget.
     #[inline(never)]
-    pub fn locate(batch: &[Probe], out: &mut Vec<Result<Vec<Located>, MeshError>>) {
+    pub fn locate(
+        batch: &[crate::inputs::mesh::Probe],
+        out: &mut Vec<Result<Vec<Located>, MeshError>>,
+    ) {
         run(batch, out, |probe| {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
             let exec = Exec::serial();

@@ -740,6 +740,12 @@ impl Canonical for crate::inputs::mesh::Terrain {
     }
 }
 
+impl Canonical for crate::inputs::mesh::Probe {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_mesh::exact::build::Polygons {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);

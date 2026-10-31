@@ -295,3 +295,16 @@ pub fn triangles(class: Class) -> Vec<[[P3; 3]; 2]> {
         }))
     })
 }
+
+/// Triangles and points near them for `geom_mesh::envelope::TriangleEnvelope`.
+#[must_use]
+pub fn envelope(class: Class) -> Vec<([P3; 3], P3)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::envelope", class);
+    batch_of(|_| {
+        let t = core::array::from_fn(|_| point(&mut g));
+        Some((t, point(&mut g)))
+    })
+}

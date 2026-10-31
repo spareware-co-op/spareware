@@ -4068,6 +4068,35 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why an envelope could not be made or asked.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+          "kinds": [
+            {
+              "doc": "A plane is over the budget of 6.2, or the numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The box tree refused.",
+              "name": "Bvh",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The work budget ran out, or the run was cancelled.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More triangles than a tree indexes.",
+              "name": "Full",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_mesh::envelope",
+          "name": "EnvelopeError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "What a mesh broke (19.2, \"What it guarantees\"). Each names the first place it was found.",
           "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
           "kinds": [
@@ -4360,6 +4389,30 @@
             "text": "Devillers and Guigue, \"Faster Triangle-Triangle Intersection Tests\", INRIA RR-4488, 2002 (<https://hal.inria.fr/inria-00072100>), from the paper. If each triangle straddles the other's plane, both cut the planes' common line in an interval, and they meet exactly when the intervals do. With each triangle turned so that its first vertex lies alone on the positive side, each end of an interval comes from one pair of edges, and comparing two ends is one orientation of four points. Coplanar triangles are compared in the plane of their normal's largest axis. Closest features are Ericson's Voronoi regions (Real-Time Collision Detection, 2005, section 5.1.5), in products of dots, as 19.10 sets out (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`)."
           },
           "path": "geom_mesh::contact",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "26 planes a triangle at most, each one or two greatest common divisors. A containment test is a tree query and up to 26 signs for each triangle whose box holds the point.",
+          "does": "[`TriangleEnvelope`] is a convex polyhedron around one triangle, its corners on the grid, inscribed in the triangle's ε-offset. [`Envelope`] holds one for each triangle of a surface, behind a box tree. A point inside any of them is within ε of the surface.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/envelope.rs",
+          "guarantees": [
+            "**Inside proves within ε.** Each polyhedron is the triangle swept by a cube of half side h, the largest whole number with 3h² ≤ ε². Its corners are a triangle's vertices moved by (±h, ±h, ±h), each within ε of the triangle, and the ε-offset of a triangle is convex, so the whole polyhedron is inside it. A point farther than ε is never inside.",
+            "**Within h proves inside.** A point within h of the triangle is inside, since a ball of radius h fits in the cube. So the envelope is never more than a factor √3 narrower than ε.",
+            "**Exact, within 384 bits.** Every test is the sign of a plane at a point: a grid point in `i128`, a line-plane or three-plane point in [`Plane::side_of_lpi`] and [`Plane::side_of_tpi`], chapter 6.2's deepest tests. The width is absolute, in grid steps, never a fraction of a model's size.",
+            "**Refused, never rounded.** A plane over 6.2's budget is an error. That takes an envelope reaching past the frame on a triangle whose normal is near its largest."
+          ],
+          "job": "The polyhedral envelope: a body that proves \"within ε of these triangles\" exactly (19.8).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3386569.3392426",
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "the polyhedral envelope of Wang et al. (2020), <https://doi.org/10.1145/3386569.3392426>, as 19.8 asks, its corners on the grid (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). The paper bounds a triangle by a prism with caps; here the same inscribed body is a Minkowski sum, the triangle and a cube, whose facets have closed-form normals: the cube's, the triangle's, and each edge crossed with each axis, both ways. A body with normal m reaches m · v + h·|m|₁ at its furthest, so each facet's plane is known without a hull."
+          },
+          "path": "geom_mesh::envelope",
           "provenance": [],
           "spdx": null,
           "target": "lib"
