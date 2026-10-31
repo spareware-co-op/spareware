@@ -6770,13 +6770,14 @@
         },
         {
           "cost": "[`Winding::count`] is a binary search; [`Winding::add`] that and a shift of the list; [`WindingTest::holds`] one step per term, with a look-up for each [`Term::Inside`].",
-          "does": "a [`Winding`] holds one winding number per entry of an arrangement, as a sorted list of (entry, count) pairs without zeros, so the outside is the empty list and the length of a list follows how many elements overlap at a point, not how many operands there are. A [`WindingTest`] is the small expression of 11.1: inside an entry, inside at least n entries, and their combinations. [`kept`] reads a piece's front and back vectors through a test: a piece is kept exactly when the test differs across it.",
+          "does": "a [`Winding`] holds one winding number per entry of an arrangement, as a sorted list of (entry, count) pairs without zeros, so the outside is the empty list and the length of a list follows how many elements overlap at a point, not how many operands there are. A [`WindingTest`] is the small expression of 11.1: inside an entry, inside at least n entries, and their combinations. [`kept`] reads a piece's front and back vectors through a test: a piece is kept exactly when the test differs across it. [`WindingTest::decided`] reads a test with some entries unknown, which is how a box is found to hold nothing of the result (11.3, step 4).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/winding.rs",
           "guarantees": [
             "**One vector, one list.** The pairs stay sorted, with no zero and no repeated entry, whatever order the crossings came in, so equal vectors compare equal (tested).",
             "**Nothing wraps, nothing aborts.** A count that would leave `i32` is [`WindingError::Overflow`], and memory refused is [`WindingError::OutOfMemory`].",
-            "**No recursion.** A test is held in postfix and evaluated on a stack of bits, so its depth never threatens a WebAssembly stack (principle 13); a test deeper than 64 is refused when it is made."
+            "**No recursion.** A test is held in postfix and evaluated on a stack of 64 answers, so its depth never threatens a WebAssembly stack (principle 13); a test deeper than that is refused when it is made.",
+            "**A settled test is settled.** [`WindingTest::decided`] answers only where every count of its open entries gives that answer, so a box it settles holds no boundary of the result."
           ],
           "job": "Sparse winding vectors and the tests that select pieces: chapter 11.2.",
           "method": {

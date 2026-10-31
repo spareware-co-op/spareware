@@ -540,6 +540,38 @@ fn wedges_agree(solids: &[[Plane; 4]]) {
     }
 }
 
+/// One box of a subdivision around tilted solids: a path that left it would miss what it crossed.
+fn wedges_in_cell(solids: &[[Plane; 4]], cell: &Cell) {
+    let all: Vec<Polygon> = solids
+        .iter()
+        .enumerate()
+        .flat_map(|(i, s)| wedge(s, i as u32))
+        .collect();
+    let polygons = clipped(&all, cell);
+    let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
+    // Just inside the low corner, x moved most and z least, as the box's moves are ordered.
+    let [x, y, z] = cell.low.map(|v| v as f64);
+    let reference = wedges_at(solids, [x + 1e-4, y + 1e-6, z + 1e-8]);
+    for c in classify(cell, &reference, &polygons, &cuts, &mut meter()).unwrap() {
+        let (front, back) = (off_middle(&c.piece, 1e-9), off_middle(&c.piece, -1e-9));
+        assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
+        assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);
+    }
+}
+
+#[test]
+fn a_path_stays_in_its_box() {
+    let a = outward([[-7, -6, -5], [9, 1, 0], [1, 8, 1], [2, 1, 7]]).unwrap();
+    let b = outward([[1, 1, 1], [8, 3, 2], [3, 9, 4], [4, 2, 9]]).unwrap();
+    for (low, high) in [
+        ([1, 1, 1], [4, 4, 4]),
+        ([2, 0, 1], [5, 3, 6]),
+        ([0, 2, 2], [3, 7, 4]),
+    ] {
+        wedges_in_cell(&[a, b], &Cell { low, high });
+    }
+}
+
 #[test]
 fn tilted_faces_are_crossed_where_a_path_leaves_them_by_either_of_two_walls() {
     let a = outward([[0, 0, 0], [9, 1, 0], [1, 8, 1], [2, 1, 7]]).unwrap();
@@ -563,6 +595,19 @@ fn any_block() -> impl Strategy<Value = Block> {
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(160))]
+
+    #[test]
+    fn every_tilted_box_agrees_with_the_solids(
+        solids in prop::collection::vec(any_wedge(), 1..4),
+        low in [-6i64..6, -6i64..6, -6i64..6],
+        size in [1i64..8, 1i64..8, 1i64..8],
+    ) {
+        let cell = Cell {
+            low,
+            high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
+        };
+        wedges_in_cell(&solids, &cell);
+    }
 
     #[test]
     fn every_tilted_piece_agrees_with_the_solids(
