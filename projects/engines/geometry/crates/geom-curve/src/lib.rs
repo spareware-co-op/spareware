@@ -91,6 +91,10 @@ pub mod tight;
 pub mod transition;
 pub mod trimmed;
 
+/// The NURBS crate whose curves and surfaces the kinds hold (`CurveKind::Nurbs`,
+/// `SurfaceKind::Nurbs`), so a crate that stores or rebuilds them names the same types.
+pub use geom_nurbs;
+
 pub use axes::{Axes, HelixAxes};
 pub use basis::Basis;
 pub use bulge::BulgePolyline;

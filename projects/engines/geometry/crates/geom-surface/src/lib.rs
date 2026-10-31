@@ -59,3 +59,4 @@ pub use implicit::{ImplicitBound, ImplicitEnclosure};
 pub use offset::Offset;
 pub use param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
 pub use swept::{Extrusion, Revolution, Ruled};
+pub use terms::Fun;
