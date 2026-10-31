@@ -175,6 +175,37 @@ fn the_selections_read_as_they_should() {
 }
 
 #[test]
+fn an_open_entry_leaves_only_what_turns_on_it() {
+    let w = vector(&[(1, 1), (2, 1)]);
+    let read = |terms: Vec<Term>, open: &[u32]| WindingTest::new(terms).unwrap().decided(&w, open);
+    assert_eq!(read(vec![Term::Inside(1)], &[]), Some(true));
+    assert_eq!(read(vec![Term::Inside(1)], &[1]), None);
+    assert_eq!(read(vec![Term::Inside(0)], &[1]), Some(false));
+    // Two known, up to two open.
+    assert_eq!(read(vec![Term::AtLeast(2)], &[0, 3]), Some(true));
+    assert_eq!(read(vec![Term::AtLeast(4)], &[0, 3]), None);
+    assert_eq!(read(vec![Term::AtLeast(5)], &[0, 3]), Some(false));
+    // Counts of open entries do not count as known.
+    assert_eq!(read(vec![Term::AtLeast(2)], &[1, 2]), None);
+    let (open, yes, no) = (Term::Inside(7), Term::Inside(1), Term::Inside(0));
+    for (a, b, and, or) in [
+        (yes, yes, Some(true), Some(true)),
+        (yes, no, Some(false), Some(true)),
+        (no, no, Some(false), Some(false)),
+        (open, yes, None, Some(true)),
+        (yes, open, None, Some(true)),
+        (open, no, Some(false), None),
+        (no, open, Some(false), None),
+        (open, open, None, None),
+    ] {
+        assert_eq!(read(vec![a, b, Term::And], &[7]), and, "{a:?} {b:?}");
+        assert_eq!(read(vec![a, b, Term::Or], &[7]), or, "{a:?} {b:?}");
+    }
+    assert_eq!(read(vec![open, Term::Not], &[7]), None);
+    assert_eq!(read(vec![no, Term::Not], &[7]), Some(true));
+}
+
+#[test]
 fn a_piece_is_kept_where_the_test_differs_across_it() {
     let (out, inside) = (Winding::new(), vector(&[(0, 1)]));
     let test = WindingTest::unite();

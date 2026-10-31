@@ -173,10 +173,7 @@ fn divide(
         let Some(at) = at else {
             continue;
         };
-        let mut n = [0i128; 3];
-        if let Some(component) = n.get_mut(axis) {
-            *component = 2;
-        }
+        let n = [0, 1, 2].map(|i| if i == axis { 2 } else { 0 });
         let plane = Plane::new(n, i128::from(at).saturating_neg())?;
         let mut below = (Vec::new(), Vec::new());
         let mut above = (Vec::new(), Vec::new());
@@ -214,11 +211,18 @@ fn divide(
         let reference =
             reference_above(&node.cell, axis, at, &node.reference, &node.polygons, meter)?;
         let depth = node.depth.saturating_add(1);
-        let (mut under, mut over) = (node.cell, node.cell);
-        if let (Some(high), Some(low)) = (under.high.get_mut(axis), over.low.get_mut(axis)) {
-            *high = at;
-            *low = at;
-        }
+        let moved = |corner: [i64; 3]| {
+            let mut i = 0..;
+            corner.map(|v| if i.next() == Some(axis) { at } else { v })
+        };
+        let under = Cell {
+            low: node.cell.low,
+            high: moved(node.cell.high),
+        };
+        let over = Cell {
+            low: moved(node.cell.low),
+            high: node.cell.high,
+        };
         let bit = 1u128
             .checked_shl(127u32.saturating_sub(node.depth))
             .unwrap_or(0);

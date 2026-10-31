@@ -482,10 +482,7 @@ pub fn reference_above(
 ) -> Result<Winding, TraceError> {
     let faces = faces(cell)?;
     let low = face_at(&faces, (axis, 0))?;
-    let mut n = [0i128; 3];
-    if let Some(component) = n.get_mut(axis) {
-        *component = 2;
-    }
+    let n = [0, 1, 2].map(|i| if i == axis { 2 } else { 0 });
     let (next, last) = (
         axis.saturating_add(1).checked_rem(3).unwrap_or(0),
         axis.saturating_add(2).checked_rem(3).unwrap_or(0),

@@ -225,9 +225,11 @@ impl WindingTest {
                 Term::And => (second, both(read(second), read(top))),
                 Term::Or => (second, either(read(second), read(top))),
             };
-            if let Some(slot) = stack.get_mut(at) {
-                *slot = answer;
-            }
+            stack
+                .iter_mut()
+                .skip(at)
+                .take(1)
+                .for_each(|slot| *slot = answer);
             depth = at.saturating_add(1);
         }
         stack.first().copied().flatten()

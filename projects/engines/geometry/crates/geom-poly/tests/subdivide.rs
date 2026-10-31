@@ -287,7 +287,11 @@ fn a_test_that_is_settled_drops_its_box_and_nothing_it_keeps() {
     let dropped = run(&blocks, 1, std::slice::from_ref(&test));
     assert!(dropped.len() < whole.len(), "{}", dropped.len());
     assert_eq!(volume(&test, &dropped), volume(&test, &whole));
-    assert!(dropped.iter().any(|c| kept(&test, &c.front, &c.back) != Kept::No));
+    assert!(
+        dropped
+            .iter()
+            .any(|c| kept(&test, &c.front, &c.back) != Kept::No)
+    );
 }
 
 #[test]
@@ -392,10 +396,7 @@ fn ten_by_ten_crossing_beams_are_counted_at_every_crossing() {
     let test = WindingTest::unite();
     let classified = run(&blocks, LEAF_POLYGONS, &[]);
     agrees(&blocks, &classified);
-    assert_eq!(
-        volume(&test, &classified),
-        counted(&test, &blocks, -1..31)
-    );
+    assert_eq!(volume(&test, &classified), counted(&test, &blocks, -1..31));
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -411,19 +412,80 @@ fn the_same_pieces_come_out_on_any_threads() {
     ];
     let list = polygons(&blocks);
     let cell = around(&list).unwrap();
-    let go = |exec: &Exec<'_>| {
-        arrange(
-            exec,
+    let go =
+        |exec: &Exec<'_>| arrange(exec, cell, Winding::new(), &list, 2, &[], &mut meter()).unwrap();
+    assert_eq!(go(&Exec::serial()), go(&Exec::with_pool(&Threads)));
+}
+
+#[test]
+fn a_box_too_thin_to_split_is_a_leaf() {
+    let list = polygons(&[A]);
+    for cell in [
+        Cell {
+            low: [3; 3],
+            high: [4; 3],
+        },
+        Cell {
+            low: [2; 3],
+            high: [3; 3],
+        },
+        Cell {
+            low: [1; 3],
+            high: [3; 3],
+        },
+    ] {
+        let got = arrange(
+            &Exec::serial(),
             cell,
             Winding::new(),
             &list,
-            2,
+            1,
             &[],
             &mut meter(),
-        )
-        .unwrap()
+        );
+        assert!(got.is_ok(), "{cell:?}");
+    }
+}
+
+#[test]
+fn a_leaf_reports_what_its_local_cuts_refuse() {
+    let cell = Cell {
+        low: [-9; 3],
+        high: [9; 3],
     };
-    assert_eq!(go(&Exec::serial()), go(&Exec::with_pool(&Threads)));
+    let broken = Polygon {
+        piece: Piece {
+            face: up(0, 0),
+            bounds: vec![up(1, 1), up(1, 2), up(2, 1)],
+        },
+        entry: Some(0),
+    };
+    let good = polygons(&[A]).remove(0);
+    let got = arrange(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &[broken, good],
+        9,
+        &[],
+        &mut meter(),
+    );
+    assert_eq!(
+        got,
+        Err(RunError::Failed(TraceError::Num(NumError::Degenerate)))
+    );
+    let list = polygons(&[A]);
+    let mut none = WorkMeter::new(Budget::new(0, u64::MAX));
+    let got = arrange(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &list,
+        99,
+        &[],
+        &mut none,
+    );
+    assert!(got.is_err(), "{got:?}");
 }
 
 #[test]
@@ -443,22 +505,17 @@ fn a_small_budget_stops_the_arrangement() {
     assert!(
         matches!(
             got,
-            Err(RunError::BudgetExceeded(_)
-                | RunError::Failed(TraceError::Stopped(_)))
+            Err(RunError::BudgetExceeded(_) | RunError::Failed(TraceError::Stopped(_)))
         ),
         "{got:?}"
     );
 }
 
 fn any_block() -> impl Strategy<Value = Block> {
-    (
-        [-6i64..6, -6i64..6, -6i64..6],
-        [1i64..6, 1i64..6, 1i64..6],
-    )
-        .prop_map(|(low, size)| Block {
-            low,
-            high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
-        })
+    ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
+        low,
+        high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
+    })
 }
 
 proptest! {
