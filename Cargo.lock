@@ -1175,6 +1175,7 @@ dependencies = [
  "geom-run",
  "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]

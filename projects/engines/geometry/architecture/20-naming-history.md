@@ -99,5 +99,8 @@ Other chapters add reasons, never outcomes. Section 17.12's placement references
 | `NotInView` | The target lies outside the drawing's view | 18.8 |
 | `OffSurface` | A plan position falls outside a surface's boundary, or in a hole or void | 17.12 |
 | `PastEnd` | A station lies beyond the end of the alignment | 17.12 |
+| `NoCarrier` | The reference wants a carrier, and its entity, or a piece it became, has none, such as a vertex | 20.4 |
+| `NameUnknown` | The name is not in the body or in any recorded step, or the name graph cannot classify it | 20.4 |
+| `HistoryBroken` | The recorded history leads to names the current body does not hold | 20.4 |
 
 **References into other documents.** A reference with a `doc` resolves by the same steps, inside the version of that document the program supplies (for Spare Construct, the package last taken in). With none available, it is `Unresolved` with `LinkMissing`. If that version is newer than the one the reference was made against, step 2 walks the linked document's history between the two; where the supplied version does not carry that history, the answer is `HistoryPruned`. If it is older and does not yet hold the name, the answer is `Unresolved` with `LinkOlder`. The host never regenerates a linked document. It reads that document's stored geometry and names, whose meaning no edition changes (section 26.2), so a link may be on a different kernel edition from the host. This is how models stay linked between programs (section 25).

@@ -4137,6 +4137,31 @@
           "target": "lib"
         },
         {
+          "cost": "for s recorded steps, r records per step and m names in the walk's vector, O(s · r log(r m)), searched by bisection, never with hashed sets; the weak checks visit the name graph's reachable nodes once per name asked about, and the base candidates scan the body's names once. Recursion: none.",
+          "does": "a [`Reference`] holds the document it points into ([`DocRef`], or none for the reference's own document), the element, the entity's [`NameId`], its [`EntityKind`], what it wants ([`Want`]: one entity, every piece, or the carrier), and the stored [`Signature`]. [`resolve`] answers it from a [`Lookup`]: the element's [`Body`] as the program has it (its current names, the carrier of each face and edge that has one, the history recorded since the reference was made, oldest first, and the name graph), or why the element cannot be read. It takes 20.4's steps in order:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/resolve.rs",
+          "guarantees": [
+            "**No geometric guessing (20.4 step 5).** [`resolve`] reads a reference's document, name and want, and never its signature, kind or element: the signature only suggests a repair in the interface, and an accepted repair is a new operation in the log. `tests/attack_g89.rs` changes each of them and finds every result unchanged, and checks that this module's code never reads the signature.",
+            "**Model state, the same on every machine.** Every outcome is computed from names and recorded history alone, every set of names is in name order, and nothing depends on an address, a hash map's order or the machine.",
+            "**Pruned is never Deleted.** A walk that reaches a pruned step while it still has names to follow answers `HistoryPruned`, whatever the later steps hold (24.4).",
+            "**Generated is not followed.** Only modified images are descendants: an entity generated from the referenced one is a new entity, not the referenced one in a new form.",
+            "**Unknown is never guessed.** A name the graph cannot classify, or that no recorded step and not the body holds, is `Unresolved` with `NameUnknown`.",
+            "**No recursion.** The walk is one loop over the steps, holding a sorted vector of names."
+          ],
+          "job": "References and how they resolve (chapter 20.4): a reference names an entity of an element, and resolving it against the element's current body and the history recorded since gives one value of the closed [`Resolution`] type.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 20.4's resolution, with the history contract of 20.3 as `geom_op::history` carries it (piece G88; `OpenCascade`'s `BRepTools_History` contract, adopted as a tested invariant), all in `projects/engines/geometry/architecture/20-naming-history.md`."
+          },
+          "path": "geom_name::resolve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(n log n) time and one copy of the list. Recursion: none.",
           "does": "[`first_duplicate`] finds the lowest name that appears more than once in a list. [`expect_unique`] is what an operation calls on the names it made before publishing them: in a build with debug assertions, every test build, it refuses a list with a duplicate; in a release build it checks nothing, because there a collision still becomes a `Weak` name, never a random suffix (20.2), and the operation's own naming has already done that.",
           "family": [],
@@ -4162,7 +4187,7 @@
       "provenance": [],
       "sections": "8.4, 17.12, 20 and 24.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution in G89, attribute classes in G90, `PruneHistory` in G109 and placement references in G374.",
+      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution ([`resolve`]) built (G89); attribute classes in G90, `PruneHistory` in G109 and placement references in G374.",
       "summary": "Spare Kit geometry kernel: persistent names and references."
     },
     {
