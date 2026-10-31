@@ -281,7 +281,8 @@ fn remainder(dividend: &Poly, divisor: &Poly) -> Option<[Big; TERMS]> {
             let scaled = slot.checked_mul(&size)?;
             let below = i.checked_sub(shift).and_then(|k| divisor.terms.get(k));
             *slot = match below {
-                Some(term) if i <= top => {
+                // Past `top` the divisor's terms are zero, so the product takes nothing away.
+                Some(term) => {
                     let product = head.checked_mul(term)?;
                     if flip {
                         scaled.checked_add(&product)?
@@ -289,7 +290,7 @@ fn remainder(dividend: &Poly, divisor: &Poly) -> Option<[Big; TERMS]> {
                         scaled.checked_sub(&product)?
                     }
                 }
-                _ => scaled,
+                None => scaled,
             };
         }
         // The divisor is of degree at least one: a chain stops at a constant.
