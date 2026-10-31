@@ -33,7 +33,7 @@ use geom_run::{Budget, WorkMeter};
 #[allow(dead_code, reason = "geom-topo's fixtures; the archive uses the wall")]
 mod topo;
 
-use geom_format::body::{BODY_TAG, StoredBody, read_body, write_body};
+use geom_format::body::{BODY_TAG, CHUNK_TAG, StoredBody, read_body, write_body};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -288,4 +288,28 @@ fn every_archived_file_matches_the_cddl() {
             at += len;
         }
     }
+}
+
+/// Writes every archived body record's payload as DIR/FILE-N.RULE.cbor for the zcbor oracle
+/// (oracles/zcbor.sh, kernel-nightly.yml), DIR from `ZCBOR_DIR`.
+#[test]
+#[ignore = "writes the archived body records for the zcbor oracle"]
+fn write_the_body_payloads() {
+    let dir = PathBuf::from(std::env::var("ZCBOR_DIR").unwrap());
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut written = 0;
+    for (name, bytes) in archive() {
+        let file = read(&mut SliceSource::new(bytes), knows, &mut meter()).unwrap();
+        for (k, r) in file.records.iter().enumerate() {
+            let rule = match r.tag {
+                BODY_TAG => "body",
+                CHUNK_TAG => "chunk",
+                _ => continue,
+            };
+            let stem = name.replace(['/', '.'], "-");
+            std::fs::write(dir.join(format!("{stem}-{k}.{rule}.cbor")), &r.payload).unwrap();
+            written += 1;
+        }
+    }
+    assert!(written > 0);
 }

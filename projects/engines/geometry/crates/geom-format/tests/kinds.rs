@@ -570,3 +570,64 @@ fn a_kind_from_another_form_is_refused() {
         Err(KindError::Curve(_))
     ));
 }
+
+/// Writes every kind these tests build, and the operations' results, as DIR/N.curve.cbor or
+/// DIR/N.surface.cbor for the zcbor oracle (oracles/zcbor.sh, kernel-nightly.yml), DIR from
+/// `ZCBOR_DIR`.
+#[test]
+#[ignore = "writes the kinds for the zcbor oracle"]
+fn write_the_kinds() {
+    let dir = std::path::PathBuf::from(std::env::var("ZCBOR_DIR").unwrap());
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut n = 0;
+    let mut put = |rule: &str, bytes: Vec<u8>| {
+        std::fs::write(dir.join(format!("kind-{n:04}.{rule}.cbor")), bytes).unwrap();
+        n += 1;
+    };
+    let scale = TypedTransform::from(Transform::scale(2.0, 0.5, 3.0).unwrap());
+    for (_, c) in leaves3() {
+        put("curve", curve_bytes(&c));
+        put(
+            "curve",
+            curve_bytes(&c.transformed(&scale, &mut meter()).unwrap().value),
+        );
+    }
+    let trimmed = Trimmed::new(Basis::Circle(circle3()), (0.5, 1.0)).unwrap();
+    let offset = Offset::new(
+        trimmed.clone(),
+        OffsetLaw::Reference {
+            distance: 0.5,
+            direction: [0.0, 0.0, 1.0],
+        },
+    )
+    .unwrap();
+    put("curve", curve_bytes(&CurveKind::Trimmed(trimmed)));
+    put(
+        "curve",
+        curve_bytes(&CurveKind::Offset(offset.cached(&mut meter()).unwrap())),
+    );
+    let law = CurvatureLaw::Clothoid {
+        start: 0.0,
+        end: 0.01,
+    };
+    let t = Transition::<2>::new([0.0, 0.0], [1.0, 0.0], 100.0, law, &mut meter()).unwrap();
+    put("curve", curve_bytes(&CurveKind::Transition(t)));
+    for (_, s) in surfaces() {
+        put("surface", surface_bytes(&s));
+        for dir in [Direction::U, Direction::V] {
+            if let Ok(r) = s.reversed(dir, &mut meter()) {
+                put("surface", surface_bytes(&r.value));
+            }
+        }
+        if let Ok(m) = s.transformed(&scale, &mut meter()) {
+            put("surface", surface_bytes(&m.value));
+        }
+    }
+    let plane = surfaces()
+        .into_iter()
+        .find(|(w, _)| *w == "plane")
+        .unwrap()
+        .1;
+    let offset = geom_surface::Offset::new(plane, 0.5).unwrap();
+    put("surface", surface_bytes(&SurfaceKind::Offset(offset)));
+}
