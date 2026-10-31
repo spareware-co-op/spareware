@@ -7,8 +7,8 @@
 //! for a test that the gate fails when an answer is perturbed or a flagged region is enlarged;
 //! these are those perturbations, and [`StandIn::expected`] names the rule each must break.
 //!
-//! The truth's curves run straight through a singular point, and a right answer splits there
-//! (12.9), which the scorer asks for: so [`StandIn::Truth`] does too.
+//! The truth's curves run straight through a singular point, and the scorer asks for a curve end at
+//! each one (12.9): so [`StandIn::Truth`] gives it one.
 //!
 //! [`StandIn::Flagged`] is a right answer of the other sort: where a class may flag, it leaves out
 //! isolated points and a stretch of a tangent curve, and returns regions that hold them. A long
@@ -160,12 +160,17 @@ impl StandIn {
     }
 }
 
-/// `curve` cut at `at`, if it passes within `cov` of it and does not already end there.
-fn cut(curve: &[V3], at: V3, cov: f64) -> Option<(Vec<V3>, Vec<V3>)> {
-    let ends = [curve.first()?, curve.last()?];
-    if ends.iter().any(|end| norm(sub(**end, at)) <= cov) {
-        return None;
-    }
+/// How long `curve` is.
+fn length(curve: &[V3]) -> f64 {
+    curve
+        .iter()
+        .zip(curve.iter().skip(1))
+        .fold(0.0, |sum, (a, b)| sum + norm(sub(*b, *a)))
+}
+
+/// `curve` with an end at `at`, if it passes within `cov` of it: an open curve in two, a closed one
+/// in one, started there.
+fn cut(curve: &[V3], at: V3, cov: f64) -> Option<Vec<Vec<V3>>> {
     let mut nearest: Option<(f64, usize)> = None;
     for (index, (a, b)) in curve.iter().zip(curve.iter().skip(1)).enumerate() {
         let distance = to_segment(at, *a, *b);
@@ -178,11 +183,52 @@ fn cut(curve: &[V3], at: V3, cov: f64) -> Option<(Vec<V3>, Vec<V3>)> {
         return None;
     }
     let (before, after) = curve.split_at(index.saturating_add(1));
-    let mut head = before.to_vec();
-    head.push(at);
+    let closed = norm(sub(*curve.first()?, *curve.last()?)) <= cov;
     let mut tail = vec![at];
     tail.extend_from_slice(after);
-    Some((head, tail))
+    if closed {
+        tail.extend(before.iter().skip(1));
+        tail.push(at);
+        return Some(vec![tail]);
+    }
+    let mut head = before.to_vec();
+    head.push(at);
+    Some(vec![head, tail])
+}
+
+/// Gives `curves` an end at `at`, which is all a singular point asks: one curve in the cut that
+/// leaves its shortest piece longest, so that crossings close together leave no scrap that runs
+/// along another curve. Curves that already end there stay whole.
+fn end_at(curves: &mut Vec<Curve>, at: V3, cov: f64) {
+    let near = |p: Option<&V3>| p.is_some_and(|p| norm(sub(*p, at)) <= cov);
+    if curves
+        .iter()
+        .any(|c| near(c.xyz.first()) || near(c.xyz.last()))
+    {
+        return;
+    }
+    let mut best: Option<(f64, usize, Vec<Vec<V3>>)> = None;
+    for (index, curve) in curves.iter().enumerate() {
+        if let Some(pieces) = cut(&curve.xyz, at, cov) {
+            let shortest = pieces
+                .iter()
+                .fold(f64::INFINITY, |least, piece| smaller(least, length(piece)));
+            if best.as_ref().is_none_or(|(most, ..)| shortest > *most) {
+                best = Some((shortest, index, pieces));
+            }
+        }
+    }
+    let Some((_, index, pieces)) = best else {
+        return;
+    };
+    let Some(kind) = curves.get(index).map(|c| c.kind.clone()) else {
+        return;
+    };
+    let made = pieces.into_iter().map(|xyz| Curve {
+        xyz,
+        kind: kind.clone(),
+    });
+    curves.splice(index..=index, made);
 }
 
 /// The curves and points of `case`'s truth, snapped to the grid, in the case's units, with the
@@ -207,24 +253,7 @@ fn truth(case: &Case, placed: &Placed) -> Output {
         });
     }
     for singular in &case.expected.singular_points {
-        let at = placed.snapped(*singular);
-        let mut pieces = Vec::with_capacity(out.curves.len());
-        for curve in core::mem::take(&mut out.curves) {
-            match cut(&curve.xyz, at, case.cov_tol) {
-                Some((head, tail)) => {
-                    pieces.push(Curve {
-                        xyz: head,
-                        kind: curve.kind.clone(),
-                    });
-                    pieces.push(Curve {
-                        xyz: tail,
-                        kind: curve.kind,
-                    });
-                }
-                None => pieces.push(curve),
-            }
-        }
-        out.curves = pieces;
+        end_at(&mut out.curves, placed.snapped(*singular), case.cov_tol);
     }
     out
 }

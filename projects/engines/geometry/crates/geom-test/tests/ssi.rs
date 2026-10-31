@@ -884,6 +884,67 @@ fn the_truth_splits_at_a_singular_point() {
 }
 
 #[test]
+fn a_closed_curve_starts_at_its_singular_point() {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    let corners = [
+        [-1.0, 0.0, 0.0],
+        [0.0, 0.5, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, -0.5, 0.0],
+        [-1.0, 0.0, 0.0],
+    ];
+    case.expected.branches[0].points = corners.to_vec();
+    case.expected.branches[0].closed = true;
+    case.surfaces[1] = case.surfaces[0].clone();
+    case.expected.singular_points = vec![[0.5, 0.25, 0.0]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(out.curves.len(), 1);
+    assert_eq!(
+        out.curves[0].xyz,
+        [
+            [0.5, 0.25, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, -0.5, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 0.5, 0.0],
+            [0.5, 0.25, 0.0]
+        ]
+    );
+}
+
+#[test]
+fn a_singular_point_cuts_one_curve_where_it_leaves_the_longest_pieces() {
+    // Two lines crossing near one's end: cutting the other leaves nothing short.
+    let mut case = Case::parse(SMALL).expect("it fits");
+    case.surfaces[1] = case.surfaces[0].clone();
+    case.expected.branches[0].points = vec![[-1.0, 0.0, 0.0], [0.9, 0.0, 0.0]];
+    let other = geom_test::ssi::case::Branch {
+        closed: false,
+        kind: Contact::Crossing,
+        points: vec![[0.8, -1.0, 0.0], [0.8, 1.0, 0.0]],
+    };
+    case.expected.branches.push(other);
+    case.expected.singular_points = vec![[0.8, 0.0, 0.0]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    assert_eq!(out.curves.len(), 3);
+    assert_eq!(out.curves[0].xyz.len(), 2, "the first line stays whole");
+    assert_eq!(
+        out.curves[1].xyz.last(),
+        Some(&placed.snapped([0.8, 0.0, 0.0]))
+    );
+    assert_eq!(
+        out.curves[2].xyz.first(),
+        Some(&placed.snapped([0.8, 0.0, 0.0]))
+    );
+}
+
+#[test]
 fn a_wrong_answer_fails_on_every_catalogue_case() {
     for stand_in in [StandIn::Shifted, StandIn::Spurious, StandIn::Dropped] {
         for case in catalogue::all() {
