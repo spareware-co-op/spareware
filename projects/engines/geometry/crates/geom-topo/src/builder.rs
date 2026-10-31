@@ -21,7 +21,8 @@
 //!   with the body; each write copies only the chunk it lands in, so a version made by editing ten
 //!   faces of a million-face body shares all but at most ten chunks per column written (23.9).
 //! - **Metered.** Publishing charges one work unit for every chunk of every link column it
-//!   checks, to the caller's meter, which polls the caller's cancellation (23.10).
+//!   checks and of the point pool, whose meetings of planes are links too, to the caller's meter,
+//!   which polls the caller's cancellation (23.10).
 //!
 //! Method: Parasolid's model structure, made immutable after building (chapter 8.2;
 //! `projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), with the validation
@@ -42,7 +43,7 @@ use geom_run::WorkMeter;
 use crate::arenas::Arenas;
 use crate::body::{Body, BodyKind};
 use crate::column::{CHUNK_ROWS, Column};
-use crate::entity::{Link, RegionIx, RegionKind};
+use crate::entity::{Link, PointKind, RegionIx, RegionKind};
 use crate::error::TopoError;
 use crate::ix::{Arena, Ix};
 
@@ -182,7 +183,26 @@ pub(crate) fn inside(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), T
     links(&edges.end, Link::EdgeEnd, arenas, meter)?;
     links(&edges.curve, Link::EdgeCurve, arenas, meter)?;
     links(&arenas.vertices.point, Link::VertexPoint, arenas, meter)?;
+    meets(arenas, meter)
+}
 
+/// [`TopoError::NoSuchRow`] for the first meeting of planes, by row, that names a plane past the
+/// end of the plane pool, charging one unit to `meter` for each chunk.
+fn meets(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), TopoError> {
+    let rows = arenas.rows(Arena::Plane);
+    for (point, row) in arenas.points.iter().zip(0_u32..) {
+        if row % CHUNK_ROWS == 0 {
+            meter.charge(1)?;
+        }
+        if let PointKind::Meet(planes) = point
+            && let Some(far) = planes.iter().find(|p| p.row() >= rows)
+        {
+            return Err(TopoError::NoSuchRow {
+                arena: Arena::Plane,
+                row: far.row(),
+            });
+        }
+    }
     Ok(())
 }
 

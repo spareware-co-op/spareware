@@ -504,6 +504,11 @@ pub enum QueryDetail {
         /// The edge's row.
         edge: u32,
     },
+    /// A vertex is where three planes meet, and the query's exact sums need a grid point.
+    ImplicitVertex {
+        /// The vertex's row.
+        vertex: u32,
+    },
     /// A face is not on a plane, and the query needs polygons.
     CurvedFace {
         /// The face's row.
@@ -527,6 +532,7 @@ impl QueryDetail {
         match self {
             QueryDetail::Malformed | QueryDetail::NotSolid => ErrorKind::InvalidInput,
             QueryDetail::CurvedEdge { .. }
+            | QueryDetail::ImplicitVertex { .. }
             | QueryDetail::CurvedFace { .. }
             | QueryDetail::NoLoops { .. } => ErrorKind::Unsupported,
             QueryDetail::Overflow => ErrorKind::Internal,
@@ -543,6 +549,7 @@ impl QueryDetail {
             QueryDetail::CurvedEdge { .. }
             | QueryDetail::CurvedFace { .. }
             | QueryDetail::NoLoops { .. } => vec![Remedy::AwaitPiece { piece: "G177" }],
+            QueryDetail::ImplicitVertex { .. } => vec![Remedy::AwaitPiece { piece: "G129" }],
             QueryDetail::Overflow => vec![Remedy::Report],
         }
     }
@@ -554,6 +561,9 @@ impl fmt::Display for QueryDetail {
             QueryDetail::Malformed => f.write_str("the body's links do not make a body"),
             QueryDetail::CurvedEdge { edge } => {
                 write!(f, "edge {edge} is not a straight line between two vertices")
+            }
+            QueryDetail::ImplicitVertex { vertex } => {
+                write!(f, "vertex {vertex} has no grid point")
             }
             QueryDetail::CurvedFace { face } => write!(f, "face {face} is not on a plane"),
             QueryDetail::NoLoops { face } => write!(f, "face {face} has no loop"),

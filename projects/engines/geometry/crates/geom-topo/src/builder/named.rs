@@ -61,7 +61,9 @@ use super::{Builder, even_columns, inside};
 use crate::arenas::{Arenas, Pool};
 use crate::body::{Body, BodyKind};
 use crate::column::{CHUNK_ROWS, Column};
-use crate::entity::{Edge, Face, Fin, Loop, Region, RegionIx, RegionKind, Sense, Shell, Vertex};
+use crate::entity::{
+    Edge, Face, Fin, Loop, PointKind, Region, RegionIx, RegionKind, Sense, Shell, Vertex,
+};
 use crate::error::TopoError;
 use crate::ix::{Arena, Ix, Kind};
 use crate::order::{NameKey, Names, Permutation};
@@ -319,6 +321,7 @@ pub(crate) struct Moves<P> {
     pub(crate) curves: P,
     pub(crate) pcurves: P,
     pub(crate) points: P,
+    pub(crate) planes: P,
 }
 
 impl Moves<Permutation> {
@@ -411,6 +414,9 @@ impl Moves<Permutation> {
                 .zip(vertices.iter().map(Some)),
             Arena::Point,
         )?;
+        // No plane belongs to one entity, so the pool is in the order of the coefficients (19.2).
+        let keys: Vec<([i128; 3], i128)> = a.planes.iter().map(|p| (p.n(), p.d())).collect();
+        let planes = order(&keys, Arena::Plane, false)?;
 
         Ok(Moves {
             regions,
@@ -424,6 +430,7 @@ impl Moves<Permutation> {
             curves,
             pcurves,
             points,
+            planes,
         })
     }
 }
@@ -549,9 +556,34 @@ impl<P: Place> Moves<P> {
             surfaces: moved_pool(&a.surfaces, &self.surfaces, meter)?,
             curves: moved_pool(&a.curves, &self.curves, meter)?,
             pcurves: moved_pool(&a.pcurves, &self.pcurves, meter)?,
-            points: moved_pool(&a.points, &self.points, meter)?,
+            points: self.moved_points(a, meter)?,
+            planes: moved_pool(&a.planes, &self.planes, meter)?,
             ..out
         })
+    }
+
+    /// `a`'s point pool moved, each meeting of planes naming them where they moved to.
+    fn moved_points(
+        &self,
+        a: &Arenas,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Pool<PointKind>, TopoError> {
+        let rows = moved(
+            &self.points,
+            meter,
+            |ix| a.points.get(ix).copied(),
+            |point| match point {
+                PointKind::Grid(_) => Ok(point),
+                PointKind::Meet([p, q, r]) => Ok(PointKind::Meet([
+                    to(&self.planes, p)?,
+                    to(&self.planes, q)?,
+                    to(&self.planes, r)?,
+                ])),
+            },
+        )?;
+        let mut out = Pool::new();
+        out.extend(rows)?;
+        Ok(out)
     }
 }
 

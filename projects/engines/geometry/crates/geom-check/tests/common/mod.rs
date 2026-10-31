@@ -22,11 +22,13 @@
 use geom_check::{Entity, Fault, FaultKind, Level, Report, check};
 use geom_curve::{Circle, CurveKind, Frame, Line};
 use geom_math::Box3;
+use geom_num::plane::{Plane as GridPlane, Tpi};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 use geom_topo::{
-    Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense, Shell, Vertex,
+    Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, RegionKind, Sense,
+    Shell, Vertex,
 };
 
 /// A meter with no cap and no cancellation.
@@ -100,7 +102,12 @@ pub struct Rows {
     pub surfaces: Vec<SurfaceKind>,
     pub curves: Vec<CurveKind<3>>,
     pub pcurves: Vec<CurveKind<2>>,
+    /// Each point: where it lies, or for a meeting of planes where it rounds to.
     pub points: Vec<P3>,
+    /// The plane pool.
+    pub planes: Vec<GridPlane>,
+    /// The points that are meetings of planes: each one's row and its three planes' rows.
+    pub meets: Vec<(u32, [u32; 3])>,
     pub outside: u32,
 }
 
@@ -122,6 +129,8 @@ impl Rows {
             curves: Vec::new(),
             pcurves: Vec::new(),
             points: Vec::new(),
+            planes: Vec::new(),
+            meets: Vec::new(),
             outside: 0,
         }
     }
@@ -140,8 +149,34 @@ impl Rows {
         a.surfaces.extend(self.surfaces.clone()).unwrap();
         a.curves.extend(self.curves.clone()).unwrap();
         a.pcurves.extend(self.pcurves.clone()).unwrap();
-        a.points.extend(self.points.clone()).unwrap();
+        let mut points: Vec<PointKind> = self.points.iter().map(|&p| p.into()).collect();
+        for &(row, planes) in &self.meets {
+            points[row as usize] = PointKind::Meet(planes.map(ix));
+        }
+        a.points.extend(points).unwrap();
+        a.planes.extend(self.planes.clone()).unwrap();
         b.publish(kind, ix(self.outside), &mut meter()).unwrap()
+    }
+
+    /// Adds the plane through three grid points; its row.
+    pub fn plane_through(&mut self, [a, b, c]: [[i64; 3]; 3]) -> u32 {
+        let p = |q: [i64; 3]| P3::new(q[0], q[1], q[2]).unwrap();
+        self.planes.push(GridPlane::through(p(a), p(b), p(c)).unwrap());
+        self.planes.len() as u32 - 1
+    }
+
+    /// Adds a vertex where three planes of the pool meet; its row. Its row in `points` holds where
+    /// it rounds to, for the edges that shadow it, or the origin if it does not round.
+    pub fn meet(&mut self, planes: [u32; 3]) -> u32 {
+        let [p, q, r] = planes.map(|k| self.planes[k as usize]);
+        let at = Tpi::new(p, q, r).ok().and_then(|t| t.to_grid().ok());
+        let origin = P3::new(0, 0, 0).unwrap();
+        self.points.push(at.map_or(origin, |rounded| rounded.value()));
+        let row = self.points.len() as u32 - 1;
+        self.meets.push((row, planes));
+        let v = self.vertices.len() as u32;
+        self.vertices.push(Vertex { point: ix(row) });
+        v
     }
 
     /// Adds a vertex at `p`; its row.
@@ -295,8 +330,33 @@ impl Rows {
     /// `(edge, sense)` in `loops`; its row. Fins join their edges' radial rings in the order
     /// added.
     pub fn face(&mut self, s: u32, loops: &[&[(u32, Sense)]]) -> u32 {
-        let f = self.faces.len() as u32;
         let (surface, bound) = self.carrier(loops);
+        self.face_with(s, loops, surface, bound)
+    }
+
+    /// As [`Rows::face`], on the plane through three grid points, turning from the first to the
+    /// third about the second's way, with a box a step wider than its corners rounded.
+    pub fn face_on(&mut self, s: u32, loops: &[&[(u32, Sense)]], on: [[i64; 3]; 3]) -> u32 {
+        let (_, bound) = self.carrier(loops);
+        let wider = |p: P3, by: i64| P3::new(p.x.get() + by, p.y.get() + by, p.z.get() + by).unwrap();
+        let bound = Box3::new(wider(bound.min(), -1), wider(bound.max(), 1)).unwrap();
+        let [o, a, b] = on.map(|q| q.map(|x| x as f64));
+        let minus = |p: [f64; 3], q: [f64; 3]| [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+        let surface = SurfaceKind::Plane(
+            Plane::new(o, minus(a, o), minus(b, o), ((0.0, 1.0), (0.0, 1.0))).unwrap(),
+        );
+        self.face_with(s, loops, surface, bound)
+    }
+
+    /// As [`Rows::face`], on `surface` with box `bound`.
+    pub fn face_with(
+        &mut self,
+        s: u32,
+        loops: &[&[(u32, Sense)]],
+        surface: SurfaceKind,
+        bound: Box3,
+    ) -> u32 {
+        let f = self.faces.len() as u32;
         self.surfaces.push(surface);
         self.faces.push(Face {
             shell: ix(s),

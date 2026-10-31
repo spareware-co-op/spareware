@@ -74,8 +74,8 @@ pub use builder::{Builder, Euler, NewEdge, NewFace, NewVertex, Wire};
 pub use column::{CHUNK_ROWS, Column, Memory};
 pub use entity::{
     CurveIx, Edge, EdgeIx, Edges, Face, FaceIx, Faces, Fin, FinIx, Fins, Link, Loop, LoopIx, Loops,
-    PcurveIx, PointIx, Region, RegionIx, RegionKind, Regions, Sense, Shell, ShellIx, Shells,
-    SurfaceIx, Vertex, VertexIx, Vertices,
+    PcurveIx, PlaneIx, PointIx, PointKind, Region, RegionIx, RegionKind, Regions, Sense, Shell,
+    ShellIx, Shells, SurfaceIx, Vertex, VertexIx, Vertices,
 };
 pub use error::{Refusal, TopoError};
 // The geometry kinds a body's pools hold, for the crates above this one that read them (such as

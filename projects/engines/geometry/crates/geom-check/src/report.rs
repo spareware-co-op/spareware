@@ -249,6 +249,8 @@ pub enum FaultKind {
     /// An edge's curve does not lie on a face's surface within the body's bound. `at` is the
     /// edge, `with` the face.
     EdgeOffSurface,
+    /// A vertex's three planes do not meet in one point. `at` is the vertex.
+    MeetSingular,
     /// A carrier group 2 has no certified check for yet: a surface or curve of another kind, a
     /// plane not given by integers in a body recorded Exact, or a fin's pcurve. Reported, never
     /// passed. `at` is the surface, curve or pcurve, `with` the face, edge or fin that uses it.
@@ -260,9 +262,9 @@ pub enum FaultKind {
     /// `with` the other.
     FacesCross,
     /// A pair group 3 has no certified test for: two edges of one face or two faces whose
-    /// carriers no closed form here separates (a face with holes or not convex against a crossing
-    /// plane, two curved faces, a circle crossing a plane's line). Reported, never passed. `at`
-    /// and `with` are the two edges, the two faces or the two shells.
+    /// carriers no closed form here separates (a flat face whose corners leave one plane, two
+    /// curved faces, a circle crossing a plane's line). Reported, never passed. `at` and `with`
+    /// are the two edges, the two faces or the two shells.
     PairUnchecked,
     /// A flat face does not have exactly one loop running counter-clockwise seen from outside the
     /// material with the rest clockwise, or a loop encloses no area. `at` is the face, `with` the
@@ -294,6 +296,7 @@ impl FaultKind {
             FaultKind::VertexOffSurface
             | FaultKind::VertexOffCurve
             | FaultKind::EdgeOffSurface
+            | FaultKind::MeetSingular
             | FaultKind::Unchecked
             | FaultKind::FaceBound => Group::Geometric,
             FaultKind::EdgesCross

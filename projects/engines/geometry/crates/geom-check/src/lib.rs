@@ -62,6 +62,7 @@ mod exactness;
 mod flat;
 mod geometric;
 mod orientation;
+mod planar;
 pub mod query;
 pub mod report;
 mod run;

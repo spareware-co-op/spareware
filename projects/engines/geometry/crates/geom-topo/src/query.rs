@@ -9,7 +9,10 @@
 //! [`bounding_box`] gives the box of every vertex, joined with the stored box of each face that is
 //! not a polygon. [`side_of_shell`] says which side of a closed flat shell a grid point lies on,
 //! and [`shell_side`] which side of one shell another lies on. A loop's vertex at each fin is where
-//! the fin starts: its edge's start for a forward fin, its end for a reversed one.
+//! the fin starts: its edge's start for a forward fin, its end for a reversed one. A vertex where
+//! three planes meet has no grid point, so these exact sums refuse it; [`corner`] gives it as an
+//! implicit point, and [`certified_loop_area`] and [`certified_shell_volume`] measure such a loop
+//! and shell in certified intervals (`crate::mass`).
 //!
 //! Guarantees:
 //!
@@ -21,8 +24,8 @@
 //! - **Flat only, said so.** A loop with an edge that is not a straight line between two vertices
 //!   is refused with [`QueryError::Curved`] naming the edge, a face not on a plane with
 //!   [`QueryError::NotPlanar`], a face with no loop with [`QueryError::Loopless`], and the volume of
-//!   a body that is not a solid with [`QueryError::NotSolid`]. Certified mass properties of curved
-//!   bodies come with later pieces, and those of implicit vertices are `crate::mass`'s.
+//!   a body that is not a solid with [`QueryError::NotSolid`], and a vertex with no grid point with
+//!   [`QueryError::Implicit`]. Certified mass properties of curved bodies come with later pieces.
 //! - **Exact sides, every tie decided.** [`side_of_shell`] is a signed count of a ray's crossings
 //!   with the fan triangles of the shell's loops, decided by `orient2d` and `orient3d` on grid
 //!   points, with the query point moved symbolically so that no tie is left. It is the point's
@@ -31,9 +34,9 @@
 //! - **Ends on any body.** Every list and ring walk is bounded by its arena's length, so a ring that
 //!   does not come back is [`QueryError::Ring`], never a hang; a link out of its arena is
 //!   [`QueryError::NoSuchRow`], never a panic.
-//! - **Charged, and nothing allocated but one list.** One unit of work per face listed, per vertex
-//!   boxed and per loop, face and fin visited. Only [`faces`] allocates: its list, reserved
-//!   fallibly with its logical bytes on the meter first.
+//! - **Charged, and nothing allocated but its lists.** One unit of work per face listed, per vertex
+//!   boxed and per loop, face and fin visited. Only [`faces`] and the certified measures allocate:
+//!   a list, reserved fallibly with its logical bytes on the meter first.
 //!
 //! Method: the vector area of a polygon in space and a closed polyhedron's volume by the divergence
 //! theorem over its faces, `6V = Σ A_f · p_f` (Goldman, "Area of planar polygons and volume of
@@ -57,6 +60,8 @@ use core::fmt;
 use geom_curve::CurveKind;
 use geom_math::Box3;
 use geom_num::grid::{P2, P3};
+use geom_num::interval::Interval;
+use geom_num::plane::Tpi;
 use geom_num::predicate::{orient2d, orient3d};
 use geom_num::wide::I256;
 use geom_num::{NumError, Sign};
@@ -66,9 +71,10 @@ use geom_surface::SurfaceKind;
 
 use crate::body::{Body, BodyKind};
 use crate::entity::{
-    EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, Sense, ShellIx, SurfaceIx, VertexIx,
+    EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, PointKind, Sense, ShellIx, SurfaceIx, VertexIx,
 };
 use crate::ix::Ix;
+use crate::mass::{self, Corner};
 use crate::order::NameKey;
 
 /// Why a query could not answer.
@@ -85,6 +91,8 @@ pub enum QueryError {
     NotPlanar(FaceIx),
     /// A face with no loop, where a polygon is needed.
     Loopless(FaceIx),
+    /// A vertex where three planes meet, where a grid point is needed.
+    Implicit(VertexIx),
     /// A volume asked of a body that is not a solid.
     NotSolid,
     /// A sum past its integer's width, or an exact predicate that could not finish: never for a
@@ -106,6 +114,7 @@ impl fmt::Display for QueryError {
             ),
             QueryError::NotPlanar(face) => write!(f, "face {} is not on a plane", face.row()),
             QueryError::Loopless(face) => write!(f, "face {} has no loop", face.row()),
+            QueryError::Implicit(v) => write!(f, "vertex {} has no grid point", v.row()),
             QueryError::NotSolid => f.write_str("the body is not a solid"),
             QueryError::Overflow => f.write_str("a sum past its integer's width"),
             QueryError::Stopped(s) => write!(f, "{s}"),
@@ -268,12 +277,8 @@ fn next_fin(
     Ok(Some(fin))
 }
 
-/// The point of vertex `v`.
-///
-/// # Errors
-///
-/// [`QueryError::NoSuchRow`] for a vertex or point out of its arena.
-pub fn point(body: &Body, v: VertexIx) -> Result<P3, QueryError> {
+/// Where vertex `v` lies.
+fn place(body: &Body, v: VertexIx) -> Result<PointKind, QueryError> {
     let a = body.arenas();
     let vertex = a.vertices.get(v).ok_or(QueryError::NoSuchRow)?;
     a.points
@@ -282,17 +287,50 @@ pub fn point(body: &Body, v: VertexIx) -> Result<P3, QueryError> {
         .ok_or(QueryError::NoSuchRow)
 }
 
-/// The point fin `fin` starts at, if its edge is a straight line between two vertices.
-fn polygon_point(body: &Body, fin: FinIx) -> Result<P3, QueryError> {
+/// The point of vertex `v`.
+///
+/// # Errors
+///
+/// [`QueryError::NoSuchRow`] for a vertex or point out of its arena, and
+/// [`QueryError::Implicit`] for a vertex where three planes meet.
+pub fn point(body: &Body, v: VertexIx) -> Result<P3, QueryError> {
+    place(body, v)?.grid().ok_or(QueryError::Implicit(v))
+}
+
+/// Where vertex `v` lies, as an exact point of either kind.
+///
+/// # Errors
+///
+/// [`QueryError::NoSuchRow`] for a link out of its arena, and [`QueryError::Overflow`] for three
+/// planes that do not meet in one point.
+pub fn corner(body: &Body, v: VertexIx) -> Result<Corner, QueryError> {
+    let a = body.arenas();
+    match place(body, v)? {
+        PointKind::Grid(p) => Ok(Corner::Grid(p)),
+        PointKind::Meet(planes) => {
+            let [p, q, r] = planes.map(|ix| a.planes.get(ix).copied());
+            let plane = |x: Option<geom_num::plane::Plane>| x.ok_or(QueryError::NoSuchRow);
+            Ok(Corner::Tpi(Tpi::new(plane(p)?, plane(q)?, plane(r)?)?))
+        }
+    }
+}
+
+/// The vertex fin `fin` starts at, if its edge is a straight line between two vertices.
+fn polygon_vertex(body: &Body, fin: FinIx) -> Result<VertexIx, QueryError> {
     let a = body.arenas();
     let f = a.fins.get(fin).ok_or(QueryError::NoSuchRow)?;
     let e = a.edges.get(f.edge).ok_or(QueryError::NoSuchRow)?;
     let line = matches!(a.curves.get(e.curve), Some(CurveKind::Line(_)));
     match (line, e.start, e.end, f.sense) {
-        (true, Some(start), Some(_), Sense::Forward) => point(body, start),
-        (true, Some(_), Some(end), Sense::Reversed) => point(body, end),
+        (true, Some(start), Some(_), Sense::Forward) => Ok(start),
+        (true, Some(_), Some(end), Sense::Reversed) => Ok(end),
         _ => Err(QueryError::Curved(f.edge)),
     }
+}
+
+/// The point fin `fin` starts at, if its edge is a straight line between two vertices.
+fn polygon_point(body: &Body, fin: FinIx) -> Result<P3, QueryError> {
+    point(body, polygon_vertex(body, fin)?)
 }
 
 /// `p × q`, exactly.
@@ -417,6 +455,72 @@ pub fn shell_volume(
                 .checked_mul(&I256::from_i64(x.get()))
                 .ok_or(QueryError::Overflow)?;
             sum = sum.checked_add(&term).ok_or(QueryError::Overflow)?;
+        }
+    }
+    Ok(sum)
+}
+
+/// The corners of loop `l`, in ring order.
+fn loop_corners(
+    body: &Body,
+    l: LoopIx,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Corner>, QueryError> {
+    let mut count = 0_u64;
+    let mut ring = ring_of(body, l)?;
+    while next_fin(body, &mut ring, meter)?.is_some() {
+        count = count.saturating_add(1);
+    }
+    let mut out: Vec<Corner> = reserve(meter, count)?;
+    let mut ring = ring_of(body, l)?;
+    while let Some(fin) = next_fin(body, &mut ring, meter)? {
+        out.push(corner(body, polygon_vertex(body, fin)?)?);
+    }
+    Ok(out)
+}
+
+/// Twice the area vector of loop `l`, whatever its vertices, as certified intervals
+/// (`crate::mass::loop_area`).
+///
+/// # Errors
+///
+/// [`QueryError::Curved`] for an edge that is not a line between two vertices, and [`corner`]'s,
+/// the walk's and the meter's.
+pub fn certified_loop_area(
+    body: &Body,
+    l: LoopIx,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; 3], QueryError> {
+    mass::loop_area(&loop_corners(body, l, meter)?, meter)
+}
+
+/// Six times the signed volume shell `s` encloses, whatever its vertices, as a certified interval
+/// measured from a point of its own (`crate::mass::loop_volume`), so that a small shell far from
+/// the origin keeps its sign.
+///
+/// # Errors
+///
+/// [`QueryError::NotPlanar`] for a face not on a plane, [`QueryError::Curved`] for an edge that is
+/// not a line between two vertices, and [`corner`]'s, the walk's and the meter's.
+pub fn certified_shell_volume(
+    body: &Body,
+    s: ShellIx,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Interval, QueryError> {
+    let a = body.arenas();
+    let mut sum = Interval::point(0.0)?;
+    let mut origin = None;
+    let mut walk = faces_of(body, s)?;
+    while let Some(face) = next_face(body, &mut walk, meter)? {
+        let f = a.faces.get(face).ok_or(QueryError::NoSuchRow)?;
+        if !matches!(a.surfaces.get(f.surface), Some(SurfaceKind::Plane(_))) {
+            return Err(QueryError::NotPlanar(face));
+        }
+        let mut loops = loops_of(body, face)?;
+        while let Some(l) = next_loop(body, &mut loops, meter)? {
+            let corners = loop_corners(body, l, meter)?;
+            let from = *origin.get_or_insert_with(|| mass::about(&corners));
+            sum = sum.add(mass::loop_volume(&corners, from, meter)?)?;
         }
     }
     Ok(sum)
@@ -623,14 +727,23 @@ pub fn bounding_box(
     let join = |b: Option<Box3>, other: Box3| Some(b.map_or(other, |x| x.union(&other)));
     for row in 0..a.vertices.len() {
         meter.charge(1)?;
-        let p = point(body, VertexIx::new(row).ok_or(QueryError::NoSuchRow)?)?;
-        boxed = join(boxed, Box3::new(p, p).map_err(|_| QueryError::NoSuchRow)?);
+        match point(body, VertexIx::new(row).ok_or(QueryError::NoSuchRow)?) {
+            Ok(p) => boxed = join(boxed, Box3::new(p, p).map_err(|_| QueryError::NoSuchRow)?),
+            // Its faces' stored boxes hold it, joined below.
+            Err(QueryError::Implicit(_)) => {}
+            Err(e) => return Err(e),
+        }
     }
     for row in 0..a.faces.len() {
         let face = FaceIx::new(row).ok_or(QueryError::NoSuchRow)?;
         match face_polygon(body, face, meter) {
             Ok(_) => {}
-            Err(QueryError::NotPlanar(_) | QueryError::Loopless(_) | QueryError::Curved(_)) => {
+            Err(
+                QueryError::NotPlanar(_)
+                | QueryError::Loopless(_)
+                | QueryError::Curved(_)
+                | QueryError::Implicit(_),
+            ) => {
                 tight = false;
                 boxed = join(boxed, a.faces.get(face).ok_or(QueryError::NoSuchRow)?.bound);
             }

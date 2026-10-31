@@ -371,9 +371,12 @@ pub(crate) fn moved_copy(
     let mut rounded = false;
     let mut points = Vec::new();
     for p in every(a.rows(Arena::Vertex)).filter_map(|v| a.vertices.point.get(v)) {
-        let image = t
-            .apply(*a.points.get(*p).ok_or_else(defect)?)
-            .map_err(num)?;
+        let place = a.points.get(*p).ok_or_else(defect)?;
+        // The rebuild that first makes such a body brings the move of its planes (G129).
+        let Some(point) = place.grid() else {
+            return Err(fail(ctx, MakeDetail::NotCertifiedYet { piece: "G129" }));
+        };
+        let image = t.apply(point).map_err(num)?;
         rounded |= !image.is_exact();
         points.push(image.value());
     }
