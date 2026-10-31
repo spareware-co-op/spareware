@@ -67,14 +67,6 @@
       "reason": "The mutant also enters the block when rank == n. Each row's reflection is then on the one coordinate k: householder on a one-entry vector finds a zero tail and returns tau = 0 and beta = the entry, so R(k, k) is set to itself, z_tau keeps its zeros and no row is updated; apply_z returns early when r == n. The work was charged before."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/qr.rs",
-      "mutant": "replace > with >= in canonical_null_space",
-      "line_text": "if v > best {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant pivots on the last of several rows of equal largest magnitude instead of the first. The reduced echelon basis over the variable order is unique (chapter 15.8, the reason it is the canonical one), so the result is the same basis either way; the elimination order changes only the rounding of its entries, which the function does not promise bit for bit."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-num/src/eft.rs",
       "mutant": "replace < with <= in abs",
       "line_text": "if x < 0.0 { -x } else { x }",
@@ -844,11 +836,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/jet.rs",
-      "mutant": "replace >= with < in Jet::div",
+      "mutant": "replace >= with < in Jet::quotient",
       "line_text": "if g0.lo() <= 0.0 && g0.hi() >= 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "Every divisor the crate forms is positive at every point it is formed over: a length |S_u x S_v| that Jet::sqrt has already shown positive (it refuses otherwise), or a NURBS weight function, whose weights geom-nurbs keeps positive. On a positive divisor both tests are false; they differ only for a divisor through or below zero, which no input through the public interface produces."
+      "reason": "Every divisor the crate forms, through Jet::div or Jet::div_valued, both of which call quotient, is positive at every point it is formed over: a length |S_u x S_v| that Jet::sqrt has already shown positive (it refuses otherwise), or a NURBS weight function, whose weights geom-nurbs keeps positive. On a positive divisor both tests are false; they differ only for a divisor through or below zero, which no input through the public interface produces."
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
