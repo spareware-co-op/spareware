@@ -641,11 +641,76 @@ fn a_tiny_entry_beside_a_huge_one_is_not_scaled() {
     let values = eig.values();
     let root = 5.0f64.sqrt();
     assert!(
-        (values[0] / 1e300 - (1.0 - root) / 2.0).abs() < 1e-12,
+        (values[0] / 1e300 - f64::midpoint(1.0, -root)).abs() < 1e-12,
         "{values:?}"
     );
     assert!(
-        (values[2] / 1e300 - (1.0 + root) / 2.0).abs() < 1e-12,
+        (values[2] / 1e300 - f64::midpoint(1.0, root)).abs() < 1e-12,
         "{values:?}"
     );
+}
+
+/// How far the columns of `q` are from orthonormal.
+fn drift(q: &Matrix) -> f64 {
+    let mut worst = 0.0f64;
+    for i in 0..q.cols() {
+        for j in 0..q.cols() {
+            let dot: f64 = (0..q.rows())
+                .map(|k| q.get(k, i).unwrap() * q.get(k, j).unwrap())
+                .sum();
+            let want = if i == j { 1.0 } else { 0.0 };
+            let off = (dot - want).abs();
+            if off > worst {
+                worst = off;
+            }
+        }
+    }
+    worst
+}
+
+/// A fuzz finding: a wholly subnormal matrix, whose column length keeps too few bits to divide by.
+/// Both methods keep U and V orthonormal, and the singular value is the true one.
+#[test]
+fn a_subnormal_matrix_keeps_orthonormal_factors() {
+    let a = [8.289_046e-317, 0.0, 1.5e-323, 0.0];
+    let m = Matrix::from_rows(2, 2, &a).unwrap();
+    for svd in [
+        Svd::jacobi(&m, &mut Work::new(1 << 40)).unwrap(),
+        Svd::golub_kahan(&m, &mut Work::new(1 << 40)).unwrap(),
+    ] {
+        assert!(drift(svd.u()) < 1e-15, "{svd:?}");
+        assert!(drift(svd.v()) < 1e-15, "{svd:?}");
+        let [big, small] = svd.singular_values() else {
+            panic!("{svd:?}");
+        };
+        assert_eq!(*big, 8.289_046e-317, "{svd:?}");
+        assert_eq!(*small, 0.0, "{svd:?}");
+    }
+}
+
+/// A subnormal column beside an ordinary one: only the column is scaled to be normalised.
+#[test]
+fn a_subnormal_column_beside_a_normal_one_is_a_unit_vector() {
+    let a = [1.0, 0.0, 0.0, 8.289_046e-317, 0.0, 1.5e-323];
+    let m = Matrix::from_rows(3, 2, &a).unwrap();
+    let svd = Svd::jacobi(&m, &mut Work::new(1 << 40)).unwrap();
+    assert!(drift(svd.u()) < 1e-15, "{svd:?}");
+    assert!(drift(svd.v()) < 1e-15, "{svd:?}");
+}
+
+/// A matrix at the lift's edge, 2^−500 and just below it, gives the same singular value in the
+/// exponent: the lift changes the path, never the answer.
+#[test]
+fn the_lift_changes_no_singular_value() {
+    let low = f64::from_bits(0x20B0_0000_0000_0000);
+    for top in [low, low.next_down()] {
+        let a = [top, 0.0, 0.0, top / 2.0];
+        let m = Matrix::from_rows(2, 2, &a).unwrap();
+        for svd in [
+            Svd::jacobi(&m, &mut Work::new(1 << 40)).unwrap(),
+            Svd::golub_kahan(&m, &mut Work::new(1 << 40)).unwrap(),
+        ] {
+            assert_eq!(svd.singular_values(), [top, top / 2.0], "{svd:?}");
+        }
+    }
 }

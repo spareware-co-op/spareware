@@ -42,9 +42,9 @@ pub(crate) fn hypot(a: f64, b: f64) -> Result<f64, LinalgError> {
 }
 
 /// 2^−1021: at or above this in either input, r is a normal number.
-const TINY: f64 = f64::from_bits(0x0020_0000_0000_0000);
+pub(crate) const TINY: f64 = f64::from_bits(0x0020_0000_0000_0000);
 /// 2^100, which takes any double below [`TINY`] exactly to a normal one.
-const UP: f64 = f64::from_bits(0x4630_0000_0000_0000);
+pub(crate) const UP: f64 = f64::from_bits(0x4630_0000_0000_0000);
 /// 2^−100, the inverse of [`UP`].
 const DOWN: f64 = f64::from_bits(0x39B0_0000_0000_0000);
 
