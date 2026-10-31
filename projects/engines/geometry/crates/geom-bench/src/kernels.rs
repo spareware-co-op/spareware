@@ -2026,17 +2026,22 @@ pub mod roots {
     }
 }
 
-/// `geom-intersect`'s hot paths (piece G158, decision 32.44): items put in canonical order, a key
-/// read, and a pair put in order, under an unlimited budget.
+/// `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): items put in canonical
+/// order, a key read, a pair put in order, and a point projected, under an unlimited budget.
 pub mod intersect {
     use geom_curve::CurveKind;
     use geom_intersect::{
-        CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, pair,
+        CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, Projection,
+        pair, project_curve, project_surface,
     };
     use geom_num::Steps;
     use geom_run::{Budget, WorkMeter};
+    use geom_surface::SurfaceKind;
 
     use super::run;
+
+    /// The floor of a projection: a micrometre, in metres.
+    const FLOOR: f64 = 1e-6;
 
     /// A meter of its own, under no limit.
     fn meter() -> WorkMeter<'static> {
@@ -2092,6 +2097,28 @@ pub mod intersect {
     ) {
         run(batch, out, |(a, b)| {
             pair(&operand(a)?, &operand(b)?, nothing)
+        });
+    }
+
+    /// `project_curve` on each arc and point.
+    #[inline(never)]
+    pub fn on_arcs(
+        batch: &[(CurveKind<3>, [f64; 3])],
+        out: &mut Vec<Result<Projection<1, 3>, IntersectError>>,
+    ) {
+        run(batch, out, |(curve, p)| {
+            project_curve(curve, p, FLOOR, &mut meter())
+        });
+    }
+
+    /// `project_surface` on each band and point.
+    #[inline(never)]
+    pub fn on_spheres(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<Projection<2, 3>, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, p)| {
+            project_surface(surface, p, FLOOR, &mut meter())
         });
     }
 }

@@ -242,6 +242,12 @@
               "kind": "corpus",
               "piece": "G159",
               "why": "7 new count benchmarks on the exact decisions on lines and quadrics (decision 32.44): a line with a sphere, cylinder, cone and torus, parallel directions, an axis's gap and a tangent sphere; no existing digest moved"
+            },
+            {
+              "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63",
+              "kind": "corpus",
+              "piece": "G162",
+              "why": "2 new count benchmarks on geom-intersect's projection (decision 32.44): the search on an arc and on a band of a sphere; no existing digest moved"
             }
           ],
           "sha256": "d0f5a6b3d51104d1b56c8c8bb6801b4e0b66025a74a9d0670020e1ddc53d2ff4"

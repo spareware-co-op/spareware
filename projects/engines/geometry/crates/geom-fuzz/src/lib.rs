@@ -12,8 +12,10 @@
 //! operation at every width; and [`variants`] (G42), every variant of every generated exact path
 //! returns the exact value of its description, evaluated in big integers; [`intersect`]
 //! (G158), an intersection's items keep their invariants against an all-pairs oracle and a pair
-//! asked either way round makes one call; and [`quadric`] (G159), every exact decision on a line and
-//! a quadric agrees with big integers, and a Sturm chain counts the roots a polynomial was built from. The layout every target follows, and how each engine runs it locally and in CI,
+//! asked either way round makes one call; [`quadric`] (G159), every exact decision on a line and a
+//! quadric agrees with big integers, and a Sturm chain counts the roots a polynomial was built
+//! from; and [`project`] (G162), a nearest point is never beaten by a sample of the kind. The
+//! layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -162,6 +164,7 @@ use core::fmt;
 pub mod intersect;
 pub mod orient2d;
 pub mod predicates;
+pub mod project;
 pub mod quadric;
 pub mod seeded;
 pub mod variants;

@@ -14,6 +14,7 @@ geom-test = { path = "../geom-test" }
 geom-curve = { path = "../geom-curve" }
 geom-intersect = { path = "../geom-intersect" }
 geom-math = { path = "../geom-math" }
+geom-nurbs = { path = "../geom-nurbs" }
 geom-run = { path = "../geom-run" }
 geom-surface = { path = "../geom-surface" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.

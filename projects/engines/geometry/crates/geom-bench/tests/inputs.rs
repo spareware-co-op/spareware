@@ -2385,6 +2385,8 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("sort_items", k::sorted, &m::items(Typical));
     all_ok("key_circle", k::keys, &m::circles(Typical));
     all_ok("pair_lines", k::paired, &m::lines(Typical));
+    all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
+    all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
 }
 
 /// Every typical batch of the decisions on lines and quadrics (decision 32.44) is decided.
