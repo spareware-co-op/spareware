@@ -17,7 +17,7 @@ use geom_bool::rebuild::{Carrier, Merge, Outward, RebuildError, rebuild, select}
 use geom_check::{Level, check};
 use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Sign};
-use geom_poly::convex::Piece;
+use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon};
 use geom_poly::winding::{Winding, WindingTest};
@@ -371,11 +371,10 @@ fn tetrahedron(
     }
     let turned = |p: &Plane| Plane::new(p.n().map(|v| -v), -p.d()).unwrap();
     for i in 0..4 {
+        let sides: Vec<Plane> = (1..4).map(|k| turned(&planes[(i + k) % 4])).collect();
+        let mut pieces = convex_pieces(&planes[i], &[sides], &mut meter()).ok()?;
         polygons.push(Polygon {
-            piece: Piece {
-                face: planes[i],
-                bounds: (1..4).map(|k| turned(&planes[(i + k) % 4])).collect(),
-            },
+            piece: pieces.pop()?,
             entry: Some(entry),
         });
         carriers.push(Carrier {

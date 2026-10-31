@@ -1237,7 +1237,52 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why pieces could not be made into a body.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A trace failed.",
+              "name": "Trace",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The topology refused.",
+              "name": "Topo",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two pieces of one sheet overlap.",
+              "name": "Overlap",
+              "shape": "unit"
+            },
+            {
+              "doc": "A stretch of boundary has no partner across it: the pieces do not close.",
+              "name": "Open",
+              "shape": "unit"
+            },
+            {
+              "doc": "A shell faces inward with no shell around it.",
+              "name": "Inside",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_bool::rebuild",
+          "name": "RebuildError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Combine"
       ],
@@ -1253,12 +1298,39 @@
       "job": "The arrangement engine: booleans, imprint, split, cells, batch cuts, the arrangement step of local operations, `close_near_contacts`.",
       "kind": "kernel",
       "layer": "6",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the meter one unit per side of a piece, per fin and per shell.",
+          "does": "[`select`] reads a test over classified pieces and turns each kept piece to face out of the result. [`rebuild`] merges those pieces into maximal faces, finds the edges between the faces as maximal runs on one line, makes loops, joins faces into shells by their order around each edge, nests shells into regions, and publishes a [`Body`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
+          "guarantees": [
+            "**The same bytes however the boxes fell.** Faces, edges and vertices are numbered by exact keys that depend on the shape alone: not on the boxes, the leaf size, the threads, or the order the pieces came in (11.3; tested).",
+            "**Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by their Plücker coordinates, in at most 576 bits, and nothing is rounded but the shadows below.",
+            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' `Line`s are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
+            "**Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has no partner across it, mean the pieces are no closed boundary: [`RebuildError`]."
+          ],
+          "job": "The canonical rebuild: the pieces a selection keeps, made into a body (11.3, step 5).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181",
+              "https://doi.org/10.1098/rstl.1865.0017",
+              "https://doi.org/10.1109/MCG.1985.276271"
+            ],
+            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which goes further than EMBER's section 6, whose output keeps T-junctions (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); a line's coordinates are Plücker's, <https://doi.org/10.1098/rstl.1865.0017>; radial order at an edge is Weiler's radial edge structure, 1985, <https://doi.org/10.1109/MCG.1985.276271>."
+          },
+          "path": "geom_bool::rebuild",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-bool",
       "provenance": [],
       "sections": "10.2, 11, 13 (introduction), 13.14, 16.1, 22, 23.5 and 23.6, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G129, G130, G131, G132, G133, G137, G138, G139, G144, G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.",
+      "status": "the rebuild built (G129); the rest by pieces G130, G131, G132, G133, G137, G138, G139, G144, G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.",
       "summary": "Spare Kit geometry kernel: the arrangement engine."
     },
     {
