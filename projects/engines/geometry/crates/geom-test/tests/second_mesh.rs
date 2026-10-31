@@ -19,7 +19,7 @@ use geom_mesh::exact::build::{Corner, Polygons, Source, build};
 use geom_mesh::exact::mass::Volume;
 use geom_mesh::exact::{ExactMesh, MeshKind, PropTable, Role, Vertex};
 use geom_num::Exactness;
-use geom_num::grid::P3;
+use geom_num::grid::{P3, Steps};
 use geom_num::plane::Plane;
 use geom_op::NameId;
 use geom_run::{Budget, Exec, WorkMeter};
@@ -159,6 +159,46 @@ fn cut_box() -> Polygons {
     out
 }
 
+/// Two boxes of side 10 touching along the edge from (10, 10, 0) to (10, 10, 10).
+fn touching() -> Polygons {
+    let at = |x: i64, y: i64, z: i64| {
+        [
+            [x, y, z],
+            [x + 10, y, z],
+            [x + 10, y + 10, z],
+            [x, y + 10, z],
+            [x, y, z + 10],
+            [x + 10, y, z + 10],
+            [x + 10, y + 10, z + 10],
+            [x, y + 10, z + 10],
+        ]
+    };
+    let mut rows: Vec<[i64; 3]> = at(0, 0, 0).to_vec();
+    let mut second = [0_u32; 8];
+    for (slot, p) in second.iter_mut().zip(at(10, 10, 0)) {
+        *slot = rows.iter().position(|q| *q == p).unwrap_or_else(|| {
+            rows.push(p);
+            rows.len() - 1
+        }) as u32;
+    }
+    let rings = |v: [u32; 8]| {
+        [
+            [v[0], v[3], v[2], v[1]],
+            [v[4], v[5], v[6], v[7]],
+            [v[0], v[1], v[5], v[4]],
+            [v[1], v[2], v[6], v[5]],
+            [v[2], v[3], v[7], v[6]],
+            [v[3], v[0], v[4], v[7]],
+        ]
+    };
+    let faces: Vec<[u32; 4]> = rings([0, 1, 2, 3, 4, 5, 6, 7])
+        .into_iter()
+        .chain(rings(second))
+        .collect();
+    let lists: Vec<&[u32]> = faces.iter().map(<[u32; 4]>::as_slice).collect();
+    soup(rows.iter().map(|p| g(p[0], p[1], p[2])).collect(), &lists)
+}
+
 fn mesh(input: &Polygons) -> ExactMesh {
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     build(input, &Exec::serial(), &mut meter).unwrap()
@@ -176,6 +216,7 @@ fn corpus() -> Vec<ExactMesh> {
         mesh(&cuboid(1, 1, 1)),
         mesh(&cuboid(1_000_000, 3, 7)),
         mesh(&cut_box()),
+        mesh(&touching()),
     ]
 }
 
@@ -204,8 +245,11 @@ fn the_volumes_agree() {
         panic!("a mesh of meetings of planes");
     };
     let truth = six_volume(m.parts()).unwrap();
-    let as_double = truth.to_f64_lossy();
-    assert!(six.lo() <= as_double + 1.0e-6 && as_double - 1.0e-6 <= six.hi());
+    let (lo, hi) = (
+        RBig::try_from(six.lo()).unwrap(),
+        RBig::try_from(six.hi()).unwrap(),
+    );
+    assert!(lo <= truth && truth <= hi);
 }
 
 /// A broken copy of each mesh, each breaking one rule.
@@ -236,6 +280,12 @@ fn breaks() -> Vec<(&'static str, fn(&mut geom_mesh::exact::Parts))> {
         ("a loop start moved", |p| {
             p.loop_start[1] = 1;
         }),
+        ("an edge plane turned", |p| {
+            p.he_plane[0].flipped = !p.he_plane[0].flipped;
+        }),
+        ("a deviation past the class", |p| {
+            p.face_dev[0] = Steps(1);
+        }),
     ]
 }
 
@@ -250,6 +300,63 @@ fn every_broken_mesh_is_refused_by_both() {
             assert!(!first_checks(parts), "{name}: the first checker");
         }
     }
+}
+
+#[test]
+fn pairs_across_the_wrong_cell_are_refused_by_both() {
+    let m = mesh(&touching());
+    assert_eq!(m.parts().kind, MeshKind::General);
+    let mut parts = m.parts().clone();
+    // The four half-edges of the shared edge, by its two vertices.
+    let shared = |p: [i64; 3]| {
+        let at = P3::new(p[0], p[1], p[2]).unwrap();
+        parts
+            .verts
+            .iter()
+            .position(|v| *v == Vertex::Grid(at))
+            .unwrap() as u32
+    };
+    let (low, high) = (shared([10, 10, 0]), shared([10, 10, 10]));
+    let ends: Vec<usize> = (0..parts.he_vert.len())
+        .filter(|&h| {
+            let pair = parts.he_pair[h] as usize;
+            let (a, b) = (parts.he_vert[h], parts.he_vert[pair]);
+            (a, b) == (low, high)
+        })
+        .collect();
+    assert_eq!(ends.len(), 2);
+    let (x, y) = (ends[0], ends[1]);
+    let (px, py) = (parts.he_pair[x], parts.he_pair[y]);
+    parts.he_pair[x] = py;
+    parts.he_pair[py as usize] = x as u32;
+    parts.he_pair[y] = px;
+    parts.he_pair[px as usize] = y as u32;
+    assert!(
+        check(&parts)
+            .iter()
+            .all(|f| matches!(f, Finding::BadPair(_)))
+    );
+    assert_ne!(check(&parts), []);
+    assert!(!first_checks(parts));
+}
+
+#[test]
+fn a_meeting_on_the_grid_and_a_flip_off_it_are_findings() {
+    let m = mesh(&cut_box());
+    // The cut's face has only corners off the grid, so only the second checker turns it.
+    let mut parts = m.parts().clone();
+    let face = (0..parts.face_plane.len())
+        .find(|f| {
+            let plane = parts.planes[parts.face_plane[*f].row as usize];
+            plane.n() == [3, 4, 7]
+        })
+        .unwrap();
+    parts.face_plane[face].flipped = !parts.face_plane[face].flipped;
+    assert!(
+        check(&parts)
+            .iter()
+            .any(|f| matches!(f, Finding::WrongWay(_)))
+    );
 }
 
 #[test]

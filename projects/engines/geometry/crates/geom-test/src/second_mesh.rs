@@ -9,7 +9,10 @@
 //!
 //! - **Exact.** Every value is a rational; nothing rounds and no width can overflow.
 //! - **Independent.** It reads `Parts` and nothing of the checker: no predicate, no key, no sort of
-//!   `geom-mesh`'s, and it recomputes every point it compares.
+//!   `geom-mesh`'s, and it recomputes every point it compares. Around an edge of more than two
+//!   half-edges it sorts the faces by the signs of rational cross products.
+//! - **Off the grid as on it.** A face with a corner off the grid has its turn and its area tested
+//!   like any other, and an edge its facing, which the first checker leaves to the rest of the mesh.
 //! - **Says what it finds.** A list of [`Finding`]s, so a test can hold it to the first checker's
 //!   verdict on every body, valid or broken.
 //!
@@ -27,12 +30,13 @@
     reason = "exact rational arithmetic, which cannot overflow; divisors are shown nonzero"
 )]
 
+use core::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use dashu_int::IBig;
+use dashu_int::{IBig, UBig};
 use dashu_ratio::RBig;
 use geom_mesh::exact::{Facing, MeshKind, NONE, Parts, Vertex};
-use geom_num::P3;
+use geom_num::{Exactness, P3};
 
 /// A point or a vector.
 type V3 = [RBig; 3];
@@ -44,6 +48,8 @@ pub enum Finding {
     Shape,
     /// A vertex's three planes do not meet in one point.
     NoPoint(u32),
+    /// A meeting of planes at a grid point, which belongs in that form.
+    OnTheGrid(u32),
     /// Two vertices at one place.
     OnePoint(u32, u32),
     /// A loop of fewer than three half-edges.
@@ -54,6 +60,8 @@ pub enum Finding {
     OffFace(u32),
     /// An end of a half-edge off its edge plane.
     OffEdgePlane(u32),
+    /// An edge plane not facing into its face.
+    EdgeFacing(u32),
     /// A face with no area.
     NoArea(u32),
     /// A face turning the other way from its plane.
@@ -66,6 +74,8 @@ pub enum Finding {
     WrongKind,
     /// Two faces with the same corners in the same order.
     Repeated(u32, u32),
+    /// A face further from its source than the mesh's class says.
+    Deviation(u32),
 }
 
 /// A number as a rational.
@@ -76,6 +86,11 @@ fn q(n: i128) -> RBig {
 /// A grid point as a rational point.
 fn point(p: P3) -> V3 {
     [p.x, p.y, p.z].map(|c| q(i128::from(c.get())))
+}
+
+/// `a − b`.
+fn minus(a: &V3, b: &V3) -> V3 {
+    [&a[0] - &b[0], &a[1] - &b[1], &a[2] - &b[2]]
 }
 
 /// `a × b`.
@@ -142,7 +157,7 @@ fn loops(parts: &Parts, f: usize) -> std::ops::Range<usize> {
 fn fits(parts: &Parts) -> bool {
     let faces = parts.face_plane.len();
     let edges = parts.he_vert.len();
-    let rising = |list: &[u32]| list.windows(2).all(|w| w[0] <= w[1]);
+    let rising = |list: &[u32]| list.first() == Some(&0) && list.windows(2).all(|w| w[0] <= w[1]);
     parts.face_loops.len() == faces + 1
         && rising(&parts.face_loops)
         && rising(&parts.loop_start)
@@ -150,6 +165,8 @@ fn fits(parts: &Parts) -> bool {
         && parts.loop_start.last().map(|v| *v as usize) == Some(edges)
         && parts.he_plane.len() == edges
         && parts.he_pair.len() == edges
+        && parts.he_prop.len() == edges
+        && parts.face_dev.len() == faces
         && parts
             .he_vert
             .iter()
@@ -202,11 +219,16 @@ fn faces(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
                 if dot(&n, a) + &d != RBig::ZERO {
                     out.push(Finding::OffFace(edge));
                 }
-                let on_edge = plane(parts, parts.he_plane[h].row).is_some_and(|(m, e)| {
-                    dot(&m, a) + &e == RBig::ZERO && dot(&m, b) + &e == RBig::ZERO
-                });
-                if !on_edge {
+                let Some((m, e)) = facing(parts, parts.he_plane[h]) else {
+                    out.push(Finding::Shape);
+                    continue;
+                };
+                if dot(&m, a) + &e != RBig::ZERO || dot(&m, b) + &e != RBig::ZERO {
                     out.push(Finding::OffEdgePlane(edge));
+                }
+                // The face lies to the left of its edge, seen from outside: along n × (b − a).
+                if dot(&m, &cross(&n, &minus(b, a))) <= RBig::ZERO {
+                    out.push(Finding::EdgeFacing(edge));
                 }
             }
         }
@@ -219,50 +241,153 @@ fn faces(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
     }
 }
 
-/// The rules each edge keeps: used equally each way, paired with its opposite, the mesh's kind.
-fn edges(parts: &Parts, out: &mut Vec<Finding>) {
-    let mut uses: BTreeMap<(u32, u32), (u32, u32, u32)> = BTreeMap::new();
-    let mut ends: Vec<(u32, u32)> = vec![(0, 0); parts.he_vert.len()];
-    for l in 0..parts.loop_start.len().saturating_sub(1) {
-        for h in ring(parts, l) {
-            let (a, b) = (parts.he_vert[h], parts.he_vert[next_in(parts, l, h)]);
-            ends[h] = (a, b);
-            let slot = uses.entry((a.min(b), a.max(b))).or_insert((0, 0, 0));
-            if a < b {
-                slot.0 += 1;
-            } else {
-                slot.1 += 1;
-            }
-            slot.2 = u32::try_from(h).unwrap_or(u32::MAX);
-        }
+/// One half-edge's flap about its edge: the way its face runs from the edge.
+struct Flap {
+    half_edge: u32,
+    /// Whether it runs from the edge's higher vertex to its lower.
+    against: bool,
+    run: V3,
+}
+
+/// Where `run` lies from `first`, turning about `axis`: 0 on it, 1 within a half turn, 2 opposite,
+/// 3 beyond.
+fn rank(first: &V3, run: &V3, axis: &V3) -> u8 {
+    let side = dot(&cross(first, run), axis);
+    if side > RBig::ZERO {
+        1
+    } else if side < RBig::ZERO {
+        3
+    } else if dot(first, run) > RBig::ZERO {
+        0
+    } else {
+        2
     }
-    let mut boundary = false;
-    let mut radial = false;
-    for (ahead, back, h) in uses.values() {
-        match (*ahead, *back) {
-            (1, 1) => {}
-            (1, 0) | (0, 1) => boundary = true,
-            (a, b) if a == b => radial = true,
-            _ => out.push(Finding::Uneven(*h)),
-        }
+}
+
+/// The half-edges of an edge from `low` to `high`, each with its flap, in the order they turn about
+/// the line from `low` to `high`; flaps in one half-plane by row.
+fn around(
+    parts: &Parts,
+    points: &[V3],
+    owner: &[u32],
+    group: &[u32],
+    (low, high): (u32, u32),
+) -> Option<Vec<Flap>> {
+    let axis = minus(points.get(high as usize)?, points.get(low as usize)?);
+    let mut flaps = Vec::new();
+    for &h in group {
+        let row = h as usize;
+        let (n, _) = facing(parts, *parts.face_plane.get(*owner.get(row)? as usize)?)?;
+        let against = parts.he_vert.get(row) == Some(&high);
+        let way = if against {
+            axis.clone().map(|c| -c)
+        } else {
+            axis.clone()
+        };
+        flaps.push(Flap {
+            half_edge: h,
+            against,
+            run: cross(&n, &way),
+        });
     }
-    let right = match parts.kind {
-        MeshKind::Closed => !boundary && !radial,
-        MeshKind::Open => !radial,
-        MeshKind::General => radial && !boundary,
+    let first = flaps.first()?.run.clone();
+    flaps.sort_by(|p, q| {
+        rank(&first, &p.run, &axis)
+            .cmp(&rank(&first, &q.run, &axis))
+            .then_with(|| {
+                RBig::ZERO
+                    .partial_cmp(&dot(&cross(&p.run, &q.run), &axis))
+                    .unwrap_or(Ordering::Equal)
+            })
+            .then(p.half_edge.cmp(&q.half_edge))
+    });
+    Some(flaps)
+}
+
+/// An edge of more than two half-edges: each pair bounds one cell, so a half-edge against the line
+/// meets its pair next, turning about the line from its face through what lies behind it.
+fn radial(
+    parts: &Parts,
+    points: &[V3],
+    owner: &[u32],
+    group: &[u32],
+    edge: (u32, u32),
+    out: &mut Vec<Finding>,
+) {
+    let Some(flaps) = around(parts, points, owner, group, edge) else {
+        out.push(Finding::Shape);
+        return;
     };
-    if !right {
+    for (flap, next) in flaps.iter().zip(flaps.iter().cycle().skip(1)) {
+        let pair = |h: u32| parts.he_pair.get(h as usize).copied();
+        let paired = pair(flap.half_edge) == Some(next.half_edge)
+            && pair(next.half_edge) == Some(flap.half_edge);
+        if flap.against && (next.against || !paired) {
+            out.push(Finding::BadPair(flap.half_edge));
+        }
+    }
+}
+
+/// The rules each edge keeps: used equally each way, paired, and the mesh the kind it says.
+fn edges(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
+    let mut uses: BTreeMap<(u32, u32), Vec<u32>> = BTreeMap::new();
+    let mut owner = vec![0; parts.he_vert.len()];
+    for f in 0..parts.face_plane.len() {
+        for l in loops(parts, f) {
+            for h in ring(parts, l) {
+                let (a, b) = (parts.he_vert[h], parts.he_vert[next_in(parts, l, h)]);
+                owner[h] = u32::try_from(f).unwrap_or(u32::MAX);
+                let row = u32::try_from(h).unwrap_or(u32::MAX);
+                uses.entry((a.min(b), a.max(b))).or_default().push(row);
+            }
+        }
+    }
+    let (mut boundary, mut general) = (false, false);
+    for (&edge, group) in &uses {
+        let of = |h: u32| parts.he_vert.get(h as usize).copied();
+        let ahead = group.iter().filter(|h| of(**h) == Some(edge.0)).count();
+        let pair = |h: u32| parts.he_pair.get(h as usize).copied();
+        match group.as_slice() {
+            [one] => {
+                boundary = true;
+                if pair(*one) != Some(NONE) {
+                    out.push(Finding::BadPair(*one));
+                }
+            }
+            [x, y] if ahead == 1 => {
+                if pair(*x) != Some(*y) || pair(*y) != Some(*x) {
+                    out.push(Finding::BadPair(*x));
+                }
+            }
+            [first, ..] if ahead * 2 != group.len() => out.push(Finding::Uneven(*first)),
+            _ => {
+                general = true;
+                radial(parts, points, &owner, group, edge, out);
+            }
+        }
+    }
+    let kind = if general {
+        MeshKind::General
+    } else if boundary {
+        MeshKind::Open
+    } else {
+        MeshKind::Closed
+    };
+    if parts.kind != kind {
         out.push(Finding::WrongKind);
     }
-    for (h, &pair) in parts.he_pair.iter().enumerate() {
-        let row = u32::try_from(h).unwrap_or(u32::MAX);
-        if pair == NONE {
-            let alone = uses.get(&(ends[h].0.min(ends[h].1), ends[h].0.max(ends[h].1)));
-            if !alone.is_some_and(|u| u.0 + u.1 == 1) {
-                out.push(Finding::BadPair(row));
-            }
-        } else if ends.get(pair as usize) != Some(&(ends[h].1, ends[h].0)) {
-            out.push(Finding::BadPair(row));
+}
+
+/// No face further from its source than the class says.
+fn deviations(parts: &Parts, out: &mut Vec<Finding>) {
+    let limit = match parts.class {
+        Exactness::Exact => 0,
+        Exactness::Certified { bound, .. } => bound.get(),
+        Exactness::Approximate { deviation, .. } => deviation.get(),
+    };
+    for (face, dev) in parts.face_dev.iter().enumerate() {
+        if dev.get() > limit {
+            out.push(Finding::Deviation(u32::try_from(face).unwrap_or(u32::MAX)));
         }
     }
 }
@@ -277,11 +402,17 @@ pub fn check(parts: &Parts) -> Vec<Finding> {
     let mut points = Vec::new();
     for (v, vertex) in parts.verts.iter().enumerate() {
         match place(parts, vertex) {
-            Some(p) => points.push(p),
+            Some(p) => {
+                let whole = p.iter().all(|c| *c.denominator() == UBig::ONE);
+                if whole && matches!(vertex, Vertex::Planes(_)) {
+                    out.push(Finding::OnTheGrid(u32::try_from(v).unwrap_or(u32::MAX)));
+                }
+                points.push(p);
+            }
             None => out.push(Finding::NoPoint(u32::try_from(v).unwrap_or(u32::MAX))),
         }
     }
-    if !out.is_empty() {
+    if points.len() != parts.verts.len() {
         return out;
     }
     let mut seen: BTreeMap<&V3, u32> = BTreeMap::new();
@@ -303,7 +434,8 @@ pub fn check(parts: &Parts) -> Vec<Finding> {
         }
     }
     faces(parts, &points, &mut out);
-    edges(parts, &mut out);
+    edges(parts, &points, &mut out);
+    deviations(parts, &mut out);
     out
 }
 
