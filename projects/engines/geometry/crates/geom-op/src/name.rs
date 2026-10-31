@@ -406,7 +406,7 @@ const fn kind_number(kind: EdgeOrVertex) -> u64 {
 fn items(names: &[NameId]) -> Result<Vec<Item>, NameError> {
     names
         .iter()
-        .map(|name| {
+        .map(|name| -> Result<Item, NameError> {
             let mut e = Encoder::new();
             e.bytes(&name.to_bytes())?;
             Ok(e.finish()?)
