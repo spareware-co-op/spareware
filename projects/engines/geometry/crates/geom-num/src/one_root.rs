@@ -215,7 +215,7 @@ fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError> {
     Ok(if negative { sum.neg() } else { sum })
 }
 
-/// A point of the plane at ((aₓ + bₓ√k) / w, (a_y + b_y√k) / w): a crossing of a carrier and a
+/// A point of the plane at ((a₀ + b₀√k) / w, (a₁ + b₁√k) / w): a crossing of a carrier and a
 /// circle, or a rational point, whose b's and k are zero. One root, shared by both coordinates.
 #[derive(Clone, Copy, Debug)]
 pub struct Crossing2 {
@@ -253,18 +253,22 @@ impl Crossing2 {
     /// Where carrier `l` meets the circle about (cx, cy) / cw, of squared radius rr / cw².
     /// N = a² + b², h = c · cw − a · cx − b · cy and k = rr · N − h², so the crossing is
     /// (C · N + n · h ± d√k) / (cw · N), d = (b, −a) the way the carrier runs.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, c, h, k and n are the formula's, l the carrier"
+    )]
     fn on_circle(
         l: &Carrier,
-        centre: [Big; 2],
-        cw: Big,
+        centre: &[Big; 2],
+        cw: &Big,
         rr: &Big,
         root: Root,
     ) -> Result<Crossing2, NumError> {
         let ([a, b], c) = l.coefficients();
         let (a, b, c) = (Big::from_i128(a), Big::from_i128(b), Big::from_i128(c));
-        let [cx, cy] = &centre;
+        let [cx, cy] = centre;
         let n = add(&mul(&a, &a)?, &mul(&b, &b)?)?;
-        let h = sub(&sub(&mul(&c, &cw)?, &mul(&a, cx)?)?, &mul(&b, cy)?)?;
+        let h = sub(&sub(&mul(&c, cw)?, &mul(&a, cx)?)?, &mul(&b, cy)?)?;
         let k = sub(&mul(rr, &n)?, &mul(&h, &h)?)?;
         if k.is_negative() {
             return Err(NumError::Degenerate);
@@ -281,7 +285,7 @@ impl Crossing2 {
             Root::Second => [ahead, turned(across)?],
         }
         .map(I384::from_i128);
-        Crossing2::from_parts([ax, ay], bs, stored(k)?, stored(mul(&cw, &n)?)?)
+        Crossing2::from_parts([ax, ay], bs, stored(k)?, stored(mul(cw, &n)?)?)
     }
 
     /// Where the carrier `l` meets the circle `round`, `root` choosing which.
@@ -297,7 +301,7 @@ impl Crossing2 {
         let dx = sub(&mul(&Big::from_i64(on.x.get()), &cw)?, &cx)?;
         let dy = sub(&mul(&Big::from_i64(on.y.get()), &cw)?, &cy)?;
         let rr = add(&mul(&dx, &dx)?, &mul(&dy, &dy)?)?;
-        Crossing2::on_circle(l, [cx, cy], cw, &rr, root)
+        Crossing2::on_circle(l, &[cx, cy], &cw, &rr, root)
     }
 
     /// Where the carrier `l` meets the circle `circle`, `root` choosing which.
@@ -309,7 +313,7 @@ impl Crossing2 {
         let c = circle.centre();
         let r = Big::from_i128(circle.radius());
         let centre = [Big::from_i64(c.x.get()), Big::from_i64(c.y.get())];
-        Crossing2::on_circle(l, centre, Big::from_i64(1), &mul(&r, &r)?, root)
+        Crossing2::on_circle(l, &centre, &Big::from_i64(1), &mul(&r, &r)?, root)
     }
 
     /// A rational point in this form, b and k zero, so that it can be compared with a crossing.
@@ -327,7 +331,7 @@ impl Crossing2 {
         )
     }
 
-    /// Its homogeneous parts: `[aₓ, a_y]`, `[bₓ, b_y]`, k and w, w positive.
+    /// Its homogeneous parts: `[a₀, a₁]`, `[b₀, b₁]`, k and w, w positive.
     #[must_use]
     pub const fn parts(&self) -> ([I384; 2], [I384; 2], I384, I384) {
         (self.a, self.b, self.k, self.w)
@@ -410,11 +414,15 @@ impl Crossing2 {
     }
 
     /// Which side of the carrier `l` it lies on, as [`Carrier::side`] says of a rational point: the
-    /// sign of E + F√k with E = a · aₓ + b · a_y − c · w and F = a · bₓ + b · b_y.
+    /// sign of E + F√k with E = a · a₀ + b · a₁ − c · w and F = a · b₀ + b · b₁.
     ///
     /// # Errors
     ///
     /// As for [`Crossing2::cmp_x`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b and c are the carrier's, x and y the coordinates, l the carrier"
+    )]
     pub fn side(&self, l: &Carrier) -> Result<Sign, NumError> {
         let ([a, b], c) = l.coefficients();
         let exact = |v: i128| enclose(&I384::from_i128(v));
@@ -441,6 +449,10 @@ impl Crossing2 {
     /// # Errors
     ///
     /// As for [`Crossing2::cmp_x`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "b, c, p, t, u, x and y are the formula's"
+    )]
     pub fn against_round(&self, round: &Round) -> Result<Sign, NumError> {
         let ([cx, cy], cw) = round.centre().coordinates();
         let on = round.on();
@@ -475,6 +487,10 @@ impl Crossing2 {
     /// # Errors
     ///
     /// As for [`Crossing2::cmp_x`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "b, c, r, u, x and y are the formula's"
+    )]
     pub fn against_circle(&self, circle: &Circle2) -> Result<Sign, NumError> {
         let (x, y) = (self.part(0)?, self.part(1)?);
         let c = circle.centre();
