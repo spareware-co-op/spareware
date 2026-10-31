@@ -34,9 +34,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use geom_name::resolve::Step;
 use geom_name::{
     Body, CarrierIx, DocRef, ElementId, EntityKind, Lookup, NameGraph, Reference, Resolution,
-    Signature, Step, Target, UnresolvedReason, Want, resolve,
+    Signature, Target, UnresolvedReason, Want, resolve,
 };
 use geom_op::history::{History, Origin, Record};
 use geom_op::name::{NameList, NameSet, Ordinal, PieceKey, Role, Side, TopoName};

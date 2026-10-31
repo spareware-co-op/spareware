@@ -10,6 +10,8 @@
 //!   and each 13.14 change is checked against the records as its row says.
 //! - Composition follows chapter 20.3's rules on a hand-worked chain, the "two paths" case
 //!   included: modified wins.
+//! - A history encodes to exactly the bytes its doc comment states, every origin and every change
+//!   class, checked against the independent reference encoder (ciborium-ll).
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -19,9 +21,12 @@
 // clippy.toml says tests may use these, and a broken case must stop the test loudly.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
+mod common;
+
+use common::{V, hex, reference};
 use geom_op::{
-    ChangeClass, History, HistoryError, LawBreak, LoopChange, NameId, NameList, NameSet, Origin,
-    PieceKey, Record, Role, Side, TopologyChange, Vanish,
+    ChangeClass, History, HistoryError, LawBreak, LoopChange, NameId, NameList, NameSet, OpId,
+    OpPath, Origin, PieceKey, Record, Role, Side, TopologyChange, Vanish,
 };
 
 fn n(x: u8) -> NameId {
@@ -483,5 +488,124 @@ fn a_hand_worked_chain_composes_by_chapter_20_3s_rules() {
     assert_eq!(
         none.deleted().collect::<Vec<_>>(),
         [n(1), n(2), n(3), n(4), n(5), n(6)]
+    );
+}
+
+fn name_v(x: u8) -> V {
+    V::B(vec![x; 16])
+}
+
+fn set_v(xs: &[u8]) -> V {
+    V::Set(xs.iter().map(|&x| name_v(x)).collect())
+}
+
+fn list_v(xs: &[u8]) -> V {
+    V::Sorted(xs.iter().map(|&x| name_v(x)).collect())
+}
+
+fn role_v(name: &str) -> V {
+    V::A(vec![V::T(name.to_owned())])
+}
+
+#[test]
+fn a_history_encodes_as_its_doc_comment_states() {
+    let op = OpPath::new(OpId::from_bytes([9; 16]));
+    let h = History::new(
+        [
+            rec(14, Origin::Merged { of: set(&[6, 7]) }),
+            rec(10, Origin::Unchanged),
+            rec(11, modified(&[1, 2])),
+            rec(12, generated(&[3], "cap")),
+            rec(13, split(4, 5, Side::Front)),
+        ],
+        set(&[8]),
+        [
+            TopologyChange::BodySplit {
+                lumps: NameList::new([n(37), n(36)]),
+            },
+            TopologyChange::VertexSplit {
+                vertex: n(30),
+                edges: NameList::new([n(32), n(31)]),
+            },
+            TopologyChange::FaceVanished {
+                face: n(20),
+                why: Vanish::Collapsed,
+            },
+            TopologyChange::FaceVanished {
+                face: n(21),
+                why: Vanish::InsideOut,
+            },
+            TopologyChange::SelfOverlapCut {
+                face: n(22),
+                along: NameList::new([n(23)]),
+            },
+            TopologyChange::ClashTrimmed {
+                faces: set(&[24, 25]),
+            },
+            TopologyChange::OvershootRemoved { faces: set(&[26]) },
+            TopologyChange::FacesMerged {
+                faces: set(&[27, 28]),
+                into: n(29),
+            },
+            TopologyChange::FaceAdded {
+                face: n(33),
+                role: role("rim"),
+            },
+            TopologyChange::LoopChanged {
+                face: n(34),
+                change: LoopChange::HoleClosed,
+            },
+            TopologyChange::LoopChanged {
+                face: n(35),
+                change: LoopChange::FaceSplit,
+            },
+        ],
+    )
+    .unwrap();
+    let record = |output: u8, origin: Vec<V>| V::A(vec![name_v(output), V::A(origin)]);
+    let expected = V::A(vec![
+        V::A(vec![name_v(9)]),
+        V::A(vec![
+            record(10, vec![V::U(0)]),
+            record(11, vec![V::U(1), set_v(&[1, 2])]),
+            record(12, vec![V::U(2), set_v(&[3]), role_v("cap")]),
+            record(
+                13,
+                vec![
+                    V::U(3),
+                    name_v(4),
+                    V::A(vec![V::U(0), set_v(&[5]), V::U(1)]),
+                ],
+            ),
+            record(14, vec![V::U(4), set_v(&[6, 7])]),
+        ]),
+        set_v(&[8]),
+        V::A(vec![
+            V::A(vec![V::U(0), name_v(30), list_v(&[31, 32])]),
+            V::A(vec![V::U(1), name_v(20), V::U(0)]),
+            V::A(vec![V::U(1), name_v(21), V::U(1)]),
+            V::A(vec![V::U(2), name_v(22), list_v(&[23])]),
+            V::A(vec![V::U(3), set_v(&[24, 25])]),
+            V::A(vec![V::U(4), set_v(&[26])]),
+            V::A(vec![V::U(5), set_v(&[27, 28]), name_v(29)]),
+            V::A(vec![V::U(6), name_v(33), role_v("rim")]),
+            V::A(vec![V::U(7), name_v(34), V::U(0)]),
+            V::A(vec![V::U(7), name_v(35), V::U(1)]),
+            V::A(vec![V::U(8), list_v(&[36, 37])]),
+        ]),
+    ]);
+    assert_eq!(
+        hex(h.encode(&op).unwrap().as_bytes()),
+        hex(&reference(&expected))
+    );
+    let empty = V::A(vec![
+        V::A(vec![name_v(9)]),
+        V::A(vec![]),
+        V::Set(vec![]),
+        V::A(vec![]),
+    ]);
+    assert_eq!(
+        hex(History::default().encode(&op).unwrap().as_bytes()),
+        hex(&reference(&empty))
     );
 }

@@ -30,6 +30,8 @@ num-bigint = "0.4.8"
 # whose values fill them (ours, MPL-2.0).
 geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
+# The code under test of the cbor target (G91), read with geom-run's work meter (MPL-2.0, ours).
+geom-format = { path = "../geom-format" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under
