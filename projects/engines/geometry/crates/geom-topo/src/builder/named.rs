@@ -37,6 +37,11 @@
 //!   edge's radial ring are kept as given: their order is the shape's.
 //! - **Checked as published.** The arenas pass [`Builder::publish`]'s checks before anything is
 //!   read, and the moved arenas pass them again as they are published.
+//! - **What did not change stays shared.** A chunk that comes out holding what the arena given
+//!   held at that place is that arena's own chunk, so a new version shares it with the version it
+//!   was made from (23.8, 23.9), and republishing a body shares them all. Integers are compared; a
+//!   pool of doubles shares a chunk only if none of its rows moved, since equal doubles can differ
+//!   in bits.
 //! - **One answer, the first fault.** Faults are reported in a fixed order: [`Builder::publish`]'s
 //!   checks; then, for regions, faces, edges and vertices in turn, a count of names other than one
 //!   per row or two rows of one name; then equal keys among shells, loops and fins in turn; then an
@@ -93,7 +98,8 @@ impl Builder {
             return Err(TopoError::Outside);
         }
         let moves = Moves::new(a, names)?;
-        let arenas = rechain(moves.arenas(a, meter)?)?;
+        let mut arenas = rechain(moves.arenas(a, meter)?)?;
+        share(&mut arenas, a, &moves);
         let sorted = Names {
             regions: in_order(&moves.regions, &names.regions),
             faces: in_order(&moves.faces, &names.faces),
@@ -104,6 +110,66 @@ impl Builder {
         let body = Builder { arenas }.publish(kind, outside, meter)?;
         Ok(body.named(sorted))
     }
+}
+
+/// Whether two chunks of a column of integers hold the same rows.
+fn equal<V: PartialEq>(_place: usize, mine: &[V], theirs: &[V]) -> bool {
+    mine == theirs
+}
+
+/// Whether no row of chunk `place`, of `rows` rows, moved.
+fn unmoved(moves: &Permutation, place: usize, rows: usize) -> bool {
+    let first = u32::try_from(place).map_or(u32::MAX, |p| p.saturating_mul(CHUNK_ROWS));
+    (first..)
+        .take(rows)
+        .all(|row| moves.source(row) == Some(row))
+}
+
+/// Gives `new`, the arenas `moves` made from `old`, each of `old`'s chunks it holds unchanged.
+fn share(new: &mut Arenas, old: &Arenas, moves: &Moves<Permutation>) {
+    new.regions.kind.share_with(&old.regions.kind, equal);
+    new.regions
+        .first_shell
+        .share_with(&old.regions.first_shell, equal);
+    new.shells.region.share_with(&old.shells.region, equal);
+    new.shells.next.share_with(&old.shells.next, equal);
+    new.shells
+        .first_face
+        .share_with(&old.shells.first_face, equal);
+    new.faces.shell.share_with(&old.faces.shell, equal);
+    new.faces.next.share_with(&old.faces.next, equal);
+    new.faces.surface.share_with(&old.faces.surface, equal);
+    new.faces.sense.share_with(&old.faces.sense, equal);
+    new.faces
+        .first_loop
+        .share_with(&old.faces.first_loop, equal);
+    new.faces.bound.share_with(&old.faces.bound, equal);
+    new.loops.face.share_with(&old.loops.face, equal);
+    new.loops.next.share_with(&old.loops.next, equal);
+    new.loops.first_fin.share_with(&old.loops.first_fin, equal);
+    new.fins.loop_.share_with(&old.fins.loop_, equal);
+    new.fins.next.share_with(&old.fins.next, equal);
+    new.fins.prev.share_with(&old.fins.prev, equal);
+    new.fins.edge.share_with(&old.fins.edge, equal);
+    new.fins.sense.share_with(&old.fins.sense, equal);
+    new.fins.radial.share_with(&old.fins.radial, equal);
+    new.fins.pcurve.share_with(&old.fins.pcurve, equal);
+    new.edges.first_fin.share_with(&old.edges.first_fin, equal);
+    new.edges.start.share_with(&old.edges.start, equal);
+    new.edges.end.share_with(&old.edges.end, equal);
+    new.edges.curve.share_with(&old.edges.curve, equal);
+    new.vertices.point.share_with(&old.vertices.point, equal);
+    new.points.share_with(&old.points, equal);
+    // A permutation moves every row, so both columns have the same rows and the same chunks.
+    new.surfaces.share_with(&old.surfaces, |place, mine, _| {
+        unmoved(&moves.surfaces, place, mine.len())
+    });
+    new.curves.share_with(&old.curves, |place, mine, _| {
+        unmoved(&moves.curves, place, mine.len())
+    });
+    new.pcurves.share_with(&old.pcurves, |place, mine, _| {
+        unmoved(&moves.pcurves, place, mine.len())
+    });
 }
 
 /// The move into name order of a named arena of `rows` rows.

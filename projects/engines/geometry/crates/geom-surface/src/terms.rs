@@ -55,7 +55,7 @@ const PI_HI: f64 = f64::from_bits(0x4009_21FB_5444_2D19);
 
 /// A scalar function of one parameter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum Fun {
+pub enum Fun {
     /// 1.
     One,
     /// t.

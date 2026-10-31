@@ -103,8 +103,8 @@ pub use history::{
 pub use id::{Label, NameId, OpId, OpPath};
 pub use kind::ErrorKind;
 pub use name::{
-    EdgeOrVertex, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal, PieceKey, Role,
-    RoleArg, Side, TopoName,
+    BLANK_OP, EdgeOrVertex, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal, PieceKey,
+    Role, RoleArg, Side, Stamp, TopoName,
 };
 pub use output::{Diagnostic, OpOutput};
 pub use remedy::{Bound, Remedy};

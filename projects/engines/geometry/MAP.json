@@ -487,6 +487,26 @@
           "target": "lib"
         },
         {
+          "cost": "about a hundred draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/bvh.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): small scenes for the box tree (build, then the boxes meeting a query box) and for the Morton-sorted cell index (build, then the points within a radius of a centre).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the queries of `geom-bvh`'s tests (`tests/tree.rs`, `tests/cells.rs`, each checked there against brute force), built and queried whole under an unlimited budget on the serial executor, at one scene size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::bvh",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a batch of up to 64 inputs, built once per benchmark run.",
           "does": null,
           "family": [],
@@ -502,6 +522,26 @@
             "text": "the degenerate cases of a crossing as `Ssi::new` documents them, with Shewchuk's input classes (<https://doi.org/10.1007/PL00009321>, section 6) and a unimodular 2D basis (Knuth, volume 2, section 4.5.2) for the nearly degenerate ones, built from the shared draws of `inputs` as the plane inputs are."
           },
           "path": "geom_bench::inputs::crossing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per value, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/curve.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44): parameters on an exact helix (its point, and its certified enclosure with two derivatives), bulge polylines for their conversion to NURBS, stations on a clothoid transition, and transition lengths for their conversion to NURBS.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-curve`'s benchmarks (`benches/analytic.rs`, `compound.rs`, `enclosure.rs` and `transition.rs`), at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::curve",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -585,6 +625,26 @@
             "text": "one input per arm of each match (chapter 9 of the kernel architecture: the less exact class wins and bounds add, in the finer step; chapter 6.5: a bound over its ceiling is an error), with boundary values at the ceiling and at the end of `u64` (boundary-value analysis, <https://en.wikipedia.org/wiki/Boundary-value_analysis>)."
           },
           "path": "geom_bench::inputs::exactness",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(`BATCH`) draws; a batch of versions shares one body's chunks.",
+          "does": "[`cache_key`] gives an edition and an input's seed per call; [`memo_get`] gives the place of a key in the store [`store`] fills; [`next_version`] gives a first version of the body [`faces`] with a body one row changed from it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/format.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`), so each benchmark measures the path that succeeds: every key is found, and a new version hashes one chunk, as an edit in place does. Only the typical class exists: a key's cost does not depend on its bytes."
+          ],
+          "job": "Inputs for `geom-format`'s hot paths (piece G105, decision 32.44): calls whose cache keys differ by edition and input, keys to look up in a memo store, and new versions of a body, each one row of its last chunk moved to another surface.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-format`'s own tests (`tests/cache.rs`, `tests/versions.rs`), at one size each, each measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::format",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -690,6 +750,26 @@
           "target": "lib"
         },
         {
+          "cost": "36 or 24 draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/linalg.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.44): small dense matrices for the column-pivoted QR factorisation and the one-sided Jacobi singular value decomposition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the corpus shape of `geom-linalg`'s `tests/dense_determinism.rs` and `tests/spectral_determinism.rs` (random entries, the factorisation run whole under an unlimited budget), at one size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::linalg",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -705,6 +785,26 @@
             "text": "the hard cases of elementary-function implementations, each a separate path through libm (which `geom_num::math` wraps): arguments that need the longest trigonometric argument reduction (Payne and Hanek 1983, <https://doi.org/10.1145/1057600.1057602>), results near overflow and underflow, subnormals, and arguments next to the ends of each domain."
           },
           "path": "geom_bench::inputs::math",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/math_types.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.44): grid points for the typed transforms and the rational rotation, unit directions for the rational-rotation search, grid points for the frame-to-map conversion, and survey coordinates as decimal text.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-math`'s `benches/transform.rs` (the 1M-point transform benchmark of G45, with G46's searches and G48's frames), whose header says they move here once this harness exists. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::math_types",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -748,6 +848,26 @@
             "text": "the cases an interval Newton step decides, as chapter 12.4 lists them (exclusion, uniqueness, refinement) and as `geom_num::newton`'s module header proves them (`projects/engines/geometry/architecture/12-intersections.md`), each with its own class, and boxes around a zero at widths a decade apart, as the root-isolation engine (G53) will hand them over."
           },
           "path": "geom_bench::inputs::newton",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per value, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/nurbs.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): parameters for evaluating a clamped cubic curve, point sets for its interpolation, and interval control points for the Bernstein bound.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-nurbs`'s benchmarks (`benches/nurbs.rs`, `fit.rs` and `bernstein.rs`): a clamped cubic, chord-length interpolation by version 1 of the fit, and the bound of a cubic Bernstein piece, at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::nurbs",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -856,6 +976,26 @@
           "target": "lib"
         },
         {
+          "cost": "two draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/roots.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for root finding and quadrature (piece G51, decision 32.44): brackets for Brent's zero search on a fixed cubic, and intervals for Gauss-Legendre quadrature of a fixed quintic.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the classic test function x³ − 2x − 5 of root finding (Wallis's, used by Brent in *Algorithms for Minimization without Derivatives*, 1973, chapter 4), and a quintic, which an eight-point rule integrates exactly. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::roots",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -871,6 +1011,26 @@
             "text": "one input per branch of a three-way comparison, at both ends of the type (boundary-value analysis, <https://en.wikipedia.org/wiki/Boundary-value_analysis>)."
           },
           "path": "geom_bench::inputs::sign",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two draws of [`SplitMix64`] per pair, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/surface.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.44): parameter pairs on a torus (its point, and its certified enclosure with first partials) and on an offset cylinder (its point).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-surface`'s benchmarks (`benches/surfaces.rs`, `offsets.rs`), at one size each. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::surface",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -2568,6 +2728,69 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a body could not be stored or read back.",
+          "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
+          "kinds": [
+            {
+              "doc": "The encoder refused a value (writing).",
+              "name": "Encode",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes that break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A payload that is not what its table or the index needs.",
+              "name": "Shape",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A chunk the index does not list, or listed in the wrong place or with another content ID.",
+              "name": "Chunk",
+              "shape": "struct"
+            },
+            {
+              "doc": "A geometry kind that could not be stored or read.",
+              "name": "Kind",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The topology did not build back.",
+              "name": "Topo",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::body",
+          "name": "BodyError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a name-free entry could not be restamped.",
+          "file": "projects/engines/geometry/crates/geom-format/src/cache.rs",
+          "kinds": [
+            {
+              "doc": "A name holds something other than blanks and names stamped before it.",
+              "name": "Name",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A body's new names could not be published.",
+              "name": "Topo",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::cache",
+          "name": "StampError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "The rule of SKG's CBOR subset (24.3, RFC 8949 section 4.2.1) an input breaks.",
           "file": "projects/engines/geometry/crates/geom-format/src/cbor/error.rs",
           "kinds": [
@@ -2820,6 +3043,40 @@
           ],
           "module": "geom_format::history",
           "name": "HistoryRecordError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a kind could not be written or read back.",
+          "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+          "kinds": [
+            {
+              "doc": "The encoder refused a value: a double that is not finite where one must be.",
+              "name": "Encode",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes that break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An item that is not the kind its code names.",
+              "name": "Shape",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The kind's constructor refused the values.",
+              "name": "Curve",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A NURBS constructor refused the values.",
+              "name": "Nurbs",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::kinds",
+          "name": "KindError",
           "non_exhaustive": false
         },
         {
@@ -3106,6 +3363,58 @@
             "text": "chapter 24.4's attributes record and section 8.4's events and actions (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/08-topology.md`), after Parasolid's published attribute classes, as a concept only (`projects/kit/notes/G01-evidence/07-persistent-naming.md`)."
           },
           "path": "geom_format::attributes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the body: one pass over each table to write, one to read, one SHA-256 pass over every chunk; memory for one chunk's payload at a time plus the body itself. [`BodyVersion::next`] is linear in the chunks it checks and the rows of the name tables, and encodes and hashes only the chunks that changed, plus the index.",
+          "does": "[`write_body`] turns a `geom_topo::Body` into a [`StoredBody`]: one chunk record (type 4) per run of [`CHUNK_ROWS`] rows of each table, in arena order, and the index record (type 3) listing every table's row count and its chunks' content IDs in order. [`read_body`] reads them back through `geom_topo::Builder`, which checks the topology again before it publishes, so a stored body is never trusted further than a built one. The tables, by code in [`table`], are the arenas of chapter 8.2: regions, shells, faces, loops, fins, edges and vertices; the geometry pools (points, surfaces, curves and pcurves); and, for a body published by name, the names of its regions, faces, edges and vertices. A [`BodyVersion`] is a body with each chunk's content ID: [`BodyVersion::next`] writes a new version, encoding and hashing only the chunks it does not share with the one before (23.8). Its [`BodyVersion::geometry_id`] is the root of the same tree without the name tables, which a name-free cache key takes (23.8).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
+          "guarantees": [
+            "**Index for index.** A body read back equals the one written (`PartialEq`), every arena in the same order, so the next operation on either gives the same bits (24.3).",
+            "**Chunks are a pure function of their rows.** The runs are geom-topo's own chunks (`geom_topo::CHUNK_ROWS`, 4,096), so a chunk whose rows did not change encodes to the same bytes and the same content ID, whatever else changed: an edit to 1% of a body's rows rewrites only the chunks those rows are in.",
+            "**A new version hashes only what it changed, and gets the same IDs.** [`BodyVersion::next`] reuses a chunk's ID only where every column of the chunk is the very chunk the version before holds (`Column::shares_chunk`) or, for a name table, where the rows are equal, so its index is byte for byte [`write_body`]'s. The version holds the earlier body's columns, so a chunk it compares against is never freed and its address reused.",
+            "**References are checked.** Every reference is stored as its row plus one, 0 for none; a required reference of 0, a row count that disagrees with the chunks, a chunk of the wrong table or position, or a content ID that does not match its chunk is refused before anything is built, and the builder then checks the topology itself."
+          ],
+          "job": "Body records: a body stored as one index record and a chunk record for every 4,096-row run of each of its tables, so a body's content ID is the root of a hash tree and a new version writes only the chunks that changed (24.2, 24.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://doi.org/10.1007/3-540-48184-2_32"
+            ],
+            "text": "chapter 24.2 to 24.4 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`, and the arenas of chapter 8.2, `projects/engines/geometry/architecture/08-topology.md`; Merkle's hash tree, <https://doi.org/10.1007/3-540-48184-2_32>, for the content ID of the index over its chunks."
+          },
+          "path": "geom_format::body",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a key is one encoding and one SHA-256 pass over it: linear in the path's labels and the number of inputs. A store lookup, insertion or eviction is O(log n) in the entries held.",
+          "does": "[`CacheKey::new`] is the SHA-256 of the canonical encoding of `[edition, name, version, path, precision, [input content IDs]]`: the kernel edition, the operation's name and version from its schema, its `OpPath` (every name the operation creates holds it, 20.2), its precision (a preview and a final result never share a key, 23.6) and the content ID of each input, in the operation's order. [`CacheKey::name_free`] is the same without the path, for the operations whose schema says their geometry does not depend on names; its inputs are then the content IDs of their geometry without names. [`CacheEntry`] holds a result with the budget its run had and what the run used. [`MemoStore`] is the caller's store of entries: bounded by bytes, it forgets the entry used longest ago first, and it is a value the caller owns. [`restamp`] turns a name-free entry into the entry of one call: it fills in the path and the input names and recomputes every `NameId`, through a result's own [`Restamp`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/cache.rs",
+          "guarantees": [
+            "**A hit is the same bits as a fresh run.** [`CacheEntry::answer`] answers only when a fresh run under the caller's budget would give exactly the stored answer: a stored result, or a stored deterministic error, when the budget covers everything the run used (a run stops only when a charge passes its cap, and charges only add); a stored budget failure only under the same budget, since a smaller one can stop the run sooner with other numbers. Every other call misses, and the caller's own run gives the exact `BudgetExceeded`.",
+            "**What is never stored.** [`CacheEntry::new`] refuses `Cancelled`, `OutOfMemory` and a batch's total: none is the operation's deterministic answer (23.10).",
+            "**Name-free only where the schema says so.** [`CacheKey::name_free`] gives no key for an operation whose schema does not set `name_free`. A body enters such a key by `BodyVersion::geometry_id`.",
+            "**A restamped hit is the same bits as a fresh run, names included.** Names go through `Stamp`, a body is published again by its new names, so its arenas take the new order. A stored error holds paths and names only the run knows, so [`restamp`] gives no entry for one: the call misses, and the caller's own run gives it.",
+            "**One encoding.** A key is `geom-op`'s canonical encoding and SHA-256 (32.20), and its path is written by [`OpPath::encode`], as names write it. Every field changes the key; a key with a path and a name-free key differ in length, so they never collide by construction.",
+            "**Bounded, and deterministic.** A [`MemoStore`] never holds more than its byte bound. Which entry it forgets depends only on the order of the calls made on it, never on time, addresses or a hash seed. It holds no global state (principle 7)."
+          ],
+          "job": "Cache keys and the reference memo store: an operation's result named by everything it depends on, so that a hit is the same bits as running the operation again (23.8).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://csrc.nist.gov/pubs/fips/180-4/upd1/final"
+            ],
+            "text": "chapter 23.8's `CacheKey`, `CacheEntry` and memo store (`projects/engines/geometry/architecture/23-performance.md`), with the content IDs of 24.2 (`projects/engines/geometry/architecture/24-file-format-exchange.md`) and SHA-256 by NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, through `geom_op::hash`. 23.8 fixes only that the store is bounded by bytes and owned by the caller; forgetting the entry used longest ago first is this piece's choice, deterministic because its clock counts calls."
+          },
+          "path": "geom_format::cache",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3423,6 +3732,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in a kind's values, plus, for an offset stored with its cache, the cost of fitting it again.",
+          "does": "[`write_curve`] and [`write_surface`] append one kind to an encoder; [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the kind's own constructor, so a stored kind is checked as a built one is. The codes are in [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the order `format/cddl/kinds.cddl` gives them. Doubles are written in their shortest exact width, lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as `[value]`, and a flag as 0 or 1.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+          "guarantees": [
+            "**Value for value.** A kind read back equals the one written (`PartialEq`), every double with its bits, a negative zero included: a kind keeps what defines it, never a refit.",
+            "**Caches are rebuilt, not stored.** An offset's fitted NURBS cache is a function of the offset; the item says whether it was there and reading computes it again (`Offset::cached`), which gives the same bits on every target (23.1). A curve on a surface keeps its 3D curve, which defines it.",
+            "**Infinite ends.** A parameter interval's end may be infinite only on its own side (a ray or line); it is written `[]`.",
+            "**Bounded.** Every kind nests at most [`DEPTH`] containers deep: a surface offset at most `geom_surface::offset::MAX_NESTING` (4) times, over a swept surface whose profile is a conic on axes on a frame."
+          ],
+          "job": "Geometry kinds as canonical items: every curve and surface kind a body's pools hold, written as `[code, fields…]` and read back to the same value (24.2, 24.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.2 and 24.3 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; the kinds are those of chapter 7, `07-curves-surfaces.md`."
+          },
+          "path": "geom_format::kinds",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the record; each node is decoded, encoded and hashed once.",
           "does": "[`names_record`] writes a name graph's nodes as one required record (tag [`NAMES_TAG`]): an array of `[id, name]` pairs in `NameId` order, each name in its canonical encoding (32.19). [`read_names`] reads one back into a fresh name graph. [`read_topo_name`] reads one canonical `TopoName` item.",
           "family": [],
@@ -3613,7 +3945,7 @@
       "provenance": [],
       "sections": "12.12, 16.1, 18.10, 21, 23.8, 23.11 and 24.1 to 24.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); the rest by pieces G94, G95, G96, G105, G108, G112, G175, G318, G405, G410, G411, G459.",
+      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); cache keys, the reference memo store, body versions and restamping built (G105); the rest by pieces G94, G95, G96, G108, G112, G175, G318, G405, G410, G411, G459.",
       "summary": "Spare Kit geometry kernel: the native file format."
     },
     {
@@ -3635,6 +3967,50 @@
       "kind": "development",
       "layer": "Development",
       "modules": [
+        {
+          "cost": "at most [`MAX_ROWS`] rows per arena and [`MAX_EDITS`] edits: a few hundred column writes and one publish per version; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a row count for each of the eleven arenas, a value for every link of every row (inside its arena, at its end, far past it, or absent where the link may be), a column that is one row longer or shorter than its arena, the outside region, and edits to make to a published body. [`check`] fills the arenas, publishes them, and compares the answer with an independent reading of `geom-topo`'s rules (the length of every column, then every link in the order of `Link::ALL`, then the outside region): the same body or the same first fault. When the body publishes, it checks that every index it holds is inside its arenas, that an edit starting from it publishes the same body, and that the edits leave the first version unchanged. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/arenas.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each link is read through a rule byte that makes the boundaries common: the last row, the first row past the end, `u32::MAX − 1`, or absent.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-topo`'s arenas publish exactly the bodies their rules allow, and a body's versions never see each other's edits.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "differential testing against an independent reading of chapter 8.2's rules as `geom-topo`'s `builder` module states them (`projects/engines/geometry/architecture/08-topology.md`), written here from the rules, not from the code: lengths per arena from region to edge, then the links in their published order, rows ascending, then the outside region."
+          },
+          "path": "geom_fuzz::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most [`MAX_OPS`] calls on a store of at most [`MAX_KEYS`] entries, each checked against a list of at most as many; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a byte bound and up to [`MAX_OPS`] calls on one store (insert an entry of some size whose run used some work, get under some work budget, forget), each on a key from a small alphabet so that keys repeat. [`check`] runs the calls on a `MemoStore` and, beside it, on a list kept in order of use, written here from chapter 23.8's rule; after every call it compares the answer, the keys in order of use, the bytes held and the count. [`check_with`] takes the rule that picks the entry to forget, so a test shows a wrong rule is caught. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/cache.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-format`'s memo store keeps to its bound, forgets the entry used longest ago first, and answers a call only when the caller's budget covers what the stored run used.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "differential testing against chapter 23.8's memo store read independently (`projects/engines/geometry/architecture/23-performance.md`): bounded by bytes, a hit only where a fresh run gives the same answer, the entry used longest ago forgotten first."
+          },
+          "path": "geom_fuzz::cache",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "one decoder pass, one text form and one parse per input, each linear in the input's length; the text form is at most about three times as long as the bytes.",
           "does": "[`harness`] reads the fuzzer's bytes twice, as the native reader must read any file (24.7: \"is a fuzz target from its first commit\").",
@@ -8570,6 +8946,11 @@
               "shape": "unit"
             },
             {
+              "doc": "A name to stamp that refers to a name not stamped yet, or whose path is not blank.",
+              "name": "NotBlank",
+              "shape": "unit"
+            },
+            {
               "doc": "The encoder refused a value; only a defect in this module can cause it.",
               "name": "Encode",
               "shape": "tuple"
@@ -8844,12 +9225,13 @@
         },
         {
           "cost": "encoding a name allocates its bytes once and one small item per element of each set; hashing is one SHA-256 pass over at most a few hundred bytes. The NFC check is linear in a role name's length. Recursion: none; a name refers to other names by `NameId`, never by nesting.",
-          "does": "a [`TopoName`] says how an entity was made: created by an operation step in a [`Role`], split from one input by cutting faces ([`PieceKey`]), merged from several, bounded by the faces it lies between and those that end it, or, where entities would still collide, the [`Ordinal`]-th of a [`TopoName::Weak`] group (chapter 20.2). [`TopoName::encode`] writes its canonical bytes and [`TopoName::id`] hashes them to the 128-bit [`NameId`] (32.19): the first 16 bytes of SHA-256 over [`NAME_SCHEME_V1_PREFIX`] and those bytes. Sets of names are [`NameSet`]s, sorted lists [`NameList`]s, both in name order.",
+          "does": "a [`TopoName`] says how an entity was made: created by an operation step in a [`Role`], split from one input by cutting faces ([`PieceKey`]), merged from several, bounded by the faces it lies between and those that end it, or, where entities would still collide, the [`Ordinal`]-th of a [`TopoName::Weak`] group (chapter 20.2). [`TopoName::encode`] writes its canonical bytes and [`TopoName::id`] hashes them to the 128-bit [`NameId`] (32.19): the first 16 bytes of SHA-256 over [`NAME_SCHEME_V1_PREFIX`] and those bytes. Sets of names are [`NameSet`]s, sorted lists [`NameList`]s, both in name order. A [`Stamp`] fills in the names a name-free run made with its path and input names left blank (23.8).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-op/src/name.rs",
           "guarantees": [
             "**One name, one encoding, one `NameId`.** A `TopoName` can only hold sets without repeats, lists in order, ordinals with `n < of` and role names in Normalization Form C, so its encoding is a pure function of the name, and so is its `NameId`, on every target.",
             "**Text is NFC under Unicode 18.0.0** (32.19): a role name not in Normalization Form C is refused when the role is made, never normalised behind the caller's back. Step labels are printable ASCII ([`crate::id`]), which is NFC under every Unicode version.",
+            "**A stamped name is the name a run with those names would make.** [`Stamp::name`] writes the real path and names where the blanks stood and hashes the result the usual way, and it refuses a name that refers to anything it has not stamped.",
             "**Names never collide with other hashes.** The prefix `SKG NameScheme v1` and a zero byte go before every name's bytes, so no name hashes like a content ID (32.20) or a later scheme."
           ],
           "job": "Persistent names: how an operation names what it makes, and the `NameId` each name hashes to under `NameScheme v1`.",
@@ -10370,6 +10752,27 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the parameters, to write and to read. Running is the operation's cost.",
+          "does": "a [`Call`] is one replayable operation of the kernel: its name, its version and its inputs in their own types. [`Call::params`] writes the operation record's `params`, one item of SKG's canonical CBOR: an array of the fields of the operation's schema, in the schema's order, without the bodies it takes, which the record's `inputs` carry. [`Call::read`] reads them back, and [`Call::run`] runs the operation.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/calls.rs",
+          "guarantees": [
+            "**One writing.** [`Call::read`] writes what it read and refuses anything that does not come back byte for byte, so a log has one spelling of every call.",
+            "**An unknown operation is refused, never guessed**: a name or version that [`Call::read`] does not know is an error, which the kernel turns into a refusal no fixture status accepts."
+          ],
+          "job": "The operations a log can hold, with their parameters as the log writes them (chapter 28.16; pieces G97, G101 and G116).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "the operation record of chapter 24.4 and format/SPEC.md, with the fields of each operation's schema in `engine_geometry::operations` (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_test::fixture::calls",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the two sets.",
           "does": "[`diff`] compares the fixtures of a base commit with a pull request's and sorts every change into refused, needing a kernel owner's approval, or free. `.github/workflows/` `kernel-golden.yml` runs it through the `fixture diff` binary and holds the pull request to its answer, with the golden store's own approval rule (`golden::diff::approved`).",
           "family": [],
@@ -10390,15 +10793,16 @@
           "target": "lib"
         },
         {
-          "cost": "one match per operation, plus the operation.",
-          "does": "[`Kernel`] finds an operation by its name and version and runs it. The table is empty until the first operations of the facade are replayable (G101 on), and each piece that adds an operation adds its row here, so until then every log is refused by name.",
+          "cost": "one match per operation, plus the operation, plus one write of each result to hash it.",
+          "does": "[`Kernel`] finds an operation by its name and version ([`Call::read`]), takes the bodies it names from the results so far, runs it, and keeps each result under its content ID, so a later operation of the log can name it. Each piece that adds an operation adds its row to [`Call`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/fixture/kernel.rs",
           "guarantees": [
-            "**An unknown operation is refused, never guessed**: a name or version not in the table gives [`Ran::Refused`], which no status accepts.",
-            "**No state survives [`Engine::start`]**: a fresh run begins from the log's own inputs."
+            "**An unknown operation is refused, never guessed**: a name or version not in the table, or parameters that are not its one writing, give [`Ran::Refused`], which no status accepts. So does an operation that names a body the log has not made.",
+            "**No state survives [`Engine::start`]**: a fresh run begins from the log's own inputs.",
+            "**A body is its stored bytes.** A result's hash in the step is its content ID (24.2)."
           ],
-          "job": "The kernel as a fixture's [`Engine`]: one operation record in, the operation's canonical parts out (chapter 28.16; piece G97).",
+          "job": "The kernel as a fixture's [`Engine`]: one operation record in, the operation's canonical parts out (chapter 28.16; pieces G97 and G116).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/21-determinism.md"
@@ -12266,6 +12670,7 @@
             "**Every link follows its row.** A link that pointed at a row points at that row's new place, so the body joins the same entities as the arenas given.",
             "**Lists follow the back-links, in name order.** Each region's shells, each shell's faces and each face's loops are chained from the least row up, and each loop's and each edge's first fin is its least fin, all read from the links each entity holds to its owner (a shell's region, a face's shell, a loop's face, a fin's loop and edge). What the lists given held is replaced, so they never depend on the order a body was built in either. A loop's cycle of fins and an edge's radial ring are kept as given: their order is the shape's.",
             "**Checked as published.** The arenas pass [`Builder::publish`]'s checks before anything is read, and the moved arenas pass them again as they are published.",
+            "**What did not change stays shared.** A chunk that comes out holding what the arena given held at that place is that arena's own chunk, so a new version shares it with the version it was made from (23.8, 23.9), and republishing a body shares them all. Integers are compared; a pool of doubles shares a chunk only if none of its rows moved, since equal doubles can differ in bits.",
             "**One answer, the first fault.** Faults are reported in a fixed order: [`Builder::publish`]'s checks; then, for regions, faces, edges and vertices in turn, a count of names other than one per row or two rows of one name; then equal keys among shells, loops and fins in turn; then an unused row of the surface, curve, pcurve and point pools in turn.",
             "**Metered.** Besides what [`Builder::publish`] charges, twice (on the arenas given and on the moved ones), publishing by name charges one unit for every chunk of rows it moves."
           ],
