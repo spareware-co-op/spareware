@@ -5,7 +5,8 @@
 //! a list follows how many elements overlap at a point, not how many operands there are. A
 //! [`WindingTest`] is the small expression of 11.1: inside an entry, inside at least n entries, and
 //! their combinations. [`kept`] reads a piece's front and back vectors through a test: a piece is
-//! kept exactly when the test differs across it.
+//! kept exactly when the test differs across it. [`WindingTest::decided`] reads a test with some
+//! entries unknown, which is how a box is found to hold nothing of the result (11.3, step 4).
 //!
 //! Guarantees:
 //!
@@ -13,9 +14,11 @@
 //!   order the crossings came in, so equal vectors compare equal (tested).
 //! - **Nothing wraps, nothing aborts.** A count that would leave `i32` is
 //!   [`WindingError::Overflow`], and memory refused is [`WindingError::OutOfMemory`].
-//! - **No recursion.** A test is held in postfix and evaluated on a stack of bits, so its depth
-//!   never threatens a WebAssembly stack (principle 13); a test deeper than 64 is refused when it
+//! - **No recursion.** A test is held in postfix and evaluated on a stack of 64 answers, so its depth
+//!   never threatens a WebAssembly stack (principle 13); a test deeper than that is refused when it
 //!   is made.
+//! - **A settled test is settled.** [`WindingTest::decided`] answers only where every count of its
+//!   open entries gives that answer, so a box it settles holds no boundary of the result.
 //!
 //! Method: winding-number vectors after EMBER's section 4 (Trettner, Nehring-Wirxel and Kobbelt
 //! 2022, <https://doi.org/10.1145/3528223.3530181>), sparse as chapter 11.2 sets out
@@ -202,35 +205,73 @@ impl WindingTest {
     /// Whether `winding` passes.
     #[must_use]
     pub fn holds(&self, winding: &Winding) -> bool {
-        let mut stack = 0u64;
+        self.decided(winding, &[]) == Some(true)
+    }
+
+    /// What the test says of every point where `known` gives each count but those of `open`, which
+    /// may be anything, or `None` if the answer turns on them: Kleene's three-valued reading.
+    #[must_use]
+    pub fn decided(&self, known: &Winding, open: &[Entry]) -> Option<bool> {
+        let mut stack = [None; 64];
+        let mut depth = 0usize;
         for term in &self.terms {
-            stack = match term {
-                Term::Inside(entry) => push(stack, winding.count(*entry) > 0),
-                Term::AtLeast(n) => {
-                    let inside = winding.pairs.iter().filter(|(_, c)| *c > 0).count();
-                    push(
-                        stack,
-                        u64::try_from(inside).is_ok_and(|i| i >= u64::from(*n)),
-                    )
-                }
-                Term::And => fold(stack, |a, b| a && b),
-                Term::Or => fold(stack, |a, b| a || b),
-                Term::Not => stack ^ 1,
+            let top = depth.saturating_sub(1);
+            let second = top.saturating_sub(1);
+            let read = |at: usize| stack.get(at).copied().flatten();
+            let (at, answer) = match term {
+                Term::Inside(entry) => (depth, inside(known, open, *entry)),
+                Term::AtLeast(n) => (depth, at_least(known, open, *n)),
+                Term::Not => (top, read(top).map(|answer: bool| !answer)),
+                Term::And => (second, both(read(second), read(top))),
+                Term::Or => (second, either(read(second), read(top))),
             };
+            if let Some(slot) = stack.get_mut(at) {
+                *slot = answer;
+            }
+            depth = at.saturating_add(1);
         }
-        stack & 1 == 1
+        stack.first().copied().flatten()
     }
 }
 
-/// `stack` with `answer` on top, bit 0.
-fn push(stack: u64, answer: bool) -> u64 {
-    (stack.rotate_left(1) & !1) | u64::from(answer)
+/// Whether a point is inside `entry`, unless `entry` is open.
+fn inside(known: &Winding, open: &[Entry], entry: Entry) -> Option<bool> {
+    (!open.contains(&entry)).then(|| known.count(entry) > 0)
 }
 
-/// `stack` with its top two answers folded into one by `op`.
-fn fold(stack: u64, op: fn(bool, bool) -> bool) -> u64 {
-    let below = stack.rotate_right(1);
-    (below & !1) | u64::from(op(stack & 1 == 1, below & 1 == 1))
+/// Whether a point is inside at least `n` entries, unless the open ones can change that.
+fn at_least(known: &Winding, open: &[Entry], n: u32) -> Option<bool> {
+    let settled = known
+        .pairs
+        .iter()
+        .filter(|(entry, count)| *count > 0 && !open.contains(entry))
+        .count();
+    let n = usize::try_from(n).unwrap_or(usize::MAX);
+    if settled >= n {
+        Some(true)
+    } else if settled.saturating_add(open.len()) < n {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// Kleene's and.
+fn both(a: Option<bool>, b: Option<bool>) -> Option<bool> {
+    match (a, b) {
+        (Some(false), _) | (_, Some(false)) => Some(false),
+        (Some(true), Some(true)) => Some(true),
+        _ => None,
+    }
+}
+
+/// Kleene's or.
+fn either(a: Option<bool>, b: Option<bool>) -> Option<bool> {
+    match (a, b) {
+        (Some(true), _) | (_, Some(true)) => Some(true),
+        (Some(false), Some(false)) => Some(false),
+        _ => None,
+    }
 }
 
 /// What a test makes of a piece.
