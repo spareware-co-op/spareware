@@ -291,6 +291,19 @@ fn blocks_that_share_only_an_edge_stay_two_shells_with_four_fins_on_it() {
 }
 
 #[test]
+fn an_edge_ends_where_another_block_starts_along_it() {
+    let other = block([4, 4, 1], [8, 8, 3]);
+    let m = merged(&[A, other], &WindingTest::unite(), LEAF_POLYGONS);
+    assert_eq!(m.shells.len(), 2);
+    // Along the shared line: two fins, four where the blocks share it, two.
+    let mut widths: Vec<usize> = m.edges.iter().map(|e| e.fins.len()).collect();
+    widths.sort_unstable();
+    assert_eq!(m.edges.len(), 12 + 12 + 1);
+    assert_eq!(widths.last(), Some(&4));
+    assert_eq!(widths.iter().filter(|w| **w == 4).count(), 1);
+}
+
+#[test]
 fn a_ring_stays_in_its_corner_of_the_face_where_two_holes_touch() {
     let plate = block([0, 0, 0], [6, 6, 2]);
     let first = block([1, 1, -1], [3, 3, 3]);
@@ -407,6 +420,16 @@ fn a_piece_turned_against_its_neighbours_is_refused() {
     let piece = &mut pieces[0].piece;
     piece.face = opposite(&piece.face).unwrap();
     piece.bounds.reverse();
+    assert_eq!(
+        merge(&pieces, Merge::RemoveRedundant, &mut meter()),
+        Err(MergeError::Open)
+    );
+}
+
+#[test]
+fn a_piece_with_its_bounds_in_the_wrong_turn_is_refused() {
+    let mut pieces = kept(&scene(&[A]), &WindingTest::unite(), LEAF_POLYGONS);
+    pieces[0].piece.bounds.reverse();
     assert_eq!(
         merge(&pieces, Merge::RemoveRedundant, &mut meter()),
         Err(MergeError::Open)
@@ -534,6 +557,23 @@ fn tilted_solids_meet_where_three_planes_do() {
     for test in [WindingTest::intersect(2), WindingTest::subtract(0)] {
         tilted(&[a, b], &test, 4).unwrap();
     }
+}
+
+#[test]
+fn two_faces_that_meet_at_their_lowest_corner_keep_their_numbers() {
+    let mut polygons = Vec::new();
+    let up = [[0, 0, 0], [40, 10, 0], [40, 30, 0], [30, 20, 30]];
+    let down = [[0, 0, 0], [40, -10, 0], [40, -30, 0], [30, -20, 30]];
+    tetrahedron(up, 0, &mut polygons).unwrap();
+    tetrahedron(down, 1, &mut polygons).unwrap();
+    let mut pieces = kept(&polygons, &WindingTest::unite(), LEAF_POLYGONS);
+    let once = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&once, &pieces);
+    pieces.reverse();
+    let again = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    assert_eq!(once.faces, again.faces);
+    assert_eq!(once.edges, again.edges);
+    assert_eq!(once.shells, again.shells);
 }
 
 #[test]

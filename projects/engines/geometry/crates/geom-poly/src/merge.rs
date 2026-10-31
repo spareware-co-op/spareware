@@ -36,7 +36,6 @@
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use core::cell::Cell as Once;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
 
@@ -352,8 +351,8 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
 }
 
 /// `order`, with a failure written down: a sort's comparison cannot return one.
-fn noted(order: Option<Ordering>, failed: &Once<bool>) -> Ordering {
-    failed.set(failed.get() || order.is_none());
+fn noted(order: Option<Ordering>, failed: &mut bool) -> Ordering {
+    *failed = (*failed).max(order.is_none());
     order.unwrap_or(Ordering::Equal)
 }
 
@@ -469,13 +468,9 @@ fn sweep(
         if fins.is_empty() {
             continue;
         }
-        let same = |a: &RunFin, b: &RunFin| a.sheet == b.sheet && a.rising == b.rising;
+        let key = |fin: &RunFin| (fin.sheet, fin.rising);
         match runs.get_mut(opening..).and_then(<[Run]>::last_mut) {
-            Some(run)
-                if run.high == low
-                    && run.fins.len() == fins.len()
-                    && run.fins.iter().zip(&fins).all(|(a, b)| same(a, b)) =>
-            {
+            Some(run) if run.high == low && run.fins.iter().map(key).eq(fins.iter().map(key)) => {
                 run.high = high;
             }
             _ => runs.push(Run {
@@ -559,15 +554,13 @@ fn numbered(
         }
     }
     let mut order: Vec<usize> = (0..corners.len()).collect();
-    let failed = Once::new(false);
+    let mut failed = false;
     let at = |i: &usize| corners.get(*i).and_then(Option::as_ref);
     order.sort_by(|a, b| {
         let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
-        noted(found, &failed)
+        noted(found, &mut failed)
     });
-    (!failed.get())
-        .then_some(())
-        .ok_or(NumError::BudgetExceeded)?;
+    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
     for i in order {
@@ -614,11 +607,9 @@ fn sides_of(
         }
         base = base.saturating_add(k);
     }
-    let failed = Once::new(false);
-    sides.sort_by(|a, b| noted(line_order(&a.key, &b.key), &failed));
-    (!failed.get())
-        .then_some(())
-        .ok_or(NumError::BudgetExceeded)?;
+    let mut failed = false;
+    sides.sort_by(|a, b| noted(line_order(&a.key, &b.key), &mut failed));
+    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
     Ok(sides)
 }
 
@@ -781,7 +772,7 @@ fn nest(
                 (Some(at) == chosen)
                     .then(|| p.piece.clone())
                     .into_iter()
-                    .collect()
+                    .collect::<Vec<Piece>>()
             })
             .collect();
         let found = classify(&cell, &Winding::new(), &polygons, &lists, meter)?;
@@ -822,6 +813,9 @@ fn nest(
     Ok(out)
 }
 
+/// What numbers a face: its sheet, then its lowest fin's edge and way.
+type FaceKey = (usize, usize, usize, bool);
+
 /// Merges `pieces` into the faces, edges and shells of a body, every number the shape's own.
 ///
 /// # Errors
@@ -855,17 +849,17 @@ pub fn merge(
     }
     let runs = cut_at_ends(runs, &points)?;
 
-    // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest vertex.
-    let mut lowest: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
+    // only one face of a sheet can hold.
+    let mut lowest: BTreeMap<usize, FaceKey> = BTreeMap::new();
     for run in &runs {
         for fin in &run.fins {
-            let slot = lowest
-                .entry(root(&same_piece, fin.held))
-                .or_insert((fin.sheet, run.low));
-            slot.1 = slot.1.min(run.low);
+            let key = (fin.sheet, run.low, run.high, fin.rising);
+            let slot = lowest.entry(root(&same_piece, fin.held)).or_insert(key);
+            *slot = key.min(*slot);
         }
     }
-    let mut face_list: Vec<((usize, usize), usize)> =
+    let mut face_list: Vec<(FaceKey, usize)> =
         lowest.iter().map(|(top, key)| (*key, *top)).collect();
     face_list.sort_unstable();
     let numbered_faces: BTreeMap<usize, usize> = face_list
@@ -880,7 +874,7 @@ pub fn merge(
             .ok_or(MergeError::Open)
     };
     let mut planes: Vec<Plane> = Vec::with_capacity(face_list.len());
-    for ((sheet, _), _) in &face_list {
+    for ((sheet, ..), _) in &face_list {
         planes.push(sheets.get(*sheet).ok_or(MergeError::Open)?.face);
     }
 
@@ -958,7 +952,7 @@ pub fn merge(
             faces: Vec::new(),
         })
         .collect();
-    for (at, (((sheet, _), _), list)) in face_list.iter().zip(&own_fins).enumerate() {
+    for (at, (((sheet, ..), _), list)) in face_list.iter().zip(&own_fins).enumerate() {
         let plane = planes.get(at).ok_or(MergeError::Open)?;
         let shell = shell_of(at)?;
         faces.push(Face {
