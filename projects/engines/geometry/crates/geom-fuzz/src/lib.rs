@@ -17,7 +17,8 @@
 //! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
 //! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
-//! (G49, G50). The layout every target follows, and how each engine runs it locally and in CI,
+//! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
+//! zero brackets its sign change (G51, G52, G53). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -171,6 +172,7 @@ pub mod linalg;
 pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;
+pub mod roots;
 pub mod seeded;
 pub mod surfaces;
 pub mod transforms;

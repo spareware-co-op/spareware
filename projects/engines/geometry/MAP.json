@@ -2481,6 +2481,29 @@
           "target": "lib"
         },
         {
+          "cost": "one isolation, one Brent search and one quadrature of a polynomial of degree at most [`MAX_ROOTS`], each bounded; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a polynomial in one unknown, the product of x − rᵢ for up to [`MAX_ROOTS`] roots on a grid of quarters (repeated roots included), a domain, the Newton operator to use, and a bracket's half-width. [`check`] holds three laws, decided exactly from the roots (the sign of the polynomial at a double is the product of the signs of x − rᵢ, each an exact comparison):",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/roots.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Roots are quarters in [−8, 8], so repeated roots, roots on the domain's ends and roots on the engine's split lines come up often.",
+            "**A panic is a failure; a broken law is a [`Finding`]**; every typed error is legal.",
+            "**No hang.** Each call runs under a work meter of [`WORK`] units, or an evaluation cap.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes."
+          ],
+          "job": "Fuzz target: the root engine misses no root and proves none twice, and Brent's method brackets its zero, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the engine's and Brent's stated guarantees (`geom_num::isolate`, `geom_num::brent`), checked against the exact roots, as `geom-num`'s `tests/attack_g53.rs` does on seeded systems, driven by coverage-guided fuzzing (chapter 28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::roots",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`cases` runs of the harness, plus one `SplitMix64` word per eight bytes drawn and one or two words per length.",
           "does": "[`run`] resolves a seed with `geom_test::seed::resolve` (the test's default, or `SPAREKIT_SEED`; printed as `seed: <hex>`), then for each case draws a length in `0..=max_len` and that many bytes from `geom-test`'s `SplitMix64`, and runs the harness on them.",
           "family": [],
