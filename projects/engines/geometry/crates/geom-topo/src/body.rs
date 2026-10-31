@@ -35,6 +35,8 @@
 
 use alloc::sync::Arc;
 
+use geom_op::Bounds;
+
 use crate::arenas::Arenas;
 use crate::column::Memory;
 use crate::entity::RegionIx;
@@ -64,6 +66,8 @@ pub struct Body {
     /// The names of its named entities, in name order, when it was published by name (G81);
     /// shared, so cloning a body copies one pointer for them.
     names: Option<Arc<Names>>,
+    /// Its entities' error bounds, when an operation has given it any (13.2); shared likewise.
+    bounds: Option<Arc<Bounds>>,
 }
 
 impl Body {
@@ -74,6 +78,7 @@ impl Body {
             outside,
             arenas,
             names: None,
+            bounds: None,
         }
     }
 
@@ -90,6 +95,22 @@ impl Body {
     #[must_use]
     pub fn names(&self) -> Option<&Names> {
         self.names.as_deref()
+    }
+
+    /// Its entities' error bounds, if an operation has given it any: none means every entity is
+    /// exact as far as this body knows (13.2).
+    #[must_use]
+    pub fn bounds(&self) -> Option<&Bounds> {
+        self.bounds.as_deref()
+    }
+
+    /// The same body, carrying `bounds`.
+    #[must_use]
+    pub fn with_bounds(self, bounds: Bounds) -> Body {
+        Body {
+            bounds: Some(Arc::new(bounds)),
+            ..self
+        }
     }
 
     /// What the body is made of.

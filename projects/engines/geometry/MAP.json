@@ -8672,6 +8672,12 @@
               "doc": "A failure of the Make and Transform families: primitives, transforms and patterns (`geom-make`, piece G101).",
               "name": "Make",
               "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A refusal of the per-entity bounds: what a step or a history may spend (13.2, piece G143).",
+              "name": "Bound",
+              "shape": "tuple"
             }
           ],
           "module": "geom_op::detail",
@@ -8886,6 +8892,39 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why the per-entity bounds refused an operation (13.2, 32.21; [`crate::bounds`]).",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "ExactnessNotAccepted",
+              "doc": "An operation's own term for an entity passes what one step may add.",
+              "name": "OverStep",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "ExactnessNotAccepted",
+              "doc": "An entity's bound would pass what the caller accepts.",
+              "name": "OverCeiling",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "An operation gave an own term to an entity that is not an output, that passed through unchanged, or twice to one output. A defect.",
+              "name": "OwnTermAstray",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "Two operands' bounds count different grid steps.",
+              "name": "MixedSteps",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "BoundDetail",
+          "non_exhaustive": true
+        },
+        {
           "doc": "Why records cannot make a history.",
           "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
           "kinds": [
@@ -9062,6 +9101,31 @@
       "kind": "kernel",
       "layer": "1",
       "modules": [
+        {
+          "cost": "`after` is `O(n log n)` in the outputs and own terms, plus the terms copied; a lookup is `O(log n)` by bisection, on sorted vectors, never hashed. An entity holds at most one term per whole step of its bound, since every term is at least one. Recursion: none.",
+          "does": "[`Bounds`] holds each named entity's error bound as the terms that make it up: which step added how much ([`Spent`]). [`Bounds::after`] gives the bounds of an operation's outputs from those of its inputs, its [`History`] and its own terms. An output's bound is the sum of its own operands' bounds and the operation's own term for it. [`Bounds::largest`] is a body's bound, and [`Bounds::class`] the class it makes. [`Bounds::join`] puts the bounds of an operation's operands together.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/bounds.rs",
+          "guarantees": [
+            "**Along an entity's own history, and nowhere else.** A term reaches an output only through that output's origin. A face an operation leaves unchanged keeps its bound and takes on nothing, so a part cut 200 times keeps its measured bound; an edge filleted after a loft carries both.",
+            "**Only commits and fits add.** A term of zero is no term: an entity with no term is exact, is not stored, and a step that spends nothing leaves no trace.",
+            "**Refused, with the steps named.** An output past [`Limits::total`] is [`BoundDetail::OverCeiling`], `ExactnessNotAccepted`, whose message names the earlier steps that used the budget and whose remedy offers the larger bound. An operation's own term past [`Limits::own`] is [`BoundDetail::OverStep`] the same way.",
+            "**No term goes astray.** An own term for an entity that is not an output, or for one that passed through unchanged, is a defect of the operation ([`BoundDetail::OwnTermAstray`]), and an entity named twice in the own terms likewise: it is never summed or dropped.",
+            "**In name order.** The same outputs and terms give the same bounds in any order of reporting, and the first entity in name order is the one a refusal names."
+          ],
+          "job": "Error bounds per entity: what each face and edge has spent of the fit bound, along its own history (chapter 13.2; decision 32.21; piece G143).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "the one rule of chapter 13.2, adopted by owner action G120 (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`, `projects/engines/geometry/architecture/32-decisions.md`, 32.21)."
+          },
+          "path": "geom_op::bounds",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "linear in what is encoded; one allocation for the encoding.",
           "does": "[`encode_exactness`], [`encode_evidence`], [`encode_diagnostic`] and [`encode_error`] write each in SKG's canonical CBOR (24.3), the parts chapter 28.13's canonical output hashes: an output's exactness class and diagnostics, or an error's kind, entities and evidence. `geom-test`'s canonical-output hasher combines them with the bodies, names and history (piece G96).",
