@@ -41,8 +41,10 @@ use geom_test::seed::{Seed, fixed};
 
 const GOLDEN: &str = "geom-format/record-layer";
 
+/// A budget far above what any test here spends, so a decoder that stops advancing ends in a
+/// failed test, not a hang.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(1_000_000))
 }
 
 fn put(total: &mut Sha256, section: &mut Sha256, bytes: &[u8]) {
