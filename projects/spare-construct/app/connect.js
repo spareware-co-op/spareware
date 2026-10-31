@@ -48,6 +48,7 @@
     watching: new Set(),
     arriving: [], // other people's edits, until they are drawn
     latencies: [], // how long those took, from leaving their browser to drawn in this one
+    journeys: [], // the same, split: to the server, on to this page, then onto the screen
     log: [],
     three: null,
     geometry: null, // the shape builder, or null if this browser couldn't load it
@@ -794,7 +795,7 @@
       if (mine) turnBack(entry.counter, entry.failed);
       return;
     }
-    if (!mine && fresh) C.arriving.push(entry);
+    if (!mine && fresh) C.arriving.push({ ...entry, arrived_ms: Date.now() });
     const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
     for (const change of entry.changes) {
@@ -990,7 +991,14 @@
     }
     canvas.innerHTML = `<svg class="dw pan${S.tool !== 'select' ? ' press' : ''}" viewBox="${viewBox(S.view)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(view?.name || '')}"><rect class="paper" x="-20000" y="-20000" width="80000" height="80000"/>${shapes}</svg>`;
     for (const entry of C.arriving.splice(0)) {
-      C.latencies.push(Date.now() - entry.author_ms);
+      const now = Date.now();
+      C.latencies.push(now - entry.author_ms);
+      C.journeys.push({
+        cmd: entry.cmd,
+        to_server: entry.orderer_ms - entry.author_ms,
+        to_page: entry.arrived_ms - entry.orderer_ms,
+        to_screen: now - entry.arrived_ms,
+      });
       $('#hint').textContent = `${named(entry.author)}’s edit arrived in ${C.latencies.at(-1)} ms.`;
     }
   }

@@ -132,6 +132,15 @@ const toBen = await ben.evaluate(() => window.spare.latencies);
 const toAnna = await anna.evaluate(() => window.spare.latencies);
 console.log(`      Anna to Ben: ${stats(toBen)}`);
 console.log(`      Ben to Anna: ${stats(toAnna)}`);
+// Where the slowest edits spent their time, so a miss says which part to look at.
+const journeys = [
+  ...(await ben.evaluate(() => window.spare.journeys)),
+  ...(await anna.evaluate(() => window.spare.journeys)),
+];
+const took = (j) => j.to_server + j.to_page + j.to_screen;
+for (const journey of journeys.sort((a, b) => took(b) - took(a)).slice(0, 3)) {
+  console.log(`      slowest: ${took(journey)} ms, ${JSON.stringify(journey)}`);
+}
 check(
   Math.max(...toBen, ...toAnna) < 200,
   'every edit was drawn in the other browser in under 200 ms',
