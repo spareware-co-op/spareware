@@ -133,11 +133,10 @@ impl Svd {
             if sigma > 0.0 {
                 // A subnormal sigma keeps too few bits to divide by, so such a column is first
                 // scaled by a power of two, which is exact.
-                let up = if sigma < TINY { UP } else { 1.0 };
-                let length = if sigma < TINY {
-                    norm(w.col(j)?.iter().map(|x| x * UP))?
+                let (up, length) = if sigma < TINY {
+                    (UP, norm(w.col(j)?.iter().map(|x| x * UP))?)
                 } else {
-                    sigma
+                    (1.0, sigma)
                 };
                 for x in w.col_mut(j)? {
                     *x = finite(*x * up / length)?;
@@ -295,16 +294,10 @@ fn jacobi_sweeps(w: &mut Cols, v: &mut Cols, work: &mut Work) -> Result<(), Lina
 /// returns what brings its singular values back: rotations among subnormal entries keep too few
 /// bits to stay orthogonal. Any other matrix is left as it is, so its results do not change.
 fn lift(w: &mut Cols) -> Result<f64, LinalgError> {
-    let mut largest = 0.0f64;
     for j in 0..w.count() {
-        for x in w.col(j)? {
-            if x.abs() > largest {
-                largest = x.abs();
-            }
+        if w.col(j)?.iter().any(|x| x.abs() >= LOW) {
+            return Ok(1.0);
         }
-    }
-    if largest >= LOW {
-        return Ok(1.0);
     }
     for j in 0..w.count() {
         for x in w.col_mut(j)? {

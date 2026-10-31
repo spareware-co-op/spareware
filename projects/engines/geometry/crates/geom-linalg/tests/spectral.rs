@@ -698,6 +698,20 @@ fn a_subnormal_column_beside_a_normal_one_is_a_unit_vector() {
     assert!(drift(svd.v()) < 1e-15, "{svd:?}");
 }
 
+/// One ordinary entry keeps a matrix from being lifted, however tiny the rest: 2^600 times this
+/// entry would overflow.
+#[test]
+fn one_ordinary_entry_keeps_a_matrix_from_being_lifted() {
+    let a = [1e300, 0.0, 0.0, 1e-300];
+    let m = Matrix::from_rows(2, 2, &a).unwrap();
+    for svd in [
+        Svd::jacobi(&m, &mut Work::new(1 << 40)).unwrap(),
+        Svd::golub_kahan(&m, &mut Work::new(1 << 40)).unwrap(),
+    ] {
+        assert_eq!(svd.singular_values()[0], 1e300, "{svd:?}");
+    }
+}
+
 /// A matrix at the lift's edge, 2^−500 and just below it, gives the same singular value in the
 /// exponent: the lift changes the path, never the answer.
 #[test]

@@ -11,6 +11,14 @@
       "reason": "Either < becomes <=: the forms differ only when that input is exactly 2^-1021. The pair is then scaled by 2^100 and r scaled back, both exact there since r is at least 2^-1021, a normal number, and y/r and z/r are unchanged by a common power of two: the same c, s and r either way."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace < with <= in Svd::jacobi",
+      "line_text": "let (up, length) = if sigma < TINY {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when sigma is exactly 2^-1021, a normal number. UP is a power of two and x*UP is exact, so norm takes the same ratios, the same sum and the same root, and its product rounds to 53 bits on both paths: length is exactly sigma*UP, and x*UP/length rounds the same quotient as x/sigma. The column comes out the same to the bit."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
       "mutant": "replace || with && in Matrix::row_pair",
       "line_text": "if i == j || i >= self.rows || j >= self.rows {",
