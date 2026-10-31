@@ -15,9 +15,9 @@
 //!   or a derivative that cannot vanish, by certified bounds on the kind. Nothing is sampled.
 //! - **Ties are kept.** Candidates whose distance enclosures overlap are all returned, in parameter
 //!   order; [`Projection::tie_broken`] says so, and the first is the lowest parameter.
-//! - **Nothing is guessed at the floor.** Spans at the floor that the test cannot decide join into
-//!   runs. A run whose image is within twice the floor is one nearest point, since nothing in it can
-//!   be told apart on the grid (a sphere's pole, a foot on a split); a longer one is
+//! - **Nothing is guessed at the floor.** Spans at the floor that the test cannot decide are joined.
+//!   If their hull's image is within twice the floor it is one nearest point, since nothing in it
+//!   can be told apart on the grid (a sphere's pole, a foot on a split); a longer one is
 //!   [`Projection::NonIsolated`], never a foot.
 //! - **Enclosures, never numbers.** Each parameter, point and distance is an interval holding the
 //!   exact value.
@@ -267,29 +267,12 @@ struct Line<'a> {
 }
 
 impl Line<'_> {
-    /// The side the fixed parameter is read from: inward, since a spline has nothing past its end.
-    fn inward(&self) -> Limit {
-        let (u, v) = self.surface.domain();
-        let (_, end) = if self.fixed_u { u } else { v };
-        if self.at < end {
-            Limit::FromRight
-        } else {
-            Limit::FromLeft
-        }
-    }
-
-    /// `span` of the line as a box, and the sides to read it from.
-    fn region(&self, span: (f64, f64)) -> (geom_surface::ParamBox, (Limit, Limit)) {
+    /// `span` of the line as a box.
+    fn region(&self, span: (f64, f64)) -> geom_surface::ParamBox {
         if self.fixed_u {
-            (
-                ((self.at, self.at), span),
-                (self.inward(), Limit::FromRight),
-            )
+            ((self.at, self.at), span)
         } else {
-            (
-                (span, (self.at, self.at)),
-                (Limit::FromRight, self.inward()),
-            )
+            (span, (self.at, self.at))
         }
     }
 
@@ -299,8 +282,11 @@ impl Line<'_> {
         span: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<Vec<[Interval; 3]>>, IntersectError> {
-        let (region, sides) = self.region(span);
-        match self.surface.partials_over(region, sides, 2, meter) {
+        let sides = (Limit::FromRight, Limit::FromRight);
+        match self
+            .surface
+            .partials_over(self.region(span), sides, 2, meter)
+        {
             Ok(partials) => Ok(Some(partials)),
             Err(CurveError::Unbounded) => Ok(None),
             Err(e) => Err(e.into()),
@@ -327,8 +313,10 @@ impl Path<3> for Line<'_> {
     ) -> Result<[Interval; 3], IntersectError> {
         // Not `bound`: a spline's control net is only clipped along a span with a width, so on a
         // line its box stays as wide as the patch across it.
-        let (region, sides) = self.region(span);
-        let partials = self.surface.partials_over(region, sides, 0, meter)?;
+        let sides = (Limit::FromRight, Limit::FromRight);
+        let partials = self
+            .surface
+            .partials_over(self.region(span), sides, 0, meter)?;
         partials.first().copied().ok_or(IntersectError::Internal)
     }
 
@@ -351,9 +339,9 @@ impl Path<3> for Line<'_> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<([Interval; 3], [Interval; 3]), IntersectError> {
         let (u, v, sides) = if self.fixed_u {
-            (self.at, t, (self.inward(), side))
+            (self.at, t, (Limit::FromRight, side))
         } else {
-            (t, self.at, (side, self.inward()))
+            (t, self.at, (side, Limit::FromRight))
         };
         let [point, along_u, along_v] = self.surface.enclose(u, v, sides, meter)?;
         Ok((point, if self.fixed_u { along_v } else { along_u }))
@@ -581,8 +569,8 @@ fn settle<const N: usize, const D: usize>(
     Ok(kept)
 }
 
-/// Joins the open spans still in reach of `found.upper` into runs. A run within twice the floor
-/// becomes a nearest point; the first longer one is returned, as a parameter span.
+/// Joins the open spans still in reach of `found.upper`. Their hull, within twice the floor, is a
+/// nearest point; a longer one is returned, as a parameter span.
 fn close<const D: usize>(
     path: &dyn Path<D>,
     p: &[f64; D],
@@ -592,26 +580,20 @@ fn close<const D: usize>(
 ) -> Result<Option<(f64, f64)>, IntersectError> {
     let upper = found.upper;
     found.open.retain(|(_, low)| *low <= upper);
-    found
-        .open
-        .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(core::cmp::Ordering::Equal));
-    let mut runs: Vec<(f64, f64)> = Vec::new();
-    for (span, _) in found.open.drain(..) {
-        match runs.last_mut() {
-            Some(run) if run.1 >= span.0 => run.1 = larger(run.1, span.1),
-            _ => runs.push(span),
-        }
+    let low = found.open.iter().map(|(span, _)| span.0).reduce(smaller);
+    let high = found.open.iter().map(|(span, _)| span.1).reduce(larger);
+    found.open.clear();
+    let (Some(a), Some(b)) = (low, high) else {
+        return Ok(None);
+    };
+    if image(&path.around((a, b), meter)?) <= 2.0 * floor {
+        let point = nearest(path, p, (a, b), Place::Foot, meter)?;
+        found.upper = smaller(found.upper, point.distance.hi());
+        found.points.push(point);
+        Ok(None)
+    } else {
+        Ok(Some((a, b)))
     }
-    for run in runs {
-        if image(&path.around(run, meter)?) <= 2.0 * floor {
-            let point = nearest(path, p, run, Place::Foot, meter)?;
-            found.upper = smaller(found.upper, point.distance.hi());
-            found.points.push(point);
-        } else {
-            return Ok(Some(run));
-        }
-    }
-    Ok(None)
 }
 
 /// Exact coordinates as intervals.

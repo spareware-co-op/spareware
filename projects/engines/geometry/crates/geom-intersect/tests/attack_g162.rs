@@ -1,5 +1,6 @@
 //! Attacks on piece G162's claims: nearest points by closed form and by certified search, typed
-//! sets, ties, trimmed domains, and zero wrong answers on 10,000 cases with known feet.
+//! sets, ties, trimmed domains, and zero wrong answers on 10,000 cases with known feet (in a release
+//! build; a debug one runs fewer, so a mutant fails in seconds).
 
 #![allow(
     clippy::unwrap_used,
@@ -29,9 +30,9 @@ use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind, Tor
 use geom_test::Seed;
 use geom_test::rng::SplitMix64;
 
-/// A meter far above what any case here takes, so a search that loses its way fails, not hangs.
+/// A meter above what any case here takes, so a search that loses its way fails, not hangs.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::of_work(1 << 22))
+    WorkMeter::new(Budget::of_work(1 << 18))
 }
 
 const FLOOR: f64 = 1e-6;
@@ -167,8 +168,8 @@ fn holds_surface(s: &SurfaceKind, u: f64, v: f64, d: f64) {
 
 #[test]
 fn zero_wrong_answers_on_surfaces_with_known_feet() {
-    // Each search takes about 65 ms unoptimised, so a debug build runs a tenth of the cases.
-    let rounds = if cfg!(debug_assertions) { 100 } else { 1_000 };
+    // Each search takes about 65 ms unoptimised, so a debug build runs a fortieth of the cases.
+    let rounds = if cfg!(debug_assertions) { 25 } else { 1_000 };
     let mut r = rng("g162 surfaces", 0x4731_3633);
     let frame = Frame::standard().unwrap();
     for _ in 0..rounds {
@@ -428,7 +429,7 @@ fn a_quartic_contact_is_one_point() {
 #[test]
 fn a_continuum_no_kind_names_is_undecided_not_a_foot() {
     let basis = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
-    let points = [[5.0, 0.0], [5.0, 5.0], [0.0, 5.0]];
+    let points = [[0.5, 0.0], [0.5, 0.5], [0.0, 0.5]];
     let weights = [1.0, core::f64::consts::FRAC_1_SQRT_2, 1.0];
     let arc = CurveKind::Nurbs(Curve::new_rational(basis, &points, &weights).unwrap());
     let found = project_curve(&arc, &[0.0, 0.0], 1e-2, &mut meter()).unwrap();
@@ -446,12 +447,12 @@ fn a_continuum_along_a_surfaces_second_parameter_is_undecided() {
     let arc = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
     let mut net = Vec::new();
     let mut weights = Vec::new();
-    for z in [-1.0, 1.0] {
-        net.extend([[5.0, 0.0, z], [5.0, 5.0, z], [0.0, 5.0, z]]);
+    for z in [-0.25, 0.25] {
+        net.extend([[0.5, 0.0, z], [0.5, 0.5, z], [0.0, 0.5, z]]);
         weights.extend([1.0, core::f64::consts::FRAC_1_SQRT_2, 1.0]);
     }
     let surface = SurfaceKind::Nurbs(Surface::new_rational(line, arc, &net, &weights).unwrap());
-    let found = project_surface(&surface, &[0.0, 0.0, 0.0], 1e-1, &mut meter());
+    let found = project_surface(&surface, &[0.0, 0.0, 0.0], 1e-2, &mut meter());
     assert!(
         matches!(found, Ok(Projection::NonIsolated { .. })),
         "{found:?}"
@@ -527,10 +528,10 @@ fn a_floor_that_is_not_positive_is_refused_on_a_surface_too() {
     }
 }
 
-/// A spline has nothing past its end, so an edge at the end of its domain is read from inside, and
-/// a nearest point on that edge is found.
+/// A spline's bound is clipped only along a span with a width, so an edge's enclosure must come from
+/// its partials, or every edge would tie with the true foot.
 #[test]
-fn a_nurbs_surfaces_far_edges_are_read_from_inside() {
+fn a_nurbs_surfaces_edges_do_not_tie_with_its_foot() {
     let basis = || Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
     let net = [
         [0.0, 0.0, 0.0],
@@ -615,8 +616,11 @@ fn each_search_takes_the_work_it_always_took() {
         )
         .unwrap(),
     );
-    let curves: [(&CurveKind<2>, [f64; 2], u64); 2] =
-        [(&arc, [4.0, 6.0], 165), (&ellipse, [1.0, 2.0], 191)];
+    let curves: [(&CurveKind<2>, [f64; 2], u64); 3] = [
+        (&arc, [4.0, 6.0], 165),
+        (&arc, [9.0, 2.0], 405),
+        (&ellipse, [1.0, 2.0], 191),
+    ];
     let mut work = Vec::new();
     let mut pins = Vec::new();
     for (curve, p, pinned) in curves {
