@@ -41,6 +41,8 @@
 //!   an arena's rows into name order that the builder applies before publishing (8.2, 32.17).
 //! - [`attributes`]: [`attributes::Attributes`], values keyed by persistent name, and the split and
 //!   merge classes that say what they do when their entity is split or merged (8.4).
+//! - [`query`]: the core queries of 10.2 on topology and points (G102): faces listed, the bounding
+//!   box, and exact twice-area vectors and six-times volumes of flat bodies.
 //!
 //! Status: the arenas, their typed indices and the publishing builder (G80) built; the Euler
 //! operators, name order, attributes, regions and cells, queries, proofs and instances to come in
@@ -59,6 +61,7 @@ pub mod entity;
 pub mod error;
 pub mod ix;
 pub mod order;
+pub mod query;
 
 pub use arenas::{Arenas, Pool};
 pub use body::{Body, BodyKind};
