@@ -288,10 +288,10 @@ impl<K: Kind, V: Clone> Column<K, V> {
     /// [`TopoError::Full`] if the rows would pass `u32::MAX`, before anything is added;
     /// [`TopoError::OutOfMemory`] if an allocation is refused, after which the column holds the
     /// rows added before the refusal.
-    pub fn extend<I>(&mut self, values: I) -> Result<(), TopoError>
+    pub fn extend<I, J>(&mut self, values: I) -> Result<(), TopoError>
     where
-        I: IntoIterator<Item = V>,
-        I::IntoIter: ExactSizeIterator,
+        I: IntoIterator<Item = V, IntoIter = J>,
+        J: ExactSizeIterator<Item = V>,
     {
         let mut values = values.into_iter();
         let mut left = values.len();
