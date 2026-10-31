@@ -96,6 +96,50 @@ fn a_bad_operation_is_refused() {
 }
 
 #[test]
+fn every_refusal_says_what_it_refused() {
+    use geom_format::cbor::CborError;
+    use geom_format::names::NamesError;
+    use geom_format::payload::PayloadError;
+    use geom_format::recipe::RecipeError;
+    let params = operation().encode(&mut meter()).unwrap();
+    let mut bad = operation();
+    bad.params = vec![0x18, 0x01];
+    let OperationError::Params(cbor) = bad.encode(&mut meter()).unwrap_err() else {
+        panic!()
+    };
+    let cbor: CborError = cbor;
+    let payload = PayloadError::Shape {
+        offset: 0,
+        expected: "x",
+    };
+    let cases: [(OperationError, &str); 7] = [
+        (
+            OperationError::Payload(payload.clone()),
+            "not an operation record",
+        ),
+        (
+            OperationError::Names(NamesError::from(payload.clone())),
+            "not an operation record",
+        ),
+        (
+            OperationError::Input(RecipeError::from(payload)),
+            "not an operation's input",
+        ),
+        (OperationError::Name, "printable ASCII"),
+        (OperationError::Params(cbor), "not canonical CBOR"),
+        (OperationError::NotCanonical, "canonical encoding"),
+        (
+            OperationError::Encode(geom_op::cbor::EncodeError::TooLong),
+            "could not be encoded",
+        ),
+    ];
+    for (error, words) in cases {
+        assert!(error.to_string().contains(words), "{error}");
+    }
+    assert!(!params.is_empty());
+}
+
+#[test]
 fn the_operation_payload_matches_its_cddl() {
     let schema = [
         include_str!("../../../format/cddl/operation.cddl"),
