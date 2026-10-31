@@ -11,10 +11,32 @@ body = [
 table-entry = [table: 1..15, rows: uint, chunks: [* content-id]]
 content-id = [alg: uint, digest: bstr]
 
-chunk = [table: 1..15, position: uint, rows: 1..4096, columns: [* column]]
-column = refs / i64-column / names / [* surface] / [* curve]
-refs = [* uint]               ; a reference (row plus one, 0 for none), a sense or a kind code
-names = bstr                  ; 16 bytes per row
+chunk = regions-chunk / shells-chunk / faces-chunk / loops-chunk / fins-chunk / edges-chunk
+      / vertices-chunk / points-chunk / surfaces-chunk / curves-chunk / pcurves-chunk
+      / names-chunk
+; A column of one unsigned integer per row: a reference (row plus one, 0 for none), a sense
+; (0 forward, 1 reversed) or a region kind (0 solid, 1 void).
+refs = [+ uint]
+regions-chunk = [table: 1, position: uint, rows: 1..4096,
+                 columns: [kind: refs, first-shell: refs]]
+shells-chunk = [table: 2, position: uint, rows: 1..4096,
+                columns: [region: refs, next: refs, first-face: refs]]
+faces-chunk = [table: 3, position: uint, rows: 1..4096,
+               columns: [shell: refs, next: refs, surface-ref: refs, sense: refs,
+                         first-loop: refs, bounds: i64-column]]
+loops-chunk = [table: 4, position: uint, rows: 1..4096,
+               columns: [face: refs, next: refs, first-fin: refs]]
+fins-chunk = [table: 5, position: uint, rows: 1..4096,
+              columns: [loop: refs, next: refs, previous: refs, edge: refs, sense: refs,
+                        radial: refs, pcurve: refs]]
+edges-chunk = [table: 6, position: uint, rows: 1..4096,
+               columns: [first-fin: refs, start: refs, end: refs, curve-ref: refs]]
+vertices-chunk = [table: 7, position: uint, rows: 1..4096, columns: [point: refs]]
+points-chunk = [table: 8, position: uint, rows: 1..4096, columns: [xyz: i64-column]]
+surfaces-chunk = [table: 9, position: uint, rows: 1..4096, columns: [surfaces: [+ surface]]]
+curves-chunk = [table: 10, position: uint, rows: 1..4096, columns: [curves: [+ curve]]]
+pcurves-chunk = [table: 11, position: uint, rows: 1..4096, columns: [pcurves: [+ curve]]]
+names-chunk = [table: 12..15, position: uint, rows: 1..4096, columns: [keys: bstr]]
 
 i64-column = #6.79(bstr)      ; RFC 8746: little-endian int64
 f64-column = #6.86(bstr)      ; RFC 8746: little-endian float64, every value finite

@@ -141,7 +141,7 @@ A chunk's payload (CDDL `chunk`):
 | `table` | `uint` | the table's code |
 | `position` | `uint` | the chunk's place in its table, from 0 |
 | `rows` | `1..4096` | its rows: 4,096 in every chunk but a table's last |
-| `columns` | `[* column]` | the table's columns over those rows, in the table's order |
+| `columns` | `[+ refs / i64-column / bstr / [+ surface] / [+ curve]]` | the table's columns over those rows, in the table's order |
 <!-- end generated -->
 
 The tables, by code, and their columns. A reference to a row is stored as the row plus one, and 0 for none; a sense as 0 (forward) or 1 (reversed). Each column but the faces' bounds, the points and the names is an array of one unsigned integer per row; the surface, curve and pcurve columns are arrays of one kind (section 11) per row.

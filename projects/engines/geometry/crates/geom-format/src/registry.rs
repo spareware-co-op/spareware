@@ -223,7 +223,7 @@ pub const RECORDS: &[RecordType] = &[
             },
             Field {
                 name: "columns",
-                cddl: "[* column]",
+                cddl: "[+ refs / i64-column / bstr / [+ surface] / [+ curve]]",
                 meaning: "the table's columns over those rows, in the table's order",
             },
         ],
