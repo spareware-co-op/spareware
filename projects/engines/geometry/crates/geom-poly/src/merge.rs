@@ -469,13 +469,9 @@ fn sweep(
         if fins.is_empty() {
             continue;
         }
-        let same = |a: &RunFin, b: &RunFin| a.sheet == b.sheet && a.rising == b.rising;
+        let key = |fin: &RunFin| (fin.sheet, fin.rising);
         match runs.get_mut(opening..).and_then(<[Run]>::last_mut) {
-            Some(run)
-                if run.high == low
-                    && run.fins.len() == fins.len()
-                    && run.fins.iter().zip(&fins).all(|(a, b)| same(a, b)) =>
-            {
+            Some(run) if run.high == low && run.fins.iter().map(key).eq(fins.iter().map(key)) => {
                 run.high = high;
             }
             _ => runs.push(Run {

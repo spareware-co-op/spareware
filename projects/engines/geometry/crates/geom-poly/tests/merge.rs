@@ -291,6 +291,19 @@ fn blocks_that_share_only_an_edge_stay_two_shells_with_four_fins_on_it() {
 }
 
 #[test]
+fn an_edge_ends_where_another_block_starts_along_it() {
+    let other = block([4, 4, 1], [8, 8, 3]);
+    let m = merged(&[A, other], &WindingTest::unite(), LEAF_POLYGONS);
+    assert_eq!(m.shells.len(), 2);
+    // Along the shared line: two fins, four where the blocks share it, two.
+    let mut widths: Vec<usize> = m.edges.iter().map(|e| e.fins.len()).collect();
+    widths.sort_unstable();
+    assert_eq!(m.edges.len(), 12 + 12 + 1);
+    assert_eq!(widths.last(), Some(&4));
+    assert_eq!(widths.iter().filter(|w| **w == 4).count(), 1);
+}
+
+#[test]
 fn a_ring_stays_in_its_corner_of_the_face_where_two_holes_touch() {
     let plate = block([0, 0, 0], [6, 6, 2]);
     let first = block([1, 1, -1], [3, 3, 3]);
