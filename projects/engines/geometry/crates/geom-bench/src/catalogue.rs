@@ -398,6 +398,7 @@ pub static OPS: &[Op] = &[
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
     // The triangulation's hot path (piece G153; decision 32.44).
     Op { group: "mesh", name: "cdt", measures: "geom_mesh::cdt::triangulate", classes: T, prepare: |c| bind(inputs::mesh::cdt(c), kernels::mesh::cdt) },
+    Op { group: "mesh", name: "exact_build", measures: "geom_mesh::exact::build::build", classes: T, prepare: |c| bind(inputs::mesh::exact_build(c), kernels::mesh::exact_build) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -616,6 +617,8 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
     ("Tpi::planes", "field accessor"),
+    ("Tpi::weight", "field accessor"),
+    ("Plane::new", "four magnitude comparisons on a plane already made"),
     ("Lpi::points", "field accessor"),
     ("Lpi::plane", "field accessor"),
     ("Ssi::points", "field accessor"),

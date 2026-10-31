@@ -8,8 +8,9 @@ license.workspace = true
 description = "Spare Kit geometry kernel, development only: fuzz harnesses and bounded proofs, run as tests on stable, under libFuzzer with cargo-bolero, in ClusterFuzzLite and under Kani."
 
 [dependencies]
-# The triangulation target (G153).
+# The triangulation target (G153) and the exact mesh target (G146).
 geom-mesh = { path = "../geom-mesh" }
+geom-op = { path = "../geom-op" }
 geom-num = { path = "../geom-num" }
 geom-run = { path = "../geom-run" }
 geom-test = { path = "../geom-test" }
@@ -18,6 +19,8 @@ geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
 # MPL-2.0; development only).
 geom-gen = { path = "../geom-gen" }
+# The planes target (G123): geom-poly's planes and orders, under test (ours, MPL-2.0).
+geom-poly = { path = "../geom-poly" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"

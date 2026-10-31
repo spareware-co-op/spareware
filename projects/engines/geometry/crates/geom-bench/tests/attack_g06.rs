@@ -1357,6 +1357,10 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                         .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
                 }),
         ),
+        ("mesh", "exact_build") => fold(inputs::mesh::exact_build(class).iter().map(|p| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::exact::build::build(p, &geom_run::Exec::serial(), &mut meter)
+        })),
         ("mesh", "cdt") => fold(inputs::mesh::cdt(class).iter().map(|t| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::triangulate(&t.sites, &t.constraints, None, &mut meter)
