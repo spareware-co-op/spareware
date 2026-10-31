@@ -12,7 +12,9 @@ agree with the exact determinant of orient2d's definition, computed from scratch
 flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
 every operation at every width, `I128` to the reserved 768 bits; and `cbor` (`src/cbor.rs`, G91),
 `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
-convert both ways bit for bit.
+convert both ways bit for bit; and `cache` (`src/cache.rs`, G105), `geom-format`'s memo store
+keeps to its bound, forgets the entry used longest ago first and answers only where the caller's
+budget covers the stored run.
 
 ## One law, four engines
 

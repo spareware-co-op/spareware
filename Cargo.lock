@@ -1079,6 +1079,7 @@ dependencies = [
  "geom-format",
  "geom-gen",
  "geom-num",
+ "geom-op",
  "geom-run",
  "geom-test",
  "num-bigint",
