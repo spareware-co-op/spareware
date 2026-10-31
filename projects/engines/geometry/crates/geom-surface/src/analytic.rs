@@ -27,7 +27,8 @@
 //!   deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).
 //! - **Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale,
 //!   the frame carried, a mirror flipping the axial sign); any other transform gives the moved
-//!   NURBS form. A plane takes every affine map.
+//!   NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly
+//!   is exact: deviation 0 (chapter 7; piece G69).
 //! - **Exact split and reversal.**
 //!
 //! Method: the elementary surfaces of ISO 10303-42 (`plane`, `cylindrical_surface`,
@@ -900,6 +901,14 @@ macro_rules! round_surface {
                     return affine_image(&self.terms, self.round.domain, angular($which), &m);
                 }
                 let k = $kind::build(self.round.moved(&m)?)?;
+                if m.exact_for(&[self.round.center])? {
+                    // A grid transform moving the centre exactly carries the frame, and its unit
+                    // vectors, exactly too (piece G69).
+                    return Ok(Changed {
+                        value: SurfaceKind::$variant(k),
+                        deviation: 0.0,
+                    });
+                }
                 let image = image_terms(&self.terms, &m)?;
                 let deviation = k.terms.distance(&image, self.round.domain)?;
                 Ok(Changed {

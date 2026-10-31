@@ -17,8 +17,10 @@ its bound, forgets the entry used longest ago first and answers only where the c
 covers the stored run; `arenas` (`src/arenas.rs`, G80), `geom-topo` publishes exactly the arenas its
 rules allow, and a body's versions never see each other's edits; and `make` (`src/make.rs`, G101),
 the primitives and transforms return only what the full checker passes, keep their laws, and refuse
-with a typed error; and `sequence` (`src/sequence.rs`, G116), whole operation logs replay to the same
-hash and keep every law at every step. `src/adversarial.rs` holds the generators aimed at the hard
+with a typed error; `sequence` (`src/sequence.rs`, G116), whole operation logs replay to the same
+hash and keep every law at every step; and `intersect` (`src/intersect.rs`, G158), an intersection's
+items keep their invariants against an all-pairs oracle, and a pair asked either way round makes one
+call. `src/adversarial.rs` holds the generators aimed at the hard
 cases, and `src/robustness.rs` counts how many plain designs succeed per family: `src/robustness.txt`
 records it, and a count may not fall.
 

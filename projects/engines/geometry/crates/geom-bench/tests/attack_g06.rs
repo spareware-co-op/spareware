@@ -1259,6 +1259,44 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .map(|(a, b)| geom_num::brent::zero(inputs::roots::cubic, a, b, tol, 100)),
             )
         }
+        ("intersect", "sort_items") => {
+            fold(inputs::intersect::items(class).into_iter().map(|items| {
+                geom_intersect::Intersection::new(
+                    items,
+                    geom_intersect::Coverage::CompleteOutsideFlagged,
+                    Vec::new(),
+                    &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                )
+            }))
+        }
+        ("intersect", "key_circle") => fold(inputs::intersect::circles(class).iter().map(|c| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_intersect::CanonicalKey::of_curve(c, &mut meter)
+        })),
+        ("intersect", "pair_lines") => {
+            fold(inputs::intersect::lines(class).iter().map(|(a, b)| {
+                let operand = |curve| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::CanonicalKey::of_curve(curve, &mut meter).map(|key| {
+                        geom_intersect::Operand {
+                            geom: geom_intersect::Geom::Curve(curve),
+                            domain: None,
+                            bound: Steps(0),
+                            key,
+                        }
+                    })
+                };
+                let (x, y) = (operand(a)?, operand(b)?);
+                geom_intersect::pair(&x, &y, |_, _| {
+                    geom_intersect::Intersection::new(
+                        Vec::new(),
+                        geom_intersect::Coverage::TopologyCertified,
+                        Vec::new(),
+                        &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                    )
+                })
+            }))
+        }
         ("quadrature", "gauss_legendre") => fold(
             inputs::roots::gauss_legendre(class)
                 .into_iter()

@@ -21,6 +21,8 @@
 //!   positive. The deviation bounds only the rounding of the pieces' points and weights.
 //! - **Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices
 //!   mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form.
+//!   A grid transform that moves every vertex exactly is exact: deviation 0 (chapter 7; piece
+//!   G69).
 //! - **Splits are trimmed polylines.** A split leaves the polyline untouched and trims it
 //!   (`crate::trimmed`); a reversal reverses the vertices and negates the bulges, exactly.
 //!
@@ -583,6 +585,15 @@ impl<const D: usize> ParamCurve<D> for BulgePolyline<D> {
             .as_ref()
             .map(|w| w.iter().map(|&(a, b)| (m.scale * a, m.scale * b)).collect());
         let p = BulgePolyline::with_start(vertices, bulges, widths, self.closed, self.start)?;
+        if m.exact_for(&self.vertices)? {
+            // Each segment's definition is a rational function of its vertices and bulge that a
+            // signed permutation and a translation carry exactly (a mirror's negated bulge with
+            // it).
+            return Ok(Changed {
+                value: CurveKind::Bulge(p),
+                deviation: 0.0,
+            });
+        }
         // Each segment of the image is a rational quadratic with the same weights as the image of
         // the old one; the curves differ by at most max |Δh| / min W, with W ≥ (1 + w₁)/2.
         let mut deviation = point(0.0)?;

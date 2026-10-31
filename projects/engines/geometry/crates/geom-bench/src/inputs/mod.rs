@@ -43,6 +43,7 @@ pub mod format;
 pub mod generated;
 pub mod grid;
 pub mod growth;
+pub mod intersect;
 pub mod interval;
 pub mod isolate;
 pub mod linalg;

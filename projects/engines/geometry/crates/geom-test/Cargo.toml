@@ -105,6 +105,11 @@ unicode-normalization = "0.1.26"
 num-rational = "0.4.2"
 # The workflow test reads `.github/workflows/kernel-quality.yml` as YAML (G21). MIT OR Apache-2.0.
 yaml-rust2 = { version = "0.13.0", default-features = false }
+# The kinds and transforms the law catalogue checks on every pull request and nightly (G69,
+# tests/laws_curves.rs and tests/laws_surfaces.rs). Ours, MPL-2.0; development dependencies, as
+# above; geom-math is a dependency already (G116).
+geom-curve = { path = "../geom-curve" }
+geom-surface = { path = "../geom-surface" }
 
 [lints.rust]
 unsafe_code = "forbid"

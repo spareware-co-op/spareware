@@ -15,15 +15,17 @@ name: Kernel nightly
 # oracle run out of process (28.10's differential testing; 17.8): Bertolazzi and Frego's Clothoids
 # library, built from source at a pinned commit in a container pinned by digest, evaluates the
 # night's seeded clothoids, and geom-curve's tests/clothoids_oracle.rs compares every point with
-# the kernel's certified enclosure, settling any difference by a fixed-point truth. Piece G86 adds
-# Python's cbor2, run the same way: geom-op's tests/cbor2_oracle.rs writes the night's seeded values
-# of SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by hash) encodes each value
-# in its canonical mode in a container pinned by digest and reads the kernel's bytes back, and the
-# test fails on any byte that differs. Piece G97 adds the slow fixtures (28.16): geom-test's
-# `fixture run --tier slow`. Piece G114 adds the fetched corpora (28.12): geom-test's `corpus fetch`
-# downloads each at its pinned source and checks it against the register's digest, so a source
-# that moves or disappears shows up the night it happens. Later pieces add the rest of 28.17's
-# nightly list (hours of fuzzing, the other outside oracles).
+# the kernel's certified enclosure, settling any difference by a fixed-point truth. Piece G69 adds
+# the law catalogue of 28.3 for the curve and surface kinds and NURBS (geom-test's tests/laws_nurbs.rs,
+# laws_curves.rs and laws_surfaces.rs), each law's dense refutation sampler drawing from the night's
+# seed. Piece G86 adds Python's cbor2, run the same way: geom-op's tests/cbor2_oracle.rs writes the
+# night's seeded values of SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by
+# hash) encodes each value in its canonical mode in a container pinned by digest and reads the
+# kernel's bytes back, and the test fails on any byte that differs. Piece G97 adds the slow fixtures
+# (28.16): geom-test's `fixture run --tier slow`. Piece G114 adds the fetched corpora (28.12):
+# geom-test's `corpus fetch` downloads each at its pinned source and checks it against the register's
+# digest, so a source that moves or disappears shows up the night it happens. Later pieces add the
+# rest of 28.17's nightly list (hours of fuzzing, the other outside oracles).
 #
 # --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
 # guard).
@@ -98,6 +100,28 @@ jobs:
         run: >-
           cargo test --locked --release -p geom-num
           --test verification --test attack_g28 --test attack_g29 --test attack_g30
+
+  laws:
+    name: Kind and NURBS laws with a fresh seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Tonight's seed, printed
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+      - name: The law catalogue for NURBS and the curve and surface kinds (28.3)
+        run: >-
+          cargo test --locked --release -p geom-test
+          --test laws_nurbs --test laws_curves --test laws_surfaces
 
   maths:
     name: Proven maths against the oracle
