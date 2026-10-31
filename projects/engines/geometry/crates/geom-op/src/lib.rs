@@ -75,6 +75,7 @@
 
 extern crate alloc;
 
+pub mod bounds;
 pub mod canonical;
 pub mod cbor;
 pub mod context;
@@ -91,8 +92,9 @@ pub mod remedy;
 pub mod run;
 pub mod schema;
 
+pub use bounds::{Bounds, Limits, Spent};
 pub use context::{OpContext, Precision};
-pub use detail::{MakeDetail, NumDetail, OpErrorDetail, RunDetail};
+pub use detail::{BoundDetail, MakeDetail, NumDetail, OpErrorDetail, RunDetail};
 pub use error::OpError;
 pub use evidence::{Evidence, Value};
 pub use geom_num::Exactness;
