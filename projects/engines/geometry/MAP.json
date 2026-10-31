@@ -4221,6 +4221,16 @@
               "shape": "unit"
             },
             {
+              "doc": "Inside and outside are undefined for an open mesh.",
+              "name": "NotClosed",
+              "shape": "unit"
+            },
+            {
+              "doc": "The box tree refused.",
+              "name": "Bvh",
+              "shape": "tuple"
+            },
+            {
               "doc": "The numbers layer refused: a plane over budget, or a fault of its own.",
               "name": "Num",
               "shape": "tuple"
@@ -4303,6 +4313,30 @@
               "take": "port-method"
             }
           ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a query walks the tree for the faces over a point in plan, and each edge of those faces once: a few signs for an edge between grid points, three determinants for one off the grid. [`Classifier::beside`] splits the faces near the point into convex pieces and traces once.",
+          "does": "[`Classifier`] holds a mesh and a tree of its faces' boxes in plan. [`Classifier:: locate`] casts a ray up the z axis from a grid point and adds up its signed crossings: the winding number, 1 inside a solid, 0 outside. [`Classifier::locate_all`] does that for many points on the parallel helper. [`Classifier::beside`] takes a three-plane point, whose ray would not be a line of the grid, and traces from a grid corner near it with `geom-poly`'s exact winding tracing.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+          "guarantees": [
+            "**Exact.** Every decision is an integer sign or an exact predicate, within 6.2's budget.",
+            "**Only the start moves.** A ray through an edge or a vertex in plan is settled by moving its start by an infinitesimal, (ε², ε) in x and y, never by moving the mesh: so a mesh with three-plane vertices needs no perturbation of its own, and one query has one answer. A point on the surface is told first, unmoved.",
+            "**Closed meshes only.** Inside and outside are undefined for an open surface, which is refused.",
+            "**The threads do not show.** [`Classifier::locate_all`] gives the same list on any pool."
+          ],
+          "job": "Where a point is against a closed exact mesh: on its surface, or by its winding number (19.11).",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md",
+              "https://doi.org/10.1145/2461912.2461916"
+            ],
+            "text": "ray crossing with Simulation of Simplicity on the start point only (19.11, 6.2; the evidence is `projects/kit/notes/G01-evidence/05-exact-arithmetic-determinism.md`, section 5); the signed count is Jacobson, Kavan and Sorkine-Hornung's winding number, <https://doi.org/10.1145/2461912.2461916>, in the exact form of 11.2. In a face, a second ray along x counts edges by a half-open rule on y, which is the same ε. Three-plane corners are compared by the order of points along a line of two planes, 11.3's `along`."
+          },
+          "path": "geom_mesh::classify",
+          "provenance": [],
           "spdx": null,
           "target": "lib"
         },

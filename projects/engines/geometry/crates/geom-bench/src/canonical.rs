@@ -752,6 +752,12 @@ impl Canonical for geom_mesh::exact::ExactMesh {
     }
 }
 
+impl Canonical for geom_mesh::classify::Located {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl<T: Canonical> Canonical for Result<T, geom_mesh::exact::MeshError> {
     fn encode(&self, h: &mut Sha256) {
         match self {

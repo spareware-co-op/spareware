@@ -2631,9 +2631,16 @@ pub mod mesh {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/locate/typical"))]
+    fn locate(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = mesh;
-        benchmarks = cdt, exact_build, point_point, point_line, point_plane, line_line,
+        benchmarks = cdt, exact_build, locate, point_point, point_line, point_plane, line_line,
             closest_dots, triangles
     );
 }

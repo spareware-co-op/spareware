@@ -1395,6 +1395,15 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_mesh::contact::Contact::Cross => geom_num::Sign::Positive,
             })
         })),
+        ("mesh", "locate") => fold(inputs::mesh::locate(class).iter().map(|probe| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let exec = geom_run::Exec::serial();
+            geom_mesh::classify::Classifier::new(&probe.solid, &exec, &mut meter)?.locate_all(
+                &probe.points,
+                &exec,
+                &mut meter,
+            )
+        })),
         ("mesh", "exact_build") => fold(inputs::mesh::exact_build(class).iter().map(|p| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::exact::build::build(p, &geom_run::Exec::serial(), &mut meter)

@@ -26,7 +26,7 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today: [`cdt`] (piece G153), the kernel's one exact constrained Delaunay triangulation,
+//! Modules today: [`classify`] (piece G147), where a point is against a closed mesh; [`cdt`] (piece G153), the kernel's one exact constrained Delaunay triangulation,
 //! [`exact`] (piece G146), the exact mesh, its checker group and its mass properties, and
 //! [`contact`] (piece G151), exact contact and closest features of triangles.
 //!
@@ -38,6 +38,7 @@
 extern crate alloc;
 
 pub mod cdt;
+pub mod classify;
 pub mod contact;
 pub mod exact;
 
