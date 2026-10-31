@@ -3806,6 +3806,206 @@ pub mod collections {
         }
     }
     impl crate::error::Error for TryReserveError {}
+
+    // BTreeMap and BTreeSet: a lookup, an insertion or a removal compares keys by `Ord::cmp`; a
+    // clone, a comparison for equality and `Debug` reach the keys' and values' own; nothing else
+    // calls back.
+    pub use self::btree_map::BTreeMap;
+    pub use self::btree_set::BTreeSet;
+
+    pub mod btree_map {
+        use crate::marker::PhantomData;
+
+        pub struct BTreeMap<K, V> {
+            k: PhantomData<K>,
+            v: PhantomData<V>,
+        }
+        impl<K, V> BTreeMap<K, V> {
+            pub const fn new() -> BTreeMap<K, V> {
+                loop {}
+            }
+            pub fn len(&self) -> usize {
+                loop {}
+            }
+            pub fn is_empty(&self) -> bool {
+                loop {}
+            }
+            pub fn clear(&mut self) {}
+            pub fn keys(&self) -> Keys<K, V> {
+                loop {}
+            }
+            pub fn values(&self) -> Values<K, V> {
+                loop {}
+            }
+            pub fn iter(&self) -> Iter<K, V> {
+                loop {}
+            }
+        }
+        impl<K: Ord, V> BTreeMap<K, V> {
+            pub fn get(&self, key: &K) -> Option<&V> {
+                key.cmp(key);
+                loop {}
+            }
+            pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+                key.cmp(key);
+                loop {}
+            }
+            pub fn contains_key(&self, key: &K) -> bool {
+                key.cmp(key);
+                loop {}
+            }
+            pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+                key.cmp(&key);
+                loop {}
+            }
+            pub fn remove(&mut self, key: &K) -> Option<V> {
+                key.cmp(key);
+                loop {}
+            }
+        }
+        impl<K: Clone, V: Clone> Clone for BTreeMap<K, V> {
+            fn clone(&self) -> BTreeMap<K, V> {
+                let k: &K = crate::any();
+                k.clone();
+                let v: &V = crate::any();
+                v.clone();
+                loop {}
+            }
+        }
+        impl<K: crate::fmt::Debug, V: crate::fmt::Debug> crate::fmt::Debug for BTreeMap<K, V> {
+            fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+                let k: &K = crate::any();
+                crate::fmt::Debug::fmt(k, f);
+                let v: &V = crate::any();
+                crate::fmt::Debug::fmt(v, f)
+            }
+        }
+        impl<K, V> Default for BTreeMap<K, V> {
+            fn default() -> BTreeMap<K, V> {
+                loop {}
+            }
+        }
+        impl<K: PartialEq, V: PartialEq> PartialEq for BTreeMap<K, V> {
+            fn eq(&self, other: &BTreeMap<K, V>) -> bool {
+                let k: &K = crate::any();
+                k.eq(k);
+                let v: &V = crate::any();
+                v.eq(v);
+                loop {}
+            }
+        }
+        impl<K: Eq, V: Eq> Eq for BTreeMap<K, V> {}
+
+        pub struct Keys<K, V> {
+            k: PhantomData<K>,
+            v: PhantomData<V>,
+        }
+        impl<K, V> Iterator for Keys<K, V> {
+            type Item = &K;
+            fn next(&mut self) -> Option<&K> {
+                loop {}
+            }
+        }
+        pub struct Values<K, V> {
+            k: PhantomData<K>,
+            v: PhantomData<V>,
+        }
+        impl<K, V> Iterator for Values<K, V> {
+            type Item = &V;
+            fn next(&mut self) -> Option<&V> {
+                loop {}
+            }
+        }
+        pub struct Iter<K, V> {
+            k: PhantomData<K>,
+            v: PhantomData<V>,
+        }
+        impl<K, V> Iterator for Iter<K, V> {
+            type Item = (&K, &V);
+            fn next(&mut self) -> Option<(&K, &V)> {
+                loop {}
+            }
+        }
+    }
+
+    pub mod btree_set {
+        use crate::marker::PhantomData;
+
+        pub struct BTreeSet<T> {
+            t: PhantomData<T>,
+        }
+        impl<T> BTreeSet<T> {
+            pub const fn new() -> BTreeSet<T> {
+                loop {}
+            }
+            pub fn len(&self) -> usize {
+                loop {}
+            }
+            pub fn is_empty(&self) -> bool {
+                loop {}
+            }
+            pub fn iter(&self) -> Iter<T> {
+                loop {}
+            }
+        }
+        impl<T: Ord> BTreeSet<T> {
+            pub fn insert(&mut self, value: T) -> bool {
+                value.cmp(&value);
+                loop {}
+            }
+            pub fn contains(&self, value: &T) -> bool {
+                value.cmp(value);
+                loop {}
+            }
+            pub fn remove(&mut self, value: &T) -> bool {
+                value.cmp(value);
+                loop {}
+            }
+        }
+        impl<T: Ord, const N: usize> crate::convert::From<[T; N]> for BTreeSet<T> {
+            fn from(values: [T; N]) -> BTreeSet<T> {
+                let a: &T = crate::any();
+                a.cmp(a);
+                loop {}
+            }
+        }
+        impl<T: Clone> Clone for BTreeSet<T> {
+            fn clone(&self) -> BTreeSet<T> {
+                let a: &T = crate::any();
+                a.clone();
+                loop {}
+            }
+        }
+        impl<T: crate::fmt::Debug> crate::fmt::Debug for BTreeSet<T> {
+            fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+                let a: &T = crate::any();
+                crate::fmt::Debug::fmt(a, f)
+            }
+        }
+        impl<T> Default for BTreeSet<T> {
+            fn default() -> BTreeSet<T> {
+                loop {}
+            }
+        }
+        impl<T: PartialEq> PartialEq for BTreeSet<T> {
+            fn eq(&self, other: &BTreeSet<T>) -> bool {
+                let a: &T = crate::any();
+                a.eq(a);
+                loop {}
+            }
+        }
+        impl<T: Eq> Eq for BTreeSet<T> {}
+
+        pub struct Iter<T> {
+            t: PhantomData<T>,
+        }
+        impl<T> Iterator for Iter<T> {
+            type Item = &T;
+            fn next(&mut self) -> Option<&T> {
+                loop {}
+            }
+        }
+    }
 }
 
 pub mod sync {

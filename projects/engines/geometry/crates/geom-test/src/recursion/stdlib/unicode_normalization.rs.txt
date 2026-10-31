@@ -1,0 +1,9 @@
+// The recursion check's model of the `unicode-normalization` crate ((MIT OR Apache-2.0) AND
+// Unicode-3.0, https://github.com/unicode-rs/unicode-normalization), read in place of its source
+// (src/recursion/stdlib.rs): the one function the kernel calls, from its documentation
+// (https://docs.rs/unicode-normalization/0.1.26/unicode_normalization/fn.is_nfc.html). It reads
+// the text it is handed and calls nothing back, so its body is `loop {}`. Never compiled.
+
+pub fn is_nfc(s: &str) -> bool {
+    loop {}
+}
