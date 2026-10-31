@@ -448,6 +448,23 @@ fn operands_join_and_a_copy_keeps_the_larger() {
     assert_eq!(b.join(&step(30), &a).unwrap(), both);
     // A smaller copy changes nothing, and neither does a like one.
     assert_eq!(a.join(&step(30), &a).unwrap(), a);
+    // Of two equal bounds from different steps, the first operand's stays: the order is the caller's.
+    let like = Bounds::new(GridStep::Q0)
+        .after(
+            &step(21),
+            &history(vec![generated(1, &[])]),
+            &[(name(1), Steps(3))],
+            Limits::DEFAULT,
+        )
+        .unwrap();
+    assert_eq!(
+        a.join(&step(30), &like).unwrap().terms(name(1))[0].step,
+        step(10)
+    );
+    assert_eq!(
+        like.join(&step(30), &a).unwrap().terms(name(1))[0].step,
+        step(21)
+    );
     let other = Bounds::new(GridStep::Q1);
     let e = a.join(&step(30), &other).unwrap_err();
     assert_eq!(*e.detail(), OpErrorDetail::Bound(BoundDetail::MixedSteps));
