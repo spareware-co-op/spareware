@@ -39,13 +39,14 @@
 use geom_check::{FaultKind, Level, Report, check};
 use geom_curve::{Circle, CurveKind, Line, ParamCurve};
 use geom_math::{Box3, GridTransform, TypedTransform};
+use geom_num::plane::Plane;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::{Budget, Stopped, WorkMeter};
 use geom_surface::{ParamSurface, SurfaceKind};
 use geom_topo::ix::Arena;
 use geom_topo::{
-    Arenas, Body, Builder, Edge, Face, Fin, Ix, Loop, PointIx, RegionKind, Sense, Shell, TopoError,
-    Vertex,
+    Arenas, Body, Builder, Edge, Face, Fin, Ix, Loop, PlaneIx, PointIx, PointKind, RegionKind,
+    Sense, Shell, TopoError, Vertex,
 };
 
 /// A broken body and the exactness record it is checked at.
@@ -441,8 +442,8 @@ fn vertex_off_surface(body: &Body, exactness: Exactness) -> Option<Broken> {
     let by = past(exactness)?;
     same(body, exactness, |a| {
         let (row, normal) = on_flat(a)?;
-        let moved = along(*a.points.get(row)?, normal, by)?;
-        a.points.set(row, moved).ok()
+        let moved = along(a.points.get(row)?.grid()?, normal, by)?;
+        a.points.set(row, moved.into()).ok()
     })
 }
 
@@ -451,8 +452,8 @@ fn vertex_off_surface(body: &Body, exactness: Exactness) -> Option<Broken> {
 fn lowered_bound(body: &Body, _exactness: Exactness) -> Option<Broken> {
     let broken = edited(body, |a| {
         let (row, normal) = on_flat(a)?;
-        let moved = along(*a.points.get(row)?, normal, 8)?;
-        a.points.set(row, moved).ok()
+        let moved = along(a.points.get(row)?.grid()?, normal, 8)?;
+        a.points.set(row, moved.into()).ok()
     })?;
     Some(Broken {
         body: broken,
@@ -650,13 +651,115 @@ fn crossing_faces(body: &Body, exactness: Exactness) -> Option<Broken> {
     }
     for row in (0..points).filter_map(Ix::new) {
         out.points
-            .push(t.apply(*a.points.get(row)?).ok()?.value())
+            .push(t.apply(a.points.get(row)?.grid()?).ok()?.value().into())
             .ok()?;
     }
     let body = builder
         .publish(body.kind(), body.outside(), &mut meter)
         .ok()?;
     Some(Broken { body, exactness })
+}
+
+/// The first point of `a` that is a meeting of planes, with its planes.
+fn first_meeting(a: &Arenas) -> Option<(PointIx, [PlaneIx; 3])> {
+    (0..a.rows(Arena::Point))
+        .filter_map(Ix::new)
+        .find_map(|row| match a.points.get(row)? {
+            PointKind::Meet(planes) => Some((row, *planes)),
+            PointKind::Grid(_) => None,
+        })
+}
+
+/// A vertex whose three planes are not three: one given twice.
+fn singular_meeting(body: &Body, exactness: Exactness) -> Option<Broken> {
+    same(body, exactness, |a| {
+        let (row, [p, q, _]) = first_meeting(a)?;
+        a.points.set(row, PointKind::Meet([p, p, q])).ok()
+    })
+}
+
+/// A vertex given another vertex's planes, none of its faces' but those they share.
+fn meeting_elsewhere(body: &Body, exactness: Exactness) -> Option<Broken> {
+    same(body, exactness, |a| {
+        let (row, planes) = first_meeting(a)?;
+        let other = (0..a.rows(Arena::Point))
+            .filter_map(Ix::new)
+            .find_map(|r| match a.points.get(r)? {
+                PointKind::Meet(found) if found.iter().all(|p| !planes.contains(p)) => Some(*found),
+                _ => None,
+            })?;
+        a.points.set(row, PointKind::Meet(other)).ok()
+    })
+}
+
+/// A plane of the pool moved a step of its offset, so what meets on it leaves the other faces.
+fn plane_moved(body: &Body, exactness: Exactness) -> Option<Broken> {
+    same(body, exactness, |a| {
+        let (_, [row, _, _]) = first_meeting(a)?;
+        let plane = a.planes.get(row)?;
+        let moved = Plane::new(plane.n(), plane.d().checked_add(1)?).ok()?;
+        a.planes.set(row, moved).ok()
+    })
+}
+
+/// The first edge of `a` that starts at a meeting of planes.
+fn edge_from_meeting(a: &Arenas) -> Option<(Ix<Edge>, Ix<Vertex>)> {
+    (0..a.rows(Arena::Edge))
+        .filter_map(Ix::<Edge>::new)
+        .find_map(|e| {
+            let v = (*a.edges.start.get(e)?)?;
+            let place = a.points.get(*a.vertices.point.get(v)?)?;
+            matches!(place, PointKind::Meet(_)).then_some((e, v))
+        })
+}
+
+/// A shadow line that ends far from the vertex it shadows.
+fn shadow_far(body: &Body, exactness: Exactness) -> Option<Broken> {
+    let by = f64::from(i32::try_from(past(exactness)?.checked_add(4)?).ok()?);
+    same(body, exactness, |a| {
+        let (e, _) = edge_from_meeting(a)?;
+        let curve = *a.edges.curve.get(e)?;
+        let CurveKind::Line(line) = a.curves.get(curve)? else {
+            return None;
+        };
+        let [x, y, z] = line.origin();
+        let moved = Line::new([x, y, z + by], line.direction(), line.domain()).ok()?;
+        a.curves.set(curve, CurveKind::Line(moved)).ok()
+    })
+}
+
+/// A face's stored box shrunk to a point of its first meeting's far side, so it holds no corner.
+fn box_off_meeting(body: &Body, exactness: Exactness) -> Option<Broken> {
+    same(body, exactness, |a| {
+        let f = (0..a.rows(Arena::Face))
+            .filter_map(Ix::<Face>::new)
+            .find(|f| {
+                a.faces
+                    .surface
+                    .get(*f)
+                    .and_then(|s| a.surfaces.get(*s))
+                    .is_some_and(|s| matches!(s, SurfaceKind::Plane(_)))
+            })?;
+        first_meeting(a)?;
+        let high = a.faces.bound.get(f)?.max();
+        let far = P3::new(
+            high.x.get().checked_add(9)?,
+            high.y.get().checked_add(9)?,
+            high.z.get().checked_add(9)?,
+        )
+        .ok()?;
+        a.faces.bound.set(f, Box3::new(far, far).ok()?).ok()
+    })
+}
+
+/// A face turned the wrong way on a body whose vertices meet on planes: its loops read backwards.
+fn turned_face(body: &Body, exactness: Exactness) -> Option<Broken> {
+    same(body, exactness, |a| {
+        first_meeting(a)?;
+        let f: Ix<Face> = first(a.rows(Arena::Face), |_| true)?;
+        let turned = flipped(*a.faces.sense.get(f)?);
+        a.faces.sense.set(f, turned).ok()
+    })
 }
 
 /// The catalogue, in chapter 8.3's group order.
@@ -755,5 +858,35 @@ pub const CATALOGUE: &[Injection] = &[
         name: "two crossing faces",
         kinds: &[FaultKind::FacesCross],
         inject: crossing_faces,
+    },
+    Injection {
+        name: "three planes that do not meet",
+        kinds: &[FaultKind::MeetSingular],
+        inject: singular_meeting,
+    },
+    Injection {
+        name: "a vertex given another's planes",
+        kinds: &[FaultKind::VertexOffSurface],
+        inject: meeting_elsewhere,
+    },
+    Injection {
+        name: "a plane of the pool moved",
+        kinds: &[FaultKind::VertexOffSurface],
+        inject: plane_moved,
+    },
+    Injection {
+        name: "a shadow line far from its vertex",
+        kinds: &[FaultKind::VertexOffCurve],
+        inject: shadow_far,
+    },
+    Injection {
+        name: "a face's box off its corners",
+        kinds: &[FaultKind::FaceBound],
+        inject: box_off_meeting,
+    },
+    Injection {
+        name: "a face turned the wrong way",
+        kinds: &[FaultKind::LoopSense],
+        inject: turned_face,
     },
 ];
