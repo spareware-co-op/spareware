@@ -5175,14 +5175,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
-      "mutant": "replace Parser<'_>::item -> Result<bool, TextError> with Ok(false)",
-      "line_text": "let (line, column) = (self.cursor.line, self.cursor.column);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "No item ever completes and nothing is consumed, so the parse loop calls item for ever under the tests' unlimited meter. It hangs; it never returns bytes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
       "mutant": "replace | with ^ in hex_float",
       "line_text": "significand = (significand << 4) | u128::from(d);",
       "occurrences": 1,
