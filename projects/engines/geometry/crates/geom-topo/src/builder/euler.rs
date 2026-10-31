@@ -60,8 +60,8 @@ use super::named::{Keep, Moves, to};
 use crate::arenas::Arenas;
 use crate::body::{Body, BodyKind};
 use crate::entity::{
-    Edge, EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, Region, RegionIx, RegionKind, Sense,
-    Shell, ShellIx, Vertex, VertexIx,
+    CurveIx, Edge, EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, Region, RegionIx, RegionKind,
+    Sense, Shell, ShellIx, SurfaceIx, Vertex, VertexIx,
 };
 use crate::error::{Refusal, TopoError};
 use crate::ix::{Arena, Ix, Kind};
@@ -360,6 +360,14 @@ impl Euler {
         Ok(ix)
     }
 
+    fn add_curve(&mut self, curve: CurveKind<3>) -> Result<CurveIx, TopoError> {
+        self.arenas.curves.push(curve)
+    }
+
+    fn add_surface(&mut self, surface: SurfaceKind) -> Result<SurfaceIx, TopoError> {
+        self.arenas.surfaces.push(surface)
+    }
+
     fn add_edge(
         &mut self,
         e: NewEdge,
@@ -367,7 +375,7 @@ impl Euler {
         end: VertexIx,
         first_fin: FinIx,
     ) -> Result<EdgeIx, TopoError> {
-        let curve = self.arenas.curves.push(e.curve)?;
+        let curve = self.add_curve(e.curve)?;
         let ix = self.arenas.edges.push(Edge {
             first_fin: Some(first_fin),
             start: Some(start),
@@ -394,7 +402,7 @@ impl Euler {
     }
 
     fn add_face(&mut self, f: NewFace, shell: ShellIx) -> Result<FaceIx, TopoError> {
-        let surface = self.arenas.surfaces.push(f.surface)?;
+        let surface = self.add_surface(f.surface)?;
         let ix = self.arenas.faces.push(Face {
             shell,
             next: None,
@@ -927,5 +935,226 @@ impl Euler {
         };
         let outside = to(&moves.regions, outside)?;
         Builder { arenas: kept }.publish_named(&names, kind, outside, meter)
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G112), proven by `kernel-fuzz.yml`'s `kani-topo` job.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use geom_curve::Line;
+    use geom_surface::Plane;
+
+    use super::*;
+
+    /// The arguments every operator takes: one name per call, and shared geometry, which no
+    /// operator reads.
+    struct Stock {
+        names: u8,
+        curve: CurveKind<3>,
+        surface: SurfaceKind,
+        bound: Box3,
+        point: P3,
+    }
+
+    impl Stock {
+        fn new() -> Stock {
+            let point = P3::new(0, 0, 0).ok().unwrap();
+            Stock {
+                names: 0,
+                curve: CurveKind::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, 1.0)).unwrap()),
+                surface: SurfaceKind::Plane(
+                    Plane::new(
+                        [0.0; 3],
+                        [1.0, 0.0, 0.0],
+                        [0.0, 1.0, 0.0],
+                        ((0.0, 1.0), (0.0, 1.0)),
+                    )
+                    .unwrap(),
+                ),
+                bound: Box3::new(point, point).ok().unwrap(),
+                point,
+            }
+        }
+
+        fn name(&mut self) -> NameKey {
+            self.names += 1;
+            NameKey([self.names; 16])
+        }
+
+        fn edge(&mut self) -> NewEdge {
+            NewEdge {
+                name: self.name(),
+                curve: self.curve.clone(),
+            }
+        }
+
+        fn face(&mut self) -> NewFace {
+            NewFace {
+                name: self.name(),
+                surface: self.surface.clone(),
+                sense: Sense::Forward,
+                bound: self.bound,
+            }
+        }
+
+        fn vertex(&mut self) -> NewVertex {
+            NewVertex {
+                name: self.name(),
+                point: self.point,
+            }
+        }
+    }
+
+    /// An editor holding one region and one wire.
+    fn wire(stock: &mut Stock) -> Euler {
+        let mut e = Euler::new();
+        let name = stock.name();
+        let region = e.make_region(RegionKind::Solid, name).unwrap();
+        let (face, edge) = (stock.face(), stock.edge());
+        let (start, end) = (stock.vertex(), stock.vertex());
+        e.make_wire(region, face, edge, start, end).unwrap();
+        e
+    }
+
+    /// Any row of an arena of `rows` rows, live or dead.
+    fn any_ix<K: Kind>(rows: u32) -> Ix<K> {
+        let row: u32 = kani::any();
+        kani::assume(row < rows);
+        Ix::new(row).unwrap()
+    }
+
+    /// Applies any operator to any arguments, keeping count of the holes Euler's formula needs.
+    fn step(e: &mut Euler, stock: &mut Stock, holes: &mut i32) {
+        let fins = e.arenas.fins.len();
+        let (a, b): (FinIx, FinIx) = (any_ix(fins), any_ix(fins));
+        let op: u8 = kani::any();
+        match op {
+            0 => {
+                let (edge, vertex) = (stock.edge(), stock.vertex());
+                let _ = e.mev(a, edge, vertex);
+            }
+            1 => {
+                let edge = e.fin(a).map(|f| f.edge);
+                let _ = edge.and_then(|edge| e.kev(edge));
+            }
+            2 => {
+                let (edge, face) = (stock.edge(), stock.face());
+                let _ = e.mef(a, b, edge, face);
+            }
+            3 => {
+                let _ = e.kef(a);
+            }
+            4 => {
+                let edge = stock.edge();
+                let _ = e.mekr(a, b, edge);
+            }
+            5 => {
+                let _ = e.kemr(a);
+            }
+            6 => {
+                let (keep, ring) = (any_ix(e.arenas.faces.len()), any_ix(e.arenas.loops.len()));
+                if e.kfmrh(keep, ring).is_ok() {
+                    *holes += 1;
+                }
+            }
+            _ => {
+                let (ring, face) = (any_ix(e.arenas.loops.len()), stock.face());
+                if e.mfkrh(ring, face).is_ok() {
+                    *holes -= 1;
+                }
+            }
+        }
+    }
+
+    /// The live rows of arena `arena`, of `rows` rows.
+    fn live_rows(e: &Euler, arena: Arena, rows: u32) -> i32 {
+        let mut count = 0;
+        for row in 0..rows {
+            if e.is_live(arena, row) {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Every combinatorial rule the operators promise: each live fin's links, partner and loop;
+    /// each live loop's ring holding all its fins; each live edge's first fin; Euler's formula.
+    fn assert_rules(e: &Euler, holes: i32) {
+        let a = &e.arenas;
+        for row in 0..a.fins.len() {
+            if !e.is_live(Arena::Fin, row) {
+                continue;
+            }
+            let x: FinIx = Ix::new(row).unwrap();
+            let fin = e.fin(x).unwrap();
+            let next = e.fin(fin.next).unwrap();
+            let prev = e.fin(fin.prev).unwrap();
+            let partner = e.fin(fin.radial).unwrap();
+            assert!(next.prev == x && prev.next == x);
+            assert!(next.loop_ == fin.loop_);
+            assert!(fin.radial != x && partner.radial == x);
+            assert!(partner.edge == fin.edge && partner.sense != fin.sense);
+            assert!(e.start(&partner).unwrap() == e.start(&next).unwrap());
+            assert!(e.loop_(fin.loop_).is_ok());
+        }
+        for row in 0..a.loops.len() {
+            if !e.is_live(Arena::Loop, row) {
+                continue;
+            }
+            let l: LoopIx = Ix::new(row).unwrap();
+            let first = e.loop_(l).unwrap().first_fin.unwrap();
+            let ring = e.segment(first, first);
+            assert!(ring.iter().all(|&f| e.fin(f).is_ok_and(|fin| fin.loop_ == l)));
+            let mut fins = 0;
+            for f in 0..a.fins.len() {
+                let x: FinIx = Ix::new(f).unwrap();
+                if e.fin(x).is_ok_and(|fin| fin.loop_ == l) {
+                    fins += 1;
+                }
+            }
+            assert!(fins == ring.len());
+        }
+        for row in 0..a.edges.len() {
+            if !e.is_live(Arena::Edge, row) {
+                continue;
+            }
+            let x: EdgeIx = Ix::new(row).unwrap();
+            let first = e.edge(x).unwrap().first_fin.unwrap();
+            assert!(e.fin(first).is_ok_and(|fin| fin.edge == x));
+        }
+        let v = live_rows(e, Arena::Vertex, a.vertices.len());
+        let edges = live_rows(e, Arena::Edge, a.edges.len());
+        let f = live_rows(e, Arena::Face, a.faces.len());
+        let l = live_rows(e, Arena::Loop, a.loops.len());
+        let s = live_rows(e, Arena::Shell, a.shells.len());
+        assert!(v - edges + f - (l - f) == 2 * (s - holes));
+    }
+
+    /// Stands in for [`Euler::add_curve`]: no operator reads a curve.
+    fn no_curve(_: &mut Euler, _: CurveKind<3>) -> Result<CurveIx, TopoError> {
+        Ok(Ix::new(0).unwrap())
+    }
+
+    /// Stands in for [`Euler::add_surface`]: no operator reads a surface.
+    fn no_surface(_: &mut Euler, _: SurfaceKind) -> Result<SurfaceIx, TopoError> {
+        Ok(Ix::new(0).unwrap())
+    }
+
+    /// MEV at any fin of a wire keeps every rule.
+    #[kani::proof]
+    #[kani::unwind(64)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn mev_keeps_the_rules() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        let at = any_ix(e.arenas.fins.len());
+        let (edge, vertex) = (stock.edge(), stock.vertex());
+        assert!(e.mev(at, edge, vertex).is_ok());
+        assert_rules(&e, 0);
     }
 }
