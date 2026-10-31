@@ -25,7 +25,6 @@ use geom_op::NameId;
 use geom_run::WorkMeter;
 
 use crate::cbor::{CborError, Decoder, Item, item_len};
-use crate::header::head_len;
 use crate::record::PAYLOAD_DEPTH;
 
 /// Why a payload does not have the shape its record needs.
@@ -93,11 +92,8 @@ impl<'a> Reader<'a> {
             offset,
             expected: "an item",
         })?;
-        let used = match item {
-            Item::Array(_) | Item::Map(_) | Item::Tag(_) => head_len(rest),
-            _ => d.offset(),
-        };
-        self.at = self.at.saturating_add(used);
+        // One head: a scalar whole, a container's or a tag's head alone.
+        self.at = self.at.saturating_add(d.offset());
         Ok(item)
     }
 

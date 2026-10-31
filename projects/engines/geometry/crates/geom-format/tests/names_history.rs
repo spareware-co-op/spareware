@@ -11,6 +11,8 @@
 //! - A history with every origin and every topology change written as a history record and read
 //!   back is the same history at the same path; generated histories round-trip too; a second
 //!   spelling or an unknown origin is refused.
+//! - The first code of each choice (a collapsed face, a closed hole, an edge) round-trips; the
+//!   payload reader reports its offset and refuses bytes left over; each error reads as a sentence.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -23,6 +25,7 @@
 
 use geom_format::history::{HistoryRecordError, history_record, read_history};
 use geom_format::names::{NamesError, names_record, read_names, read_topo_name};
+use geom_format::payload::{PayloadError, Reader};
 use geom_format::record::Record;
 use geom_name::NameGraph;
 use geom_op::{
@@ -463,5 +466,86 @@ fn every_payload_matches_its_cddl() {
         "recipe",
         &[RECIPE_CDDL, NAMES_CDDL, RECORD_CDDL],
         &recipe_record(&recipe()).unwrap().payload,
+    );
+}
+
+#[test]
+fn the_first_code_of_each_choice_round_trips() {
+    // Code 0 of each choice: a face that collapsed, a hole closed, a name bounded as an edge.
+    let history = History::new(
+        [rec(1, Origin::Unchanged)],
+        NameSet::default(),
+        [
+            TopologyChange::FaceVanished {
+                face: n(2),
+                why: Vanish::Collapsed,
+            },
+            TopologyChange::LoopChanged {
+                face: n(1),
+                change: LoopChange::HoleClosed,
+            },
+        ],
+    )
+    .unwrap();
+    let record = through_file(&history_record(&op(), &history).unwrap());
+    assert_eq!(
+        read_history(&record.payload, &mut meter()).unwrap(),
+        (op(), history)
+    );
+    let edge = TopoName::Bounded {
+        kind: EdgeOrVertex::Edge,
+        by: set(&[9, 10]),
+        ends: set(&[11, 12]),
+    };
+    let bytes = edge.encode().unwrap();
+    assert_eq!(
+        read_topo_name(bytes.as_bytes(), &mut meter()).unwrap(),
+        edge
+    );
+}
+
+#[test]
+fn the_reader_knows_where_it_is_and_what_is_left() {
+    let bytes = [0x82, 0x01, 0x62, b'h', b'i', 0x00];
+    let mut r = Reader::new(&bytes);
+    assert_eq!(r.offset(), 0);
+    assert_eq!(r.array(&mut meter(), "a pair").unwrap(), 2);
+    assert_eq!(r.offset(), 1);
+    assert_eq!(r.uint(&mut meter(), "a count").unwrap(), 1);
+    assert_eq!(r.text(&mut meter(), "a word").unwrap(), "hi");
+    assert_eq!(r.offset(), 5);
+    let left = r.end().unwrap_err();
+    assert_eq!(
+        left,
+        PayloadError::Shape {
+            offset: 5,
+            expected: "the end of the payload"
+        }
+    );
+    assert_eq!(
+        left.to_string(),
+        "the end of the payload expected at byte 5"
+    );
+    assert_eq!(r.uint(&mut meter(), "a zero").unwrap(), 0);
+    assert_eq!(r.end(), Ok(()));
+}
+
+#[test]
+fn the_errors_read_as_sentences() {
+    let shape = PayloadError::Shape {
+        offset: 3,
+        expected: "an item",
+    };
+    assert_eq!(
+        NamesError::Payload(shape).to_string(),
+        "not a names record: an item expected at byte 3"
+    );
+    assert_eq!(
+        HistoryRecordError::Names(NamesError::Scheme(2)).to_string(),
+        "not a history record: NameScheme 2 is not readable here"
+    );
+    assert_eq!(
+        HistoryRecordError::NotCanonical.to_string(),
+        "the history is not in its canonical encoding"
     );
 }
