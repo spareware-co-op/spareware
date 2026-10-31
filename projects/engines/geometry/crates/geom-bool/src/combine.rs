@@ -10,7 +10,8 @@
 //! - **One list per selection.** Most selections give one body, split one per cell, and each
 //!   selection's list stands in its place.
 //! - **Inputs are never changed, and nothing is returned unchecked.** A result that fails the
-//!   checker is an error, never a body (11.10).
+//!   checker or the arrangement certificate is an error, never a body, and a failure leaves the
+//!   operands as they were: they are shared borrows (11.10).
 //! - **As exact as the least exact operand.** A flat arrangement adds no error of its own (11.3).
 //! - **The same bytes on any threads, and in any order of the operands.** The order is the keys',
 //!   and the work is deterministic (23.4).
@@ -21,6 +22,7 @@
 //!
 //! Cost: what [`prepare`], [`arrange`] and [`rebuild`] cost, and the checker per result.
 
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use geom_check::{Level, check};
@@ -40,6 +42,7 @@ use geom_poly::winding::{Winding, WindingTest};
 use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
 use geom_topo::Body;
 
+use crate::certificate::{Fault, certify, labelled};
 use crate::operand::{
     BooleanInput, Operand, OperandKey, PrepareError, Prepared, Selection, prepare,
 };
@@ -144,6 +147,14 @@ enum Refused {
     Rebuild(RebuildError),
     /// The input did.
     Detail(CombineDetail),
+    /// The certificate did.
+    Fault(Fault),
+}
+
+impl From<Fault> for Refused {
+    fn from(e: Fault) -> Self {
+        Refused::Fault(e)
+    }
 }
 
 impl From<RebuildError> for Refused {
@@ -208,6 +219,10 @@ fn refused(ctx: &OpContext<'_>, error: Refused, meter: &mut WorkMeter<'_>) -> Op
     match error {
         Refused::Rebuild(e) => rebuilt(ctx, e, meter),
         Refused::Detail(detail) => fail(ctx, detail),
+        Refused::Fault(Fault::Stopped(stopped)) => ctx.stopped(meter, stopped, REBUILD),
+        Refused::Fault(fault) => {
+            fail(ctx, CombineDetail::ResultInvalid).with_message(fault.to_string())
+        }
     }
 }
 
@@ -273,6 +288,7 @@ impl Scene<'_> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<Body>, Refused> {
         let kept = self.sourced(select(test, self.classified)?);
+        labelled(&kept, test, meter)?;
         let rules = Rules { cuts, open: false };
         let body = rebuild_with(&kept, &self.ready.carriers, self.merge, rules, meter)?;
         Ok(alloc::vec![body])
@@ -513,6 +529,7 @@ pub fn combine(
             if !report.passed() {
                 return Err(fail(ctx, CombineDetail::ResultInvalid));
             }
+            certify(body, &mut meter).map_err(|e| refused(ctx, e.into(), &mut meter))?;
         }
         if bodies.iter().all(|body| body.arenas().edges.is_empty()) {
             notes.extend(Diagnostic::new(

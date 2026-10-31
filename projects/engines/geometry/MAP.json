@@ -1239,6 +1239,40 @@
       "depends": [],
       "errors": [
         {
+          "doc": "What a result failed to show.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
+          "kinds": [
+            {
+              "doc": "An edge's fins do not pair up: an odd number, or two neighbours running the same way.",
+              "name": "Fins",
+              "shape": "struct"
+            },
+            {
+              "doc": "An edge starts where it ends, or has no ends.",
+              "name": "ZeroLength",
+              "shape": "struct"
+            },
+            {
+              "doc": "A face has a loop of fewer than three fins, or no loop.",
+              "name": "ZeroArea",
+              "shape": "struct"
+            },
+            {
+              "doc": "A kept piece does not separate two cells the test tells apart.",
+              "name": "Label",
+              "shape": "struct"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_bool::certificate",
+          "name": "Fault",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a boolean's input was refused.",
           "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
           "kinds": [
@@ -1329,6 +1363,28 @@
       "layer": "6",
       "modules": [
         {
+          "cost": "linear in the body's fins, and in the pieces. Charges the meter one unit per edge, face and piece.",
+          "does": "[`certify`] holds a rebuilt body to chapter 11.10's closure checks, cheap enough to run on every result: every edge's fins pair up, in radial order alternating which way they run, so each wedge around an edge is one cell; no edge has zero length; and every face has an area. [`labelled`] holds the pieces of a winding selection to the last: each separates two cells the test tells apart, the result's material behind it. Planes within budget need no check: a plane outside its budget cannot be made. A sheet's edge may have one fin, and a wire has no fins at all, so only bodies that bound something pair up.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
+          "guarantees": [
+            "**Reports, never repairs.** A fault names what broke and the row it broke at; the body is not changed.",
+            "**The first fault in a fixed order.** Fins by edge, then edges, then faces, then pieces, each ascending, the same on every machine."
+          ],
+          "job": "The arrangement certificate: what a result must show before it is returned (11.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs#L4336-L4456"
+            ],
+            "text": "chapter 11.10 (`projects/engines/geometry/architecture/11-booleans.md`), after the closure certificate hypermesh runs before publishing a mesh (<https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs#L4336-L4456>)."
+          },
+          "path": "geom_bool::certificate",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "what [`prepare`], [`arrange`] and [`rebuild`] cost, and the checker per result.",
           "does": "[`combine`] prepares its operands, arranges their polygons, and for each selection rebuilds what it keeps and holds the body to the checker. [`unite`], [`subtract`] and [`intersect`] are its three commonest calls. [`COMBINE`] is its schema.",
           "family": [],
@@ -1336,7 +1392,7 @@
           "guarantees": [
             "**One arrangement, several results.** The selections share every clip, cut and trace (11.1).",
             "**One list per selection.** Most selections give one body, split one per cell, and each selection's list stands in its place.",
-            "**Inputs are never changed, and nothing is returned unchecked.** A result that fails the checker is an error, never a body (11.10).",
+            "**Inputs are never changed, and nothing is returned unchecked.** A result that fails the checker or the arrangement certificate is an error, never a body, and a failure leaves the operands as they were: they are shared borrows (11.10).",
             "**As exact as the least exact operand.** A flat arrangement adds no error of its own (11.3).",
             "**The same bytes on any threads, and in any order of the operands.** The order is the keys', and the work is deterministic (23.4)."
           ],
