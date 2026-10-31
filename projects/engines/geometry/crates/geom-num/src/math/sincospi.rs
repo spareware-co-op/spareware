@@ -1697,4 +1697,26 @@ mod tests {
             assert!(gap.signum() > 0 && le(&cubic, &gap), "k = {k}");
         }
     }
+
+    /// `refine`'s hard-case scan answers every `(iq, z)` it can match with the listed correctly
+    /// rounded value: each entry, its mirror `(2048 − iq, −x)`, and both moved by 2048, 48 in all.
+    /// So its doubt test lets the scan run at each of them.
+    #[test]
+    fn refine_answers_every_listed_hard_case() {
+        for hard in [&SINPI_HARD[..], &COSPI_HARD[..]] {
+            for h in hard {
+                for (iq, x) in [
+                    (h.iq, h.x),
+                    (h.iq + 2048, h.x),
+                    (2048 - h.iq, -h.x),
+                    (4096 - h.iq, -h.x),
+                ] {
+                    let sgn = if iq > 2048 { -1.0 } else { 1.0 };
+                    let want = sgn * h.r + sgn * h.d;
+                    let got = refine(iq, x * hf!("0x1p63"), hard);
+                    assert_eq!(got.to_bits(), want.to_bits(), "iq = {iq}, x = {x:e}");
+                }
+            }
+        }
+    }
 }
