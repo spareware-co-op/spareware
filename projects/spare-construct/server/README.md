@@ -93,7 +93,7 @@ This is the owner's test of the whole stack, and it stays the test as the stack 
 | --- | --- | --- |
 | 1 | Anna logs in and lands in Company 1 | Passes. Someone not on the server is refused, and nothing opens without signing in |
 | 2 | Dan switches between Company 2 and Company 1 | Passes. Each hub shows only the projects he is on |
-| 3 | Two browsers editing Example model 1 each see the other's edit in under 200 ms | Passes. Real browsers: median 24 ms, worst 67 ms. Test clients, 200 edits each way: median 20 ms, worst 56 ms |
+| 3 | Two browsers editing Example model 1 each see the other's edit in under 200 ms | Passes. Real browsers: median 24 ms, worst 67 ms. Test clients, 200 edits each way: median 22 ms, worst 130 ms |
 | 4 | Dan can't see the Architecture team's WIP; Arch v12 can be shared, bridged and consumed | Passes. A bridge to Company 3 is refused because only one hub permits it. What Dan consumes has the same hash as what Anna shared |
 | 5 | Killing and restarting the server mid-edit loses nothing | Passes. 400 edits through 2 hard kills: exactly 400 log entries, and the log replays to exactly what is stored. The real page reconnects by itself mid-drag |
 | 6 | A backup restores | Passes. After wiping TiKV and RustFS, every key and file came back byte for byte, the logs replay, and work carries on |
@@ -102,18 +102,18 @@ Shapes run through all of it. Every `verify` above also rebuilds each stored sha
 
 ### Moving to three machines, by settings alone
 
-The whole checklist passes on three copies of PD and TiKV, with three copies of every write, changing only `STACK_NODES`, `STACK_PD` and the replica count. One TiKV is killed with 175 of the 400 edits still to come: nothing is lost, and the run takes 1.9 s instead of 1.7 s while the other two take over.
+The whole checklist passes on three copies of PD and TiKV, with three copies of every write, changing only `STACK_NODES`, `STACK_PD` and the replica count. Every Raft leader is first moved onto one TiKV, the worst one to lose, which is then killed with 175 of the 400 edits still to come. Nothing is lost, and the run takes 13 s instead of 1.6 s while the other two elect new leaders. A server restarted just as that TiKV dies was back in 8 to 14 s.
 
 ### Load on the direct TiKV route
 
-Each writer sends an edit and waits for it to be confirmed, as a busy browser does. These run the orderer directly on TiKV, with no web server and no regeneration, which runs after each commit and holds nothing up. Every edit is checked afterwards: none lost, none doubled. Through the real server, with regeneration keeping up behind them, eight tabs on two servers reach 82 edits/s on one node and 67 on three.
+Each writer sends an edit and waits for it to be confirmed, as a busy browser does. These run the orderer directly on TiKV, with no web server and no regeneration, which runs after each commit and holds nothing up. Every edit is checked afterwards: none lost, none doubled. Through the real server, with regeneration keeping up behind them, eight tabs on two servers reach 85 edits/s on one node and 58 on three.
 
 | Run | One node | Three nodes |
 | --- | --- | --- |
-| 1 project, 8 writers, 1 server | 188 edits/s, 99% in 58 ms | 178 edits/s, 99% in 61 ms |
-| 1 project, 8 writers, 2 servers | 99 edits/s, 99% in 1,270 ms, worst 3.4 s | 69 edits/s, 99% in 1,120 ms, worst 6.1 s |
-| 8 projects, 8 writers, 1 server | 241 edits/s, 99% in 61 ms | 163 edits/s, 99% in 65 ms |
-| 32 projects, 64 writers, 2 servers | 426 edits/s, 99% in 285 ms | 337 edits/s, 99% in 410 ms |
+| 1 project, 8 writers, 1 server | 225 edits/s, 99% in 42 ms | 177 edits/s, 99% in 58 ms |
+| 1 project, 8 writers, 2 servers | 125 edits/s, 99% in 409 ms, worst 4.9 s | 94 edits/s, 99% in 1,356 ms, worst 5.4 s |
+| 8 projects, 8 writers, 1 server | 286 edits/s, 99% in 37 ms | 130 edits/s, 99% in 202 ms |
+| 32 projects, 64 writers, 2 servers | 528 edits/s, 99% in 168 ms | 422 edits/s, 99% in 200 ms |
 
 What these say:
 

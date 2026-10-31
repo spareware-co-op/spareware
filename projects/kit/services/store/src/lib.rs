@@ -9,6 +9,10 @@
 //! - A write conflict comes back nested inside key errors, and a commit whose outcome is unknown
 //!   comes back as `UndeterminedError`. [`classify`] turns those into `kit-store`'s errors, which
 //!   the orderer needs to tell apart.
+//! - `tikv-client` 0.4.0 can't get past a dead TiKV. It keeps asking the leader it has cached, and
+//!   a connection that fails gives it no answer to learn from, so a server could stay down for
+//!   good while the two machines left had already elected new leaders. tikv/client-rust#562 tries
+//!   the other copies, and Spare Construct's checklist now kills the node holding every leader.
 //! - PD and TiKV stop on a hang-up signal even under `nohup`: run them under a service manager.
 
 use futures::TryStreamExt;
@@ -34,9 +38,7 @@ pub struct Tikv {
 fn is_conflict(error: &Error) -> bool {
     match error {
         Error::KeyError(key_error) => key_error.conflict.is_some(),
-        Error::MultipleKeyErrors(errors) | Error::ExtractedErrors(errors) => {
-            errors.iter().any(is_conflict)
-        }
+        Error::MultipleKeyErrors(errors) => errors.iter().any(is_conflict),
         _ => false,
     }
 }

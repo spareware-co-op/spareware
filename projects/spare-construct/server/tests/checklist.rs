@@ -55,7 +55,8 @@ impl Server {
                 .expect("starting the server"),
         ));
         let health = format!("http://{bind}/health");
-        for _ in 0..200 {
+        // A minute, because a server starting just after a TiKV died waits for new Raft leaders.
+        for _ in 0..1200 {
             if reqwest::get(&health)
                 .await
                 .is_ok_and(|r| r.status().is_success())
@@ -865,8 +866,51 @@ async fn four_access_and_bridges(base: &str) {
     );
 }
 
+/// Moves every Raft leader onto the TiKV node about to die. Left to chance, a run can lose a node
+/// leading nothing and prove nothing: that's how `tikv-client` 0.4.0, which can't get past a dead
+/// leader, passed this check until the day the leaders happened to be there.
+async fn leaders_onto_the_node_that_dies() {
+    let pd = "http://127.0.0.1:2379/pd/api/v1";
+    let http = Client::new();
+    let read = |url: String| {
+        let http = http.clone();
+        async move {
+            let reply = http.get(url).send().await.unwrap();
+            reply.json::<Value>().await.unwrap()
+        }
+    };
+    let stores = read(format!("{pd}/stores")).await;
+    let dying = stores["stores"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["store"]["address"] == "127.0.0.1:20162")
+        .expect("the third TiKV");
+    let store = dying["store"]["id"].as_u64().unwrap();
+    let grant = json!({ "name": "grant-leader-scheduler", "store_id": store });
+    let schedulers = format!("{pd}/schedulers");
+    http.post(&schedulers).json(&grant).send().await.unwrap();
+    let mut gathered = false;
+    for _ in 0..600 {
+        let status = read(format!("{pd}/store/{store}")).await;
+        let status = &status["status"];
+        gathered = status["region_count"].as_u64().is_some_and(|n| n > 0)
+            && status["leader_count"] == status["region_count"];
+        if gathered {
+            break;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    let done = format!("{schedulers}/grant-leader-scheduler");
+    http.delete(&done).send().await.unwrap();
+    check(gathered, "every Raft leader is on the node about to die");
+}
+
 async fn five_kill_mid_edit(server: &mut Server) {
     println!("\n5. Killing and restarting the server mid-edit loses nothing");
+    if std::env::var("STACK_NODES").as_deref() == Ok("3") {
+        leaders_onto_the_node_that_dies().await;
+    }
     let base = server.base();
     const EDITS: u64 = 400;
     let model = "arch-model";
@@ -987,7 +1031,17 @@ async fn five_kill_mid_edit(server: &mut Server) {
     );
     pass("replaying every project's log gives exactly the stored model");
     pass("and every stored shape is what its recipe builds");
-    stack(&["collect"]);
+    // Just after a TiKV dies a region can be between leaders. `collect` says so and stops, and a
+    // running server tries again on its timer, so this does too.
+    let mut collected = false;
+    for _ in 0..120 {
+        collected = Command::new(BIN).arg("collect").output().unwrap().status.success();
+        if collected {
+            break;
+        }
+        sleep(Duration::from_millis(500)).await;
+    }
+    check(collected, "every region has a leader again");
     stack(&["verify"]);
     pass("clearing old versions out of TiKV leaves the model and its log whole");
 }
