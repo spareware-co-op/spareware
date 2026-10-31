@@ -21,12 +21,16 @@
 //! (`projects/engines/geometry/architecture/12-intersections.md`).
 //!
 //! Cost: linear in the items and samples.
+//!
+//! Consulted: ssi-corpus, MIT OR Apache-2.0,
+//!   <https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9>, for its
+//!   case schema, its runner contract and its scoring rules.
 
 use geom_curve::{CurveKind, ParamCurve};
 use geom_intersect::{CurveContact, Intersection, Item, Unresolved};
 use geom_math::Box3;
-use geom_nurbs::Limit;
 use geom_num::P3;
+use geom_nurbs::Limit;
 use serde::{Deserialize, Serialize};
 
 use super::SsiError;
@@ -34,7 +38,7 @@ use super::case::V3;
 use super::place::Placed;
 use crate::golden::{Sha256, hex};
 
-/// The status a success reports: SMLib's `SM_SUCCESS`, which the scorer tests for.
+/// The status a success reports: `SMLib`'s `SM_SUCCESS`, which the scorer tests for.
 pub const SUCCESS: u32 = 1000;
 
 /// The status of an engine that does not answer.
@@ -144,8 +148,12 @@ pub struct Output {
 
 /// The middle of `xyz`, in steps.
 fn middle(xyz: &Box3) -> V3 {
-    let (a, b) = (corner(xyz.min()), corner(xyz.max()));
-    [0, 1, 2].map(|i| (double(a[i]) + double(b[i])) / 2.0)
+    let (a, b) = (corner(xyz.min()).map(double), corner(xyz.max()).map(double));
+    [
+        f64::midpoint(a[0], b[0]),
+        f64::midpoint(a[1], b[1]),
+        f64::midpoint(a[2], b[2]),
+    ]
 }
 
 /// `p`'s coordinates.
@@ -167,8 +175,8 @@ fn sampled(curve: &CurveKind<3>, placed: &Placed, id: &str) -> Result<Vec<V3>, S
     let (lo, hi) = ParamCurve::domain(curve);
     let mut samples = Vec::with_capacity(SAMPLES as usize);
     for i in 0..SAMPLES {
-        let t = lo + (hi - lo) * (f64::from(i) / f64::from(SAMPLES - 1));
-        let side = if i + 1 == SAMPLES {
+        let t = lo + (hi - lo) * (f64::from(i) / f64::from(SAMPLES.saturating_sub(1)));
+        let side = if i == SAMPLES.saturating_sub(1) {
             Limit::FromLeft
         } else {
             Limit::FromRight
@@ -260,7 +268,7 @@ impl Output {
         for flag in &self.flagged {
             word(flag.why as u64);
             for x in flag.lo.iter().chain(&flag.hi) {
-                word(x.cast_unsigned());
+                word(u64::from_le_bytes(x.to_le_bytes()));
             }
         }
         hex(h.finish())

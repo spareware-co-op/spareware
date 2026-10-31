@@ -17,6 +17,10 @@
 //! <https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/README.md>.
 //!
 //! Cost: one case's placement, and its answer.
+//!
+//! Consulted: ssi-corpus, MIT OR Apache-2.0,
+//!   <https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9>, for its
+//!   case schema, its runner contract and its scoring rules.
 
 #![forbid(unsafe_code)]
 

@@ -1,9 +1,9 @@
 //! The intersection failure catalogues, rebuilt with inputs of our own (chapter 12.17; piece G160).
 //!
 //! What it does: [`all`] builds one case for each intersection failure the vetted kernels publish:
-//! SMLib's issues #1 and #16, the loops its search drops near tangency, the single candidate per
+//! `SMLib`'s issues #1 and #16, the loops its search drops near tangency, the single candidate per
 //! patch pair, its fixed tolerances, truncated traces, and the seam and pole defects of its known
-//! issues and OpenCascade's own list. Every input is new: the shapes are chosen here, and each truth
+//! issues and `OpenCascade`'s own list. Every input is new: the shapes are chosen here, and each truth
 //! is a closed form computed here. Nothing is taken from those projects but the failure's
 //! description, and each case's `notes` says which it rebuilds. The cases use the corpus's schema,
 //! so the corpus's scorer and [`super::gate`] judge them as they do the corpus.
@@ -21,13 +21,16 @@
 //!
 //! Cost: linear in the samples; a few thousand per case.
 
+use core::f64::consts::PI;
 use std::fs;
 use std::path::Path;
+
+use geom_num::{Real, math};
 
 use super::case::{
     Branch, Case, Contact, Expected, Implicit, Shared, Surface, V3, along, cross, unit,
 };
-use super::{SsiError, cos_deg, sin_deg};
+use super::{SsiError, cos_deg, cos_half, sin_deg, sin_half};
 
 /// Samples along one curve.
 const SAMPLES: u32 = 1_500;
@@ -48,7 +51,9 @@ fn curve(kind: Contact, closed: bool, f: impl Fn(f64) -> V3) -> Branch {
 
 /// The line from `a` to `b`.
 fn line(kind: Contact, a: V3, b: V3) -> Branch {
-    curve(kind, false, |t| along(a, t, [b[0] - a[0], b[1] - a[1], b[2] - a[2]]))
+    curve(kind, false, |t| {
+        along(a, t, [b[0] - a[0], b[1] - a[1], b[2] - a[2]])
+    })
 }
 
 /// A full plane patch's data: `origin` + u·`x` + v·`y`.
@@ -144,7 +149,7 @@ const X: V3 = [1.0, 0.0, 0.0];
 const Y: V3 = [0.0, 1.0, 0.0];
 const Z: V3 = [0.0, 0.0, 1.0];
 
-/// SMLib #16: wrong results and errors on tangent cylinders.
+/// `SMLib` #16: wrong results and errors on tangent cylinders.
 fn tangent_cylinders() -> Vec<Case> {
     let about = |id, title, formula| About {
         id,
@@ -165,7 +170,11 @@ fn tangent_cylinders() -> Vec<Case> {
             ),
             cylinder([-1.0, 0.0, 0.0], X, Y, 1.0, tall),
             cylinder([1.0, 0.0, 0.0], X, Y, 1.0, tall),
-            curves(vec![line(Contact::Tangent, [0.0, 0.0, -2.0], [0.0, 0.0, 2.0])]),
+            curves(vec![line(
+                Contact::Tangent,
+                [0.0, 0.0, -2.0],
+                [0.0, 0.0, 2.0],
+            )]),
         ),
         case(
             &about(
@@ -175,7 +184,11 @@ fn tangent_cylinders() -> Vec<Case> {
             ),
             cylinder([0.0; 3], X, Y, 2.0, tall),
             cylinder([1.0, 0.0, 0.0], X, Y, 1.0, tall),
-            curves(vec![line(Contact::Tangent, [2.0, 0.0, -2.0], [2.0, 0.0, 2.0])]),
+            curves(vec![line(
+                Contact::Tangent,
+                [2.0, 0.0, -2.0],
+                [2.0, 0.0, 2.0],
+            )]),
         ),
         case(
             &about(
@@ -190,16 +203,15 @@ fn tangent_cylinders() -> Vec<Case> {
     ]
 }
 
-/// SMLib #1: a mirrored operand dropped without a word.
+/// `SMLib` #1: a mirrored operand dropped without a word.
 fn mirrored() -> Vec<Case> {
     let root3 = 3.0_f64.sqrt();
-    let n = [0.6, 0.8, 0.0];
-    let u = [-0.8, 0.6, 0.0];
-    let turn = core::f64::consts::TAU;
+    let mirror = [0.6, 0.8, 0.0];
+    let across = [-0.8, 0.6, 0.0];
     let circle = move |t: f64| {
         along(
-            along([0.0; 3], root3 * (turn * t).cos(), u),
-            root3 * (turn * t).sin(),
+            along([0.0; 3], root3 * cos_half(2.0 * t), across),
+            root3 * sin_half(2.0 * t),
             Z,
         )
     };
@@ -213,17 +225,20 @@ fn mirrored() -> Vec<Case> {
             cov_tol: 1e-3,
             feature_size: None,
         },
-        sphere(along([0.0; 3], 1.0, n), 2.0),
-        sphere(along([0.0; 3], -1.0, n), 2.0),
+        sphere(along([0.0; 3], 1.0, mirror), 2.0),
+        sphere(along([0.0; 3], -1.0, mirror), 2.0),
         curves(vec![curve(Contact::Crossing, true, circle)]),
     );
     // Two equal cylinders whose axes are mirror images in x = 0, at 30 degrees either side of z.
-    let (s, c) = (0.5, root3 / 2.0);
-    let (a, b) = ([c, 0.0, -s], [c, 0.0, s]);
+    let (sine, cosine) = (0.5, root3 / 2.0);
+    let (first, second) = ([cosine, 0.0, -sine], [cosine, 0.0, sine]);
     let half = |x_scale: f64, z_scale: f64, side: f64| {
         curve(Contact::Crossing, false, move |t| {
-            let at = turn / 2.0 * t;
-            [x_scale * at.sin() * side, at.cos(), z_scale * at.sin() * side]
+            [
+                x_scale * sin_half(t) * side,
+                cos_half(t),
+                z_scale * sin_half(t) * side,
+            ]
         })
     };
     let cylinders = case(
@@ -236,20 +251,19 @@ fn mirrored() -> Vec<Case> {
             cov_tol: 1e-3,
             feature_size: None,
         },
-        cylinder([0.0; 3], a, Y, 1.0, [-3.0, 3.0]),
-        cylinder([0.0; 3], b, Y, 1.0, [-3.0, 3.0]),
+        cylinder([0.0; 3], first, Y, 1.0, [-3.0, 3.0]),
+        cylinder([0.0; 3], second, Y, 1.0, [-3.0, 3.0]),
         Expected {
             branches: vec![
-                half(0.0, 1.0 / s, 1.0),
-                half(0.0, 1.0 / s, -1.0),
-                half(1.0 / c, 0.0, 1.0),
-                half(1.0 / c, 0.0, -1.0),
+                half(0.0, 1.0 / sine, 1.0),
+                half(0.0, 1.0 / sine, -1.0),
+                half(1.0 / cosine, 0.0, 1.0),
+                half(1.0 / cosine, 0.0, -1.0),
             ],
             singular_points: vec![[0.0, 1.0, 0.0], [0.0, -1.0, 0.0]],
             ..Expected::default()
         },
     );
-    let rectangle = |a: V3, b: V3| line(Contact::Coincident, a, b).points;
     let corners = [
         [0.0, -1.0, 0.0],
         [1.0, -1.0, 0.0],
@@ -258,8 +272,9 @@ fn mirrored() -> Vec<Case> {
         [0.0, -1.0, 0.0],
     ];
     let boundary = corners
-        .windows(2)
-        .flat_map(|w| rectangle(w[0], w[1]))
+        .iter()
+        .zip(corners.iter().skip(1))
+        .flat_map(|(a, b)| line(Contact::Coincident, *a, *b).points)
         .collect();
     let planes = case(
         &About {
@@ -281,10 +296,9 @@ fn mirrored() -> Vec<Case> {
     vec![spheres, cylinders, planes]
 }
 
-/// SMLib drops candidates within 5 and 2 degrees of tangent without a signal, and an interior loop
+/// `SMLib` drops candidates within 5 and 2 degrees of tangent without a signal, and an interior loop
 /// rests on one sampled candidate per pair of leaf patches.
 fn loops() -> Vec<Case> {
-    let turn = core::f64::consts::TAU;
     let shallow = |id, angle: f64| {
         let (r, h) = (sin_deg(angle), cos_deg(angle));
         case(
@@ -300,16 +314,15 @@ fn loops() -> Vec<Case> {
             plane([0.0, 0.0, h], X, Y, [-1.0, 1.0], [-1.0, 1.0]),
             sphere([0.0; 3], 1.0),
             curves(vec![curve(Contact::Crossing, true, move |t| {
-                [r * (turn * t).cos(), r * (turn * t).sin(), h]
+                [r * cos_half(2.0 * t), r * sin_half(2.0 * t), h]
             })]),
         )
     };
     // A plane x = 1/2 through a ring torus, nearer its axis than its hole's edge: two ovals.
     let oval = |side: f64| {
         curve(Contact::Crossing, true, move |t| {
-            let phi = turn * t;
-            let rho = 2.0 + phi.cos();
-            [0.5, side * (rho * rho - 0.25).sqrt(), phi.sin()]
+            let rho = 2.0 + cos_half(2.0 * t);
+            [0.5, side * (rho * rho - 0.25).sqrt(), sin_half(2.0 * t)]
         })
     };
     let ovals = case(
@@ -342,13 +355,16 @@ fn loops() -> Vec<Case> {
         ),
         curves(vec![oval(1.0), oval(-1.0)]),
     );
-    vec![shallow("f5_loop_3deg", 3.0), shallow("f2_loop_1deg5", 1.5), ovals]
+    vec![
+        shallow("f5_loop_3deg", 3.0),
+        shallow("f2_loop_1deg5", 1.5),
+        ovals,
+    ]
 }
 
-/// SMLib's tolerances are fixed fractions of a surface's size, and its truncated traces return
+/// `SMLib`'s tolerances are fixed fractions of a surface's size, and its truncated traces return
 /// success.
 fn sizes() -> Vec<Case> {
-    let turn = core::f64::consts::TAU;
     let scaled = |id, r: f64| {
         let h = r / 2.0;
         let rho = r * 3.0_f64.sqrt() / 2.0;
@@ -365,14 +381,14 @@ fn sizes() -> Vec<Case> {
             plane([0.0, 0.0, h], X, Y, [-r, r], [-r, r]),
             sphere([0.0; 3], r),
             curves(vec![curve(Contact::Crossing, true, move |t| {
-                [rho * (turn * t).cos(), rho * (turn * t).sin(), h]
+                [rho * cos_half(2.0 * t), rho * sin_half(2.0 * t), h]
             })]),
         )
     };
     // The plane x = 1/2 + z tan 1 degree through a tall cylinder: a long, thin arc over its top.
     let slope = sin_deg(1.0) / cos_deg(1.0);
     let rim = 0.5 - 30.0 * slope;
-    let t0 = rim.acos();
+    let reach = math::atan2((1.0 - rim * rim).sqrt(), rim).map_or(0.0, Real::get) / PI;
     let normal = unit([1.0, 0.0, -slope]);
     let up = cross(normal, Y);
     let long = case(
@@ -388,17 +404,20 @@ fn sizes() -> Vec<Case> {
         plane([0.5, 0.0, 0.0], Y, up, [-2.0, 2.0], [-32.0, 32.0]),
         cylinder([0.0; 3], X, Y, 1.0, [-30.0, 30.0]),
         curves(vec![curve(Contact::Crossing, false, move |t| {
-            let at = t0 * (2.0 * t - 1.0);
-            [at.cos(), at.sin(), (at.cos() - 0.5) / slope]
+            let at = reach * (2.0 * t - 1.0);
+            [cos_half(at), sin_half(at), (cos_half(at) - 0.5) / slope]
         })]),
     );
-    vec![scaled("f_scale_small", 1.0 / 256.0), scaled("f_scale_large", 256.0), long]
+    vec![
+        scaled("f_scale_small", 1.0 / 256.0),
+        scaled("f_scale_large", 256.0),
+        long,
+    ]
 }
 
-/// The seam and pole defects of SMLib's known issues, and a branch point its tracer follows only
+/// The seam and pole defects of `SMLib`'s known issues, and a branch point its tracer follows only
 /// one way out of.
 fn seams() -> Vec<Case> {
-    let turn = core::f64::consts::TAU;
     let tall = [-2.0, 2.0];
     let seam_line = case(
         &About {
@@ -430,7 +449,7 @@ fn seams() -> Vec<Case> {
         plane([0.0; 3], X, Z, [-2.0, 2.0], [-2.0, 2.0]),
         sphere([0.0; 3], 1.0),
         curves(vec![curve(Contact::Crossing, true, move |t| {
-            [(turn * t).cos(), 0.0, (turn * t).sin()]
+            [cos_half(2.0 * t), 0.0, sin_half(2.0 * t)]
         })]),
     );
     let half = 30.0;

@@ -43,9 +43,7 @@ use geom_test::corpus::{EMBEDDED, Manifest};
 use geom_test::ssi::SsiError;
 use geom_test::ssi::case::{Case, Class};
 use geom_test::ssi::catalogue;
-use geom_test::ssi::gate::{
-    CEILINGS, Ceilings, Mode, Report, Run, accuracy_of, run, total_size,
-};
+use geom_test::ssi::gate::{CEILINGS, Ceilings, Mode, Report, Run, accuracy_of, run, total_size};
 use geom_test::ssi::output::Output;
 use geom_test::ssi::place::{disagreement, place};
 
@@ -190,12 +188,18 @@ fn place_all(all: &[Case], tolerance: f64, quiet: bool) -> usize {
             Ok((placed, off)) if off <= case.cov_tol => {
                 if !quiet {
                     let moved = placed.moved();
-                    println!("{} 2^{} moved {moved} kinds off by {off:e}", case.id, placed.log2);
+                    println!(
+                        "{} 2^{} moved {moved} kinds off by {off:e}",
+                        case.id, placed.log2
+                    );
                 }
             }
             Ok((_, off)) => {
                 failed += 1;
-                println!("{}: the kernel's kinds lie {off:e} off its closed forms", case.id);
+                println!(
+                    "{}: the kernel's kinds lie {off:e} off its closed forms",
+                    case.id
+                );
             }
             Err(e) => {
                 failed += 1;

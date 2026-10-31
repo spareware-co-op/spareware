@@ -20,6 +20,10 @@
 //! scan cannot be wrong in the ways a hash can.
 //!
 //! Cost: samples × segments, for each direction.
+//!
+//! Consulted: ssi-corpus, MIT OR Apache-2.0,
+//!   <https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9>, for its
+//!   case schema, its runner contract and its scoring rules.
 
 use super::case::{Case, Contact, V3, along, dot, norm, sub};
 use super::output::Output;
@@ -44,14 +48,22 @@ fn thinned(points: &[V3]) -> impl Iterator<Item = &V3> {
 
 /// How far `q` is from the segment `a`–`b`.
 fn to_segment(q: V3, a: V3, b: V3) -> f64 {
-    let d = sub(b, a);
-    let long = dot(d, d);
-    let t = if long > 0.0 {
-        larger(0.0, smaller(1.0, dot(sub(q, a), d) / long))
+    let span = sub(b, a);
+    let long = dot(span, span);
+    let at = if long > 0.0 {
+        larger(0.0, smaller(1.0, dot(sub(q, a), span) / long))
     } else {
         0.0
     };
-    norm(sub(q, along(a, t, d)))
+    norm(sub(q, along(a, at, span)))
+}
+
+/// How far `q` is from the polyline `line`; infinite if it is empty.
+pub(crate) fn to_line(q: V3, line: &[V3]) -> f64 {
+    let first = line.first().map_or(f64::INFINITY, |p| norm(sub(q, *p)));
+    line.iter()
+        .zip(line.iter().skip(1))
+        .fold(first, |d, (a, b)| smaller(d, to_segment(q, *a, *b)))
 }
 
 /// A set of polylines and points to measure against.
@@ -67,7 +79,7 @@ impl Nearest {
             if let [only] = curve {
                 segments.push((*only, *only));
             }
-            segments.extend(curve.windows(2).map(|w| (w[0], w[1])));
+            segments.extend(curve.iter().copied().zip(curve.iter().copied().skip(1)));
         }
         segments.extend(points.iter().map(|p| (*p, *p)));
         Nearest { segments }
@@ -131,11 +143,16 @@ pub fn compare(case: &Case, out: &Output, cov: f64) -> Seen {
             .map(|f| f.points),
         &case.expected.isolated_points,
     );
-    seen.spurious = out
+    let curves = out
         .curves
         .iter()
         .filter(|c| thinned(&c.xyz).any(|q| truth.distance(*q) > cov))
-        .count()
-        + out.points.iter().filter(|p| truth.distance(**p) > cov).count();
+        .count();
+    let points = out
+        .points
+        .iter()
+        .filter(|p| truth.distance(**p) > cov)
+        .count();
+    seen.spurious = curves.saturating_add(points);
     seen
 }

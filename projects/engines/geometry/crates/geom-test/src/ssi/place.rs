@@ -5,25 +5,28 @@
 //! corpus's are doubles in units of their own. [`place`] maps a case by 2^k steps to the unit, which
 //! is exact in doubles, and rounds each point and length to a whole step. Directions, angles, knots
 //! and weights are not grid data and stay as they are. It tries k upward from the first scale at
-//! which the tolerance is at least ε_fit, and takes the smallest that passes [`kept`]'s checks, so
+//! which the tolerance is at least `ε_fit`, and takes the smallest that passes [`kept`]'s checks, so
 //! a case is never scaled further than it needs: thresholds in steps stay as small as they can.
 //!
 //! Guarantees: what [`kept`] holds, for the case's two surfaces together:
 //!
-//! - **ε_fit**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale.
+//! - **`ε_fit`**: the case's tolerance is at least [`FIT_STEPS`] steps at this scale.
 //! - **The range**: every coordinate is inside the grid's range.
 //! - **The truth is still on the surfaces**: every truth sample is within the tolerance of each
 //!   analytic surface as placed, by its closed form. A NURBS surface cannot move further than its
 //!   furthest control point did, since a point on it is a convex combination of its net with the
 //!   same weights; that bound is the surface's `moved`.
 //! - **The answer did not move past the tolerance**: where a case states how far a residual moves
-//!   the answer, `moved` × that factor is within the tolerance.
+//!   the answer, `moved` × that factor is within the tolerance the scorer applies to that case,
+//!   which widens with the same factor ([`effective`]).
 //! - **Small features survive**: `moved` is at most a quarter of a stated feature size.
 //! - **A contact did not spread past the tolerance**: where surfaces touch, a change of δ moves the
 //!   contact by about √(2δ/Δκ) (12.9). The harness has no Δκ for a NURBS pair, so it takes the
 //!   flattest curvature the case's size allows, 1/L, and asks √(2δL) to be within the tolerance.
 //!   Contacts of higher order are named in [`HIGHER_ORDER`], and the same bound is taken at their
-//!   order. A case whose data is exact on the grid moves nothing and passes at once.
+//!   order. A case whose data is exact on the grid moves nothing and passes at once. A case that
+//!   states its conditioning is a shallow crossing, not a touch: its answer moves as δ times that
+//!   factor, which the check above holds, so this one does not apply to it.
 //!
 //! Method: chapter 12.17's adapter
 //! (`projects/engines/geometry/architecture/12-intersections.md`); the band formula of 12.9; the
@@ -31,16 +34,15 @@
 //!
 //! Cost: linear in the case's samples and control points, for each scale tried; at most 40 scales.
 
-use core::f64::consts::PI;
-
 use geom_curve::frame::Frame;
 use geom_nurbs::{Basis, Limit};
 use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind, Torus};
 
-use super::case::{Case, Contact, Implicit, Surface, V3, along, cross, norm, sub, unit};
+use super::case::{Case, Contact, Implicit, Surface, V3, along, cross, norm, sub};
+use super::cover::effective;
 use super::{SsiError, cos_deg, larger, sin_deg};
 
-/// ε_fit in steps: `geom_num::ladder::FIT`.
+/// `ε_fit` in steps: `geom_num::ladder::FIT`.
 pub const FIT_STEPS: f64 = 64.0;
 const _: () = assert!(geom_num::ladder::FIT.0 == 64);
 
@@ -58,7 +60,7 @@ pub const HIGHER_ORDER: [(&str, u32); 2] = [
 
 /// 2^`k`, exactly.
 fn two(k: u32) -> f64 {
-    f64::from_bits((1023 + u64::from(k)) << 52)
+    (0..k).fold(1.0, |x, _| x * 2.0)
 }
 
 /// `x` steps, rounded to a whole step ties to even, and how far that moved it.
@@ -127,6 +129,10 @@ fn extent(surface: &Surface) -> f64 {
 }
 
 /// `surface` on the grid, and how far it moved at most, in steps.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one arm per kind, each the same few lines; splitting them hides that"
+)]
 fn rounded(surface: &Surface, scale: f64) -> (Surface, f64) {
     match surface {
         Surface::Plane {
@@ -384,11 +390,6 @@ impl Placed {
     }
 }
 
-/// `deg` degrees in radians.
-fn radians(deg: f64) -> f64 {
-    deg / 180.0 * PI
-}
-
 /// `surface`, as the kernel's kind.
 fn kind(surface: &Surface, id: &str) -> Result<SurfaceKind, SsiError> {
     let refused = |e: &dyn core::fmt::Debug| SsiError::Kernel {
@@ -396,7 +397,8 @@ fn kind(surface: &Surface, id: &str) -> Result<SurfaceKind, SsiError> {
         why: format!("{e:?}"),
     };
     let frame = |x: V3, y: V3| Frame::new(x, cross(x, y)).map_err(|e| refused(&e));
-    let turn = |r: [f64; 2]| (radians(r[0]), radians(r[1]));
+    // The kernel's angles are in half-turns.
+    let turn = |r: [f64; 2]| (r[0] / 180.0, r[1] / 180.0);
     Ok(match surface {
         Surface::Plane {
             origin,
@@ -416,8 +418,13 @@ fn kind(surface: &Surface, id: &str) -> Result<SurfaceKind, SsiError> {
             lon,
             lat,
         } => SurfaceKind::Sphere(
-            Sphere::new(*center, *radius, frame(*xaxis, *yaxis)?, (turn(*lon), turn(*lat)))
-                .map_err(|e| refused(&e))?,
+            Sphere::new(
+                *center,
+                *radius,
+                frame(*xaxis, *yaxis)?,
+                (turn(*lon), turn(*lat)),
+            )
+            .map_err(|e| refused(&e))?,
         ),
         Surface::Cylinder {
             origin,
@@ -511,8 +518,9 @@ pub fn holds_contact(width: f64, moved: f64, extent: f64, order: u32) -> bool {
     left >= right
 }
 
-/// Why rounding at `scale` changes `case`'s truth, or `None` if it does not.
-fn kept(case: &Case, placed: &Placed, tolerance: f64) -> Option<String> {
+/// Why rounding at `placed`'s scale changes `case`'s truth, or `None` if it does not. `tolerance`
+/// is the one `ε_fit` answers to, and `accuracy` the run's.
+fn kept(case: &Case, placed: &Placed, tolerance: f64, accuracy: Option<f64>) -> Option<String> {
     let scale = placed.scale();
     let allowed = case.cov_tol * scale;
     if tolerance * scale < FIT_STEPS {
@@ -532,13 +540,18 @@ fn kept(case: &Case, placed: &Placed, tolerance: f64) -> Option<String> {
         }
     }
     if let Some(ill) = case.ill_cond {
-        if moved * ill > allowed {
-            return Some(format!("moving {moved} steps moves the answer past {allowed}"));
+        let judged = effective(case, accuracy) * scale;
+        if moved * ill > judged {
+            return Some(format!(
+                "moving {moved} steps moves the answer past {judged}"
+            ));
         }
     }
     if let Some(size) = case.feature_size {
         if moved * 4.0 > size * scale {
-            return Some(format!("moving {moved} steps is too large for a feature of {size}"));
+            return Some(format!(
+                "moving {moved} steps is too large for a feature of {size}"
+            ));
         }
     }
     let touching = case.features().iter().any(|f| {
@@ -547,8 +560,11 @@ fn kept(case: &Case, placed: &Placed, tolerance: f64) -> Option<String> {
             Contact::Tangent | Contact::NearTangent | Contact::Isolated | Contact::Singular
         )
     });
-    if touching && !holds_contact(allowed, moved, placed.extent, placed.order) {
-        return Some(format!("moving {moved} steps spreads a contact past {allowed}"));
+    let shallow = case.ill_cond.is_some();
+    if touching && !shallow && !holds_contact(allowed, moved, placed.extent, placed.order) {
+        return Some(format!(
+            "moving {moved} steps spreads a contact past {allowed}"
+        ));
     }
     None
 }
@@ -569,7 +585,7 @@ pub fn place(case: &Case, accuracy: Option<f64>) -> Result<Placed, SsiError> {
     };
     let mut k = 0;
     while tolerance * two(k) < FIT_STEPS {
-        k += 1;
+        k = k.saturating_add(1);
     }
     let mut last = format!("a reach of {far} leaves no scale for a tolerance of {tolerance:e}");
     while far * two(k) <= RANGE {
@@ -583,11 +599,11 @@ pub fn place(case: &Case, accuracy: Option<f64>) -> Result<Placed, SsiError> {
             extent: far * scale,
             order: order_of(&case.id),
         };
-        match kept(case, &placed, tolerance) {
+        match kept(case, &placed, tolerance, accuracy) {
             None => return Ok(placed),
             Some(why) => last = why,
         }
-        k += 1;
+        k = k.saturating_add(1);
     }
     Err(unplaced(last))
 }
@@ -606,8 +622,8 @@ pub fn disagreement(case: &Case, placed: &Placed) -> Result<f64, SsiError> {
         let ((u0, u1), (v0, v1)) = kind.domain();
         for i in 0..SIDE {
             for j in 0..SIDE {
-                let along_u = f64::from(i) / f64::from(SIDE - 1);
-                let along_v = f64::from(j) / f64::from(SIDE - 1);
+                let along_u = f64::from(i) / f64::from(SIDE.saturating_sub(1));
+                let along_v = f64::from(j) / f64::from(SIDE.saturating_sub(1));
                 let u = u0 + (u1 - u0) * along_u;
                 let v = v0 + (v1 - v0) * along_v;
                 let sides = (Limit::FromRight, Limit::FromRight);
@@ -620,10 +636,4 @@ pub fn disagreement(case: &Case, placed: &Placed) -> Result<f64, SsiError> {
         }
     }
     Ok(most)
-}
-
-/// The unit normal the case's frame gives `x` and `y`, for a catalogue's truth.
-#[must_use]
-pub fn axis_of(x: V3, y: V3) -> V3 {
-    unit(cross(x, y))
 }

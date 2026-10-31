@@ -30,6 +30,10 @@
 //!
 //! Cost: a case's placement is linear in its truth samples, once per scale tried; judging is
 //! quadratic in its samples (see [`cover`]).
+//!
+//! Consulted: ssi-corpus, MIT OR Apache-2.0,
+//!   <https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9>, for its
+//!   case schema, its runner contract and its scoring rules.
 
 pub mod case;
 pub mod catalogue;
@@ -41,7 +45,7 @@ pub mod standin;
 
 use core::fmt;
 
-use geom_num::math;
+use geom_num::{Real, math};
 
 /// Why the harness could not go on.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -89,14 +93,24 @@ impl fmt::Display for SsiError {
 
 impl std::error::Error for SsiError {}
 
-/// The sine of `deg` degrees, by `geom-num`'s `sinpi`, the same on every target.
-pub(crate) fn sin_deg(deg: f64) -> f64 {
-    math::sinpi(deg / 180.0).map_or(f64::NAN, |x| x.get())
+/// The sine of `half` half-turns, by `geom-num`'s `sinpi`, the same on every target.
+pub(crate) fn sin_half(half: f64) -> f64 {
+    math::sinpi(half).map_or(f64::NAN, Real::get)
 }
 
-/// The cosine of `deg` degrees, likewise.
+/// The cosine of `half` half-turns, likewise.
+pub(crate) fn cos_half(half: f64) -> f64 {
+    math::cospi(half).map_or(f64::NAN, Real::get)
+}
+
+/// The sine of `deg` degrees.
+pub(crate) fn sin_deg(deg: f64) -> f64 {
+    sin_half(deg / 180.0)
+}
+
+/// The cosine of `deg` degrees.
 pub(crate) fn cos_deg(deg: f64) -> f64 {
-    math::cospi(deg / 180.0).map_or(f64::NAN, |x| x.get())
+    cos_half(deg / 180.0)
 }
 
 /// The larger of two lengths; `b` if they cannot be ordered.
