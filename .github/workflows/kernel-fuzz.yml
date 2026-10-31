@@ -463,12 +463,12 @@ jobs:
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
       # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, the narrowing
-      # dropping a set bit (geom-test's trip module and binary).
+      # to a shorter float dropping a set bit (geom-test's trip module and binary).
       - name: Kani fails on a planted violation
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-op --
-          cargo kani -p geom-op --harness cbor::proofs::binary32_is_exact_and_shortest --exact
+          cargo kani -p geom-op --harness cbor::proofs::binary16_is_exact_and_shortest --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
@@ -508,13 +508,13 @@ jobs:
           cargo kani setup
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
-      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, the real
-      # check refusing the frame's edge (geom-test's trip module and binary).
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, a magnitude's
+      # width one too many (geom-test's trip module and binary).
       - name: Kani fails on a planted violation
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-format --
-          cargo kani -p geom-format --harness range::proofs::real_accepts_exactly_the_finite_frame --exact
+          cargo kani -p geom-format --harness range::proofs::bits_is_the_magnitude_width --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
