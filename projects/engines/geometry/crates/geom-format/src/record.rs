@@ -329,3 +329,53 @@ fn bytes_item<'a>(
         _ => Err(RecordError::Shape { offset, expected }),
     }
 }
+
+/// Bounded proofs (chapter 28.7; piece G112), proven by `kernel-fuzz.yml`'s `kani-format` job.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use geom_run::{Budget, WorkMeter};
+
+    use super::Record;
+
+    /// Any bytes up to 4, every head and refusal of an envelope's start, decode to a record or a
+    /// refusal, never a panic. Longer raw bytes are beyond a bounded proof (every head branches
+    /// on every byte): `tests/fuzz_records.rs` and `tests/record_layer.rs` cover them.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn decode_never_panics() {
+        const LEN: usize = 4;
+        let bytes: [u8; LEN] = kani::any();
+        let len: usize = kani::any();
+        kani::assume(len <= LEN);
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        if let Ok((_, end)) = Record::decode(&bytes[..len], &mut meter) {
+            assert!(end <= len);
+        }
+    }
+
+    /// A shortest record, heads fixed and every value any byte, its check any four bytes: decoding
+    /// reaches every field, the flags, the checksum and the payload's own check, and gives a
+    /// record or a refusal, never a panic.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(crate::cbor::decode::check_tagged, crate::cbor::decode::proofs::any_tagged)]
+    #[kani::stub(crate::cbor::decode::utf8, crate::cbor::decode::proofs::any_text)]
+    #[kani::stub(crate::cbor::decode::key_order, crate::cbor::decode::proofs::any_order)]
+    fn decode_of_a_shaped_record_never_panics() {
+        let (tag, flags, schema, payload): (u8, u8, u8, u8) = kani::any();
+        kani::assume(tag < 24 && flags < 24 && schema < 24 && payload < 24);
+        let check: [u8; 4] = kani::any();
+        let bytes = [
+            0x86, tag, flags, schema, 0x80, 0x41, payload, 0x1a, check[0], check[1], check[2],
+            check[3],
+        ];
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        if let Ok((_, end)) = Record::decode(&bytes, &mut meter) {
+            assert!(end == bytes.len());
+        }
+    }
+}

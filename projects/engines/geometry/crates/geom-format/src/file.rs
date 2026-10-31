@@ -467,3 +467,38 @@ pub fn salvage(bytes: &[u8], meter: &mut WorkMeter<'_>) -> Result<Salvage, FileE
 fn wide(n: usize) -> u64 {
     u64::try_from(n).unwrap_or(u64::MAX)
 }
+
+/// Bounded proofs (chapter 28.7; piece G112), proven by `kernel-fuzz.yml`'s `kani-format` job.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use geom_run::{Budget, WorkMeter};
+
+    use super::pull_record;
+    use crate::source::SliceSource;
+
+    /// The bytes a proof reads.
+    const LEN: usize = 6;
+
+    /// Any bytes up to [`LEN`] whose every head claims fewer than 24 bytes give a record's bytes
+    /// from the front of them, or a refusal, never a panic. A head claiming more first grows the
+    /// buffer one byte at a time, up to the cap of 64 MiB, which no bounded proof walks: the caps
+    /// themselves are tested (`tests/record_layer.rs`).
+    #[kani::proof]
+    #[kani::unwind(30)]
+    fn pull_record_never_panics() {
+        let bytes: [u8; LEN] = kani::any();
+        let len: usize = kani::any();
+        kani::assume(len <= LEN);
+        kani::assume(bytes.iter().all(|&b| b & 0x1f < 24));
+        let mut source = SliceSource::new(&bytes[..len]);
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        if let Ok(record) = pull_record(&mut source, 0, &mut meter) {
+            assert!(record.len() <= len);
+            assert!(record[..] == bytes[..record.len()]);
+        }
+    }
+}
