@@ -94,6 +94,8 @@ geom-run = { path = "../geom-run" }
 geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 geom-math = { path = "../geom-math" }
+# The second checker for exact meshes (G135, src/second_mesh.rs): the arrays it reads.
+geom-mesh = { path = "../geom-mesh" }
 
 [lints.rust]
 unsafe_code = "forbid"
