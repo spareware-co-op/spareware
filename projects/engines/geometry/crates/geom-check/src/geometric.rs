@@ -99,13 +99,15 @@ pub(crate) fn check(
                 Fault::at(FaultKind::VertexOffSurface, Entity::Vertex(v)).with(Entity::Face(face)),
             );
         }
-        if let Some(e) = fin_edge(a, n)
-            && !edge_on(a, e, &on.carrier, limit)
-        {
-            sink.push(
-                Fault::at(FaultKind::EdgeOffSurface, Entity::Edge(e)).with(Entity::Face(face)),
-            );
-        }
+        // Every fin of a published body names its edge: the filter decides, not the lookup.
+        fin_edge(a, n)
+            .filter(|&e| !edge_on(a, e, &on.carrier, limit))
+            .into_iter()
+            .for_each(|e| {
+                sink.push(
+                    Fault::at(FaultKind::EdgeOffSurface, Entity::Edge(e)).with(Entity::Face(face)),
+                );
+            });
     }
     for e in rows::<Edge>(a.rows(Arena::Edge)) {
         sink.charge()?;

@@ -544,6 +544,9 @@ fn every_fault_says_what_is_wrong_in_its_group() {
         FaultKind::VertexOffCurve,
         FaultKind::EdgeOffSurface,
         FaultKind::Unchecked,
+        FaultKind::EdgesCross,
+        FaultKind::FacesCross,
+        FaultKind::PairUnchecked,
     ];
     let mut words: Vec<&str> = all.iter().map(|k| k.what()).collect();
     assert!(words.iter().all(|w| w.len() > 10));
@@ -563,6 +566,9 @@ fn every_fault_says_what_is_wrong_in_its_group() {
             | FaultKind::VertexOffCurve
             | FaultKind::EdgeOffSurface
             | FaultKind::Unchecked => Group::Geometric,
+            FaultKind::EdgesCross | FaultKind::FacesCross | FaultKind::PairUnchecked => {
+                Group::SelfIntersection
+            }
             _ => Group::Combinatorial,
         };
         assert_eq!(kind.group(), expected, "{kind:?}");

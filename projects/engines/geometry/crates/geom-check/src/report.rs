@@ -381,13 +381,8 @@ impl Fault {
 
 impl fmt::Display for Fault {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "group {}, {}: {}",
-            self.kind.group().number(),
-            self.at,
-            self.kind.what()
-        )?;
+        let (group, what) = (self.kind.group().number(), self.kind.what());
+        write!(f, "group {group}, {}: {what}", self.at)?;
         if let Some(with) = self.with {
             write!(f, " ({with})")?;
         }

@@ -410,8 +410,11 @@ impl<'a> Polygon<'a> {
         let head = loop_fins(a, first).next()?;
         let plane = corners(head)?;
         let [o, x, y] = plane;
+        // Dropping a coordinate in which the first corner's normal is not zero projects the plane
+        // one to one, and the corner's turn there is that coordinate of the normal, up to sign:
+        // never zero. A first corner on one line has no such coordinate, and no polygon.
         let normal = cross(diff(x, o)?, diff(y, x)?)?;
-        let axis = (0..3).max_by_key(|&k| normal.get(k).map_or(0, |c| c.unsigned_abs()))?;
+        let axis = (0..3).find(|&k| normal.get(k).is_some_and(|c| *c != 0))?;
         let turn = |[o, x, y]: [P3; 3]| orient(drop(o, axis), drop(x, axis), drop(y, axis));
         let sign = turn(plane)?.signum();
         // Every corner on the plane of the first three, turning the same way.
@@ -423,7 +426,7 @@ impl<'a> Polygon<'a> {
                 Some(flat && turn(corner)?.signum() == sign)
             })
             .try_fold(true, |all, x| Some(all && x?))?;
-        (sign != 0 && convex).then_some(Polygon {
+        convex.then_some(Polygon {
             a,
             face,
             plane,

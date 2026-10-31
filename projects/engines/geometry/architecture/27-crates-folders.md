@@ -128,7 +128,7 @@ This replaces section 5's three boxes (Numbers, Core, Operations) with thirteen 
 | `geom-topo` | 3 | Bodies to vertices in arenas; the builder; attributes and continuity records; regions and cells; the instance record | base, math, curve, surface | 18.7, 23.9 |
 | `geom-name` | 3 | The name graph and its hash-consing; references, their resolution and the walk through history; surface groups and placement references | base, topo | 17.12, 20.4 |
 | `geom-intersect` | 4 | Certified curve-curve, curve-surface and surface-surface intersection; level curves, isoclines and contour generators; closed-form distances | base, math, **nurbs**, curve, surface, **bvh** | 12.3, 12.13, 18.5, 19.10, 19.14, 23.7; OQ-12.1, OQ-19.7 |
-| `geom-check` | 5 | The B-rep validity checker | base, **curve**, topo, intersect | 8.3, 18.10, 19.2 |
+| `geom-check` | 5 | The B-rep validity checker | base, **curve** (G85's design note, below the table), topo, intersect | 8.3, 18.10, 19.2 |
 | `geom-poly` | 6 | Exact plane-based polyhedra and their arrangements; plane commit; indicators, early-out derivation and piece selection; the maximal-face merge with T-junction insertion, shared by `geom-bool` and `geom-mesh` | base, math, topo | 11.14, 13.2, 19.5; OQ-11.2, OQ-19.4 |
 | `geom-bool` | 6 | The arrangement engine: booleans, imprint, split, cells, batch cuts, the arrangement step of local operations, `close_near_contacts` | base, poly, intersect, topo, name, check, **bvh** | 11.4, 11.14, 13 (intro) |
 | `geom-2d` | 6 | Drafting entities, the 2D arrangement, regions, hatches, 2D booleans and offsets, edits, snaps and references, 2D distance and clearance, survey linework and COGO | base, math, curve, **topo, name, intersect, bvh** | 14 (intro), 14.8, 14.9, 17.2; OQ-12.1, OQ-14.9 |
@@ -166,6 +166,10 @@ This replaces section 5's three boxes (Numbers, Core, Operations) with thirteen 
 | `geom-pool` (new) | 13 | Threads for `geom-run`'s helper: rayon on native targets, Web Workers in a browser | run | 23.4; OQ-23.4 |
 | `geom-test`, `geom-fuzz`, `geom-bench` | Development | As above | As needed | 28.2 |
 | `geom-gen` (new) | Development | Every generator whose output is checked in (below) | As needed | 6.2, 16.1, 23.3, 24.6, 24.11, 26.3, 29.20; OQ-24.6, OQ-28.6 |
+
+**Edges added by design notes.** Each edge a crate's design note adds, by the route in the paragraph above the table, with its reason. It changes the row above and `engine-geometry/tests/scaffold/table.rs` in the same pull request.
+
+- `geom-check` to `geom-curve` (G85, accepted 2026-10-31). Group 2 certifies vertices and edges against their carriers with `geom_curve::tight` (interval operations exact where the doubles are), `Frame::unit_vectors` (a frame's unit vectors, enclosed) and `ParamCurve::domain` (where an edge's curve ends); groups 2 and 3 read lines and circles as `Line` and `Circle`. The surfaces come through `geom_topo::SurfaceKind`, so no `geom-surface` edge is needed. The edge points from layer 5 to layer 2, so the cycle check below still holds. `geom-intersect` is a scaffold today, so group 3 tests primitives with its own exact predicates and closed forms; G134 and G322 move the general cases to it.
 
 **Cycle check.** Every edge in the table points to a lower layer, or along an edge the layer table allows inside one layer, and those same-layer edges form no loop. So the whole graph is acyclic. A script over this table checked both on 2026-10-21, and G09's scaffold check repeats it on every pull request, with 30.5's amendments.
 

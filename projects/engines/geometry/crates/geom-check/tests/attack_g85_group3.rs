@@ -178,6 +178,13 @@ fn faces_whose_planes_cross_but_which_do_not_meet_pass() {
         &[[5, 20, -5], [5, 30, -5], [5, 30, 5], [5, 20, 5]],
     ]);
     assert_eq!(at(&r, BodyKind::General, 0), []);
+    // A square in x = 15 whose side crosses z = 0 on the line of the first square's far side,
+    // beyond its end.
+    let r = sheets(&[
+        &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
+        &[[15, 10, -5], [15, 20, -5], [15, 20, 5], [15, 10, 5]],
+    ]);
+    assert_eq!(at(&r, BodyKind::General, 0), []);
     // A triangle standing beside a square, its lower corner on the square's plane outside it.
     let r = sheets(&[
         &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
