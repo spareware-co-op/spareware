@@ -212,6 +212,27 @@ const TRANSFORM_ERRORS: [ErrorSpec; 8] = [
     BUILD_FAILED,
 ];
 
+/// What a move or a mirror can return: each is a grid transform, exact on every kind, so it rounds
+/// nothing and needs no class accepted (`tests/contract_laws.rs` holds every list to its triggers).
+const GRID_TRANSFORM_ERRORS: [ErrorSpec; 5] = [
+    OUT_OF_RANGE,
+    BODY_NOT_NAMED,
+    BUDGET_EXCEEDED,
+    RESULT_INVALID,
+    BUILD_FAILED,
+];
+
+/// What a rotation can return: it keeps circles, so every kind follows it, unlike a scale.
+const ROTATE_ERRORS: [ErrorSpec; 7] = [
+    OUT_OF_RANGE,
+    BODY_NOT_NAMED,
+    NOT_ACCEPTED,
+    NOT_CERTIFIED_YET,
+    BUDGET_EXCEEDED,
+    RESULT_INVALID,
+    BUILD_FAILED,
+];
+
 /// The two regions of every solid.
 const REGION_SOLID: RoleSpec = RoleSpec {
     name: "region.solid",
@@ -663,7 +684,7 @@ const TRANSFORM_MIRROR: OpSchema = OpSchema {
     ],
     outputs: &MOVED,
     roles: &[],
-    errors: &TRANSFORM_ERRORS,
+    errors: &GRID_TRANSFORM_ERRORS,
     diagnostics: &[],
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
@@ -692,7 +713,7 @@ const TRANSFORM_MOVE: OpSchema = OpSchema {
     ],
     outputs: &MOVED,
     roles: &[],
-    errors: &TRANSFORM_ERRORS,
+    errors: &GRID_TRANSFORM_ERRORS,
     diagnostics: &[],
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
@@ -801,7 +822,7 @@ const TRANSFORM_ROTATE: OpSchema = OpSchema {
     ],
     outputs: &MOVED,
     roles: &[],
-    errors: &TRANSFORM_ERRORS,
+    errors: &ROTATE_ERRORS,
     diagnostics: &[],
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
