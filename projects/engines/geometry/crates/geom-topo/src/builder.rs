@@ -32,6 +32,11 @@
 //! each); [`Builder::publish`] is linear in the number of rows of the link columns, one comparison
 //! each, and allocates nothing. Nothing recurses.
 
+mod euler;
+mod named;
+
+pub use euler::{Euler, NewEdge, NewFace, NewVertex, Wire};
+
 use geom_run::WorkMeter;
 
 use crate::arenas::Arenas;
@@ -97,7 +102,7 @@ fn links<K, V: Target>(
 
 /// [`TopoError::Ragged`] for the first arena, from region to edge, whose columns hold different
 /// numbers of rows. The vertex arena has one column, so it cannot be ragged.
-fn even_columns(arenas: &Arenas) -> Result<(), TopoError> {
+pub(crate) fn even_columns(arenas: &Arenas) -> Result<(), TopoError> {
     let regions = &arenas.regions;
     even(
         Arena::Region,
@@ -152,7 +157,7 @@ fn even_columns(arenas: &Arenas) -> Result<(), TopoError> {
 
 /// [`TopoError::Dangling`] for the first link, in [`Link::ALL`]'s order and then by row, that points
 /// past the end of the arena it names.
-fn inside(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), TopoError> {
+pub(crate) fn inside(arenas: &Arenas, meter: &mut WorkMeter<'_>) -> Result<(), TopoError> {
     let (regions, shells, faces) = (&arenas.regions, &arenas.shells, &arenas.faces);
     let (loops, fins, edges) = (&arenas.loops, &arenas.fins, &arenas.edges);
     links(&regions.first_shell, Link::RegionFirstShell, arenas, meter)?;

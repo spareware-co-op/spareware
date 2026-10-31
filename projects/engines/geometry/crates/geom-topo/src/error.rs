@@ -23,6 +23,50 @@ use geom_run::{Stop, Stopped};
 use crate::entity::Link;
 use crate::ix::Arena;
 
+/// Why an Euler operator refused its arguments ([`crate::builder::Euler`]). A refusal changes
+/// nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Refusal {
+    /// A handle names no live row of its arena.
+    Dead {
+        /// The arena.
+        arena: Arena,
+        /// The row.
+        row: u32,
+    },
+    /// The fins are not in the loops the operator needs: one loop (`mef`, `kemr`), or two loops of
+    /// one face (`mekr`).
+    Loops,
+    /// The edge does not have exactly two fins, each the other's radial neighbour.
+    Ring,
+    /// The topology is not the shape the operator works on: the edge is not a spur (`kev`) or a
+    /// lone wire (`kill_wire`), its fins are next to each other (`kemr`), the operator would leave
+    /// a loop with no fin, or a fin it starts from has no vertex.
+    Shape,
+    /// The faces are not what the operator needs: fins of two faces (`kef`), two faces of one
+    /// shell (`kfmrh`), a face to remove with only the loop given (`kef`, `kfmrh`), or a face
+    /// that keeps a loop (`mfkrh`).
+    Faces,
+    /// The region still has shells, or the shell still has other faces.
+    InUse,
+    /// The body was published without names, so it cannot be edited by name.
+    Unnamed,
+}
+
+impl fmt::Display for Refusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Refusal::Dead { arena, row } => write!(f, "{arena} {row} is not a live row"),
+            Refusal::Loops => f.write_str("the fins are not in the loops the operator needs"),
+            Refusal::Ring => f.write_str("the edge does not have exactly two fins"),
+            Refusal::Shape => f.write_str("the topology is not the shape the operator works on"),
+            Refusal::Faces => f.write_str("the faces are not what the operator needs"),
+            Refusal::InUse => f.write_str("the region or shell still holds other entities"),
+            Refusal::Unnamed => f.write_str("the body has no names to edit it by"),
+        }
+    }
+}
+
 /// Why an arena could not change, or arenas could not be published as a body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TopoError {
@@ -50,6 +94,36 @@ pub enum TopoError {
     Stopped(Stop),
     /// A large allocation (a chunk of rows, or a column's list of chunks) was refused.
     OutOfMemory,
+    /// The names given for a named arena are not one per row.
+    Names(Arena),
+    /// Two rows of a named arena have the same name: the first such pair in name order.
+    DuplicateName {
+        /// The arena.
+        arena: Arena,
+        /// The lower of the two rows.
+        first: u32,
+        /// The higher of the two rows.
+        second: u32,
+    },
+    /// Two rows of an arena with no names (shells, loops, fins) or of a geometry pool get the same
+    /// key from what they join, so name order cannot place them: the first such pair.
+    Unordered {
+        /// The arena.
+        arena: Arena,
+        /// The lower of the two rows.
+        first: u32,
+        /// The higher of the two rows.
+        second: u32,
+    },
+    /// An Euler operator refused its arguments.
+    Euler(Refusal),
+    /// A row of a geometry pool that no entity uses, so name order cannot place it.
+    Unused {
+        /// The pool.
+        arena: Arena,
+        /// The row.
+        row: u32,
+    },
 }
 
 impl fmt::Display for TopoError {
@@ -81,6 +155,26 @@ impl fmt::Display for TopoError {
             }
             TopoError::Stopped(stop) => write!(f, "publishing the body stopped: {stop}"),
             TopoError::OutOfMemory => f.write_str("an allocation was refused"),
+            TopoError::Names(arena) => {
+                write!(f, "the names of the {arena} arena are not one per row")
+            }
+            TopoError::DuplicateName {
+                arena,
+                first,
+                second,
+            } => write!(f, "{arena} rows {first} and {second} have the same name"),
+            TopoError::Unordered {
+                arena,
+                first,
+                second,
+            } => write!(
+                f,
+                "{arena} rows {first} and {second} join the same names, so name order cannot place them"
+            ),
+            TopoError::Euler(refusal) => write!(f, "the Euler operator refused: {refusal}"),
+            TopoError::Unused { arena, row } => {
+                write!(f, "no entity uses row {row} of the {arena} pool")
+            }
         }
     }
 }
