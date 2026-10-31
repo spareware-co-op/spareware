@@ -1206,6 +1206,9 @@ version = "0.0.0"
 dependencies = [
  "geom-num",
  "geom-run",
+ "geom-test",
+ "proptest",
+ "serde_json",
 ]
 
 [[package]]

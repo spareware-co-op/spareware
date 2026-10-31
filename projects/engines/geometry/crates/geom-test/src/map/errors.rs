@@ -28,6 +28,14 @@
 //! - **Only real code.** The scan runs on tokens, so an enum inside a comment, a string or a
 //!   doc example is never found; `pub(crate)` and private enums are not part of the crate's
 //!   interface and are not listed.
+//! - **Every detail with its base kind.** Chapter 22 maps every detail to one base kind, and the
+//!   catalogue lists both (26.3). For an error enum whose `impl` block in the same file has a
+//!   function `kind` returning `ErrorKind`, each variant's base kind is read from that function's
+//!   `match self`: an arm `Enum::Variant => ErrorKind::Kind` gives `Kind`, and an arm
+//!   `Enum::Variant(detail) => detail.kind()` gives [`HELD`], the kind of the detail the variant
+//!   holds. A body that is not one `match self`, an arm in another form, a variant with no arm or
+//!   with two, or a base kind that is not a variant of an `ErrorKind` enum in the map, is reported
+//!   ([`Rule::ErrorBase`]), never guessed.
 //!
 //! Method: a single pass over the token stream at nesting depth zero, reading attributes
 //! (`#[...]`), outer doc comments and `pub enum` items, with bracket depth counted over `()`, `[]`
@@ -38,7 +46,8 @@
 //! (<https://doc.rust-lang.org/reference/items/enumerations.html>) and attributes
 //! (<https://doc.rust-lang.org/reference/attributes.html>).
 //!
-//! Cost: linear in the number of tokens, times a search of the crate's error type names.
+//! Cost: linear in the number of tokens, times a search of the crate's error type names, plus one
+//! pass over each top-level `impl` block for a `kind` function.
 //!
 //! Consulted: Clippy's `clippy_dev` token cursor, MIT OR Apache-2.0,
 //!   <https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs>,
@@ -81,6 +90,31 @@ pub struct Variant {
     pub doc: Option<String>,
     /// Its shape.
     pub shape: Shape,
+    /// Its base kind, read from its enum's `kind` function; `None` when the enum has none.
+    pub base: Option<Base>,
+}
+
+/// Where an error kind's base kind comes from: an arm of its enum's `kind` function (chapter 22).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Base {
+    /// The arm names the kind: `XError::A => ErrorKind::NoSolution`.
+    Kind(String),
+    /// The arm asks the detail the variant holds: `OpErrorDetail::Num(detail) => detail.kind()`.
+    Held,
+}
+
+/// How the map writes [`Base::Held`].
+pub const HELD: &str = "held detail";
+
+impl Base {
+    /// The base kind's name in the map: the kind's name, or [`HELD`].
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Base::Kind(kind) => kind,
+            Base::Held => HELD,
+        }
+    }
 }
 
 /// One error enum.
@@ -184,6 +218,7 @@ pub fn find(tokens: &[Token], error_types: &BTreeSet<String>) -> Found {
     let mut pending = Pending::default();
     let mut depth: usize = 0;
     let mut at: usize = 0;
+    let mut impls: Vec<usize> = Vec::new();
     while let Some(t) = tokens.get(at) {
         let next = at.saturating_add(1);
         match t.kind {
@@ -217,8 +252,16 @@ pub fn find(tokens: &[Token], error_types: &BTreeSet<String>) -> Found {
                 at = enum_item(tokens, at, depth, &pending, error_types, &mut found);
                 pending = Pending::default();
             }
+            Kind::Ident if depth == 0 && t.is_ident("impl") => {
+                impls.push(at);
+                pending = Pending::default();
+                at = next;
+            }
             _ => at = next,
         }
+    }
+    for start in impls {
+        base_kinds(tokens, start, &mut found);
     }
     found
 }
@@ -342,6 +385,7 @@ fn variants(body: &[Token]) -> Vec<Variant> {
                     name: t.text.clone(),
                     doc: first_paragraph(&docs),
                     shape,
+                    base: None,
                 });
                 docs.clear();
                 at = variant_end(body, after);
@@ -366,6 +410,365 @@ fn variant_end(body: &[Token], mut at: usize) -> usize {
         }
     }
     body.len()
+}
+
+/// One arm of a `kind` match: the variants its patterns name, and its base kind.
+type Arm = (Vec<String>, Base);
+
+/// Reads the `fn kind(&self) -> ErrorKind` of the `impl` block at `start` into the variants of the
+/// error enum the block is for, when that enum is declared in this file; what it cannot read is
+/// reported. A block for any other type, or without such a function, is passed over.
+fn base_kinds(tokens: &[Token], start: usize, found: &mut Found) {
+    let Some(end) = item_end(tokens, start) else {
+        return;
+    };
+    let Some(open) = (start..end).find(|&k| tokens.get(k).is_some_and(|t| t.is_punct('{'))) else {
+        return;
+    };
+    let header = tokens
+        .get(start.saturating_add(1)..open)
+        .unwrap_or_default();
+    let Some(name) = self_type(header) else {
+        return;
+    };
+    let Some(index) = found.enums.iter().position(|e| e.name == name) else {
+        return;
+    };
+    let body = tokens
+        .get(open.saturating_add(1)..end.saturating_sub(1))
+        .unwrap_or_default();
+    let read = match kind_function(body) {
+        None => return,
+        Some(Ok(arms_body)) => arms(arms_body, &name),
+        Some(Err(why)) => Err(why),
+    };
+    let arms = match read {
+        Ok(arms) => arms,
+        Err(why) => {
+            found.problems.push((
+                Rule::ErrorBase,
+                format!("`{name}::kind` cannot be read: {why}"),
+            ));
+            return;
+        }
+    };
+    let mut problems = Vec::new();
+    if let Some(e) = found.enums.get_mut(index) {
+        for (variants, base) in arms {
+            for v in variants {
+                match e.variants.iter_mut().find(|x| x.name == v) {
+                    Some(x) if x.base.is_none() => x.base = Some(base.clone()),
+                    Some(_) => problems.push(format!(
+                        "`{name}::{v}` has two arms in `{name}::kind`; give each variant one base \
+                         kind"
+                    )),
+                    None => problems.push(format!(
+                        "`{name}::kind` names `{name}::{v}`, which is not a variant of `{name}`"
+                    )),
+                }
+            }
+        }
+        for v in e.variants.iter().filter(|v| v.base.is_none()) {
+            problems.push(format!(
+                "`{name}::{}` has no arm in `{name}::kind`, so the catalogue cannot give its base \
+                 kind; name it in an arm",
+                v.name
+            ));
+        }
+    }
+    found
+        .problems
+        .extend(problems.into_iter().map(|p| (Rule::ErrorBase, p)));
+}
+
+/// The type an `impl` header (the tokens between `impl` and `{`) is for: the last segment of the
+/// path after `for`, at angle-bracket depth zero, or else of the first path after the block's own
+/// generics.
+fn self_type(header: &[Token]) -> Option<String> {
+    let mut angle: usize = 0;
+    let mut after_for = None;
+    let mut first = None;
+    for (k, t) in header.iter().enumerate() {
+        if t.is_punct('<') {
+            angle = angle.saturating_add(1);
+        } else if t.is_punct('>') {
+            // The `>` of `->` closes nothing.
+            let arrow = k
+                .checked_sub(1)
+                .and_then(|p| header.get(p))
+                .is_some_and(|p| p.is_punct('-'));
+            if !arrow {
+                angle = angle.saturating_sub(1);
+            }
+        } else if angle == 0 && t.kind == Kind::Ident {
+            if t.is_ident("for") {
+                after_for = Some(k.saturating_add(1));
+            } else if first.is_none() {
+                first = Some(k);
+            }
+        }
+    }
+    let mut at = after_for.or(first)?;
+    let mut last = None;
+    while let Some(t) = header.get(at) {
+        if t.kind == Kind::Ident && !t.is_ident("where") {
+            last = Some(t.text.clone());
+        } else if !t.is_punct(':') {
+            break;
+        }
+        at = at.saturating_add(1);
+    }
+    last
+}
+
+/// The arms of the `fn kind(&self) -> ErrorKind { match self { arms } }` at depth zero of an `impl`
+/// body. `None` when the body has no function `kind` returning `ErrorKind`; an error when it has
+/// one whose body is not a single `match self`.
+fn kind_function(body: &[Token]) -> Option<Result<&[Token], String>> {
+    let mut depth: usize = 0;
+    let mut at: usize = 0;
+    while let Some(t) = body.get(at) {
+        if t.is_punct('{') || t.is_punct('(') || t.is_punct('[') {
+            depth = depth.saturating_add(1);
+        } else if t.is_punct('}') || t.is_punct(')') || t.is_punct(']') {
+            depth = depth.saturating_sub(1);
+        } else if depth == 0
+            && t.is_ident("fn")
+            && body
+                .get(at.saturating_add(1))
+                .is_some_and(|n| n.is_ident("kind"))
+        {
+            return kind_signature(body, at.saturating_add(2));
+        }
+        at = at.saturating_add(1);
+    }
+    None
+}
+
+/// The rest of a function `kind` from its parameter list at `at`: its match arms when it returns
+/// `ErrorKind` (see [`kind_function`]).
+fn kind_signature(body: &[Token], at: usize) -> Option<Result<&[Token], String>> {
+    if !body.get(at).is_some_and(|t| t.is_punct('(')) {
+        return None;
+    }
+    let after_params = matching(body, at)?;
+    let open =
+        (after_params..body.len()).find(|&k| body.get(k).is_some_and(|t| t.is_punct('{')))?;
+    let returns = body.get(after_params..open).unwrap_or_default();
+    let returns_kind = returns.first().is_some_and(|t| t.is_punct('-'))
+        && returns.get(1).is_some_and(|t| t.is_punct('>'))
+        && returns.last().is_some_and(|t| t.is_ident("ErrorKind"));
+    if !returns_kind {
+        return None;
+    }
+    let close = matching(body, open)?;
+    let inner = body
+        .get(open.saturating_add(1)..close.saturating_sub(1))
+        .unwrap_or_default();
+    let star = usize::from(inner.get(1).is_some_and(|t| t.is_punct('*')));
+    let open_match = star.saturating_add(2);
+    let shape = inner.first().is_some_and(|t| t.is_ident("match"))
+        && inner
+            .get(star.saturating_add(1))
+            .is_some_and(|t| t.is_ident("self"))
+        && inner.get(open_match).is_some_and(|t| t.is_punct('{'))
+        && matching(inner, open_match) == Some(inner.len());
+    if !shape {
+        return Some(Err(
+            "its body must be one `match self { ... }` whose arms the map reads".to_owned(),
+        ));
+    }
+    Some(Ok(inner
+        .get(open_match.saturating_add(1)..inner.len().saturating_sub(1))
+        .unwrap_or_default()))
+}
+
+/// The tokens' text, joined by spaces, for a message.
+fn spelled(tokens: &[Token]) -> String {
+    tokens
+        .iter()
+        .map(|t| t.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The arms of a `kind` match body: each arm's patterns `Enum::Variant` (or `Self::Variant`), each
+/// with its fields or none, joined by `|`, and its value, `ErrorKind::Kind` or `detail.kind()`,
+/// alone or in a block.
+fn arms(body: &[Token], enum_name: &str) -> Result<Vec<Arm>, String> {
+    let mut out = Vec::new();
+    let mut at: usize = 0;
+    while at < body.len() {
+        let arrow = fat_arrow(body, at).ok_or_else(|| {
+            format!(
+                "`{}` is not an arm",
+                spelled(body.get(at..).unwrap_or_default())
+            )
+        })?;
+        let variants = pattern_variants(body.get(at..arrow).unwrap_or_default(), enum_name)?;
+        let start = arrow.saturating_add(2);
+        let (value, next) = arm_value(body, start);
+        let base = base_of(value).ok_or_else(|| {
+            format!(
+                "the arm for `{enum_name}::{}` gives `{}`, neither `ErrorKind::<kind>` nor \
+                 `<detail>.kind()`",
+                variants.join(" | "),
+                spelled(value)
+            )
+        })?;
+        out.push((variants, base));
+        at = next;
+    }
+    Ok(out)
+}
+
+/// The index of the `=` of the first `=>` at bracket depth zero from `at`.
+fn fat_arrow(body: &[Token], at: usize) -> Option<usize> {
+    let mut depth: usize = 0;
+    for k in at..body.len() {
+        let t = body.get(k)?;
+        if t.is_punct('{') || t.is_punct('(') || t.is_punct('[') {
+            depth = depth.saturating_add(1);
+        } else if t.is_punct('}') || t.is_punct(')') || t.is_punct(']') {
+            depth = depth.saturating_sub(1);
+        } else if depth == 0
+            && t.is_punct('=')
+            && body
+                .get(k.saturating_add(1))
+                .is_some_and(|n| n.is_punct('>'))
+        {
+            return Some(k);
+        }
+    }
+    None
+}
+
+/// The variants an arm's patterns name, each `Enum::Variant` or `Self::Variant` with at most one
+/// group of fields after it.
+fn pattern_variants(patterns: &[Token], enum_name: &str) -> Result<Vec<String>, String> {
+    let mut variants = Vec::new();
+    let mut depth: usize = 0;
+    let mut part_start: usize = 0;
+    for k in 0..=patterns.len() {
+        let t = patterns.get(k);
+        let split = match t {
+            None => true,
+            Some(t) if t.is_punct('{') || t.is_punct('(') || t.is_punct('[') => {
+                depth = depth.saturating_add(1);
+                false
+            }
+            Some(t) if t.is_punct('}') || t.is_punct(')') || t.is_punct(']') => {
+                depth = depth.saturating_sub(1);
+                false
+            }
+            Some(t) => depth == 0 && t.is_punct('|'),
+        };
+        if split {
+            let part = patterns.get(part_start..k).unwrap_or_default();
+            if !part.is_empty() {
+                variants.push(pattern_variant(part, enum_name)?);
+            }
+            part_start = k.saturating_add(1);
+        }
+    }
+    if variants.is_empty() {
+        return Err("an arm names no variant".to_owned());
+    }
+    Ok(variants)
+}
+
+/// The variant one pattern names: `Enum::Variant`, `Self::Variant`, either followed by one group
+/// of fields.
+fn pattern_variant(part: &[Token], enum_name: &str) -> Result<String, String> {
+    let head = part
+        .first()
+        .is_some_and(|t| t.is_ident(enum_name) || t.is_ident("Self"));
+    let path = part.get(1).is_some_and(|t| t.is_punct(':'))
+        && part.get(2).is_some_and(|t| t.is_punct(':'));
+    let variant = part.get(3).filter(|t| t.kind == Kind::Ident);
+    let rest_closes = match part.get(4) {
+        None => true,
+        Some(t) if t.is_punct('(') || t.is_punct('{') => matching(part, 4) == Some(part.len()),
+        Some(_) => false,
+    };
+    match variant {
+        Some(v) if head && path && rest_closes => Ok(v.text.clone()),
+        _ => Err(format!(
+            "the pattern `{}` is not `{enum_name}::<Variant>` with its fields",
+            spelled(part)
+        )),
+    }
+}
+
+/// An arm's value from `start`, and where the next arm starts: a block and the `,` after it if
+/// any, or the tokens up to the `,` at depth zero that ends it.
+fn arm_value(body: &[Token], start: usize) -> (&[Token], usize) {
+    if body.get(start).is_some_and(|t| t.is_punct('{'))
+        && let Some(end) = matching(body, start)
+    {
+        let value = body
+            .get(start.saturating_add(1)..end.saturating_sub(1))
+            .unwrap_or_default();
+        let next = if body.get(end).is_some_and(|t| t.is_punct(',')) {
+            end.saturating_add(1)
+        } else {
+            end
+        };
+        return (value, next);
+    }
+    let mut depth: usize = 0;
+    let mut k = start;
+    while let Some(t) = body.get(k) {
+        if t.is_punct('{') || t.is_punct('(') || t.is_punct('[') {
+            depth = depth.saturating_add(1);
+        } else if t.is_punct('}') || t.is_punct(')') || t.is_punct(']') {
+            depth = depth.saturating_sub(1);
+        } else if depth == 0 && t.is_punct(',') {
+            break;
+        }
+        k = k.saturating_add(1);
+    }
+    (body.get(start..k).unwrap_or_default(), k.saturating_add(1))
+}
+
+/// The base kind an arm's value gives: `ErrorKind::Kind`, by any path ending so, or
+/// `detail.kind()` on a binding of the pattern.
+fn base_of(value: &[Token]) -> Option<Base> {
+    let held = value.len() == 5
+        && value.first().is_some_and(|t| t.kind == Kind::Ident)
+        && value.get(1).is_some_and(|t| t.is_punct('.'))
+        && value.get(2).is_some_and(|t| t.is_ident("kind"))
+        && value.get(3).is_some_and(|t| t.is_punct('('))
+        && value.get(4).is_some_and(|t| t.is_punct(')'));
+    if held {
+        return Some(Base::Held);
+    }
+    // A path: identifiers joined by `::`, ending `ErrorKind::<Kind>`.
+    let mut idents = Vec::new();
+    let mut k: usize = 0;
+    while let Some(t) = value.get(k) {
+        if t.kind != Kind::Ident {
+            return None;
+        }
+        idents.push(t.text.as_str());
+        match value.get(k.saturating_add(1)) {
+            None => break,
+            Some(c) if c.is_punct(':') => {
+                if !value
+                    .get(k.saturating_add(2))
+                    .is_some_and(|c| c.is_punct(':'))
+                {
+                    return None;
+                }
+                k = k.saturating_add(3);
+            }
+            Some(_) => return None,
+        }
+    }
+    match idents.as_slice() {
+        [.., "ErrorKind", kind] => Some(Base::Kind((*kind).to_owned())),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
