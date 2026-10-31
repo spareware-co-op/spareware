@@ -47,7 +47,7 @@ fn thinned(points: &[V3]) -> impl Iterator<Item = &V3> {
 }
 
 /// How far `q` is from the segment `a`–`b`.
-fn to_segment(q: V3, a: V3, b: V3) -> f64 {
+pub(crate) fn to_segment(q: V3, a: V3, b: V3) -> f64 {
     let span = sub(b, a);
     let long = dot(span, span);
     let at = if long > 0.0 {

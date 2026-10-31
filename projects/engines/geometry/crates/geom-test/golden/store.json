@@ -242,9 +242,15 @@
               "kind": "corpus",
               "piece": "G158",
               "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
+            },
+            {
+              "sha256": "71d5020c80411fdbcffcc856ab61ead6142460d6afde64e30b08e01bea0ad627",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
-          "sha256": "71d5020c80411fdbcffcc856ab61ead6142460d6afde64e30b08e01bea0ad627"
+          "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1"
         },
         {
           "id": "geom-nurbs/operations",

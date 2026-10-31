@@ -43,7 +43,9 @@ use geom_test::corpus::{EMBEDDED, Manifest};
 use geom_test::ssi::SsiError;
 use geom_test::ssi::case::{Case, Class};
 use geom_test::ssi::catalogue;
-use geom_test::ssi::gate::{CEILINGS, Ceilings, Mode, Report, Run, accuracy_of, run, total_size};
+use geom_test::ssi::gate::{
+    CEILINGS, Ceilings, Failure, Mode, Report, Run, accuracy_of, run, total_size,
+};
 use geom_test::ssi::output::Output;
 use geom_test::ssi::place::{disagreement, place};
 
@@ -178,7 +180,7 @@ fn cases(dir: &Path) -> Result<Vec<Case>, SsiError> {
 /// Every case of `all`, placed and held to its closed forms; prints a line each, and gives how many
 /// failed.
 fn place_all(all: &[Case], tolerance: f64, quiet: bool) -> usize {
-    let mut failed = 0;
+    let mut failed = 0_usize;
     for case in all {
         let result = place(case, Some(accuracy_of(tolerance))).and_then(|placed| {
             let off = disagreement(case, &placed)?;
@@ -195,14 +197,14 @@ fn place_all(all: &[Case], tolerance: f64, quiet: bool) -> usize {
                 }
             }
             Ok((_, off)) => {
-                failed += 1;
+                failed = failed.saturating_add(1);
                 println!(
                     "{}: the kernel's kinds lie {off:e} off its closed forms",
                     case.id
                 );
             }
             Err(e) => {
-                failed += 1;
+                failed = failed.saturating_add(1);
                 println!("{e}");
             }
         }
@@ -246,7 +248,7 @@ fn gate(g: &Gate) -> Result<bool, SsiError> {
         credit: &credit,
     })?;
     for row in report.rows.iter().filter(|r| !r.failures.is_empty()) {
-        let rules: Vec<&str> = row.failures.iter().map(|f| f.name()).collect();
+        let rules: Vec<&str> = row.failures.iter().map(Failure::name).collect();
         println!("{}: {:?}: {}", row.id, row.verdict, rules.join(", "));
     }
     println!(
@@ -325,7 +327,8 @@ fn tool(command: &Tool) -> Result<bool, SsiError> {
         Tool::List(folder) => {
             let mut counts: BTreeMap<Class, usize> = BTreeMap::new();
             for case in cases(&folder.cases)? {
-                *counts.entry(case.class()?).or_default() += 1;
+                let count = counts.entry(case.class()?).or_default();
+                *count = count.saturating_add(1);
             }
             for (class, count) in counts {
                 println!("{class:?} {count}");

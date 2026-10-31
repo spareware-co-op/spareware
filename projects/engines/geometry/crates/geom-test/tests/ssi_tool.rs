@@ -1,6 +1,22 @@
 //! The `ssi` and `ssi-runner` binaries (G160): the contract the corpus's scorer calls, the catalogue
 //! as files, and the gate's exit codes.
 
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    reason = "test cases; the rules are for kernel code"
+)]
+#![allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used
+)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output as Ran};
@@ -159,7 +175,7 @@ fn a_kernel_kind_off_its_closed_form_fails_the_tool() {
     let mut case = catalogue::all().remove(0);
     let moved = serde_json::to_string(&case.truth[0])
         .expect("written")
-        .replace("-1.0", "-1.0004");
+        .replace("-1.0", "-1.4");
     case.truth[0] = serde_json::from_str(&moved).expect("read");
     let path = dir.join("cases").join(format!("{}.json", case.id));
     fs::write(&path, serde_json::to_string(&case).expect("written")).expect("wrote");

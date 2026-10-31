@@ -7,6 +7,9 @@
 //! for a test that the gate fails when an answer is perturbed or a flagged region is enlarged;
 //! these are those perturbations, and [`StandIn::expected`] names the rule each must break.
 //!
+//! The truth's curves run straight through a singular point, and a right answer splits there
+//! (12.9), which the scorer asks for: so [`StandIn::Truth`] does too.
+//!
 //! [`StandIn::Flagged`] is a right answer of the other sort: where a class may flag, it leaves out
 //! isolated points and a stretch of a tangent curve, and returns regions that hold them. A long
 //! stretch comes back as a chain of boxes, each no wider than the case's band.
@@ -23,7 +26,7 @@
 //! Cost: linear in the case's samples.
 
 use super::case::{Case, Contact, V3, along, norm, sub, unit};
-use super::cover::effective;
+use super::cover::{effective, to_segment};
 use super::gate::{band, floor_reach};
 use super::output::{Curve, Flag, Output, Why};
 use super::place::Placed;
@@ -157,7 +160,33 @@ impl StandIn {
     }
 }
 
-/// The curves and points of `case`'s truth, snapped to the grid, in the case's units.
+/// `curve` cut at `at`, if it passes within `cov` of it and does not already end there.
+fn cut(curve: &[V3], at: V3, cov: f64) -> Option<(Vec<V3>, Vec<V3>)> {
+    let ends = [curve.first()?, curve.last()?];
+    if ends.iter().any(|end| norm(sub(**end, at)) <= cov) {
+        return None;
+    }
+    let mut nearest: Option<(f64, usize)> = None;
+    for (index, (a, b)) in curve.iter().zip(curve.iter().skip(1)).enumerate() {
+        let distance = to_segment(at, *a, *b);
+        if nearest.is_none_or(|(best, _)| distance < best) {
+            nearest = Some((distance, index));
+        }
+    }
+    let (distance, index) = nearest?;
+    if distance > cov {
+        return None;
+    }
+    let (before, after) = curve.split_at(index.saturating_add(1));
+    let mut head = before.to_vec();
+    head.push(at);
+    let mut tail = vec![at];
+    tail.extend_from_slice(after);
+    Some((head, tail))
+}
+
+/// The curves and points of `case`'s truth, snapped to the grid, in the case's units, with the
+/// curves split at its singular points.
 fn truth(case: &Case, placed: &Placed) -> Output {
     let mut out = Output::empty(placed);
     for f in case.features() {
@@ -176,6 +205,26 @@ fn truth(case: &Case, placed: &Placed) -> Output {
             xyz: f.points.iter().map(|p| placed.snapped(*p)).collect(),
             kind: name.into(),
         });
+    }
+    for singular in &case.expected.singular_points {
+        let at = placed.snapped(*singular);
+        let mut pieces = Vec::with_capacity(out.curves.len());
+        for curve in core::mem::take(&mut out.curves) {
+            match cut(&curve.xyz, at, case.cov_tol) {
+                Some((head, tail)) => {
+                    pieces.push(Curve {
+                        xyz: head,
+                        kind: curve.kind.clone(),
+                    });
+                    pieces.push(Curve {
+                        xyz: tail,
+                        kind: curve.kind,
+                    });
+                }
+                None => pieces.push(curve),
+            }
+        }
+        out.curves = pieces;
     }
     out
 }
@@ -211,12 +260,7 @@ fn flagged(case: &Case, placed: &Placed, cov: f64, out: &mut Output) {
     for p in &case.expected.singular_points {
         out.flagged.push(around(*p, floor, Why::NonSmooth, placed));
     }
-    let tangent = case
-        .expected
-        .branches
-        .iter()
-        .position(|b| matches!(b.kind, Contact::Tangent | Contact::NearTangent));
-    if let Some(index) = tangent {
+    if let Some(index) = out.curves.iter().position(|c| c.kind == "TANGENT") {
         stretch(index, placed, cov, out);
     }
 }

@@ -337,6 +337,7 @@ fn interning_keeps_one_node_per_name_in_name_order() {
         assert_eq!(graph.bytes(got), Some(name.encode().unwrap().as_bytes()));
     }
     assert_eq!(graph.len(), 4);
+    assert!(!graph.is_empty());
     let listed: Vec<NameId> = graph.ids().collect();
     let mut sorted = ids.clone();
     sorted.sort();

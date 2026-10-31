@@ -121,11 +121,7 @@ pub(crate) fn fail(ctx: &OpContext<'_>, detail: MakeDetail) -> OpError {
 /// The error for rows that did not reach a body: the meter's stop, an allocation refused, or a
 /// defect.
 pub(crate) fn unbuilt(ctx: &OpContext<'_>, meter: &mut WorkMeter<'_>, e: TopoError) -> OpError {
-    let stop = match e {
-        TopoError::OutOfMemory => Some(meter.out_of_memory()),
-        _ => meter.check().err(),
-    };
-    match stop {
+    match e.stop(meter) {
         Some(stop) => ctx.stopped(meter, stop, PHASE),
         None => fail(ctx, MakeDetail::BuildFailed),
     }
@@ -328,14 +324,10 @@ pub(crate) fn finish(
 )]
 /// The rows of `part`: the void outside (region 0), the solid (region 1), one shell, and the
 /// faces, loops, fins, edges and vertices in the part's order, each edge's fins in one radial ring
-/// in the order the loops use them.
+/// in the order the loops use them. Lists are left unlinked: publishing in name order rebuilds
+/// every list from its members' owners.
 fn rows_of(part: &Part) -> Option<Rows> {
     let shell = ix::<Shell>(0)?;
-    let first_face = if part.faces.is_empty() {
-        None
-    } else {
-        Some(ix::<Face>(0)?)
-    };
     let regions = [
         Region {
             kind: RegionKind::Void,
@@ -343,47 +335,34 @@ fn rows_of(part: &Part) -> Option<Rows> {
         },
         Region {
             kind: RegionKind::Solid,
-            first_shell: Some(shell),
+            first_shell: None,
         },
     ];
     let shells = [Shell {
         region: ix(1)?,
         next: None,
-        first_face,
+        first_face: None,
     }];
     let mut faces = Vec::new();
     let mut loops = Vec::new();
     let mut fins: Vec<Fin> = Vec::new();
     let mut ring: Vec<Vec<usize>> = (0..part.edges.len()).map(|_| Vec::new()).collect();
-    let face_count = part.faces.len();
     for (f, face) in part.faces.iter().enumerate() {
-        let next_face = maybe(f.checked_add(1).filter(|&n| n < face_count))?;
-        let first_loop = if face.loops.is_empty() {
-            None
-        } else {
-            Some(ix(loops.len())?)
-        };
         faces.push(Face {
             shell,
-            next: next_face,
+            next: None,
             surface: ix(f)?,
             sense: face.sense,
-            first_loop,
+            first_loop: None,
             bound: face.bound,
         });
-        let loop_count = face.loops.len();
-        for (l, fins_of) in face.loops.iter().enumerate() {
+        for fins_of in &face.loops {
             let here = loops.len();
             let first = fins.len();
-            let more = l.checked_add(1).is_some_and(|n| n < loop_count);
             loops.push(Loop {
                 face: ix(f)?,
-                next: if more {
-                    Some(ix(here.checked_add(1)?)?)
-                } else {
-                    None
-                },
-                first_fin: Some(ix(first)?),
+                next: None,
+                first_fin: None,
             });
             let n = fins_of.len();
             for (k, &(e, sense)) in fins_of.iter().enumerate() {
@@ -417,7 +396,7 @@ fn rows_of(part: &Part) -> Option<Rows> {
         .enumerate()
         .map(|(e, edge)| {
             Some(Edge {
-                first_fin: maybe(ring.get(e)?.first().copied())?,
+                first_fin: None,
                 start: maybe(edge.ends.and_then(|(s, _)| usize::try_from(s).ok()))?,
                 end: maybe(edge.ends.and_then(|(_, t)| usize::try_from(t).ok()))?,
                 curve: ix(e)?,
