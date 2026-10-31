@@ -200,6 +200,10 @@ fn a_table_holds_each_plane_once_at_its_narrowest() {
     assert_eq!(table.widths(), (1, 1));
     assert_eq!(table.plane(w.plane), Some(canonical(&far).unwrap().plane));
     assert_eq!(w.plane.row(), 1);
+    let again = table.insert(&at_x(4)).unwrap();
+    let third = table.insert(&at_y(4)).unwrap();
+    assert_eq!((again.plane.row(), third.plane.row()), (2, 3));
+    assert_eq!(table.widths(), (3, 1));
     assert_eq!(
         table.plane(geom_poly::plane::PlaneIx::default()),
         Some(at_z(0))

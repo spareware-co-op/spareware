@@ -56,10 +56,11 @@ pub fn canonical(plane: &Plane) -> Result<Canonical, NumError> {
     let divisor = [x, y, z, d]
         .iter()
         .fold(0, |g, v| gcd_u128(g, v.unsigned_abs()));
-    let sign = match [x, y, z].iter().find(|v| **v != 0) {
-        Some(first) if *first < 0 => -1,
-        _ => 1,
-    };
+    let flipped = [x, y, z]
+        .iter()
+        .find(|v| **v != 0)
+        .is_some_and(|first| first.is_negative());
+    let sign = if flipped { -1 } else { 1 };
     let reduce = |v: i128| -> Result<i128, NumError> {
         // The divisor is at most |v| where v is not zero, and a normal is never all zero, so it is
         // at least 1 and at most 2^125: it fits i128 and leaves v's sign alone.
@@ -70,7 +71,7 @@ pub fn canonical(plane: &Plane) -> Result<Canonical, NumError> {
     };
     Ok(Canonical {
         plane: Plane::new([reduce(x)?, reduce(y)?, reduce(z)?], reduce(d)?)?,
-        flipped: sign < 0,
+        flipped,
     })
 }
 
