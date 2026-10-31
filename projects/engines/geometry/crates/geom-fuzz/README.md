@@ -27,11 +27,12 @@ form never panic, refuse inside their input and convert both ways bit for bit; `
 their laws, and refuse with a typed error; `make` (`src/make.rs`, G101), the primitives and
 transforms return only what the full checker passes, keep their laws, and refuse with a typed
 error; `sequence` (`src/sequence.rs`, G116), whole operation logs replay to the same hash and keep
-every law at every step; and `cbor` (`src/cbor.rs`, G91), `geom-format`'s strict CBOR decoder and
-its text form never panic, refuse inside their input and convert both ways bit for bit.
-`src/adversarial.rs` holds the generators aimed at the hard cases, and `src/robustness.rs` counts
-how many plain designs succeed per family: `src/robustness.txt` records it, and a count may not
-fall.
+every law at every step; `cbor` (`src/cbor.rs`, G91), `geom-format`'s strict CBOR decoder and its
+text form never panic, refuse inside their input and convert both ways bit for bit; and `surfaces`
+(`src/surfaces.rs`), every curve and surface kind built from any bytes keeps the kind contract kit
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform. `src/adversarial.rs`
+holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
+succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
 ## One law, four engines
 

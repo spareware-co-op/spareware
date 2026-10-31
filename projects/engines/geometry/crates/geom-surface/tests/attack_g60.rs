@@ -13,6 +13,7 @@
     reason = "tests: native arithmetic and indexing, and a failure stops the test"
 )]
 
+use geom_curve::tight::larger;
 use geom_curve::{ContractError, CurveError, DerivativeBound, Law, ParamMap};
 use geom_math::{Axis, GridTransform, TypedTransform};
 use geom_num::interval::Interval;
@@ -113,10 +114,14 @@ impl ParamSurface for Faulty {
     fn partials(&self, u: f64, v: f64, sides: (Limit, Limit)) -> Result<[[f64; 3]; 3], CurveError> {
         let mut out = self.inner.partials(u, v, sides)?;
         if let Fault::Evaluate(k, above) = self.fault {
-            let e = self.inner.enclose(u, v, sides, &mut meter())?;
-            let (lo, hi) = (e[0][0].lo(), e[0][0].hi());
+            let whole = self.inner.enclose(u, v, sides, &mut meter())?;
+            let (lo, hi) = (whole[0][0].lo(), whole[0][0].hi());
             let end = if above { hi } else { lo };
-            let scale = 1.0 + end.abs() + lo.abs() + hi.abs();
+            let largest = whole
+                .iter()
+                .flatten()
+                .fold(0.0, |m, i| larger(m, larger(i.lo().abs(), i.hi().abs())));
+            let scale = 1.0 + largest + end.abs() + lo.abs() + hi.abs();
             out[0][0] = if above {
                 hi + k * SLACK * scale
             } else {
@@ -253,8 +258,8 @@ fn a_conversion_passes_within_its_deviation_either_way_and_fails_beyond() {
     }
 }
 
-/// Claim: doubles may lie up to slack·(1 + |x| + |lo| + |hi|) outside the enclosure, on either
-/// side, and not further.
+/// Claim: doubles may lie up to slack·(1 + the largest value + |x| + |lo| + |hi|) outside the
+/// enclosure, on either side, and not further.
 #[test]
 fn evaluation_in_doubles_has_exactly_its_slack() {
     for above in [true, false] {

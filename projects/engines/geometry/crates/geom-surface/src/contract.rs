@@ -7,8 +7,8 @@
 //! stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s
 //! first three are the enclosure's, and its partials at a pair meet those over the box around it,
 //! as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound
-//! must keep the sign of every coordinate it decides; doubles
-//! must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).
+//! must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures
+//! within 2^−30 of the largest value there (a wrong formula, not rounding).
 //!
 //! Guarantees:
 //!
@@ -66,9 +66,9 @@ fn boxes_meet(a: &Bounds<3>, b: &Bounds<3>) -> bool {
         .all(|((&al, &ah), (&bl, &bh))| al <= bh && bl <= ah)
 }
 
-fn near(v: &[f64; 3], a: &[Interval; 3]) -> bool {
+fn near(v: &[f64; 3], a: &[Interval; 3], largest: f64) -> bool {
     v.iter().zip(a).all(|(&x, i)| {
-        let scale = 1.0 + x.abs() + i.lo().abs() + i.hi().abs();
+        let scale = 1.0 + largest + x.abs() + i.lo().abs() + i.hi().abs();
         i.lo() - SLACK * scale <= x && x <= i.hi() + SLACK * scale
     })
 }
@@ -103,12 +103,13 @@ pub fn check<K: ParamSurface>(
     let ((a, b), (c, d)) = kind.domain();
     let call = |law: Law, at: f64| move |e: CurveError| broken(law, at, Some(e));
     let sides = (Limit::FromRight, Limit::FromRight);
-    // One domain length and one unit past the end.
-    let beyond = b + (b - a);
-    let outside = beyond + 1.0;
+    // The first double past each end: a step of 1 rounds back inside beyond 2^53 in magnitude, which
+    // the fuzz target found the kit blaming a kind for, and nearer is the sharper test.
+    let outside = b.next_up();
+    let before = a.next_down();
     if kind.point(outside, c, sides) != Err(CurveError::ParameterOutside)
-        || kind.bound(((a - 1.0, b), (c, d)), meter) != Err(CurveError::SpanOutside)
-        || kind.partials_over(((a - 1.0, b), (c, d)), sides, 1, meter)
+        || kind.bound(((before, b), (c, d)), meter) != Err(CurveError::SpanOutside)
+        || kind.partials_over(((before, b), (c, d)), sides, 1, meter)
             != Err(CurveError::SpanOutside)
         || kind.split(Direction::U, a, meter).err() != Some(CurveError::ParameterOutside)
     {
@@ -142,7 +143,10 @@ pub fn check<K: ParamSurface>(
         let dbl = kind
             .partials(u, v, sides)
             .map_err(call(Law::EvaluationIsEnclosed, u))?;
-        if !dbl.iter().zip(&e).all(|(x, y)| near(x, y)) {
+        let largest = e.iter().flatten().fold(0.0, |m, i| {
+            tight::larger(m, tight::larger(i.lo().abs(), i.hi().abs()))
+        });
+        if !dbl.iter().zip(&e).all(|(x, y)| near(x, y, largest)) {
             return Err(broken(Law::EvaluationIsEnclosed, u, None));
         }
         let [p, su, sv] = e;

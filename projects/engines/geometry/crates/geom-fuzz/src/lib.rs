@@ -26,11 +26,12 @@
 //! only what the full checker passes, keep their laws, and refuse with a typed error; [`make`]
 //! (G101), the primitives and transforms return only what the full checker passes, keep their
 //! laws, and refuse with a typed error; [`sequence`] (G116), whole operation logs replay to the
-//! same hash and keep every law at every step; and [`cbor`] (G91), `geom-format`'s strict CBOR
-//! decoder and its text form never panic, refuse inside their input and convert both ways bit for
-//! bit. [`adversarial`] holds the generators aimed at chapter 28.5's hard cases, and
-//! [`robustness`] counts how many plain designs succeed. The layout every target follows, and how
-//! each engine runs it locally and in CI, is in this crate's `README.md`.
+//! same hash and keep every law at every step; [`cbor`] (G91), `geom-format`'s strict CBOR decoder
+//! and its text form never panic, refuse inside their input and convert both ways bit for bit; and
+//! [`variants`] (G42), every variant of every generated exact path returns the exact value of its
+//! description, evaluated in big integers. [`adversarial`] holds the generators aimed at chapter
+//! 28.5's hard cases, and [`robustness`] counts how many plain designs succeed. The layout every
+//! target follows, and how each engine runs it locally and in CI, is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -149,6 +150,8 @@
 //! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (MPL-2.0, ours), the code
 //!   under test of the [`arenas`] target and the values that fill its arenas.
 //! - `geom-format` (MPL-2.0, ours), the code under test of the [`cbor`] target.
+//! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
+//!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -165,8 +168,10 @@
 //!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
-//!   `num-bigint`, `num-integer`, `num-traits` and `autocfg`.
+//!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,
+//!   `dashu-ratio` and `static_assertions`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
+//! - Apache-2.0: `num-modular` (through `dashu-int`).
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
@@ -195,14 +200,22 @@ pub mod adversarial;
 pub mod arenas;
 pub mod attributes;
 pub mod batch;
+pub mod boxtree;
 pub mod cache;
 pub mod cbor;
+pub mod curves;
+pub mod linalg;
 pub mod make;
+pub mod maths;
+pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;
 pub mod robustness;
+pub mod roots;
 pub mod seeded;
 pub mod sequence;
+pub mod surfaces;
+pub mod transforms;
 pub mod variants;
 pub mod wide;
 
