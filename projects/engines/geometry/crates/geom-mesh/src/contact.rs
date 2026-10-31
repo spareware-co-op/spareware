@@ -27,6 +27,11 @@
 //! Cost: constant: at most 8 orientations and, for coplanar triangles, 15 more in the plane. No
 //! allocation.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are points and a, b, c and d signs, as in the paper"
+)]
+
 use geom_num::distance::{self, dot_from, product_difference};
 use geom_num::grid::{P2, P3};
 use geom_num::predicate::{orient2d, orient3d};
