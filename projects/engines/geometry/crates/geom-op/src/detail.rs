@@ -66,6 +66,8 @@ pub enum OpErrorDetail {
     Make(MakeDetail),
     /// A failure of a query (chapter 22; piece G102).
     Query(QueryDetail),
+    /// A failure of the Combine family (`geom-bool`, chapter 11.11).
+    Combine(CombineDetail),
 }
 
 impl OpErrorDetail {
@@ -77,6 +79,7 @@ impl OpErrorDetail {
             OpErrorDetail::Num(detail) => detail.kind(),
             OpErrorDetail::Make(detail) => detail.kind(),
             OpErrorDetail::Query(detail) => detail.kind(),
+            OpErrorDetail::Combine(detail) => detail.kind(),
         }
     }
 
@@ -88,6 +91,7 @@ impl OpErrorDetail {
             OpErrorDetail::Num(detail) => detail.remedies(),
             OpErrorDetail::Make(detail) => detail.remedies(),
             OpErrorDetail::Query(detail) => detail.remedies(),
+            OpErrorDetail::Combine(detail) => detail.remedies(),
         }
     }
 }
@@ -574,6 +578,63 @@ impl fmt::Display for QueryDetail {
 }
 
 impl core::error::Error for QueryDetail {}
+
+/// A failure of the Combine family (chapter 11.11).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombineDetail {
+    /// Two operands share a key.
+    DuplicateOperand,
+    /// A selection names a key that no solid operand has.
+    UnknownOperand,
+    /// A test on winding numbers does not leave one answer.
+    BadSelection,
+    /// An operand cannot enter the arrangement.
+    InvalidOperand,
+    /// An operand has a face the flat path cannot take.
+    NotPlaneBased,
+    /// The selection would include the outside.
+    UnboundedResult,
+    /// A rebuilt body failed the checker: a defect, reported instead of a wrong body.
+    ResultInvalid,
+}
+
+impl CombineDetail {
+    /// The base kind.
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
+        match self {
+            CombineDetail::DuplicateOperand
+            | CombineDetail::UnknownOperand
+            | CombineDetail::BadSelection
+            | CombineDetail::InvalidOperand
+            | CombineDetail::UnboundedResult => ErrorKind::InvalidInput,
+            CombineDetail::NotPlaneBased => ErrorKind::Unsupported,
+            CombineDetail::ResultInvalid => ErrorKind::Internal,
+        }
+    }
+
+    /// The remedies this detail knows: the input to change, or the piece that adds a route.
+    #[must_use]
+    pub fn remedies(&self) -> Vec<Remedy> {
+        let change = |input: &'static str| Remedy::ChangeInput { input, to: None };
+        match self {
+            CombineDetail::DuplicateOperand
+            | CombineDetail::UnknownOperand
+            | CombineDetail::InvalidOperand => vec![change("operands")],
+            CombineDetail::BadSelection | CombineDetail::UnboundedResult => {
+                vec![change("select")]
+            }
+            CombineDetail::NotPlaneBased => vec![Remedy::AwaitPiece { piece: "G242" }],
+            CombineDetail::ResultInvalid => Vec::new(),
+        }
+    }
+}
+
+impl From<CombineDetail> for OpErrorDetail {
+    fn from(detail: CombineDetail) -> Self {
+        OpErrorDetail::Combine(detail)
+    }
+}
 
 impl From<QueryDetail> for OpErrorDetail {
     fn from(detail: QueryDetail) -> Self {
