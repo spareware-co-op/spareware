@@ -47,6 +47,9 @@ fn sections() -> Vec<(&'static str, &'static str, String)> {
         ("SPEC.md", "header", field_table(by_name("header"))),
         ("SPEC.md", "rungs", rung_table()),
         ("SPEC.md", "end", field_table(by_name("end"))),
+        ("SPEC.md", "names", field_table(by_name("names"))),
+        ("SPEC.md", "history", field_table(by_name("history"))),
+        ("SPEC.md", "recipe", field_table(by_name("recipe"))),
     ]
 }
 

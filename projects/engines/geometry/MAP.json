@@ -2628,6 +2628,45 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a recipe cannot be read, written or re-run.",
+          "file": "projects/engines/geometry/crates/geom-format/src/recipe.rs",
+          "kinds": [
+            {
+              "doc": "The payload's shape or encoding is wrong.",
+              "name": "Payload",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The path inside is wrong.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An owner namespace that is empty or not printable ASCII.",
+              "name": "Owner",
+              "shape": "unit"
+            },
+            {
+              "doc": "No owner present reads this recipe's schema, so it cannot be re-run (24.4). Its bodies still open and its payload is kept.",
+              "name": "RecipeOwnerMissing",
+              "shape": "struct"
+            },
+            {
+              "doc": "The payload is not the recipe's one canonical encoding.",
+              "name": "NotCanonical",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder failed; only a defect can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::recipe",
+          "name": "RecipeError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a record has no encoding, or its bytes are not one.",
           "file": "projects/engines/geometry/crates/geom-format/src/record.rs",
           "kinds": [
@@ -3099,6 +3138,29 @@
             "text": "chapter 24.7 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`, with the bit budgets of chapter 6.2 (`projects/engines/geometry/architecture/06-numbers.md`); the greatest common divisor by Euclid's algorithm (Knuth, TAOCP vol. 2, 4.5.2, Algorithm A)."
           },
           "path": "geom_format::range",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the recipe; the payload is copied once.",
+          "does": "a [`Recipe`] is chapter 24.4's envelope every reader knows: the owner's namespace (`kit.geom` for kernel operations, `kit.geom.ifc`, a plugin's ID), the owner's schema version, the operation's path and version, its inputs by content ID and `NameId`, an opaque payload only the owner decodes, and the content IDs of the bodies it produced. [`recipe_record`] writes one as a required record (tag [`RECIPE_TAG`]); [`read_recipe`] reads it back. [`Recipe::owner_in`] finds the owner that can re-run it, or refuses with `RecipeOwnerMissing`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/recipe.rs",
+          "guarantees": [
+            "**The payload is never decoded here** and is kept byte for byte: a reader without the owner still has the evaluated bodies, by content ID, and writes the recipe back unchanged.",
+            "**Only re-running needs the owner**: [`Recipe::owner_in`] refuses with [`RecipeError::RecipeOwnerMissing`], naming the owner and its schema, and nothing else does.",
+            "**One encoding**: a recipe is read and encoded again, and the bytes must be the stored ones."
+          ],
+          "job": "The recipe envelope: how a shape was made, kept for whoever owns the recipe, so a file opens and draws where that owner is absent.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/26-how-it-grows.md"
+            ],
+            "text": "chapter 24.4's recipe envelope and 26.1's promise that a file opens without the plugin that made a shape (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/26-how-it-grows.md`)."
+          },
+          "path": "geom_format::recipe",
           "provenance": [],
           "spdx": null,
           "target": "lib"

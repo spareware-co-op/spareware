@@ -6,6 +6,8 @@
 //!   read back is the same graph, byte for byte; every `NameId` is checked against its bytes.
 //! - A names record is refused under another `NameScheme`, with a node whose id is not its hash,
 //!   out of order or repeated, or with a name in a second spelling, each at its byte.
+//! - A recipe round-trips with its payload byte for byte, needs its owner only to re-run, and a
+//!   bad owner or a second spelling is refused; every payload matches its CDDL.
 //! - A history with every origin and every topology change written as a history record and read
 //!   back is the same history at the same path; generated histories round-trip too; a second
 //!   spelling or an unknown origin is refused.
@@ -17,7 +19,7 @@
 )]
 // Helpers outside `#[test]` functions are not covered by clippy.toml's allow-*-in-tests settings;
 // clippy.toml says tests may use these, and a broken case must stop the test loudly.
-#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use geom_format::history::{HistoryRecordError, history_record, read_history};
 use geom_format::names::{NamesError, names_record, read_names, read_topo_name};
@@ -335,4 +337,131 @@ proptest! {
         prop_assert_eq!(path, op());
         prop_assert_eq!(back, history);
     }
+}
+
+// The recipe envelope (tag 18).
+
+use geom_format::content::ContentId;
+use geom_format::recipe::{
+    KERNEL_OWNER, Recipe, RecipeError, RecipeInput, RecipeOwner, read_recipe, recipe_record,
+};
+
+fn recipe() -> Recipe {
+    Recipe {
+        owner: KERNEL_OWNER.to_owned(),
+        owner_schema: 3,
+        op: op(),
+        version: 2,
+        inputs: vec![
+            RecipeInput::Body(ContentId::of_payload(b"a body")),
+            RecipeInput::Entity(n(9)),
+        ],
+        payload: vec![0xde, 0xad, 0xbe, 0xef],
+        outputs: vec![ContentId::of_payload(b"the result")],
+    }
+}
+
+struct Owner(&'static str, u64);
+
+impl RecipeOwner for Owner {
+    fn owner(&self) -> &str {
+        self.0
+    }
+    fn reads(&self, schema: u64) -> bool {
+        schema <= self.1
+    }
+}
+
+#[test]
+fn a_recipe_round_trips_and_keeps_its_payload_byte_for_byte() {
+    let recipe = recipe();
+    let record = through_file(&recipe_record(&recipe).unwrap());
+    assert_eq!((record.tag, record.flags, record.schema), (18, 1, 1));
+    let back = read_recipe(&record.payload, &mut meter()).unwrap();
+    assert_eq!(back, recipe);
+    assert_eq!(back.payload, [0xde, 0xad, 0xbe, 0xef]);
+    assert_eq!(back.encode().unwrap(), record.payload);
+}
+
+#[test]
+fn only_re_running_needs_the_owner() {
+    let recipe = recipe();
+    let facade = Owner("kit.geom", 3);
+    let old = Owner("kit.geom", 2);
+    let plugin = Owner("org.example.stairs", 9);
+    let found = recipe.owner_in(&[&plugin, &facade]).unwrap();
+    assert_eq!(found.owner(), "kit.geom");
+    let missing = RecipeError::RecipeOwnerMissing {
+        owner: "kit.geom".to_owned(),
+        schema: 3,
+    };
+    assert_eq!(
+        recipe.owner_in(&[&plugin, &old]).err(),
+        Some(missing.clone())
+    );
+    assert_eq!(recipe.owner_in(&[]).err(), Some(missing.clone()));
+    assert_eq!(
+        missing.to_string(),
+        "no owner present re-runs `kit.geom` recipes of schema 3; its bodies open and its payload \
+         is kept"
+    );
+    // Reading never needs the owner.
+    assert!(read_recipe(&recipe.encode().unwrap(), &mut meter()).is_ok());
+}
+
+#[test]
+fn a_bad_recipe_is_refused() {
+    for owner in ["", "kit geom", "kit.g\u{e9}om"] {
+        let mut r = recipe();
+        r.owner = owner.to_owned();
+        assert_eq!(r.encode().unwrap_err(), RecipeError::Owner, "{owner:?}");
+    }
+    let payload = recipe().encode().unwrap();
+    let mut longer = payload.clone();
+    longer.push(0);
+    assert!(read_recipe(&longer, &mut meter()).is_err());
+    // An input kind that does not exist: the second input's [1, name] becomes [2, name] (the
+    // first, [0, [1, digest]], holds a content ID whose algorithm 1 has the same two bytes).
+    let at = payload
+        .windows(3)
+        .position(|w| w == [0x82, 0x01, 0x50])
+        .unwrap();
+    let mut unknown = payload;
+    unknown[at + 1] = 0x02;
+    assert!(matches!(
+        read_recipe(&unknown, &mut meter()).unwrap_err(),
+        RecipeError::Payload(_)
+    ));
+}
+
+// Every payload against its CDDL (format/cddl).
+
+const RECORD_CDDL: &str = include_str!("../../../format/cddl/record.cddl");
+const NAMES_CDDL: &str = include_str!("../../../format/cddl/names.cddl");
+const HISTORY_CDDL: &str = include_str!("../../../format/cddl/history.cddl");
+const RECIPE_CDDL: &str = include_str!("../../../format/cddl/recipe.cddl");
+
+fn validate(rule: &str, schemas: &[&str], payload: &[u8]) {
+    let schema = schemas.join("\n");
+    cddl_cat::validate_cbor_bytes(rule, &schema, payload)
+        .unwrap_or_else(|e| panic!("{rule}: {e:?}"));
+}
+
+#[test]
+fn every_payload_matches_its_cddl() {
+    validate(
+        "names",
+        &[NAMES_CDDL],
+        &names_record(&graph()).unwrap().payload,
+    );
+    validate(
+        "history",
+        &[HISTORY_CDDL, NAMES_CDDL],
+        &history_record(&op(), &full_history()).unwrap().payload,
+    );
+    validate(
+        "recipe",
+        &[RECIPE_CDDL, NAMES_CDDL, RECORD_CDDL],
+        &recipe_record(&recipe()).unwrap().payload,
+    );
 }

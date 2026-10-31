@@ -116,3 +116,54 @@ A reader checks both and refuses a file whose count or digest differs, a file wi
 ## 9. Versions
 
 The header holds the format version. A minor version only adds what an older reader can skip or fall back from: new optional records, new even extension keys, new schema versions read beside the old. A major version runs beside the old one. Record types are versioned on their own by `schema`; a reader keeps a decoder for every schema ever published (24.6).
+
+## 10. The names record
+
+Tag 16, schema 1, required. Its payload (CDDL `names` in [cddl/names.cddl](cddl/names.cddl)):
+
+<!-- generated: names -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `nodes` | `[* [id: name-id, name: topo-name]]` | every name node the file keeps, in NameId order; each id is the first 16 bytes                       of the SHA-256 of the scheme's prefix and the name's canonical bytes (32.19) |
+<!-- end generated -->
+
+Every face, edge and vertex `NameId` a file holds, and the name nodes reachable from live entities and stored references (architecture 24.4), as one array of `[id, name]` pairs in strictly increasing `NameId` order. Each name is a `TopoName` in its canonical encoding (32.19): a variant number (`Created` 0, `Split` 1, `Merged` 2, `Bounded` 3, `Weak` 4) and its fields, sets and sorted lists in byte order, role names in Normalization Form C. A reader:
+
+- refuses the record when the header's `name-scheme` is one it does not know;
+- checks each id: the first 16 bytes of the SHA-256 of the 17 ASCII bytes `SKG NameScheme v1`, a zero byte, and the name's bytes as stored; a node whose id differs is refused, never trusted;
+- decodes each name and encodes it again; bytes that differ are a second spelling and are refused;
+- refuses a node out of order, and a second node under one id.
+
+## 11. The history record
+
+Tag 17, schema 1, required. Its payload (CDDL `history` in [cddl/history.cddl](cddl/history.cddl), with names.cddl's rules):
+
+<!-- generated: history -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `op` | `op-path` | the operation's path: its OpId and its labels |
+| `records` | `[* [output: name-id, origin]]` | one per output, in output-name order: unchanged, modified, generated, split                           or merged (20.3) |
+| `deleted` | `[* name-id]` | the inputs the operation deleted, a set |
+| `changes` | `[* topology-change]` | the topology changes it made (13.14), in the history's order |
+<!-- end generated -->
+
+One operation's history (architecture 20.3): every output's origin and the inputs it deleted, with the topology changes of 13.14. An origin is `[0]` unchanged, `[1, from]` modified, `[2, from, role]` generated (from an empty set when made from nothing), `[3, of, piece]` split or `[4, of]` merged from at least two. A change is its class's number in 13.14's table order (vertex split 0, face vanished 1, self-overlap cut 2, clash trimmed 3, overshoot removed 4, faces merged 5, face added 6, loop changed 7, body split 8) with its fields; why a face vanished is collapsed 0 or inside out 1, and a loop change is hole closed 0 or face split 1. A reader refuses two records of one output, a modification from nothing, a merge of one, and any payload that is not the history's canonical encoding.
+
+## 12. The recipe record
+
+Tag 18, schema 1, required. Its payload (CDDL `recipe` in [cddl/recipe.cddl](cddl/recipe.cddl), with names.cddl's and record.cddl's rules):
+
+<!-- generated: recipe -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `owner` | `tstr` | the owner's namespace, printable ASCII: `kit.geom` for kernel operations, `kit.geom.ifc`, a plugin's ID |
+| `owner-schema` | `uint` | the owner's schema version for the payload |
+| `op` | `op-path` | the operation's path |
+| `version` | `uint` | the operation's version (26.2) |
+| `inputs` | `[* ([0, content-id] / [1, name-id])]` | the inputs in the owner's order: a body by content ID, an entity by name |
+| `payload` | `bstr` | the owner's own encoding of the recipe, never decoded by the format |
+| `outputs` | `[* content-id]` | the content IDs of the bodies the recipe produced |
+<!-- end generated -->
+
+How a shape was made, in one envelope every reader knows (architecture 24.4), whoever owns it. The format never decodes the payload; its owner does (the facade from operation schemas, `geom-ifc`, a plugin). A reader without the owner still opens the bodies the recipe produced, by their content IDs, keeps the recipe byte for byte, and refuses only what would re-run it, with `RecipeOwnerMissing`, naming the owner and its schema. A reader refuses an owner that is empty or not printable ASCII, and any payload that is not the recipe's canonical encoding.
+

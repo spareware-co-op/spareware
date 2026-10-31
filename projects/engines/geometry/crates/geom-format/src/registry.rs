@@ -29,6 +29,9 @@ use geom_num::ladder;
 
 use crate::file::{END_TAG, HEADER_TAG};
 use crate::header::{Header, rung};
+use crate::history::{HISTORY_SCHEMA, HISTORY_TAG};
+use crate::names::{NAMES_SCHEMA, NAMES_TAG};
+use crate::recipe::{RECIPE_SCHEMA, RECIPE_TAG};
 use crate::record::REQUIRED;
 
 /// One field of a record or payload.
@@ -159,6 +162,95 @@ pub const RECORDS: &[RecordType] = &[
                 name: "digest",
                 cddl: "bstr .size 32",
                 meaning: "the SHA-256 of every byte before this record, the label included",
+            },
+        ],
+    },
+    RecordType {
+        tag: NAMES_TAG,
+        name: "names",
+        schemas: &[NAMES_SCHEMA],
+        flags: REQUIRED,
+        cddl: "names.cddl",
+        section: "10",
+        fields: &[Field {
+            name: "nodes",
+            cddl: "[* [id: name-id, name: topo-name]]",
+            meaning: "every name node the file keeps, in NameId order; each id is the first 16 bytes                       of the SHA-256 of the scheme's prefix and the name's canonical bytes (32.19)",
+        }],
+    },
+    RecordType {
+        tag: HISTORY_TAG,
+        name: "history",
+        schemas: &[HISTORY_SCHEMA],
+        flags: REQUIRED,
+        cddl: "history.cddl",
+        section: "11",
+        fields: &[
+            Field {
+                name: "op",
+                cddl: "op-path",
+                meaning: "the operation's path: its OpId and its labels",
+            },
+            Field {
+                name: "records",
+                cddl: "[* [output: name-id, origin]]",
+                meaning: "one per output, in output-name order: unchanged, modified, generated, split                           or merged (20.3)",
+            },
+            Field {
+                name: "deleted",
+                cddl: "[* name-id]",
+                meaning: "the inputs the operation deleted, a set",
+            },
+            Field {
+                name: "changes",
+                cddl: "[* topology-change]",
+                meaning: "the topology changes it made (13.14), in the history's order",
+            },
+        ],
+    },
+    RecordType {
+        tag: RECIPE_TAG,
+        name: "recipe",
+        schemas: &[RECIPE_SCHEMA],
+        flags: REQUIRED,
+        cddl: "recipe.cddl",
+        section: "12",
+        fields: &[
+            Field {
+                name: "owner",
+                cddl: "tstr",
+                meaning: "the owner's namespace, printable ASCII: `kit.geom` for kernel operations, \
+                          `kit.geom.ifc`, a plugin's ID",
+            },
+            Field {
+                name: "owner-schema",
+                cddl: "uint",
+                meaning: "the owner's schema version for the payload",
+            },
+            Field {
+                name: "op",
+                cddl: "op-path",
+                meaning: "the operation's path",
+            },
+            Field {
+                name: "version",
+                cddl: "uint",
+                meaning: "the operation's version (26.2)",
+            },
+            Field {
+                name: "inputs",
+                cddl: "[* ([0, content-id] / [1, name-id])]",
+                meaning: "the inputs in the owner's order: a body by content ID, an entity by name",
+            },
+            Field {
+                name: "payload",
+                cddl: "bstr",
+                meaning: "the owner's own encoding of the recipe, never decoded by the format",
+            },
+            Field {
+                name: "outputs",
+                cddl: "[* content-id]",
+                meaning: "the content IDs of the bodies the recipe produced",
             },
         ],
     },
