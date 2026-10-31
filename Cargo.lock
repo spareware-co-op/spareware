@@ -978,9 +978,14 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "geom-bench",
+ "geom-curve",
  "geom-gen",
+ "geom-math",
  "geom-num",
+ "geom-run",
+ "geom-surface",
  "geom-test",
+ "geom-topo",
  "num-bigint",
 ]
 
@@ -1340,6 +1345,7 @@ dependencies = [
 name = "geom-surface"
 version = "0.0.0"
 dependencies = [
+ "dashu-ratio",
  "geom-curve",
  "geom-math",
  "geom-num",

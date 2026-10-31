@@ -41,7 +41,7 @@ use std::path::{Path, PathBuf};
 
 /// Every source file of the crate, its tests and its benchmark: its path in the crate's folder,
 /// and its text, read when the test is built, so the check runs on every target.
-const SOURCES: [(&str, &str); 24] = [
+const SOURCES: [(&str, &str); 25] = [
     ("benches/helper.rs", include_str!("../benches/helper.rs")),
     ("src/batch.rs", include_str!("../src/batch.rs")),
     ("src/budget.rs", include_str!("../src/budget.rs")),
@@ -55,6 +55,10 @@ const SOURCES: [(&str, &str); 24] = [
     ("src/pool.rs", include_str!("../src/pool.rs")),
     ("src/scan.rs", include_str!("../src/scan.rs")),
     ("src/sort.rs", include_str!("../src/sort.rs")),
+    (
+        "tests/all_chunks_reach_the_pool.rs",
+        include_str!("all_chunks_reach_the_pool.rs"),
+    ),
     ("tests/attack_g04.rs", include_str!("attack_g04.rs")),
     ("tests/attack_g23.rs", include_str!("attack_g23.rs")),
     ("tests/budget_cancel.rs", include_str!("budget_cancel.rs")),

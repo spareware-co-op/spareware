@@ -6,9 +6,13 @@
 //! error, split, reverse and transform; with every partial derivative of any order enclosed at a
 //! point or over a box ([`ParamSurface::partials_over`], listed by [`partial_index`]) and the
 //! parameters where a kind may not be smooth ([`ParamSurface::breaks`]), which chapter 13's
-//! offsets and Class-A blends need (piece G66). [`SurfaceKind`] is the storage enum, one variant
-//! per kind, which dispatches to it. New surfaces come back as [`SurfaceKind`] inside `geom-nurbs`'s
-//! [`Changed`], with a certified bound on their distance from the exact result. Errors are
+//! offsets and Class-A blends need (piece G66), and, from those partials, bounds on the second
+//! partials and on the unit normal's partials over any box
+//! ([`ParamSurface::second_derivative_bound`], [`ParamSurface::normal_derivative_bound`], piece
+//! G68), which tessellation's chord and normal-angle bounds rest on (chapter 19.3).
+//! [`SurfaceKind`] is the storage enum, one variant per kind, which dispatches to it. New surfaces
+//! come back as [`SurfaceKind`] inside `geom-nurbs`'s [`Changed`], with a certified bound on their
+//! distance from the exact result. Errors are
 //! `geom-curve`'s [`CurveError`], shared by every kind (a span there is a box here).
 //!
 //! Guarantees:
@@ -37,6 +41,7 @@ use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
 
 use crate::analytic::{AffineSurface, Cone, Cylinder, Plane, Sphere, Torus};
+use crate::derivative::{SecondDerivativeBound, normal_partials, second_partials};
 use crate::offset::Offset;
 use crate::swept::{Extrusion, Revolution, Ruled};
 
@@ -221,6 +226,47 @@ pub trait ParamSurface {
         region: ParamBox,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Bounds<3>, CurveError>;
+
+    /// Boxes holding the second partials `S_uu`, `S_uv` and `S_vv` at every point of `region`, from
+    /// [`ParamSurface::partials_over`] to order 2 with `sides` (piece G68); `Unbounded` where those
+    /// cannot be bounded. [`crate::SecondPartials::chord`] gives chapter 19.3's M from them.
+    ///
+    /// # Errors
+    ///
+    /// As [`ParamSurface::partials_over`], but for [`CurveError::Unbounded`].
+    fn second_derivative_bound(
+        &self,
+        region: ParamBox,
+        sides: (Limit, Limit),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<SecondDerivativeBound, CurveError> {
+        match self.partials_over(region, sides, 2, meter) {
+            Ok(p) => Ok(SecondDerivativeBound::Bounded(second_partials(&p)?)),
+            Err(CurveError::Unbounded) => Ok(SecondDerivativeBound::Unbounded),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Boxes holding the partials `N_u` and `N_v` of the unit normal N = n/|n|, n = `S_u` × `S_v`, at
+    /// every point of `region`, from [`ParamSurface::partials_over`] to order 2 with `sides` (piece
+    /// G68; `crate::derivative`): what chapter 19.3's normal-angle bound is proven from. Each is
+    /// `Unbounded` where n may vanish over the region, or the partials cannot be bounded there.
+    ///
+    /// # Errors
+    ///
+    /// As [`ParamSurface::partials_over`], but for [`CurveError::Unbounded`].
+    fn normal_derivative_bound(
+        &self,
+        region: ParamBox,
+        sides: (Limit, Limit),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<[DerivativeBound<3>; 2], CurveError> {
+        match self.partials_over(region, sides, 2, meter) {
+            Ok(p) => normal_partials(&p),
+            Err(CurveError::Unbounded) => Ok([DerivativeBound::Unbounded; 2]),
+            Err(e) => Err(e),
+        }
+    }
 
     /// The surface as NURBS, with the map from each of the kind's parameters to the surface's, and
     /// a certified bound on |S(u, v) − N(map(u), map(v))| over the domain (0 when exact).

@@ -3809,6 +3809,81 @@ pub mod collections {
 }
 
 pub mod sync {
+    use crate::ops::Deref;
+    // `Arc` as `Box`, plus its reference count: `make_mut` and `unwrap_or_clone` clone the value
+    // when it is shared; `clone` copies only the pointer.
+    pub struct Arc<T: ?Sized>(T);
+    impl<T> Arc<T> {
+        pub fn new(data: T) -> Arc<T> {
+            loop {}
+        }
+        pub fn try_unwrap(this: Arc<T>) -> Result<T, Arc<T>> {
+            loop {}
+        }
+        pub fn into_inner(this: Arc<T>) -> Option<T> {
+            loop {}
+        }
+    }
+    impl<T: ?Sized> Arc<T> {
+        pub fn get_mut(this: &mut Arc<T>) -> Option<&mut T> {
+            loop {}
+        }
+        pub fn strong_count(this: &Arc<T>) -> usize {
+            loop {}
+        }
+        pub fn ptr_eq(this: &Arc<T>, other: &Arc<T>) -> bool {
+            loop {}
+        }
+    }
+    impl<T: Clone> Arc<T> {
+        pub fn make_mut(this: &mut Arc<T>) -> &mut T {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+        pub fn unwrap_or_clone(this: Arc<T>) -> T {
+            let a: &T = crate::any();
+            a.clone();
+            loop {}
+        }
+    }
+    impl<T: ?Sized> Deref for Arc<T> {
+        type Target = T;
+        fn deref(&self) -> &T {
+            loop {}
+        }
+    }
+    impl<T: ?Sized> Clone for Arc<T> {
+        fn clone(&self) -> Self {
+            loop {}
+        }
+    }
+    impl<T: ?Sized + crate::fmt::Debug> crate::fmt::Debug for Arc<T> {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            crate::fmt::Debug::fmt(&**self, f)
+        }
+    }
+    impl<T: ?Sized + crate::fmt::Display> crate::fmt::Display for Arc<T> {
+        fn fmt(&self, f: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+            crate::fmt::Display::fmt(&**self, f)
+        }
+    }
+    impl<T: ?Sized + PartialEq> PartialEq for Arc<T> {
+        fn eq(&self, other: &Arc<T>) -> bool {
+            PartialEq::eq(&**self, &**other)
+        }
+    }
+    impl<T: Default> Default for Arc<T> {
+        fn default() -> Self {
+            T::default();
+            loop {}
+        }
+    }
+    impl<T> From<T> for Arc<T> {
+        fn from(t: T) -> Arc<T> {
+            loop {}
+        }
+    }
     pub mod atomic {
         #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
         pub enum Ordering {
