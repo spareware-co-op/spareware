@@ -292,3 +292,33 @@ Tag 20, schema 1, required. Its payload (CDDL `operation` in [cddl/operation.cdd
 
 One entry of an operation log (architecture 21 and 28.13): everything a replay needs to run the operation again and get the same bits. The record type has its schema, and each record names the operation's own version, which fixes its results, its charge schedule and its error details (26.2). The parameters are one item of SKG's canonical CBOR, written by the operation's schema. The budget is recorded because a budget that can fail an operation in a shared model is fixed by its version or recorded in the log (23.10). Nothing timed and no precision is recorded: only final operations are logged, and a cancelled run writes nothing (10.1). A reader refuses a name that is empty or not printable ASCII, parameters that are not canonical CBOR, and any payload that is not the record's canonical encoding.
 
+
+## 17. Validation stamps
+
+A **stamp** (tag 5, schema 1) says which checker passed a stored body, which of the checker's groups it passed (architecture chapter 8.3: 1 combinatorial, 2 geometric consistency, 3 self-intersection, 4 the exactness record) and under which kernel edition (24.7). It is a record of its own, never a field of the body index, so checking a body again adds a stamp and leaves the body's content ID unchanged. It is optional, so a reader that does not know it skips it and checks the body in full, and it is not copy-always, so a program rewriting a file keeps it only while its body is there with the same content ID. Its `depends` is exactly the stamped body's index, and its payload names that index again, so stamps about two bodies never share a content ID. Its payload (CDDL `stamp` in [cddl/stamp.cddl](cddl/stamp.cddl)):
+
+<!-- generated: stamp -->
+| Field | CDDL | Holds |
+| --- | --- | --- |
+| `body` | `content-id` | the body index the stamp is about, also its one dependency |
+| `checker` | `uint` | the version of the checker that passed the body |
+| `groups` | `[* uint]` | the groups of chapter 8.3 it passed, by number, strictly ascending |
+| `edition` | `uint` | the kernel edition the check ran under |
+<!-- end generated -->
+
+A reader refuses a stamp whose groups are not strictly ascending, whose `depends` is not the body its payload names, or that has bytes after it. A stamp is read only when the program says the document comes from a known source (section 14); from any other source it is skipped, and the body is checked in full.
+
+## 18. Containers
+
+A container stores a document's records as **blobs**, each the bytes of one whole record (flags and check included) under the content ID of its payload, so every lookup verifies itself: a reader refuses a blob that is not one intact record, or whose payload's content ID is not its key. A document is its **document blob**, its header record (with its frames once frame records exist), and its **roots**, the records nothing else in it depends on, in order.
+
+A standalone file made from a container holds the header, then each root after the records it depends on, depth first and each record once: a body's chunks in the order its index lists them, then the index; any other record's dependencies in its `depends` order; then the END record. A file written in that order, as the kernel's writers write them, goes to a container and back byte for byte; any file goes and comes back as the same records, each byte for byte. Salvaging a damaged container writes every intact record out as a standalone file, in the same order, and lists the missing and damaged blobs.
+
+## 19. Trust on open
+
+The program states the trust of what it opens; a reader never infers it from the file (24.7).
+
+- **Known** (the program's own store, or a source whose integrity it checks): a body with a stamp from a checker at least as new as the reader's, listing every group the reader's full check runs, needs only the cheap groups (1 and 4). Any other body needs the full check.
+- **Unknown** (everything else): stamps are not read, and every body needs the full check.
+
+Every body is range-checked and rebuilt through the topology builder, and the cheap groups run on it, when it is opened. The full check runs later, body by body, within the caller's budget. A body whose records are missing or damaged opens with no geometry; one that fails a check opens read-only, with the checker's report; neither is ever an operation input, and the rest of the document opens normally. A body that passes its full check earns a stamp for the program to store.

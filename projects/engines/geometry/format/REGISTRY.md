@@ -9,6 +9,7 @@
 | 2 | `end` | 1 | required | `cddl/end.cddl` | SPEC.md, section 7 |
 | 3 | `body` | 1 | required | `cddl/body.cddl` | SPEC.md, section 10 |
 | 4 | `chunk` | 1 | required | `cddl/body.cddl` | SPEC.md, section 10 |
+| 5 | `stamp` | 1 | optional | `cddl/stamp.cddl` | SPEC.md, section 17 |
 | 16 | `names` | 1 | required | `cddl/names.cddl` | SPEC.md, section 12 |
 | 17 | `history` | 1 | required | `cddl/history.cddl` | SPEC.md, section 13 |
 | 18 | `recipe` | 1 | required | `cddl/recipe.cddl` | SPEC.md, section 14 |

@@ -3081,6 +3081,89 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a blob could not be read as the record its key names.",
+          "file": "projects/engines/geometry/crates/geom-format/src/container.rs",
+          "kinds": [
+            {
+              "doc": "The store has no blob under the key.",
+              "name": "Missing",
+              "shape": "unit"
+            },
+            {
+              "doc": "The store failed.",
+              "name": "Source",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A blob longer than any record may be ([`RECORD_CAP`]).",
+              "name": "TooLarge",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes that are not one canonical record with a matching check.",
+              "name": "Record",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes after the record.",
+              "name": "Trailing",
+              "shape": "unit"
+            },
+            {
+              "doc": "A record whose payload's content ID is not its key.",
+              "name": "Key",
+              "shape": "unit"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::container",
+          "name": "BlobError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a container could not be made from a file, or a file from a container.",
+          "file": "projects/engines/geometry/crates/geom-format/src/container.rs",
+          "kinds": [
+            {
+              "doc": "The document blob is not one intact header record.",
+              "name": "Document",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A record the file needs is missing or damaged.",
+              "name": "Blob",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two different records whose payloads share a content ID.",
+              "name": "Collision",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A record with no canonical encoding.",
+              "name": "Record",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The file could not be written.",
+              "name": "File",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::container",
+          "name": "ContainerError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a file could not be written or read.",
           "file": "projects/engines/geometry/crates/geom-format/src/file.rs",
           "kinds": [
@@ -3468,6 +3551,83 @@
           "module": "geom_format::source",
           "name": "SourceError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a stamp could not be written or read.",
+          "file": "projects/engines/geometry/crates/geom-format/src/stamp.rs",
+          "kinds": [
+            {
+              "doc": "The encoder refused a value (writing).",
+              "name": "Encode",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes that break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A record or payload that is not a stamp of schema 1.",
+              "name": "Shape",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::stamp",
+          "name": "StampError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a root's body could not be read.",
+          "file": "projects/engines/geometry/crates/geom-format/src/trust.rs",
+          "kinds": [
+            {
+              "doc": "A record it needs is missing or damaged.",
+              "name": "Blob",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Its stamp does not read.",
+              "name": "Stamp",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Its records do not build a body.",
+              "name": "Body",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::trust",
+          "name": "Unread",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a document did not open at all.",
+          "file": "projects/engines/geometry/crates/geom-format/src/trust.rs",
+          "kinds": [
+            {
+              "doc": "The document blob is not one intact header record.",
+              "name": "Document",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The header does not read.",
+              "name": "Header",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A required root of a record type this reader does not know (24.2).",
+              "name": "Unsupported",
+              "shape": "struct"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::trust",
+          "name": "OpenError",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -3779,6 +3939,31 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the records: one decode and one SHA-256 pass per blob read, one encode per record written.",
+          "does": "a program's store implements [`Blobs`]: the bytes of one whole record, flags and check included, under the content ID of its payload. A document is its **document blob**, the header record (with its frames, once frame records exist), and its **roots**, the records nothing else in it depends on, in order. [`read_record`] reads one blob back as a record and checks it against its key, so every lookup verifies itself. [`Container`] is the reference container, in memory: [`Container::from_file`] takes a file apart into blobs, [`Container::to_file`] writes the standalone file again, and [`Container::salvage`] writes every intact record of a damaged container out as a standalone file and names the damaged blobs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/container.rs",
+          "guarantees": [
+            "**A file and back gives the same bytes.** [`Container::to_file`] writes each root after the records it depends on, depth first and each record once: a body's chunks in its index's order, then the index; any other record's dependencies in `depends` order. A file written in that order, as the body writer's are, comes back byte for byte; any file comes back as the same records, each byte for byte.",
+            "**A container and back gives the same blobs.** Every record is stored as its canonical bytes under its own content ID, and a file read back from the container gives exactly those blobs.",
+            "**Every lookup verifies itself.** A blob is refused unless it is one canonical record, its check matches and its payload's content ID is the key it was stored under.",
+            "**Damage stays local.** [`Container::salvage`] keeps every intact record and lists each missing or damaged blob with its error; only a damaged document blob stops it.",
+            "**No recursion, no panic.** Dependencies are walked with an explicit stack; every blob's length is checked against [`RECORD_CAP`] before anything is allocated for it."
+          ],
+          "job": "Containers: a document's records as blobs keyed by content ID, the way Spare Construct's SQLite container stores them, and the standalone file they come from or go to (24.5).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://git-scm.com/book/en/v2/Git-Internals-Git-Objects"
+            ],
+            "text": "chapter 24.5 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`, and Spare Construct's proposed SQLite storage (`projects/spare-construct/ARCHITECTURE.md`, storage and scale); content-addressed storage as Git's object store keys each object by its hash (<https://git-scm.com/book/en/v2/Git-Internals-Git-Objects>)."
+          },
+          "path": "geom_format::container",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one SHA-256 pass over the payload for [`ContentId::of_payload`]; the digest is copied.",
           "does": "a [`ContentId`] is `[alg, digest]`. Algorithm 1 is the SHA-256 of the payload's bytes (owner action G79, 32.20), computed by `geom-op`'s hash, so names and content share one implementation. An ID of another algorithm is kept as read, so a file written once a stronger hash joins as algorithm 2 still carries its IDs through this reader byte for byte.",
           "family": [],
@@ -4081,13 +4266,60 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "linear in the groups listed; a few heads.",
+          "does": "a [`Stamp`] is an optional record (type 5) about one body index. Its `depends` is that body, and its payload names the body again, so stamps about two bodies never share a content ID. [`Stamp::record`] writes it; [`Stamp::read`] reads one back. Its CDDL is `format/cddl/stamp.cddl` in the kernel's tree:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/stamp.rs",
+          "guarantees": [
+            "**A stamp is not part of its body.** It is a record of its own, not a field of the index, so checking a body again with a newer checker adds a stamp and leaves the body's content ID, and everything that names it, unchanged.",
+            "**A stamp lapses with its body.** It is optional and not copy-always: a reader that does not know stamps skips it and checks the body in full, and a program rewriting a file keeps it only while its body is there with the same content ID (24.2's copy rule).",
+            "**One encoding.** The groups strictly ascending and `depends` exactly the body named in the payload; anything else is refused with a [`StampError`]."
+          ],
+          "job": "Validation stamps: which checker passed a stored body, which of chapter 8.3's groups it passed, and under which kernel edition, so a program reopening its own store runs only the cheap checks (24.7).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://www.w3.org/TR/png-3/#5Chunk-naming-conventions"
+            ],
+            "text": "chapter 24.7 of the kernel architecture (trust on open), `projects/engines/geometry/architecture/24-file-format-exchange.md`, and the copy rule of 24.2, which takes PNG's safe-to-copy chunks (<https://www.w3.org/TR/png-3/#5Chunk-naming-conventions>)."
+          },
+          "path": "geom_format::stamp",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`open`] is linear in the document's records and bodies, plus the cheap checks, which are linear in each body; [`Opened::check_next`] is one full check of one body.",
+          "does": "[`open`] reads a document from a container ([`Blobs`], its document blob and its roots): the header, then each root's body, every blob checked against its key, built back through geom-topo's builder, which range-checks every coordinate and checks the topology again. The program's [`Checker`] then runs the cheap groups on every body. A body whose trust needs the full checker is left [`State::Pending`], and [`Opened::check_next`] runs the full checker on the next pending body within the caller's budget. [`Opened::input`] hands a body out as an operation input only once it is [`State::Usable`]; the stamps the full checks earn are kept for the program to store ([`Opened::fresh_stamps`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/trust.rs",
+          "guarantees": [
+            "**The cheap check always runs**, at either trust, because the combinatorial group is what keeps the kernel's own loops finite (23.11).",
+            "**A bad body never stops the document.** A body whose records are missing or damaged, or that does not build back, opens [`State::Damaged`], with no geometry; one that fails a check opens [`State::Failed`], read-only, with the checker's report. Neither is ever an operation input; healing one is an operation in the log. The other bodies open normally.",
+            "**A pending body is not an input** until its full check passes.",
+            "**Nothing is published from a stopped read.** If the meter stops inside [`open`], nothing opens; inside [`Opened::check_next`], the body stays pending and nothing about it changes.",
+            "**Deterministic.** Bodies open in root order, and [`Opened::check_next`] takes the first pending one."
+          ],
+          "job": "Trust on open: the program says where a document's bytes came from, and each stored body is checked as that trust needs, the cheap checks at once and the full checker later, body by body, so a bad body never stops the document (24.7, 23.11).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.7 (trust on open) and 23.11 (checks on open) of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md` and `23-performance.md`, with chapter 8.3's groups (`08-topology.md`)."
+          },
+          "path": "geom_format::trust",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-format",
       "provenance": [],
       "sections": "12.12, 16.1, 18.10, 21, 23.8, 23.11 and 24.1 to 24.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); cache keys, the reference memo store, body versions and restamping built (G105); the rest by pieces G94, G95, G96, G108, G112, G175, G318, G405, G410, G411, G459.",
+      "status": "the strict CBOR decoder, its columns and the text form built (G91); the record layer, byte sources, files, salvage, chunks and range checks built (G92); the header record and the registry built (G93); body records built (G94); cache keys, the reference memo store, body versions and restamping built (G105); validation stamps, the reference container and trust on open built (G108); the rest by pieces G95, G96, G112, G175, G318, G405, G410, G411, G459.",
       "summary": "Spare Kit geometry kernel: the native file format."
     },
     {

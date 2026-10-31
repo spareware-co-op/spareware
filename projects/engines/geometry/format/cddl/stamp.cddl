@@ -1,0 +1,10 @@
+; The validation stamp's payload (tag 5, schema 1, optional, not copy-always): format 1 (draft),
+; SPEC.md section 12. The record's `depends` is exactly the stamped body.
+
+stamp = [
+  body: content-id,     ; the body index the stamp is about
+  checker: uint,        ; the version of the checker that passed it
+  groups: [* uint],     ; the groups of chapter 8.3 it passed, strictly ascending
+  edition: uint,        ; the kernel edition the check ran under
+]
+content-id = [alg: uint, digest: bstr]

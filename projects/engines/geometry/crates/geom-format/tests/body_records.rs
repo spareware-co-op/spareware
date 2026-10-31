@@ -12,13 +12,15 @@
     reason = "tests: native arithmetic and indexing, and a failure stops the test"
 )]
 
+// geom-topo's fixtures, whose module allows the ones these tests do not use.
 #[path = "../../geom-topo/tests/common/mod.rs"]
 mod topo;
 
 use std::collections::BTreeSet;
 
 use geom_format::body::{
-    BODY_TAG, BodyError, CHUNK_ROWS, CHUNK_TAG, SCHEMA, StoredBody, read_body, write_body,
+    BODY_TAG, BodyError, CHUNK_ROWS, CHUNK_TAG, SCHEMA, StoredBody, chunk_ids, read_body,
+    write_body,
 };
 use geom_format::cbor::{Decoder, Item};
 use geom_format::content::ContentId;
@@ -483,4 +485,40 @@ fn a_surface_nested_past_a_chunks_depth_is_refused_by_the_decoder() {
         matches!(read, Err(BodyError::Kind(KindError::Cbor(_)))),
         "{read:?}"
     );
+}
+
+#[test]
+fn an_index_lists_its_chunks_in_the_writers_order() {
+    for body in [wall(), named_wall(), many_faces(9_000)] {
+        let stored = store(&body);
+        let listed = chunk_ids(&stored.index, &mut meter()).unwrap();
+        let written: Vec<ContentId> = stored.chunks.iter().map(Record::content_id).collect();
+        assert_eq!(listed, written);
+    }
+    // Only a body index of schema 1 has a list.
+    let stored = store(&wall());
+    let not_an_index = |r: &Record| chunk_ids(r, &mut meter()).unwrap_err();
+    for wrong in [
+        stored.chunks[0].clone(),
+        Record {
+            schema: 2,
+            ..stored.index.clone()
+        },
+        Record {
+            tag: CHUNK_TAG,
+            ..stored.index.clone()
+        },
+    ] {
+        assert_eq!(
+            not_an_index(&wrong),
+            BodyError::Shape("not a body index of schema 1")
+        );
+    }
+    // An index whose payload breaks off inside its tables is refused, not read past.
+    let mut short = stored.index.clone();
+    short.payload.truncate(short.payload.len() / 2);
+    assert!(matches!(
+        chunk_ids(&short, &mut meter()),
+        Err(BodyError::Cbor(_))
+    ));
 }
