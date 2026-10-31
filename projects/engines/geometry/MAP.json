@@ -790,6 +790,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input and, for the transforms, one box built, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/make.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-make`'s hot paths (piece G101, decision 32.44): a box and a cylinder built from their inputs, and a box moved and quarter-turned, each with its checker postcondition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the operations of `geom-make`'s attack tests (`tests/attack_g101.rs`), under an unlimited budget, in the build a program ships. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::make",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -13498,7 +13518,10 @@
           ],
           "job": "Why an arena could not change, or arenas could not be published as a body.",
           "method": {
-            "none": "an error enum and its conversions, with `geom-run`'s stops (chapter 23.10)."
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "an error enum and its conversions, with `geom-run`'s stops (`projects/engines/geometry/architecture/23-performance.md`, 23.10)."
           },
           "path": "geom_topo::error",
           "provenance": [],

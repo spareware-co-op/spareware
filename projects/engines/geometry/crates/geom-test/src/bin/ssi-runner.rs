@@ -42,6 +42,10 @@ fn usage(message: &str) -> ExitCode {
     ExitCode::from(2)
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the time per case 12.17 asks for: reported, and in no answer or digest"
+)]
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     let [case, _mode, tol, out] = args.as_slice() else {
