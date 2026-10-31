@@ -16,6 +16,10 @@
 //! <https://github.com/jyviko/ssi-corpus/blob/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/README.md>.
 //!
 //! Cost: linear in the case's text.
+//!
+//! Consulted: ssi-corpus, MIT OR Apache-2.0,
+//!   <https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9>, for its
+//!   case schema, its runner contract and its scoring rules.
 
 use std::fs;
 use std::path::Path;
@@ -255,7 +259,7 @@ impl Implicit {
                 small,
             } => {
                 let (h, rho) = polar(point, axis);
-                ((rho - big).hypot(h) - small).abs()
+                (norm([rho - big, h, 0.0]) - small).abs()
             }
             Implicit::Other => return None,
         })
@@ -497,6 +501,10 @@ impl Case {
             contact: Contact::Singular,
             points: core::slice::from_ref(p),
         });
-        branches.chain(regions).chain(isolated).chain(singular).collect()
+        branches
+            .chain(regions)
+            .chain(isolated)
+            .chain(singular)
+            .collect()
     }
 }

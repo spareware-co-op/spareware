@@ -38,8 +38,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::case::{Case, Class, Contact, Feature, V3, norm, sub};
-use super::cover::{Seen, compare, effective};
+use super::case::{Case, Class, Contact, V3};
+use super::cover::{Seen, compare, effective, to_line};
 use super::output::{Flag, Output, SUCCESS, Why};
 use super::place::{Placed, holds_contact, place};
 use super::{SsiError, larger};
@@ -255,7 +255,8 @@ impl Ceilings {
     reason = "a sum of diagonals on the grid is positive and far under 2^64"
 )]
 pub fn total_size(flags: &[Flag]) -> u64 {
-    flags.iter().map(Flag::diagonal).sum::<f64>().ceil() as u64
+    let total = flags.iter().fold(0.0, |sum, flag| sum + flag.diagonal());
+    total.ceil() as u64
 }
 
 /// Whether a region flagged `why` can stand for a feature with contact `contact`.
@@ -304,39 +305,50 @@ pub fn allowed(why: Why, reach: f64, placed: &Placed) -> bool {
     }
     match why {
         Why::TangentBand | Why::HigherOrderContact | Why::NearMiss | Why::NearCoincident => {
-            holds_contact(reach, placed.moved() + 1.0, placed.extent, placed.order)
-                && reach * reach <= band_ceiling(placed)
+            reach <= contact_band(placed)
         }
         _ => false,
     }
 }
 
-/// The square of the widest band a case's order allows: for order two, [`band`] squared.
-fn band_ceiling(placed: &Placed) -> f64 {
-    let mut width = band(placed);
-    if placed.order > 2 {
-        // The band of order n is the width where holds_contact turns; find it by doubling.
-        while !holds_contact(width, placed.moved() + 1.0, placed.extent, placed.order) {
-            width *= 2.0;
+/// The half-width of the band at the case's own order of contact, in steps: [`band`] at order two,
+/// and above it the width at which [`holds_contact`] turns true, by bisection.
+#[must_use]
+pub fn contact_band(placed: &Placed) -> f64 {
+    let moved = placed.moved() + 1.0;
+    let holds = |width: f64| holds_contact(width, moved, placed.extent, placed.order);
+    let (mut low, mut high) = (band(placed), band(placed));
+    if placed.order == 2 {
+        return high;
+    }
+    while !holds(high) {
+        high *= 2.0;
+    }
+    for _ in 0..64 {
+        let middle = f64::midpoint(low, high);
+        if holds(middle) {
+            high = middle;
+        } else {
+            low = middle;
         }
     }
-    width * width
+    high
 }
 
 /// Whether the segment `a`–`b` meets the box `lo`–`hi` grown by `margin`, by clipping it against
 /// each pair of faces in turn.
 fn meets(a: V3, b: V3, lo: V3, hi: V3, margin: f64) -> bool {
     let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
-    for axis in 0..3 {
-        let (low, high) = (lo[axis] - margin, hi[axis] + margin);
-        let d = b[axis] - a[axis];
+    for (((start, end), low), high) in a.iter().zip(&b).zip(&lo).zip(&hi) {
+        let (low, high) = (low - margin, high + margin);
+        let d = end - start;
         if d == 0.0 {
-            if a[axis] < low || a[axis] > high {
+            if *start < low || *start > high {
                 return false;
             }
             continue;
         }
-        let (mut near, mut far) = ((low - a[axis]) / d, (high - a[axis]) / d);
+        let (mut near, mut far) = ((low - start) / d, (high - start) / d);
         if near > far {
             core::mem::swap(&mut near, &mut far);
         }
@@ -349,17 +361,15 @@ fn meets(a: V3, b: V3, lo: V3, hi: V3, margin: f64) -> bool {
     true
 }
 
-/// `feature` in steps.
-fn in_steps(feature: &Feature<'_>, placed: &Placed) -> Vec<V3> {
-    feature.points.iter().map(|p| placed.steps(*p)).collect()
-}
-
 /// Whether the polyline `line` meets the box grown by `margin`.
 fn holds(flag: &Flag, line: &[V3], margin: f64) -> bool {
     let (lo, hi) = flag.corners();
     match line {
         [only] => meets(*only, *only, lo, hi, margin),
-        _ => line.windows(2).any(|w| meets(w[0], w[1], lo, hi, margin)),
+        _ => line
+            .iter()
+            .zip(line.iter().skip(1))
+            .any(|(a, b)| meets(*a, *b, lo, hi, margin)),
     }
 }
 
@@ -367,18 +377,12 @@ fn holds(flag: &Flag, line: &[V3], margin: f64) -> bool {
 fn reach(flag: &Flag, line: &[V3]) -> f64 {
     let (lo, hi) = flag.corners();
     let mut furthest = 0.0;
-    for mask in 0..8_u32 {
-        let corner = [0_usize, 1, 2].map(|axis| {
-            if mask >> axis & 1 == 0 {
-                lo[axis]
-            } else {
-                hi[axis]
+    for x in [lo[0], hi[0]] {
+        for y in [lo[1], hi[1]] {
+            for z in [lo[2], hi[2]] {
+                furthest = larger(furthest, to_line([x, y, z], line));
             }
-        });
-        let near = line
-            .iter()
-            .fold(f64::INFINITY, |d, p| super::smaller(d, norm(sub(corner, *p))));
-        furthest = larger(furthest, near);
+        }
     }
     furthest
 }
@@ -400,14 +404,17 @@ pub struct Judging<'a> {
     pub accuracy: Option<f64>,
 }
 
-/// The rules on one flagged region.
-fn region(index: usize, flag: &Flag, j: &Judging<'_>, failures: &mut Vec<Failure>) {
-    let margin = j.placed.moved() + 1.0;
-    let held: Vec<(Contact, Vec<V3>)> = j
-        .case
-        .features()
+/// The rules on one flagged region, given the case's features in steps.
+fn region(
+    index: usize,
+    flag: &Flag,
+    lines: &[(Contact, Vec<V3>)],
+    placed: &Placed,
+    failures: &mut Vec<Failure>,
+) {
+    let margin = placed.moved() + 1.0;
+    let held: Vec<&(Contact, Vec<V3>)> = lines
         .iter()
-        .map(|f| (f.contact, in_steps(f, j.placed)))
         .filter(|(_, line)| holds(flag, line, margin))
         .collect();
     if held.is_empty() {
@@ -426,10 +433,10 @@ fn region(index: usize, flag: &Flag, j: &Judging<'_>, failures: &mut Vec<Failure
         });
         return;
     }
-    let least = matching
-        .iter()
-        .fold(f64::INFINITY, |d, line| super::smaller(d, reach(flag, line)));
-    if !allowed(flag.why, least, j.placed) {
+    let least = matching.iter().fold(f64::INFINITY, |d, line| {
+        super::smaller(d, reach(flag, line))
+    });
+    if !allowed(flag.why, least, placed) {
         failures.push(Failure::TooWide {
             region: index,
             reach: least,
@@ -509,8 +516,17 @@ pub fn judge(j: &Judging<'_>, ceiling: &Ceiling) -> Result<Vec<Failure>, SsiErro
     if !class.may_flag() && flagged > 0 {
         failures.push(Failure::FlaggedInClean { count: flagged });
     }
+    let lines: Vec<(Contact, Vec<V3>)> = j
+        .case
+        .features()
+        .iter()
+        .map(|f| {
+            let steps = f.points.iter().map(|p| j.placed.steps(*p));
+            (f.contact, steps.collect())
+        })
+        .collect();
     for (index, flag) in j.output.flagged.iter().enumerate() {
-        region(index, flag, j, &mut failures);
+        region(index, flag, &lines, j.placed, &mut failures);
     }
     let size = total_size(&j.output.flagged);
     if flagged as u64 > ceiling.count || size > ceiling.size {
@@ -670,7 +686,10 @@ fn row(r: &Run<'_>, scored: &Scored) -> Result<Row, SsiError> {
         log2: placed.log2,
         flags: flags.len() as u64,
         size: total_size(flags),
-        digest: output.as_ref().filter(|o| o.status == SUCCESS).map(Output::digest),
+        digest: output
+            .as_ref()
+            .filter(|o| o.status == SUCCESS)
+            .map(Output::digest),
         source: case.source,
         failures,
     })
@@ -683,12 +702,11 @@ fn row(r: &Run<'_>, scored: &Scored) -> Result<Row, SsiError> {
 /// [`SsiError`] for a file that cannot be read or a case that cannot be placed. A run that breaks
 /// a rule is not an error: it is the report.
 pub fn run(r: &Run<'_>) -> Result<Report, SsiError> {
-    let scored: Vec<Scored> = serde_json::from_str(&text(r.scores)?).map_err(|e| {
-        SsiError::Malformed {
+    let scored: Vec<Scored> =
+        serde_json::from_str(&text(r.scores)?).map_err(|e| SsiError::Malformed {
             what: r.scores.display().to_string(),
             why: e.to_string(),
-        }
-    })?;
+        })?;
     let rows = scored
         .iter()
         .map(|s| row(r, s))

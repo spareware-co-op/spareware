@@ -16,7 +16,8 @@ const RUNNER: &str = env!("CARGO_BIN_EXE_ssi-runner");
 
 /// A folder of its own: `cases` and `raw` inside.
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("geom-test-ssi-tool-{name}-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("geom-test-ssi-tool-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(dir.join("cases")).expect("made");
     fs::create_dir_all(dir.join("raw")).expect("made");
@@ -97,7 +98,11 @@ fn gate(dir: &Path, engine: &str, more: &[&str]) -> Ran {
 fn the_tool_checks_the_ceilings_and_the_catalogue() {
     let ran = ssi(&["check"]);
     assert!(ran.status.success(), "{}", printed(&ran));
-    assert!(printed(&ran).contains("14 catalogue cases, 0 failed"), "{}", printed(&ran));
+    assert!(
+        printed(&ran).contains("15 catalogue cases, 0 failed"),
+        "{}",
+        printed(&ran)
+    );
 }
 
 #[test]
@@ -105,7 +110,10 @@ fn the_catalogue_is_written_lists_and_places() {
     let dir = scratch("catalogue");
     let cases = dir.join("cases");
     assert!(ssi(&["catalogue", "--out", arg(&cases)]).status.success());
-    assert_eq!(fs::read_dir(&cases).expect("listed").count(), catalogue::all().len());
+    assert_eq!(
+        fs::read_dir(&cases).expect("listed").count(),
+        catalogue::all().len()
+    );
     // Anything that is not a case is not read.
     fs::write(cases.join("README.txt"), "not a case").expect("wrote");
     let listed = ssi(&["list", "--cases", arg(&cases)]);
@@ -116,7 +124,7 @@ fn the_catalogue_is_written_lists_and_places() {
     let placed = ssi(&["place", "--cases", arg(&cases)]);
     assert!(placed.status.success(), "{}", printed(&placed));
     let text = printed(&placed);
-    assert!(text.contains("14 cases, 0 failed"), "{text}");
+    assert!(text.contains("15 cases, 0 failed"), "{text}");
     assert!(text.contains("f_seam_line 2^23 moved 0"), "{text}");
     fs::remove_dir_all(&dir).expect("removed");
 }
@@ -130,7 +138,11 @@ fn a_case_that_cannot_be_placed_fails_the_tool_and_the_runner() {
     fs::write(&path, serde_json::to_string(&case).expect("written")).expect("wrote");
     let placed = ssi(&["place", "--cases", arg(&dir.join("cases"))]);
     assert_eq!(placed.status.code(), Some(1));
-    assert!(printed(&placed).contains("cannot be placed"), "{}", printed(&placed));
+    assert!(
+        printed(&placed).contains("cannot be placed"),
+        "{}",
+        printed(&placed)
+    );
     let out = dir.join("out.json");
     let ran = Command::new(RUNNER)
         .args([arg(&path), "default", "default", arg(&out)])
@@ -145,13 +157,19 @@ fn a_case_that_cannot_be_placed_fails_the_tool_and_the_runner() {
 fn a_kernel_kind_off_its_closed_form_fails_the_tool() {
     let dir = scratch("kinds");
     let mut case = catalogue::all().remove(0);
-    let moved = serde_json::to_string(&case.truth[0]).expect("written").replace("-1.0", "-1.0004");
+    let moved = serde_json::to_string(&case.truth[0])
+        .expect("written")
+        .replace("-1.0", "-1.0004");
     case.truth[0] = serde_json::from_str(&moved).expect("read");
     let path = dir.join("cases").join(format!("{}.json", case.id));
     fs::write(&path, serde_json::to_string(&case).expect("written")).expect("wrote");
     let placed = ssi(&["place", "--cases", arg(&dir.join("cases"))]);
     assert_eq!(placed.status.code(), Some(1), "{}", printed(&placed));
-    assert!(printed(&placed).contains("off its closed forms"), "{}", printed(&placed));
+    assert!(
+        printed(&placed).contains("off its closed forms"),
+        "{}",
+        printed(&placed)
+    );
     fs::remove_dir_all(&dir).expect("removed");
 }
 
@@ -169,14 +187,18 @@ fn the_runner_keeps_the_contract() {
     assert_eq!(json["curves"][0]["type"], "TANGENT");
     assert_eq!(json["log2"], 23);
     // With no stand-in named, it is the truth.
-    let (case_path, out) = (dir.join("cases").join(format!("{id}.json")), dir.join("out.json"));
+    let (case_path, out) = (
+        dir.join("cases").join(format!("{id}.json")),
+        dir.join("out.json"),
+    );
     let ran = Command::new(RUNNER)
         .env_remove("SSI_STAND_IN")
         .args([arg(&case_path), "default", "default", arg(&out)])
         .output()
         .expect("it runs");
     assert!(ran.status.success());
-    let read: Output = serde_json::from_str(&fs::read_to_string(&out).expect("written")).expect("read");
+    let read: Output =
+        serde_json::from_str(&fs::read_to_string(&out).expect("written")).expect("read");
     // At the default tolerance the scale follows the case's own tolerance.
     assert_eq!(read.log2, 13);
     assert_eq!(read.curves.len(), 1);
@@ -199,11 +221,23 @@ fn the_runner_refuses_what_it_cannot_do() {
             .code()
     };
     assert_eq!(run("truth", &[]), Some(2));
-    assert_eq!(run("truth", &[arg(&case), "default", "soon", arg(&out)]), Some(2));
-    assert_eq!(run("psychic", &[arg(&case), "default", "1e-6", arg(&out)]), Some(2));
-    assert_eq!(run("truth", &["no-such.json", "default", "1e-6", arg(&out)]), Some(2));
+    assert_eq!(
+        run("truth", &[arg(&case), "default", "soon", arg(&out)]),
+        Some(2)
+    );
+    assert_eq!(
+        run("psychic", &[arg(&case), "default", "1e-6", arg(&out)]),
+        Some(2)
+    );
+    assert_eq!(
+        run("truth", &["no-such.json", "default", "1e-6", arg(&out)]),
+        Some(2)
+    );
     let nowhere = dir.join("no-such-folder").join("out.json");
-    assert_eq!(run("truth", &[arg(&case), "default", "1e-6", arg(&nowhere)]), Some(2));
+    assert_eq!(
+        run("truth", &[arg(&case), "default", "1e-6", arg(&nowhere)]),
+        Some(2)
+    );
     fs::remove_dir_all(&dir).expect("removed");
 }
 
@@ -215,14 +249,27 @@ fn the_gate_passes_a_right_answer_and_writes_its_report() {
     let report = dir.join("report.json");
     let ran = gate(&dir, "truth", &["--report", arg(&report)]);
     assert!(ran.status.success(), "{}", printed(&ran));
-    assert!(printed(&ran).contains("truth: 1 cases, 0 failed"), "{}", printed(&ran));
-    let read: Report = serde_json::from_str(&fs::read_to_string(&report).expect("written")).expect("read");
-    assert!(read.credit.contains("Yang, Jia and Yan 2023"), "{}", read.credit);
+    assert!(
+        printed(&ran).contains("truth: 1 cases, 0 failed"),
+        "{}",
+        printed(&ran)
+    );
+    let read: Report =
+        serde_json::from_str(&fs::read_to_string(&report).expect("written")).expect("read");
+    assert!(
+        read.credit.contains("Yang, Jia and Yan 2023"),
+        "{}",
+        read.credit
+    );
     assert_eq!(read.rows.len(), 1);
     // Asked to break a rule it did not, it fails.
     let held = gate(&dir, "truth", &["--must-fail", "verdict"]);
     assert_eq!(held.status.code(), Some(1));
-    assert!(printed(&held).contains("expected to break verdict"), "{}", printed(&held));
+    assert!(
+        printed(&held).contains("expected to break verdict"),
+        "{}",
+        printed(&held)
+    );
     fs::remove_dir_all(&dir).expect("removed");
 }
 
@@ -233,9 +280,22 @@ fn the_gate_fails_a_wrong_answer_unless_that_is_what_it_was_asked() {
     answered(&dir, "f_seam_line", "shifted");
     let ran = gate(&dir, "shifted", &[]);
     assert_eq!(ran.status.code(), Some(1));
-    assert!(printed(&ran).contains("f_seam_line: Incomplete: verdict"), "{}", printed(&ran));
-    assert!(gate(&dir, "shifted", &["--must-fail", "verdict"]).status.success());
-    assert_eq!(gate(&dir, "shifted", &["--must-fail", "too-wide"]).status.code(), Some(1));
+    assert!(
+        printed(&ran).contains("f_seam_line: Incomplete: verdict"),
+        "{}",
+        printed(&ran)
+    );
+    assert!(
+        gate(&dir, "shifted", &["--must-fail", "verdict"])
+            .status
+            .success()
+    );
+    assert_eq!(
+        gate(&dir, "shifted", &["--must-fail", "too-wide"])
+            .status
+            .code(),
+        Some(1)
+    );
     fs::remove_dir_all(&dir).expect("removed");
 }
 
@@ -248,22 +308,68 @@ fn a_flagged_run_is_judged_by_its_measured_ceilings() {
     // `measure` reads every case of its folder, so leave it this one.
     let keep = dir.join("kept");
     fs::create_dir_all(&keep).expect("made");
-    fs::copy(dir.join("cases").join(format!("{id}.json")), keep.join(format!("{id}.json"))).expect("copied");
+    fs::copy(
+        dir.join("cases").join(format!("{id}.json")),
+        keep.join(format!("{id}.json")),
+    )
+    .expect("copied");
     let measured = dir.join("measured.json");
     let (raw, out) = (dir.join("raw"), arg(&measured));
-    let ran = ssi(&["measure", "--cases", arg(&keep), "--raw", arg(&raw), "--out", out, "--why", "a test"]);
+    let ran = ssi(&[
+        "measure",
+        "--cases",
+        arg(&keep),
+        "--raw",
+        arg(&raw),
+        "--out",
+        out,
+        "--why",
+        "a test",
+    ]);
     assert!(ran.status.success(), "{}", printed(&ran));
     assert!(gate(&dir, "flagged", &["--ceilings", out]).status.success());
     // The register has nothing flagged, so over it the same run fails.
-    assert!(gate(&dir, "flagged", &["--must-fail", "over-ceiling"]).status.success());
+    assert!(
+        gate(&dir, "flagged", &["--must-fail", "over-ceiling"])
+            .status
+            .success()
+    );
     answered(&dir, id, "enlarged");
-    let wide = gate(&dir, "enlarged", &["--ceilings", out, "--must-fail", "too-wide"]);
+    let wide = gate(
+        &dir,
+        "enlarged",
+        &["--ceilings", out, "--must-fail", "too-wide"],
+    );
     assert!(wide.status.success(), "{}", printed(&wide));
-    assert!(gate(&dir, "enlarged", &["--ceilings", out, "--must-fail", "over-ceiling"]).status.success());
+    assert!(
+        gate(
+            &dir,
+            "enlarged",
+            &["--ceilings", out, "--must-fail", "over-ceiling"]
+        )
+        .status
+        .success()
+    );
     answered(&dir, id, "misplaced");
-    assert!(gate(&dir, "misplaced", &["--ceilings", out, "--must-fail", "no-feature"]).status.success());
+    assert!(
+        gate(
+            &dir,
+            "misplaced",
+            &["--ceilings", out, "--must-fail", "no-feature"]
+        )
+        .status
+        .success()
+    );
     answered(&dir, id, "wrong-reason");
-    assert!(gate(&dir, "wrong-reason", &["--ceilings", out, "--must-fail", "wrong-kind"]).status.success());
+    assert!(
+        gate(
+            &dir,
+            "wrong-reason",
+            &["--ceilings", out, "--must-fail", "wrong-kind"]
+        )
+        .status
+        .success()
+    );
     fs::remove_dir_all(&dir).expect("removed");
 }
 
@@ -274,15 +380,32 @@ fn two_reports_are_compared_bit_for_bit() {
     let id = "f_seam_line";
     let (first, second, third) = (dir.join("a.json"), dir.join("b.json"), dir.join("c.json"));
     answered(&dir, id, "truth");
-    assert!(gate(&dir, "truth", &["--report", arg(&first)]).status.success());
+    assert!(
+        gate(&dir, "truth", &["--report", arg(&first)])
+            .status
+            .success()
+    );
     answered(&dir, id, "truth");
-    assert!(gate(&dir, "truth", &["--report", arg(&second)]).status.success());
+    assert!(
+        gate(&dir, "truth", &["--report", arg(&second)])
+            .status
+            .success()
+    );
     answered(&dir, id, "shifted");
-    assert_eq!(gate(&dir, "shifted", &["--report", arg(&third)]).status.code(), Some(1));
+    assert_eq!(
+        gate(&dir, "shifted", &["--report", arg(&third)])
+            .status
+            .code(),
+        Some(1)
+    );
     assert!(ssi(&["same", arg(&first), arg(&second)]).status.success());
     let ran = ssi(&["same", arg(&first), arg(&third)]);
     assert_eq!(ran.status.code(), Some(1));
-    assert!(printed(&ran).contains("f_seam_line differs"), "{}", printed(&ran));
+    assert!(
+        printed(&ran).contains("f_seam_line differs"),
+        "{}",
+        printed(&ran)
+    );
     fs::remove_dir_all(&dir).expect("removed");
 }
 
@@ -295,7 +418,12 @@ fn what_cannot_be_read_is_a_usage_error() {
     assert_eq!(code(&["place", "--cases", arg(&missing)]), Some(2));
     assert_eq!(code(&["catalogue", "--out", arg(&missing)]), Some(2));
     assert_eq!(code(&["same", arg(&missing), arg(&missing)]), Some(2));
-    assert_eq!(gate(&dir, "x", &["--ceilings", arg(&missing)]).status.code(), Some(2));
+    assert_eq!(
+        gate(&dir, "x", &["--ceilings", arg(&missing)])
+            .status
+            .code(),
+        Some(2)
+    );
     assert_eq!(gate(&dir, "x", &[]).status.code(), Some(2));
     assert_eq!(code(&["nonsense"]), Some(2));
     fs::remove_dir_all(&dir).expect("removed");

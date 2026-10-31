@@ -22,7 +22,7 @@ use geom_test::ssi::catalogue;
 use geom_test::ssi::cover::{Seen, compare, effective};
 use geom_test::ssi::gate::{
     CEILINGS, Ceiling, Ceilings, Failure, Judging, Mode, Report, Run, Scored, Verdict, allowed,
-    band, floor_reach, judge, run, stands_for, total_size,
+    band, contact_band, floor_reach, judge, run, stands_for, total_size,
 };
 use geom_test::ssi::output::{Curve, Flag, Output, SUCCESS, Why};
 use geom_test::ssi::place::{Placed, disagreement, holds_contact, place};
@@ -67,7 +67,13 @@ fn open() -> Ceiling {
 }
 
 /// The rules `out` breaks for `case`.
-fn broken(case: &Case, placed: &Placed, mode: Mode, out: &Output, ceiling: &Ceiling) -> Vec<String> {
+fn broken(
+    case: &Case,
+    placed: &Placed,
+    mode: Mode,
+    out: &Output,
+    ceiling: &Ceiling,
+) -> Vec<String> {
     let scored = scored(case, out);
     let j = Judging {
         case,
@@ -131,7 +137,10 @@ fn a_shape_or_contact_it_does_not_know_is_refused() {
         SMALL.replace("\"crossing\"", "\"glancing\""),
         SMALL.replace("\"cov_tol\": 0.001,", ""),
     ] {
-        assert!(matches!(Case::parse(&text), Err(SsiError::Malformed { .. })), "{text}");
+        assert!(
+            matches!(Case::parse(&text), Err(SsiError::Malformed { .. })),
+            "{text}"
+        );
     }
     let mut case = Case::parse(SMALL).expect("it fits");
     case.class = "0 nothing".into();
@@ -176,7 +185,8 @@ fn every_class_of_the_corpus_has_its_name() {
 #[test]
 fn each_closed_form_gives_the_distance_to_its_surface() {
     let z = [0.0, 0.0, 1.0];
-    let close = |a: Option<f64>, b: f64| assert!((a.expect("analytic") - b).abs() < 1e-12, "{a:?} {b}");
+    let close =
+        |a: Option<f64>, b: f64| assert!((a.expect("analytic") - b).abs() < 1e-12, "{a:?} {b}");
     let plane = Implicit::Plane {
         point: [0.0, 0.0, 1.0],
         normal: [0.0, 0.0, 2.0],
@@ -326,6 +336,33 @@ fn a_contact_on_data_off_the_grid_pushes_the_scale_up() {
 }
 
 #[test]
+fn a_shallow_crossing_answers_to_its_conditioning_not_to_a_contact() {
+    // A touch on data off the grid needs a scale that keeps the contact from spreading. A stated
+    // conditioning replaces that with moved × factor, against the tolerance the scorer widens for it.
+    let mut touch = off_grid();
+    touch.expected.singular_points = vec![[0.0, 0.0, 3.0_f64.sqrt()]];
+    let spread = place(&touch, None).expect("placed");
+    let mut shallow = touch.clone();
+    shallow.ill_cond = Some(2.0);
+    let crossing = place(&shallow, None).expect("placed");
+    assert!(
+        crossing.log2 < spread.log2,
+        "{} {}",
+        crossing.log2,
+        spread.log2
+    );
+
+    // At the scorer's accuracy the tolerance widens, so the same factor asks less of the scale.
+    let mut steep = off_grid();
+    steep.ill_cond = Some(1e6);
+    let plain = place(&steep, None).expect("placed");
+    let widened = place(&steep, ACCURACY).expect("placed");
+    assert!(widened.log2 <= plain.log2);
+    assert!(widened.moved() * 1e6 <= effective(&steep, ACCURACY) * widened.scale());
+    assert!(widened.moved() * 1e6 > steep.cov_tol * widened.scale());
+}
+
+#[test]
 fn a_contact_on_exact_data_does_not() {
     // Exact data moves nothing, so a contact there costs no scale.
     let case = named("f16_cylinders_external");
@@ -337,6 +374,7 @@ fn a_contact_on_exact_data_does_not() {
 #[test]
 fn the_named_high_order_contacts_take_their_order() {
     let mut case = off_grid();
+    case.cov_tol = 0.01;
     case.expected.singular_points = vec![[0.0, 0.0, 3.0_f64.sqrt()]];
     let second = place(&case, None).expect("placed");
     assert_eq!(second.order, 2);
@@ -356,9 +394,9 @@ fn the_band_is_the_bound_of_12_9() {
     // Order three: x³ ≥ 6·δ·L².
     assert!(holds_contact(6.0, 1.0, 6.0, 3));
     assert!(!holds_contact(5.9, 1.0, 6.0, 3));
-    // Order four: x⁴ ≥ 24·δ·L³.
-    assert!(holds_contact(2.0, 2.0, 1.0 / 3.0_f64.cbrt(), 4));
-    assert!(!holds_contact(1.9, 2.0, 1.0 / 3.0_f64.cbrt(), 4));
+    // Order four: x⁴ ≥ 24·δ·L³, here 96.
+    assert!(holds_contact(3.2, 0.5, 2.0, 4));
+    assert!(!holds_contact(3.1, 0.5, 2.0, 4));
     // Exactly on the bound holds.
     assert!(holds_contact(2.0, 1.0, 2.0, 2));
     assert!(holds_contact(0.0, 0.0, 9.0, 2));
@@ -366,7 +404,12 @@ fn the_band_is_the_bound_of_12_9() {
 
 #[test]
 fn a_nurbs_surface_moves_as_far_as_its_net() {
-    let net = vec![[0.1, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.3], [1.0, 1.0, 0.0]];
+    let net = vec![
+        [0.1, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [1.0, 0.0, 0.3],
+        [1.0, 1.0, 0.0],
+    ];
     let mut case = Case::parse(SMALL).expect("it fits");
     case.expected = Expected::default();
     case.surfaces[0] = Surface::Nurbs {
@@ -381,10 +424,23 @@ fn a_nurbs_surface_moves_as_far_as_its_net() {
     };
     let placed = place(&case, None).expect("placed");
     let scale = placed.scale();
-    let shifts = [(0.1 * scale).round_ties_even() - 0.1 * scale, (0.3 * scale).round_ties_even() - 0.3 * scale];
-    let furthest = if shifts[0].abs() > shifts[1].abs() { shifts[0] } else { shifts[1] };
+    let shifts = [
+        (0.1 * scale).round_ties_even() - 0.1 * scale,
+        (0.3 * scale).round_ties_even() - 0.3 * scale,
+    ];
+    let furthest = if shifts[0].abs() > shifts[1].abs() {
+        shifts[0]
+    } else {
+        shifts[1]
+    };
     assert_eq!(placed.moved[0], furthest.abs());
-    let Surface::Nurbs { points, weights, knots_u, .. } = &placed.surfaces[0] else {
+    let Surface::Nurbs {
+        points,
+        weights,
+        knots_u,
+        ..
+    } = &placed.surfaces[0]
+    else {
         panic!("a NURBS surface");
     };
     assert_eq!(points[1], [0.0, scale, 0.0]);
@@ -468,17 +524,29 @@ fn coverage_finds_what_is_missing_and_what_is_extra() {
     let case = Case::parse(SMALL).expect("it fits");
     let cov = 0.001;
     assert_eq!(
-        compare(&case, &answer(vec![vec![[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]]), cov),
+        compare(
+            &case,
+            &answer(vec![vec![[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]]),
+            cov
+        ),
         Seen::default()
     );
     // A distance measured to the segment, not its ends: the truth's ends lie on the answer's line.
-    let long = answer(vec![vec![[-2.0, 0.0, 0.0], [0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]]);
+    let long = answer(vec![vec![
+        [-2.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+    ]]);
     let seen = compare(&case, &long, cov);
     assert!(seen.missing.is_empty());
     // That curve runs past the truth.
     assert_eq!(seen.spurious, 1);
     // Half of it: the far end is missing.
-    let half = compare(&case, &answer(vec![vec![[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]), cov);
+    let half = compare(
+        &case,
+        &answer(vec![vec![[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]),
+        cov,
+    );
     assert_eq!(half.missing.len(), 1);
     assert_eq!(half.missing[0].feature, 0);
     assert_eq!(half.missing[0].contact, Contact::Crossing);
@@ -487,7 +555,13 @@ fn coverage_finds_what_is_missing_and_what_is_extra() {
     let none = compare(&case, &answer(Vec::new()), cov);
     assert_eq!(none.missing[0].samples.len(), 2);
     // Just within and just past the tolerance, off to one side.
-    let near = |d: f64| compare(&case, &answer(vec![vec![[-1.0, d, 0.0], [1.0, d, 0.0]]]), cov);
+    let near = |d: f64| {
+        compare(
+            &case,
+            &answer(vec![vec![[-1.0, d, 0.0], [1.0, d, 0.0]]]),
+            cov,
+        )
+    };
     assert_eq!(near(0.000_9), Seen::default());
     assert_eq!(near(0.001_1).missing.len(), 1);
     assert_eq!(near(0.001_1).spurious, 1);
@@ -505,7 +579,9 @@ fn coverage_finds_what_is_missing_and_what_is_extra() {
 #[test]
 fn coverage_thins_a_long_curve_as_the_scorer_does() {
     let mut case = Case::parse(SMALL).expect("it fits");
-    let dense: Vec<[f64; 3]> = (0..2_500).map(|i| [f64::from(i) / 1_250.0 - 1.0, 0.0, 0.0]).collect();
+    let dense: Vec<[f64; 3]> = (0..2_500)
+        .map(|i| [f64::from(i) / 1_250.0 - 1.0, 0.0, 0.0])
+        .collect();
     case.expected.branches[0].points = dense;
     // 2,500 samples thin to every second one.
     let seen = compare(&case, &answer(Vec::new()), 0.001);
@@ -649,9 +725,13 @@ fn the_kernels_result_reaches_the_scorer_as_its_contract_says() {
         },
     ];
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
-    let result =
-        Intersection::new(items, Coverage::CompleteOutsideFlagged, Vec::new(), &mut meter)
-            .expect("in order");
+    let result = Intersection::new(
+        items,
+        Coverage::CompleteOutsideFlagged,
+        Vec::new(),
+        &mut meter,
+    )
+    .expect("in order");
     let out = Output::of_intersection(&result, &placed, "tiny").expect("read");
     assert_eq!(out.status, SUCCESS);
     assert_eq!(out.log2, placed.log2);
@@ -681,11 +761,17 @@ fn geom_test_steps() -> geom_intersect::StepsInterval {
 fn every_reason_of_the_kernel_has_its_name() {
     let gap = geom_test_steps();
     let pairs = [
-        (Unresolved::TangentBand { width: Steps(1) }, Why::TangentBand),
+        (
+            Unresolved::TangentBand { width: Steps(1) },
+            Why::TangentBand,
+        ),
         (Unresolved::HigherOrderContact, Why::HigherOrderContact),
         (Unresolved::NearCoincident { gap }, Why::NearCoincident),
         (Unresolved::NearMiss { gap }, Why::NearMiss),
-        (Unresolved::BoundExceeded { needed: Steps(1) }, Why::BoundExceeded),
+        (
+            Unresolved::BoundExceeded { needed: Steps(1) },
+            Why::BoundExceeded,
+        ),
         (Unresolved::KnownCurveUnproven, Why::KnownCurveUnproven),
         (
             Unresolved::UndecidedAtFloor {
@@ -727,7 +813,9 @@ fn a_flag_measures_its_box() {
 fn the_truth_passes_on_every_catalogue_case_in_both_modes() {
     for case in catalogue::all() {
         let placed = place(&case, ACCURACY).expect("placed");
-        let out = StandIn::Truth.answer(&case, &placed, ACCURACY).expect("answered");
+        let out = StandIn::Truth
+            .answer(&case, &placed, ACCURACY)
+            .expect("answered");
         for mode in [Mode::Certify, Mode::Default] {
             let broke = broken(&case, &placed, mode, &out, &Ceiling::default());
             assert!(broke.is_empty(), "{}: {broke:?}", case.id);
@@ -743,9 +831,17 @@ fn a_wrong_answer_fails_on_every_catalogue_case() {
             let out = stand_in.answer(&case, &placed, ACCURACY).expect("answered");
             let broke = broken(&case, &placed, Mode::Default, &out, &open());
             if case.class().expect("a class").may_flag() && stand_in != StandIn::Spurious {
-                assert!(broke.contains(&"uncovered".to_owned()), "{}: {broke:?}", case.id);
+                assert!(
+                    broke.contains(&"uncovered".to_owned()),
+                    "{}: {broke:?}",
+                    case.id
+                );
             } else {
-                assert!(broke.contains(&"verdict".to_owned()), "{}: {broke:?}", case.id);
+                assert!(
+                    broke.contains(&"verdict".to_owned()),
+                    "{}: {broke:?}",
+                    case.id
+                );
             }
             let certified = broken(&case, &placed, Mode::Certify, &out, &open());
             assert!(certified.contains(&"verdict".to_owned()), "{}", case.id);
@@ -755,14 +851,20 @@ fn a_wrong_answer_fails_on_every_catalogue_case() {
 
 #[test]
 fn a_flagged_answer_passes_where_a_class_may_flag() {
-    let ids = ["f16_cylinders_external", "f1_mirrored_cylinders", "f_apex_rulings"];
+    let ids = [
+        "f16_cylinders_external",
+        "f1_mirrored_cylinders",
+        "f_apex_rulings",
+    ];
     for id in ids {
         let broke = stand_in(id, StandIn::Flagged, Mode::Default, &open());
         assert!(broke.is_empty(), "{id}: {broke:?}");
     }
     let case = named("f16_cylinders_external");
     let placed = place(&case, ACCURACY).expect("placed");
-    let out = StandIn::Flagged.answer(&case, &placed, ACCURACY).expect("answered");
+    let out = StandIn::Flagged
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
     assert!(out.flagged.len() > 1, "a chain of boxes");
     assert_eq!(out.curves.len(), 2, "the curve either side of the stretch");
     assert_eq!(scored(&case, &out).verdict, Verdict::Incomplete);
@@ -773,7 +875,9 @@ fn a_class_that_may_not_flag_is_never_flagged_by_the_stand_in() {
     for case in catalogue::all() {
         if !case.class().expect("a class").may_flag() {
             let placed = place(&case, ACCURACY).expect("placed");
-            let out = StandIn::Flagged.answer(&case, &placed, ACCURACY).expect("answered");
+            let out = StandIn::Flagged
+                .answer(&case, &placed, ACCURACY)
+                .expect("answered");
             assert!(out.flagged.is_empty(), "{}", case.id);
         }
     }
@@ -802,7 +906,12 @@ fn a_region_whose_reason_does_not_fit_fails() {
         assert!(broke.contains(&"wrong-kind".to_owned()), "{id}: {broke:?}");
     }
     // A gap covered only by a region that cannot stand for it is uncovered too.
-    let broke = stand_in("f16_cylinders_external", StandIn::WrongReason, Mode::Default, &open());
+    let broke = stand_in(
+        "f16_cylinders_external",
+        StandIn::WrongReason,
+        Mode::Default,
+        &open(),
+    );
     assert!(broke.contains(&"uncovered".to_owned()), "{broke:?}");
 }
 
@@ -822,8 +931,16 @@ fn every_stand_in_breaks_the_rule_it_names() {
 
 #[test]
 fn certify_mode_allows_no_flag_and_no_gap() {
-    let broke = stand_in("f16_cylinders_external", StandIn::Flagged, Mode::Certify, &open());
-    assert!(broke.contains(&"flagged-in-certify".to_owned()), "{broke:?}");
+    let broke = stand_in(
+        "f16_cylinders_external",
+        StandIn::Flagged,
+        Mode::Certify,
+        &open(),
+    );
+    assert!(
+        broke.contains(&"flagged-in-certify".to_owned()),
+        "{broke:?}"
+    );
     assert!(broke.contains(&"verdict".to_owned()), "{broke:?}");
 }
 
@@ -831,10 +948,15 @@ fn certify_mode_allows_no_flag_and_no_gap() {
 fn a_clean_class_may_not_flag() {
     let case = named("f_seam_line");
     let placed = place(&case, ACCURACY).expect("placed");
-    let mut out = StandIn::Truth.answer(&case, &placed, ACCURACY).expect("answered");
+    let mut out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
     // A box right on the seam, the size of the floor: nothing wrong with it but where it is.
     let p = placed.steps([1.0, 0.0, 0.0]).map(|x| x.round_ties_even());
-    #[allow(clippy::cast_possible_truncation, reason = "a whole number of steps in range")]
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "a whole number of steps in range"
+    )]
     let p = p.map(|x| x as i64);
     out.flagged.push(Flag {
         why: Why::UndecidedAtFloor,
@@ -849,7 +971,9 @@ fn a_clean_class_may_not_flag() {
 fn the_ceilings_hold_the_count_and_the_size_apart() {
     let case = named("f16_cylinders_external");
     let placed = place(&case, ACCURACY).expect("placed");
-    let out = StandIn::Flagged.answer(&case, &placed, ACCURACY).expect("answered");
+    let out = StandIn::Flagged
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
     let count = out.flagged.len() as u64;
     let size = total_size(&out.flagged);
     let at = |count: u64, size: u64| Ceiling {
@@ -874,7 +998,12 @@ fn a_flag_reaches_as_far_as_the_case_allows_and_no_further() {
     assert!(allowed(Why::UndecidedAtFloor, floor, &placed));
     assert!(!allowed(Why::UndecidedAtFloor, floor + 0.01, &placed));
     assert!(!allowed(Why::NonSmooth, wide, &placed));
-    for why in [Why::TangentBand, Why::HigherOrderContact, Why::NearMiss, Why::NearCoincident] {
+    for why in [
+        Why::TangentBand,
+        Why::HigherOrderContact,
+        Why::NearMiss,
+        Why::NearCoincident,
+    ] {
         assert!(allowed(why, wide * 0.999, &placed), "{why:?}");
         assert!(!allowed(why, wide * 1.001, &placed), "{why:?}");
     }
@@ -888,6 +1017,24 @@ fn a_flag_reaches_as_far_as_the_case_allows_and_no_further() {
 }
 
 #[test]
+fn a_band_is_measured_to_the_line_not_its_samples() {
+    // A box halfway between two samples a long way apart reaches as far as its own corners.
+    let case = named("f16_cylinders_external");
+    let placed = place(&case, ACCURACY).expect("placed");
+    let out = StandIn::Flagged
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let wide = band(&placed);
+    assert!(out.flagged.iter().all(|f| f.diagonal() < 2.0 * wide));
+    let step = case.expected.branches[0].points[1][2] - case.expected.branches[0].points[0][2];
+    assert!(
+        step * placed.scale() > wide,
+        "samples sparser than the band"
+    );
+    assert!(broken(&case, &placed, Mode::Default, &out, &open()).is_empty());
+}
+
+#[test]
 fn a_higher_order_contact_widens_the_band_at_its_order() {
     let mut case = named("f16_cylinders_external");
     let second = place(&case, ACCURACY).expect("placed");
@@ -896,6 +1043,13 @@ fn a_higher_order_contact_widens_the_band_at_its_order() {
     let wide = band(&second) * 4.0;
     assert!(!allowed(Why::TangentBand, wide, &second));
     assert!(allowed(Why::TangentBand, wide, &fourth));
+    // At order four the band is where x⁴ = 24·δ·L³, δ one step.
+    let width = contact_band(&fourth);
+    assert_eq!(contact_band(&second), band(&second));
+    assert!(holds_contact(width, 1.0, fourth.extent, 4));
+    assert!(!holds_contact(width * 0.999, 1.0, fourth.extent, 4));
+    assert!(allowed(Why::TangentBand, width * 0.999, &fourth));
+    assert!(!allowed(Why::TangentBand, width * 1.001, &fourth));
 }
 
 #[test]
@@ -904,24 +1058,45 @@ fn a_reason_stands_for_the_kinds_it_can_and_no_others() {
         Boundary, Coincident, CoincidentBorder, Crossing, Isolated, NearTangent, Singular, Tangent,
     };
     let every = [
-        Crossing, Tangent, CoincidentBorder, NearTangent, Boundary, Isolated, Singular, Coincident,
+        Crossing,
+        Tangent,
+        CoincidentBorder,
+        NearTangent,
+        Boundary,
+        Isolated,
+        Singular,
+        Coincident,
     ];
     let table: [(Why, &[Contact]); 8] = [
         (Why::TangentBand, &[Tangent, NearTangent, Isolated]),
         (Why::HigherOrderContact, &[Tangent, Isolated, Singular]),
-        (Why::NearCoincident, &[Coincident, CoincidentBorder, NearTangent]),
+        (
+            Why::NearCoincident,
+            &[Coincident, CoincidentBorder, NearTangent],
+        ),
         (Why::NearMiss, &[Crossing, Tangent, NearTangent, Isolated]),
         (Why::NonSmooth, &[Singular]),
         (
             Why::KnownCurveUnproven,
-            &[Crossing, Tangent, CoincidentBorder, NearTangent, Boundary, Coincident],
+            &[
+                Crossing,
+                Tangent,
+                CoincidentBorder,
+                NearTangent,
+                Boundary,
+                Coincident,
+            ],
         ),
         (Why::BoundExceeded, &every),
         (Why::UndecidedAtFloor, &every),
     ];
     for (why, kinds) in table {
         for contact in every {
-            assert_eq!(stands_for(why, contact), kinds.contains(&contact), "{why:?} {contact:?}");
+            assert_eq!(
+                stands_for(why, contact),
+                kinds.contains(&contact),
+                "{why:?} {contact:?}"
+            );
         }
     }
 }
@@ -930,9 +1105,15 @@ fn a_reason_stands_for_the_kinds_it_can_and_no_others() {
 fn both_readings_must_agree() {
     let case = named("f_seam_line");
     let placed = place(&case, ACCURACY).expect("placed");
-    let truth = StandIn::Truth.answer(&case, &placed, ACCURACY).expect("answered");
-    let dropped = StandIn::Dropped.answer(&case, &placed, ACCURACY).expect("answered");
-    let spurious = StandIn::Spurious.answer(&case, &placed, ACCURACY).expect("answered");
+    let truth = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let dropped = StandIn::Dropped
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
+    let spurious = StandIn::Spurious
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
     let rules = |out: &Output, verdict: Verdict| {
         let scored = Scored {
             id: case.id.clone(),
@@ -958,14 +1139,21 @@ fn both_readings_must_agree() {
     assert!(!rules(&dropped, Verdict::Incomplete).iter().any(disagree));
     // A verdict about something else asks nothing of the coverage.
     let err = rules(&truth, Verdict::Error);
-    assert_eq!(err, vec![Failure::Verdict { verdict: Verdict::Error }]);
+    assert_eq!(
+        err,
+        vec![Failure::Verdict {
+            verdict: Verdict::Error
+        }]
+    );
 }
 
 #[test]
 fn every_other_verdict_fails_both_modes() {
     let case = named("f16_cylinders_external");
     let placed = place(&case, ACCURACY).expect("placed");
-    let out = StandIn::Truth.answer(&case, &placed, ACCURACY).expect("answered");
+    let out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
     for verdict in [
         Verdict::Crash,
         Verdict::Error,
@@ -998,7 +1186,9 @@ fn every_other_verdict_fails_both_modes() {
 fn something_spurious_beside_a_gap_fails() {
     let case = named("f16_cylinders_external");
     let placed = place(&case, ACCURACY).expect("placed");
-    let out = StandIn::Flagged.answer(&case, &placed, ACCURACY).expect("answered");
+    let out = StandIn::Flagged
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
     let judged = |flags: &[&str]| {
         let scored = Scored {
             id: case.id.clone(),
@@ -1030,22 +1220,44 @@ fn something_spurious_beside_a_gap_fails() {
 fn an_answer_from_another_scale_fails() {
     let case = named("f_seam_line");
     let placed = place(&case, ACCURACY).expect("placed");
-    let mut out = StandIn::Truth.answer(&case, &placed, ACCURACY).expect("answered");
+    let mut out = StandIn::Truth
+        .answer(&case, &placed, ACCURACY)
+        .expect("answered");
     out.log2 += 1;
-    assert_eq!(broken(&case, &placed, Mode::Default, &out, &open()), ["off-scale"]);
+    assert_eq!(
+        broken(&case, &placed, Mode::Default, &out, &open()),
+        ["off-scale"]
+    );
 }
 
 #[test]
 fn every_rule_has_its_name() {
     let names = [
-        (Failure::Verdict { verdict: Verdict::Crash }, "verdict"),
+        (
+            Failure::Verdict {
+                verdict: Verdict::Crash,
+            },
+            "verdict",
+        ),
         (Failure::Spurious, "spurious"),
         (Failure::FlaggedInCertify { count: 1 }, "flagged-in-certify"),
         (Failure::FlaggedInClean { count: 1 }, "flagged-in-clean"),
         (Failure::Uncovered { feature: 0 }, "uncovered"),
         (Failure::NoFeature { region: 0 }, "no-feature"),
-        (Failure::WrongKind { region: 0, why: Why::NearMiss }, "wrong-kind"),
-        (Failure::TooWide { region: 0, reach: 1.0 }, "too-wide"),
+        (
+            Failure::WrongKind {
+                region: 0,
+                why: Why::NearMiss,
+            },
+            "wrong-kind",
+        ),
+        (
+            Failure::TooWide {
+                region: 0,
+                reach: 1.0,
+            },
+            "too-wide",
+        ),
         (Failure::OverCeiling { count: 1, size: 1 }, "over-ceiling"),
         (
             Failure::Disagree {
@@ -1067,12 +1279,21 @@ fn the_register_of_ceilings_is_read_and_held() {
     let ceilings = Ceilings::parse(CEILINGS).expect("the register");
     assert_eq!(ceilings.classes.len(), Class::ALL.len());
     // Nothing is flagged yet, so nothing may be.
-    assert!(ceilings.classes.values().all(|c| c.count == 0 && c.size == 0));
+    assert!(
+        ceilings
+            .classes
+            .values()
+            .all(|c| c.count == 0 && c.size == 0)
+    );
     let less = CEILINGS.replace("\"transversal\": { \"count\": 0, \"size\": 0, \"why\": \"12.17: this class may not flag\" },", "");
-    assert!(matches!(Ceilings::parse(&less), Err(SsiError::Malformed { why, .. }) if why.contains("no ceiling")));
+    assert!(
+        matches!(Ceilings::parse(&less), Err(SsiError::Malformed { why, .. }) if why.contains("no ceiling"))
+    );
     for field in ["\"count\": 1, \"size\": 0", "\"count\": 0, \"size\": 1"] {
         let raised = CEILINGS.replacen("\"count\": 0, \"size\": 0", field, 1);
-        assert!(matches!(Ceilings::parse(&raised), Err(SsiError::Malformed { why, .. }) if why.contains("may not flag")));
+        assert!(
+            matches!(Ceilings::parse(&raised), Err(SsiError::Malformed { why, .. }) if why.contains("may not flag"))
+        );
     }
     let open = CEILINGS.replacen(
         "\"tangent-curve\": { \"count\": 0, \"size\": 0",
@@ -1110,8 +1331,16 @@ fn judged_run(dir: &PathBuf, cases: &[Case], stand_in: StandIn, ceilings: &Ceili
     for case in cases {
         let placed = place(case, ACCURACY).expect("placed");
         let out = stand_in.answer(case, &placed, ACCURACY).expect("answered");
-        fs::write(dir.join("cases").join(format!("{}.json", case.id)), serde_json::to_string(case).expect("written")).expect("wrote");
-        fs::write(dir.join("raw").join(format!("{}.json", case.id)), serde_json::to_string(&out).expect("written")).expect("wrote");
+        fs::write(
+            dir.join("cases").join(format!("{}.json", case.id)),
+            serde_json::to_string(case).expect("written"),
+        )
+        .expect("wrote");
+        fs::write(
+            dir.join("raw").join(format!("{}.json", case.id)),
+            serde_json::to_string(&out).expect("written"),
+        )
+        .expect("wrote");
         lines.push(scored(case, &out));
     }
     let scores = dir.join("scores.json");
@@ -1166,7 +1395,12 @@ fn a_report_publishes_every_case() {
     assert_eq!(report.differs_from(&lost), ["f_seam_line"]);
 
     // Over the register's ceilings the same run fails, and says which rule.
-    let held = judged_run(&dir, &cases, StandIn::Flagged, &Ceilings::parse(CEILINGS).expect("read"));
+    let held = judged_run(
+        &dir,
+        &cases,
+        StandIn::Flagged,
+        &Ceilings::parse(CEILINGS).expect("read"),
+    );
     assert_eq!(held.failed(), 1);
     assert!(held.broke("over-ceiling"));
     assert!(!held.broke("too-wide"));
@@ -1178,7 +1412,12 @@ fn a_runner_that_wrote_nothing_is_a_failure_with_its_verdict() {
     let dir = scratch("crash");
     let case = named("f_seam_line");
     let ceilings = Ceilings::parse(CEILINGS).expect("the register");
-    judged_run(&dir, core::slice::from_ref(&case), StandIn::Truth, &ceilings);
+    judged_run(
+        &dir,
+        core::slice::from_ref(&case),
+        StandIn::Truth,
+        &ceilings,
+    );
     fs::remove_file(dir.join("raw").join("f_seam_line.json")).expect("removed");
     let scores = dir.join("scores.json");
     let line = Scored {
@@ -1208,7 +1447,11 @@ fn a_runner_that_wrote_nothing_is_a_failure_with_its_verdict() {
         ..answer(Vec::new())
     };
     failed.log2 = place(&case, ACCURACY).expect("placed").log2;
-    fs::write(raw.join("f_seam_line.json"), serde_json::to_string(&failed).expect("written")).expect("wrote");
+    fs::write(
+        raw.join("f_seam_line.json"),
+        serde_json::to_string(&failed).expect("written"),
+    )
+    .expect("wrote");
     assert_eq!(run(&job).expect("judged").rows[0].digest, None);
     // What cannot be read stops the run: it is not a verdict.
     fs::write(raw.join("f_seam_line.json"), "{").expect("wrote");
@@ -1224,7 +1467,11 @@ fn a_runner_that_wrote_nothing_is_a_failure_with_its_verdict() {
 #[test]
 fn the_credit_travels_with_the_corpus() {
     let manifest = Manifest::parse(EMBEDDED).expect("the register");
-    let entry = manifest.corpora.iter().find(|c| c.id == "ssi-corpus").expect("listed");
+    let entry = manifest
+        .corpora
+        .iter()
+        .find(|c| c.id == "ssi-corpus")
+        .expect("listed");
     let credit = entry.credit.as_deref().expect("credited");
     assert!(credit.contains("Yang, Jia and Yan 2023"), "{credit}");
     assert!(credit.contains("CC BY"), "{credit}");
@@ -1233,14 +1480,18 @@ fn the_credit_travels_with_the_corpus() {
 #[test]
 fn the_catalogue_is_our_own_closed_forms() {
     let all = catalogue::all();
-    assert_eq!(all.len(), 14);
+    assert_eq!(all.len(), 15);
     let mut ids: Vec<&str> = all.iter().map(|c| c.id.as_str()).collect();
     ids.sort_unstable();
     ids.dedup();
     assert_eq!(ids.len(), all.len());
     for case in &all {
         assert!(case.class().is_ok(), "{}", case.id);
-        assert!(case.notes.starts_with("Rebuilds, with our own inputs: "), "{}", case.id);
+        assert!(
+            case.notes.starts_with("Rebuilds, with our own inputs: "),
+            "{}",
+            case.id
+        );
         assert!(!case.formula.is_empty(), "{}", case.id);
         assert!(!case.title.is_empty(), "{}", case.id);
         let size = case.cov_tol * 1_024.0;
@@ -1249,7 +1500,11 @@ fn the_catalogue_is_our_own_closed_forms() {
             for p in feature.points {
                 for truth in &case.truth {
                     let off = truth.distance(*p).expect("a closed form");
-                    assert!(off <= 1e-11 * (1.0 + size), "{}: {p:?} is {off:e} off", case.id);
+                    assert!(
+                        off <= 1e-11 * (1.0 + size),
+                        "{}: {p:?} is {off:e} off",
+                        case.id
+                    );
                 }
             }
         }

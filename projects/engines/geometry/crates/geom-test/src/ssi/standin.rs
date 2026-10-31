@@ -166,7 +166,8 @@ fn truth(case: &Case, placed: &Placed) -> Output {
             Contact::Tangent | Contact::NearTangent => "TANGENT",
             Contact::CoincidentBorder | Contact::Coincident => "COINCIDENT",
             Contact::Isolated => {
-                out.points.extend(f.points.iter().map(|p| placed.snapped(*p)));
+                out.points
+                    .extend(f.points.iter().map(|p| placed.snapped(*p)));
                 continue;
             }
             Contact::Singular => continue,
@@ -204,7 +205,8 @@ fn flagged(case: &Case, placed: &Placed, cov: f64, out: &mut Output) {
     let floor = half_for(floor_reach(placed));
     out.points.clear();
     for p in &case.expected.isolated_points {
-        out.flagged.push(around(*p, floor, Why::TangentBand, placed));
+        out.flagged
+            .push(around(*p, floor, Why::TangentBand, placed));
     }
     for p in &case.expected.singular_points {
         out.flagged.push(around(*p, floor, Why::NonSmooth, placed));
@@ -219,36 +221,50 @@ fn flagged(case: &Case, placed: &Placed, cov: f64, out: &mut Output) {
     }
 }
 
+/// The point `s` along `xyz`, whose samples lie at the arc lengths `at`.
+fn point_at(xyz: &[V3], at: &[f64], s: f64) -> V3 {
+    let pieces = xyz.iter().zip(xyz.iter().skip(1));
+    for ((p, q), (a, b)) in pieces.zip(at.iter().zip(at.iter().skip(1))) {
+        if *b >= s {
+            let t = if b > a { (s - a) / (b - a) } else { 0.0 };
+            return along(*p, t, sub(*q, *p));
+        }
+    }
+    xyz.last().copied().unwrap_or([0.0; 3])
+}
+
 /// Cuts a stretch out of `out`'s curve `index`, and covers it with a chain of boxes.
 fn stretch(index: usize, placed: &Placed, cov: f64, out: &mut Output) {
     let half = half_for(band(placed));
-    let xyz = out.curves[index].xyz.clone();
+    let Some(curve) = out.curves.get(index) else {
+        return;
+    };
+    let (xyz, kind) = (curve.xyz.clone(), curve.kind.clone());
     let mut at = Vec::with_capacity(xyz.len());
     let mut walked = 0.0;
-    for (i, p) in xyz.iter().enumerate() {
-        if i > 0 {
-            walked += norm(sub(*p, xyz[i - 1]));
+    let mut last = xyz.first().copied();
+    for p in &xyz {
+        if let Some(before) = last {
+            walked += norm(sub(*p, before));
         }
         at.push(walked);
+        last = Some(*p);
     }
     let length = smaller(GAP * 2.0 * cov, walked);
     let spacing = half / placed.scale();
-    if length / spacing > MOST_BOXES || walked == 0.0 {
+    if length / spacing > MOST_BOXES || walked <= 0.0 {
         return;
     }
-    let (from, to) = ((walked - length) / 2.0, (walked + length) / 2.0);
-    let on = |s: f64| {
-        let i = at.partition_point(|a| *a < s).clamp(1, xyz.len() - 1);
-        let (a, b) = (at[i - 1], at[i]);
-        let t = if b > a { (s - a) / (b - a) } else { 0.0 };
-        along(xyz[i - 1], t, sub(xyz[i], xyz[i - 1]))
-    };
+    let (from, to) = ((walked - length) / 2.0, f64::midpoint(walked, length));
+    let on = |s: f64| point_at(&xyz, &at, s);
     let mut s = from;
     while s < to {
-        out.flagged.push(around(on(s), half, Why::TangentBand, placed));
+        out.flagged
+            .push(around(on(s), half, Why::TangentBand, placed));
         s += spacing;
     }
-    out.flagged.push(around(on(to), half, Why::TangentBand, placed));
+    out.flagged
+        .push(around(on(to), half, Why::TangentBand, placed));
     let keep = |wanted: &dyn Fn(f64) -> bool| -> Vec<V3> {
         xyz.iter()
             .zip(&at)
@@ -258,7 +274,6 @@ fn stretch(index: usize, placed: &Placed, cov: f64, out: &mut Output) {
     };
     let before = keep(&|a| a < from);
     let after = keep(&|a| a > to);
-    let kind = out.curves[index].kind.clone();
     out.curves.remove(index);
     for piece in [before, after] {
         if piece.len() > 1 {
@@ -280,12 +295,13 @@ fn tweak(stand_in: StandIn, placed: &Placed, out: &mut Output) {
     for flag in &mut out.flagged {
         match stand_in {
             StandIn::Enlarged => {
-                flag.lo = flag.lo.map(|x| x - wide);
-                flag.hi = flag.hi.map(|x| x + wide);
+                flag.lo = flag.lo.map(|x| x.saturating_sub(wide));
+                flag.hi = flag.hi.map(|x| x.saturating_add(wide));
             }
             StandIn::Misplaced => {
-                flag.lo = flag.lo.map(|x| x + 4 * wide);
-                flag.hi = flag.hi.map(|x| x + 4 * wide);
+                let far = wide.saturating_mul(4);
+                flag.lo = flag.lo.map(|x| x.saturating_add(far));
+                flag.hi = flag.hi.map(|x| x.saturating_add(far));
             }
             StandIn::WrongReason => {
                 flag.why = match flag.why {
