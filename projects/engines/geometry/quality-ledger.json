@@ -2324,7 +2324,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace | with ^ in ln",
+      "mutant": "replace | with ^ in ln_checked",
       "line_text": "let v = f64::from_bits((0x3ff << 52) | (bits & MANTISSA));",
       "occurrences": 1,
       "kind": "equivalent",
@@ -2568,7 +2568,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace + with * in ln",
+      "mutant": "replace + with * in ln_checked",
       "line_text": "let left = h + (l - ERR);",
       "occurrences": 1,
       "kind": "equivalent",
@@ -2576,7 +2576,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace - with / in ln",
+      "mutant": "replace - with / in ln_checked",
       "line_text": "let left = h + (l - ERR);",
       "occurrences": 1,
       "kind": "equivalent",
@@ -4636,7 +4636,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace + with * in ln",
+      "mutant": "replace + with * in ln_checked",
       "line_text": "let right = h + (l + ERR);",
       "occurrences": 1,
       "kind": "equivalent",
