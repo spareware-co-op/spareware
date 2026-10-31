@@ -449,6 +449,42 @@ fn a_known_curve_agrees_exactly() {
 }
 
 #[test]
+fn derivatives_are_the_blossom_with_unit_directions() {
+    // The cubic Bezier curve on (0, 0), (1, 3), (4, 2), (5, 0) at t = 1/4, by hand from its
+    // hodographs: P′ = 3·Σ B²ᵢ·ΔPᵢ = (21/4, 57/16), P″ = 6·Σ B¹ᵢ·Δ²Pᵢ = (6, −39/2),
+    // P‴ = 6·Δ³P = (−24, 18), and nothing past the degree.
+    let s = Spline::new(
+        3,
+        &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0],
+        &[&[0.0, 0.0], &[1.0, 3.0], &[4.0, 2.0], &[5.0, 0.0]],
+    )
+    .unwrap();
+    let t = r(0.25);
+    let q = |a: i64, b: u64| RBig::from_parts(IBig::from(a), UBig::from(b));
+    assert_eq!(
+        s.homogeneous_derivative(&t, 0).unwrap(),
+        s.point(&t).unwrap()
+    );
+    assert_eq!(
+        s.homogeneous_derivative(&t, 1).unwrap(),
+        vec![q(21, 4), q(57, 16)]
+    );
+    assert_eq!(
+        s.homogeneous_derivative(&t, 2).unwrap(),
+        vec![q(6, 1), q(-39, 2)]
+    );
+    assert_eq!(
+        s.homogeneous_derivative(&t, 3).unwrap(),
+        vec![q(-24, 1), q(18, 1)]
+    );
+    assert_eq!(
+        s.homogeneous_derivative(&t, 4).unwrap(),
+        vec![RBig::ZERO, RBig::ZERO]
+    );
+    assert!(s.homogeneous_derivative(&r(2.0), 1).is_err());
+}
+
+#[test]
 fn the_comparison_catches_a_moved_point() {
     // The comparison has teeth: a result with one control point moved by 2^-20, or a weight
     // changed by as much, is outside its certified deviation, which is only rounding.

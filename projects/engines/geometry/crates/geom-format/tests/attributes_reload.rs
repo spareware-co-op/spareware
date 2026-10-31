@@ -5,8 +5,9 @@
 //! - Definitions of every value schema and behaviour, and values both single and combined, written
 //!   as an attributes record and read back are the same, byte for byte; a reader that does not
 //!   know an attribute's owner carries its values through a split by its class alone.
-//! - A value without its definition, a definition refused by its rules, and a second spelling are
-//!   refused; the payload matches its CDDL.
+//! - A value without its definition, a definition refused by its rules, a second spelling and the
+//!   values of one attribute split into two groups are refused; a definition that copies its
+//!   values round-trips; the payload matches its CDDL; each error reads as a sentence.
 //! - Every stored reference resolves identically after its names and history are saved and
 //!   reloaded: exactly, through a split to its pieces, ambiguously, and to a deletion.
 
@@ -20,9 +21,12 @@
 
 use std::collections::BTreeMap;
 
-use geom_format::attributes::{AttributesError, attributes_record, read_attributes};
+use geom_format::attributes::{
+    AttributesError, attributes_record, encode_attributes, read_attributes,
+};
 use geom_format::history::{history_record, read_history};
 use geom_format::names::{names_record, read_names};
+use geom_format::payload::PayloadError;
 use geom_format::record::Record;
 use geom_name::resolve::Step;
 use geom_name::{
@@ -396,4 +400,79 @@ fn every_stored_reference_resolves_identically_after_save_and_reload() {
         })
         .collect();
     assert_eq!(kinds.len(), 4, "{before:?}");
+}
+
+#[test]
+fn a_definition_that_copies_round_trips() {
+    let mut b = behaviour(
+        SplitAction::Propagate,
+        MergeAction::Combine,
+        TransformAction::Keep,
+    );
+    b.copied = CopyAction::Copy;
+    let d = Definition::new(
+        attr("kit.construct", "copied"),
+        [EntityKind::Face],
+        ValueSchema::Length,
+        b,
+    )
+    .unwrap();
+    let definitions = Definitions::default().define(d).unwrap();
+    let payload = encode_attributes(&definitions, &Attributes::new()).unwrap();
+    assert_eq!(
+        read_attributes(&payload, &mut meter()).unwrap().0,
+        definitions
+    );
+}
+
+#[test]
+fn the_values_of_one_attribute_are_one_group() {
+    let (definitions, _) = model();
+    let fire = attr("org.example.fire", "rating");
+    let defined = |keys: &[u8]| {
+        let mut v = Attributes::new();
+        for d in definitions.iter() {
+            v = v.defined_as(d.attr().clone(), d.behaviour().class());
+        }
+        v.rebuilt(
+            keys.iter()
+                .map(|&k| (fire.clone(), NameKey([k; 16]), Carried::One(Value(vec![k])))),
+        )
+    };
+    let encode = |keys: &[u8]| encode_attributes(&definitions, &defined(keys)).unwrap();
+    // [definitions, values]: with no values the payload ends in an empty array; with one value
+    // that array holds one group, the tail after the definitions.
+    let none = encode(&[]);
+    let group = |k: u8| encode(&[k])[none.len()..].to_vec();
+    let both = encode(&[7, 8]);
+    assert_eq!(
+        read_attributes(&both, &mut meter()).unwrap().1,
+        defined(&[7, 8])
+    );
+    // The same two values written as two groups of one attribute are not the canonical encoding.
+    let mut split = none[..none.len() - 1].to_vec();
+    split.push(0x82);
+    split.extend(group(7));
+    split.extend(group(8));
+    assert_ne!(split, both);
+    assert_eq!(
+        read_attributes(&split, &mut meter()).unwrap_err(),
+        AttributesError::NotCanonical
+    );
+}
+
+#[test]
+fn the_attributes_errors_read_as_sentences() {
+    let shape = PayloadError::Shape {
+        offset: 3,
+        expected: "an item",
+    };
+    assert_eq!(
+        AttributesError::Payload(shape).to_string(),
+        "not an attributes record: an item expected at byte 3"
+    );
+    assert_eq!(
+        AttributesError::NotCanonical.to_string(),
+        "the attributes are not in their canonical encoding"
+    );
 }

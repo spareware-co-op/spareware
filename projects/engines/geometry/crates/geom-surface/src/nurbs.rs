@@ -275,7 +275,11 @@ fn value<const D: usize>(
 
 /// The partials of the patch's surface to `order`, listed by `partial_index`, at the point or
 /// over the box (`Where`): a polynomial patch's are its partial forms' values; a rational
-/// patch's are those of A/W, the quotient of its numerator's and weight's jets.
+/// patch's are those of A/W, the quotient of its numerator's and weight's jets, which is chapter
+/// 19.3's interval quotient rule (`S_u` = (`A_u` − `W_u`·S)/W, `S_uu` = (`A_uu` − 2`W_u`·`S_u` −
+/// `W_uu`·S)/W, and so on). Over a box, S itself is taken from the convex hull of the patch's
+/// Euclidean control points, not from A/W of the two boxes, which is far wider when the weights
+/// spread (piece G68).
 ///
 /// # Errors
 ///
@@ -310,13 +314,23 @@ pub(crate) fn patch_partials(
         });
     }
     let wj = Jet::from_partials(&wv, order)?;
+    let hull = match at {
+        Where::Point(..) => None,
+        Where::Over(_) => Some(value(patch, at, meter)?),
+    };
     let mut out = alloc::vec![[Interval::point(0.0)?; 3]; av.len()];
     for d in 0..3 {
         let col: Vec<Interval> = av
             .iter()
             .map(|x| x.get(d).copied().ok_or(CurveError::Defect))
             .collect::<Result<_, _>>()?;
-        let q = Jet::from_partials(&col, order)?.div(&wj)?.partials()?;
+        let a = Jet::from_partials(&col, order)?;
+        let s = hull.and_then(|h| h.get(d).copied());
+        let q = match s {
+            Some(s) => a.div_valued(&wj, s)?,
+            None => a.div(&wj)?,
+        }
+        .partials()?;
         for (o, x) in out.iter_mut().zip(q) {
             if let Some(slot) = o.get_mut(d) {
                 *slot = x;
