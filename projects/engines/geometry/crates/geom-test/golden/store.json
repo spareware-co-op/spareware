@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G187",
               "why": "83 new benchmarks: integer carriers and rational points and their generated predicates; no existing digest moved"
+            },
+            {
+              "sha256": "da4fdd58f92a598b3514947db88d705c715ac97910a493f0f37cf41d7c82cc79",
+              "kind": "corpus",
+              "piece": "G188",
+              "why": "116 new benchmarks: rational-centre circles and arcs and their generated predicates; no existing digest moved"
             }
           ],
-          "sha256": "da4fdd58f92a598b3514947db88d705c715ac97910a493f0f37cf41d7c82cc79"
+          "sha256": "7b4093180097afa334400fcc6295c5e8e795ef51e2f6f9468b16dd78c21ec30a"
         },
         {
           "id": "geom-nurbs/operations",
