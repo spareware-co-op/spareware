@@ -3311,14 +3311,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "mutant": "replace Ssi::routed -> Option<Sign> with None",
-      "line_text": "let [a, b, c, d] = self.points;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On None, Ssi::orient2d takes orient2d_hand, which computes the same sign exactly: oa . ob2 - ob . oa2 in I256 (then I320) times the sign of w, the expression the generated ssi_side and ssi_weight evaluate. Both paths are exact, so the answer is the same for every input; only the time taken changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
       "mutant": "replace side -> Option<Sign> with None",
       "line_text": "let left = Wide::<L>::product_i128(oa, ob2)?;",
       "occurrences": 1,
@@ -3887,27 +3879,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace lpi_routed -> Option<Sign> with None",
-      "line_text": "let ([ax, ay, az], ad) = (l.plane.n, l.plane.d);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On None, Plane::side_of_lpi takes side_of_lpi_hand, which computes the same sign exactly: w1 s2p - w2 s1p in I256 (then I320) times the sign of w1, from the same planes and points, the very expression the generated lpi_side and lpi_weight evaluate. Both paths are exact, so the answer is the same for every input; only the time taken changes. (tests/gate1_core.rs calls the generated predicates directly.)"
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "mutant": "replace lpi_classify -> Option<Sign> with None",
       "line_text": "let a = Wide::<L>::product_i128(w1, s2p)?;",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "lpi_classify runs only in side_of_lpi_hand, which Plane::side_of_lpi calls only when the generated lpi_weight or lpi_side path returns None. Those paths check their rounded inputs against their certified widths (83 and 125 bits) on entry, and every plane a user can make comes from Plane::through on grid points, whose coefficients lie inside them (G29's budget); inside them no step overflows (the certificate). So no public input reaches lpi_classify, and returning None from it changes no result a user can see."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace tpi_routed -> Option<Sign> with None",
-      "line_text": "let [p, q, r] = t.planes;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
