@@ -12,6 +12,8 @@ geom-num = { path = "../geom-num" }
 # The native format, for fixtures' operation logs (src/fixture, piece G97): a log is a standalone
 # `.skgf` file of operation records, so a fixture is held to the format's own rules.
 geom-format = { path = "../geom-format" }
+# The curves the first outside oracle is compared with (src/oracle/geomdl.rs, piece G113).
+geom-nurbs = { path = "../geom-nurbs" }
 geom-run = { path = "../geom-run" }
 # The operation contract, for the history-law kit (src/history.rs, piece G88): the kit checks
 # histories through geom-op's own checker, so every operation's tests use the same laws.
