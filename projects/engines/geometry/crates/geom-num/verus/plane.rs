@@ -693,7 +693,11 @@ impl Plane {
     /// it here, so no plane over budget reaches an exact computation.
     pub const fn new(n: [i128; 3], d: i128) -> (r: Result<Plane, NumError>)
         ensures
-            r is Ok ==> r->Ok_0.n == n && r->Ok_0.d == d,
+            match r {
+                Ok(pl) => pl.wf() && pl.normal() == (n@[0] as int, n@[1] as int, n@[2] as int)
+                    && pl.offset() == d as int,
+                Err(_) => true,
+            },
     {
         if n[0] == 0 && n[1] == 0 && n[2] == 0 {
             Err(NumError::Degenerate)
