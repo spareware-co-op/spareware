@@ -367,6 +367,8 @@ pub enum MeshError {
     Full,
     /// Inside and outside are undefined for an open mesh. Heal it first.
     NotClosed,
+    /// A boolean's pieces would not merge, which closed inputs should never cause.
+    Merge(MergeError),
     /// The outside passes this test of a boolean, so its result has no finite boundary. Intersect
     /// it with a box first.
     UnboundedResult {
@@ -399,6 +401,7 @@ impl fmt::Display for MeshError {
             }
             MeshError::Full => f.write_str("more items than 32-bit indices can name"),
             MeshError::NotClosed => f.write_str("an open mesh has no inside: heal it first"),
+            MeshError::Merge(e) => write!(f, "{e}"),
             MeshError::UnboundedResult { test } => write!(
                 f,
                 "test {test} passes outside everything, so its result has no boundary: intersect it with a box first"
@@ -426,10 +429,7 @@ impl From<MergeError> for MeshError {
         match e {
             MergeError::Num(e) => MeshError::Num(e),
             MergeError::Stopped(s) => s.into(),
-            // Closed inputs give closed pieces.
-            MergeError::Trace(_) | MergeError::Overlap | MergeError::Open | MergeError::Inside => {
-                MeshError::Defect
-            }
+            other => MeshError::Merge(other),
         }
     }
 }

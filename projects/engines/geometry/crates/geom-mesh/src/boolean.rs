@@ -320,17 +320,15 @@ fn split_records(
         };
         named.push((name.id().map_err(|_| MeshError::Defect)?, piece, patch));
     }
-    for (base, piece, patch) in &named {
-        let same: Vec<&Patch> = named
-            .iter()
-            .filter(|(b, _, _)| b == base)
-            .map(|(_, _, p)| *p)
+    for (place, (base, piece, patch)) in named.iter().enumerate() {
+        let same: Vec<usize> = (0..named.len())
+            .filter(|k| named.get(*k).is_some_and(|(b, _, _)| b == base))
             .collect();
         let mut output = *base;
         if same.len() > 1 {
             let n = same
                 .iter()
-                .position(|p| core::ptr::eq(*p, *patch))
+                .position(|k| *k == place)
                 .ok_or(MeshError::Defect)?;
             let ord = Ordinal::new(index(n)?, index(same.len())?).map_err(|_| MeshError::Defect)?;
             output = TopoName::Weak { base: *base, ord }

@@ -106,7 +106,7 @@ fn mesh(input: &Polygons, exec: &Exec<'_>) -> ExactMesh {
 fn main() {
     let rayon = Rayon::new(NonZeroUsize::new(8).unwrap()).unwrap();
     let step = OpPath::new(OpId::from_bytes([7; 16]));
-    for side in [23, 71, 224] {
+    for side in [71, 224] {
         let mut rng = SplitMix64::new(Seed(0x148));
         let a = mesh(&field(side, 0, 1, &mut rng), &Exec::with_pool(&rayon));
         let b = mesh(&field(side, 2048, 2, &mut rng), &Exec::with_pool(&rayon));
