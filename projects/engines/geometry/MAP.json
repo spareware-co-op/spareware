@@ -11376,6 +11376,23 @@
           "target": "bin"
         },
         {
+          "cost": "`compare` is linear in the jobs.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/oracle.rs",
+          "guarantees": [
+            "nothing here runs an oracle, and only `triage` writes a file: the register and the one fixture. Exit codes: 0 when everything checked holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
+          ],
+          "job": "`oracle`: the outside oracles' tool: list the catalogue, check it, write a night's jobs, compare the answers, and record a triage.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::oracle`], whose module headers carry the methods."
+          },
+          "path": "oracle",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "one build of the map and the ledger ([`geom_test::ledger::build`]) and one read or write of each generated file.",
           "does": null,
           "family": [],
@@ -11655,7 +11672,7 @@
         },
         {
           "cost": "one match per operation, plus the operation, plus one write of each result to hash it.",
-          "does": "[`Kernel`] finds an operation by its name and version ([`Call::read`]), takes the bodies it names from the results so far, runs it, and keeps each result under its content ID, so a later operation of the log can name it. Each piece that adds an operation adds its row to [`Call`].",
+          "does": "[`Kernel`] finds an operation by its name and version ([`Call::read`]), takes the bodies it names from the results so far, runs it, and keeps each result under its content ID, so a later operation of the log can name it. Each piece that adds an operation adds its row to [`Call`]. A case an oracle raised on a function no operation holds yet replays through `oracle::geomdl`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/fixture/kernel.rs",
           "guarantees": [
@@ -12671,6 +12688,139 @@
             "text": "C. de Boor, \"On calculating with B-splines\", *Journal of Approximation Theory* 6 (1972), 50–62, <https://doi.org/10.1016/0021-9045(72)90080-9>, for the recurrence; L. Ramshaw, \"Blossoms are polar forms\", *Computer Aided Geometric Design* 6 (1989), 323–358, <https://doi.org/10.1016/0167-8396(89)90032-0>, for the blossom, the dual functional property and degree elevation as the mean of the blossom over the choices of its arguments; and H.-P. Seidel, \"A new multiaffine approach to B-splines\", *Computer Aided Geometric Design* 6 (1989), 23–32, <https://doi.org/10.1016/0167-8396(89)90003-4>, for de Boor's algorithm as the blossom with one argument per level."
           },
           "path": "geom_test::nurbs_reference",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as each part's header states.",
+          "does": "this crate holds the jobs and the comparison code; every oracle that is not a permissive Rust crate runs out of process, in its own container, from the oracle repository.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle.rs",
+          "guarantees": [
+            "**Never trusted as truth, never linked, never shipped** (28.10): an oracle only ever raises a difference, ground truth settles it, and [`catalogue::linked`] fails a build that links one.",
+            "**The oracle sees what the kernel saw**: [`exact`] writes each input so it reads back to the same bits.",
+            "**The allowance never grows with the oracle's tolerance**: it is capped at our bound plus the fit bound ([`compare::Allowance::total`]).",
+            "**Each signature is judged once**: a nightly run fails only on a new one."
+          ],
+          "job": "Differential testing against outside oracles (chapter 28.10; piece G113): the same job through another system, and an investigation of every difference.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "chapter 28.10 and decision 32.6 (`projects/engines/geometry/architecture/28-testing.md`, `projects/engines/geometry/architecture/32-decisions.md`)."
+          },
+          "path": "geom_test::oracle",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the catalogue, the lock file and the repository's text files.",
+          "does": "[`Catalogue::parse`] reads `oracles/catalogue.json` ([`CATALOGUE_PATH`]) into typed records and checks its rules. [`linked`] reads a `Cargo.lock` and names any package a catalogue entry says must never enter a build. [`audit`] reads a checkout of the oracle repository and names anything that could publish an image or build from an unpinned one.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/catalogue.rs",
+          "guarantees": [
+            "**Nothing ambiguous parses**: unknown fields, a missing field, a malformed id or two entries with one id are each a [`CatalogueError`].",
+            "**Read as text, never run**: the audit executes nothing from the repository it reads."
+          ],
+          "job": "The oracle catalogue: the maintained list of outside oracles (chapter 28.10; piece G113), and the checks that none is linked or published.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/"
+            ],
+            "text": "chapter 28.10, decision 32.6, 29.20's rule 8 (`projects/engines/geometry/architecture/`). `Cargo.lock` is read as TOML."
+          },
+          "path": "geom_test::oracle::catalogue",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per value.",
+          "does": "[`exact`] compares exact oracles exactly. [`within`] compares a value within an [`Allowance`]: both sides' stated bounds plus the conversion rounding, capped at our bound plus the fit bound. [`Hausdorff`]-style distances come from the same comparison: they are numbers measured by sampling, which can only refute.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/compare.rs",
+          "guarantees": [
+            "**The cap holds.** [`Allowance::total`] never exceeds our bound plus the fit bound, whatever the oracle states: anything beyond is settled by recomputing the case in high precision, never accepted because the oracle's own tolerance grew.",
+            "**A pass is never lost to rounding, and a difference never hidden by it**: the allowance is rounded up and the gap rounded down, so [`within`] says \"differs\" only when the two doubles are truly further apart than the allowance's real value.",
+            "**Not finite is a difference.**"
+          ],
+          "job": "Comparing a kernel result with an oracle's (chapter 28.10; piece G113).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.10's comparisons (`projects/engines/geometry/architecture/28-testing.md`), with directed rounding by one unit in the last place on each sum."
+          },
+          "path": "geom_test::oracle::compare",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per number.",
+          "does": "[`steps`] writes grid steps as the whole numbers an exact oracle takes. [`float`] writes a double as the shortest decimal that reads back to the same bits, and [`read_float`] reads one. [`to_millimetres`] converts grid steps to the unit floating-point oracles are tuned for, and returns the rounding the conversion cost, which the comparison must add to its bound: 1/6400 mm is not a binary fraction, so converting to millimetres rounds.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/exact.rs",
+          "guarantees": [
+            "**Bit for bit.** `read_float(&float(x)?) == x` for every finite double, signed zero included.",
+            "**No silent infinity or NaN**: [`float`] and [`read_float`] refuse them.",
+            "**The rounding is stated.** [`Millimetres::rounding`] bounds the difference between the double and the exact value, rounded up."
+          ],
+          "job": "The exact-input writer: what an oracle is given, so it sees what the kernel saw (chapter 28.10; piece G113).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/06-numbers.md"
+            ],
+            "text": "Rust's float formatter writes the shortest digits that round-trip, and its parser is correctly rounded; a step is an exact fraction of a millimetre, from `geom_num::grid::GridStep::quarter_nm` (`projects/engines/geometry/architecture/06-numbers.md`)."
+          },
+          "path": "geom_test::oracle::exact",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the jobs; the exact reference runs only on a difference.",
+          "does": "[`jobs`] draws a night's seeded curves and what to do with each: evaluate a point, the basis functions at a parameter, or a knot insertion. Each job is one JSON line, with every double written by [`super::exact::float`], so geomdl reads the bits the kernel read. The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-nurbs`, and settles any difference by the exact rational reference ([`crate::nurbs_reference`]): a difference the kernel is within its own bound of the truth on is geomdl's rounding; anything else is ours.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/geomdl.rs",
+          "guarantees": [
+            "**The job is what the kernel ran**: inputs round-trip bit for bit, and the kernel's answer comes from the same parsed job.",
+            "**Refusals are compared**: a job the kernel refuses and geomdl answers is a difference, of kind `refused`, never a pass.",
+            "**Truth settles it**: an oracle is never trusted; [`Compared::Differ`]'s `settled` says what the exact reference found."
+          ],
+          "job": "The first oracle: geomdl (NURBS-Python, MIT), out of process, on NURBS (chapter 28.10; piece G113).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "The NURBS Book's A2.2, A3.1, A4.1 and A5.1, which geomdl's comments and `geom-nurbs` both cite; chapter 28.10's comparison (`projects/engines/geometry/architecture/28-testing.md`). The bound is the one `geom-nurbs` states and `tests/nurbs_reference.rs` holds it to; geomdl states none, and it runs the same algorithms in doubles, so it is held to the same bound."
+          },
+          "path": "geom_test::oracle::geomdl",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the register for each lookup.",
+          "does": "a [`Signature`] groups differences: operation, oracle, kind of difference, input family. [`Register`] is the record of triaged signatures (`oracles/triaged.json`, [`REGISTER_PATH`]): [`Register::new_signatures`] says which of a night's are new, and only those fail it. [`fixture`] turns a triaged case into the [`Fixture`] 28.16 asks for.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/triage.rs",
+          "guarantees": [
+            "**One record per signature**, and every record names its fixture.",
+            "**\"Theirs\" names its report**, and \"ours\" its fix: neither can be recorded empty.",
+            "**The nightly run fails only on a new signature**, so a known difference never hides a new one and is never argued twice."
+          ],
+          "job": "Triage: every difference ends in one of four outcomes, each a fixture, and each signature is recorded once (chapter 28.10; piece G113).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.10's triage (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::oracle::triage",
           "provenance": [],
           "spdx": null,
           "target": "lib"
