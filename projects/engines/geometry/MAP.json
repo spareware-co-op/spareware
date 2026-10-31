@@ -3892,6 +3892,30 @@
           "target": "lib"
         },
         {
+          "cost": "a transform and a full check the first time a placement is asked of, one ordered-map lookup after that. The cache's size is the caller's. Recursion: none.",
+          "does": "[`materialise`] makes the body of a placement: `crate::transform`'s copy, in name order, its history kept, then every checker group at the full level whatever the build. A [`Library`] is the caller's cache of those bodies, keyed by the shared body's content hash and the placement, and answers the queries of `geom_topo::placed` for every instance: an exact placement moves the question into the shared frame, a general one asks its materialised body.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/placed.rs",
+          "guarantees": [
+            "**One answer either way.** Every query on an instance equals the same query on its materialisation: `tests/placed.rs` holds that for all 48 signed permutations and for rotations that round.",
+            "**Made once, and only when asked.** A placement's body is made the first time a query needs it, and an exact placement never makes one.",
+            "**Never an unchecked body.** A materialised body has passed every checker group, in every build; one that does not is [`MakeDetail::ResultInvalid`] or [`MakeDetail::NotCertifiedYet`], and nothing is cached.",
+            "**A rotation only.** A placement that does not keep lengths is refused where it is made (`geom_topo::placed::Placed::general`); a scale makes a new definition (19.12)."
+          ],
+          "job": "Placed instances that are not exact: an instance's geometry is its materialisation, the shared body made into its own body by the placement, rounded to the grid, re-validated and labelled with its class, made once into a caller-owned cache (23.9, 19.12; piece G145).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "chapter 23.9's \"What a placed body is\" and 19.12's placements (`projects/engines/geometry/architecture/23-performance.md`, `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`)."
+          },
+          "path": "geom_make::placed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant per primitive; O(n log n) for a prism of n corners, whose edges are found through an ordered map. Recursion: none.",
           "does": "each function checks its input, writes the solid as a [`Part`] and hands it to [`assemble`], which names, publishes, checks and records it. Lengths are whole grid steps of the frame (`geom_num::Steps`) and every vertex is a grid point; round shapes stand on the z axis through the point given, and other orientations come from the Transform family.",
           "family": [],
@@ -7506,6 +7530,12 @@
             },
             {
               "base_kind": "InvalidInput",
+              "doc": "A placed instance names a row past the document's side table of transforms.",
+              "name": "NoSuchPlacement",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
               "doc": "The body given carries no names: it was not published in name order, so its entities cannot keep their names through the transform.",
               "name": "BodyNotNamed",
               "shape": "unit"
@@ -11049,6 +11079,40 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a placement could not answer.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/placed.rs",
+          "kinds": [
+            {
+              "doc": "The placement is general, and its answers come from its materialisation.",
+              "name": "General",
+              "shape": "unit"
+            },
+            {
+              "doc": "A general placement that does not keep lengths: a scale makes a new definition (19.12).",
+              "name": "NotRigid",
+              "shape": "unit"
+            },
+            {
+              "doc": "A packed permutation past 47.",
+              "name": "Permutation",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A value out of the grid's range or the transform's budget.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The query on the shared body.",
+              "name": "Query",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_topo::placed",
+          "name": "PlacedError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a query could not answer.",
           "file": "projects/engines/geometry/crates/geom-topo/src/query.rs",
           "kinds": [
@@ -11401,6 +11465,30 @@
           "target": "lib"
         },
         {
+          "cost": "constant per point; a shared query's cost otherwise, charged as `crate::query` says. Nothing allocated but [`faces`]'s list. Recursion: none.",
+          "does": "[`Placed`] is the kernel's one instance record, at most 88 bytes: a handle to its definition, its [`Placement`] and its integer box. A definition is a body in the caller's table, in its own frame. An exact placement is a grid shift with one of the 48 signed axis permutations, held packed; any other is an index into the document's side table of general transforms. On an exact placement the queries here move the question into the definition's frame and answer it there: [`to_shared`] and [`from_shared`] carry a point across, [`face_area`] and [`six_volume`] read the shared body, [`side_of_shell`] takes the point back first, and [`faces`] lists the shared rows with a mirror's senses turned. A general placement has no query here: its geometry is its materialisation, the body rounded to the grid and re-validated, which needs the operations above this crate (`geom_make::placed`), and each of these answers [`PlacedError::General`] for it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/placed.rs",
+          "guarantees": [
+            "**88 bytes.** A test holds [`Placed`]'s size at most 88 on every target, and its logical size is 88 whatever the target's layout (23.10).",
+            "**Exact placements are exact.** Every step is integer arithmetic on signed permutations, so an answer equals the same query on the materialised body, bit for bit; `geom-make`'s tests hold every query to it for all 48 permutations. Twice a face's area vector turns with the body and ignores the shift; a mirror reverses the loops it reflects, so outward stays outward and the area vector is the plain image; six times the volume is unchanged; a side of a shell is unchanged.",
+            "**The box is held once and holds the body.** An exact placement's box is the definition's box moved, exact where that box is; a general one's holds every exact image of the definition's box and every rounding of it, one step out.",
+            "**Refused, never guessed.** A packed permutation past 47, or a point the placement sends out of the grid's range, is a [`PlacedError`]."
+          ],
+          "job": "Placed instances: a definition stored once and placed many times, copying no geometry (19.12, 23.9; piece G145).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "chapter 19.12's definitions and instances, as IFC's mapped items place them, and 23.9's rule that an instance is defined as its materialisation (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`, `projects/engines/geometry/architecture/23-performance.md`), on `geom_math`'s signed permutations (`geom_math::GridTransform`)."
+          },
+          "path": "geom_topo::placed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the rows visited; each list is walked once per query. [`shell_side`] is one [`side_of_shell`] for each vertex of the first shell the second holds, plus one. Recursion: none.",
           "does": "[`faces`] lists every face with its shell, surface, sense, loops and name. [`loop_area`] and [`face_area`] give twice the area vector of a loop and of a face, Σ pᵢ × pᵢ₊₁ over the loop's vertices in fin order; [`shell_volume`] and [`volume`] give six times the signed volume enclosed, Σ over faces of the face's twice-area vector dotted with one of its vertices. [`bounding_box`] gives the box of every vertex, joined with the stored box of each face that is not a polygon. [`side_of_shell`] says which side of a closed flat shell a grid point lies on, and [`shell_side`] which side of one shell another lies on. A loop's vertex at each fin is where the fin starts: its edge's start for a forward fin, its end for a reversed one.",
           "family": [],
@@ -11454,7 +11542,7 @@
       "provenance": [],
       "sections": "8, 10.2, 13.2, 18.7, 19.12, 22 and 23.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the arenas, their typed indices and the publishing builder (G80) and the core queries (G102) built; the Euler operators, name order, attributes, regions and cells, proofs and instances to come in G81, G90, G111, G112, G143, G145, G247 and G398.",
+      "status": "the arenas, their typed indices and the publishing builder (G80) and the core queries (G102) and the instance record (G145) built; the Euler operators, name order, attributes, regions and cells and proofs to come in G81, G90, G111, G112, G143, G247 and G398.",
       "summary": "Spare Kit geometry kernel: topology."
     }
   ],

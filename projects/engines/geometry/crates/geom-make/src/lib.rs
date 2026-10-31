@@ -33,6 +33,8 @@
 //! - [`primitive`]: box, prism, cylinder, cone, sphere and torus.
 //! - [`transform`]: move, rotate, mirror and scale.
 //! - [`pattern`]: copies of a body, one per transform, each keyed by the caller.
+//! - [`placed`]: a placed instance's materialised body, re-validated, and the caller's cache of
+//!   them (G145).
 //!
 //! Status: built by piece G101: every primitive and transform of 10.2 with its schema in the
 //! facade; scales that are not uniform on curved bodies wait for G177's checker.
@@ -43,6 +45,7 @@ extern crate alloc;
 
 mod build;
 pub mod pattern;
+pub mod placed;
 pub mod primitive;
 pub mod transform;
 

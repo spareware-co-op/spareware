@@ -291,6 +291,20 @@ fn run(
     })
 }
 
+/// The body of `input` under `t`, as `crate::placed` materialises a placement.
+///
+/// # Errors
+///
+/// [`run`]'s.
+pub(crate) fn placed_copy(
+    ctx: &OpContext<'_>,
+    input: Moved<'_>,
+    t: &TypedTransform,
+    motion: Motion,
+) -> Result<OpOutput<Made>, OpError> {
+    run(ctx, input, *t, motion)
+}
+
 /// A moved copy before its check: the body, its records, its exactness, and, when the transform
 /// rounded a corner or moved curved geometry by a deviation, the piece that widens what the
 /// checker certifies for it.
