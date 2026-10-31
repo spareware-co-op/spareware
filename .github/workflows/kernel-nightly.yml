@@ -47,22 +47,8 @@ env:
   RUST_TOOLCHAIN: "1.99.0"
 
 jobs:
-  slow-fixtures:
-    name: Slow fixtures
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Every slow fixture
-        run: cargo run --locked --release -p geom-test --bin fixture -- run --tier slow
-
-  predicates:
-    name: Predicates with a fresh seed
+  quick:
+    name: Quick checks on a scratch branch
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -72,179 +58,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed
-        run: |
-          set -euo pipefail
-          seed=$(printf '%016x' "$GITHUB_RUN_ID")
-          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
-          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
-      - name: The predicate verification suite and the predicates' attack tests
-        run: >-
-          cargo test --locked --release -p geom-num
-          --test verification --test attack_g28 --test attack_g29 --test attack_g30
-
-  maths:
-    name: Proven maths against the oracle
-    runs-on: ubuntu-latest
-    # Measured (G47): about 6.5 hours of one core's work for the ten million inputs per function,
-    # and 7 minutes on five cores for the lists, so about two hours on a hosted runner's four.
-    timeout-minutes: 300
-    env:
-      # The CORE-MATH commit the five functions are ported from (geom-num's src/math/).
-      CORE_MATH_COMMIT: 0ce0cbc15935e24c656280e5a46c34e89f301b7a
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          components: clippy, rustfmt
+      - name: The map, regenerated
+        run: cargo run --locked -p geom-test --bin map -- write
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed
-        run: |
-          set -euo pipefail
-          seed=$(printf '%016x' "$GITHUB_RUN_ID")
-          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
-          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
-      - name: CORE-MATH's worst-case lists at the ported commit, checked by SHA-256
-        run: |
-          set -euo pipefail
-          dir="$RUNNER_TEMP/core-math/src/binary64"
-          for f in sinpi cospi exp log atan2; do
-            mkdir -p "$dir/$f"
-            curl --fail --silent --show-error --location --retry 3 --output "$dir/$f/$f.wc" \
-              "https://gitlab.inria.fr/core-math/core-math/-/raw/$CORE_MATH_COMMIT/src/binary64/$f/$f.wc"
-          done
-          cd "$dir"
-          sha256sum --check --strict <<'SUMS'
-          476d2c6bad1332cc2257a9b73dd95fcc86aa8ec2288d31db30695ed105955c37  sinpi/sinpi.wc
-          ae02bccca8ea664673cf5b1035acb66d8bd3d74ad14d1e6f321ea73a2ae7e34f  cospi/cospi.wc
-          8c62a01572eb5c66d0303f287ca528fffbb69f3d3935ca29f852f656553b128b  exp/exp.wc
-          2d213b6758e257a1dc68dee717af2fc04b2907db19639b80bf196dfbf04ed9fb  log/log.wc
-          9e4fb81a3c4a789ea739203d2db3ef9689c48208d94196726fa7a22886e573db  atan2/atan2.wc
-          SUMS
-          echo "CORE_MATH_DIR=$dir" >> "$GITHUB_ENV"
-      - name: Every input of the worst-case lists
-        run: >-
-          cargo test --locked --release -p geom-num --test math_full_worst_cases
-          -- --ignored --nocapture
-      - name: Ten million inputs per function from tonight's seed
-        run: >-
-          cargo test --locked --release -p geom-num --test math_oracle
-          -- --ignored --nocapture
-
-  clothoids:
-    name: Clothoids, out of process
-    runs-on: ubuntu-latest
-    # Measured (G63): the oracle builds in about a minute on twenty cores, so a few on a hosted
-    # runner's four; the comparison takes seconds.
-    timeout-minutes: 60
-    env:
-      # Bertolazzi and Frego's Clothoids (BSD-2-Clause), at the commit chapter 17.8 cites; its
-      # submodules come at the commits it records.
-      CLOTHOIDS_COMMIT: dafdc29acee5c4f25e777c6cffe56ecb39b0ec11
-      # gcc:13.3.0, pinned by digest.
-      GCC_IMAGE: gcc:13.3.0@sha256:1d71f0f3450214bef38fe09e6f610fb6cca90cf97b43f4ce845bfc32a4168818
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed, and the files
-        run: |
-          set -euo pipefail
-          seed=$(printf '%016x' "$GITHUB_RUN_ID")
-          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
-          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
-          mkdir -p "$RUNNER_TEMP/clothoids"
-          echo "CLOTHOIDS_CASES=$RUNNER_TEMP/clothoids/cases.txt" >> "$GITHUB_ENV"
-          echo "CLOTHOIDS_ANSWERS=$RUNNER_TEMP/clothoids/answers.txt" >> "$GITHUB_ENV"
-      - name: Tonight's cases
-        run: >-
-          cargo test --locked --release -p geom-curve --test clothoids_oracle
-          -- --ignored --exact write_the_cases --nocapture
-      - name: Clothoids at the pinned commit, built and run in the container
-        run: |
-          set -euo pipefail
-          dir="$RUNNER_TEMP/clothoids"
-          git clone --quiet https://github.com/ebertolazzi/Clothoids.git "$dir/src"
-          git -C "$dir/src" checkout --quiet "$CLOTHOIDS_COMMIT"
-          git -C "$dir/src" submodule --quiet update --init --recursive
-          docker run --rm -i -v "$PWD:/work:ro" -v "$dir:/oracle" -w /work "$GCC_IMAGE" \
-            bash projects/engines/geometry/crates/geom-curve/oracles/clothoids.sh \
-            /oracle/src /oracle/build < "$CLOTHOIDS_CASES" > "$CLOTHOIDS_ANSWERS"
-      - name: The kernel against Clothoids' points
-        run: >-
-          cargo test --locked --release -p geom-curve --test clothoids_oracle
-          -- --ignored --exact compare_with_the_answers --nocapture
-
-  cbor2:
-    name: Canonical CBOR against cbor2, out of process
-    runs-on: ubuntu-latest
-    # The kernel's cases build and run in a few minutes; cbor2 installs from one wheel and encodes
-    # them in seconds.
-    timeout-minutes: 30
-    env:
-      # python:3.13-slim, pinned by digest; oracles/cbor2.sh pins cbor2 6.1.5's wheel by SHA-256.
-      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Tonight's seed, printed, and the files
-        run: |
-          set -euo pipefail
-          seed=$(printf '%016x' "$GITHUB_RUN_ID")
-          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
-          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
-          mkdir -p "$RUNNER_TEMP/cbor2"
-          echo "CBOR2_CASES=$RUNNER_TEMP/cbor2/cases.txt" >> "$GITHUB_ENV"
-          echo "CBOR2_ANSWERS=$RUNNER_TEMP/cbor2/answers.txt" >> "$GITHUB_ENV"
-      - name: Tonight's cases
-        run: >-
-          cargo test --locked --release -p geom-op --test cbor2_oracle
-          -- --ignored --exact write_the_cases --nocapture
-      - name: cbor2 6.1.5, in the container
-        run: |
-          set -euo pipefail
-          docker run --rm -i -v "$PWD:/work:ro" -w /work "$PYTHON_IMAGE" \
-            bash projects/engines/geometry/crates/geom-op/oracles/cbor2.sh \
-            < "$CBOR2_CASES" > "$CBOR2_ANSWERS"
-      - name: The kernel against cbor2's encodings
-        run: >-
-          cargo test --locked --release -p geom-op --test cbor2_oracle
-          -- --ignored --exact compare_with_the_answers --nocapture
-
-  zcbor:
-    name: Body records and kinds against their CDDL, with zcbor
-    runs-on: ubuntu-latest
-    # The writers build and run in a few minutes; zcbor validates each file in well under a second.
-    timeout-minutes: 30
-    env:
-      # python:3.13-slim, pinned by digest, as the cbor2 job; oracles/zcbor.sh pins zcbor 0.9.1 and
-      # its three dependencies' wheels by SHA-256.
-      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: The archived body records and every kind, one file each
-        run: |
-          set -euo pipefail
-          echo "ZCBOR_DIR=$RUNNER_TEMP/zcbor" >> "$GITHUB_ENV"
-          export ZCBOR_DIR="$RUNNER_TEMP/zcbor"
-          cargo test --locked --release -p geom-format --test registry --test kinds \
-            -- --ignored --exact write_the_body_payloads write_the_kinds --nocapture
-      - name: zcbor 0.9.1, in the container
-        run: |
-          set -euo pipefail
-          docker run --rm -v "$PWD:/work:ro" -v "$ZCBOR_DIR:/cases:ro" -w /work "$PYTHON_IMAGE" \
-            bash projects/engines/geometry/crates/geom-format/oracles/zcbor.sh \
-            projects/engines/geometry/format/cddl/body.cddl /cases
+          name: map
+          path: projects/engines/geometry/MAP.json
+      - name: Format
+        if: always()
+        run: cargo fmt -p geom-test -p geom-bench -p geom-fuzz -p geom-op -p geom-make -- --check
+      - name: Lint
+        if: always()
+        run: cargo clippy --locked -p geom-test -p geom-bench -p geom-fuzz -p geom-op -p geom-make --all-targets -- -D warnings
+      - name: Golden store
+        if: always()
+        run: cargo run --locked -p geom-test --bin golden -- check
+      - name: Provenance
+        if: always()
+        run: cargo run --locked -p geom-test --bin provenance
+      - name: Tests
+        if: always()
+        run: cargo test --locked -p geom-test --test determinism --test fixtures --test fixture_tool --test oracle --test oracle_tool -p geom-make -p geom-op -p geom-fuzz
