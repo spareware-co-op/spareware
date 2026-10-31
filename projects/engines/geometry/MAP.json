@@ -9580,6 +9580,31 @@
           "target": "lib"
         },
         {
+          "cost": "one full check of the body per injection, each linear in its rows but for group 3's pairs of faces. Recursion: none.",
+          "does": "[`CATALOGUE`] lists every [`Injection`]: a name from 28.4's list or chapter 8.3's groups, the [`FaultKind`]s that are the right answer, and a function that breaks a copy of a valid body. It breaks the rows, not the checker's view of them: each goes through `geom_topo::Builder::edit` and is published again, so only what the builder allows gets through, as with a body from a damaged file or a broken operation. An injection applies to the bodies that have what it breaks: a fin to flip, a line to move, a certified bound to lower. [`attack`] runs the catalogue on one valid body and says, per injection, whether it applied and whether the checker caught it, [`Outcome`]; [`missed`] reads the outcomes as a list of checker bugs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/faults.rs",
+          "guarantees": [
+            "**One fault at a time.** Each injection changes one thing a chapter 8.3 group promises to catch: the broken body differs from the valid one in that thing only, and an injection that finds nothing to break reports [`Applied::No`], never a pass.",
+            "**The right kind.** A fault is caught only by a report that names one of the injection's kinds. Any other fault is a miss: a checker that reports the wrong thing has not understood what is broken.",
+            "**Both ways.** [`attack`] first checks the body unbroken, so a body it is given that does not pass is an error, never a catalogue of false catches.",
+            "**Just past the bound.** A fault of distance moves by the smallest whole number of steps past the body's bound (28.4, \"by just more than its bound\"): a looser check would miss it.",
+            "**Deterministic.** Nothing here reads a clock or a random number; the same body gives the same outcomes on every target."
+          ],
+          "job": "Checker fault injection (chapter 28.4, the first catalogue): valid bodies broken on purpose, one fault at a time, and the checker must name each with the right kind; and it must pass every valid body, so a checker that rejects too much is caught too.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 28.4's fault injection, both ways (`projects/engines/geometry/architecture/28-testing.md`), on chapter 8.3's checker groups (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_test::faults",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the length of the path; [`kernel_crates`] reads one directory.",
           "does": "[`place`] says, for a path relative to the repository root, which kernel crate it belongs to and whether it is in the foundation set, a development crate, or outside the kernel. [`kernel_crates`] lists the kernel crates in the kernel's folder. The mutation gate ([`crate::mutants`]) and the coverage gate ([`crate::coverage`]) both classify with these, so the two gates can never disagree about what the foundation set is.",
           "family": [],
