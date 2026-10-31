@@ -226,11 +226,13 @@ As built (G113, `geom_test::oracle`, the `oracle` binary): the oracle repository
 
 The starting set is below. The maintained list, with pinned commits, lives in the oracle catalogue in `geom-test` (`oracles/catalogue.json`), linked from `MAP.json`.
 
+As built (G161, `geom_test::oracle::smlib`, the oracle repository's `smlib-nlib` folder): the harness calls NLib directly, so its image compiles usd-brep's pinned `NL_*` files and nothing else. No part of solidcore is needed, which also keeps its port of `NL_Math.cpp` out (29.6), and SMLib's `Sm*` files never reach the image, so its matrix, integrator and Brent routines are not compiled. The eight barred routines in `NL_Math.cpp`, `N_SolveQuadraticEq` among them, are cut from the source before it compiles, and the cut file's digest is pinned. Reading the sources' call graph from the harness's calls reaches 78 routines and none of the eight, as 32.23 expected; a stub is still there, and reaching one stops the run, so its job can only fail. The nightly runs the image twice and refuses any answer that differs (32.23).
+
 | Oracle | Licence; how run | Checks |
 | --- | --- | --- |
 | CGAL: Nef polyhedra on an exact kernel; 2D arrangements with circle-segment traits | GPL or LGPL by package; out of process | Flat booleans and line-and-arc arrangements, compared exactly |
 | OpenCascade, through its DRAW harness | LGPL-2.1 with exception; out of process | B-rep booleans, fillets, offsets, hidden lines (`HLRBRep`), STEP reading; `checkshape` and `bopargcheck` as a second opinion on our STEP output |
-| SMLib's NLib layer, through solidcore's harness | Apache-2.0; out of process, built from pinned source with its Numerical Recipes-derived routines stubbed out, never compiled; the owner said yes on those terms (owner action G157, 32.23; 29.5; 29.20, rule 8) | NURBS evaluation, knot insertion and removal, degree elevation. Never the fitting routines, which use a hidden random-number generator, and never booleans or validity ([13](../../../kit/notes/G01-evidence/13-vetting-smlib.md)); routines solidcore has not ported need new shims |
+| SMLib's NLib layer | Apache-2.0; out of process, built from pinned source with its Numerical Recipes-derived routines stubbed out, never compiled; the owner said yes on those terms (owner action G157, 32.23; 29.5; 29.20, rule 8) | NURBS evaluation, knot insertion and removal, degree elevation. Never the fitting routines, which use a hidden random-number generator, and never booleans or validity ([13](../../../kit/notes/G01-evidence/13-vetting-smlib.md)); routines solidcore has not ported need new shims |
 | geomdl (NURBS-Python) | MIT; out of process | NURBS basis, evaluation, knot operations |
 | IfcConvert (OpenCascade, CGAL and Manifold backends); web-ifc | LGPL-3.0; MPL-2.0; out of process | IFC geometry |
 | Manifold; manifold-rust's rational engine | Apache-2.0; C++ out of process, the Rust port as a development dependency | Mesh booleans |
