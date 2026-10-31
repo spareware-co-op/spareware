@@ -3463,7 +3463,7 @@
           "guarantees": [
             "**The minimum is proven.** Every span dropped has a lower bound above the reported distance, or a derivative that cannot vanish, by certified bounds on the kind. Nothing is sampled.",
             "**Ties are kept.** Candidates whose distance enclosures overlap are all returned, in parameter order; [`Projection::tie_broken`] says so, and the first is the lowest parameter.",
-            "**Nothing is guessed at the floor.** Spans at the floor that the test cannot decide join into runs. A run whose image is within twice the floor is one nearest point, since nothing in it can be told apart on the grid (a sphere's pole, a foot on a split); a longer one is [`Projection::NonIsolated`], never a foot.",
+            "**Nothing is guessed at the floor.** Spans at the floor that the test cannot decide are joined. If their hull's image is within twice the floor it is one nearest point, since nothing in it can be told apart on the grid (a sphere's pole, a foot on a split); a longer one is [`Projection::NonIsolated`], never a foot.",
             "**Enclosures, never numbers.** Each parameter, point and distance is an interval holding the exact value.",
             "**Deterministic.** Midpoint splits, and a fixed work order, first half first."
           ],
