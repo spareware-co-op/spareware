@@ -60,7 +60,7 @@ pub enum Kept {
 }
 
 /// What a commit did.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 pub enum Commit {
     /// The point is this grid point, exactly on its carriers, and no decision moved.
     Grid(P2),

@@ -82,8 +82,9 @@ impl fmt::Display for PointError {
 
 impl core::error::Error for PointError {}
 
-/// A point of the plane, as chapter 14.2 stores it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// A point of the plane, as chapter 14.2 stores it. Two of these are one place or not by what they
+/// say, which takes the exact questions below, so they have no `==`.
+#[derive(Clone, Copy, Debug)]
 pub enum Pt2 {
     /// Whole grid steps.
     Grid(P2),

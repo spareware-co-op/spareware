@@ -36,7 +36,7 @@ use geom_num::{NumError, Sign};
 pub type Line2 = Carrier;
 
 /// A circle with an exact squared radius.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 pub enum Circle2 {
     /// A drawn or imported circle: a grid centre and a whole number of steps.
     Grid(GridCircle),
@@ -73,7 +73,7 @@ impl Circle2 {
 }
 
 /// A carrier: the whole curve an entity lies on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 pub enum Curve2 {
     /// A line.
     Line(Line2),
@@ -126,7 +126,7 @@ impl CurveIx {
 }
 
 /// The carriers of a drawing, each named by its place.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct Carriers {
     curves: Vec<Curve2>,
 }
