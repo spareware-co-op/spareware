@@ -29,10 +29,6 @@
     clippy::arithmetic_side_effects,
     reason = "exact rational arithmetic, which cannot overflow; divisors are shown nonzero"
 )]
-#![allow(
-    clippy::indexing_slicing,
-    reason = "every index is of an array of three, or a row [`fits`] has shown in range"
-)]
 
 use core::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -92,23 +88,32 @@ fn point(p: P3) -> V3 {
     [p.x, p.y, p.z].map(|c| q(i128::from(c.get())))
 }
 
+/// `f` of each pair of coordinates.
+fn zipped(a: &V3, b: &V3, f: impl Fn(&RBig, &RBig) -> RBig) -> V3 {
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    [f(ax, bx), f(ay, by), f(az, bz)]
+}
+
 /// `a − b`.
 fn minus(a: &V3, b: &V3) -> V3 {
-    [&a[0] - &b[0], &a[1] - &b[1], &a[2] - &b[2]]
+    zipped(a, b, |x, y| x - y)
+}
+
+/// `a + b`.
+fn plus(a: &V3, b: &V3) -> V3 {
+    zipped(a, b, |x, y| x + y)
 }
 
 /// `a × b`.
 fn cross(a: &V3, b: &V3) -> V3 {
-    [
-        &a[1] * &b[2] - &a[2] * &b[1],
-        &a[2] * &b[0] - &a[0] * &b[2],
-        &a[0] * &b[1] - &a[1] * &b[0],
-    ]
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]
 }
 
 /// `a · b`.
 fn dot(a: &V3, b: &V3) -> RBig {
-    &a[0] * &b[0] + &a[1] * &b[1] + &a[2] * &b[2]
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    ax * bx + ay * by + az * bz
 }
 
 /// The pool's plane at `row`, as a normal and an offset.
@@ -140,7 +145,11 @@ fn place(parts: &Parts, v: &Vertex) -> Option<V3> {
                 return None;
             }
             let (ca, ab) = (cross(&nc, &na), cross(&na, &nb));
-            Some([0, 1, 2].map(|k| -(&da * &across[k] + &db * &ca[k] + &dc * &ab[k]) / &det))
+            let sum = plus(
+                &across.map(|c| &da * c),
+                &plus(&ca.map(|c| &db * c), &ab.map(|c| &dc * c)),
+            );
+            Some(sum.map(|c| -c / &det))
         }
     }
 }
@@ -161,7 +170,8 @@ fn loops(parts: &Parts, f: usize) -> std::ops::Range<usize> {
 fn fits(parts: &Parts) -> bool {
     let faces = parts.face_plane.len();
     let edges = parts.he_vert.len();
-    let rising = |list: &[u32]| list.first() == Some(&0) && list.windows(2).all(|w| w[0] <= w[1]);
+    let rising =
+        |list: &[u32]| list.first() == Some(&0) && list.windows(2).all(|w| w.first() <= w.last());
     parts.face_loops.len() == faces + 1
         && rising(&parts.face_loops)
         && rising(&parts.loop_start)
@@ -183,27 +193,35 @@ fn next_in(parts: &Parts, l: usize, h: usize) -> usize {
     if h + 1 == span.end { span.start } else { h + 1 }
 }
 
+/// The vertices half-edge `h` of loop `l` runs between.
+fn ends(parts: &Parts, l: usize, h: usize) -> Option<(u32, u32)> {
+    let at = |row: usize| parts.he_vert.get(row).copied();
+    Some((at(h)?, at(next_in(parts, l, h))?))
+}
+
+/// The places half-edge `h` of loop `l` runs between.
+fn places<'p>(parts: &Parts, points: &'p [V3], l: usize, h: usize) -> Option<(&'p V3, &'p V3)> {
+    let (from, to) = ends(parts, l, h)?;
+    Some((points.get(from as usize)?, points.get(to as usize)?))
+}
+
 /// Twice the area vector of a face's rings, its holes running the other way.
-fn area(parts: &Parts, points: &[V3], f: usize) -> V3 {
+fn area(parts: &Parts, points: &[V3], f: usize) -> Option<V3> {
     let mut sum = [RBig::ZERO, RBig::ZERO, RBig::ZERO];
     for l in loops(parts, f) {
         for h in ring(parts, l) {
-            let (a, b) = (
-                &points[parts.he_vert[h] as usize],
-                &points[parts.he_vert[next_in(parts, l, h)] as usize],
-            );
-            let c = cross(a, b);
-            sum = [0, 1, 2].map(|k| &sum[k] + &c[k]);
+            let (a, b) = places(parts, points, l, h)?;
+            sum = plus(&sum, &cross(a, b));
         }
     }
-    sum
+    Some(sum)
 }
 
 /// The rules each face keeps.
 fn faces(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
     for f in 0..parts.face_plane.len() {
         let face = u32::try_from(f).unwrap_or(u32::MAX);
-        let Some((n, d)) = facing(parts, parts.face_plane[f]) else {
+        let Some((n, d)) = parts.face_plane.get(f).and_then(|p| facing(parts, *p)) else {
             out.push(Finding::Shape);
             continue;
         };
@@ -215,15 +233,19 @@ fn faces(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
             }
             for h in ring(parts, l) {
                 let edge = u32::try_from(h).unwrap_or(u32::MAX);
-                let (from, to) = (parts.he_vert[h], parts.he_vert[next_in(parts, l, h)]);
+                let (Some((from, to)), Some((a, b))) =
+                    (ends(parts, l, h), places(parts, points, l, h))
+                else {
+                    out.push(Finding::Shape);
+                    continue;
+                };
                 if from == to {
                     out.push(Finding::ZeroEdge(edge));
                 }
-                let (a, b) = (&points[from as usize], &points[to as usize]);
                 if dot(&n, a) + &d != RBig::ZERO {
                     out.push(Finding::OffFace(edge));
                 }
-                let Some((m, e)) = facing(parts, parts.he_plane[h]) else {
+                let Some((m, e)) = parts.he_plane.get(h).and_then(|p| facing(parts, *p)) else {
                     out.push(Finding::Shape);
                     continue;
                 };
@@ -236,7 +258,11 @@ fn faces(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
                 }
             }
         }
-        let along = dot(&area(parts, points, f), &n);
+        let Some(vector) = area(parts, points, f) else {
+            out.push(Finding::Shape);
+            continue;
+        };
+        let along = dot(&vector, &n);
         if along == RBig::ZERO {
             out.push(Finding::NoArea(face));
         } else if along < RBig::ZERO {
@@ -339,8 +365,12 @@ fn edges(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
     for f in 0..parts.face_plane.len() {
         for l in loops(parts, f) {
             for h in ring(parts, l) {
-                let (a, b) = (parts.he_vert[h], parts.he_vert[next_in(parts, l, h)]);
-                owner[h] = u32::try_from(f).unwrap_or(u32::MAX);
+                let Some((a, b)) = ends(parts, l, h) else {
+                    continue;
+                };
+                if let Some(slot) = owner.get_mut(h) {
+                    *slot = u32::try_from(f).unwrap_or(u32::MAX);
+                }
                 let row = u32::try_from(h).unwrap_or(u32::MAX);
                 uses.entry((a.min(b), a.max(b))).or_default().push(row);
             }
@@ -431,7 +461,7 @@ pub fn check(parts: &Parts) -> Vec<Finding> {
         let row = u32::try_from(f).unwrap_or(u32::MAX);
         let corners: Vec<u32> = loops(parts, f)
             .flat_map(|l| ring(parts, l))
-            .map(|h| parts.he_vert[h])
+            .filter_map(|h| parts.he_vert.get(h).copied())
             .collect();
         if let Some(first) = rings.insert(corners, row) {
             out.push(Finding::Repeated(first, row));
