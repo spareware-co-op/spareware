@@ -43,7 +43,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 # The kernel's one lint posture: exactly geom-num's settings, here and in clippy.toml (the scaffold
