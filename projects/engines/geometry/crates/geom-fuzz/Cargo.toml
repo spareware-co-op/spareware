@@ -18,6 +18,9 @@ geom-gen = { path = "../geom-gen" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
+# The code under test of the cbor target (G91), and the work meter it is read with (MPL-2.0, ours).
+geom-format = { path = "../geom-format" }
+geom-run = { path = "../geom-run" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

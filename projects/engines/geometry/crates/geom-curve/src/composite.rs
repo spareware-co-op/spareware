@@ -120,6 +120,18 @@ impl<const D: usize> Composite<D> {
         Composite::assemble(segments, starts, 0.0)
     }
 
+    /// The composite of `segments` over `starts` exactly as given, with each joint's gap certified
+    /// again: what a stored composite is rebuilt from. Its joints may be apart, as a transform or
+    /// split may leave them; [`Composite::gaps`] bounds each.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Degenerate`] unless there is a segment and one more start than segments,
+    /// increasing and finite; the errors of enclosing a segment's ends.
+    pub fn from_starts(segments: Vec<Trimmed<D>>, starts: Vec<f64>) -> Result<Composite<D>, CurveError> {
+        Composite::assemble(segments, starts, f64::INFINITY)
+    }
+
     /// The composite of `segments` over `starts` (increasing and finite, or
     /// [`CurveError::Degenerate`]), whose joints may be apart by at most `allow` beyond overlapping
     /// (a transform's deviation).

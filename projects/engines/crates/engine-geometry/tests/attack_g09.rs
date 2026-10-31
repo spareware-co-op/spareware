@@ -1233,10 +1233,6 @@ mod repository {
             "geom-field",
             "G326 G327 G328 G329 G330 G331 G332 G338 G339 G352 G469",
         ),
-        (
-            "geom-format",
-            "G91 G92 G93 G94 G95 G96 G105 G108 G112 G175 G318 G405 G410 G411 G459",
-        ),
         ("geom-heal", "G417 G419 G420"),
         ("geom-ifc", "G421 G422 G423 G424 G426"),
         (
@@ -1254,7 +1250,6 @@ mod repository {
         ("geom-meshio", "G354 G434 G435"),
         ("geom-name", "G87 G89 G90 G109 G374"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
-        ("geom-op", "G82 G83 G86 G87 G88 G104 G143 G144 G459"),
         ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-poly", "G123 G124 G125 G126 G127 G128 G142"),
@@ -1271,10 +1266,6 @@ mod repository {
         (
             "geom-terrain",
             "G362 G363 G364 G365 G366 G367 G368 G369 G370 G374 G377 G380",
-        ),
-        (
-            "geom-topo",
-            "G80 G81 G90 G102 G111 G112 G143 G145 G247 G398",
         ),
         ("engine-geometry", "G100 G482"),
     ];
