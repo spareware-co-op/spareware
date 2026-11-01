@@ -4873,7 +4873,7 @@
           "file": "projects/engines/geometry/crates/geom-fuzz/src/planes.rs",
           "guarantees": [
             "**Any bytes are a case**, and [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
-            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a canonical form that moves, a plane given two entries or two planes one, a flip that does not say which way a plane faced; an order that is not antisymmetric or not transitive; a turn that changes when its sides swap; a point that is not the point it was made as. No law may panic or return `BudgetExceeded`: every plane here is within budget."
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a canonical form that moves, a plane given two entries or two planes one, a flip that does not say which way a plane faced; an order that is not antisymmetric or not transitive; a turn that changes when its sides swap; a point that is not the point it was made as; a face split into pieces with a plane it did not have, or refused for anything but a shape. No law may panic or return `BudgetExceeded`: every plane here is within budget."
           ],
           "job": "Fuzz target: `geom-poly`'s canonical planes and arrangement predicates, on any bytes, give one entry to one plane and one order to any points, rays or flaps.",
           "method": {
@@ -10475,6 +10475,25 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a face could not be split.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused: a side parallel to the face, two adjacent sides on one line, or rings that leave a piece without an end.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_poly::convex",
+          "name": "ConvexError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a plane could not join a table.",
           "file": "projects/engines/geometry/crates/geom-poly/src/plane.rs",
           "kinds": [
@@ -10513,6 +10532,33 @@
       "kind": "kernel",
       "layer": "6",
       "modules": [
+        {
+          "cost": "for n edges, at most n cuts, each classifying the edges left in its cell: O(n²) exact predicates at worst, and a piece of k bounds takes O(k²) more to put in order. Charges the meter one unit per edge classified and per bound ordered.",
+          "does": "EMBER takes convex polygons, each a supporting plane and one bounding plane per edge. [`convex_pieces`] takes a face as its plane and its rings, each ring a cycle of [`Side`]s, and splits it along its own edges' planes only: a binary space partition of the face, by each edge in the order given, which a caller makes name order. Every piece is a [`Piece`]: the face's plane and its bounding planes in turn around it, each with the interior on its positive side.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
+          "guarantees": [
+            "**Nothing new.** Every plane of a piece is the face's or one of its sides': each edge of a piece lies on an existing plane, and each corner is the meeting of three, so 6.2's budget holds, as EMBER's section 3.2 needs.",
+            "**A partition of the face.** The pieces are convex, cover the face and overlap nowhere, each side of the partition being a half-plane of the cut (tested against exact areas).",
+            "**The same pieces every time.** Pieces depend only on the planes and the order of the sides; nothing is hashed, and every decision is an exact predicate.",
+            "**No recursion.** The tree is an explicit stack, so its depth never threatens a WebAssembly stack (principle 13).",
+            "**Refused, never guessed.** A side parallel to the face is `Degenerate`; so are two adjacent sides on one line, which leave a corner undefined. Merge such sides first: the corner they share is no corner. So are rings that leave a piece without an end, such as a hole with no outline around it."
+          ],
+          "job": "Plane-based faces into convex polygons: the autopartition of 11.3, which lets a face with notches and holes enter the arrangement without one number growing.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181",
+              "https://doi.org/10.1145/800250.807481",
+              "https://doi.org/10.1145/37402.37430"
+            ],
+            "text": "chapter 11.3's \"How faces enter\" (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's sections 3.2 and 4.3 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); the binary space partition is Fuchs, Kedem and Naylor 1980, <https://doi.org/10.1145/800250.807481>, with the leaves read as in Thibault and Naylor 1987, <https://doi.org/10.1145/37402.37430>."
+          },
+          "path": "geom_poly::convex",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant and no allocation. [`along`] is two three-plane determinants and one classify; the others are at most three determinants or seven cross products of normals.",
           "does": "a [`Line`] is where two planes meet. [`along`] orders two points of a line, each the meeting of the line with a third plane. [`same_point`] says whether two three-plane points are one point: 11.3's test, that one lies on all three planes of the other. Within a plane, a [`Ray`] runs from a vertex along the line where that plane meets another, and [`turn`] and [`around`] order rays. About a line, a [`Flap`] is a half-plane bounded by the line, and [`turn_about`] and [`about`] order flaps.",
@@ -10565,7 +10611,7 @@
       "provenance": [],
       "sections": "6.2, 11.3, 11.12, 11.14, 13.2, 19.5 and 23.2; open questions OQ-11.2 and OQ-19.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); the rest by pieces G124, G125, G126, G127, G128, G142.",
+      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); faces into convex pieces ([`convex`]) built (G125); the rest by pieces G124, G126, G127, G128, G142.",
       "summary": "Spare Kit geometry kernel: exact plane-based polyhedra."
     },
     {
