@@ -131,6 +131,9 @@ pub const COMBINE: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified],
     charges: &[Charge::new(ARRANGEMENT, "polygon a split clips", 1)],
     batch: false,
+    // Phase-4 train: OpSchema gained name_free (23.8) after G130; false shares no cache entry,
+    // which is right whatever the answer. G130's owner decides whether booleans may share.
+    name_free: false,
     example: "a 4 m cube less a 2 m cube at its corner: a cube with a corner notch",
 };
 

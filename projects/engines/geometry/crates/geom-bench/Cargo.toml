@@ -65,6 +65,8 @@ geom-surface = { path = "../geom-surface" }
 geom-linalg = { path = "../geom-linalg" }
 # The attribute step of phase 3 (piece G90) and the types it takes, for the same count benchmarks.
 geom-name = { path = "../geom-name" }
+# The intersection results and canonical order of phase 4 (piece G158), for the same count benchmarks.
+geom-intersect = { path = "../geom-intersect" }
 # The primitives and transforms of phase 3 (piece G101), and the context and output they take and
 # give, for the same count benchmarks.
 geom-make = { path = "../geom-make" }

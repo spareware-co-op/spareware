@@ -358,6 +358,7 @@ fn the_maps_error_catalogue_is_the_codes() {
             ("Batch".to_owned(), Some("held detail".to_owned())),
             ("Query".to_owned(), Some("held detail".to_owned())),
             ("Combine".to_owned(), Some("held detail".to_owned())),
+            ("Bound".to_owned(), Some("held detail".to_owned())),
         ]
     );
 }

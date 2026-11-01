@@ -686,6 +686,21 @@ SPDX License List 3.29.0
     projects/engines/geometry/crates/geom-test/src/map/classes.rs
       to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences.
 
+ssi-corpus
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/bin/ssi-runner.rs
+      for its case schema, its runner contract and its scoring rules.
+    projects/engines/geometry/crates/geom-test/src/ssi.rs
+      for its case schema, its runner contract and its scoring rules.
+    projects/engines/geometry/crates/geom-test/src/ssi/case.rs
+      for its case schema, its runner contract and its scoring rules.
+    projects/engines/geometry/crates/geom-test/src/ssi/cover.rs
+      for its case schema, its runner contract and its scoring rules.
+    projects/engines/geometry/crates/geom-test/src/ssi/output.rs
+      for its case schema, its runner contract and its scoring rules.
+
 the Model Context Protocol specification
   Licence:      Apache-2.0 AND MIT
   Link:         https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts

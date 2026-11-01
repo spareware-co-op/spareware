@@ -867,6 +867,7 @@ dependencies = [
  "geom-bvh",
  "geom-curve",
  "geom-format",
+ "geom-intersect",
  "geom-linalg",
  "geom-make",
  "geom-math",
@@ -1119,6 +1120,7 @@ dependencies = [
  "geom-curve",
  "geom-format",
  "geom-gen",
+ "geom-intersect",
  "geom-linalg",
  "geom-make",
  "geom-math",
@@ -1197,6 +1199,7 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
 ]
 
 [[package]]
@@ -1400,6 +1403,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
  "geom-topo",
  "num-bigint",
  "proptest",
@@ -1569,6 +1573,7 @@ dependencies = [
  "geom-check",
  "geom-curve",
  "geom-format",
+ "geom-intersect",
  "geom-make",
  "geom-math",
  "geom-num",

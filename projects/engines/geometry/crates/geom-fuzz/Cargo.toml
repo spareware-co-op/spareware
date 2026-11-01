@@ -28,22 +28,25 @@ geom-nurbs = { path = "../geom-nurbs" }
 geom-run = { path = "../geom-run" }
 geom-surface = { path = "../geom-surface" }
 geom-test = { path = "../geom-test" }
+# The intersect target (G158): the code under test. The shapes and boxes its cases are made of come
+# from the kernel crates listed below for the make and arenas targets (ours, MPL-2.0).
+geom-intersect = { path = "../geom-intersect" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
 geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
 # MPL-2.0; development only).
 geom-gen = { path = "../geom-gen" }
+# The planes target (G123): geom-poly's planes and orders, under test (ours, MPL-2.0).
+geom-poly = { path = "../geom-poly" }
 # The make target (G101): geom-make's operations under test, and the kernel crates its inputs and
 # oracles come from (ours, MPL-2.0).
 geom-check = { path = "../geom-check", features = ["full"] }
 geom-make = { path = "../geom-make" }
-# The planes target (G123): geom-poly's planes and orders, under test (ours, MPL-2.0).
-geom-poly = { path = "../geom-poly" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
-geom-op = { path = "../geom-op" }
-geom-topo = { path = "../geom-topo" }
 # The code under test of the cbor target (G91), and the work meter it is read with (MPL-2.0, ours).
 # The code under test of the cbor target (G91; MPL-2.0, ours).
 geom-format = { path = "../geom-format" }

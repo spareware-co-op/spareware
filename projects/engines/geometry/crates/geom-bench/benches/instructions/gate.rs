@@ -2866,3 +2866,34 @@ pub mod make {
         benchmarks = build_box, cylinder, move_box, turn_box
     );
 }
+
+/// geom-intersect's hot paths (piece G158; decision 32.44).
+pub mod intersect {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/sort_items/typical"))]
+    fn sort_items(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/key_circle/typical"))]
+    fn key_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/pair_lines/typical"))]
+    fn pair_lines(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = intersect;
+        benchmarks = sort_items, key_circle, pair_lines
+    );
+}

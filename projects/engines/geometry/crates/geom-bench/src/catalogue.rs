@@ -430,6 +430,11 @@ pub static OPS: &[Op] = &[
     Op { group: "format", name: "cache_key", measures: "geom_format::CacheKey::new", classes: T, prepare: |c| bind(inputs::format::cache_key(c), kernels::format::cache_key) },
     Op { group: "format", name: "memo_get", measures: "geom_format::MemoStore::get", classes: T, prepare: |c| bind(inputs::format::memo_get(c), kernels::format::memo_get) },
     Op { group: "format", name: "next_version", measures: "geom_format::BodyVersion::next", classes: T, prepare: |c| bind(inputs::format::next_version(c), kernels::format::next_version) },
+    // geom-intersect's canonical order (piece G158; decision 32.44): a list of items sorted and
+    // proven disjoint, a key read through a circle's NURBS form, and a pair of keys put in order.
+    Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
+    Op { group: "intersect", name: "key_circle", measures: "geom_intersect::CanonicalKey::of_curve", classes: T, prepare: |c| bind(inputs::intersect::circles(c), kernels::intersect::keys) },
+    Op { group: "intersect", name: "pair_lines", measures: "geom_intersect::order::pair", classes: T, prepare: |c| bind(inputs::intersect::lines(c), kernels::intersect::paired) },
     // geom-make's hot paths (piece G101; decision 32.44): a primitive built and a body moved, named,
     // published and checked.
     Op { group: "make", name: "build_box", measures: "geom_make::primitive::make_box", classes: T, prepare: |c| bind(inputs::make::boxes(c), kernels::make::boxes) },
@@ -443,7 +448,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 35] = [
+pub const GROUPS: [&str; 36] = [
     "predicate",
     "sign",
     "wide",
@@ -478,6 +483,7 @@ pub const GROUPS: [&str; 35] = [
     "brent",
     "quadrature",
     "linalg",
+    "intersect",
     "make",
 ];
 

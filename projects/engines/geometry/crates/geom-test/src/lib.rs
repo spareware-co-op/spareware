@@ -218,6 +218,8 @@
 //!   the kinds and transforms the law catalogue checks.
 //! - `geom-format` and `geom-run` (MPL-2.0, ours), dependencies (G97): a fixture's operation log is
 //!   a standalone native file, and the meter its readers take.
+//! - `geom-intersect` (MPL-2.0, ours), a dependency (G160): the result type [`ssi`] reads an
+//!   answer from.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -274,6 +276,7 @@ pub mod rust_source;
 pub mod scan;
 pub mod second_check;
 pub mod seed;
+pub mod ssi;
 pub mod trip;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};

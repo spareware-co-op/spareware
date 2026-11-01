@@ -7,6 +7,7 @@
 //! changed input. It has fourteen targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! changed input. It has five targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has eleven targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -42,6 +43,20 @@
 //! and refuse with a typed error; and [`planes`] (G123), `geom-poly`'s canonical planes and
 //! arrangement predicates give one entry to one plane and one order to any points or rays. The
 //! layout every target follows, and how each engine runs it locally and in CI,
+//! returns the exact value of its description, evaluated in big integers; [`cbor`] (G91),
+//! `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input
+//! and convert both ways bit for bit; [`cache`] (G105), `geom-format`'s memo store keeps to its
+//! bound, forgets the entry used longest ago first and answers only where the caller's budget
+//! covers the stored run; [`arenas`] (G80), `geom-topo` publishes exactly the arenas its rules
+//! allow, and a body's versions never see each other's edits; and [`make`] (G101), the primitives
+//! and transforms return only what the full checker passes, keep their laws, and refuse with a
+//! typed error; [`planes`] (G123), `geom-poly`'s canonical planes and arrangement predicates
+//! give one entry to one plane and one order to any points or rays; [`sequence`] (G116), whole operation logs replay to the same hash and keep
+//! every law at every step; and [`intersect`] (G158), an intersection's items keep their
+//! invariants against an all-pairs oracle and a pair asked either way round makes one call.
+//! [`adversarial`] holds the generators aimed at chapter 28.5's hard
+//! cases, and [`robustness`] counts how many plain designs succeed. The layout every target
+//! follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -163,6 +178,8 @@
 //! - `geom-format` (MPL-2.0, ours), the code under test of the [`cbor`] target.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
+//! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
+//!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -215,6 +232,7 @@ pub mod boxtree;
 pub mod cache;
 pub mod cbor;
 pub mod curves;
+pub mod intersect;
 pub mod linalg;
 pub mod make;
 pub mod maths;
