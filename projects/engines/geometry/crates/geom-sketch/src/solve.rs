@@ -202,19 +202,18 @@ fn worst(v: &[f64]) -> (f64, usize) {
 }
 
 impl Stage {
+    /// The stage of `part`. `local` maps each of the assembly's rows to nothing, and is left so:
+    /// one map serves every stage, so that a plan costs the size of its parts, not the stages
+    /// times the rows.
     fn new(
         assembly: &Assembly,
         part: &Part,
         square: bool,
+        local: &mut [Option<usize>],
         work: &mut Work,
     ) -> Result<Stage, SketchError> {
         let (rows, columns) = (part.equations.clone(), part.variables.clone());
         let jacobian = assembly.jacobian();
-        let mut local = Vec::new();
-        local
-            .try_reserve_exact(jacobian.rows())
-            .map_err(|_| SketchError::OutOfMemory)?;
-        local.resize(jacobian.rows(), None);
         let mut rules: Vec<usize> = Vec::new();
         for (i, &row) in rows.iter().enumerate() {
             *local.get_mut(row).ok_or(SketchError::Internal)? = Some(i);
@@ -233,6 +232,9 @@ impl Stage {
                     push(&mut entries, (i, k, jacobian.place_of(row, column)?))?;
                 }
             }
+        }
+        for &row in &rows {
+            *local.get_mut(row).ok_or(SketchError::Internal)? = None;
         }
         let (m, n) = (rows.len(), columns.len());
         let mut triplets = Vec::new();
@@ -522,6 +524,11 @@ impl Plan {
         let mut stages = Vec::new();
         let mut freedoms = 0_usize;
         let mut work = Work::new(u64::MAX);
+        let mut local = Vec::new();
+        local
+            .try_reserve_exact(assembly.jacobian().rows())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        local.resize(assembly.jacobian().rows(), None);
         for component in &analysis.components {
             freedoms = freedoms
                 .checked_add(component.freedoms)
@@ -531,7 +538,10 @@ impl Plan {
                 .chain(core::iter::once((&component.under, false)));
             for (part, square) in parts {
                 if !part.equations.is_empty() {
-                    push(&mut stages, Stage::new(&assembly, part, square, &mut work)?)?;
+                    push(
+                        &mut stages,
+                        Stage::new(&assembly, part, square, &mut local, &mut work)?,
+                    )?;
                 }
             }
         }
