@@ -289,8 +289,8 @@ struct Corner {
     point: Tpi,
     x: [I320; 3],
     w: I256,
-    /// X and w in machine words, where all four fit.
-    narrow: Option<([i128; 3], i128)>,
+    /// Each coordinate `X_i` / w as a [`Cell`], where X and w fit machine words.
+    cells: Option<[Cell; 3]>,
     /// The planes of every corner at this point: its own, until [`numbered`] joins them.
     through: Vec<Plane>,
 }
@@ -317,21 +317,60 @@ fn narrow_order(a: i128, b: i128, c: i128, d: i128) -> Option<Ordering> {
     Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
 }
 
-/// X and w in machine words, if all four fit.
-fn narrowed(x: &[I320; 3], w: &I256) -> Option<([i128; 3], i128)> {
-    let mut words = [0; 3];
-    for (word, coordinate) in words.iter_mut().zip(x) {
-        *word = coordinate.to_i128()?;
-    }
-    Some((words, w.to_i128()?))
+/// A ratio v / over, over positive, as its floor and its remainder in [0, over): two ratios
+/// compare by their floors, and only equal floors with neither remainder zero need
+/// [`narrow_order`]'s products. A corner of a building's faces on the grid has every remainder
+/// zero, and so do most of a line's coordinates over a short direction.
+#[derive(Clone, Copy, Debug)]
+struct Cell {
+    floor: i128,
+    rest: i128,
+    over: i128,
 }
 
-/// Points lexicographically: in machine words where both fit, else at most 2^294 · 2^252 in 576
-/// bits. The first coordinate that differs decides, and the rest are not compared.
+impl Cell {
+    /// v / `over` split, or `None` unless `over` is positive.
+    fn new(v: i128, over: i128) -> Option<Self> {
+        if over <= 0 {
+            return None;
+        }
+        Some(Cell {
+            floor: v.checked_div_euclid(over)?,
+            rest: v.checked_rem_euclid(over)?,
+            over,
+        })
+    }
+
+    /// The order of the two ratios, exactly.
+    fn order(&self, other: &Cell) -> Option<Ordering> {
+        let by_floor = self.floor.cmp(&other.floor);
+        if by_floor != Ordering::Equal {
+            return Some(by_floor);
+        }
+        if self.rest == 0 || other.rest == 0 {
+            return Some((self.rest != 0).cmp(&(other.rest != 0)));
+        }
+        narrow_order(self.rest, self.over, other.rest, other.over)
+    }
+}
+
+/// Each `X_i` / w as a [`Cell`], if X and w fit machine words.
+fn cells_of(x: &[I320; 3], w: &I256) -> Option<[Cell; 3]> {
+    let over = w.to_i128()?;
+    let [first, second, third] = x;
+    Some([
+        Cell::new(first.to_i128()?, over)?,
+        Cell::new(second.to_i128()?, over)?,
+        Cell::new(third.to_i128()?, over)?,
+    ])
+}
+
+/// Points lexicographically: by [`Cell`]s where both have them, else at most 2^294 · 2^252 in
+/// 576 bits. The first coordinate that differs decides, and the rest are not compared.
 fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
     for i in 0..3 {
-        let order = if let (Some((own, under)), Some((other, beneath))) = (&a.narrow, &b.narrow) {
-            narrow_order(*own.get(i)?, *under, *other.get(i)?, *beneath)?
+        let order = if let (Some(own), Some(other)) = (&a.cells, &b.cells) {
+            own.get(i)?.order(other.get(i)?)?
         } else {
             ratio_order::<5, 4, 9>(a.x.get(i)?, &a.w, b.x.get(i)?, &b.w)?
         };
@@ -362,7 +401,7 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
     };
     Ok(Corner {
         point,
-        narrow: narrowed(&x, &w),
+        cells: cells_of(&x, &w),
         x,
         w,
         through,
@@ -375,8 +414,9 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
 struct LineKey {
     coordinates: [I256; 6],
     first: usize,
-    /// The coordinates in machine words, where all six fit.
-    narrow: Option<[i128; 6]>,
+    /// Each coordinate over the direction's first non-zero component as a [`Cell`], where all
+    /// six fit machine words.
+    cells: Option<[Cell; 6]>,
 }
 
 /// The line where `p` and `q` meet: direction `n_p` × `n_q`, moment `d_p` `n_q` − `d_q` `n_p`, which
@@ -411,24 +451,30 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
         }
     }
     Ok(LineKey {
-        narrow: narrow_line(&coordinates),
+        cells: line_cells(&coordinates, first),
         coordinates,
         first,
     })
 }
 
-/// A line's coordinates in machine words, if all six fit.
-fn narrow_line(coordinates: &[I256; 6]) -> Option<[i128; 6]> {
-    let mut words = [0; 6];
-    for (word, coordinate) in words.iter_mut().zip(coordinates) {
-        *word = coordinate.to_i128()?;
+/// A line's coordinates over its `first` as [`Cell`]s, if all six fit machine words.
+fn line_cells(coordinates: &[I256; 6], first: usize) -> Option<[Cell; 6]> {
+    let over = coordinates.get(first)?.to_i128()?;
+    let mut cells = [Cell {
+        floor: 0,
+        rest: 0,
+        over,
+    }; 6];
+    for (cell, coordinate) in cells.iter_mut().zip(coordinates) {
+        *cell = Cell::new(coordinate.to_i128()?, over)?;
     }
-    Some(words)
+    Some(cells)
 }
 
 /// The order of two lines, equal when they are one line: by which component of the direction comes
-/// first, then every coordinate over that component, in machine words where both fit, else below
-/// 2^418 in 512 bits. The first coordinate that differs decides, and the rest are not compared.
+/// first, then every coordinate over that component, by [`Cell`]s where both have them, else
+/// below 2^418 in 512 bits. The first coordinate that differs decides, and the rest are not
+/// compared.
 fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     let order = a.first.cmp(&b.first);
     if order != Ordering::Equal {
@@ -436,8 +482,8 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     }
     let over = a.first;
     for i in 0..6 {
-        let order = if let (Some(p), Some(q)) = (&a.narrow, &b.narrow) {
-            narrow_order(*p.get(i)?, *p.get(over)?, *q.get(i)?, *q.get(over)?)?
+        let order = if let (Some(p), Some(q)) = (&a.cells, &b.cells) {
+            p.get(i)?.order(q.get(i)?)?
         } else {
             let (p, q) = (&a.coordinates, &b.coordinates);
             ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?
@@ -1353,4 +1399,71 @@ pub fn merge_with(
         shells,
         piece_face,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::arithmetic_side_effects,
+        clippy::many_single_char_names,
+        clippy::unwrap_used,
+        reason = "tests: native arithmetic, ratios a / b and c / d, and a failure stops the test"
+    )]
+
+    use core::cmp::Ordering;
+
+    use num_bigint::BigInt;
+    use proptest::prelude::*;
+
+    use super::Cell;
+
+    /// a / b against c / d, b and d positive, by cross-multiplying big integers.
+    fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
+        (BigInt::from(a) * BigInt::from(d)).cmp(&(BigInt::from(c) * BigInt::from(b)))
+    }
+
+    fn agrees(a: i128, b: i128, c: i128, d: i128) {
+        let order = Cell::new(a, b).unwrap().order(&Cell::new(c, d).unwrap());
+        assert_eq!(
+            order,
+            Some(exact(a, b, c, d)),
+            "{a} / {b} against {c} / {d}"
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn cells_order_as_their_ratios_when_ties_are_common(
+            a in -40i128..40, b in 1i128..9, c in -40i128..40, d in 1i128..9,
+        ) {
+            agrees(a, b, c, d);
+        }
+
+        #[test]
+        fn cells_order_as_their_ratios_across_i128(
+            a in any::<i128>(), b in 1i128.., c in any::<i128>(), d in 1i128..,
+        ) {
+            agrees(a, b, c, d);
+        }
+    }
+
+    #[test]
+    fn cells_order_at_the_ends_of_i128() {
+        for (a, b) in [
+            (i128::MIN, 1),
+            (i128::MAX, 1),
+            (i128::MIN, i128::MAX),
+            (-1, i128::MAX),
+        ] {
+            for (c, d) in [(i128::MIN, 3), (i128::MAX, 2), (0, 1), (1, i128::MAX)] {
+                agrees(a, b, c, d);
+            }
+        }
+    }
+
+    #[test]
+    fn a_divisor_that_is_not_positive_has_no_cell() {
+        assert!(Cell::new(1, 0).is_none());
+        assert!(Cell::new(1, -2).is_none());
+    }
 }
