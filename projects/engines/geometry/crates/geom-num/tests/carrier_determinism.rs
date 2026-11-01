@@ -15,7 +15,11 @@
     clippy::cast_sign_loss,
     reason = "the corpus generator; the rules are for kernel code"
 )]
-#![allow(clippy::unwrap_used, clippy::panic)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "a, b and c are a line's, x, y and w a point's"
+)]
+#![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
 use geom_num::NumError;
 use geom_num::Sign;

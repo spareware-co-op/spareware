@@ -717,7 +717,9 @@ fn para(out: &mut String, lead: &str, first: &str, rest: &str, text: &str) {
             .saturating_add(word.chars().count());
         if !empty && needed > WIDTH {
             let carried = if matches!(word, "+" | "-") {
-                current.rsplit_once(' ').map(|(kept, last)| (kept.to_owned(), last.to_owned()))
+                current
+                    .rsplit_once(' ')
+                    .map(|(kept, last)| (kept.to_owned(), last.to_owned()))
             } else {
                 None
             };

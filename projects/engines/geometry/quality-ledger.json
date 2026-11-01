@@ -5169,6 +5169,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
+      "mutant": "replace below -> i128 with 0",
+      "line_text": "(1_i128 << bits).saturating_sub(1)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
+      "mutant": "replace fits -> bool with false",
+      "line_text": "v.unsigned_abs() <= below(bits).unsigned_abs()",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
+      "mutant": "replace <= with > in fits",
+      "line_text": "v.unsigned_abs() <= below(bits).unsigned_abs()",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
     }
   ],
   "coverage_off": [

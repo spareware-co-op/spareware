@@ -215,7 +215,10 @@ impl Ellipse2 {
     /// The quadratic form of its equation: A, B and C of A x² + B x y + C y², about its centre.
     pub(crate) fn form(&self) -> Result<[Big; 3], NumError> {
         let [mx, my] = self.major.map(big);
-        let (p2, q2) = (mul(&big(self.p), &big(self.p))?, mul(&big(self.q), &big(self.q))?);
+        let (p2, q2) = (
+            mul(&big(self.p), &big(self.p))?,
+            mul(&big(self.q), &big(self.q))?,
+        );
         let (xx, yy) = (mul(&mx, &mx)?, mul(&my, &my)?);
         let xy = mul(&mx, &my)?;
         let shear = sub(&p2, &q2)?;
@@ -391,11 +394,7 @@ impl Conic {
     pub fn of_round(round: &Round) -> Result<Conic, NumError> {
         let on = round.on();
         let ([cx, cy], w) = round.centre().coordinates();
-        let (w, cx, cy) = (
-            Big::from_i128(w),
-            Big::from_i128(cx),
-            Big::from_i128(cy),
-        );
+        let (w, cx, cy) = (Big::from_i128(w), Big::from_i128(cx), Big::from_i128(cy));
         let dx = sub(&cx, &mul(&w, &big(on.x.get()))?)?;
         let dy = sub(&cy, &mul(&w, &big(on.y.get()))?)?;
         let turned = |v: &Big| sub(&big(0), &add(v, v)?);

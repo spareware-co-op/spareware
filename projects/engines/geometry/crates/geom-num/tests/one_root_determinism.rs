@@ -14,6 +14,10 @@
     clippy::cast_sign_loss,
     reason = "the corpus generator; the rules are for kernel code"
 )]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "c, d, e, l, m, p, q, s, u and v are the corpus's curves and points"
+)]
 #![allow(clippy::unwrap_used, clippy::panic)]
 
 use geom_num::arc::{Arc2, Circle2, RADIUS_BITS, Round};

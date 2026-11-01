@@ -1126,9 +1126,8 @@ pub fn compare(
     if !OPEN.contains(&piece) {
         return Ok(Sign::Zero);
     }
-    let simple = |quartic: &Quartic| {
-        piece.open_on_unit(&square_free(&primitive(&widened(&quartic.c)?)?)?)
-    };
+    let simple =
+        |quartic: &Quartic| piece.open_on_unit(&square_free(&primitive(&widened(&quartic.c)?)?)?);
     let x = order(
         Stretch::of(p)?,
         &simple(first)?,

@@ -2640,7 +2640,7 @@ fn the_conic_classes_are_what_they_say() {
     for class in [Typical, Degenerate, Extreme] {
         assert_eq!(c::of_ellipse(class).len(), BATCH, "{class}");
         assert_eq!(c::against_ellipse(class).len(), BATCH, "{class}");
-        assert!(c::compare(class).len() >= BATCH - 1, "{class}");
+        assert_eq!(c::compare(class).len(), BATCH, "{class}");
     }
     assert!(
         c::side(Degenerate)
@@ -2692,20 +2692,16 @@ fn the_conic_classes_are_what_they_say() {
                 gp::ellipse_side::filter(x, y, w, k, mx, my, p, q).is_some()
             })
     );
-    assert!(
-        i::ellipse_side_filter(NearlyDegenerate)
-            .iter()
-            .all(|&([x, y, w], k, [mx, my, p, q])| {
-                gp::ellipse_side::filter(x, y, w, k, mx, my, p, q).is_none()
-            })
-    );
-    assert!(
-        i::ellipse_line_filter(NearlyDegenerate)
-            .iter()
-            .all(|&([a, b, d], k, [mx, my, p, q])| {
-                gp::ellipse_line::filter(a, b, d, k, mx, my, p, q).is_none()
-            })
-    );
+    assert!(i::ellipse_side_filter(NearlyDegenerate).iter().all(
+        |&([x, y, w], k, [mx, my, p, q])| {
+            gp::ellipse_side::filter(x, y, w, k, mx, my, p, q).is_none()
+        }
+    ));
+    assert!(i::ellipse_line_filter(NearlyDegenerate).iter().all(
+        |&([a, b, d], k, [mx, my, p, q])| {
+            gp::ellipse_line::filter(a, b, d, k, mx, my, p, q).is_none()
+        }
+    ));
     assert!(
         i::ellipse_line_value(Degenerate)
             .iter()

@@ -275,7 +275,12 @@ struct Part {
 
 impl Crossing2 {
     /// Makes a crossing from its integers, its enclosure from theirs.
-    fn from_parts(a: [Stored; 2], b: [Stored; 2], k: Stored, w: Stored) -> Result<Crossing2, NumError> {
+    fn from_parts(
+        a: [Stored; 2],
+        b: [Stored; 2],
+        k: Stored,
+        w: Stored,
+    ) -> Result<Crossing2, NumError> {
         let root = enclose(&k)?.sqrt()?;
         let weight = enclose(&w)?;
         let coordinate = |a: &Stored, b: &Stored| -> Result<Interval, NumError> {
@@ -659,9 +664,8 @@ impl Crossing2 {
         let [mx, my] = ellipse.major().map(Big::from_i64);
         let length = add(&mul(&mx, &mx)?, &mul(&my, &my)?)?;
         let scale = twice(&mul(&p, &length)?)?;
-        let stored = |v: Big| -> Result<Stored, NumError> {
-            v.resize().ok_or(NumError::BudgetExceeded)
-        };
+        let stored =
+            |v: Big| -> Result<Stored, NumError> { v.resize().ok_or(NumError::BudgetExceeded) };
         let weight = twice(&e)?;
         let lead_x = add(&mul(&cx, &weight)?, &mul(&h, ax)?)?;
         let lead_y = add(&mul(&cy, &weight)?, &mul(&h, ay)?)?;
@@ -671,7 +675,12 @@ impl Crossing2 {
             Root::First => [stored(neg(&bx)?)?, stored(neg(&by)?)?],
             Root::Second => [stored(bx)?, stored(by)?],
         };
-        Crossing2::from_parts([stored(lead_x)?, stored(lead_y)?], bs, stored(k)?, stored(weight)?)
+        Crossing2::from_parts(
+            [stored(lead_x)?, stored(lead_y)?],
+            bs,
+            stored(k)?,
+            stored(weight)?,
+        )
     }
 
     /// Where it lies against the ellipse `e`: [`Sign::Negative`] inside, [`Sign::Zero`] on it,

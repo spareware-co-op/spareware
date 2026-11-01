@@ -103,7 +103,10 @@ impl Rng {
     fn ellipse(&mut self) -> Ellipse2 {
         loop {
             let centre = self.grid();
-            let major = [self.signed(RADIUS_BITS) as i64, self.signed(RADIUS_BITS) as i64];
+            let major = [
+                self.signed(RADIUS_BITS) as i64,
+                self.signed(RADIUS_BITS) as i64,
+            ];
             let q = 1 + (self.signed(RATIO_BITS).unsigned_abs() as i64);
             let p = 1 + (self.signed(RATIO_BITS).unsigned_abs() as i64) % q;
             if let Ok(e) = Ellipse2::new(centre, major, p, q) {
@@ -259,8 +262,14 @@ fn every_stretch_of_the_line_and_every_cut_is_found() {
 fn every_multiplicity_is_found() {
     use Piece::*;
     let (a, b) = ((3, 1), (5, 4));
-    assert_eq!(found(&quartic(&[a, a, b, b], &[])), [(Above, 2), (Above, 2)]);
-    assert_eq!(found(&quartic(&[a, a, a, b], &[])), [(Above, 3), (Above, 1)]);
+    assert_eq!(
+        found(&quartic(&[a, a, b, b], &[])),
+        [(Above, 2), (Above, 2)]
+    );
+    assert_eq!(
+        found(&quartic(&[a, a, a, b], &[])),
+        [(Above, 3), (Above, 1)]
+    );
     assert_eq!(found(&quartic(&[a, a, a, a], &[])), [(Above, 4)]);
     assert_eq!(
         found(&quartic(&[a, a, (1, -2), (3, 7)], &[])),
@@ -318,12 +327,12 @@ fn roots_a_hair_apart_stay_apart() {
     // 1/3 and 1/3 + 2^−70, past the depth where the fast path gives up, beside a double root.
     let s = 3_i128 << 70;
     let q = quartic(&[(s, s / 3), (s, s / 3 + 3), (1, 2), (1, 2)], &[]);
-    assert_eq!(
-        found(&q),
-        [(Above, 1), (Above, 1), (FarAbove, 2)]
-    );
+    assert_eq!(found(&q), [(Above, 1), (Above, 1), (FarAbove, 2)]);
     let roots: Vec<RealRoot> = q.roots().unwrap().iter().copied().collect();
-    assert_eq!(compare(&q, &roots[0], &q, &roots[1]).unwrap(), Sign::Negative);
+    assert_eq!(
+        compare(&q, &roots[0], &q, &roots[1]).unwrap(),
+        Sign::Negative
+    );
     let (third, at) = single(3, 1);
     assert_eq!(compare(&third, &at, &q, &roots[0]).unwrap(), Sign::Zero);
     assert_eq!(compare(&third, &at, &q, &roots[1]).unwrap(), Sign::Negative);
@@ -413,10 +422,8 @@ fn random_quartics_give_back_their_roots() {
             (_, 0) => Ordering::Less,
             _ => (a.1 * b.0).cmp(&(b.1 * a.0)),
         });
-        let expected: Vec<(Piece, u8)> = roots
-            .iter()
-            .map(|&(a, b, m)| (piece_of(a, b), m))
-            .collect();
+        let expected: Vec<(Piece, u8)> =
+            roots.iter().map(|&(a, b, m)| (piece_of(a, b), m)).collect();
         assert_eq!(found(&q), expected, "{roots:?}");
         // Each against each, by rational order.
         let list: Vec<RealRoot> = q.roots().unwrap().iter().copied().collect();
@@ -468,13 +475,22 @@ fn roots_of_two_quartics_compare_exactly() {
     }
     // √2 and √(2 + 2^−80): no root in common, a hair apart.
     let k = 1_i128 << 80;
-    let (near, far) = (quartic(&[], &[two, [1, 0, 1]]), quartic(&[], &[[-(2 * k + 1), 0, k], [1, 0, 1]]));
+    let (near, far) = (
+        quartic(&[], &[two, [1, 0, 1]]),
+        quartic(&[], &[[-(2 * k + 1), 0, k], [1, 0, 1]]),
+    );
     let (lo, hi): (Vec<RealRoot>, Vec<RealRoot>) = (
         near.roots().unwrap().iter().copied().collect(),
         far.roots().unwrap().iter().copied().collect(),
     );
-    assert_eq!(compare(&near, &lo[1], &far, &hi[1]).unwrap(), Sign::Negative);
-    assert_eq!(compare(&near, &lo[0], &far, &hi[0]).unwrap(), Sign::Positive);
+    assert_eq!(
+        compare(&near, &lo[1], &far, &hi[1]).unwrap(),
+        Sign::Negative
+    );
+    assert_eq!(
+        compare(&near, &lo[0], &far, &hi[0]).unwrap(),
+        Sign::Positive
+    );
 }
 
 #[test]
@@ -514,7 +530,10 @@ fn whole(e: &Ellipse2) -> Whole {
     let [mx, my] = e.major();
     let (p, q) = e.ratio();
     Whole {
-        c: [IBig::from(e.centre().x.get()), IBig::from(e.centre().y.get())],
+        c: [
+            IBig::from(e.centre().x.get()),
+            IBig::from(e.centre().y.get()),
+        ],
         m: [IBig::from(mx), IBig::from(my)],
         p: IBig::from(p),
         q: IBig::from(q),
@@ -729,7 +748,10 @@ fn one_curve_twice_is_the_same() {
     let c = Circle2::new(p2(1, 2), 25).unwrap();
     let along = ellipse((1, 2), [15, 20], 1, 1);
     assert!(is_same(&along, &Conic::of_circle(&c).unwrap()));
-    assert!(is_same(&Ellipse2::of_circle(&c).unwrap(), &Conic::of_ellipse(&along).unwrap()));
+    assert!(is_same(
+        &Ellipse2::of_circle(&c).unwrap(),
+        &Conic::of_ellipse(&along).unwrap()
+    ));
     let round = Round::new(p2(26, 2), p2(1, 2).into());
     assert!(is_same(&along, &Conic::of_round(&round).unwrap()));
 }
@@ -747,10 +769,7 @@ fn a_crossing_at_the_far_end_is_not_lost() {
 #[test]
 fn four_crossings_come_in_order_along_each_curve() {
     use Piece::*;
-    let (a, b) = (
-        ellipse((0, 0), [5, 0], 3, 5),
-        ellipse((0, 0), [0, 5], 3, 5),
-    );
+    let (a, b) = (ellipse((0, 0), [5, 0], 3, 5), ellipse((0, 0), [0, 5], 3, 5));
     let order = [(FarBelow, 1), (Below, 1), (Above, 1), (FarAbove, 1)];
     assert_eq!(contacts(&a, &Conic::of_ellipse(&b).unwrap()), order);
     assert_eq!(contacts(&b, &Conic::of_ellipse(&a).unwrap()), order);
@@ -811,13 +830,8 @@ fn each_root_stands_between_the_signs_of_the_other_curve() {
         let e = rng.ellipse();
         let other = rng.ellipse();
         // Near enough to meet, often.
-        let shifted = Ellipse2::new(
-            e.centre(),
-            other.major(),
-            other.ratio().0,
-            other.ratio().1,
-        )
-        .unwrap();
+        let shifted =
+            Ellipse2::new(e.centre(), other.major(), other.ratio().0, other.ratio().1).unwrap();
         let conic = Conic::of_ellipse(&shifted).unwrap();
         let Meeting::At { quartic, roots } = e.meeting(&conic).unwrap() else {
             continue;
@@ -853,7 +867,8 @@ fn random_tangent_circles_are_double_roots() {
     // A vertex of an ellipse along a Pythagorean axis, and a circle on the axis through it.
     let mut rng = Rng::new();
     for _ in 0..cases(300) {
-        let (a, b, c) = [(3, 4, 5), (5, 12, 13), (8, 15, 17), (7, 24, 25)][(rng.next() % 4) as usize];
+        let (a, b, c) =
+            [(3, 4, 5), (5, 12, 13), (8, 15, 17), (7, 24, 25)][(rng.next() % 4) as usize];
         let k = 1 + (rng.signed(24).unsigned_abs() as i64);
         let lambda = 1 + (rng.signed(8).unsigned_abs() as i64);
         let (mx, my) = (a * k, b * k);
@@ -1010,9 +1025,18 @@ fn one_step_from_an_ellipse_is_decided_by_the_exact_path() {
     // Two quartics with a root a step apart at the smallest step of a ratio.
     let (near, at_near) = single(1 << 60, 1 << 59);
     let (next, at_next) = single(1 << 60, (1 << 59) + 1);
-    assert_eq!(compare(&near, &at_near, &next, &at_next).unwrap(), Sign::Negative);
-    assert_eq!(compare(&next, &at_next, &near, &at_near).unwrap(), Sign::Positive);
-    assert_eq!(compare(&near, &at_near, &near, &at_near).unwrap(), Sign::Zero);
+    assert_eq!(
+        compare(&near, &at_near, &next, &at_next).unwrap(),
+        Sign::Negative
+    );
+    assert_eq!(
+        compare(&next, &at_next, &near, &at_near).unwrap(),
+        Sign::Positive
+    );
+    assert_eq!(
+        compare(&near, &at_near, &near, &at_near).unwrap(),
+        Sign::Zero
+    );
 }
 
 fn crossed(family: impl Fn(u32) -> (Option<Sign>, Sign, Sign)) {
@@ -1124,7 +1148,12 @@ fn the_extreme_values_reach_every_width_and_every_step_fits() {
         Ellipse2::new(p2(0, 0), [1, 0], 1, q + 1).err(),
         Some(NumError::BudgetExceeded)
     );
-    for (major, a, b) in [([0, 0], 1, 1), ([1, 0], 0, 1), ([1, 0], 3, 2), ([1, 0], 2, 4)] {
+    for (major, a, b) in [
+        ([0, 0], 1, 1),
+        ([1, 0], 0, 1),
+        ([1, 0], 3, 2),
+        ([1, 0], 2, 4),
+    ] {
         assert_eq!(
             Ellipse2::new(p2(0, 0), major, a, b).err(),
             Some(NumError::Degenerate)
@@ -1172,8 +1201,8 @@ fn ellipses_keep_their_laws() {
     // A pair's contacts are the same set from either curve.
     for _ in 0..cases(200) {
         let (e, other) = (rng.ellipse(), rng.ellipse());
-        let there = Ellipse2::new(e.centre(), other.major(), other.ratio().0, other.ratio().1)
-            .unwrap();
+        let there =
+            Ellipse2::new(e.centre(), other.major(), other.ratio().0, other.ratio().1).unwrap();
         let (a, b) = (
             e.meeting(&Conic::of_ellipse(&there).unwrap()).unwrap(),
             there.meeting(&Conic::of_ellipse(&e).unwrap()).unwrap(),
