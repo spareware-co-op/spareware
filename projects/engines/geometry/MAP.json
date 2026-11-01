@@ -12954,6 +12954,30 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the jobs; a judgement is one parse and one solve.",
+          "does": "[`jobs`] draws a night's sketches for one oracle from a true configuration: a fixed first point, then each further point fixed by two equations of kinds that oracle has (two distances, a midpoint, a mirror image, a distance from a line, a level or plumb line of a length, an angle, a parallel or a right angle with a length, an equal length), every value measured on the truth, and every point but the fixed one starting a little away from it. A job is the neutral description: each harness in the oracle repository writes it in its own solver's form. [`judge`] writes the same job in `sketch v1`, solves it with `geom_sketch::solve`, and holds both answers to the truth.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/sketches.rs",
+          "guarantees": [
+            "**Drawn from a truth.** Every value is measured on a known configuration, so a difference is settled on the spot: the truth says which side is off.",
+            "**Each oracle sees only what it can state.** fiksi has no midpoint and no mirror rule, so its sketches are drawn from the other kinds; level and plumb lines its harness states as parallel to a fixed axis.",
+            "**Within a tolerance, never bits** (15.16): the kernel's points and ezpz's agree within a grid step of the truth. fiksi stops once its residuals' sum of squares is below 1e-8 in a system divided by the root mean square of its coordinates and lengths (`solve/lm.rs`, `assemble/mod.rs` at the pinned commit), so its points are only as near as that: its answer agrees within [`FIKSI_SLACK`] times 1e-4 of the job's scale ([`near`]), still far inside the two units that separate a sketch's branches.",
+            "**Deterministic.** A seed gives the same jobs on every target."
+          ],
+          "job": "Sketch solvers as oracles: ezpz and fiksi, each out of process, against the block solver of `geom-sketch` (piece G222's differential runs; chapters 15.16 and 28.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 15.16's verdict on ezpz and fiksi (\"running both as differential test oracles, solved positions compared within tolerance, not bits\"), and 28.10 (`projects/engines/geometry/architecture/15-sketches.md`, `projects/engines/geometry/architecture/28-testing.md`). Both run out of process: ezpz's numerics bring in `paste`, which the `RustSec` database marks unmaintained and `deny.toml` refuses anywhere in the graph, and fiksi is not on crates.io, whose registry is the only source `deny.toml` allows. The fuller sketch corpus and the other solvers come with G231."
+          },
+          "path": "geom_test::oracle::sketches",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the jobs; a removal job costs one knot insertion to draw.",
           "does": "[`jobs`] draws a night's seeded curves and what to do with each: evaluate a point, insert a knot, remove one, or raise the degree, the layers decision 32.23 allows. A job is the same line [`super::geomdl`] writes, and an answer is judged the same way ([`super::geomdl::judge_for`]). A knot removal needs a knot that can go, so its curve is drawn and then refined by that knot.",
           "family": [],

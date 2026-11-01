@@ -28,6 +28,9 @@ geom-topo = { path = "../geom-topo" }
 geom-curve = { path = "../geom-curve" }
 geom-intersect = { path = "../geom-intersect" }
 geom-surface = { path = "../geom-surface" }
+# The sketch oracles (G222): the block solver the jobs are solved with and the sketch v1 reader they
+# are written for. Ours, MPL-2.0.
+geom-sketch = { path = "../geom-sketch" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 # float_roundtrip: a corpus double read back is the double the corpus wrote (G160).
 serde_json = { version = "1.0.149", features = ["float_roundtrip"] }

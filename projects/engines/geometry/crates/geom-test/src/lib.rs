@@ -203,6 +203,8 @@
 //!   law catalogue checks (G69), and what [`ssi`] builds a corpus case from (G160).
 //! - `geom-intersect` (MPL-2.0, ours), a dependency (G160): the result type [`ssi`] reads an answer
 //!   from.
+//! - `geom-sketch` (MPL-2.0, ours), a dependency (G222): the block solver [`oracle::sketches`] solves
+//!   a sketch job with, and the `sketch v1` reader it writes the job for.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
