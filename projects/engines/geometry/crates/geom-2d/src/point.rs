@@ -246,8 +246,10 @@ impl Pt2 {
         Ok(match self.place(carriers)? {
             Place::OneRoot(z) => match target {
                 Curve2::Line(l) => z.side(l)? == Sign::Zero,
+                Curve2::Fine(l) => z.side_of_fine(l)? == Sign::Zero,
                 Curve2::Circle(Circle2::Grid(c)) => z.against_circle(c)? == Sign::Zero,
                 Curve2::Circle(Circle2::Round(c)) => z.against_round(c)? == Sign::Zero,
+                Curve2::Circle(Circle2::Disc(c)) => z.against_disc(c)? == Sign::Zero,
                 Curve2::Ellipse(e) => z.against_ellipse(e)? == Sign::Zero,
             },
             Place::Conic {

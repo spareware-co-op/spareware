@@ -46,14 +46,13 @@ use geom_num::carrier::{Carrier, FineLine, Rational2};
 use geom_num::conic::{Conic, Ellipse2, Meeting};
 use geom_num::grid::P2;
 use geom_num::interval::Interval;
-use geom_num::ladder::ANGULAR;
 use geom_num::one_root::{Root, enclose};
 use geom_num::{DD, Exactness, GridStep, I256, NumError, Real, Sign, Steps};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 
 use crate::accept::Accept;
 use crate::carrier::{Carriers, Circle2, Curve2, CurveIx, Line2};
-use crate::ideal::{self, Aim, Equation, Foot, Pair, Solved, dd_of, dot, minus, norm, over, scaled};
+use crate::ideal::{self, Aim, Equation, Foot, Pair, Solved, dd_of, dot, minus, norm, over};
 use crate::point::{PointError, Pt2};
 
 /// The phase of [`fillet_all`].
@@ -312,29 +311,22 @@ fn aims_about<const N: usize>(
     feet: [Pair; N],
     origin: P2,
 ) -> Result<[Aim; N], PointError> {
-    let mut made = [None; N];
-    for (slot, (target, foot)) in made.iter_mut().zip(targets.iter().zip(feet)) {
-        let conic = target.curve.conic()?;
-        *slot = Some(Aim {
-            equation: Equation::about(&conic, origin)?,
+    let aim = |target: &Target, foot: Pair| -> Result<Aim, PointError> {
+        Ok(Aim {
+            equation: Equation::about(&target.curve.conic()?, origin)?,
             side: unit(target.side)?,
             loose: matches!(target.curve, Curve2::Ellipse(_)),
             foot,
-        });
-    }
-    let mut out = [None; N].map(|_: Option<Aim>| Err(NumError::Degenerate));
-    for (slot, aim) in out.iter_mut().zip(made) {
-        *slot = aim.ok_or(NumError::Degenerate);
-    }
-    let [first, ..] = &out else {
+        })
+    };
+    let (Some(first), Some(foot)) = (targets.first(), feet.first()) else {
         return Err(NumError::Degenerate.into());
     };
-    let first = (*first)?;
-    let mut done = [first; N];
-    for (slot, aim) in done.iter_mut().zip(out) {
-        *slot = aim?;
+    let mut made = [aim(first, *foot)?; N];
+    for (slot, (target, foot)) in made.iter_mut().zip(targets.iter().zip(feet)) {
+        *slot = aim(target, foot)?;
     }
-    Ok(done)
+    Ok(made)
 }
 
 /// A grid point as an offset from `origin`.
@@ -485,11 +477,8 @@ fn larger(a: f64, b: f64) -> f64 {
     if a < b { b } else { a }
 }
 
-/// Which roots of `roots` are nearest the point of angle `aim`, with what the angles of those are.
-fn nearest_two(
-    angles: &[[Interval; 2]],
-    aim: [f64; 2],
-) -> Result<(usize, usize), NumError> {
+/// Which two of `angles` are nearest the angle `aim`.
+fn nearest_two(angles: &[[Interval; 2]], aim: [f64; 2]) -> (usize, usize) {
     let [ax, ay] = aim;
     let mut best = [(f64::INFINITY, 0_usize); 2];
     for (k, [c, s]) in angles.iter().enumerate() {
@@ -503,7 +492,7 @@ fn nearest_two(
         }
     }
     let [(_, i), (_, j)] = best;
-    Ok((i, j))
+    (i, j)
 }
 
 /// What an ellipse and `disc`, whose ideal touch is `foot` about `origin`, have between them. The
@@ -529,16 +518,17 @@ fn ellipse_meet(
     let found = angles.get(..count).ok_or(NumError::Degenerate)?;
     let [mx, my] = ellipse.major();
     let (p, q) = ellipse.ratio();
-    let m = [DD::from_i64(mx), DD::from_i64(my)];
+    let (dx, dy) = (DD::from_i64(mx), DD::from_i64(my));
+    let m = [dx, dy];
     let length = dot(m, m)?;
-    let turned = [m[1_usize.min(1)].negate(), m[0_usize.min(0)]];
+    let turned = [dy.negate(), dx];
     let along = minus(foot.at, from_origin(ellipse.centre(), origin)?)?;
     let ratio = DD::from_i64(q).div(DD::from_i64(p))?;
     let aim = [
         dot(along, m)?.div(length)?.hi(),
         dot(along, turned)?.div(length)?.mul(ratio)?.hi(),
     ];
-    let (first, second) = nearest_two(found, aim)?;
+    let (first, second) = nearest_two(found, aim);
     let at = |k: usize| found.get(k).copied().ok_or(NumError::Degenerate);
     let times = |k: usize| {
         roots
@@ -548,16 +538,10 @@ fn ellipse_meet(
             .ok_or(NumError::Degenerate)
     };
     let name = |k: usize| u8::try_from(k).map_err(|_| NumError::Degenerate);
-    let major = Interval::norm(&[
-        Interval::point(geom_num::math::fma(mx as f64, 1.0, 0.0)?.get())?,
-        Interval::point(geom_num::math::fma(my as f64, 1.0, 0.0)?.get())?,
-    ])?;
+    let (ax, ay) = (exactly(i128::from(mx))?, exactly(i128::from(my))?);
+    let major = Interval::norm(&[ax, ay])?;
     let [cosine, sine] = at(first)?;
-    let (qp, axis) = (
-        exactly(i128::from(q))?.div(exactly(i128::from(p))?)?,
-        [exactly(i128::from(mx))?, exactly(i128::from(my))?],
-    );
-    let [ax, ay] = axis;
+    let qp = exactly(i128::from(q))?.div(exactly(i128::from(p))?)?;
     let back = Interval::point(-unit(side)?)?;
     let spoke = [
         cosine.mul(ax)?.sub(sine.mul(qp)?.mul(ay)?)?.mul(back)?,
@@ -744,10 +728,8 @@ fn fillet_plan(
         from_origin(second.near, origin)?,
     );
     let mut aims = aims_about(targets, [seed, other], origin)?;
-    let start = over(
-        [seed[0_usize.min(0)].add(other[0_usize.min(0)])?, seed[1_usize.min(1)].add(other[1_usize.min(1)])?],
-        DD::from_i64(2),
-    )?;
+    let ([sx, sy], [ox, oy]) = (seed, other);
+    let start = over([sx.add(ox)?, sy.add(oy)?], DD::from_i64(2))?;
     let rough = ideal::with_radius(&mut aims, start, radius)?;
     let centred = shifted(origin, rough.centre)?;
     let moved = from_origin(centred, origin)?;
@@ -894,12 +876,11 @@ pub fn tangent_circle(
         from_origin(b.near, origin)?,
         from_origin(c.near, origin)?,
     ];
-    let [p, q, r] = seeds;
-    let sum = |i: usize| -> Result<DD, NumError> {
-        let at = |s: Pair| s.get(i).copied().ok_or(NumError::Degenerate);
-        at(p)?.add(at(q)?)?.add(at(r)?)
-    };
-    let start = over([sum(0)?, sum(1)?], DD::from_i64(3))?;
+    let [[px, py], [qx, qy], [rx, ry]] = seeds;
+    let start = over(
+        [px.add(qx)?.add(rx)?, py.add(qy)?.add(ry)?],
+        DD::from_i64(3),
+    )?;
     let radius = larger_norm(&seeds, start)?;
     let mut aims = aims_about(&targets, seeds, origin)?;
     let rough = ideal::of_three(&mut aims, start, radius)?;
