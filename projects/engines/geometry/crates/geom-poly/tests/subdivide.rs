@@ -418,6 +418,37 @@ fn the_same_pieces_come_out_on_any_threads() {
 }
 
 #[test]
+fn pieces_come_in_tree_order_however_deep_each_box_goes() {
+    // Six blocks fill the low half, so it goes on splitting after the high half, with one block in
+    // it, has stopped. Tree order still puts everything low first.
+    let mut blocks: Vec<Block> = (0..6)
+        .map(|i| Block {
+            low: [i * 3, 0, 0],
+            high: [i * 3 + 2, 2, 2],
+        })
+        .collect();
+    blocks.push(Block {
+        low: [100, 0, 0],
+        high: [102, 2, 2],
+    });
+    let polygons = polygons(&blocks);
+    let far = 6 * 6;
+    let found = arrange(
+        &Exec::serial(),
+        around(&polygons).unwrap(),
+        Winding::new(),
+        &polygons,
+        8,
+        &[],
+        &mut meter(),
+    )
+    .unwrap();
+    let first = found.iter().position(|c| c.polygon >= far).unwrap();
+    assert!(first > 0);
+    assert!(found[first..].iter().all(|c| c.polygon >= far));
+}
+
+#[test]
 fn a_box_too_thin_to_split_is_a_leaf() {
     let list = polygons(&[A]);
     for cell in [
