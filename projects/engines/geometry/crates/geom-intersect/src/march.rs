@@ -313,6 +313,69 @@ impl System<'_> {
     }
 }
 
+/// The coordinate of space that moves one way along every branch through `b`, if the system there
+/// has at most one point for every value c of it, proven: its interval Jacobian over `b` is regular,
+/// ‖I − Y·J(b)‖∞ < 1 for Y the inverse of its middle. By the mean value theorem, row by row, two
+/// points of `b` with one c would differ by a vector some matrix of J(b) sends to zero, and none
+/// does. c enters only the residual, so one proof serves every c at once. `None` where it is not
+/// proven. This is uniqueness alone, without Krawczyk's existence: [`crate::known`]'s crossing
+/// tubes (12.11) know their curve is there.
+pub(crate) fn unique_over(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    b: &[Interval; 4],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<usize>, IntersectError> {
+    let [u1, v1, u2, v2] = *b;
+    let (one, two) = ((ends(u1), ends(v1)), (ends(u2), ends(v2)));
+    if !(within(first, one) && within(second, two)) {
+        return Ok(None);
+    }
+    let (na, nb) = (normals(first, one, meter)?, normals(second, two, meter)?);
+    if may_be_parallel(&na, &nb)? {
+        return Ok(None);
+    }
+    let tangent = cross(&na, &nb)?;
+    let Some(axis) = tangent.iter().position(|&x| positive(x) || negative(x)) else {
+        return Ok(None);
+    };
+    let none = Charts::default();
+    let system = System {
+        first,
+        second,
+        axis,
+        speeds: [1.0; 4],
+        seams: [&none, &none],
+    };
+    let [p, q, e, d] = b.map(mid).map(point);
+    let Some(here) = system.read(&[p?, q?, e?, d?], meter)? else {
+        return Ok(None);
+    };
+    let Some(over) = system.read(b, meter)? else {
+        return Ok(None);
+    };
+    let Some(y) = inverse(system.jacobian(&here)?.map(|row| row.map(mid))) else {
+        return Ok(None);
+    };
+    let j = system.jacobian(&over)?;
+    for (i, row) in y.iter().enumerate() {
+        // The row's sum of magnitudes, rounded up.
+        let mut sum = point(0.0)?;
+        for col in 0..4 {
+            let mut entry = point(if i == col { 1.0 } else { 0.0 })?;
+            for (yk, jk) in row.iter().zip(&j) {
+                let cell = jk.get(col).copied().ok_or(IntersectError::Internal)?;
+                entry = entry.sub(point(*yk)?.mul(cell)?)?;
+            }
+            sum = sum.add(point(larger(entry.hi(), -entry.lo()))?)?;
+        }
+        if sum.hi() >= 1.0 {
+            return Ok(None);
+        }
+    }
+    Ok(Some(axis))
+}
+
 /// A box of unknowns around the path from `x` along `rates` for a step of `h`, with `pad` of space
 /// to spare: a length that is a wide box in a surface's parameter and a thin one in a plane's unless
 /// each parameter takes it at its own `speeds`.

@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a sphere and seen in silhouette, and planes through a whole sphere's poles.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a sphere and seen in silhouette, planes through a whole sphere's poles, and sheets tangent to a plane along a known line (G174).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -3713,6 +3713,30 @@
           "target": "lib"
         },
         {
+          "cost": "per stretch of a known curve, at most log₂ of its first width over the floor tries, each one Jacobian or one second-order read; each pair of the search then tests its box against the cells, linear in them. Recursion: none.",
+          "does": "a fillet's contact curves, a sweep's seams and an extrusion's side edges arrive as [`Known`] curves, each with its certified bound and its contact. [`subdivide_known`] proves a tube around each stretch of one, cell by cell, and runs [`crate::general::subdivide`]'s search with every pair that lies inside a proven cell taken out: there the known curve is all the two surfaces share. A pair that meets the curve but no cell holds is searched further, and flagged [`Unresolved::KnownCurveUnproven`] at the floor; a stretch no cell covers is searched as any other, and what stays undecided there is flagged the same way.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/known.rs",
+          "guarantees": [
+            "**Only a proven tube is excluded.** A cell is taken out only with its proof: - A crossing: the system of 12.8 has a regular interval Jacobian over the cell, so for every value c of the coordinate the tangent moves along, the cell holds at most one common point (`march::unique_over`). The curve crosses the cell's slab of c, so within it the curve is every common point. - A tangent: across the curve, the other surface's equation read on this one, g(s), has g(0) = 0 and g′(0) = 0 by construction, and its second derivative is proven of one sign over the cell, so g(s) = ½·g″(ξ)·s² has no other zero there (Taylor's theorem with the remainder in an interval). This needs one surface's implicit form with its second derivatives (`geom_surface::ImplicitBound::hessian_box`), so it serves a pair with an analytic surface.",
+            "**The tube is never wider than its proof.** Each cell starts wide and halves until it is proven or narrower than the floor. A second intersection d away from the curve fails every cell reaching past it, so it lies outside the tube and the search finds it or flags it.",
+            "**Nothing is dropped.** A pair is taken out only inside a proven cell; anything else the search settles, splits or flags, and a flag near a known curve says [`Unresolved::KnownCurveUnproven`]."
+          ],
+          "job": "Intersections known by construction: a curve two surfaces are known to meet along, taken out of the general search only where nothing else is proven to meet near it (12.11).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1017/CBO9780511526473",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "chapter 12.11 (`projects/engines/geometry/architecture/12-intersections.md`). Uniqueness from a regular interval matrix: ‖I − Y·A‖ < 1 for every A of the enclosure makes each A nonsingular (A. Neumaier, *Interval Methods for Systems of Equations*, Cambridge University Press (1990), chapter 4, <https://doi.org/10.1017/CBO9780511526473>), and the mean value theorem row by row turns that into one zero. The tangent test is Taylor's theorem with the remainder enclosed (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_intersect::known",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "each box or span takes two reads of the surface's partials and the function, charged to the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with their neighbours; a side's crossing takes log₂(side/floor) reads more. Recursion: none.",
           "does": "[`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines ([`Isocline`]) and envelopes ([`Envelope`]). The domain is cut at the surface's breaks, then each box is excluded, settled or split, and the settled boxes' crossings are joined across their shared sides into branches.",
           "family": [],
@@ -3892,7 +3916,7 @@
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170, seams, poles and knot lines by G173; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170, seams, poles and knot lines by G173, known curves by G174; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {

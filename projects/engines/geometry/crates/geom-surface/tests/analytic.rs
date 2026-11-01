@@ -348,7 +348,14 @@ fn each_kinds_hessian_holds_its_gradients_change() {
             ];
             let y = [x[0] + d[0], x[1] + d[1], x[2] + d[2]];
             let step = [0, 1, 2].map(|k| y[k] - x[k]);
-            let region = [0, 1, 2].map(|k| Interval::new(x[k].min(y[k]), x[k].max(y[k])).unwrap());
+            let region = [0, 1, 2].map(|k| {
+                let (lo, hi) = if x[k] < y[k] {
+                    (x[k], y[k])
+                } else {
+                    (y[k], x[k])
+                };
+                Interval::new(lo, hi).unwrap()
+            });
             let hessian = kind
                 .hessian_box(region)
                 .unwrap()

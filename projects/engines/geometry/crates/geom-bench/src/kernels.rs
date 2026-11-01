@@ -2035,6 +2035,7 @@ pub mod intersect {
     use geom_intersect::curve::{curves, self_crossings};
     use geom_intersect::curve_surface::curve_surface;
     use geom_intersect::general::{Subdivided, subdivide};
+    use geom_intersect::known::{Known, subdivide_known};
     use geom_intersect::march::{Traced, march};
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, LevelCurves, OnImplicit,
@@ -2217,6 +2218,29 @@ pub mod intersect {
             let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
             let found = subdivide(surface, &sphere, 1.0, &mut meter())?;
             march(surface, &sphere, &found, 1.0, 1.0, &mut meter())
+        });
+    }
+
+    /// `subdivide_known` of each sheet on the ground, its tangent line known.
+    #[inline(never)]
+    pub fn known_cut(
+        batch: &[(SurfaceKind, Known)],
+        out: &mut Vec<Result<Subdivided, IntersectError>>,
+    ) {
+        run(batch, out, |(sheet, known)| {
+            let ground = SurfaceKind::Plane(geom_surface::Plane::new(
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                ((-2.0, 2.0), (-2.0, 2.0)),
+            )?);
+            subdivide_known(
+                sheet,
+                &ground,
+                core::slice::from_ref(known),
+                1.0 / 64.0,
+                &mut meter(),
+            )
         });
     }
 

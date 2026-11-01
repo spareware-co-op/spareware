@@ -284,9 +284,15 @@
               "kind": "corpus",
               "piece": "G173",
               "why": "1 new count benchmark on geom-intersect's poles and seams (decision 32.44): a whole sphere through a plane holding both its poles, one loop joined through each. trace_patch's, march_plate's and trace_silhouette's digests move with it: their results' branches now say where they pass a seam, a knot line or a pole (Branch::passes, 12.10), which their Debug text writes, empty here."
+            },
+            {
+              "sha256": "804f58fd795cdf67fc7109e9327c600b94abc97902aae1b9e5a063b0b616f6e1",
+              "kind": "corpus",
+              "piece": "G174",
+              "why": "1 new count benchmark on geom-intersect's known curves (decision 32.44): sheets tangent to a plane along a known line, the tube about it proven and taken out of the search; no existing digest moved"
             }
           ],
-          "sha256": "804f58fd795cdf67fc7109e9327c600b94abc97902aae1b9e5a063b0b616f6e1"
+          "sha256": "74f4b0821f7623cd24e3982a083eccbaddc428179fb74b0afa6ab03dfb56c8ec"
         },
         {
           "id": "geom-nurbs/operations",

@@ -1399,6 +1399,24 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::march::march(&sphere, surface, &found, 0.25, 1.0, &mut meter)
             },
         )),
+        ("intersect", "known_tangent") => fold(inputs::intersect::tangents(class).iter().map(
+            |(sheet, known)| {
+                let ground = geom_surface::SurfaceKind::Plane(geom_surface::Plane::new(
+                    [0.0; 3],
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    ((-2.0, 2.0), (-2.0, 2.0)),
+                )?);
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::known::subdivide_known(
+                    sheet,
+                    &ground,
+                    core::slice::from_ref(known),
+                    1.0 / 64.0,
+                    &mut meter,
+                )
+            },
+        )),
         ("intersect", "analyse_rest") => {
             fold(inputs::intersect::rests(class).iter().map(|(plate, ball)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

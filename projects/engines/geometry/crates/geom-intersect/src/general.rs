@@ -66,6 +66,7 @@ use geom_run::WorkMeter;
 use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
+use crate::known::Tube;
 use crate::project::{boxed, dot, image, negative, positive};
 use crate::result::{Degeneracy, Test, Unresolved};
 use crate::seam::{Charts, PoleStarts, Poles, cells, charts};
@@ -469,6 +470,20 @@ pub fn subdivide(
     if floor.is_nan() || floor <= 0.0 {
         return Err(IntersectError::InvalidInput);
     }
+    subdivide_with(first, second, floor, &Tube::default(), meter)
+}
+
+/// [`subdivide`] with the proven `tube` of known curves taken out ([`crate::known`], 12.11): a pair
+/// a cell holds is dropped, one that meets a known curve's stretch but no cell holds is split down
+/// to the floor and flagged there, and a flag near a known curve says
+/// [`Unresolved::KnownCurveUnproven`].
+pub(crate) fn subdivide_with(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    floor: f64,
+    tube: &Tube,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Subdivided, IntersectError> {
     let mut out = Subdivided {
         settled: Vec::new(),
         flagged: Vec::new(),
@@ -493,14 +508,24 @@ pub fn subdivide(
         {
             continue;
         }
+        if tube.holds(first, (a, b), meter)? {
+            continue;
+        }
+        let near = tube.near((a, b))?;
         let (na, nb) = (normals(first, a, meter)?, normals(second, b, meter)?);
         // Why the pair is split, and flagged once it reaches the floor: its normals may be
         // parallel, or a pole touches the other surface here with no branch out of it, a lone point
-        // kept as small as the floor allows (12.10).
+        // kept as small as the floor allows (12.10), or a known curve passes that no proven cell
+        // holds the pair about (12.11).
         let mut why = Unresolved::UndecidedAtFloor {
             test: Test::LoopFreedom,
         };
-        if !may_be_parallel(&na, &nb)? {
+        if near.is_some() {
+            why = Unresolved::KnownCurveUnproven;
+        }
+        // Next to a proven stretch, a pair is split until a cell holds it, never settled: its
+        // starts would trace the known curve again.
+        if near != Some(true) && !may_be_parallel(&na, &nb)? {
             let lines = ([&seams.0, &seams.1], &poles);
             match starts_of(first, second, (a, b), floor, lines, meter)? {
                 Starts::Found(starts) if starts.len() % 2 == 0 => {
@@ -517,17 +542,22 @@ pub fn subdivide(
                     out.flagged.push(FlaggedPair {
                         first: a,
                         second: b,
-                        why: Unresolved::UndecidedAtFloor {
-                            test: Test::Exclusion,
+                        why: if near.is_some() {
+                            Unresolved::KnownCurveUnproven
+                        } else {
+                            Unresolved::UndecidedAtFloor {
+                                test: Test::Exclusion,
+                            }
                         },
                     });
                     continue;
                 }
-                Starts::Lone => {
+                Starts::Lone if near.is_none() => {
                     why = Unresolved::NonSmooth {
                         at: Degeneracy::Pole,
                     };
                 }
+                Starts::Lone => {}
             }
         }
         if larger(image(&over_a), image(&over_b)) <= floor {

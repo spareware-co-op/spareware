@@ -2,7 +2,8 @@
 //! 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in
 //! canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that
 //! meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a
-//! sphere and seen in silhouette, and planes through a whole sphere's poles.
+//! sphere and seen in silhouette, planes through a whole sphere's poles, and sheets tangent to a
+//! plane along a known line (G174).
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -19,6 +20,7 @@
 //! Cost: a few draws of [`SplitMix64`] per input, outside every measured run.
 
 use geom_curve::{Circle, CurveKind, Frame, Line};
+use geom_intersect::known::{Known, KnownContact};
 use geom_intersect::{Item, ParamBox, PointContact};
 use geom_math::Box3;
 use geom_num::Exactness;
@@ -236,6 +238,40 @@ pub fn poles(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
             ((-8.0, 8.0), (-8.0, 8.0)),
         );
         Some((SurfaceKind::Plane(patch.ok()?), at))
+    })
+}
+
+/// A sheet tangent to the ground z = 0 along the line v = 0, z = k·v²/4 for a dyadic k, and that
+/// line as a known curve, for `subdivide_known` (piece G174).
+#[must_use]
+pub fn tangents(class: Class) -> Vec<(SurfaceKind, Known)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::tangents", class);
+    batch_of(|_| {
+        let k = f64::from(i32::try_from(g.range(1, 8)).ok()?) / 4.0;
+        let across = Basis::new(2, vec![-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]).ok()?;
+        let along = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).ok()?;
+        let mut net = Vec::new();
+        for x in [-1.0, 1.0] {
+            for (y, z) in [(-1.0, k / 4.0), (0.0, -k / 4.0), (1.0, k / 4.0)] {
+                net.push([x, y, z]);
+            }
+        }
+        let sheet = Surface::new(along, across, &net).ok()?;
+        let point = |x: f64| Interval::point(x).ok();
+        let mut vertices = Vec::new();
+        for step in -4..=4 {
+            let u = f64::from(step) / 4.0;
+            vertices.push([point(u)?, point(0.0)?, point(u)?, point(0.0)?]);
+        }
+        let known = Known {
+            vertices,
+            bound: 0.0,
+            contact: KnownContact::Tangent,
+        };
+        Some((SurfaceKind::Nurbs(sheet), known))
     })
 }
 
