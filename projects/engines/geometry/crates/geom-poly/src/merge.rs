@@ -332,7 +332,12 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
             w: w.checked_neg().ok_or(NumError::BudgetExceeded)?,
             through,
         },
-        Sign::Positive | Sign::Zero => Corner { point, x, w },
+        Sign::Positive | Sign::Zero => Corner {
+            point,
+            x,
+            w,
+            through,
+        },
     })
 }
 
