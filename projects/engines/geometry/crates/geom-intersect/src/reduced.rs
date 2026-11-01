@@ -63,6 +63,9 @@ const OUT: f64 = 4_398_046_511_104.0;
 /// A surface's meridian curves, in (ρ, z) about an axis.
 type Meridians = Vec<CurveKind<2>>;
 
+/// A place in the half-plane, and whether two surfaces touch there.
+type Touch = (Interval, Interval, bool);
+
 /// How far along `on` the point `at` stands, exactly where the data are: an exact height is what
 /// lets curve with curve see two surfaces touch.
 fn level(at: Vector, on: &Axis) -> Result<Interval, IntersectError> {
@@ -90,7 +93,7 @@ fn ring(on: &Axis, z: Interval, r: Interval, tangent: bool) -> Result<Piece, Int
 fn line_and_circle(
     line: &Line<2>,
     round: &Circle<2>,
-) -> Result<Option<Vec<(Interval, Interval, bool)>>, IntersectError> {
+) -> Result<Option<Vec<Touch>>, IntersectError> {
     let (o, d, m) = (line.origin(), line.direction(), round.center());
     let (span, r) = (ParamCurve::domain(line), tight::point(round.radius())?);
     let [ox, oy] = o;
