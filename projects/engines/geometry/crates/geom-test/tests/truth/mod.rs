@@ -701,23 +701,8 @@ pub fn curves<const D: usize>(rng: &mut Rng, grid: bool) -> Vec<(CurveKind<D>, T
         )
         .unwrap();
         let cache = nurbs_curve::<D>(rng, grid);
-        let k = OnSurface::new(pcurve.clone(), SurfaceRef(7), cache.clone(), 1e-9).unwrap();
+        let k = OnSurface::new(pcurve, SurfaceRef(7), cache.clone(), 1e-9).unwrap();
         out.push((CurveKind::OnSurface(k), Truth::Nurbs(spline_of(&cache))));
-        // An intersection curve is its 3D cache to the contract, as a curve on a surface is.
-        let span = Span {
-            at: (0.0, 1.0),
-            curve: 1e-9,
-            pcurves: [1e-9, 1e-9],
-        };
-        let k = IntersectionCurve::new(
-            [SurfaceRef(7), SurfaceRef(8)],
-            Vec::new(),
-            cache.clone(),
-            [pcurve.clone(), pcurve],
-            vec![span],
-        )
-        .unwrap();
-        out.push((CurveKind::Intersection(k), Truth::Nurbs(spline_of(&cache))));
     }
     out
 }

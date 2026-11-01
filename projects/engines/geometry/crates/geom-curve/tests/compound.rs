@@ -18,10 +18,12 @@
 
 use geom_curve::contract::check;
 use geom_curve::{
-    Basis, BulgePolyline, Circle, Composite, CurveError, CurveKind, Frame, Helix, HelixAxes, Line,
-    Offset, OffsetLaw, OnSurface, ParamCurve, ParamMap, Station, SurfaceRef, Trimmed,
+    Basis, BulgePolyline, Circle, Composite, CurveError, CurveKind, Frame, Helix, HelixAxes,
+    IntersectionCurve, Line, Marched, Offset, OffsetLaw, OnSurface, ParamCurve, ParamMap, Span,
+    Station, SurfaceRef, Trimmed,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
+use geom_num::interval::Interval;
 use geom_num::math;
 use geom_nurbs::{Basis as Knots, Curve, Limit};
 use geom_run::{Budget, WorkMeter};
@@ -420,4 +422,102 @@ fn a_curve_on_a_surface_carries_its_cache() {
         .err(),
         Some(CurveError::Dimension { dimension: 2 })
     );
+}
+
+#[test]
+fn an_intersection_curve_carries_its_caches() {
+    let m = &mut meter();
+    let uv = |a: [f64; 2], b: [f64; 2]| {
+        Trimmed::whole(Basis::Line(Line::new(a, b, (0.0, 1.0)).unwrap())).unwrap()
+    };
+    let knots = || Knots::new(3, vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let points = [
+        [0.0, 0.0, 0.0],
+        [1.0, 2.0, 0.5],
+        [2.0, 1.0, 1.0],
+        [3.0, 3.0, 0.0],
+        [4.0, 2.0, 2.0],
+    ];
+    let cache = Curve::new(knots(), &points).unwrap();
+    let span = |at: (f64, f64), e: f64| Span {
+        at,
+        curve: e,
+        pcurves: [e / 2.0, e / 4.0],
+    };
+    let chain = |t: f64| Marched {
+        at: [Interval::point(t).unwrap(); 4],
+        t,
+    };
+    let make = |spans: Vec<Span>, marched: Vec<Marched>| {
+        IntersectionCurve::new(
+            [SurfaceRef(3), SurfaceRef(4)],
+            marched,
+            cache.clone(),
+            [uv([0.0, 0.0], [1.0, 1.0]), uv([1.0, 0.0], [0.0, 1.0])],
+            spans,
+        )
+    };
+    let curve = make(
+        vec![span((0.0, 0.5), 1e-9), span((0.5, 1.0), 2e-9)],
+        vec![chain(0.0), chain(0.25), chain(0.75), chain(1.0)],
+    )
+    .unwrap();
+    assert_eq!(curve.error(), 2e-9);
+    for t in spatial() {
+        check(&curve, &params((0.0, 1.0)), &t, m).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+    }
+    // A split tiles both halves, cuts the span it falls in and parts the chain.
+    let (left, right) = curve.split(0.25, m).unwrap();
+    let (CurveKind::Intersection(l), CurveKind::Intersection(r)) = (left.value, right.value) else {
+        panic!("still intersection curves")
+    };
+    let ats = |c: &IntersectionCurve<3>| c.spans().iter().map(|s| s.at).collect::<Vec<_>>();
+    assert_eq!(ats(&l), vec![(0.0, 0.25)]);
+    assert_eq!(ats(&r), vec![(0.25, 0.5), (0.5, 1.0)]);
+    assert_eq!(l.chain().len(), 2);
+    assert_eq!(r.chain().len(), 3);
+    assert!(r.spans()[1].curve >= 2e-9 && l.spans()[0].pcurves[0] >= 5e-10);
+    // A reversal mirrors the spans and the chain.
+    let CurveKind::Intersection(b) = curve.reversed(m).unwrap().value else {
+        panic!("still an intersection curve")
+    };
+    assert_eq!(ats(&b), vec![(-1.0, -0.5), (-0.5, 0.0)]);
+    assert_eq!(b.spans()[0].curve, 2e-9);
+    assert_eq!(b.chain()[0].t, -1.0);
+    // A scale by two at least doubles every bound and leaves the pcurves.
+    let grow = TypedTransform::from(Transform::uniform_scale(2.0).unwrap());
+    let CurveKind::Intersection(g) = curve.transformed(&grow, m).unwrap().value else {
+        panic!("still an intersection curve")
+    };
+    assert!(g.error() >= 4e-9 && g.error() < 8e-9, "{}", g.error());
+    assert_eq!(g.pcurves(), curve.pcurves());
+    assert_eq!(g.surfaces(), [SurfaceRef(3), SurfaceRef(4)]);
+    // Refused: spans that leave a gap, a bound that is not finite, a chain out of order or
+    // outside the domain.
+    for (spans, marched, why) in [
+        (
+            vec![span((0.0, 0.4), 1e-9), span((0.5, 1.0), 1e-9)],
+            vec![],
+            CurveError::SpanOutside,
+        ),
+        (
+            vec![span((0.0, 1.0), f64::NAN)],
+            vec![],
+            CurveError::NotFinite,
+        ),
+        (vec![span((0.0, 1.0), -1.0)], vec![], CurveError::NotFinite),
+        (
+            vec![span((0.0, 1.0), 1e-9)],
+            vec![chain(0.5), chain(0.25)],
+            CurveError::SpanOutside,
+        ),
+        (
+            vec![span((0.0, 1.0), 1e-9)],
+            vec![chain(1.5)],
+            CurveError::SpanOutside,
+        ),
+        (vec![], vec![], CurveError::SpanOutside),
+    ] {
+        assert_eq!(make(spans, marched).err(), Some(why));
+    }
 }
