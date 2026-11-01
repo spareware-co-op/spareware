@@ -5257,6 +5257,102 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The case dx = 0 has returned above, so 0 never reaches this test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace | with & in half",
+      "line_text": "*slot = (low >> 1) | (above << 63);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with & half keeps only the bits both halves share, so an even x falls to zero within a few steps, and even(0) is true for ever: `while even(&x) { x = half(&x) }` never ends, and every quartic's gcd hangs past cargo-mutants' timeout, which is how the tests catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace >> with << in half",
+      "line_text": "*slot = (low >> 1) | (above << 63);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with << half doubles instead, so an even x stays even until its bits shift out to zero, and even(0) is true for ever: the halving loop never ends, and every quartic's gcd hangs past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace << with >> in half",
+      "line_text": "*slot = (low >> 1) | (above << 63);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with >> each limb takes the next limb's top bit into its lowest place instead of its own top, so a halved number of two limbs or more is wrong and can stay even or never fall to zero: the gcd of a wide quartic's coefficients loops past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace even -> bool with true",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with even always true the first loop halves x and y for ever (half of zero is zero), its counter stopped only by the budget after 2^32 steps: the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace even -> bool with false",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with even always false no factor of two is ever taken out, and the loop is Euclid's by subtraction alone, one difference a step: on the coefficients of a quartic of whole numbers that is up to their size in steps, each a wide subtraction, and the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace == with != in even",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with != the test reads odd numbers as even and even ones as odd: the first loop halves two odd numbers, flooring, until one is zero, which then reads as odd while the other halves on, and the later loops never reach y = 0: the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace & with | in even",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with | the low limb or one is never zero, so even is false for every number and no factor of two is taken out: Euclid by subtraction alone, one wide difference a step, runs past cargo-mutants' timeout on the quartics' coefficients."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace & with ^ in even",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with ^ a number reads as even only when its low limb is exactly one: odd ones like 3 are halved to the wrong value and even ones are never halved, so x and y need not shrink to a common divisor and the loops run past cargo-mutants' timeout on the quartics' coefficients."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace && with || in whole_gcd",
+      "line_text": "while even(&x) && even(&y) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with || the first loop goes on while either is even, so once one falls to zero (half of an odd number floors) even(0) holds for ever and the loop never ends: the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace == with != in whole_gcd",
+      "line_text": "if sub(&x, &y)?.signum() == Sign::Positive {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with != it swaps when x is not larger, so y - x is then negative or zero and the subtraction loop no longer shrinks y towards zero: on the quartics' coefficients it runs past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace >= with < in pseudo_remainder",
+      "line_text": "while let Some(dr) = degree(&r).filter(|d| *d >= db) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With < the reduction loop runs only while the remainder's degree is below the divisor's, so a remainder of degree at least the divisor's comes back unreduced: the Sturm chain and gcd built from pseudo-remainders never drop in degree, and the loops that build them run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace apart -> Result<Option<Sign>, NumError> with Ok(None)",
+      "line_text": "let top = p.s.max(q.s);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With apart never telling, order narrows two roots' stretches for ever: no narrowing is ever enough to part them, so every comparison of two distinct roots loops until its budget, and the tests run past cargo-mutants' timeout."
     }
   ],
   "coverage_off": [
