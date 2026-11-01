@@ -64,16 +64,13 @@ fn the_filter_decides_most_of_a_tangency_heavy_corpus_and_is_never_wrong() {
     for (i, p) in points.iter().enumerate() {
         for q in points.iter().skip(i + 1).step_by(37) {
             total += 1;
-            match p.cmp_x_filter(q) {
-                Some(sign) => {
-                    decided += 1;
-                    assert_eq!(p.cmp_x(q).unwrap(), sign);
-                }
-                None => {
-                    exact += 1;
-                    let answer = p.cmp_x(q).unwrap();
-                    assert_eq!(answer, q.cmp_x(p).unwrap().negate());
-                }
+            if let Some(sign) = p.cmp_x_filter(q) {
+                decided += 1;
+                assert_eq!(p.cmp_x(q).unwrap(), sign);
+            } else {
+                exact += 1;
+                let answer = p.cmp_x(q).unwrap();
+                assert_eq!(answer, q.cmp_x(p).unwrap().negate());
             }
         }
     }
