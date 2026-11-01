@@ -1023,3 +1023,29 @@ fn leaning_whole_data_decide_exactly() {
     assert_eq!(points(&r), 1, "{:?}", r.items());
     assert!(curves(&r).is_empty(), "{:?}", r.items());
 }
+
+#[test]
+fn a_cone_ending_at_its_apex_is_cut_there() {
+    // One nappe, 3 out for every 4 up, from its apex at the origin to 400 up: the apex is an edge
+    // of one point, and a line through it leaves the domain there. Each piece runs from the apex
+    // to the top circle, its middle 200 up, within what a cut can tell.
+    let up = frame_along([0.0, 0.0, 1.0]);
+    let nappe =
+        SurfaceKind::Cone(Cone::new([0.0; 3], 0.0, 0.75, up, (ROUND, (0.0, 400.0))).unwrap());
+    // A plane through the axis: two rays from the apex.
+    let r = meet(&plane([0.0; 3], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]), &nappe);
+    let c = curves(&r);
+    assert_eq!(c.len(), 2, "{:?}", r.items());
+    for ray in &c {
+        let p = mid(ray);
+        assert!((p[2] - 200.0).abs() < 0.01, "{p:?}");
+        assert!((p[0].abs() - 150.0).abs() < 0.01, "{p:?}");
+    }
+    // A plane touching it along the ruling (3, 0, 4): one tangent ray.
+    let r = meet(&plane([0.0; 3], [3.0, 0.0, 4.0], [0.0, 1.0, 0.0]), &nappe);
+    assert_eq!(curves(&r).len(), 1, "{:?}", r.items());
+    assert!(tangent(&r), "{:?}", r.items());
+    let p = mid(curves(&r)[0]);
+    assert!((p[2] - 200.0).abs() < 0.01, "{p:?}");
+    assert!((p[0] - 150.0).abs() < 0.01, "{p:?}");
+}
