@@ -1607,3 +1607,55 @@ mod tests {
         assert!(gaps(&[c(0), c(4), c(0), c(-5), c(1)], 64).is_some());
     }
 }
+
+#[cfg(kani)]
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use super::*;
+
+    /// A sum that reads at (0 : 1), where its value is its constant term, as `pick` says:
+    /// certainly positive, certainly negative, or holding zero.
+    fn read(pick: u8) -> Option<[Interval; TERMS]> {
+        let constant = match pick {
+            0 => Interval::new(1.0, 1.0),
+            1 => Interval::new(-1.0, -1.0),
+            _ => Interval::new(-1.0, 1.0),
+        }
+        .ok()?;
+        let mut terms = [Interval::point(0.0).ok()?; TERMS];
+        *terms.first_mut()? = constant;
+        Some(terms)
+    }
+
+    /// `definite_filtered` answers yes only where every sum's sign is certain and they make a
+    /// definite member, no only where no value the intervals allow could make one, and nothing
+    /// otherwise: for every way each of the four sums can read.
+    #[kani::proof]
+    fn the_filter_s_definite_test_answers_only_what_its_signs_prove() {
+        let picks: [u8; 4] = [kani::any(), kani::any(), kani::any(), kani::any()];
+        kani::assume(picks.iter().all(|p| *p < 3));
+        let (Some(a), Some(b), Some(c), Some(d)) = (
+            read(picks[0]),
+            read(picks[1]),
+            read(picks[2]),
+            read(picks[3]),
+        ) else {
+            panic!("a sum that did not build");
+        };
+        let got = definite_filtered(&[a, b, c, d], 0, 1);
+        // A sum may be positive unless it reads negative, and negative unless it reads positive;
+        // a definite member's sums are all positive, or alternate from a negative.
+        let may = |k: usize, positive: bool| picks[k] == 2 || (picks[k] == 0) == positive;
+        let up = (0..4).all(|k| may(k, true));
+        let down = (0..4).all(|k| may(k, k % 2 == 1));
+        let certain = picks.iter().all(|p| *p < 2);
+        let want = if certain && (up || down) {
+            Some(true)
+        } else if up || down {
+            None
+        } else {
+            Some(false)
+        };
+        assert!(got == want);
+    }
+}

@@ -286,6 +286,7 @@ jobs:
           - math::proofs::round_ties_even_is_exact
           - math::sincospi::proofs::cospi_hard_case_answers_exactly_the_listed_pairs
           - math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs
+          - pencil::proofs::the_filter_s_definite_test_answers_only_what_its_signs_prove
           - perturb::proofs::bit_of_covers_exactly_a_mask_of_32
           - perturb::proofs::distinct_refuses_exactly_repeated_keys
           - perturb::proofs::the_lift_of_every_frame_point_fits
