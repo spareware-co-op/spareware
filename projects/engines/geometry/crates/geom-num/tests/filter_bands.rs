@@ -36,7 +36,11 @@
 use std::collections::BTreeMap;
 
 use geom_num::Sign;
-use geom_num::generated::{carrier_order, carrier_side, rational_cmp, rational_orient};
+use geom_num::generated::{
+    carrier_order, carrier_side, circle_gap, circle_line, circle_side, rational_cmp,
+    rational_orient, round_grid, round_line, round_rational,
+};
+use geom_num::grid::P2;
 use geom_num::wide::Wide;
 
 /// The default seed (G187).
@@ -309,6 +313,17 @@ fn get<const N: usize>(inputs: &Inputs, names: [&str; N]) -> [i128; N] {
     names.map(|n| inputs[n])
 }
 
+/// The grid point named `x` and `y` among the inputs.
+fn grid(inputs: &Inputs, x: &str, y: &str) -> P2 {
+    P2::new(inputs[x] as i64, inputs[y] as i64).unwrap()
+}
+
+/// `v`, added to what `group` holds.
+fn widen(m: &mut BTreeMap<&'static str, f64>, group: &'static str, v: i128) {
+    let held = m.entry(group).or_insert(0.0);
+    *held = held.max((v as f64).abs());
+}
+
 const SPECS: &[Spec] = &[
     Spec {
         name: "carrier_side",
@@ -407,6 +422,160 @@ const SPECS: &[Spec] = &[
             rational_orient::filter(xa, ya, xb, yb, xc, yc, wa, wb, wc)
         },
         variables: |_, _| {},
+        idle: &[],
+    },
+    Spec {
+        name: "round_grid",
+        module: include_str!("../src/generated/round_grid.rs"),
+        inputs: &[
+            ("z_x", "x", 40),
+            ("z_y", "y", 40),
+            ("p_x", "x", 40),
+            ("p_y", "y", 40),
+            ("cx", "c", 124),
+            ("cy", "c", 124),
+            ("w", "w", 83),
+        ],
+        moved: &["cx", "cy", "z_x", "z_y"],
+        value: |i| {
+            let [cx, cy, w] = get(i, ["cx", "cy", "w"]);
+            let (z, p) = (grid(i, "z_x", "z_y"), grid(i, "p_x", "p_y"));
+            real(&round_grid::value(z, p, cx, cy, w).unwrap())
+        },
+        filter: |i| {
+            let [cx, cy, w] = get(i, ["cx", "cy", "w"]);
+            let (z, p) = (grid(i, "z_x", "z_y"), grid(i, "p_x", "p_y"));
+            round_grid::filter(z, p, cx, cy, w)
+        },
+        variables: |i, m| {
+            widen(m, "x", i["z_x"] - i["p_x"]);
+            widen(m, "y", i["z_y"] - i["p_y"]);
+        },
+        idle: &[],
+    },
+    Spec {
+        name: "round_rational",
+        module: include_str!("../src/generated/round_rational.rs"),
+        inputs: &[
+            ("x", "p", 124),
+            ("y", "p", 124),
+            ("v", "v", 83),
+            ("q_x", "x", 40),
+            ("q_y", "y", 40),
+            ("cx", "c", 124),
+            ("cy", "c", 124),
+            ("w", "w", 83),
+        ],
+        moved: &["cx", "cy", "x", "y"],
+        value: |i| {
+            let [x, y, v, cx, cy, w] = get(i, ["x", "y", "v", "cx", "cy", "w"]);
+            let q = grid(i, "q_x", "q_y");
+            real(&round_rational::value(x, y, v, q, cx, cy, w).unwrap())
+        },
+        filter: |i| {
+            let [x, y, v, cx, cy, w] = get(i, ["x", "y", "v", "cx", "cy", "w"]);
+            let q = grid(i, "q_x", "q_y");
+            round_rational::filter(x, y, v, q, cx, cy, w)
+        },
+        variables: |_, _| {},
+        idle: &[],
+    },
+    Spec {
+        name: "round_line",
+        module: include_str!("../src/generated/round_line.rs"),
+        inputs: &[
+            ("a", "n", 41),
+            ("b", "n", 41),
+            ("d", "d", 82),
+            ("p_x", "x", 40),
+            ("p_y", "y", 40),
+            ("cx", "c", 124),
+            ("cy", "c", 124),
+            ("w", "w", 83),
+        ],
+        moved: &["d", "cx", "cy"],
+        value: |i| {
+            let [a, b, d, cx, cy, w] = get(i, ["a", "b", "d", "cx", "cy", "w"]);
+            let p = grid(i, "p_x", "p_y");
+            real(&round_line::value(a, b, d, p, cx, cy, w).unwrap())
+        },
+        filter: |i| {
+            let [a, b, d, cx, cy, w] = get(i, ["a", "b", "d", "cx", "cy", "w"]);
+            let p = grid(i, "p_x", "p_y");
+            round_line::filter(a, b, d, p, cx, cy, w)
+        },
+        variables: |_, _| {},
+        idle: &[],
+    },
+    Spec {
+        name: "circle_side",
+        module: include_str!("../src/generated/circle_side.rs"),
+        inputs: &[
+            ("x", "p", 124),
+            ("y", "p", 124),
+            ("v", "v", 83),
+            ("k_x", "x", 40),
+            ("k_y", "y", 40),
+            ("r", "r", 41),
+        ],
+        moved: &["x", "y", "r"],
+        value: |i| {
+            let [x, y, v, r] = get(i, ["x", "y", "v", "r"]);
+            real(&circle_side::value(x, y, v, grid(i, "k_x", "k_y"), r).unwrap())
+        },
+        filter: |i| {
+            let [x, y, v, r] = get(i, ["x", "y", "v", "r"]);
+            circle_side::filter(x, y, v, grid(i, "k_x", "k_y"), r)
+        },
+        variables: |_, _| {},
+        idle: &[],
+    },
+    Spec {
+        name: "circle_line",
+        module: include_str!("../src/generated/circle_line.rs"),
+        inputs: &[
+            ("a", "n", 41),
+            ("b", "n", 41),
+            ("d", "d", 82),
+            ("k_x", "x", 40),
+            ("k_y", "y", 40),
+            ("r", "r", 41),
+        ],
+        moved: &["d", "r"],
+        value: |i| {
+            let [a, b, d, r] = get(i, ["a", "b", "d", "r"]);
+            real(&circle_line::value(a, b, d, grid(i, "k_x", "k_y"), r).unwrap())
+        },
+        filter: |i| {
+            let [a, b, d, r] = get(i, ["a", "b", "d", "r"]);
+            circle_line::filter(a, b, d, grid(i, "k_x", "k_y"), r)
+        },
+        variables: |_, _| {},
+        idle: &[],
+    },
+    Spec {
+        name: "circle_gap",
+        module: include_str!("../src/generated/circle_gap.rs"),
+        inputs: &[
+            ("a_x", "ax", 40),
+            ("a_y", "ay", 40),
+            ("b_x", "ax", 40),
+            ("b_y", "ay", 40),
+            ("t", "t", 42),
+        ],
+        moved: &["t", "a_x", "a_y"],
+        value: |i| {
+            let (a, b) = (grid(i, "a_x", "a_y"), grid(i, "b_x", "b_y"));
+            circle_gap::value(a, b, i["t"]).unwrap() as f64
+        },
+        filter: |i| {
+            let (a, b) = (grid(i, "a_x", "a_y"), grid(i, "b_x", "b_y"));
+            circle_gap::filter(a, b, i["t"])
+        },
+        variables: |i, m| {
+            widen(m, "x", i["a_x"] - i["b_x"]);
+            widen(m, "y", i["a_y"] - i["b_y"]);
+        },
         idle: &[],
     },
 ];
