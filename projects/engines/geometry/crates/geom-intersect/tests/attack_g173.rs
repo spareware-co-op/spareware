@@ -15,9 +15,10 @@
 )]
 
 use geom_curve::Frame;
+use geom_intersect::contact::{Reading, analyse};
 use geom_intersect::general::subdivide;
 use geom_intersect::march::{Branch, Traced, march};
-use geom_intersect::result::CurveEnd;
+use geom_intersect::result::{CurveEnd, Degeneracy, PointContact, Unresolved};
 use geom_intersect::seam::{Pass, Passing, charts, cuts};
 use geom_intersect::{OnImplicit, Silhouette, trace};
 use geom_num::interval::Interval;
@@ -619,4 +620,44 @@ fn a_plane_through_a_nurbs_apex_is_one_branch_through_it() {
     assert_eq!(branch.ends, [CurveEnd::Boundary, CurveEnd::Boundary]);
     assert_eq!(passes_of(branch, Passing::Pole).len(), 1, "{branch:?}");
     on_both(&pyramid, &plane, branch);
+}
+
+#[test]
+fn a_plane_touching_only_a_cones_apex_is_one_point() {
+    // z = x/4 through the apex of a cone whose generators rise at 45°: the plane is shallower than
+    // every generator, so it meets the cone at the apex alone. Nothing leaves the apex: subdivision
+    // keeps it to the floor as a pole, and the analysis reads one singular point there with no
+    // branches, never nothing.
+    let tip = Cone::new([0.0; 3], 0.0, 1.0, frame(), ((0.0, TURN), (0.0, 4.0))).unwrap();
+    let cone = SurfaceKind::Cone(tip);
+    let shallow = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.25],
+            [0.0, 1.0, 0.0],
+            ((-8.0, 8.0), (-8.0, 8.0)),
+        )
+        .unwrap(),
+    );
+    let found = subdivide(&cone, &shallow, FLOOR, &mut meter()).unwrap();
+    assert!(found.settled.is_empty(), "{found:?}");
+    assert!(!found.flagged.is_empty(), "{found:?}");
+    for pair in &found.flagged {
+        assert_eq!(
+            pair.why,
+            Unresolved::NonSmooth {
+                at: Degeneracy::Pole
+            }
+        );
+    }
+    let read = analyse(&cone, &shallow, &found, FLOOR, CEILING, &mut meter()).unwrap();
+    assert_eq!(read.len(), 1, "{read:?}");
+    let Reading::Point { at, gap, contact } = read[0] else {
+        panic!("{read:?}");
+    };
+    assert_eq!(contact, PointContact::Singular { branches: 0 });
+    assert!(gap.contains(0.0), "{gap:?}");
+    assert_eq!((at[1].lo(), at[1].hi()), (0.0, 0.0));
+    let t = march(&cone, &shallow, &found, FLOOR, CEILING, &mut meter()).unwrap();
+    assert!(t.branches.is_empty(), "{t:?}");
 }

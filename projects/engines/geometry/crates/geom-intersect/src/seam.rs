@@ -33,6 +33,9 @@
 //! - **A pole is decided as a point.** It is proven apart from the other surface, or proven within
 //!   the floor of it at a foot in the pair; otherwise the pair is undecided. A pole within the floor
 //!   is treated as on it, the same resolution floor every other test stops at (12.3).
+//! - **A lone pole is never lost.** A pole on the other surface that no branch leaves (a cone's
+//!   apex resting on a plane) is kept to the floor by subdivision, flagged
+//!   `NonSmooth { at: Pole }`, and read by [`crate::contact::analyse`] as one singular point there.
 //!
 //! Method: chapter 12.10 (`projects/engines/geometry/architecture/12-intersections.md`); each
 //! kind's closed form in `geom_surface` (its table of S(u, v)); knot multiplicity and continuity
@@ -52,8 +55,9 @@
 //! so its cut is not made. Extraordinary vertices are G320's.
 //!
 //! Cost: constant for the analytic kinds; one pass over the control net and the knots for a NURBS.
-//! A pole line in a pair costs one projection to an eighth of the floor and one run of the engine
-//! along the line. Recursion: none.
+//! Each pole line costs one projection to an eighth of the floor and one run of the engine along
+//! the line, once per subdivision (`Poles`); each pair then filters what it read. Recursion:
+//! none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -452,29 +456,146 @@ fn overlaps(x: Interval, (lo, hi): (f64, f64)) -> bool {
     x.lo() <= hi && lo <= x.hi()
 }
 
-/// The start points a pair takes from a pole of `own` (12.10), as (t, s, r): t along the pole
-/// line of `here` where one parameter is held at `at`, (s, r) on `other`. The line is one point P,
-/// so it is not searched as a curve, whose roots would be a continuum. P is tested against `other`
-/// as a point (12.4): proven apart, it gives no start; within the floor of it at a foot inside
-/// `there`, each direction a branch leaves P by inside `here` is one start; anything else is
-/// undecided, and gives `None`.
-pub(crate) fn pole_starts(
+/// What a pole line of a pair gives.
+pub(crate) enum PoleStarts {
+    /// Start points, as (t, s, r): t along the line, (s, r) on the other surface. None if the
+    /// pole is proven apart from the other surface's patch.
+    Starts(Vec<[Interval; 3]>),
+    /// The pole lies on the other surface's patch, within the floor, and no branch leaves it here:
+    /// an isolated point, such as a cone's apex resting on a plane.
+    Lone,
+    /// Undecided.
+    Undecided,
+}
+
+/// What one pole line's point is to the other surface (12.10).
+#[derive(Clone, Debug, PartialEq)]
+enum Read {
+    /// Proven apart from it.
+    Apart,
+    /// Within the floor of it at these feet on it, each with the values of the line's free
+    /// parameter a branch leaves the pole by.
+    On(Vec<([Interval; 2], Vec<Interval>)>),
+    /// Undecided.
+    Undecided,
+}
+
+/// One pole line of one surface, read against the other.
+#[derive(Clone, Debug, PartialEq)]
+struct Line {
+    /// Whether it is the second surface's.
+    second: bool,
+    /// Whether u is the parameter held.
+    fixed_u: bool,
+    /// Its value.
+    at: f64,
+    /// What its point is to the other surface.
+    read: Read,
+}
+
+/// Every pole line of a pair of surfaces, each read once against the other surface, for every
+/// pair of patches that reaches it (12.10).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Poles {
+    lines: Vec<Line>,
+}
+
+impl Poles {
+    /// The pole lines of `first` and `second` that `seams` name, each read against the other.
+    ///
+    /// # Errors
+    ///
+    /// The meter's stop; [`IntersectError::UnprovenMaths`] where a kind's bound needs one.
+    pub(crate) fn of(
+        first: &SurfaceKind,
+        second: &SurfaceKind,
+        seams: [&Charts; 2],
+        floor: f64,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Poles, IntersectError> {
+        let [one, two] = seams;
+        let mut lines = Vec::new();
+        for (own, other, chart, side) in [(first, second, one, false), (second, first, two, true)] {
+            for (fixed_u, list) in [(true, &chart.poles.0), (false, &chart.poles.1)] {
+                for &at in list {
+                    lines.push(Line {
+                        second: side,
+                        fixed_u,
+                        at,
+                        read: read_pole(own, other, (at, fixed_u), floor, meter)?,
+                    });
+                }
+            }
+        }
+        Ok(Poles { lines })
+    }
+
+    /// What the pole line held at `at` of the first surface (the second's if `second`) gives the
+    /// pair `(here, there)`, `here` on that surface: each direction out of the pole inside `here`
+    /// at a foot inside `there` is one start, as (t, s, r); a pole on `there` that no branch
+    /// leaves at all is a lone point.
+    pub(crate) fn starts(
+        &self,
+        second: bool,
+        (at, fixed_u): (f64, bool),
+        (here, there): (Region, Region),
+    ) -> PoleStarts {
+        let held = self
+            .lines
+            .iter()
+            .find(|l| l.second == second && l.fixed_u == fixed_u && l.at == at);
+        let Some(held) = held else {
+            return PoleStarts::Undecided;
+        };
+        let ((a, b), (c, d)) = here;
+        let along = if fixed_u { (c, d) } else { (a, b) };
+        match &held.read {
+            Read::Apart => PoleStarts::Starts(Vec::new()),
+            Read::Undecided => PoleStarts::Undecided,
+            Read::On(feet) => {
+                let mut out = Vec::new();
+                let mut lone = false;
+                for ([s, r], ways) in feet {
+                    if !(overlaps(*s, there.0) && overlaps(*r, there.1)) {
+                        continue;
+                    }
+                    lone = lone || ways.is_empty();
+                    for &t in ways {
+                        if overlaps(t, along) {
+                            out.push([t, *s, *r]);
+                        }
+                    }
+                }
+                if lone && out.is_empty() {
+                    PoleStarts::Lone
+                } else {
+                    PoleStarts::Starts(out)
+                }
+            }
+        }
+    }
+}
+
+/// The pole line of `own` held at `at`, one point P (`charts`), read against `other` as a point
+/// (12.4): proven apart, within the floor of it at feet whose directions out of P are found along
+/// the whole line, or undecided. The line is never searched as a curve, whose roots would be a
+/// continuum.
+fn read_pole(
     own: &SurfaceKind,
     other: &SurfaceKind,
-    (here, there): (Region, Region),
     (at, fixed_u): (f64, bool),
     floor: f64,
     meter: &mut WorkMeter<'_>,
-) -> Result<Option<Vec<[Interval; 3]>>, IntersectError> {
-    let ((a, b), (c, d)) = here;
-    let (corner, along) = if fixed_u {
-        (((at, at), (c, c)), (c, d))
+) -> Result<Read, IntersectError> {
+    let ((u0, u1), (v0, v1)) = own.domain();
+    let (corner, whole) = if fixed_u {
+        (((at, at), (v0, v0)), (v0, v1))
     } else {
-        (((a, a), (at, at)), (a, b))
+        (((u0, u0), (at, at)), (u0, u1))
     };
     // The whole line is one point, exactly (`charts`), so one parameter on it reads all of it.
     let Some(read) = partials(own, corner, 0, meter)? else {
-        return Ok(None);
+        return Ok(Read::Undecided);
     };
     let [pole, ..] = read.as_slice() else {
         return Err(IntersectError::Internal);
@@ -486,21 +607,18 @@ pub(crate) fn pole_starts(
     // the floor of it: the projection's own enclosures are as wide as the floor it is given.
     let feet = match project_surface(other, &middle, floor / 8.0, meter)? {
         Projection::Points(found) => found,
-        Projection::Set { distance, .. } if distance.lo() > spread => return Ok(Some(Vec::new())),
-        Projection::Set { .. } | Projection::NonIsolated { .. } => return Ok(None),
+        Projection::Set { distance, .. } if distance.lo() > spread => return Ok(Read::Apart),
+        Projection::Set { .. } | Projection::NonIsolated { .. } => return Ok(Read::Undecided),
     };
-    let mut out = Vec::new();
+    let mut on = Vec::new();
     for foot in feet {
         if foot.distance.lo() > spread {
             continue;
         }
         if foot.distance.hi() + spread > floor {
-            return Ok(None);
+            return Ok(Read::Undecided);
         }
         let [s, r] = foot.at;
-        if !(overlaps(s, there.0) && overlaps(r, there.1)) {
-            continue;
-        }
         let toward = Toward {
             own,
             at,
@@ -508,16 +626,25 @@ pub(crate) fn pole_starts(
             normal: normals(other, (ends(s), ends(r)), meter)?,
             floor,
         };
-        let found = solve(&toward, [span(along)?], |_, _| Ok(true), meter)?;
+        let found = solve(&toward, [span(whole)?], |_, _| Ok(true), meter)?;
         if !found.flagged.is_empty() {
-            return Ok(None);
+            return Ok(Read::Undecided);
         }
-        for zero in found.zeros {
-            let [t] = zero.enclosure;
-            out.push([t, s, r]);
-        }
+        let ways = found
+            .zeros
+            .iter()
+            .map(|zero| {
+                let [t] = zero.enclosure;
+                t
+            })
+            .collect();
+        on.push(([s, r], ways));
     }
-    Ok(Some(out))
+    Ok(if on.is_empty() {
+        Read::Apart
+    } else {
+        Read::On(on)
+    })
 }
 
 /// `surface`'s domain cut at the lines of [`cuts`], in order of u and then of v.

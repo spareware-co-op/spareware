@@ -73,18 +73,116 @@ use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 use crate::IntersectError;
 use crate::curve::exact_steps;
 use crate::general::{
-    FlaggedPair, Settled, Subdivided, around, cross, ends, may_be_parallel, minus_box, normals,
-    partials, point, same, span, speeds, starts_of,
+    FlaggedPair, Settled, Starts, Subdivided, around, cross, ends, may_be_parallel, minus_box,
+    normals, partials, point, same, span, speeds, starts_of,
 };
-use crate::project::{dot, image, negative, positive};
-use crate::result::{Coincidence, CurveContact, PointContact, StepsInterval, Test, Unresolved};
-use crate::seam::{Charts, charts};
+use crate::project::{Projection, dot, image, negative, positive, project_surface};
+use crate::result::{
+    Coincidence, CurveContact, Degeneracy, PointContact, StepsInterval, Test, Unresolved,
+};
+use crate::seam::{Charts, Poles, charts};
 use crate::solve::{Field, Solved, Zero, refined, solve};
 
 /// Why a pair is flagged when subdivision ran out of room with its normals still unparted.
 const NO_ROOM: Unresolved = Unresolved::UndecidedAtFloor {
     test: Test::LoopFreedom,
 };
+
+/// Why subdivision flags a pair holding a pole of one surface that lies on the other with no
+/// branch leaving it (12.10).
+const LONE: Unresolved = Unresolved::NonSmooth {
+    at: Degeneracy::Pole,
+};
+
+/// The pole line of `surface` every region of `regions` reaches, as the parameter held (0 for u),
+/// its value, and the domain's span of the other parameter.
+fn shared_pole(
+    surface: &SurfaceKind,
+    seams: &Charts,
+    mut regions: impl Iterator<Item = Region>,
+) -> Option<(usize, f64, (f64, f64))> {
+    let ((u0, u1), (v0, v1)) = surface.domain();
+    let first = regions.next()?;
+    let reaches = |r: Region, axis: usize, p: f64| {
+        let ((a, b), (c, d)) = r;
+        if axis == 0 {
+            a == p || b == p
+        } else {
+            c == p || d == p
+        }
+    };
+    let lines = seams.poles.0.iter().map(|&p| (0, p, (v0, v1)));
+    let lines = lines.chain(seams.poles.1.iter().map(|&p| (1, p, (u0, u1))));
+    let found: Vec<(usize, f64, (f64, f64))> = lines
+        .filter(|&(axis, p, _)| reaches(first, axis, p))
+        .collect();
+    let rest: Vec<Region> = regions.collect();
+    found
+        .into_iter()
+        .find(|&(axis, p, _)| rest.iter().all(|&r| reaches(r, axis, p)))
+}
+
+/// A cluster that subdivision flagged as a lone pole (12.10): the pole of one surface, lying on the
+/// other within the floor, read as one point. It is a singular point of the surface, so its contact
+/// is [`PointContact::Singular`] with the branches that end on the cluster (none, for a cone's apex
+/// resting on a plane). `None` where the cluster is not at one pole.
+fn at_pole(
+    system: &Collinear<'_>,
+    pairs: &[FlaggedPair],
+    settled: &[Settled],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Reading>, IntersectError> {
+    let sides = [
+        (system.first, system.second, &system.seams.0, false),
+        (system.second, system.first, &system.seams.1, true),
+    ];
+    for (own, other, seams, swapped) in sides {
+        let regions = pairs
+            .iter()
+            .map(|p| if swapped { p.second } else { p.first });
+        let Some((axis, p, free)) = shared_pole(own, seams, regions) else {
+            continue;
+        };
+        let held = point(p)?;
+        let along = span(free)?;
+        let (at, line) = if axis == 0 {
+            (((p, p), (free.0, free.0)), [held, along])
+        } else {
+            (((free.0, free.0), (p, p)), [along, held])
+        };
+        let Some(read) = partials(own, at, 0, meter)? else {
+            return Ok(None);
+        };
+        let [pole, ..] = read.as_slice() else {
+            return Err(IntersectError::Internal);
+        };
+        let middle = pole.map(|x| x.lo() / 2.0 + x.hi() / 2.0);
+        let Projection::Points(feet) = project_surface(other, &middle, system.floor / 8.0, meter)?
+        else {
+            return Ok(None);
+        };
+        let Some(foot) = feet.into_iter().min_by(|x, y| {
+            x.distance
+                .lo()
+                .partial_cmp(&y.distance.lo())
+                .unwrap_or(core::cmp::Ordering::Equal)
+        }) else {
+            return Ok(None);
+        };
+        let ending = branches(settled, pairs, meter)?;
+        let Ok(count) = u16::try_from(ending) else {
+            return Ok(None);
+        };
+        let [x, y] = line;
+        let [s, r] = foot.at;
+        return Ok(Some(Reading::Point {
+            at: if swapped { [s, r, x, y] } else { [x, y, s, r] },
+            gap: foot.distance,
+            contact: PointContact::Singular { branches: count },
+        }));
+    }
+    Ok(None)
+}
 
 /// What one cluster of flagged pairs turned out to be.
 #[derive(Clone, Debug, PartialEq)]
@@ -138,6 +236,8 @@ struct Collinear<'a> {
     weights: [f64; 4],
     /// What each surface's data proves of its seams and poles (12.10).
     seams: (Charts, Charts),
+    /// Each pole line read against the other surface.
+    poles: Poles,
 }
 
 /// Both surfaces read to the second order.
@@ -744,10 +844,10 @@ fn look(
             second,
             (pair.first, pair.second),
             system.floor,
-            [&system.seams.0, &system.seams.1],
+            ([&system.seams.0, &system.seams.1], &system.poles),
             meter,
         )? {
-            Some(starts) if starts.len().is_multiple_of(2) => {
+            Starts::Found(starts) if starts.len().is_multiple_of(2) => {
                 if !starts.is_empty() {
                     pieces.push(Settled {
                         first: pair.first,
@@ -834,11 +934,28 @@ pub fn analyse(
         floor,
         weights: [a, b, c, d],
         seams: (charts(first), charts(second)),
+        poles: Poles::default(),
+    };
+    let system = Collinear {
+        poles: Poles::of(
+            first,
+            second,
+            [&system.seams.0, &system.seams.1],
+            floor,
+            meter,
+        )?,
+        ..system
     };
     let mut out = Vec::new();
     let mut settled = found.settled.clone();
     let mut contacts = Vec::new();
     for cluster in clusters(&found.flagged, meter)? {
+        if cluster.iter().all(|p| p.why == LONE)
+            && let Some(reading) = at_pole(&system, &cluster, &settled, meter)?
+        {
+            out.push(reading);
+            continue;
+        }
         if !cluster.iter().any(|p| p.why == NO_ROOM) {
             out.extend(cluster.iter().map(|p| Reading::Undecided {
                 first: p.first,

@@ -1,8 +1,8 @@
-//! Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168 and G169, decision 32.44): a
-//! list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical
-//! order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each
-//! path of 12.5 once, curves through surfaces, each path of 12.6 once, and surfaces cut by a sphere
-//! and seen in silhouette.
+//! Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision
+//! 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in
+//! canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that
+//! meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a
+//! sphere and seen in silhouette, and planes through a whole sphere's poles.
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -216,6 +216,26 @@ pub fn plates(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
         );
         let lift = f64::from(i32::try_from(g.range(1, 4)).ok()?);
         Some((SurfaceKind::Plane(patch.ok()?), [at[0], at[1], lift]))
+    })
+}
+
+/// A plane patch holding the axis of a whole sphere about each centre, so it passes through both
+/// of the sphere's poles, for `march` across them (piece G173).
+#[must_use]
+pub fn poles(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::poles", class);
+    batch_of(|_| {
+        let at = point(&mut g);
+        let patch = Plane::new(
+            at,
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            ((-8.0, 8.0), (-8.0, 8.0)),
+        );
+        Some((SurfaceKind::Plane(patch.ok()?), at))
     })
 }
 

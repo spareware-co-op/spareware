@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168 and G169, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, and surfaces cut by a sphere and seen in silhouette.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a sphere and seen in silhouette, and planes through a whole sphere's poles.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2566,13 +2566,13 @@
         },
         {
           "cost": "one subdivision, one budgeted rerun, one march and one analysis, and [`CELLS`] squared evaluations.",
-          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of four surfaces on small lattice sizes, and a sphere or a plane through it. [`check`] subdivides the pair and holds the answer to the laws below, with a dense grid of the implicit form of the second surface on the first as the oracle: a sign change between neighbours proves the surfaces cross there, and [`crate::general`]'s pairs must cover it. [`harness`] is `decode` then `check`.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of four surfaces on small lattice sizes, some over a whole turn and some cones with an apex (G173's seams and poles), and a sphere or a plane through it. [`check`] subdivides the pair and holds the answer to the laws below, with a dense grid of the implicit form of the second surface on the first as the oracle: a sign change between neighbours proves the surfaces cross there, and [`crate::general`]'s pairs must cover it. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/general.rs",
           "guarantees": [
             "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
             "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
-            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd count, a chord past its ceiling, a contact whose point is on one surface only, a bound past its ceiling, a region off its surface, an internal error, or a budget that changes an answer instead of stopping it."
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd count, a chord past its ceiling, a pass named at a vertex off its seam or pole, two branch ends left apart across a closing seam, a contact whose point is on one surface only, a bound past its ceiling, a region off its surface, an internal error, or a budget that changes an answer instead of stopping it."
           ],
           "job": "Fuzz target: `geom-intersect`'s subdivision leaves no crossing outside its settled or flagged pairs, its marching stays on both surfaces, and its analysis of the flagged pairs says nothing the surfaces deny, on any bytes.",
           "method": {
@@ -3548,12 +3548,12 @@
       "modules": [
         {
           "cost": "constant. Recursion: none.",
-          "does": "[`settle`] gives an item the bound ε_out that [`Terms`] prove for it, and flags it `BoundExceeded` if that passes the ceiling. An operand's bound is zero when the crate intersects exact defining data, and a cache's certified error when it intersects a cache.",
+          "does": "[`settle`] gives an item the bound `ε_out` that [`Terms`] prove for it, and flags it `BoundExceeded` if that passes the ceiling. An operand's bound is zero when the crate intersects exact defining data, and a cache's certified error when it intersects a cache.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-intersect/src/bound.rs",
           "guarantees": [
             "**Never a wider Certified item.** An item comes back Certified within the ceiling, or flagged with the bound it needed.",
-            "**Rounds up.** ε_out is an upper bound of an interval sum, rounded up to whole steps.",
+            "**Rounds up.** `ε_out` is an upper bound of an interval sum, rounded up to whole steps.",
             "**Exact stays exact only on exact operands.** Any operand's bound makes an Exact item Certified.",
             "**Approximate stays Approximate.** Its deviation grows by the same terms, and proves nothing, so the ceiling does not judge it.",
             "**No angle, no bound.** Where the angle cannot carry the operands' bounds through, as it cannot near tangency, the item is flagged with a bound of `u64::MAX` steps. 12.9's square root is the tangent case's bound, and that is [`crate::contact`]'s."
@@ -3563,7 +3563,7 @@
             "links": [
               "projects/engines/geometry/architecture/12-intersections.md"
             ],
-            "text": "chapter 12.2 (`projects/engines/geometry/architecture/12-intersections.md`). Two shapes moved by ε_A and ε_B, whose sum is e, meeting at an angle whose sine is at least s, move their crossing by at most r = e/s to first order. Over a distance r the normals of shapes of curvature at most κ each turn by at most κ·r, so the angle there is within 2κ·r of θ, and sine being 1-Lipschitz, r ≤ e/(s − 2κ·r). Take r₀ = 2e/s. If s − 2κ·r₀ ≥ s/2, that map takes [0, r₀] into itself, so the crossing lies within e/(s − 2κ·r₀) of where it was. That quotient is both terms of `ε_out` at once: e/s, and the second-order rest. If not, the curvature can undo the angle inside the distance moved, and no bound of this form exists."
+            "text": "chapter 12.2 (`projects/engines/geometry/architecture/12-intersections.md`). Two shapes moved by `ε_A` and `ε_B`, whose sum is e, meeting at an angle whose sine is at least s, move their crossing by at most r = e/s to first order. Over a distance r the normals of shapes of curvature at most κ each turn by at most κ·r, so the angle there is within 2κ·r of θ, and sine being 1-Lipschitz, r ≤ e/(s − 2κ·r). Take r₀ = 2e/s. If s − 2κ·r₀ ≥ s/2, that map takes [0, r₀] into itself, so the crossing lies within e/(s − 2κ·r₀) of where it was. That quotient is both terms of `ε_out` at once: e/s, and the second-order rest. If not, the curvature can undo the angle inside the distance moved, and no bound of this form exists."
           },
           "path": "geom_intersect::bound",
           "provenance": [],
@@ -3748,7 +3748,8 @@
             "**Each branch ends for a reason.** It ends at a start point the box proves it reaches, or, at a domain's edge, where no box can stand across the point, within the floor of one, and a march leaves such a point a floor along: nothing there can be told apart on the grid. That point lies on the domain's boundary, or joins the next pair, or sits beside a flagged pair.",
             "**Everything is accounted for.** Every start point of a traced pair is used exactly once. A start that reaches no other, in either direction, leaves its whole pair in [`Traced::unproven`], with none of its pieces kept: never a branch quietly ended.",
             "**Each branch has a bound.** [`Branch::deviation`] bounds, in space, how far the exact branch is from the chords through its vertices. A step is kept only within the ceiling.",
-            "**Deterministic.** Pairs in the order subdivision left them, starts in the order found, and a step size that follows only from what the tests said."
+            "**Deterministic.** Pairs in the order subdivision left them, starts in the order found, and a step size that follows only from what the tests said.",
+            "**Joined across a closing seam (G173).** Where a domain's two ends are one curve ([`crate::seam`]), a branch that reaches one end goes on from the other: the point is kept once, and [`Branch::passes`] says where."
           ],
           "job": "General surface with surface, second part: certified marching between the start points of [`crate::general::subdivide`] (12.8, steps 6 to 8).",
           "method": {
@@ -3835,6 +3836,31 @@
           "target": "lib"
         },
         {
+          "cost": "constant for the analytic kinds; one pass over the control net and the knots for a NURBS. Each pole line costs one projection to an eighth of the floor and one run of the engine along the line, once per subdivision (`Poles`); each pair then filters what it read. Recursion: none.",
+          "does": "[`charts`] reads, from a kind's own stored data and exactly, which ends of its domain are one curve (a whole turn of a round kind, a NURBS whose first and last rows of control points are one row), which lines of its domain are each one point of space (a sphere's poles, a cone's apex, a NURBS edge whose control points are one point), and the lines inside where it is not proven tangent-continuous (a NURBS knot of full multiplicity). [`crate::general::subdivide`] cuts each domain at its creases and inner poles before anything else ([`cuts`]), and tests a patch edge on a pole line as the one point it is: the point against the other surface (12.4), then the directions a branch leaves it by. [`crate::march`] and [`crate::level`] join a branch across a closing seam, through a pole and across a knot line, recording the point once and saying where in [`Pass`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/seam.rs",
+          "guarantees": [
+            "**Exact, or not claimed.** Ends close only when the data proves them one curve: a span of exactly two half-turns (an error-free sum), or control rows of identical doubles and weights on a clamped basis. A line is a pole only when the data makes it one point: v exactly ±1/2 on a sphere; r₀ + k·v exactly 0 on a cone (an error-free product); R + r·cos πv exactly 0 at a v whose cosine is exact (a multiple of a half-turn) on a torus; identical control points along a clamped NURBS edge (`geom_nurbs::Surface::collapsed_edges`). Anything else is an ordinary edge, and a branch that ends there ends at the boundary: a join is never made that is not proven.",
+            "**One point, recorded once.** Two ends are joined across a seam only when one sits on each end of a closing parameter, exactly (a start on an edge holds the edge's value as a point), and their other parameters' enclosures meet: both are then roots of one edge system, the same standard [`crate::march`] joins pairs by. Ends held on one pole line are its one point whatever the line's free parameter. The joined branch keeps one of the enclosures.",
+            "**A pole joins two, or none.** Where exactly two half-branches end at a pole, the curve goes through it as one branch (a sphere's meridians, a cone's two generators in a plane through its apex, a turn there allowed). Any other number makes it a singular point, where each ends ([`crate::result::CurveEnd::Singular`]), as 12.8's step 8 asks.",
+            "**A pole is decided as a point.** It is proven apart from the other surface, or proven within the floor of it at a foot in the pair; otherwise the pair is undecided. A pole within the floor is treated as on it, the same resolution floor every other test stops at (12.3).",
+            "**A lone pole is never lost.** A pole on the other surface that no branch leaves (a cone's apex resting on a plane) is kept to the floor by subdivision, flagged `NonSmooth { at: Pole }`, and read by [`crate::contact::analyse`] as one singular point there."
+          ],
+          "job": "Seams, poles and knot lines: where a surface's parameterisation stops being regular, and how a branch passes them (12.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "chapter 12.10 (`projects/engines/geometry/architecture/12-intersections.md`); each kind's closed form in `geom_surface` (its table of S(u, v)); knot multiplicity and continuity from L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., section 2.2: a knot of multiplicity k leaves a degree-p basis C^(p−k) there, so k ≥ p is at most C⁰ (<https://doi.org/10.1007/978-3-642-59223-2>). The directions out of a pole are 12.10's division of the vanishing factor: on a pole line the partial along the line is zero, so a step off it moves along the partial across, and a branch leaves along those of its values that lie in the other surface's tangent plane. This is our derivation; the engine of [`crate::solve`] proves each such value once."
+          },
+          "path": "geom_intersect::seam",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "each box is one residual range and at most one operator step, each a few evaluations of the kind; O(N³) doubles for the inverse. One allocation for each list. Recursion: none.",
           "does": "a [`Field`] gives a system's residuals at a point and over a box, its Jacobian over a box, and how far a box reaches in space, from whatever a kind can bound. [`solve`] keeps boxes on a work list, discards each one a caller's test rules out or whose residuals exclude zero, takes a Krawczyk step, and splits what is left. `geom_num::isolate` does this for a system that is written once over its scalars; kinds that are bounded through their own traits come here.",
           "family": [],
@@ -3865,7 +3891,7 @@
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170, seams, poles and knot lines by G173; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {

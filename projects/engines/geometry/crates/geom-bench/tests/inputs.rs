@@ -2398,6 +2398,7 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("trace_patch", k::cut_patches, &m::patches(Typical));
     all_ok("subdivide_patch", k::subdivided, &m::sheets(Typical));
     all_ok("march_plate", k::marched, &m::plates(Typical));
+    all_ok("march_poles", k::through_poles, &m::poles(Typical));
     all_ok("analyse_rest", k::touched, &m::rests(Typical));
     all_ok("trace_silhouette", k::silhouettes, &m::tori(Typical));
 }

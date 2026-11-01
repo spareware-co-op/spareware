@@ -67,8 +67,8 @@ use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
 use crate::project::{boxed, dot, image, negative, positive};
-use crate::result::{Test, Unresolved};
-use crate::seam::{Charts, cells, charts, pole_starts};
+use crate::result::{Degeneracy, Test, Unresolved};
+use crate::seam::{Charts, PoleStarts, Poles, cells, charts};
 use crate::solve::{Field, solve};
 
 /// What a pair of patches costs the meter, besides the kinds' own charges.
@@ -335,16 +335,26 @@ pub(crate) fn same(a: &[Interval; 4], b: &[Interval; 4]) -> bool {
         .all(|(x, y)| x.lo() <= y.hi() && y.lo() <= x.hi())
 }
 
-/// The start points of one settled pair, or `None` if they could not all be proven. An edge on a
-/// pole line of its surface ([`crate::seam`]) is one point, tested as a point.
+/// What the edges of a pair whose normals part give.
+pub(crate) enum Starts {
+    /// Its start points, every one proven.
+    Found(Vec<[Interval; 4]>),
+    /// Some could not be proven.
+    Undecided,
+    /// A pole of one surface lies on the other in the pair, and no branch leaves it: a lone point.
+    Lone,
+}
+
+/// The start points of one pair, or why there are none to take. An edge on a pole line of its
+/// surface ([`crate::seam`]) is one point, tested as a point.
 pub(crate) fn starts_of(
     first: &SurfaceKind,
     second: &SurfaceKind,
     pair: (Region, Region),
     floor: f64,
-    seams: [&Charts; 2],
+    (seams, read): ([&Charts; 2], &Poles),
     meter: &mut WorkMeter<'_>,
-) -> Result<Option<Vec<[Interval; 4]>>, IntersectError> {
+) -> Result<Starts, IntersectError> {
     let (one, two) = pair;
     let [first_seams, second_seams] = seams;
     let mut out: Vec<[Interval; 4]> = Vec::new();
@@ -356,9 +366,10 @@ pub(crate) fn starts_of(
         for (at, fixed_u) in [(a, true), (b, true), (c, false), (d, false)] {
             let on_pole = if fixed_u { &poles.0 } else { &poles.1 }.contains(&at);
             let zeros = if on_pole {
-                match pole_starts(own, other, (here, there), (at, fixed_u), floor, meter)? {
-                    Some(zeros) => zeros,
-                    None => return Ok(None),
+                match read.starts(swapped, (at, fixed_u), (here, there)) {
+                    PoleStarts::Starts(zeros) => zeros,
+                    PoleStarts::Lone => return Ok(Starts::Lone),
+                    PoleStarts::Undecided => return Ok(Starts::Undecided),
                 }
             } else {
                 let edge = Edge {
@@ -383,7 +394,7 @@ pub(crate) fn starts_of(
                 for flagged in &found.flagged {
                     let [t, ..] = flagged.region;
                     if !(at_pole(t) && edge.reach(&flagged.region, meter)? <= 1.0) {
-                        return Ok(None);
+                        return Ok(Starts::Undecided);
                     }
                 }
                 found
@@ -404,7 +415,7 @@ pub(crate) fn starts_of(
             }
         }
     }
-    Ok(Some(out))
+    Ok(Starts::Found(out))
 }
 
 /// The point `share` of the way across a span, if it has one strictly inside.
@@ -465,6 +476,7 @@ pub fn subdivide(
     // Cut first at the lines where a kind is not regular (12.10): its creases and the poles inside
     // its domain, so no patch reaches across one.
     let seams = (charts(first), charts(second));
+    let poles = Poles::of(first, second, [&seams.0, &seams.1], floor, meter)?;
     let mut work = Vec::new();
     for a in cells(first, &seams.0) {
         for b in cells(second, &seams.1) {
@@ -482,9 +494,16 @@ pub fn subdivide(
             continue;
         }
         let (na, nb) = (normals(first, a, meter)?, normals(second, b, meter)?);
+        // Why the pair is split, and flagged once it reaches the floor: its normals may be
+        // parallel, or a pole touches the other surface here with no branch out of it, a lone point
+        // kept as small as the floor allows (12.10).
+        let mut why = Unresolved::UndecidedAtFloor {
+            test: Test::LoopFreedom,
+        };
         if !may_be_parallel(&na, &nb)? {
-            match starts_of(first, second, (a, b), floor, [&seams.0, &seams.1], meter)? {
-                Some(starts) if starts.len() % 2 == 0 => {
+            let lines = ([&seams.0, &seams.1], &poles);
+            match starts_of(first, second, (a, b), floor, lines, meter)? {
+                Starts::Found(starts) if starts.len() % 2 == 0 => {
                     if !starts.is_empty() {
                         out.settled.push(Settled {
                             first: a,
@@ -492,24 +511,30 @@ pub fn subdivide(
                             starts,
                         });
                     }
+                    continue;
                 }
-                _ => out.flagged.push(FlaggedPair {
-                    first: a,
-                    second: b,
-                    why: Unresolved::UndecidedAtFloor {
-                        test: Test::Exclusion,
-                    },
-                }),
+                Starts::Found(_) | Starts::Undecided => {
+                    out.flagged.push(FlaggedPair {
+                        first: a,
+                        second: b,
+                        why: Unresolved::UndecidedAtFloor {
+                            test: Test::Exclusion,
+                        },
+                    });
+                    continue;
+                }
+                Starts::Lone => {
+                    why = Unresolved::NonSmooth {
+                        at: Degeneracy::Pole,
+                    };
+                }
             }
-            continue;
         }
         if larger(image(&over_a), image(&over_b)) <= floor {
             out.flagged.push(FlaggedPair {
                 first: a,
                 second: b,
-                why: Unresolved::UndecidedAtFloor {
-                    test: Test::LoopFreedom,
-                },
+                why,
             });
             continue;
         }
@@ -528,9 +553,7 @@ pub fn subdivide(
         out.flagged.push(FlaggedPair {
             first: a,
             second: b,
-            why: Unresolved::UndecidedAtFloor {
-                test: Test::LoopFreedom,
-            },
+            why,
         });
     }
     Ok(out)

@@ -36,8 +36,11 @@ use geom_fuzz::general::{
 use geom_fuzz::seeded;
 use geom_intersect::contact::Reading;
 use geom_intersect::general::{Settled, Subdivided, subdivide};
-use geom_intersect::march::march;
-use geom_intersect::result::{Coincidence, CurveContact, PointContact, StepsInterval, Unresolved};
+use geom_intersect::march::{Branch, march};
+use geom_intersect::result::{
+    Coincidence, CurveContact, CurveEnd, PointContact, StepsInterval, Unresolved,
+};
+use geom_intersect::seam::Passing;
 use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
@@ -197,6 +200,60 @@ fn a_march_is_held_to_its_laws() {
     traced.branches[0].vertices[0][3] = far;
     let law = judge_march(&plane, &other, &traced).unwrap_err();
     assert!(law.law.contains("both surfaces"), "{law}");
+}
+
+/// The sphere of [`pair`] spans a whole turn, so its circle on the plane is one loop across the
+/// seam (G173): a pass off its line, or the loop left open across the seam, is a finding.
+#[test]
+fn a_seam_is_held_to_its_laws() {
+    let (plane, other, _, found) = pair();
+    let mut meter = WorkMeter::new(Budget::of_work(1 << 22));
+    let traced = march(&plane, &other, &found, 1e-2, 1e-1, &mut meter).unwrap();
+    let branch = &traced.branches[0];
+    assert_eq!(
+        branch.ends,
+        [CurveEnd::Closed, CurveEnd::Closed],
+        "{traced:?}"
+    );
+    let pass = branch.passes[0];
+    assert_eq!(pass.passing, Passing::Seam);
+    let mut moved = traced.clone();
+    moved.branches[0].passes[0].at = (pass.at + 3) % branch.vertices.len();
+    let law = judge_march(&plane, &other, &moved).unwrap_err();
+    assert!(law.law.contains("pass"), "{law}");
+    // The loop opened at its seam: one end at u = 0, the other at u = 2, every other parameter one.
+    let mut open = traced.clone();
+    let seam = branch.vertices[pass.at];
+    let mut far = seam;
+    let other_end = if seam[2].contains(0.0) { 2.0 } else { 0.0 };
+    far[2] = Interval::point(other_end).unwrap();
+    let mut vertices = branch.vertices.clone();
+    vertices.rotate_left(pass.at);
+    vertices.push(far);
+    open.branches[0] = Branch {
+        vertices,
+        ends: [CurveEnd::Boundary, CurveEnd::Boundary],
+        deviation: branch.deviation,
+        passes: Vec::new(),
+    };
+    let law = judge_march(&plane, &other, &open).unwrap_err();
+    assert!(law.law.contains("seam"), "{law}");
+}
+
+/// Cones whose apex is on their domain's edge, a whole turn round, and a plane through the apex:
+/// one wide enough for the plane to cut it along two generators, one narrow enough that the plane
+/// only touches its apex, a lone point flagged at the floor and read there.
+#[test]
+fn the_apex_cases_pass() {
+    let case = |size: u8| Case {
+        surface: 2 + 4 + 8,
+        size,
+        second: 1,
+        at: [8; 3],
+        work: 255,
+    };
+    assert_eq!(check(case(7)).unwrap(), Outcome::Settled);
+    assert_eq!(check(case(0)).unwrap(), Outcome::Flagged);
 }
 
 #[test]

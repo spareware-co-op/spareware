@@ -2220,6 +2220,21 @@ pub mod intersect {
         });
     }
 
+    /// `march` through what `subdivide` leaves of a whole sphere and a plane through its poles.
+    #[inline(never)]
+    pub fn through_poles(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<Traced, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, centre)| {
+            let frame = geom_curve::Frame::standard().map_err(|_| IntersectError::Internal)?;
+            let domain = ((0.0, 2.0), (-0.5, 0.5));
+            let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
+            let found = subdivide(&sphere, surface, 0.25, &mut meter())?;
+            march(&sphere, surface, &found, 0.25, 1.0, &mut meter())
+        });
+    }
+
     /// `project_surface` on each band and point.
     #[inline(never)]
     pub fn on_spheres(

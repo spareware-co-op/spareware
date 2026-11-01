@@ -1387,6 +1387,18 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::march::march(surface, &sphere, &found, 1.0, 1.0, &mut meter)
             },
         )),
+        ("intersect", "march_poles") => fold(inputs::intersect::poles(class).iter().map(
+            |(surface, centre)| {
+                let frame = geom_curve::Frame::standard().unwrap();
+                let domain = ((0.0, 2.0), (-0.5, 0.5));
+                let sphere = geom_surface::SurfaceKind::Sphere(geom_surface::Sphere::new(
+                    *centre, 5.0, frame, domain,
+                )?);
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let found = geom_intersect::general::subdivide(&sphere, surface, 0.25, &mut meter)?;
+                geom_intersect::march::march(&sphere, surface, &found, 0.25, 1.0, &mut meter)
+            },
+        )),
         ("intersect", "analyse_rest") => {
             fold(inputs::intersect::rests(class).iter().map(|(plate, ball)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

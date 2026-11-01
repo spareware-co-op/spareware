@@ -278,9 +278,15 @@
               "kind": "corpus",
               "piece": "G171",
               "why": "1 new count benchmark on geom-intersect's contact analysis (decision 32.44): a sphere resting on a plane patch. march_plate's digest moves with it: the march now pads each parameter's box at that parameter's speed, without which it could not walk a NURBS surface against a plane at grid scale."
+            },
+            {
+              "sha256": "b59060fccfa0cc11a8c2e21c0ef9e3a30750f66e442147425073903464bf184b",
+              "kind": "corpus",
+              "piece": "G173",
+              "why": "1 new count benchmark on geom-intersect's poles and seams (decision 32.44): a whole sphere through a plane holding both its poles, one loop joined through each. trace_patch's, march_plate's and trace_silhouette's digests move with it: their results' branches now say where they pass a seam, a knot line or a pole (Branch::passes, 12.10), which their Debug text writes, empty here."
             }
           ],
-          "sha256": "b59060fccfa0cc11a8c2e21c0ef9e3a30750f66e442147425073903464bf184b"
+          "sha256": "804f58fd795cdf67fc7109e9327c600b94abc97902aae1b9e5a063b0b616f6e1"
         },
         {
           "id": "geom-nurbs/operations",
