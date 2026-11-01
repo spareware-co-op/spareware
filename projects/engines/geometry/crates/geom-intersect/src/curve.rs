@@ -244,6 +244,13 @@ impl Seam {
         Ok(Interval::new(lo - pad, hi + pad)?)
     }
 
+    /// Whether `x` holds an end of the domain, where a meeting is a boundary touch (12.2: the
+    /// natural boundaries). A closed curve's join is no boundary, and an infinite end holds nothing.
+    pub(crate) fn ends(self, x: Interval) -> bool {
+        let (lo, hi) = self.domain;
+        !self.closed && (x.contains(lo) || x.contains(hi))
+    }
+
     /// `t` on the domain.
     pub(crate) fn wrapped(self, t: f64) -> f64 {
         let (lo, hi) = self.domain;
@@ -861,6 +868,10 @@ fn circle_circle<const D: usize>(
                 xyz,
                 contact: if tangent {
                     PointContact::IsolatedTangent
+                } else if Seam::turns(ParamCurve::domain(a)).ends(s)
+                    || Seam::turns(ParamCurve::domain(b)).ends(t)
+                {
+                    PointContact::BoundaryTouch
                 } else {
                     PointContact::Crossing
                 },
@@ -976,7 +987,8 @@ fn whole_overlap(
 }
 
 /// Two arcs of one circle. A point of `b` at t lies on `a` at φ ± t, with φ where `b` starts its
-/// turns, so each of `b`'s ranges a whole turn apart can lie on `a`.
+/// turns, + when the two turn the same way (their normals agree), so each of `b`'s ranges a whole
+/// turn apart can lie on `a`.
 fn one_circle<const D: usize>(
     a: &Circle<D>,
     b: &Circle<D>,
@@ -988,13 +1000,16 @@ fn one_circle<const D: usize>(
         return whole_overlap(s, t, meter);
     }
     let i = Interval::point;
-    let (_, [_, ay, _]) = a.frame().unit_vectors()?;
-    let (_, [bx, by, _]) = b.frame().unit_vectors()?;
+    let (_, [_, _, an]) = a.frame().unit_vectors()?;
+    let (_, [bx, _, bn]) = b.frame().unit_vectors()?;
     let [c, e] = axes;
     let phi = turn(a, at(&bx, c)?, at(&bx, e)?, axes)?;
-    let way = at(&ay, c)?
-        .mul(at(&by, c)?)?
-        .add(at(&ay, e)?.mul(at(&by, e)?)?)?;
+    // One circle's planes are one plane, so the unit normals are equal or opposite: the product is
+    // near 1 or −1, never near 0. (The ŷ axes' product would be cos φ, which a turn alone flips.)
+    let way = at(&an, 0)?
+        .mul(at(&bn, 0)?)?
+        .add(at(&an, 1)?.mul(at(&bn, 1)?)?)?
+        .add(at(&an, 2)?.mul(at(&bn, 2)?)?)?;
     let sign = if way.lo() > 0.0 { 1.0 } else { -1.0 };
     let ends = [
         phi.add(i(sign)?.mul(i(t.0)?)?)?,
@@ -1168,16 +1183,10 @@ pub(crate) fn quadratic(
     [a, b, c]: [Interval; 3],
     exact: Option<Meeting>,
 ) -> Result<Option<Vec<Interval>>, IntersectError> {
-    let flat = a.lo() == 0.0 && a.hi() == 0.0;
-    if a.contains(0.0) && !flat {
+    // A leading coefficient that may be zero, a line along a parabola's axis or a hyperbola's
+    // asymptote, is the engine's: its enclosure is never exactly zero, being rounded outward.
+    if a.contains(0.0) {
         return Ok(None);
-    }
-    if flat {
-        if b.contains(0.0) {
-            return Ok(None);
-        }
-        let root = c.neg().div(b.mul(Interval::point(2.0)?)?)?;
-        return Ok(Some(alloc::vec![root]));
     }
     let d = b.square()?.sub(a.mul(c)?)?;
     let meeting = match exact {
@@ -1252,6 +1261,11 @@ fn line_conic<const D: usize>(
     };
     let tangent = exact == Some(Meeting::Tangent);
     let domain = ParamCurve::domain(line);
+    let conic_seam = if conic.shape == Shape::Turn {
+        Seam::turns(conic.domain)
+    } else {
+        Seam::open(conic.domain)
+    };
     let mut items = Vec::new();
     for s in roots {
         if s.hi() < domain.0 || s.lo() > domain.1 {
@@ -1274,10 +1288,9 @@ fn line_conic<const D: usize>(
         let Some(t) = t else {
             continue;
         };
-        let end = |x: Interval, (lo, hi): (f64, f64)| x.contains(lo) || x.contains(hi);
         let contact = if tangent {
             PointContact::IsolatedTangent
-        } else if end(s, domain) || end(t, conic.domain) {
+        } else if Seam::open(domain).ends(s) || conic_seam.ends(t) {
             PointContact::BoundaryTouch
         } else {
             PointContact::Crossing
