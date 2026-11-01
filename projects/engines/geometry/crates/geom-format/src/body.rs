@@ -8,8 +8,11 @@
 //! reads them back through `geom_topo::Builder`, which checks the topology again before it
 //! publishes, so a stored body is never trusted further than a built one. The tables, by code in
 //! [`table`], are the arenas of chapter 8.2: regions, shells, faces, loops, fins, edges and
-//! vertices; the geometry pools (points, surfaces, curves and pcurves); and, for a body published
-//! by name, the names of its regions, faces, edges and vertices. A [`BodyVersion`] is a body with
+//! vertices; the geometry pools (points, surfaces, curves and pcurves); for a body published by
+//! name, the names of its regions, faces, edges and vertices; and the plane pool of its meeting
+//! points, when it has one. A point is a grid point or the meeting of three of the pool's planes
+//! (24.3): a chunk of grid points alone keeps its one column of coordinates, and a chunk holding a
+//! meeting adds a kind per row and the meetings' plane references (`format/SPEC.md`, section 10). A [`BodyVersion`] is a body with
 //! each chunk's content ID: [`BodyVersion::next`] writes a new version, encoding and hashing only
 //! the chunks it does not share with the one before (23.8). Its [`BodyVersion::geometry_id`] is
 //! the root of the same tree without the name tables, which a name-free cache key takes (23.8).
@@ -27,6 +30,11 @@
 //!   holds (`Column::shares_chunk`) or, for a name table, where the rows are equal, so its index
 //!   is byte for byte [`write_body`]'s. The version holds the earlier body's columns, so a chunk
 //!   it compares against is never freed and its address reused.
+//! - **Meetings are exact and checked.** A plane is stored as its four integers, which must be
+//!   reduced (their greatest common divisor 1) and within the 83 and 125 bits of
+//!   `geom_num::plane`; a meeting as its three planes' rows, never as coordinates. A reader refuses
+//!   a plane past those bits or not reduced, and a meeting whose three planes do not meet in one
+//!   point (an exact determinant, `geom_num::plane::Tpi`), before anything is built (24.7).
 //! - **References are checked.** Every reference is stored as its row plus one, 0 for none; a
 //!   required reference of 0, a row count that disagrees with the chunks, a chunk of the wrong table
 //!   or position, or a content ID that does not match its chunk is refused before anything is
@@ -53,17 +61,19 @@ use core::fmt;
 
 use geom_math::Box3;
 use geom_num::grid::P3;
+use geom_num::plane::{Plane, Tpi};
 use geom_op::cbor::{EncodeError, Encoder};
 use geom_run::{Stopped, WorkMeter};
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Arenas, Body, BodyKind, Builder, Column, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense,
-    Shell, TopoError, Vertex,
+    Arenas, Body, BodyKind, Builder, Column, Edge, Face, Fin, Ix, Loop, PointKind, Region,
+    RegionKind, Sense, Shell, TopoError, Vertex,
 };
 
 use crate::cbor::{CborError, Decoder, Item, int_column};
 use crate::content::ContentId;
 use crate::kinds::{self, KindError};
+use crate::range;
 use crate::record::{REQUIRED, Record};
 
 /// The record type of a body's index.
@@ -91,7 +101,8 @@ pub mod table {
     pub const EDGES: u64 = 6;
     /// Vertices: point.
     pub const VERTICES: u64 = 7;
-    /// Points: x, y, z in grid steps.
+    /// Points: x, y, z in grid steps; where a chunk holds a meeting, also each row's kind and the
+    /// meetings' plane references.
     pub const POINTS: u64 = 8;
     /// Surfaces: one kind each.
     pub const SURFACES: u64 = 9;
@@ -107,6 +118,9 @@ pub mod table {
     pub const EDGE_NAMES: u64 = 14;
     /// Vertex names.
     pub const VERTEX_NAMES: u64 = 15;
+    /// The plane pool of the meeting points: `n_x`, `n_y`, `n_z` and d, reduced. Listed only when
+    /// the pool has rows, after the names.
+    pub const PLANES: u64 = 16;
 }
 
 /// A body as records: its index and its chunks, each chunk once, in the index's order.
@@ -335,14 +349,14 @@ struct Tables<'a, 'm> {
     meter: &'a mut WorkMeter<'m>,
 }
 
-/// Every chunk of a table: `count` chunks of `width` columns, chunk `i` holding `rows_of(i)` rows,
+/// Every chunk of a table: `count` chunks, chunk `i` of `width(i)` columns holding `rows_of(i)` rows,
 /// its columns written by `write`; pushed onto `out` with the table's row count. A chunk `kept`
 /// says is unchanged takes its ID from the earlier version and is not encoded. Each chunk costs
 /// the meter one unit either way.
 fn table_chunks(
     table: u64,
     count: usize,
-    width: u64,
+    width: impl Fn(usize) -> u64,
     rows_of: impl Fn(usize) -> usize,
     kept: impl Fn(usize) -> bool,
     mut write: impl FnMut(&mut Encoder, usize) -> Result<(), BodyError>,
@@ -360,7 +374,7 @@ fn table_chunks(
         if let Some(id) = earlier.and_then(|t| t.ids.get(i)).filter(|_| kept(i)) {
             ids.push(id.clone());
         } else {
-            let record = chunk_record(table, i, rows, width, |e| write(e, i))?;
+            let record = chunk_record(table, i, rows, width(i), |e| write(e, i))?;
             ids.push(record.content_id());
             out.written.push(record);
         }
@@ -415,7 +429,7 @@ fn write(
     table_chunks(
         table::REGIONS,
         kind.len(),
-        2,
+        |_| 2,
         |i| kind.get(i).map_or(0, |c| c.len()),
         |i| {
             old.is_some_and(|o| {
@@ -448,7 +462,7 @@ fn write(
     table_chunks(
         table::SHELLS,
         region.len(),
-        3,
+        |_| 3,
         |i| region.get(i).map_or(0, |c| c.len()),
         |i| {
             old.is_some_and(|o| {
@@ -486,7 +500,7 @@ fn write(
     table_chunks(
         table::FACES,
         shell.len(),
-        6,
+        |_| 6,
         |i| shell.get(i).map_or(0, |c| c.len()),
         |i| {
             old.is_some_and(|o| {
@@ -546,7 +560,7 @@ fn write(
     table_chunks(
         table::LOOPS,
         face.len(),
-        3,
+        |_| 3,
         |i| face.get(i).map_or(0, |c| c.len()),
         |i| {
             old.is_some_and(|o| {
@@ -585,7 +599,7 @@ fn write(
     table_chunks(
         table::FINS,
         lp.len(),
-        7,
+        |_| 7,
         |i| lp.get(i).map_or(0, |c| c.len()),
         |i| {
             old.is_some_and(|o| {
@@ -635,7 +649,7 @@ fn write(
     table_chunks(
         table::EDGES,
         curve.len(),
-        4,
+        |_| 4,
         |i| curve.get(i).map_or(0, |c| c.len()),
         |i| {
             old.is_some_and(|o| {
@@ -669,7 +683,7 @@ fn write(
     table_chunks(
         table::VERTICES,
         point.len(),
-        1,
+        |_| 1,
         |i| point.get(i).map_or(0, |c| c.len()),
         |i| old.is_some_and(|o| a.vertices.point.shares_chunk(&o.vertices.point, i)),
         |e, i| {
@@ -682,21 +696,39 @@ fn write(
     )?;
 
     let points = chunks_of(&a.points);
+    let meets = |i: usize| {
+        points
+            .get(i)
+            .is_some_and(|c| c.iter().any(|p| matches!(p, PointKind::Meet(_))))
+    };
     table_chunks(
         table::POINTS,
         points.len(),
-        1,
+        |i| if meets(i) { 3 } else { 1 },
         |i| points.get(i).map_or(0, |c| c.len()),
         |i| old.is_some_and(|o| a.points.shares_chunk(&o.points, i)),
         |e, i| {
-            let xyz: Vec<i64> = points
-                .get(i)
-                .copied()
-                .unwrap_or_default()
+            let rows = points.get(i).copied().unwrap_or_default();
+            if meets(i) {
+                uints(e, rows, |p| u64::from(matches!(p, PointKind::Meet(_))))?;
+            }
+            let xyz: Vec<i64> = rows
                 .iter()
+                .filter_map(|p| p.grid())
                 .flat_map(|p| [p.x.get(), p.y.get(), p.z.get()])
                 .collect();
             e.i64_column(&xyz)?;
+            if meets(i) {
+                let planes: Vec<u64> = rows
+                    .iter()
+                    .filter_map(|p| match p {
+                        PointKind::Meet(three) => Some(three.map(|r| reference(Some(r)))),
+                        PointKind::Grid(_) => None,
+                    })
+                    .flatten()
+                    .collect();
+                uints(e, &planes, |r| *r)?;
+            }
             Ok(())
         },
         &mut tables,
@@ -706,7 +738,7 @@ fn write(
     table_chunks(
         table::SURFACES,
         surfaces.len(),
-        1,
+        |_| 1,
         |i| surfaces.get(i).map_or(0, |c| c.len()),
         |i| old.is_some_and(|o| a.surfaces.shares_chunk(&o.surfaces, i)),
         |e, i| {
@@ -723,7 +755,7 @@ fn write(
     table_chunks(
         table::CURVES,
         curves.len(),
-        1,
+        |_| 1,
         |i| curves.get(i).map_or(0, |c| c.len()),
         |i| old.is_some_and(|o| a.curves.shares_chunk(&o.curves, i)),
         |e, i| {
@@ -740,7 +772,7 @@ fn write(
     table_chunks(
         table::PCURVES,
         pcurves.len(),
-        1,
+        |_| 1,
         |i| pcurves.get(i).map_or(0, |c| c.len()),
         |i| old.is_some_and(|o| a.pcurves.shares_chunk(&o.pcurves, i)),
         |e, i| {
@@ -777,7 +809,7 @@ fn write(
             table_chunks(
                 code,
                 runs.len(),
-                1,
+                |_| 1,
                 |i| runs.get(i).map_or(0, |c| c.len()),
                 |i| old_runs.get(i) == runs.get(i),
                 |e, i| {
@@ -796,7 +828,39 @@ fn write(
         }
     }
 
+    let planes = chunks_of(&a.planes);
+    if planes.iter().flat_map(|c| c.iter()).any(|p| !reduced(p)) {
+        return Err(BodyError::Shape("a pool plane that is not reduced (24.3)"));
+    }
+    table_chunks(
+        table::PLANES,
+        planes.len(),
+        |_| 1,
+        |i| planes.get(i).map_or(0, |c| c.len()),
+        |i| old.is_some_and(|o| a.planes.shares_chunk(&o.planes, i)),
+        |e, i| {
+            let rows = planes.get(i).copied().unwrap_or_default();
+            e.array(u64::try_from(rows.len()).unwrap_or(u64::MAX).saturating_mul(4))?;
+            for plane in rows {
+                let [x, y, z] = plane.n();
+                for v in [x, y, z, plane.d()] {
+                    e.int(v)?;
+                }
+            }
+            Ok(())
+        },
+        &mut tables,
+    )?;
+    // An empty pool is not listed, so a body without meetings is stored as before there were any.
+    tables.done.retain(|t| t.code != table::PLANES || t.rows > 0);
+
     index(body, tables.done, tables.written)
+}
+
+/// Whether a plane's four integers have no common divisor above 1, as 24.3 stores a plane.
+fn reduced(plane: &Plane) -> bool {
+    let [x, y, z] = plane.n();
+    range::plane([x, y, z], plane.d(), 0, 0, "a plane").is_ok()
 }
 
 /// The index's payload over `tables`, which says whether the body has names.
@@ -832,7 +896,7 @@ fn index(body: &Body, tables: Vec<Table>, written: Vec<Record>) -> Result<BodyVe
     let payload = index_payload(body, &all, body.names().is_some())?;
     let geometry: Vec<&Table> = tables
         .iter()
-        .filter(|t| t.code < table::REGION_NAMES)
+        .filter(|t| !(table::REGION_NAMES..=table::VERTEX_NAMES).contains(&t.code))
         .collect();
     let geometry = ContentId::of_payload(&index_payload(body, &geometry, false)?);
     let mut ids: Vec<ContentId> = tables.iter().flat_map(|t| t.ids.iter().cloned()).collect();
@@ -870,7 +934,7 @@ fn width(code: u64) -> Option<u64> {
         table::FACES => Some(6),
         table::FINS => Some(7),
         table::EDGES => Some(4),
-        table::VERTICES..=table::VERTEX_NAMES => Some(1),
+        table::VERTICES..=table::VERTEX_NAMES | table::PLANES => Some(1),
         _ => None,
     }
 }
@@ -909,6 +973,28 @@ fn bytes<'a>(
         Some(Item::Bytes(b)) => Ok(b),
         _ => Err(BodyError::Shape(what)),
     }
+}
+
+/// The next integer: a CBOR integer, or a bignum (tags 2 and 3) within 128 bits. The decoder has
+/// already refused a bignum that fits in 64 bits or has a leading zero byte.
+fn integer(d: &mut Decoder<'_>, meter: &mut WorkMeter<'_>) -> Result<i128, BodyError> {
+    let shape = BodyError::Shape("an integer within 128 bits");
+    let (negative, magnitude) = match d.next(meter)? {
+        Some(Item::Uint(n)) => (false, u128::from(n)),
+        Some(Item::Nint(n)) => (true, u128::from(n)),
+        Some(Item::Tag(tag @ (2 | 3))) => {
+            let be = bytes(d, meter, "a bignum's bytes")?;
+            let mut wide = [0_u8; 16];
+            wide.get_mut(16_usize.checked_sub(be.len()).ok_or_else(|| shape.clone())?..)
+                .ok_or_else(|| shape.clone())?
+                .copy_from_slice(be);
+            (tag == 3, u128::from_be_bytes(wide))
+        }
+        _ => return Err(shape),
+    };
+    let value = i128::try_from(magnitude).map_err(|_| shape)?;
+    // A negative integer is stored as −1 − value, which is !magnitude.
+    Ok(if negative { !value } else { value })
 }
 
 /// An `i64` column (tag 79).
@@ -1124,6 +1210,13 @@ pub fn read_body(stored: &StoredBody, meter: &mut WorkMeter<'_>) -> Result<Body,
     } else {
         table::PCURVES
     };
+    // The plane pool, listed after the names only when it has rows.
+    if codes.last() == Some(&table::PLANES) {
+        codes.pop();
+        if arenas.planes.len() == 0 {
+            return Err(BodyError::Shape("an empty plane table, which is not listed"));
+        }
+    }
     if !codes.iter().copied().eq(table::REGIONS..=last) {
         return Err(BodyError::Shape(
             "tables other than a body's, or out of order",
@@ -1145,6 +1238,20 @@ pub fn read_body(stored: &StoredBody, meter: &mut WorkMeter<'_>) -> Result<Body,
         return Err(BodyError::Shape(
             "dependencies other than the index's chunks",
         ));
+    }
+    for point in arenas.points.iter() {
+        if let PointKind::Meet(three) = point {
+            let plane = |r: Ix<Plane>| {
+                arenas
+                    .planes
+                    .get(r)
+                    .copied()
+                    .ok_or(BodyError::Shape("a meeting of a plane past the pool"))
+            };
+            Tpi::new(plane(three[0])?, plane(three[1])?, plane(three[2])?).map_err(|_| {
+                BodyError::Shape("a meeting of three planes that do not meet in one point")
+            })?;
+        }
     }
     let builder = Builder { arenas };
     Ok(if by_name {
@@ -1177,7 +1284,9 @@ fn read_chunk(
         return Err(wrong);
     }
     let rows = uint(d, meter, "a chunk's rows")?;
-    if Some(array(d, meter, "a chunk's columns")?) != width(code) {
+    let columns = array(d, meter, "a chunk's columns")?;
+    // A chunk of points holding a meeting has three columns; one of grid points alone, one.
+    if Some(columns) != width(code) && !(code == table::POINTS && columns == 3) {
         return Err(BodyError::Shape("a chunk with another number of columns"));
     }
     match code {
@@ -1278,13 +1387,58 @@ fn read_chunk(
                 a.vertices.push(Vertex { point })?;
             }
         }
-        table::POINTS => {
+        table::POINTS if columns == 1 => {
             let xyz = i64s(d, meter, "the points")?;
             if u64::try_from(xyz.len()).ok() != rows.checked_mul(3) {
                 return Err(BodyError::Shape("three coordinates per point"));
             }
             for &[x, y, z] in xyz.as_chunks::<3>().0 {
-                a.points.push(grid(x, y, z)?)?;
+                a.points.push(PointKind::Grid(grid(x, y, z)?))?;
+            }
+        }
+        table::POINTS => {
+            let meet = column(d, meter, rows, |n| match n {
+                0 => Ok(false),
+                1 => Ok(true),
+                _ => Err(BodyError::Shape("a point kind of 0 or 1")),
+            })?;
+            let meetings = meet.iter().filter(|m| **m).count();
+            if meetings == 0 {
+                return Err(BodyError::Shape(
+                    "a point kind column in a chunk with no meeting",
+                ));
+            }
+            let xyz = i64s(d, meter, "the grid points")?;
+            if xyz.len() != meet.len().saturating_sub(meetings).saturating_mul(3) {
+                return Err(BodyError::Shape("three coordinates per grid point"));
+            }
+            let triples = u64::try_from(meetings)
+                .unwrap_or(u64::MAX)
+                .saturating_mul(3);
+            let planes = column(d, meter, triples, required)?;
+            let mut xyz = xyz.as_chunks::<3>().0.iter();
+            let mut planes = planes.as_chunks::<3>().0.iter();
+            for m in meet {
+                let point = if m {
+                    PointKind::Meet(*planes.next().ok_or_else(|| wrong.clone())?)
+                } else {
+                    let &[x, y, z] = xyz.next().ok_or_else(|| wrong.clone())?;
+                    PointKind::Grid(grid(x, y, z)?)
+                };
+                a.points.push(point)?;
+            }
+        }
+        table::PLANES => {
+            if Some(array(d, meter, "the planes")?) != rows.checked_mul(4) {
+                return Err(BodyError::Shape("four integers per plane"));
+            }
+            let past = BodyError::Shape("a plane past 83 and 125 bits, or not reduced");
+            for _ in 0..rows {
+                let n = [integer(d, meter)?, integer(d, meter)?, integer(d, meter)?];
+                let offset = integer(d, meter)?;
+                range::plane(n, offset, CHUNK_TAG, 0, "a plane").map_err(|_| past.clone())?;
+                a.planes
+                    .push(Plane::new(n, offset).map_err(|_| past.clone())?)?;
             }
         }
         table::SURFACES => {
