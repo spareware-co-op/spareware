@@ -36,7 +36,9 @@ fn meter() -> WorkMeter<'static> {
 /// The meeting of `a` and `b`, checked on the way out: every curve lies on both surfaces by
 /// their own equations, no two are one, and one that does not close ends on an edge of a domain.
 fn meet(a: &SurfaceKind, b: &SurfaceKind) -> Intersection {
-    let r = natural(a, b, &mut meter()).unwrap().unwrap();
+    let r = natural(a, b, &mut meter())
+        .unwrap_or_else(|e| panic!("{e:?} for {a:?} and {b:?}"))
+        .unwrap_or_else(|| panic!("no closed form for {a:?} and {b:?}"));
     holds(&r, a, b);
     r
 }
@@ -106,7 +108,7 @@ fn holds(r: &Intersection, a: &SurfaceKind, b: &SurfaceKind) {
             }
         }
         for (j, d) in all.iter().enumerate().skip(i + 1) {
-            let one = [c[50], c[150]]
+            let one = [c[37], c[91], c[163]]
                 .iter()
                 .all(|p| from_polyline(*p, d) < 1e-6 * (1.0 + length(*p)));
             assert!(!one, "curves {i} and {j} are one: {:?}", r.items());
@@ -121,7 +123,7 @@ fn holds(r: &Intersection, a: &SurfaceKind, b: &SurfaceKind) {
             for (t, side) in [(lo, Limit::FromRight), (hi, Limit::FromLeft)] {
                 let p = curve.point(t, side).unwrap();
                 assert!(
-                    inside(a, p).is_none() || inside(b, p).is_none(),
+                    inside_by(a, p, CUT).is_none() || inside_by(b, p, CUT).is_none(),
                     "a piece ends at {p:?}, inside both domains: {:?}",
                     r.items()
                 );
@@ -543,6 +545,24 @@ fn a_stop_stops() {
 
 const SIDES: (Limit, Limit) = (Limit::FromRight, Limit::FromRight);
 
+/// `s` over a whole turn and every height, so that its point at any parameters can be read.
+fn unbounded(s: &SurfaceKind) -> SurfaceKind {
+    let far = (-1e9, 1e9);
+    match s {
+        SurfaceKind::Cylinder(x) => SurfaceKind::Cylinder(
+            Cylinder::new(x.center(), x.radius(), x.frame(), (ROUND, far)).unwrap(),
+        ),
+        SurfaceKind::Cone(x) => {
+            let (r0, k) = x.radius_and_slope();
+            SurfaceKind::Cone(Cone::new(x.center(), r0, k, x.frame(), (ROUND, far)).unwrap())
+        }
+        SurfaceKind::Sphere(x) => SurfaceKind::Sphere(
+            Sphere::new(x.center(), x.radius(), x.frame(), (ROUND, (-0.5, 0.5))).unwrap(),
+        ),
+        other => other.clone(),
+    }
+}
+
 fn on(s: &SurfaceKind, u: f64, v: f64) -> [f64; 3] {
     s.point(u, v, SIDES).unwrap()
 }
@@ -569,6 +589,7 @@ fn turn(x: f64, y: f64) -> f64 {
 /// a sphere about its centre, a cylinder or cone about the axis through the middles of opposite
 /// points. `None` where no turn can be read (on an axis, at an apex).
 fn parameters_of(s: &SurfaceKind, p: [f64; 3]) -> Option<(f64, f64)> {
+    let s = &unbounded(s);
     match s {
         SurfaceKind::Plane(plane) => {
             let (c, a, b) = plane.vectors();
@@ -617,11 +638,29 @@ fn parameters_of(s: &SurfaceKind, p: [f64; 3]) -> Option<(f64, f64)> {
     }
 }
 
-/// Whether `p`, a point of `s`, lies on its domain: `None` within `MARGIN` of a true edge, where
-/// a rounding may put it either side, and where no parameter can be read.
-fn inside(s: &SurfaceKind, p: [f64; 3]) -> Option<bool> {
-    const MARGIN: f64 = 1e-4;
+/// How far one unit of each parameter moves a point of `s` at `(u, v)`, in space.
+fn reach_of(s: &SurfaceKind, v: f64) -> (f64, f64) {
+    let pi = core::f64::consts::PI;
+    match s {
+        SurfaceKind::Plane(plane) => {
+            let (_, a, b) = plane.vectors();
+            (length(a), length(b))
+        }
+        SurfaceKind::Cylinder(x) => (pi * x.radius(), 1.0),
+        SurfaceKind::Cone(x) => {
+            let (r0, k) = x.radius_and_slope();
+            (pi * (r0 + k * v).abs(), (1.0 + k * k).sqrt())
+        }
+        SurfaceKind::Sphere(x) => (pi * x.radius() * (pi * v).cos(), pi * x.radius()),
+        _ => (1.0, 1.0),
+    }
+}
+
+/// Whether `p`, a point of `s`, lies on its domain: `None` within `slack` of a true edge, in
+/// space, where a cut or a rounding may put it either side, and where no parameter can be read.
+fn inside_by(s: &SurfaceKind, p: [f64; 3], slack: f64) -> Option<bool> {
     let (u, v) = parameters_of(s, p)?;
+    let (per_u, per_v) = reach_of(s, v);
     let ((u0, u1), (v0, v1)) = ParamSurface::domain(s);
     let round = !matches!(s, SurfaceKind::Plane(_));
     let mut sides = Vec::new();
@@ -636,17 +675,26 @@ fn inside(s: &SurfaceKind, p: [f64; 3]) -> Option<bool> {
         } else {
             u
         };
-        sides.extend([u - u0, u1 - u]);
+        sides.extend([(u - u0) * per_u, (u1 - u) * per_u]);
     }
     let sphere = matches!(s, SurfaceKind::Sphere(_));
     for (side, end) in [(v - v0, v0), (v1 - v, v1)] {
         if !sphere || end.abs() < 0.5 {
-            sides.push(side);
+            sides.push(side * per_v);
         }
     }
     let least = sides.iter().fold(f64::INFINITY, |a, b| a.min(*b));
-    (least.abs() >= MARGIN).then_some(least > 0.0)
+    (least.abs() >= slack).then_some(least > 0.0)
 }
+
+/// `inside_by` with the slack of a rounding.
+fn inside(s: &SurfaceKind, p: [f64; 3]) -> Option<bool> {
+    inside_by(s, p, 1e-6 * (1.0 + length(p)))
+}
+
+/// How near an edge a cut may leave a piece's end, or skip a stretch: a stretch shorter than two
+/// steps is below what a cut can tell (12.7's trimming).
+const CUT: f64 = 2.5;
 
 /// How far `x` lies outside [lo, hi].
 fn tight_gap(x: f64, lo: f64, hi: f64) -> f64 {
@@ -703,7 +751,9 @@ fn trims(whole: &Intersection, part: &Intersection, a: &SurfaceKind, b: &Surface
         .flat_map(|p| p.windows(2).map(|w| length(sub(w[0], w[1]))))
         .fold(0.0, f64::max);
     for curve in &reference {
-        let on_both = |p: &[f64; 3]| inside(a, *p) == Some(true) && inside(b, *p) == Some(true);
+        let on_both = |p: &[f64; 3]| {
+            inside_by(a, *p, CUT) == Some(true) && inside_by(b, *p, CUT) == Some(true)
+        };
         let mut run: Vec<[f64; 3]> = Vec::new();
         let check = |run: &mut Vec<[f64; 3]>| {
             let long: f64 = run.windows(2).map(|w| length(sub(w[0], w[1]))).sum();

@@ -238,15 +238,21 @@ struct Funnel {
 fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
     let line = axis(cone.center(), &cone.frame(), cone.axial_sign())?;
     let (r0, k) = cone.radius_and_slope();
-    // Exact where the data are: a grid apex is what makes the exact decisions possible.
-    let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;
-    let [a, b, c] = line.at;
-    let [x, y, z] = line.along;
-    let apex = [
-        tight::add(a, tight::mul(x, v)?)?,
-        tight::add(b, tight::mul(y, v)?)?,
-        tight::add(c, tight::mul(z, v)?)?,
-    ];
+    // Exact where the data are: a grid apex is what makes the exact decisions possible. A cone
+    // stored by its apex has it as its centre, exactly, whatever its axis; any other is reached
+    // along the unit axis, exact only where that is.
+    let apex = if r0 == 0.0 {
+        line.at
+    } else {
+        let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;
+        let [a, b, c] = line.at;
+        let [x, y, z] = line.along;
+        [
+            tight::add(a, tight::mul(x, v)?)?,
+            tight::add(b, tight::mul(y, v)?)?,
+            tight::add(c, tight::mul(z, v)?)?,
+        ]
+    };
     let slope = point(k.abs())?;
     let exact = (|| {
         if wide(apex) > 0.0 {
@@ -1262,10 +1268,13 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
             let ((u0, u1), (v0, v1)) = ParamSurface::domain(c);
             let on = axis(c.center(), &c.frame(), c.axial_sign())?;
             for v in [v0, v1] {
-                let radius = (r0 + k * v).abs();
+                let signed = r0 + k * v;
+                let radius = signed.abs();
                 if radius > 0.0 {
+                    // Past the apex the radius is negative: the point at u is half a turn round.
+                    let turn = if signed < 0.0 { 1.0 } else { 0.0 };
                     let at = plus(on.at, scale(on.along, point(v)?)?)?;
-                    let curve = Circle::new(middle(at), radius, c.frame(), (u0, u1))?;
+                    let curve = Circle::new(middle(at), radius, c.frame(), (u0 + turn, u1 + turn))?;
                     out.push(CurveKind::Circle(curve));
                 }
             }
@@ -1510,16 +1519,17 @@ fn trimmed(
     let mut ends: Vec<f64> = Vec::new();
     let (mut start, stop) = if loops {
         let base = *cut.first().ok_or(IntersectError::Internal)?;
-        let stop = base + period;
-        // A whole turn stays one, however the sum rounds.
-        (
-            base,
-            if stop - base > period {
-                stop.next_down()
-            } else {
-                stop
-            },
-        )
+        // A whole turn stays one, however the sum rounds: its length is decided exactly, as a loop's
+        // kind checks it, and the sum is off by at most a step, so a step or two back is enough.
+        let mut stop = base + period;
+        for _ in 0..4 {
+            let (length, error) = geom_num::eft::two_sum(stop, -base);
+            if length < period || (length == period && error <= 0.0) {
+                break;
+            }
+            stop = stop.next_down();
+        }
+        (base, stop)
     } else {
         (lo, hi)
     };
