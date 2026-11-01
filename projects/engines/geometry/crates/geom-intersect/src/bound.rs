@@ -26,7 +26,7 @@
 //! terms of `ε_out` at once: e/s, and the second-order rest. If not, the curvature can undo the angle
 //! inside the distance moved, and no bound of this form exists.
 //!
-//! What this piece leaves: the methods know their θ_min and curvature at the end of a march or a
+//! What this piece leaves: the methods know their `θ_min` and curvature at the end of a march or a
 //! solve, and the pipeline that hands an item its [`Terms`] comes with the operations that intersect
 //! caches. Exact data, which every method here takes today, needs nothing added.
 //!
