@@ -3698,7 +3698,7 @@
           "guarantees": [
             "**A step cannot jump to another branch.** Each step is one Krawczyk test over a box and a whole interval of c at once: passing proves that for every c in it the box holds exactly one point, so the branch through the step's start is the only one in the box.",
             "**Each branch ends for a reason.** It ends at a start point the box proves it reaches, or, at a domain's edge, where no box can stand across the point, within the floor of one, and a march leaves such a point a floor along: nothing there can be told apart on the grid. That point lies on the domain's boundary, or joins the next pair, or sits beside a flagged pair.",
-            "**Everything is accounted for.** Every start point of every pair is used exactly once. A step that leaves its pair without reaching one is [`IntersectError::Internal`] with nothing returned, never a branch quietly ended. A step that cannot be proven above the floor flags its pair.",
+            "**Everything is accounted for.** Every start point of a traced pair is used exactly once. A start that reaches no other, in either direction, leaves its whole pair in [`Traced::unproven`], with none of its pieces kept: never a branch quietly ended.",
             "**Each branch has a bound.** [`Branch::deviation`] bounds, in space, how far the exact branch is from the chords through its vertices. A step is kept only within the ceiling.",
             "**Deterministic.** Pairs in the order subdivision left them, starts in the order found, and a step size that follows only from what the tests said."
           ],

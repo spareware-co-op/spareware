@@ -16,10 +16,9 @@
 //!   a domain's edge, where no box can stand across the point, within the floor of one, and a march
 //!   leaves such a point a floor along: nothing there can be told apart on the grid. That point lies on the domain's boundary, or joins the
 //!   next pair, or sits beside a flagged pair.
-//! - **Everything is accounted for.** Every start point of every pair is used exactly once. A step
-//!   that leaves its pair without reaching one is [`IntersectError::Internal`] with nothing
-//!   returned, never a branch quietly ended. A step that cannot be proven above the floor flags
-//!   its pair.
+//! - **Everything is accounted for.** Every start point of a traced pair is used exactly once. A
+//!   start that reaches no other, in either direction, leaves its whole pair in
+//!   [`Traced::unproven`], with none of its pieces kept: never a branch quietly ended.
 //! - **Each branch has a bound.** [`Branch::deviation`] bounds, in space, how far the exact branch
 //!   is from the chords through its vertices. A step is kept only within the ceiling.
 //! - **Deterministic.** Pairs in the order subdivision left them, starts in the order found, and a
@@ -648,8 +647,7 @@ fn join(
 ///
 /// [`IntersectError::InvalidInput`] for a floor or ceiling that is not positive;
 /// [`IntersectError::BudgetExceeded`] and [`IntersectError::Cancelled`];
-/// [`IntersectError::UnprovenMaths`] where a kind's bound needs one; [`IntersectError::Internal`]
-/// if a start point cannot be accounted for.
+/// [`IntersectError::UnprovenMaths`] where a kind's bound needs one.
 pub fn march(
     first: &SurfaceKind,
     second: &SurfaceKind,
