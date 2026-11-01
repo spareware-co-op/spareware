@@ -528,6 +528,7 @@ fn reads(rule: &str, want: f64) {
 #[test]
 fn every_dimension_measures() {
     reads("distance 1.0 1.2 1", 50.0);
+    reads("distance 1.2 1.7 1", 800.0_f64.sqrt());
     reads("length 2.4 1", 50.0);
     reads("point-line 1.3 2.0 1 left", 30.0);
     reads("point-line 1.3 2.0 1 right", -30.0);
@@ -1096,4 +1097,20 @@ fn catalogue_golden_hash_is_the_same_on_every_target() {
     checked.verdict().unwrap_or_else(|e| {
         panic!("{e}. A changed digest is a bug, or a definition changed in place (chapter 26.2)")
     });
+}
+
+#[test]
+fn a_scale_past_the_doubles_is_refused() {
+    // One over the smallest double is an infinity, which no variable can be scaled by.
+    for entity in [
+        "parameter 1.0 0 5e-324",
+        "scalar 0 5e-324",
+        "placement 0 0 0 5e-324",
+    ] {
+        assert_eq!(
+            parse(&format!("{}entity 7.0 {entity}\n", bare())),
+            Err(SketchError::NotFinite),
+            "{entity}"
+        );
+    }
 }

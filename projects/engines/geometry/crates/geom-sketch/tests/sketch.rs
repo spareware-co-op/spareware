@@ -186,8 +186,14 @@ fn items_sort_by_their_ids_whatever_order_they_came_in() {
 fn references_must_resolve_and_values_be_sound() {
     let mut s = Sketch::new(plane());
     s.add_entity(point(1, 0.0, 0.0)).unwrap();
-    s.add_entity(entity(id(2, 0), EntityKind::Reference { x: 0.0, y: 0.0 }))
-        .unwrap();
+    s.add_entity(entity(
+        id(2, 0),
+        EntityKind::Scalar {
+            value: 1.0,
+            size: 1.0,
+        },
+    ))
+    .unwrap();
     let missing = id(9, 9);
     let refused = |s: &mut Sketch, kind: EntityKind| s.add_entity(entity(id(50, 0), kind));
     let (p, r) = (id(1, 0), id(2, 0));

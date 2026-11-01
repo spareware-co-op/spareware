@@ -384,3 +384,18 @@ fn a_placed_point_states_its_class() {
     assert_eq!(lattice.place(i64::MAX, 0), Err(PlaneError::OutOfRange));
     assert_eq!(rotated.place(i64::MAX, 0), Err(PlaneError::OutOfRange));
 }
+
+#[test]
+fn a_rotated_frame_measures_its_height_off_the_plane() {
+    // No part of either axis is zero, so every term of the normal counts: (3, -6, 6) is 9 along it.
+    let third = 1.0 / 3.0;
+    let frame = Rotated::new(
+        p(0, 0, 0),
+        [2.0 * third, 2.0 * third, third],
+        [-2.0 * third, third, 2.0 * third],
+    )
+    .unwrap();
+    let (s, t, height) = frame.project(p(3, -6, 6));
+    assert!(s.abs() < 1e-9 && t.abs() < 1e-9);
+    assert!((height - 9.0).abs() < 1e-9, "{height}");
+}

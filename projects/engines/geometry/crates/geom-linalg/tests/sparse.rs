@@ -665,3 +665,33 @@ fn overflow_is_reported_not_returned() {
         LinalgError::NotFinite
     );
 }
+
+#[test]
+fn an_analysis_serves_its_own_row_count_only() {
+    // One pattern on three rows and on four: its columns are alike, and the shape is not.
+    let three = Sparse::from_triplets(3, 2, &[(0, 0, 1.0), (1, 1, 1.0)]).unwrap();
+    let four = Sparse::from_triplets(4, 2, &[(0, 0, 1.0), (1, 1, 1.0)]).unwrap();
+    let symbolic = SymbolicQr::new(&three, &mut work()).unwrap();
+    assert_eq!(
+        SparseQr::factor(&symbolic, &four, Real::ZERO, &mut work()).err(),
+        Some(LinalgError::Shape)
+    );
+}
+
+#[test]
+fn a_dead_column_is_measured_against_the_largest() {
+    // The tolerance is relative: 0.5 is more than 10^-3, and less than 10^-3 of 1024.
+    let a = Sparse::from_triplets(2, 2, &[(0, 0, 1024.0), (1, 1, 0.5)]).unwrap();
+    let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
+    let tol = Real::new(1e-3).unwrap();
+    let qr = SparseQr::factor(&symbolic, &a, tol, &mut work()).unwrap();
+    assert_eq!(qr.rank(), 1);
+}
+
+#[test]
+fn a_solve_charges_what_it_reads() {
+    let a = Sparse::from_triplets(3, 2, &[(0, 0, 1.0), (1, 0, 2.0), (2, 1, 3.0)]).unwrap();
+    let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
+    let qr = SparseQr::factor(&symbolic, &a, Real::ZERO, &mut work()).unwrap();
+    assert!(charged_exactly(|w| qr.least_squares(&[1.0, 2.0, 3.0], w)) > 1);
+}
