@@ -439,6 +439,40 @@ fn an_edge_runs_low_to_high_on_a_line_between_its_ends() {
     }
 }
 
+/// A box's corner at the origin, cut by the face 3x + y + z + 1 = 0 of a leaning tetrahedron a
+/// third of a step along its edge in −x: that edge's ends round to one point, and its lower end is
+/// the meeting, off the grid. A sub-grid edge stands a step long from whichever end is on the grid.
+#[test]
+fn an_edge_shorter_than_the_grid_stands_a_step_from_its_grid_end() {
+    let mut polygons = scene(&[([-6, 0, 0], [0, 6, 6])]);
+    tetrahedron(
+        [[0, -1, 0], [0, 0, -1], [-1, 1, 1], [5, 5, 5]],
+        1,
+        &mut polygons,
+    );
+    let m = joined(&polygons, &WindingTest::intersect(2));
+    let near = rounded(&m);
+    let b = body(&m, Sense::Forward);
+    let curves: Vec<&CurveKind<3>> = b.arenas().curves.iter().collect();
+    let mut from_the_meeting = 0;
+    for (e, held) in m.edges.iter().enumerate() {
+        let ((p, low_exact), (q, _)) = (near[held.low], near[held.high]);
+        if p != q {
+            continue;
+        }
+        let o = [p.x.get() as f64, p.y.get() as f64, p.z.get() as f64];
+        let span = if low_exact {
+            (0.0, 1.0)
+        } else {
+            from_the_meeting += 1;
+            (-1.0, 0.0)
+        };
+        let line = Line::new(o, [1.0, 0.0, 0.0], span).unwrap();
+        assert_eq!(*curves[e], CurveKind::Line(line));
+    }
+    assert!(from_the_meeting > 0);
+}
+
 #[test]
 fn a_faces_box_holds_its_corners_a_step_wider_off_the_grid() {
     let m = leaning(&WindingTest::unite());
