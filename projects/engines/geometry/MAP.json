@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G166, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, natural quadrics, four rows of 12.7, and a sphere and a cylinder in general position, whose curve is walked.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G167, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, natural quadrics, four rows of 12.7, and a sphere and a cylinder in general position, whose curve is walked, and three reductions of 12.7.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2729,6 +2729,29 @@
           "target": "lib"
         },
         {
+          "cost": "a curve-curve pair in the half-plane, up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a ring torus at the origin about z, and a plane square to its axis or through it, or a sphere, cylinder, cone or second torus about the same axis, on a coarse lattice so that touching is common. [`check`] asks where they meet in closed form and holds the answer to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/reductions.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: an answer that changes between two runs or with the order of the pair, a point of a curve off the torus by the torus's own equation, or a smaller budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: a torus's special positions say what is so.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.7 (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): the torus's equation is written here from the drawn numbers, sharing nothing with the reduction it judges."
+          },
+          "path": "geom_fuzz::reductions",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`cases` runs of the harness, plus one `SplitMix64` word per eight bytes drawn and one or two words per length.",
           "does": "[`run`] resolves a seed with `geom_test::seed::resolve` (the test's default, or `SPAREKIT_SEED`; printed as `seed: <hex>`), then for each case draws a length in `0..=max_len` and that many bytes from `geom-test`'s `SplitMix64`, and runs the harness on them.",
           "family": [],
@@ -3547,6 +3570,29 @@
             "text": "Dupont, Lazard, Lazard and Petitjean, J. Symbolic Computation 43(3), 2008, part I (<https://doi.org/10.1016/j.jsc.2007.10.006>), from the paper alone: a member of inertia (2, 2) is ruled, so a point of it is (u : v) and (s : t) in X = s(uP₁ + vP₂) + t(uR₁ + vR₂). The other quadric is then α(u, v)s² + β(u, v)st + γ(u, v)t² = 0, each of α, β and γ quadratic in (u, v), so s/t = (−β ± √Δ)/2α where Δ = β² − 4αγ is a quartic form. Its real roots bound the branches. The paper's care over which radicals are needed does not arise, since every value here is an enclosure."
           },
           "path": "geom_intersect::quartic",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a curve-curve pair for each pair of meridian curves or cross-sections, and a curve-surface pair for each profile cut. Recursion: none.",
+          "does": "[`crate::quadrics::natural`] calls these for the rows of 12.7 past the natural quadrics. Two surfaces about one axis meet in circles, one at each crossing of their meridians in the half-plane of the axis, so [`rings`] is curve with curve in two dimensions (12.5). A plane square to the axis is a line of that half-plane. A plane through a torus's axis cuts two tube circles, and a plane through its centre at the bitangent angle two Villarceau circles. A plane through a revolution's axis cuts two copies of the profile, the second mirrored. An extrusion cut by a plane along its direction is lines at the profile's crossings with the plane's trace; by any other plane it is an affine copy of the profile, of the kind the map keeps; and two sweeps of one direction meet in lines at the crossings of their cross-sections. What is left is `None`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+          "guarantees": [
+            "**Exact where the data are.** A plane's being square to an axis is a sign on the stored doubles; through an axis, and Villarceau's angle, signs from `geom_num::quadric` on whole-number data. Off the grid an enclosure decides, and a pair it cannot tell is `None`.",
+            "**Curve with curve is 12.5.** Each ring comes from a crossing or a tangency that [`crate::curve::curves`] proved, and is tangent where that was.",
+            "**The kind is kept.** Lines stay lines, a circle maps to a circle where the map is a turn and to an ellipse otherwise, conics stay conics and NURBS stay NURBS.",
+            "**Whole turns.** A torus or revolution of a part of a turn is `None`, for the general paths."
+          ],
+          "job": "Closed forms by reduction (chapter 12.7): tori in special positions, surfaces of revolution and extrusions.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the rows of chapter 12.7 (`projects/engines/geometry/architecture/12-intersections.md`). Villarceau's circles: a plane through the centre of a ring torus at the angle θ to its equator with sin θ = r/R holds two circles of radius R, centred ±r from the centre along the line where the plane meets the equator plane's square. Symmetry reduces the rest to chapter 12.5."
+          },
+          "path": "geom_intersect::reduced",
           "provenance": [],
           "spdx": null,
           "target": "lib"

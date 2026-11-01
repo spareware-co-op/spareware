@@ -444,6 +444,9 @@ pub static OPS: &[Op] = &[
     Op { group: "intersect", name: "natural_tee", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::tees(c), kernels::intersect::closed_forms) },
     Op { group: "intersect", name: "natural_apex", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::apexes(c), kernels::intersect::closed_forms) },
     Op { group: "intersect", name: "quartic_walk", measures: "geom_intersect::quartic::meet", classes: T, prepare: |c| bind(inputs::intersect::walks(c), kernels::intersect::walked) },
+    Op { group: "intersect", name: "reduced_torus", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::torus_cuts(c), kernels::intersect::closed_forms) },
+    Op { group: "intersect", name: "reduced_tube", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::torus_tubes(c), kernels::intersect::closed_forms) },
+    Op { group: "intersect", name: "reduced_wall", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::wall_cuts(c), kernels::intersect::closed_forms) },
     // geom-intersect's projection (piece G162; decision 32.44): the search on an arc and on a band
     // of a sphere.
     Op { group: "intersect", name: "project_arc", measures: "geom_intersect::project::project_curve", classes: T, prepare: |c| bind(inputs::intersect::arcs(c), kernels::intersect::on_arcs) },
@@ -678,6 +681,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Inertia::lean", "a subtraction"),
     ("Inertia::one_sided", "two comparisons"),
     ("Inertia::rank", "an addition"),
+    ("quadric::villarceau", "measured through its caller, `geom_intersect::quadrics::natural`, in the same shape as `quadric::plane_cone`"),
     ("quadric::polar", "a few products; the Bernstein coefficients it feeds are charged to their meter"),
     ("quadric::polynomial", "the first step of `quadric::roots`, measured"),
     ("quadric::roots_between", "`quadric::roots` with the chain read at two points"),

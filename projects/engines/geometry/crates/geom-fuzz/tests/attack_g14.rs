@@ -40,7 +40,7 @@ use std::path::{Path, PathBuf};
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
     Harness, crossings, intersect, natural, orient2d, pencils, piercing, predicates, project,
-    quadric, variants, wide,
+    quadric, reductions, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
@@ -52,7 +52,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 11] = [
+const TARGETS: [(&str, Harness); 12] = [
     ("crossings", crossings::harness),
     ("intersect", intersect::harness),
     ("natural", natural::harness),
@@ -62,6 +62,7 @@ const TARGETS: [(&str, Harness); 11] = [
     ("piercing", piercing::harness),
     ("predicates", predicates::harness),
     ("quadric", quadric::harness),
+    ("reductions", reductions::harness),
     ("variants", variants::harness),
     ("wide", wide::harness),
 ];
@@ -547,8 +548,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
 
     // Seeded violations: each must be reported.
     let drop_fuzz = workflow.replace(
-        "[crossings_fuzz, intersect_fuzz, natural_fuzz, orient2d_fuzz, pencils_fuzz, piercing_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, variants_fuzz, wide_fuzz]",
-        "[crossings_fuzz, intersect_fuzz, natural_fuzz, pencils_fuzz, piercing_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, variants_fuzz, wide_fuzz]",
+        "[crossings_fuzz, intersect_fuzz, natural_fuzz, orient2d_fuzz, pencils_fuzz, piercing_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, reductions_fuzz, variants_fuzz, wide_fuzz]",
+        "[crossings_fuzz, intersect_fuzz, natural_fuzz, pencils_fuzz, piercing_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, reductions_fuzz, variants_fuzz, wide_fuzz]",
     );
     assert_ne!(drop_fuzz, workflow);
     assert!(

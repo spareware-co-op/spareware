@@ -19,8 +19,9 @@ by a sample of the kind; and `crossings` (`src/crossings.rs`, G163), every point
 on both, and two cubic graphs that change sides have an item between them; `piercing`
 (`src/piercing.rs`, G164), every point of a curve and a surface lies on both; `natural`
 (`src/natural.rs`, G165), every curve two natural quadrics are said to share lies on each by its
-own equation; and `pencils` (`src/pencils.rs`, G166), what a pencil says two curved quadrics share
-is so, in either order and wherever they stand.
+own equation; `pencils` (`src/pencils.rs`, G166), what a pencil says two curved quadrics share is
+so, in either order and wherever they stand; and `reductions` (`src/reductions.rs`, G167), every
+curve a torus's special position gives lies on it by its own equation.
 
 ## One law, four engines
 
