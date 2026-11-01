@@ -247,6 +247,73 @@ fn a_polygon_beyond_the_edge_cuts_nothing_though_its_plane_passes_through() {
 }
 
 #[test]
+fn a_polygon_that_ends_on_another_cuts_it_along_that_end() {
+    let a = rect(2, 0, (-4, 4), (-4, 4));
+    // Standing on a: its lower edge lies in a's plane.
+    let standing = rect(0, 0, (-2, 2), (0, 2));
+    let cut = local_cuts(&[a.clone(), standing.clone()], &mut meter()).unwrap();
+    assert_eq!(cut[0].len(), 2);
+    assert_eq!(cut[1], [standing]);
+    // Beyond a's edge, on the same plane.
+    let beyond = rect(0, 0, (5, 7), (0, 2));
+    let cut = local_cuts(&[a.clone(), beyond], &mut meter()).unwrap();
+    assert_eq!(cut[0], std::slice::from_ref(&a));
+    // Ending at a's corner, along one point of the line.
+    let past = rect(0, 0, (4, 7), (0, 2));
+    let cut = local_cuts(&[a.clone(), past], &mut meter()).unwrap();
+    assert_eq!(cut[0], std::slice::from_ref(&a));
+    // Off a's plane altogether.
+    let above = rect(0, 0, (-2, 2), (1, 2));
+    let cut = local_cuts(&[a.clone(), above], &mut meter()).unwrap();
+    assert_eq!(cut[0], std::slice::from_ref(&a));
+    // Touching a's plane at one corner: a diamond in x = 0, its lowest corner at the origin.
+    let diamond = Piece {
+        face: up(0, 0),
+        bounds: vec![
+            Plane::new([0, 1, 1], 0).unwrap(),
+            Plane::new([0, 1, -1], 4).unwrap(),
+            Plane::new([0, -1, -1], 4).unwrap(),
+            Plane::new([0, -1, 1], 0).unwrap(),
+        ],
+    };
+    let cut = local_cuts(&[a.clone(), diamond], &mut meter()).unwrap();
+    assert_eq!(cut[0], [a]);
+}
+
+#[test]
+fn polygons_on_one_plane_cut_each_other_where_they_overlap() {
+    let a = rect(2, 0, (0, 4), (0, 4));
+    let b = rect(2, 0, (2, 6), (2, 6));
+    let cut = local_cuts(&[a.clone(), b.clone()], &mut meter()).unwrap();
+    let area = |p: &[Piece]| p.iter().map(doubled_area).sum::<i128>();
+    assert_eq!(cut[0].len(), 3);
+    assert_eq!(cut[1].len(), 3);
+    assert_eq!(area(&cut[0]), doubled_area(&a));
+    assert_eq!(area(&cut[1]), doubled_area(&b));
+    assert!(cut[0].iter().any(|p| doubled_area(p) == 8));
+    // Facing the other way changes nothing; apart they stay whole.
+    let turned = Piece {
+        face: down(2, 0),
+        bounds: b.bounds.iter().rev().copied().collect(),
+    };
+    assert_eq!(
+        local_cuts(&[a.clone(), turned], &mut meter()).unwrap()[0].len(),
+        3
+    );
+    let apart = rect(2, 0, (7, 9), (0, 4));
+    assert_eq!(
+        local_cuts(&[a.clone(), apart], &mut meter()).unwrap()[0],
+        std::slice::from_ref(&a)
+    );
+    // Side by side along an edge they share no area.
+    let beside = rect(2, 0, (4, 8), (0, 4));
+    assert_eq!(
+        local_cuts(&[a.clone(), beside], &mut meter()).unwrap()[0],
+        [a]
+    );
+}
+
+#[test]
 fn the_same_polygons_give_the_same_pieces() {
     let list = [
         rect(2, 0, (-4, 4), (-4, 4)),

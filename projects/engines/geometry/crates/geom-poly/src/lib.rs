@@ -25,7 +25,8 @@
 //!
 //! Status: canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123);
 //! faces into convex pieces ([`convex`]) built (G125); clipping and local cuts ([`cut`]) built
-//! (G126); the rest by pieces G124, G127, G128, G142.
+//! (G126); winding vectors ([`winding`]) and tracing ([`trace`]) built (G127); the rest by pieces
+//! G124, G128, G142.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -35,3 +36,5 @@ pub mod convex;
 pub mod cut;
 pub mod order;
 pub mod plane;
+pub mod trace;
+pub mod winding;
