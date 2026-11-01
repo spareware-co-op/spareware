@@ -195,10 +195,11 @@ fn main() {
             let faces = timed(a, b, &step, &exec);
             let time = start.elapsed();
             let budget = Duration::from_nanos(500 * (kept + faces) as u64);
+            let rest = time.saturating_sub(staged);
             println!(
-                "{run}: soup of {kept} pieces in {staged:?} (3 x EMBER: 4.8ms); {faces} faces in                  {time:?}, so merge and build {:?} (budget {budget:?})",
-                time.saturating_sub(staged)
+                "{run}: soup of {kept} pieces in {staged:?} (3 x EMBER: 4.8ms); {faces} faces in {time:?}"
             );
+            println!("    so merge and build {rest:?} (budget {budget:?})");
         }
     }
 }

@@ -4,7 +4,7 @@
 
 ## The answer in plain words
 
-EMBER's 1.6 ms covers less work than G148's boolean does. EMBER stops at a polygon soup: every output polygon is a part of an input polygon, with no merging and no mesh. G148's `boolean` goes on to merge the kept pieces into maximal faces and build an `ExactMesh` of the result, which is checked on the way out. On the benchmark pair these last two steps take about 45% of the time. A whole-pipeline time set against EMBER's would not compare like with like.
+EMBER's 1.6 ms covers less work than G148's boolean does. EMBER stops at a polygon soup: every output polygon is a part of an input polygon, with no merging and no mesh. G148's `boolean` goes on to merge the kept pieces into maximal faces and build an `ExactMesh` of the result, which is checked on the way out. On the benchmark pair these last two steps take about 45% of the instructions in a one-run profile, and about two thirds of the time when the soup is timed apart. A whole-pipeline time set against EMBER's would not compare like with like.
 
 So G148 is timed in stages:
 
@@ -41,6 +41,22 @@ The merge welds n kept pieces into maximal faces. It sorts their corners and the
 > merge + build ≤ 0.5 µs × (n + F)
 
 Here n is the number of pieces the soup keeps and F is the number of faces in the result, both counted on the same run, on the same machine as the soup stage. The benchmark (`crates/geom-mesh/benches/boolean.rs` under `projects/engines/geometry/`) prints n, F, the soup's time, the whole time, their difference and this budget for every run.
+
+## Measured
+
+These are the benchmark's pairs as solids, 972 faces each, at commit 49b2c054, measured on a shared Linux machine. Each figure is one run, and the machine was loaded by other work, so the numbers are noisy.
+
+| Pair | Threads | Soup | Pieces kept | Whole | Merge and build | Its budget |
+| --- | --- | --- | --- | --- | --- | --- |
+| Crossing | 1 | 62.8 ms | 5,075 | 128.7 ms | 65.9 ms | 3.5 ms |
+| Crossing | 8 | 17.4 ms | 5,075 | 70.8 ms | 53.4 ms | 3.5 ms |
+| In a strip | 1 | 16.2 ms | 3,256 | 49.1 ms | 32.9 ms | 2.6 ms |
+| In a strip | 8 | 8.5 ms | 3,256 | 31.7 ms | 23.2 ms | 2.6 ms |
+
+Neither stage meets its target yet:
+
+- The soup misses 4.8 ms by 1.8 times on the strip pair at 8 threads.
+- The merge and build miss their budget by about 9 times. Most of the merge is serial, which is why it barely speeds up on 8 threads.
 
 ## What stays open
 
