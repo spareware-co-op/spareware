@@ -1464,7 +1464,7 @@ fn every_operation_reports_the_names_it_made_and_no_other() {
         accept: None,
     };
     let out = move_by(&ctx(), moved, [3, -4, 5]).unwrap();
-    assert!(out.result.names.is_empty());
+    assert_eq!(out.result.names, Vec::new());
     assert_eq!(names(&out.result.body), names(&b.result.body));
     // A pattern's copies make their own names, each from the input's.
     let at = |k: u8, dx: i64| Instance {
