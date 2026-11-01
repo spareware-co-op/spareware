@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "38df307b44466d7d9759aa9108631825877573adc4e1742a3b60a831083a2edc",
+              "kind": "corpus",
+              "piece": "G138",
+              "why": "14 new benchmarks of geom-num's three new public functions (principle 12): plane::determinant_sign on side_of_tpi's four classes and on the planes of a building's faces, which its machine-word rung decides; plane::normals_sign on Tpi::new's three classes and on faces; Tpi::meeting on Tpi::new's three classes; no existing digest moved"
             }
           ],
-          "sha256": "38df307b44466d7d9759aa9108631825877573adc4e1742a3b60a831083a2edc"
+          "sha256": "91e230c9be3ea00519aef334715657a4d3ff0d1393f929bb58a3a9e408b8d188"
         },
         {
           "id": "geom-nurbs/operations",

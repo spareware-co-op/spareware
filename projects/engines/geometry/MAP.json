@@ -898,9 +898,9 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/inputs/plane.rs",
           "guarantees": [
-            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule and exact rounding by `tests/attack_g06.rs`."
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule, exact determinants and exact rounding by `tests/attack_g06.rs`."
           ],
-          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
+          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_meeting`] (`Tpi::meeting`), [`normals_sign`] and [`normals_sign_faces`] (`plane::normals_sign`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`determinant_sign`] and [`determinant_sign_faces`] (`plane::determinant_sign`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
           "method": {
             "links": [
               "https://doi.org/10.1111/j.1467-8659.2009.01609.x",
@@ -1401,6 +1401,28 @@
       "kind": "kernel",
       "layer": "6",
       "modules": [
+        {
+          "cost": "one arrangement per host, linear in its faces plus local work around each tool.",
+          "does": "[`cut`] subtracts each [`Cut`]'s tools from its host in one arrangement, with the tools summed into one entry, so a winding vector stays two entries long however many tools there are, and tools that overlap or share a jamb need no union first. Each host gives one [`CutResult`], in input order, which accounts for every tool.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
+          "guarantees": [
+            "**Every tool is accounted for.** Each is reported, and one that touched nothing inside the host is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently.",
+            "**Atomic by default.** A tool that cannot enter fails the call and names itself. Under [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools are left out depends only on the inputs.",
+            "**Hosts run in parallel, and the threads do not show.** Results come in input order, and one host alone has the threads for its boxes."
+          ],
+          "job": "Batch cutting: any number of tools through any number of hosts (11.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.6 (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::batch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "linear in the body's fins, and in the pieces. Charges the meter one unit per edge, face and piece.",
           "does": "[`certify`] holds a rebuilt body to chapter 11.10's closure checks, cheap enough to run on every result: every edge's fins pair up, in radial order alternating which way they run, so each wedge around an edge is one cell; no edge has zero length; and every face has an area. [`labelled`] holds the pieces of a winding selection to the last: each separates two cells the test tells apart, the result's material behind it. Planes within budget need no check: a plane outside its budget cannot be made. A sheet's edge may have one fin, and a wire has no fins at all, so only bodies that bound something pair up.",
