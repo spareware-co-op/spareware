@@ -54,9 +54,10 @@ use geom_run::WorkMeter;
 use geom_surface::{ImplicitBound, ParamBox as Region, ParamSurface, SurfaceKind, partial_index};
 
 use crate::IntersectError;
-use crate::general::{Subdivided, around, ends, partials, speeds, subdivide_with};
+use crate::general::{Leave, Subdivided, around, ends, partials, speeds, subdivide_with};
 use crate::march::unique_over;
 use crate::project::{dot, negative, positive};
+use crate::result::Unresolved;
 
 /// How two surfaces meet along a known curve.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -174,6 +175,21 @@ impl Tube {
             }
         }
         Ok(found)
+    }
+}
+
+impl Leave for Tube {
+    fn holds(
+        &self,
+        first: &SurfaceKind,
+        pair: (Region, Region),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<bool, IntersectError> {
+        Tube::holds(self, first, pair, meter)
+    }
+
+    fn near(&self, pair: (Region, Region)) -> Result<Option<(bool, Unresolved)>, IntersectError> {
+        Ok(Tube::near(self, pair)?.map(|proven| (proven, Unresolved::KnownCurveUnproven)))
     }
 }
 

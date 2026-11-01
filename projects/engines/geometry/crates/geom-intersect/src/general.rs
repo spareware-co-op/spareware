@@ -453,6 +453,37 @@ pub(crate) fn speeds(
     Ok([Interval::norm(su)?.hi(), Interval::norm(sv)?.hi()])
 }
 
+/// What a search is told to leave out besides what it proves apart: the proven tube about known
+/// curves (12.11), or the regions of one surface proven not to cross themselves (12.13).
+pub(crate) trait Leave {
+    /// Whether the pair `(a, b)`, `a` on `first`, is proven to hold nothing left to find.
+    ///
+    /// # Errors
+    ///
+    /// The meter's stop; [`IntersectError::UnprovenMaths`] where a kind's bound needs one.
+    fn holds(
+        &self,
+        first: &SurfaceKind,
+        pair: (Region, Region),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<bool, IntersectError>;
+
+    /// Whether the pair is near what is left out: whether it is never settled, only split, and
+    /// what it is flagged with at the floor.
+    ///
+    /// # Errors
+    ///
+    /// [`IntersectError::Internal`] for a malformed pair.
+    fn near(&self, pair: (Region, Region)) -> Result<Option<(bool, Unresolved)>, IntersectError>;
+
+    /// Whether a pair whose start points are not all proven is split on, and flagged only at the
+    /// floor, rather than flagged whole: a sweep that crosses itself meets its domain's edge on
+    /// both sheets at once, at a corner both patches share, where no start can be proven (12.13).
+    fn splits_undecided(&self) -> bool {
+        false
+    }
+}
+
 /// Subdivides the pair of `first` and `second` until each piece is apart, settled or flagged, to a
 /// floor of `floor` in space, and finds the settled pairs' start points.
 ///
@@ -481,23 +512,37 @@ pub(crate) fn subdivide_with(
     first: &SurfaceKind,
     second: &SurfaceKind,
     floor: f64,
-    tube: &Tube,
+    tube: &impl Leave,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Subdivided, IntersectError> {
+    // Cut first at the lines where a kind is not regular (12.10): its creases and the poles inside
+    // its domain, so no patch reaches across one.
+    let seams = (charts(first), charts(second));
+    let mut start = Vec::new();
+    for a in cells(first, &seams.0) {
+        for b in cells(second, &seams.1) {
+            start.push((a, b));
+        }
+    }
+    subdivide_from(first, second, (start, floor), tube, meter)
+}
+
+/// [`subdivide_with`] from the pairs of patches `start`, each patch within its own surface's cells,
+/// leaving out what `leave` says: the search of 12.13 over a surface and itself.
+pub(crate) fn subdivide_from(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    (start, floor): (Vec<(Region, Region)>, f64),
+    leave: &impl Leave,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Subdivided, IntersectError> {
     let mut out = Subdivided {
         settled: Vec::new(),
         flagged: Vec::new(),
     };
-    // Cut first at the lines where a kind is not regular (12.10): its creases and the poles inside
-    // its domain, so no patch reaches across one.
     let seams = (charts(first), charts(second));
     let poles = Poles::of(first, second, [&seams.0, &seams.1], floor, meter)?;
-    let mut work = Vec::new();
-    for a in cells(first, &seams.0) {
-        for b in cells(second, &seams.1) {
-            work.push((a, b));
-        }
-    }
+    let mut work = start;
     work.reverse();
     while let Some((a, b)) = work.pop() {
         meter.charge(STEP)?;
@@ -508,24 +553,25 @@ pub(crate) fn subdivide_with(
         {
             continue;
         }
-        if tube.holds(first, (a, b), meter)? {
+        if leave.holds(first, (a, b), meter)? {
             continue;
         }
-        let near = tube.near((a, b))?;
+        let near = leave.near((a, b))?;
         let (na, nb) = (normals(first, a, meter)?, normals(second, b, meter)?);
         // Why the pair is split, and flagged once it reaches the floor: its normals may be
         // parallel, or a pole touches the other surface here with no branch out of it, a lone point
         // kept as small as the floor allows (12.10), or a known curve passes that no proven cell
-        // holds the pair about (12.11).
+        // holds the pair about (12.11), or the two are pieces of one surface that touch and are not
+        // proven clean (12.13).
         let mut why = Unresolved::UndecidedAtFloor {
             test: Test::LoopFreedom,
         };
-        if near.is_some() {
-            why = Unresolved::KnownCurveUnproven;
+        if let Some((_, reason)) = near {
+            why = reason;
         }
         // Next to a proven stretch, a pair is split until a cell holds it, never settled: its
         // starts would trace the known curve again.
-        if near != Some(true) && !may_be_parallel(&na, &nb)? {
+        if !matches!(near, Some((true, _))) && !may_be_parallel(&na, &nb)? {
             let lines = ([&seams.0, &seams.1], &poles);
             match starts_of(first, second, (a, b), floor, lines, meter)? {
                 Starts::Found(starts) if starts.len() % 2 == 0 => {
@@ -539,18 +585,23 @@ pub(crate) fn subdivide_with(
                     continue;
                 }
                 Starts::Found(_) | Starts::Undecided => {
-                    out.flagged.push(FlaggedPair {
-                        first: a,
-                        second: b,
-                        why: if near.is_some() {
-                            Unresolved::KnownCurveUnproven
-                        } else {
-                            Unresolved::UndecidedAtFloor {
-                                test: Test::Exclusion,
-                            }
+                    let reason = near.map_or(
+                        Unresolved::UndecidedAtFloor {
+                            test: Test::Exclusion,
                         },
-                    });
-                    continue;
+                        |(_, reason)| reason,
+                    );
+                    if !leave.splits_undecided() {
+                        out.flagged.push(FlaggedPair {
+                            first: a,
+                            second: b,
+                            why: reason,
+                        });
+                        continue;
+                    }
+                    // Split on, so what cannot be told from a corner is left a floor across and
+                    // the branch on either side of it is traced (12.13).
+                    why = reason;
                 }
                 Starts::Lone if near.is_none() => {
                     why = Unresolved::NonSmooth {

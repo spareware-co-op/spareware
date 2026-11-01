@@ -36,6 +36,7 @@
 //! - [`known`]: intersections known by construction, taken out only where a tube is proven (G174).
 //! - [`seam`]: seams, poles and knot lines, read exactly from each kind, and where a branch passes
 //!   them (G173).
+//! - [`selfcross`]: where a surface crosses itself, by Volino and Magnenat-Thalmann's test (G176).
 //! - [`solve`] and [`curve`] (piece G163): the interval engine, and where two curves meet.
 //! - [`curve_surface`] (piece G164): where a curve meets a surface.
 //! - [`closed`] (piece G159): exact decisions for a line with a quadric or torus, and the special
@@ -43,8 +44,8 @@
 //!
 //! Status: the result types and canonical order built by piece G158, projection and inversion by
 //! G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170, seams,
-//! poles and knot lines by G173, known curves by G174; the other methods come
-//! with G159, G163, G164, G165, G166, G167, G170, G171, G172, G175, G176, G292,
+//! poles and knot lines by G173, known curves by G174, self-intersection by G176; the other methods
+//! come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G175, G292,
 //! G320, G321, G372, G390, G392, G393, G466, G467, G468.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
@@ -65,6 +66,7 @@ pub mod order;
 pub mod project;
 pub mod result;
 pub mod seam;
+pub mod selfcross;
 pub mod solve;
 
 pub use error::IntersectError;
