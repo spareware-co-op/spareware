@@ -5113,6 +5113,46 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "replace || with && in sign_with_root",
+      "line_text": "if sy == Sign::Zero || d.is_zero() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when exactly one of sy == 0 and d == 0 holds. d is never zero at a call: sign_with_root's only caller is sign_on_quadratic, whose only caller is two_doubles' test of the members between two double roots, reached after two_doubles has returned on a negative discriminant, and classify sends a zero one to triple instead; and d is that discriminant. With sy zero and d positive the code below returns sx as well: sx zero returns sy, which is zero, and otherwise the gap x^2 - 0 * d is positive and returns sx."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "replace == with != in kernel",
+      "line_text": "*slot = if j % 2 == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant negates every part of the kernel vector, so kernel returns -v for v. Its only use is singular: holds tests form * v for zero, the same for -v, and on_base builds each axis as lead * e_j - v_j * e_pivot, so every axis changes sign with v and the base forms, x^T F y over pairs of axes, are the same. No result of classify can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "delete - in singular",
+      "line_text": "for k in [0, 1, -1, 2, -2] {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either mutant tries four distinct members of 0, 1, -1, 2 and -2 instead of five. Every member here is singular, so rank three is the pencil's rank wherever a member has it, and a member falls below it only where every 3 x 3 minor of a + k b, each a cubic in k, vanishes: at three values at most, or at every k, when both lists find nothing. So either list finds a member of rank three when any member has one. Its kernel is the shared apex whenever one exists (a vector both forms send to zero lies in every member's kernel) and is not shared otherwise, so holds, one_apex and the touching cones come out the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "replace > with >= in scaled",
+      "line_text": "top = if end > top { end } else { top };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when end == top, and then both branches are the same double, so the largest bound, and the scaled form, are the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace != with == in square_root",
+      "line_text": "let used = limbs.iter().rposition(|l| *l != 0)?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With == the highest limb found is the highest zero one, so for a value of a few limbs in pencil's 184-limb Big Newton's iteration starts at 2^5856 whatever the value: about 5,800 steps, each a division of 11,776-bit integers, for every square root two_doubles takes. attack_g166's double roots then run for far past cargo-mutants' timeout, which is how the tests catch it; whole_numbers_divide_down's root of a value using every limb, where the mutant finds no zero limb and returns None, fails at once but waits for that binary's other tests."
     }
   ],
   "coverage_off": [

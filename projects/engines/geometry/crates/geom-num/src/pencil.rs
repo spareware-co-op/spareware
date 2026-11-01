@@ -1395,7 +1395,7 @@ fn definite_filtered(sums: &[[Interval; TERMS]; 4], num: i64, den: i64) -> Optio
 fn scaled(f: &[Interval; TERMS]) -> Option<[Interval; TERMS]> {
     let mut top = 0.0_f64;
     for c in f {
-        for end in [c.lo(), c.hi(), -c.lo(), -c.hi()] {
+        for end in [c.lo().abs(), c.hi().abs()] {
             top = if end > top { end } else { top };
         }
     }
