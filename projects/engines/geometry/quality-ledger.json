@@ -5337,6 +5337,38 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "start equals end only when an end of the enclosure of b's range on a, phi + sign t moved by whole turns, is exactly an end of a's domain. geom_num::interval widens every bound outward by a step, so where b truly ends at a's end the enclosure strictly holds that end and start < end; equality needs b's true end to lie past a's end by under a step, a miss. There the original reports the boundary touch its enclosure cannot rule out and the mutant reports nothing, which is the truth of the inputs; every touch and overlap that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in items_of",
+      "line_text": "if difference.lo() > 0.0 || difference.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when difference's lower bound is exactly 0.0, where the mutant reads a gap that may be zero as apart. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in items_of",
+      "line_text": "if difference.lo() > 0.0 || difference.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when difference's upper bound is exactly 0.0, where the mutant reads a gap that may be zero as apart. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in items_of",
+      "line_text": "} else if difference.lo() != 0.0 || difference.hi() != 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when exactly one bound of difference is 0.0, where the mutant takes a gap that may not be zero as no gap. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace != with == in items_of",
+      "line_text": "} else if difference.lo() != 0.0 || difference.hi() != 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either mutant differs from the original only when a bound of difference is exactly 0.0. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
     }
   ],
   "coverage_off": [

@@ -1062,3 +1062,155 @@ fn the_engine_takes_only_its_work() {
     ];
     assert_eq!(got, [(3, 3589), (3, 3589), (3, 3589), (2, 507), (0, 254)]);
 }
+
+#[test]
+fn conics_in_a_leaning_plane_meet_curves_in_it_as_crossings() {
+    // The plane z = x, through whole numbers: the shared plane is proven from the conics' centres
+    // and axes, so a meeting needs no third coordinate and is a crossing, never a near miss.
+    let axes = || Axes::Vectors {
+        u: [2.0, 0.0, 2.0],
+        v: [0.0, 1.0, 0.0],
+    };
+    let across = bezier(&[[-3.0, 2.0, -3.0], [1.0, 2.0, 1.0], [5.0, 2.0, 5.0]]);
+    let up = bezier(&[[2.0, -3.0, 2.0], [2.0, 2.0, 2.0], [2.0, 7.0, 2.0]]);
+    let kinds: [CurveKind<3>; 3] = [
+        CurveKind::Ellipse(Ellipse::new([1.0, 2.0, 1.0], axes(), (0.0, 2.0)).unwrap()),
+        CurveKind::Hyperbola(Hyperbola::new([1.0, 2.0, 1.0], axes(), (-2.0, 2.0)).unwrap()),
+        CurveKind::Parabola(Parabola::new([1.0, 2.0, 1.0], axes(), (-2.0, 2.0)).unwrap()),
+    ];
+    let mut counts = Vec::new();
+    for k in &kinds {
+        for b in [&across, &up] {
+            let r = meet(k, b);
+            assert!(
+                r.items().iter().all(|i| matches!(
+                    i,
+                    Item::Point {
+                        contact: PointContact::Crossing,
+                        ..
+                    }
+                )),
+                "{:?}",
+                r.items()
+            );
+            counts.push(r.items().len());
+        }
+    }
+    // The hyperbola's branch starts at x = 3, so the line x = 2 misses it.
+    assert_eq!(counts, [2, 2, 1, 0, 1, 2]);
+}
+
+#[test]
+fn curves_whose_shadows_cross_a_unit_apart_do_not_meet() {
+    // Not in one plane, so a meeting of two coordinates counts only if the third agrees: they are
+    // a unit apart in z, either way round.
+    let high = bezier(&[[0.0, 0.0, 1.0], [1.0, 1.0, 1.0], [2.0, 2.0, 1.0]]);
+    let low = bezier(&[[0.0, 2.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]]);
+    is_empty(&meet(&high, &low));
+    is_empty(&meet(&low, &high));
+}
+
+#[test]
+fn a_rational_curve_is_not_in_the_plane_of_its_weighted_points() {
+    // Weights 1, 2, 1 on points at heights 2, 1, 2 put every stored w·P at height 2, but the curve
+    // is at 2 / (1 + B1(t)): 4/3 halfway, where its shadow crosses x = 1. A curve at height 2
+    // through that shadow point is 2/3 above it, so the two do not meet, either way round.
+    let a = CurveKind::Nurbs(
+        Curve::new_rational(
+            basis(2),
+            &[[0.0, 0.0, 2.0], [1.0, 2.0, 1.0], [2.0, 0.0, 2.0]],
+            &[1.0, 2.0, 1.0],
+        )
+        .unwrap(),
+    );
+    let b = bezier(&[[1.0, 0.0, 2.0], [1.0, 1.0, 2.0], [1.0, 3.0, 2.0]]);
+    is_empty(&meet(&a, &b));
+    is_empty(&meet(&b, &a));
+}
+
+#[test]
+fn a_conic_near_the_grid_s_reach_keeps_its_plane() {
+    // In the plane z = x again, centred three quarters of the grid's reach out: the centre moved
+    // along each axis stays on the grid (moved back, it would leave it), so the plane is proven and
+    // the meeting with a line in it is a crossing.
+    let k = 0.75 * 2.0_f64.powi(40);
+    let half = 2.0_f64.powi(39);
+    let axes = Axes::Vectors {
+        u: [-half, 0.0, -half],
+        v: [0.0, half, 0.0],
+    };
+    let e = CurveKind::Ellipse(Ellipse::new([k, -k, k], axes, (0.0, 2.0)).unwrap());
+    let reach = 2.0_f64.powi(40) - 1.0;
+    let line = bezier(&[[k, -reach, k], [k, -k, k], [k, 0.0, k]]);
+    let r = meet(&e, &line);
+    assert!(
+        matches!(
+            r.items(),
+            [Item::Point {
+                contact: PointContact::Crossing,
+                ..
+            }]
+        ),
+        "{:?}",
+        r.items()
+    );
+    // At a quarter turn: the centre plus v.
+    assert_eq!(points(&r).len(), 1);
+    assert!((points(&r)[0].0 - 0.5).abs() < 1e-9);
+}
+
+#[test]
+fn a_line_all_but_tangent_to_a_circle_is_answered() {
+    // The line through (k, 0) and (2k, 1) passes within about 1 / 2k² of the unit circle's edge,
+    // near (0, -1), and meets it twice: the exact count says so, while the discriminant, exactly 1
+    // against terms near k⁴, has an enclosure reaching far below zero. The closed form must take
+    // the root of what is not negative and leave the pair to the engine, never fail.
+    for e in [20, 26] {
+        let k = 2.0_f64.powi(e);
+        let unit = circle([0.0, 0.0], 1.0);
+        is_empty(&meet(&segment([k, 0.0], [2.0 * k, 1.0]), &unit));
+        let r = meet(&infinite([k, 0.0], [k, 1.0]), &unit);
+        assert_eq!(r.items().len(), 2, "{:?}", r.items());
+        assert!(
+            r.items()
+                .iter()
+                .all(|i| (i.at().spans()[0].lo() + 1.0).abs() < 1e-6),
+            "{:?}",
+            r.items()
+        );
+    }
+}
+
+#[test]
+fn an_overlap_far_along_its_parameter_is_flagged_within_budget() {
+    // One curve runs on parameters near 2^40, where a double's step is 2^-12, and covers 16,384
+    // grid steps a unit: a side one step of a double wide still reaches 4 grid steps, past the
+    // floor. Such a side cannot be halved, so its box is flagged there; splitting it into itself
+    // would go round for ever. The two lines are one, so the answer is one flagged run.
+    let t = 2.0_f64.powi(40);
+    let far = CurveKind::Nurbs(
+        Curve::new(
+            Basis::new(1, vec![t, t, t + 1.0, t + 1.0]).unwrap(),
+            &[[0.0, 0.0], [16384.0, 0.0]],
+        )
+        .unwrap(),
+    );
+    let near = bezier(&[[0.0, 0.0], [16384.0, 0.0]]);
+    let r = curves(&far, &near, &mut WorkMeter::new(Budget::of_work(4_000_000))).unwrap();
+    assert!(
+        matches!(
+            r.items(),
+            [Item::Flagged {
+                why: Unresolved::HigherOrderContact,
+                ..
+            }]
+        ),
+        "{:?}",
+        r.items()
+    );
+    let s = r.items()[0].at().spans();
+    assert_eq!(
+        (s[0].lo(), s[0].hi(), s[1].lo(), s[1].hi()),
+        (t, t + 1.0, 0.0, 1.0)
+    );
+}
