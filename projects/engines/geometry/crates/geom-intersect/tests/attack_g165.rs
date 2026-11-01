@@ -430,7 +430,9 @@ fn what_is_not_natural_is_left_alone() {
         )
         .unwrap(),
     );
-    assert!(natural(&level(0.0), &t, &mut meter()).unwrap().is_none());
+    // Square to a torus is G167's; a plane at no special angle is left alone.
+    let tilted = plane([0.0, 0.0, 1.0], [1.0, 0.0, 0.25], [0.0, 1.0, 0.0]);
+    assert!(natural(&tilted, &t, &mut meter()).unwrap().is_none());
 }
 
 #[test]

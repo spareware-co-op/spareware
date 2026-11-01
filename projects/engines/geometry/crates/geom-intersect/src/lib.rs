@@ -52,6 +52,7 @@ pub mod order;
 pub mod project;
 pub mod quadrics;
 pub mod quartic;
+mod reduced;
 pub mod result;
 pub mod solve;
 
