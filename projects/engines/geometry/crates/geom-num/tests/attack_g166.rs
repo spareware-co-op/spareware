@@ -1191,32 +1191,39 @@ fn cones_of_one_apex_with_a_singular_base_in_the_basis_run() {
 
 #[test]
 fn the_filter_answers_on_well_parted_roots_either_way_round() {
-    // Four simple roots at 0, 1, 2 and 3: the walk parts them, and the filter answers what the exact
-    // path does, definite or not. Turned round, every member's sign turns, so a definite member the
-    // walk reads as positive one way it reads as negative the other.
+    // Four simple roots, at 0, 1, 2 and 3, which the first walk does not part, and at -20, -10, 0
+    // and 10, which it does: the filter answers what the exact path does, definite or not. Turned
+    // round, every member's sign turns, so a definite member the walk reads as positive one way it
+    // reads as negative the other.
     let i = |v: i128| Interval::of(i64::try_from(v).unwrap()).unwrap();
-    for signs in [
-        [1, 1, -1, -1],
-        [1, 1, 1, -1],
-        [1, 1, 1, 1],
-        [1, -1, 1, -1],
-        [-1, 1, 1, -1],
-    ] {
+    for (at, signs) in [[0, 1, 2, 3], [-20, -10, 0, 10]]
+        .into_iter()
+        .flat_map(|at| {
+            [
+                [1, 1, -1, -1],
+                [1, 1, 1, -1],
+                [1, 1, 1, 1],
+                [1, -1, 1, -1],
+                [-1, 1, 1, -1],
+            ]
+            .map(|signs| (at, signs))
+        })
+    {
         let pair = zero()
-            .block(0, 1, 0, signs[0])
-            .block(1, 1, 1, signs[1])
-            .block(2, 1, 2, signs[2])
-            .block(3, 1, 3, signs[3]);
-        let roots: Vec<(i128, i128)> = (0..4).map(|k| (k as i128, signs[k])).collect();
+            .block(0, 1, at[0], signs[0])
+            .block(1, 1, at[1], signs[1])
+            .block(2, 1, at[2], signs[2])
+            .block(3, 1, at[3], signs[3]);
+        let roots: Vec<(i128, i128)> = (0..4).map(|k| (at[k], signs[k])).collect();
         let want = if definite(&roots) { NONE } else { smooth(2) };
         let (a, b) = pair.forms();
-        assert_eq!(classify(&a, &b).unwrap().topology, want, "{signs:?}");
+        assert_eq!(classify(&a, &b).unwrap().topology, want, "{at:?} {signs:?}");
         for turn in [1, -1] {
             let form = |m: &Small| m.map(|row| row.map(|v| i(turn * v)));
             assert_eq!(
                 filtered(&form(&pair.a), &form(&pair.b)),
                 Some(want),
-                "{signs:?} turned {turn}"
+                "{at:?} {signs:?} turned {turn}"
             );
         }
     }
