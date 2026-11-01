@@ -414,7 +414,7 @@ fn a_wall_back_to_back_makes_two_cells_whichever_fin_comes_first() {
     assert_eq!(four, 4);
     // The two sides of the wall lie in different shells.
     let back = kept.len();
-    let shell_of = |at: usize| m.faces[m.piece_faces[at]].shell;
+    let shell_of = |at: usize| m.faces[m.piece_face[at]].shell;
     assert_ne!(shell_of(back), shell_of(back + 1));
     // Which fin an edge starts from follows the sheets, so turn them all over and go again.
     let turned: Vec<Outward> = pieces
@@ -464,7 +464,7 @@ fn a_wall_that_stops_short_has_one_cell_on_both_sides() {
     };
     let m = merge_with(&pieces, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
     let back = kept.len();
-    let shell_of = |at: usize| m.faces[m.piece_faces[at]].shell;
+    let shell_of = |at: usize| m.faces[m.piece_face[at]].shell;
     assert_eq!(shell_of(back), shell_of(back + 1));
 }
 
@@ -547,6 +547,15 @@ fn a_section_runs_where_two_owners_meet() {
         assert_eq!((curves.edges.len(), curves.vertices.len()), (6, 6));
         assert!(curves.edges.iter().all(|(low, high)| low < high));
     }
+    // Two bars over one block: two stretches of one line, with a gap between them.
+    let long = block([0, 0, 0], [10, 4, 4]);
+    let bars = [
+        long,
+        block([1, -1, 2], [3, 5, 6]),
+        block([6, -1, 2], [8, 5, 6]),
+    ];
+    let curves = section(&pieces(&bars, LEAF_POLYGONS), &mut meter()).unwrap();
+    assert_eq!((curves.edges.len(), curves.vertices.len()), (16, 16));
     let flush = block([4, 0, 0], [8, 4, 4]);
     let curves = section(&pieces(&[A, flush], LEAF_POLYGONS), &mut meter()).unwrap();
     assert_eq!(curves.edges.len(), 4, "around their contact, not across it");
@@ -823,6 +832,19 @@ fn two_faces_in_a_line_that_touch_at_a_vertex_keep_their_own_edges() {
     let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
     closed(&m, &pieces);
     assert_eq!(counts(&m), [2, 8, 8, 12, 7]);
+}
+
+#[test]
+fn an_edge_breaks_at_each_corner_that_rests_on_it() {
+    let mut polygons = scene(&[A]);
+    let one = [[1, 4, 4], [1, 8, 5], [2, 9, 9], [0, 5, 9]];
+    let two = [[3, 4, 4], [3, 8, 5], [4, 9, 9], [2, 5, 9]];
+    tetrahedron(one, 1, &mut polygons).unwrap();
+    tetrahedron(two, 2, &mut polygons).unwrap();
+    let pieces = kept(&polygons, &WindingTest::unite(), LEAF_POLYGONS);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&m, &pieces);
+    assert_eq!(counts(&m), [3, 14, 14, 26, 16]);
 }
 
 #[test]

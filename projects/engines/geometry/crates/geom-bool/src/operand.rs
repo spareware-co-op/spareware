@@ -225,10 +225,10 @@ fn on_grid(v: [f64; 3]) -> Option<P3> {
         let r = round_ties_even(x).ok()?.get();
         #[allow(
             clippy::cast_possible_truncation,
-            reason = "checked below: a whole double within the grid converts exactly"
+            reason = "a double past the range saturates, and P3::new below refuses it"
         )]
         let n = r as i64;
-        (r == x && x.abs() < 1e15).then_some(n)
+        (r == x).then_some(n)
     };
     let [x, y, z] = v;
     P3::new(whole(x)?, whole(y)?, whole(z)?).ok()
@@ -412,8 +412,7 @@ fn joined(face: &Plane, sides: Vec<Side>) -> Result<Vec<Side>, NumError> {
             ring.push(side);
         }
     }
-    if let (Some(first), Some(last)) = (ring.first(), ring.last())
-        && ring.len() > 1
+    if let [first, .., last] = ring.as_slice()
         && normals_det(face, first, last)? == Sign::Zero
     {
         ring.pop();
