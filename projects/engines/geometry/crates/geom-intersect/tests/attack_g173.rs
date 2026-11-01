@@ -650,16 +650,26 @@ fn a_plane_touching_only_a_cones_apex_is_one_point() {
             }
         );
     }
-    let read = analyse(&cone, &shallow, &found, FLOOR, CEILING, &mut meter()).unwrap();
-    assert_eq!(read.len(), 1, "{read:?}");
-    let Reading::Point { at, gap, contact } = read[0] else {
-        panic!("{read:?}");
-    };
-    assert_eq!(contact, PointContact::Singular { branches: 0 });
-    assert!(gap.contains(0.0), "{gap:?}");
-    assert_eq!((at[1].lo(), at[1].hi()), (0.0, 0.0));
-    let t = march(&cone, &shallow, &found, FLOOR, CEILING, &mut meter()).unwrap();
-    assert!(t.branches.is_empty(), "{t:?}");
+    // The point is the whole pole line, v = 0 for every u of the turn, read from either side.
+    for (one, two, swapped) in [(&cone, &shallow, false), (&shallow, &cone, true)] {
+        let found = subdivide(one, two, FLOOR, &mut meter()).unwrap();
+        let read = analyse(one, two, &found, FLOOR, CEILING, &mut meter()).unwrap();
+        assert_eq!(read.len(), 1, "{read:?}");
+        let Reading::Point { at, gap, contact } = read[0] else {
+            panic!("{read:?}");
+        };
+        assert_eq!(contact, PointContact::Singular { branches: 0 });
+        assert!(gap.contains(0.0), "{gap:?}");
+        let (u, v) = if swapped {
+            (at[2], at[3])
+        } else {
+            (at[0], at[1])
+        };
+        assert_eq!((u.lo(), u.hi()), (0.0, TURN), "{at:?}");
+        assert_eq!((v.lo(), v.hi()), (0.0, 0.0), "{at:?}");
+        let t = march(one, two, &found, FLOOR, CEILING, &mut meter()).unwrap();
+        assert!(t.branches.is_empty(), "{t:?}");
+    }
 }
 
 #[test]
