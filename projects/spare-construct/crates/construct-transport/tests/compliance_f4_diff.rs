@@ -32,7 +32,10 @@ fn assumption_diff_matches_the_prototype() {
             "runDiff" => {
                 let mut opts = case.g("opts").clone();
                 if case.g("scIndex").is_num() {
-                    opts.set("sc", p.g("scenarios").ix(case.g("scIndex").n() as usize).clone());
+                    opts.set(
+                        "sc",
+                        p.g("scenarios").ix(case.g("scIndex").n() as usize).clone(),
+                    );
                 }
                 Ok(expert::run_diff(&p, case.g("diffs"), &opts))
             }
@@ -44,7 +47,10 @@ fn assumption_diff_matches_the_prototype() {
         }
     }
     for call in ["parseOther", "diffParams", "runDiff"] {
-        assert!(calls.get(call).copied().unwrap_or(0) >= 10, "too few {call} cases");
+        assert!(
+            calls.get(call).copied().unwrap_or(0) >= 10,
+            "too few {call} cases"
+        );
     }
 }
 
@@ -60,15 +66,36 @@ fn json_reader_matches_v8() {
             Ok(v) => {
                 let want = case.g("ok");
                 if !want.is_str() || v.stringify() != want.s() {
-                    bad.push(format!("{s:?}: read as {} but JSON.parse gave {}", v.stringify(), if want.is_str() { want.s() } else { format!("the error {}", case.g("err").s()) }));
+                    bad.push(format!(
+                        "{s:?}: read as {} but JSON.parse gave {}",
+                        v.stringify(),
+                        if want.is_str() {
+                            want.s()
+                        } else {
+                            format!("the error {}", case.g("err").s())
+                        }
+                    ));
                 }
             }
             Err(e) => {
                 if !case.has("err") || e != case.g("err").s() {
-                    bad.push(format!("{s:?}: refused with {e:?} but JSON.parse {}", if case.has("err") { format!("refused with {:?}", case.g("err").s()) } else { format!("gave {}", case.g("ok").s()) }));
+                    bad.push(format!(
+                        "{s:?}: refused with {e:?} but JSON.parse {}",
+                        if case.has("err") {
+                            format!("refused with {:?}", case.g("err").s())
+                        } else {
+                            format!("gave {}", case.g("ok").s())
+                        }
+                    ));
                 }
             }
         }
     }
-    assert!(bad.is_empty(), "{} of {} texts differ:\n{}", bad.len(), cases.len(), bad.iter().take(25).cloned().collect::<Vec<_>>().join("\n"));
+    assert!(
+        bad.is_empty(),
+        "{} of {} texts differ:\n{}",
+        bad.len(),
+        cases.len(),
+        bad.iter().take(25).cloned().collect::<Vec<_>>().join("\n")
+    );
 }

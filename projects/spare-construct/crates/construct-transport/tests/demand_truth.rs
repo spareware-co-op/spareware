@@ -39,7 +39,11 @@ fn trip_ends_as_recorded() {
 }
 
 fn num_list(v: &[f64]) -> Value {
-    Value::Array(v.iter().map(|&x| construct_transport::jsnum::plain_number(x)).collect())
+    Value::Array(
+        v.iter()
+            .map(|&x| construct_transport::jsnum::plain_number(x))
+            .collect(),
+    )
 }
 
 #[test]
@@ -52,7 +56,9 @@ fn demand_and_apply_me_on_the_variants() {
         let name = case["name"].as_str().expect("name");
         let p = Project::from_json(case["projectText"].as_str().expect("project text"))
             .unwrap_or_else(|e| panic!("{name}: {e}"));
-        let sc = p.scenario(case["scenario"].as_str().expect("scenario")).expect("scenario");
+        let sc = p
+            .scenario(case["scenario"].as_str().expect("scenario"))
+            .expect("scenario");
         for period in ["AM", "PM"] {
             let rec = &case["periods"][period];
             let path = format!("{name}.{period}");
@@ -60,7 +66,11 @@ fn demand_and_apply_me_on_the_variants() {
             // trip ends of every zone and gateway
             for z in sc.zones.values() {
                 let t = trip_ends(&p, z, &p.settings, period, sc);
-                assert_close(&json!({ "O": t.o, "D": t.d }), &rec["tripEnds"][&z.id], &format!("{path}.tripEnds.{}", z.id));
+                assert_close(
+                    &json!({ "O": t.o, "D": t.d }),
+                    &rec["tripEnds"][&z.id],
+                    &format!("{path}.tripEnds.{}", z.id),
+                );
             }
             let d = demand(&p, sc, &g, period, &p.settings);
             let got = json!({
@@ -69,11 +79,25 @@ fn demand_and_apply_me_on_the_variants() {
             });
             assert_close(&got, &rec["demand"], &format!("{path}.demand"));
             n_demand += 1;
-            for (k, me) in rec["applyME"].as_array().expect("applyME cases").iter().enumerate() {
-                let mut t: Vec<f64> = me["T0"].as_array().expect("T0").iter().map(|v| v.as_f64().expect("number")).collect();
+            for (k, me) in rec["applyME"]
+                .as_array()
+                .expect("applyME cases")
+                .iter()
+                .enumerate()
+            {
+                let mut t: Vec<f64> = me["T0"]
+                    .as_array()
+                    .expect("T0")
+                    .iter()
+                    .map(|v| v.as_f64().expect("number"))
+                    .collect();
                 let year = me["year"].as_f64();
                 let note = apply_me(&p, &g.zones, period, &mut t, year);
-                assert_eq!(note, me["note"].as_str().expect("note"), "{path}.applyME[{k}].note");
+                assert_eq!(
+                    note,
+                    me["note"].as_str().expect("note"),
+                    "{path}.applyME[{k}].note"
+                );
                 assert_close(&num_list(&t), &me["T"], &format!("{path}.applyME[{k}].T"));
                 n_me += 1;
             }

@@ -182,7 +182,11 @@ fn kernel_cos(x: f64, y: f64) -> f64 {
     if ix < 0x3fd3_3333 {
         1.0 - (0.5 * z - (z * r - x * y))
     } else {
-        let qx = if ix > 0x3fe9_0000 { 0.28125 } else { words(ix - 0x0020_0000, 0) };
+        let qx = if ix > 0x3fe9_0000 {
+            0.28125
+        } else {
+            words(ix - 0x0020_0000, 0)
+        };
         let hz = 0.5 * z - qx;
         let a = 1.0 - qx;
         a - (hz - (z * r - x * y))
@@ -259,7 +263,11 @@ fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
             }
         }
         let y1 = (r - y0) - w;
-        return if hx < 0 { Some((-n, -y0, -y1)) } else { Some((n, y0, y1)) };
+        return if hx < 0 {
+            Some((-n, -y0, -y1))
+        } else {
+            Some((n, y0, y1))
+        };
     }
     None
 }

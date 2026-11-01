@@ -814,6 +814,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-dev.yml` | `wasm` | The tests of `native` on wasm32: a failing test fails it, and the checks they test are seeded under `native` |
 | `kernel-dev.yml` | `verus` | `trip verus` |
 | `kernel-golden.yml` | `store` | J: `geom-test/tests/attack_g19.rs::seeded_violations_of_the_real_tree_are_found`; R: `geom-test/tests/attack_g19.rs::golden_diff_holds_a_change_to_the_owner_rule_end_to_end` |
+| `kernel-golden.yml` | `fixtures` | J: `geom-test/tests/fixture_tool.rs::a_tree_that_breaks_a_rule_fails_its_check`; R: `geom-test/tests/fixture_tool.rs::diff_holds_a_pull_request_to_the_rules` |
 | `kernel-bench.yml` | `scope` | Not a gate: it decides which count jobs run, from the same paths as the workflow's trigger |
 | `kernel-bench.yml` | `checks` | The tools of `kernel.yml`'s `lint`: `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
 | `kernel-bench.yml` | `instructions` | `trip gungraun`, on both legs; J: `geom-bench/tests/attack_g18a.rs::a_real_rise_in_estimated_cycles_fails`, `geom-bench/tests/attack_g18a.rs::the_command_line_passes_fails_and_refuses_as_the_rule_says` |
@@ -821,6 +822,8 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-fuzz.yml` | `libfuzzer` | `trip libfuzzer` |
 | `kernel-fuzz.yml` | `kani` | `trip kani-fuzz` |
 | `kernel-fuzz.yml` | `kani-num` | `trip kani-num` |
+| `kernel-fuzz.yml` | `kani-op` | `trip kani-op` |
+| `kernel-fuzz.yml` | `kani-format` | `trip kani-format` |
 | `kernel-fuzz.yml` | `kani-limbs` | `trip kani-limbs` |
 | `kernel-fuzz.yml` | `clusterfuzzlite` | `trip clusterfuzzlite`, run by the job `clusterfuzzlite-seeded` through this job's actions' own images with this job's inputs: the actions build a fresh clone of the pull request, which a planted line never reaches |
 | `kernel-fuzz.yml` | `clusterfuzzlite-seeded` | `trip clusterfuzzlite`: the job is `clusterfuzzlite`'s seeded run, and fails if ClusterFuzzLite's build and fuzzing stop finding the planted crash |
@@ -847,3 +850,33 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 - **The full mutation run** is the evidence for geom-num, not the sum of the diffs: a pull request that only weakens a test mutates nothing in its diff, so only the full run shows that no unexplained mutant survives.
 
 **Changes:** this record; `geom-num`'s verification suite and `tests/attack_g29.rs`; the thread-count tests of `geom-run`, `geom-pool`, `geom-math` and `geom-num`; `geom-test`'s `rust_source::references`, `golden::THREAD_COUNTS`, `trip`, `guard prove --golden-run` and `tests/attack_g43.rs`; the `trip` steps of `kernel.yml`, `kernel-dev.yml`, `kernel-fuzz.yml`, `kernel-bench.yml` and `kernel-certificates.yml`, the wasm legs' guard step, and `kernel-fuzz.yml`'s job `clusterfuzzlite-seeded` with `.clusterfuzzlite/seeded.sh`; `geom-bench/tests/attack_g18a.rs`'s count of the instruction job's measured runs, which the seed raises to seven; issues #367 and #368.
+
+## 32.45 Fixed runs stay: no name-ordered bucket tree (G105)
+
+**What it is.** 31.7 left one question to the piece "Content hashes and cache keys": keep cutting a body's tables into fixed runs of 4,096 rows (24.2), or cut them by name, ending a bucket where a row's name meets a fixed condition, so that adding an entity, which shifts every row after it in name order (32.17), leaves the other chunks alone.
+
+**Measured** by `geom-format`'s `tests/bucket_tree.rs`, in counts, the same on every machine. The body is a strip of 20,000 quads published by name, each table past the chunk size, 460,032 rows and 9,302,983 bytes of chunk payload once one more quad is added with a name in the middle of the order. A row counts as changed if no row of the old version has its values. The bucket column is not one guess at a cut but a lower bound for any cut whose buckets hold at least 1,024 rows, a quarter of the mean: all rows outside runs of that many unchanged rows. A table's rows are counted at its mean bytes.
+
+| Tables | Bytes | Fixed runs rewrite | Any bucket cut rewrites at least |
+| --- | --- | --- | --- |
+| Faces, loops, fins, edges: rows of links | 3,504,818 | 3,021,772 | 2,915,162 |
+| Vertices, points, surfaces, curves, names: rows of values | 5,798,165 | 4,176,392 | 29,226 |
+| All | 9,302,983 | 7,198,164 (77%) | 2,944,388 (32%) |
+
+An edit in place, which moves no row, rewrites one chunk under either scheme (241,522 bytes here), and `BodyVersion::next` hashes only that chunk. The first analysis of this question expected nothing from buckets, since links are row numbers. That is true of the link tables, but the tables of values only shift, and buckets could keep nearly all of them.
+
+| Option | What it means |
+| --- | --- |
+| A. Fixed runs in every table | One rule. A row's chunk is its row divided by 4,096. Adding an entity to a big body rewrites most of it |
+| B. Buckets in every table | The link tables gain nothing: every row of them changes, whatever the cut |
+| C. Buckets in the tables of values only | Up to 59% fewer bytes for this edit. Two rules in the specification, and the index and chunks change |
+
+**Decided 2026-10-31: A.**
+- **C's saving is real but narrow.** It needs a table past 4,096 rows, so a body of about a thousand faces or more: a wall or a door has one chunk per table, rewritten whole under any scheme.
+- **It saves bytes stored, not time.** A cut has to read every row to find its ends, and buckets lie across the columns' chunks, so `BodyVersion::next` could not skip them: hashing a new version would cost no less.
+- **It costs what the fixed rule gives.** With fixed runs a reader finds a row's chunk by division, which the browser's chunks in view rely on (23.9). Buckets need a search over row counts, a chunk's place taken out of its payload (a shifted bucket must keep its ID), and a second cutting rule in `SPEC.md`.
+- **It can come later.** The cut is fixed by the specification and versioned (24.2), and a chunk record has a schema, so a later format can cut the tables of values differently and still read every file (24.6). 32.17's remedy, a canonical key before the name, stays open too.
+
+Reopen this if real containers show saved versions dominated by the tables of values of big bodies; `tests/bucket_tree.rs` then gives the numbers again.
+
+**Changes:** 24.2, 23.8's as-built note, 31.7, `tests/bucket_tree.rs`.

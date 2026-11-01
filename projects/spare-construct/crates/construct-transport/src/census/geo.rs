@@ -1,6 +1,9 @@
 //! Study boxes, polygons and the small helpers of the land use feature (landuse-plus.js "small helpers" and "geometry").
 
-use crate::jsnum::{JsNum, Maybe, math_max_of, math_min, math_max, math_min_of, math_round, string_to_number, to_fixed, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{
+    JsNum, Maybe, math_max, math_max_of, math_min, math_min_of, math_round, string_to_number,
+    to_fixed, value_to_js_string, value_to_number, value_truthy,
+};
 use crate::project::{Project, Scenario};
 use crate::util::{self, fmt};
 use serde_json::Value;
@@ -23,7 +26,13 @@ pub struct Bx {
 impl Bx {
     /// A box with no basis.
     pub fn new(s: f64, w: f64, n: f64, e: f64) -> Bx {
-        Bx { s, w, n, e, basis: None }
+        Bx {
+            s,
+            w,
+            n,
+            e,
+            basis: None,
+        }
     }
     /// The same box with a basis.
     pub fn with_basis(mut self, basis: &str) -> Bx {
@@ -65,7 +74,12 @@ pub fn box_of(b: &Value) -> Option<Bx> {
     }
     let key = |k: &str| b.get(k).map_or(f64::NAN, num);
     if b.get("south").is_some() {
-        return Some(Bx::new(key("south"), key("west"), key("north"), key("east")));
+        return Some(Bx::new(
+            key("south"),
+            key("west"),
+            key("north"),
+            key("east"),
+        ));
     }
     if b.get("s").is_some() && ["s", "w", "n", "e"].iter().all(|k| finite_value(b.get(*k))) {
         return Some(Bx::new(key("s"), key("w"), key("n"), key("e")));
@@ -75,12 +89,22 @@ pub fn box_of(b: &Value) -> Option<Bx> {
 
 /// `areaBox(sc)`: the study area, in this order: the box drawn in onboarding, the extent of the scenario's network and zones, the box of the last fill. None when there is none.
 pub fn area_box(p: &Project, sc: &Scenario) -> Option<Bx> {
-    if let Some(drawn) = p.extra.get("onboarding").and_then(|o| o.get("area")).and_then(box_of) {
+    if let Some(drawn) = p
+        .extra
+        .get("onboarding")
+        .and_then(|o| o.get("area"))
+        .and_then(box_of)
+    {
         return Some(drawn.with_basis("the study area"));
     }
     let mut lats: Vec<f64> = Vec::new();
     let mut lngs: Vec<f64> = Vec::new();
-    for (lat, lng) in sc.nodes.values().map(|n| (n.lat.num(), n.lng.num())).chain(sc.zones.values().map(|z| (z.lat.num(), z.lng.num()))) {
+    for (lat, lng) in sc
+        .nodes
+        .values()
+        .map(|n| (n.lat.num(), n.lng.num()))
+        .chain(sc.zones.values().map(|z| (z.lat.num(), z.lng.num())))
+    {
         if lat.is_finite() && lng.is_finite() {
             lats.push(lat);
             lngs.push(lng);
@@ -95,13 +119,21 @@ pub fn area_box(p: &Project, sc: &Scenario) -> Option<Bx> {
             basis: Some("the extent of the network and zones".into()),
         });
     }
-    p.extra.get("landuse").and_then(|l| l.get("bounds")).and_then(box_of).map(|b| b.with_basis("the area of the last fill"))
+    p.extra
+        .get("landuse")
+        .and_then(|l| l.get("bounds"))
+        .and_then(box_of)
+        .map(|b| b.with_basis("the area of the last fill"))
 }
 
 /// `boxText(B)`: the size of a box in kilometres, "1.4 \u{d7} 1.1 km".
 pub fn box_text(b: &Bx) -> String {
     let f = util::flat((b.s + b.n) / 2.0);
-    format!("{} \u{d7} {} km", fmt::num((b.e - b.w) * f.kx / 1000.0, 1), fmt::num((b.n - b.s) * f.ky / 1000.0, 1))
+    format!(
+        "{} \u{d7} {} km",
+        fmt::num((b.e - b.w) * f.kx / 1000.0, 1),
+        fmt::num((b.n - b.s) * f.ky / 1000.0, 1)
+    )
 }
 
 /// `inBox(B, lat, lng)`.
@@ -111,7 +143,11 @@ pub fn in_box(b: &Bx, lat: f64, lng: f64) -> bool {
 
 /// `boxKey(B)`: the box as text to four decimals, the cache key of a download.
 pub fn box_key(b: &Bx) -> String {
-    [b.s, b.w, b.n, b.e].iter().map(|v| to_fixed(*v, 4)).collect::<Vec<_>>().join(",")
+    [b.s, b.w, b.n, b.e]
+        .iter()
+        .map(|v| to_fixed(*v, 4))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// `parseNum(v)`: '12,000', '5000 m2', '5 000 m\u{b2}' and '250 sqm' become numbers; '' gives None; anything else NaN (Some).
@@ -122,7 +158,11 @@ pub fn parse_num(v: &Value) -> Option<f64> {
         let x = n.as_f64().unwrap_or(f64::NAN);
         return Some(if x.is_finite() { x } else { f64::NAN });
     }
-    parse_num_text(&if v.is_null() { String::new() } else { value_to_js_string(v) })
+    parse_num_text(&if v.is_null() {
+        String::new()
+    } else {
+        value_to_js_string(v)
+    })
 }
 
 /// `parseNum` of text.
@@ -146,11 +186,18 @@ pub fn parse_num_text(text: &str) -> Option<f64> {
         kept.push(chars[i]);
         i += 1;
     }
-    let s: String = kept.chars().filter(|c| !(crate::jsnum::is_js_space(*c) || *c == ',' || *c == ' ')).collect();
+    let s: String = kept
+        .chars()
+        .filter(|c| !(crate::jsnum::is_js_space(*c) || *c == ',' || *c == ' '))
+        .collect();
     if s.is_empty() {
         return None;
     }
-    if numlike(&s) { Some(string_to_number(&s)) } else { Some(f64::NAN) }
+    if numlike(&s) {
+        Some(string_to_number(&s))
+    } else {
+        Some(f64::NAN)
+    }
 }
 
 // /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i
@@ -204,10 +251,18 @@ pub fn lr(total: f64, weights: &[f64]) -> Vec<f64> {
     let raw: Vec<f64> = weights.iter().map(|w| total * w / s).collect();
     let mut out: Vec<f64> = raw.iter().map(|r| r.floor()).collect();
     let mut left = total - out.iter().fold(0.0, |a, b| a + b);
-    let mut rem: Vec<(f64, usize)> = raw.iter().enumerate().map(|(i, r)| (r - out[i], i)).collect();
+    let mut rem: Vec<(f64, usize)> = raw
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r - out[i], i))
+        .collect();
     crate::graph::js_sort_by(&mut rem, |a, b| {
         let d = b.0 - a.0;
-        if d != 0.0 && !d.is_nan() { d } else { a.1 as f64 - b.1 as f64 }
+        if d != 0.0 && !d.is_nan() {
+            d
+        } else {
+            a.1 as f64 - b.1 as f64
+        }
     });
     for (_, i) in rem {
         if left > 0.0 {
@@ -240,7 +295,12 @@ impl Poly {
 
 /// `bbOf(rings)`: [west, south, east, north] over every point.
 pub fn bb_of(rings: &[Ring]) -> [f64; 4] {
-    let mut bb = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    let mut bb = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
     for r in rings {
         for p in r {
             bb[0] = math_min(bb[0], p[0]);
@@ -274,7 +334,11 @@ pub fn in_rings(x: f64, y: f64, rings: &[Ring]) -> bool {
 
 /// `inPoly(f, lng, lat)`: the point is inside the polygon (bounding box first).
 pub fn in_poly(f: &Poly, lng: f64, lat: f64) -> bool {
-    lng >= f.bb[0] && lng <= f.bb[2] && lat >= f.bb[1] && lat <= f.bb[3] && in_rings(lng, lat, &f.rings)
+    lng >= f.bb[0]
+        && lng <= f.bb[2]
+        && lat >= f.bb[1]
+        && lat <= f.bb[3]
+        && in_rings(lng, lat, &f.rings)
 }
 
 /// `bbInBox(bb, B)`: the bounding box lies wholly inside the study box.
@@ -334,7 +398,13 @@ pub fn sample_share(f: &Poly, b: &Bx, n: usize) -> Sample {
             }
         }
     }
-    let share = if inside > 0 { pts.len() as f64 / inside as f64 } else if bb_meets(&f.bb, b) { 1.0 } else { 0.0 };
+    let share = if inside > 0 {
+        pts.len() as f64 / inside as f64
+    } else if bb_meets(&f.bb, b) {
+        1.0
+    } else {
+        0.0
+    };
     Sample { share, pts, inside }
 }
 
@@ -349,7 +419,12 @@ pub fn rings_of(g: Option<&Value>) -> Vec<Ring> {
             r.as_array()
                 .expect("a ring")
                 .iter()
-                .map(|p| [p.get(0).map_or(f64::NAN, value_to_number), p.get(1).map_or(f64::NAN, value_to_number)])
+                .map(|p| {
+                    [
+                        p.get(0).map_or(f64::NAN, value_to_number),
+                        p.get(1).map_or(f64::NAN, value_to_number),
+                    ]
+                })
                 .collect()
         })
         .collect()

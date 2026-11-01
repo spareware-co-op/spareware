@@ -53,7 +53,10 @@ fn abs(x: f64) -> f64 {
 pub fn box_around(lat: f64, lng: f64, m: f64) -> PlaceBounds {
     let d_lat = m / 110574.0;
     let d_lng = m / (111320.0 * math_max(0.05, jsmath::cos(lat * std::f64::consts::PI / 180.0)));
-    [[r7(lat - d_lat), r7(lng - d_lng)], [r7(lat + d_lat), r7(lng + d_lng)]]
+    [
+        [r7(lat - d_lat), r7(lng - d_lng)],
+        [r7(lat + d_lat), r7(lng + d_lng)],
+    ]
 }
 
 /// `parseCoords(q)`: "-37.10, 174.95", "-37.10 174.95", "174.95, -37.10" and "37.1 S, 174.95 E" as a place, else None.
@@ -61,14 +64,21 @@ pub fn box_around(lat: f64, lng: f64, m: f64) -> PlaceBounds {
 /// Without hemisphere letters the pair is read as latitude, longitude, swapped when only that makes sense (the first value
 /// beyond 90 either way, or a New Zealand longitude first and a southern latitude second).
 pub fn parse_coords(q: &str) -> Option<Place> {
-    let re = Regex::lit("^\\s*([-+]?\\d{1,3}(?:\\.\\d+)?)\\s*\u{b0}?\\s*([NSEW])?\\s*[,;\\s]\\s*([-+]?\\d{1,3}(?:\\.\\d+)?)\\s*\u{b0}?\\s*([NSEW])?\\s*$", "i");
+    let re = Regex::lit(
+        "^\\s*([-+]?\\d{1,3}(?:\\.\\d+)?)\\s*\u{b0}?\\s*([NSEW])?\\s*[,;\\s]\\s*([-+]?\\d{1,3}(?:\\.\\d+)?)\\s*\u{b0}?\\s*([NSEW])?\\s*$",
+        "i",
+    );
     let u: Vec<u16> = q.encode_utf16().collect();
     let m = re.exec_units(&u, 0)?;
     let g = |i: usize| m.text(&u, i);
     let hemi = Regex::lit("[SW]", "i");
     let val = |n: Option<String>, h: &Option<String>| {
         let v = parse_float(&n.unwrap_or_default());
-        if h.as_deref().is_some_and(|h| !h.is_empty() && hemi.test(h)) { -abs(v) } else { v }
+        if h.as_deref().is_some_and(|h| !h.is_empty() && hemi.test(h)) {
+            -abs(v)
+        } else {
+            v
+        }
     };
     let (h1, h2) = (g(2), g(4));
     let (mut a, mut b) = (val(g(1), &h1), val(g(3), &h2));
@@ -85,7 +95,13 @@ pub fn parse_coords(q: &str) -> Option<Place> {
     if !a.is_finite() || !b.is_finite() || abs(a) > 90.0 || abs(b) > 180.0 {
         return None;
     }
-    Some(Place { name: format!("{}, {}", to_fixed(a, 5), to_fixed(b, 5)), lat: r7(a), lng: r7(b), bounds: box_around(a, b, MIN_BOX), kind: "coordinates".to_string() })
+    Some(Place {
+        name: format!("{}, {}", to_fixed(a, 5), to_fixed(b, 5)),
+        lat: r7(a),
+        lng: r7(b),
+        bounds: box_around(a, b, MIN_BOX),
+        kind: "coordinates".to_string(),
+    })
 }
 
 // Road-type abbreviations as NZ addresses write them (the same list DataHub uses to match counts)
@@ -103,7 +119,14 @@ const ABBR: [(&str, &str); 11] = [
     ("blvd", "Boulevard"),
 ];
 // St, Dr and Ct are also Saint, Doctor and Court names, so they expand only at the end of a part
-const ABBR_END: [(&str, &str); 6] = [("st", "Street"), ("dr", "Drive"), ("ct", "Court"), ("cl", "Close"), ("cr", "Crescent"), ("sq", "Square")];
+const ABBR_END: [(&str, &str); 6] = [
+    ("st", "Street"),
+    ("dr", "Drive"),
+    ("ct", "Court"),
+    ("cl", "Close"),
+    ("cr", "Crescent"),
+    ("sq", "Square"),
+];
 
 /// `expand(q)`: common New Zealand abbreviations written out ('Waihoehoe Rd' gives 'Waihoehoe Road').
 ///
@@ -113,11 +136,15 @@ pub fn expand(q: &str) -> String {
     let mut s = q.to_string();
     for (a, full) in ABBR {
         let re = Regex::lit(&format!("(\\S\\s+){a}\\.?(?=\\s|,|$)"), "gi");
-        s = re.replace(&s, |m, u| format!("{}{}", m.text(u, 1).unwrap_or_default(), full));
+        s = re.replace(&s, |m, u| {
+            format!("{}{}", m.text(u, 1).unwrap_or_default(), full)
+        });
     }
     for (a, full) in ABBR_END {
         let re = Regex::lit(&format!("(\\S\\s+){a}\\.?(?=\\s*(?:,|$))"), "gi");
-        s = re.replace(&s, |m, u| format!("{}{}", m.text(u, 1).unwrap_or_default(), full));
+        s = re.replace(&s, |m, u| {
+            format!("{}{}", m.text(u, 1).unwrap_or_default(), full)
+        });
     }
     s
 }
@@ -139,7 +166,11 @@ pub fn shorten(display: &str) -> String {
         parts.splice(0..2, [joined]);
     }
     let out = parts.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
-    if out.is_empty() { display.to_string() } else { out }
+    if out.is_empty() {
+        display.to_string()
+    } else {
+        out
+    }
 }
 
 fn text_of(v: Option<&JsonValue>) -> String {
@@ -147,7 +178,10 @@ fn text_of(v: Option<&JsonValue>) -> String {
 }
 
 fn first_truthy(vs: &[Option<&JsonValue>]) -> Option<String> {
-    vs.iter().flatten().find(|v| v.truthy()).map(|v| v.js_string())
+    vs.iter()
+        .flatten()
+        .find(|v| v.truthy())
+        .map(|v| v.js_string())
 }
 
 /// `toResult(r)`: one Nominatim result as a place; None when it has no position.
@@ -166,11 +200,21 @@ pub fn to_result(r: &JsonValue) -> Result<Option<Place>, String> {
     }
     let bb: Vec<f64> = match r.get("boundingbox") {
         Some(JsonValue::Array(a)) => a.iter().map(|v| parse_float(&v.js_string())).collect(),
-        Some(v) if v.truthy() => return Err("(r.boundingbox || []).map is not a function".to_string()),
+        Some(v) if v.truthy() => {
+            return Err("(r.boundingbox || []).map is not a function".to_string());
+        }
         _ => Vec::new(),
     };
-    let mut bounds = if bb.len() == 4 && bb.iter().all(|v| v.is_finite()) { [[bb[0], bb[2]], [bb[1], bb[3]]] } else { box_around(lat, lng, MIN_BOX) };
-    let small = (bounds[1][0] - bounds[0][0]) * 110574.0 < 2.0 * MIN_BOX && (bounds[1][1] - bounds[0][1]) * 111320.0 * jsmath::cos(lat * std::f64::consts::PI / 180.0) < 2.0 * MIN_BOX;
+    let mut bounds = if bb.len() == 4 && bb.iter().all(|v| v.is_finite()) {
+        [[bb[0], bb[2]], [bb[1], bb[3]]]
+    } else {
+        box_around(lat, lng, MIN_BOX)
+    };
+    let small = (bounds[1][0] - bounds[0][0]) * 110574.0 < 2.0 * MIN_BOX
+        && (bounds[1][1] - bounds[0][1])
+            * 111320.0
+            * jsmath::cos(lat * std::f64::consts::PI / 180.0)
+            < 2.0 * MIN_BOX;
     if small {
         bounds = box_around(lat, lng, MIN_BOX);
     }
@@ -180,7 +224,8 @@ pub fn to_result(r: &JsonValue) -> Result<Option<Place>, String> {
         lat: r7(lat),
         lng: r7(lng),
         bounds,
-        kind: first_truthy(&[r.get("addresstype"), r.get("type"), r.get("category")]).unwrap_or_else(|| "place".to_string()),
+        kind: first_truthy(&[r.get("addresstype"), r.get("type"), r.get("category")])
+            .unwrap_or_else(|| "place".to_string()),
     }))
 }
 
@@ -216,11 +261,25 @@ pub fn plan(q: &str) -> Plan {
     }
     let qx = expand(s);
     let key = cache_key(&qx);
-    let pairs: Vec<(String, String)> = [("format", "jsonv2"), ("countrycodes", "nz"), ("limit", "6"), ("addressdetails", "0"), ("accept-language", "en"), ("q", qx.as_str())]
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
-    let request = HttpRequest { method: "GET".to_string(), url: format!("{}?{}", NOMINATIM, query_string(&pairs)), body: None, headers: Vec::new(), timeout_ms: 30_000.0, expect: Expect::Json };
+    let pairs: Vec<(String, String)> = [
+        ("format", "jsonv2"),
+        ("countrycodes", "nz"),
+        ("limit", "6"),
+        ("addressdetails", "0"),
+        ("accept-language", "en"),
+        ("q", qx.as_str()),
+    ]
+    .iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
+    let request = HttpRequest {
+        method: "GET".to_string(),
+        url: format!("{}?{}", NOMINATIM, query_string(&pairs)),
+        body: None,
+        headers: Vec::new(),
+        timeout_ms: 30_000.0,
+        expect: Expect::Json,
+    };
     Plan::Ask { request, key }
 }
 

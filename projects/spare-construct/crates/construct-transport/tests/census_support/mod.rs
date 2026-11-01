@@ -2,7 +2,10 @@
 //! tools/transport-truth/gen-census.mjs wrote the answers (fixtures/data/census-answers.json) and ran the prototype on them.
 #![allow(dead_code)] // each test file uses its own part of this module
 
-use construct_transport::census::{AupData, CensusData, CensusLayers, EmployeeData, FillData, Failure, Layer, Net, parse_aup, parse_census, parse_employees, parse_moe};
+use construct_transport::census::{
+    AupData, CensusData, CensusLayers, EmployeeData, Failure, FillData, Layer, Net, parse_aup,
+    parse_census, parse_employees, parse_moe,
+};
 use construct_transport::edit::Ids;
 use engine_sim::{Mulberry32, Rng};
 use serde_json::Value;
@@ -37,7 +40,11 @@ pub fn exchanges() -> Value {
 impl<'a> Replay<'a> {
     /// A replay of a recorded request log, with the table of answers.
     pub fn new(log: &'a Value, table: &'a Value) -> Replay<'a> {
-        Replay { log: log.as_array().expect("a log"), table, at: 0 }
+        Replay {
+            log: log.as_array().expect("a log"),
+            table,
+            at: 0,
+        }
     }
     /// The requests made so far.
     pub fn used(&self) -> usize {
@@ -48,10 +55,20 @@ impl<'a> Replay<'a> {
         self.at == self.log.len()
     }
     fn next(&mut self, method: &str, url: &str, body: Option<&str>) -> Result<Value, Failure> {
-        let e = self.log.get(self.at).unwrap_or_else(|| panic!("request {} ({method} {url}) was not made by the prototype", self.at));
+        let e = self.log.get(self.at).unwrap_or_else(|| {
+            panic!(
+                "request {} ({method} {url}) was not made by the prototype",
+                self.at
+            )
+        });
         assert_eq!(e["method"].as_str(), Some(method), "request {}", self.at);
         assert_eq!(e["url"].as_str(), Some(url), "request {}", self.at);
-        assert_eq!(e.get("body").and_then(Value::as_str), body, "body of request {}", self.at);
+        assert_eq!(
+            e.get("body").and_then(Value::as_str),
+            body,
+            "body of request {}",
+            self.at
+        );
         self.at += 1;
         if let Some(f) = e.get("failure").and_then(Value::as_str) {
             return Err(match f {
@@ -84,23 +101,37 @@ impl Net for Replay<'_> {
 
 /// The OpenStreetMap elements of the made-up suburb (fixtures/landuse-papatoetoe.json).
 pub fn suburb_elements() -> Vec<Value> {
-    crate::support::load_json("fixtures/landuse-papatoetoe.json")["elements"].as_array().expect("elements").clone()
+    crate::support::load_json("fixtures/landuse-papatoetoe.json")["elements"]
+        .as_array()
+        .expect("elements")
+        .clone()
 }
 
 fn layer(fields: &Value, features: &Value) -> Layer {
-    Layer { fields: fields.as_array().cloned().unwrap_or_default(), features: features.as_array().cloned().unwrap_or_default() }
+    Layer {
+        fields: fields.as_array().cloned().unwrap_or_default(),
+        features: features.as_array().cloned().unwrap_or_default(),
+    }
 }
 
 /// The Census layers of the made-up answers; `no_dw` leaves the dwellings layer out.
 pub fn census_of(ans: &Value, no_dw: bool) -> CensusData {
     let c = &ans["census"];
     let l = |k: &str| Some(layer(&c[k]["fields"], &c[k]["features"]));
-    parse_census(&CensusLayers { dw: if no_dw { None } else { l("dw") }, hh: l("hh"), ind0: l("ind0"), ind2: l("ind2") })
+    parse_census(&CensusLayers {
+        dw: if no_dw { None } else { l("dw") },
+        hh: l("hh"),
+        ind0: l("ind0"),
+        ind2: l("ind2"),
+    })
 }
 
 /// The employees of the made-up answers.
 pub fn employees_of(ans: &Value) -> EmployeeData {
-    parse_employees(&layer(&ans["employees"]["fields"], &ans["employees"]["features"]))
+    parse_employees(&layer(
+        &ans["employees"]["fields"],
+        &ans["employees"]["features"],
+    ))
 }
 
 /// The Unitary Plan zones of the made-up answers.
@@ -116,7 +147,10 @@ pub fn data_for(ans: &Value, which: &Value) -> FillData {
         d.elements = Some(suburb_elements());
     }
     if on("census") {
-        d.census = Some(census_of(ans, which.get("census").and_then(Value::as_str) == Some("noDw")));
+        d.census = Some(census_of(
+            ans,
+            which.get("census").and_then(Value::as_str) == Some("noDw"),
+        ));
     }
     if on("employees") {
         d.employees = Some(employees_of(ans));

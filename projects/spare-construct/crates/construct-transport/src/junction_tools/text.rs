@@ -1,6 +1,6 @@
 //! Cell and number formats of the junction tables (the `formatting` block of junctions.js) and the kit's small HTML helpers.
 
-use super::{LABEL, STORAGE_AMBER, STORAGE_RED, FIGURE_STEP};
+use super::{FIGURE_STEP, LABEL, STORAGE_AMBER, STORAGE_RED};
 use crate::edit::CONTROLS;
 use crate::jsnum::{math_round, number_to_js_string, to_fixed};
 use crate::util::{esc, fmt};
@@ -80,7 +80,11 @@ pub fn dos_cell(dos: Option<f64>, xp: Option<f64>) -> String {
     if c.is_empty() {
         x2(dos)
     } else {
-        format!("<span style=\"color:{};font-weight:600\">{}</span>", c, x2(dos))
+        format!(
+            "<span style=\"color:{};font-weight:600\">{}</span>",
+            c,
+            x2(dos)
+        )
     }
 }
 

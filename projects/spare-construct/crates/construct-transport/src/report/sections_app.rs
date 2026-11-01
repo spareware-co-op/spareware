@@ -2,10 +2,11 @@
 //! convergence, counts, movement summaries, the crash listing, ANOP inputs, the data pack manifest and the expert sign-off.
 
 use super::app_support::{
-    NonDefault, Series, assumption_rows, data_sources, default_settings_json, kit_line, non_defaults, settings_rows, val_text,
+    NonDefault, Series, assumption_rows, data_sources, default_settings_json, kit_line,
+    non_defaults, settings_rows, val_text,
 };
 use super::consts::{PERIODS, attrib, disclaimer_ids, reg};
-use super::ctx::{Ctx, Head, Row, Tbl, TableOpts, day_of, disc, disc_with, h, hn, note, para};
+use super::ctx::{Ctx, Head, Row, TableOpts, Tbl, day_of, disc, disc_with, h, hn, note, para};
 use super::js;
 use super::rfmt;
 use super::sections_end::network_diff;
@@ -36,10 +37,22 @@ pub(crate) fn app_data(c: &mut Ctx) -> String {
         .map(|d| {
             Row::new(vec![
                 esc(d.what),
-                if d.url.is_empty() { esc(d.source) } else { format!("<a href=\"{}\">{}</a>", esc(d.url), esc(d.source)) },
-                esc(if d.licence.is_empty() { fmt::DASH } else { d.licence }),
+                if d.url.is_empty() {
+                    esc(d.source)
+                } else {
+                    format!("<a href=\"{}\">{}</a>", esc(d.url), esc(d.source))
+                },
+                esc(if d.licence.is_empty() {
+                    fmt::DASH
+                } else {
+                    d.licence
+                }),
                 esc(d.date.as_deref().unwrap_or("Not loaded")),
-                esc(if d.basis.is_empty() { fmt::DASH } else { d.basis }),
+                esc(if d.basis.is_empty() {
+                    fmt::DASH
+                } else {
+                    d.basis
+                }),
                 esc(&d.notes),
             ])
         })
@@ -75,15 +88,34 @@ pub(crate) fn app_data(c: &mut Ctx) -> String {
         },
     ];
     for a in r.host.about_entries() {
-        entries.push(Entry { title: a.title, order: a.order, rows: a.rows });
+        entries.push(Entry {
+            title: a.title,
+            order: a.order,
+            rows: a.rows,
+        });
     }
     let mut idx: Vec<usize> = (0..entries.len()).collect();
-    idx.sort_by(|a, b| entries[*a].order.partial_cmp(&entries[*b].order).unwrap_or(std::cmp::Ordering::Equal));
+    idx.sort_by(|a, b| {
+        entries[*a]
+            .order
+            .partial_cmp(&entries[*b].order)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let feat: Vec<Row> = idx
         .iter()
         .flat_map(|&i| {
             let a = &entries[i];
-            a.rows.iter().map(|x| Row::new(vec![esc(&a.title), x[0].clone(), x[1].clone(), x[2].clone()])).collect::<Vec<_>>()
+            a.rows
+                .iter()
+                .map(|x| {
+                    Row::new(vec![
+                        esc(&a.title),
+                        x[0].clone(),
+                        x[1].clone(),
+                        x[2].clone(),
+                    ])
+                })
+                .collect::<Vec<_>>()
         })
         .collect();
     format!(
@@ -128,7 +160,13 @@ pub(crate) fn app_settings(c: &mut Ctx) -> String {
         .iter()
         .map(|x| {
             Row::cls(
-                vec![esc(&x.label), format!("<code>{}</code>", esc(&x.key)), esc(&x.value), esc(&x.def), if x.changed { "<b>Changed</b>" } else { "" }.to_string()],
+                vec![
+                    esc(&x.label),
+                    format!("<code>{}</code>", esc(&x.key)),
+                    esc(&x.value),
+                    esc(&x.def),
+                    if x.changed { "<b>Changed</b>" } else { "" }.to_string(),
+                ],
                 if x.changed { "chg" } else { "" },
             )
         })
@@ -156,20 +194,57 @@ pub(crate) fn app_rates(c: &mut Ctx) -> String {
     let rows: Vec<Row> = LANDUSES
         .iter()
         .map(|l| {
-            let rr = js::get(s_rates, l.key).filter(|v| v.truthy()).unwrap_or(&empty);
-            let dd = js::get(d_rates, l.key).filter(|v| v.truthy()).unwrap_or(&empty);
+            let rr = js::get(s_rates, l.key)
+                .filter(|v| v.truthy())
+                .unwrap_or(&empty);
+            let dd = js::get(d_rates, l.key)
+                .filter(|v| v.truthy())
+                .unwrap_or(&empty);
             let same = rr.stringify() == dd.stringify();
-            let p = |per: &str, f: &str| -> Option<&JsonValue> { js::get(Some(rr), per).filter(|v| v.truthy()).and_then(|v| v.get(f)) };
+            let p = |per: &str, f: &str| -> Option<&JsonValue> {
+                js::get(Some(rr), per)
+                    .filter(|v| v.truthy())
+                    .and_then(|v| v.get(f))
+            };
             let am = js::get(Some(rr), "AM").filter(|v| v.truthy());
             let pm = js::get(Some(rr), "PM").filter(|v| v.truthy());
             Row::new(vec![
                 esc(l.label),
-                format!("per {}{}", if l.per == 1.0 { String::new() } else { format!("{} ", number_to_js_string(l.per)) }, esc(l.unit.strip_suffix('s').unwrap_or(l.unit))),
-                if am.is_some() { rfmt::num(rfmt::v(p("AM", "rate")), 2) } else { fmt::DASH.to_string() },
-                if am.is_some() { rfmt::pct(rfmt::v(p("AM", "inPct"))) } else { fmt::DASH.to_string() },
-                if pm.is_some() { rfmt::num(rfmt::v(p("PM", "rate")), 2) } else { fmt::DASH.to_string() },
-                if pm.is_some() { rfmt::pct(rfmt::v(p("PM", "inPct"))) } else { fmt::DASH.to_string() },
-                if same { "Spare Construct indicative default" } else { "<b>User-entered</b>" }.to_string(),
+                format!(
+                    "per {}{}",
+                    if l.per == 1.0 {
+                        String::new()
+                    } else {
+                        format!("{} ", number_to_js_string(l.per))
+                    },
+                    esc(l.unit.strip_suffix('s').unwrap_or(l.unit))
+                ),
+                if am.is_some() {
+                    rfmt::num(rfmt::v(p("AM", "rate")), 2)
+                } else {
+                    fmt::DASH.to_string()
+                },
+                if am.is_some() {
+                    rfmt::pct(rfmt::v(p("AM", "inPct")))
+                } else {
+                    fmt::DASH.to_string()
+                },
+                if pm.is_some() {
+                    rfmt::num(rfmt::v(p("PM", "rate")), 2)
+                } else {
+                    fmt::DASH.to_string()
+                },
+                if pm.is_some() {
+                    rfmt::pct(rfmt::v(p("PM", "inPct")))
+                } else {
+                    fmt::DASH.to_string()
+                },
+                if same {
+                    "Spare Construct indicative default"
+                } else {
+                    "<b>User-entered</b>"
+                }
+                .to_string(),
             ])
         })
         .collect();
@@ -215,23 +290,40 @@ pub(crate) fn app_zones(c: &mut Ctx) -> String {
         .values()
         .filter(|z| !z.kind.is("gateway"))
         .map(|z| {
-            let lu: Vec<String> = z
-                .lu
-                .get()
-                .map(|m| {
-                    m.iter()
-                        .filter(|(_, q)| q.num() > 0.0)
-                        .map(|(k, q)| format!("{} {}", land_use(k).map_or(k.to_string(), |l| l.label.to_string()), rfmt::num(q.num(), 0)))
-                        .collect()
-                })
-                .unwrap_or_default();
+            let lu: Vec<String> =
+                z.lu.get()
+                    .map(|m| {
+                        m.iter()
+                            .filter(|(_, q)| q.num() > 0.0)
+                            .map(|(k, q)| {
+                                format!(
+                                    "{} {}",
+                                    land_use(k).map_or(k.to_string(), |l| l.label.to_string()),
+                                    rfmt::num(q.num(), 0)
+                                )
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
             Row::new(vec![
                 esc(&name_or_id(z)),
                 esc(zone_class(Some(z))),
-                esc(&if lu.is_empty() { fmt::DASH.to_string() } else { lu.join(", ") }),
+                esc(&if lu.is_empty() {
+                    fmt::DASH.to_string()
+                } else {
+                    lu.join(", ")
+                }),
                 year_cell(&z.year),
-                if z.reduction.truthy() { rfmt::pct(z.reduction.num()) } else { fmt::DASH.to_string() },
-                if !matches!(z.buildout, Maybe::Missing | Maybe::Null) { rfmt::pct(z.buildout.num()) } else { fmt::DASH.to_string() },
+                if z.reduction.truthy() {
+                    rfmt::pct(z.reduction.num())
+                } else {
+                    fmt::DASH.to_string()
+                },
+                if !matches!(z.buildout, Maybe::Missing | Maybe::Null) {
+                    rfmt::pct(z.buildout.num())
+                } else {
+                    fmt::DASH.to_string()
+                },
                 esc(&maybe_text(&z.src, "user")),
             ])
         })
@@ -251,7 +343,10 @@ pub(crate) fn app_zones(c: &mut Ctx) -> String {
                 g("AMout"),
                 g("PMin"),
                 g("PMout"),
-                esc(&maybe_text(&z.gw_src, "Estimated by Spare Construct (no matched count)")),
+                esc(&maybe_text(
+                    &z.gw_src,
+                    "Estimated by Spare Construct (no matched count)",
+                )),
             ])
         })
         .collect();
@@ -260,15 +355,39 @@ pub(crate) fn app_zones(c: &mut Ctx) -> String {
         c.table(
             &format!("Zone schedule \u{b7} {}", esc(r.sc(sc).name())),
             Tbl::new(
-                vec![h("Zone"), h("Class"), h("Land use"), h("Opening year"), hn("Trip reduction"), hn("Build-out"), h("Source")],
+                vec![
+                    h("Zone"),
+                    h("Class"),
+                    h("Land use"),
+                    h("Opening year"),
+                    hn("Trip reduction"),
+                    hn("Build-out"),
+                    h("Source")
+                ],
                 zrows
             ),
             &TableOpts::default()
         ),
         c.table(
-            &format!("Gateway flows (base year {}, before growth)", year_cell(&r.st().base_year)),
-            Tbl::new(vec![h("Gateway"), hn("AM in"), hn("AM out"), hn("PM in"), hn("PM out"), h("Count basis")], grows),
-            &TableOpts::note(&format!("veh/h. Grown to each scenario's year by {}.", esc(&growth_basis(r.st()))))
+            &format!(
+                "Gateway flows (base year {}, before growth)",
+                year_cell(&r.st().base_year)
+            ),
+            Tbl::new(
+                vec![
+                    h("Gateway"),
+                    hn("AM in"),
+                    hn("AM out"),
+                    hn("PM in"),
+                    hn("PM out"),
+                    h("Count basis")
+                ],
+                grows
+            ),
+            &TableOpts::note(&format!(
+                "veh/h. Grown to each scenario's year by {}.",
+                esc(&growth_basis(r.st()))
+            ))
         )
     )
 }
@@ -293,19 +412,39 @@ pub(crate) fn app_network(c: &mut Ctx) -> String {
                     .into_iter()
                     .filter(|l| !l.status.is("closed"))
                     .map(|l| {
-                        let name = l.name.as_str().filter(|x| !x.is_empty()).unwrap_or("Unnamed road");
-                        let v = if l.b == n.id { &l.lanes_ab } else { &l.lanes_ba };
+                        let name = l
+                            .name
+                            .as_str()
+                            .filter(|x| !x.is_empty())
+                            .unwrap_or("Unnamed road");
+                        let v = if l.b == n.id {
+                            &l.lanes_ab
+                        } else {
+                            &l.lanes_ba
+                        };
                         format!("{} {}", esc(name), int(Some(&to_json(v))))
                     })
                     .collect();
-                if l.is_empty() { fmt::DASH.to_string() } else { l.join(", ") }
+                if l.is_empty() {
+                    fmt::DASH.to_string()
+                } else {
+                    l.join(", ")
+                }
             };
             let ctl = n.control.as_str().unwrap_or("");
             Row::new(vec![
                 esc(&kit_junction_name(scn, &n.id)),
-                esc(&if ctl.is_empty() { "Uncontrolled".to_string() } else { control_label(ctl) }),
+                esc(&if ctl.is_empty() {
+                    "Uncontrolled".to_string()
+                } else {
+                    control_label(ctl)
+                }),
                 lanes,
-                if n.cycle.truthy() { format!("{} s", int(Some(&to_json(&n.cycle)))) } else { fmt::DASH.to_string() },
+                if n.cycle.truthy() {
+                    format!("{} s", int(Some(&to_json(&n.cycle))))
+                } else {
+                    fmt::DASH.to_string()
+                },
                 if n.fixed_timing.truthy() {
                     "Fixed".to_string()
                 } else if n.control.is("signals") {
@@ -314,7 +453,9 @@ pub(crate) fn app_network(c: &mut Ctx) -> String {
                     fmt::DASH.to_string()
                 },
                 match n.bans.get() {
-                    Some(serde_json::Value::Array(a)) if !a.is_empty() => format!("{} banned", int_f(a.len() as f64)),
+                    Some(serde_json::Value::Array(a)) if !a.is_empty() => {
+                        format!("{} banned", int_f(a.len() as f64))
+                    }
                     _ => fmt::DASH.to_string(),
                 },
                 if n.upgrade.truthy() { "Yes" } else { "" }.to_string(),
@@ -328,10 +469,22 @@ pub(crate) fn app_network(c: &mut Ctx) -> String {
             let d = network_diff(Some(r.scenario(base)), Some(r.scenario(i)));
             let t = format!(
                 "{}{}",
-                d.iter().take(8).map(|x| x.text.clone()).collect::<Vec<_>>().join("; "),
-                if d.len() > 8 { format!("; and {} more", d.len() - 8) } else { String::new() }
+                d.iter()
+                    .take(8)
+                    .map(|x| x.text.clone())
+                    .collect::<Vec<_>>()
+                    .join("; "),
+                if d.len() > 8 {
+                    format!("; and {} more", d.len() - 8)
+                } else {
+                    String::new()
+                }
             );
-            Row::new(vec![esc(r.sc(i).name()), d.len().to_string(), esc(&if t.is_empty() { "None".to_string() } else { t })])
+            Row::new(vec![
+                esc(r.sc(i).name()),
+                d.len().to_string(),
+                esc(&if t.is_empty() { "None".to_string() } else { t }),
+            ])
         })
         .collect();
     format!(
@@ -369,7 +522,12 @@ pub(crate) fn app_assumptions(c: &mut Ctx) -> String {
             Row::new(vec![
                 esc(&a.name),
                 esc(&a.edition),
-                if a.corridor { "<b>Spare Construct assumption</b>" } else { "Published source" }.to_string(),
+                if a.corridor {
+                    "<b>Spare Construct assumption</b>"
+                } else {
+                    "Published source"
+                }
+                .to_string(),
                 if a.verified { "Yes" } else { "No" }.to_string(),
             ])
         })
@@ -409,7 +567,13 @@ pub(crate) fn app_calibration(c: &mut Ctx) -> String {
             .iter()
             .map(|k| {
                 let k = k.to_value();
-                let or_dash = |s: String| if s.is_empty() { fmt::DASH.to_string() } else { s };
+                let or_dash = |s: String| {
+                    if s.is_empty() {
+                        fmt::DASH.to_string()
+                    } else {
+                        s
+                    }
+                };
                 Row::new(vec![
                     esc(&vtext(&k, "label")),
                     esc(&or_dash(vtext(&k, "target"))),
@@ -417,28 +581,58 @@ pub(crate) fn app_calibration(c: &mut Ctx) -> String {
                         None | Some(serde_json::Value::Null) => fmt::DASH.to_string(),
                         Some(serde_json::Value::Number(n)) => {
                             let v = n.as_f64().unwrap_or(f64::NAN);
-                            if k.get("kind").and_then(serde_json::Value::as_str) == Some("share") { rfmt::pct(v * 100.0) } else { rfmt::num(v, 3) }
+                            if k.get("kind").and_then(serde_json::Value::as_str) == Some("share") {
+                                rfmt::pct(v * 100.0)
+                            } else {
+                                rfmt::num(v, 3)
+                            }
                         }
-                        Some(serde_json::Value::String(s)) if matches!(s.as_str(), "NaN" | "Infinity" | "-Infinity") => {
+                        Some(serde_json::Value::String(s))
+                            if matches!(s.as_str(), "NaN" | "Infinity" | "-Infinity") =>
+                        {
                             let v = match s.as_str() {
                                 "NaN" => f64::NAN,
                                 "Infinity" => f64::INFINITY,
                                 _ => f64::NEG_INFINITY,
                             };
-                            if k.get("kind").and_then(serde_json::Value::as_str) == Some("share") { rfmt::pct(v * 100.0) } else { rfmt::num(v, 3) }
+                            if k.get("kind").and_then(serde_json::Value::as_str) == Some("share") {
+                                rfmt::pct(v * 100.0)
+                            } else {
+                                rfmt::num(v, 3)
+                            }
                         }
                         Some(v) => esc(&crate::jsnum::value_to_js_string(v)),
                     },
                     esc(&or_dash(vtext(&k, "status"))),
                     esc(&vtext(&k, "source")),
                     esc(&vtext(&k, "table")),
-                    if k.get("verified").is_some_and(crate::jsnum::value_truthy) { "Yes" } else { "No" }.to_string(),
+                    if k.get("verified").is_some_and(crate::jsnum::value_truthy) {
+                        "Yes"
+                    } else {
+                        "No"
+                    }
+                    .to_string(),
                 ])
             })
             .collect();
         parts.push(c.table(
-            &format!("Calibration checks \u{b7} {} \u{b7} {} peak", esc(r.sc(sc).name()), p),
-            Tbl::new(vec![h("Criterion"), h("Target"), h("Value"), h("Status"), h("Source"), h("Table"), h("Verified")], rows),
+            &format!(
+                "Calibration checks \u{b7} {} \u{b7} {} peak",
+                esc(r.sc(sc).name()),
+                p
+            ),
+            Tbl::new(
+                vec![
+                    h("Criterion"),
+                    h("Target"),
+                    h("Value"),
+                    h("Status"),
+                    h("Source"),
+                    h("Table"),
+                    h("Verified"),
+                ],
+                rows,
+            ),
             &TableOpts::note(&format!(
                 "{} {} {}",
                 esc(&rep.summary),
@@ -471,7 +665,14 @@ pub(crate) fn app_calibration(c: &mut Ctx) -> String {
     let body = parts.join("");
     format!(
         "{}{}",
-        if body.is_empty() { note("Run the existing (base-year) scenario with counts loaded to report calibration.", false) } else { body },
+        if body.is_empty() {
+            note(
+                "Run the existing (base-year) scenario with counts loaded to report calibration.",
+                false,
+            )
+        } else {
+            body
+        },
         disc("D6")
     )
 }
@@ -484,28 +685,56 @@ pub(crate) fn app_convergence(c: &mut Ctx) -> String {
     for i in 0..r.project.scenarios.len() {
         for p in r.rep_periods(i) {
             let res = r.results[i].get(p).expect("a period with results");
-            let last: Vec<f64> = res.conv.iter().rev().take(4).rev().map(|x| x.p.unwrap_or(f64::NAN)).collect();
-            let pm = if last.is_empty() { None } else { Some(crate::jsnum::math_min_of(&last)) };
+            let last: Vec<f64> = res
+                .conv
+                .iter()
+                .rev()
+                .take(4)
+                .rev()
+                .map(|x| x.p.unwrap_or(f64::NAN))
+                .collect();
+            let pm = if last.is_empty() {
+                None
+            } else {
+                Some(crate::jsnum::math_min_of(&last))
+            };
             rows.push(Row::new(vec![
                 esc(r.sc(i).name()),
                 p.to_string(),
                 int(Some(&JsonValue::Number(res.it))),
                 format!("{}%", fmt::num(res.gap * 100.0, 4)),
                 pm.map_or(fmt::DASH.to_string(), |v| rfmt::pct(v * 100.0)),
-                if !res.converged { "<b class=\"bad\">No</b>" } else { "Yes" }.to_string(),
+                if !res.converged {
+                    "<b class=\"bad\">No</b>"
+                } else {
+                    "Yes"
+                }
+                .to_string(),
                 esc(&res.conv_note),
             ]));
             if Some(i) == c.sel.with && res.conv.len() > 1 {
                 series.push(Series {
-                    pts: res.conv.iter().filter(|x| x.gap > 0.0).map(|x| [x.it, (-x.gap.log10()).min(6.0)]).collect(),
-                    colour: if p == "AM" { "var(--accent)" } else { "var(--amber)" },
+                    pts: res
+                        .conv
+                        .iter()
+                        .filter(|x| x.gap > 0.0)
+                        .map(|x| [x.it, (-x.gap.log10()).min(6.0)])
+                        .collect(),
+                    colour: if p == "AM" {
+                        "var(--accent)"
+                    } else {
+                        "var(--amber)"
+                    },
                     label: format!("{p} \u{2212}log\u{2081}\u{2080}(gap)"),
                     y_max: 6.0,
                 });
             }
         }
     }
-    let xs: Vec<f64> = series.iter().flat_map(|s| s.pts.iter().map(|q| q[0])).collect();
+    let xs: Vec<f64> = series
+        .iter()
+        .flat_map(|s| s.pts.iter().map(|q| q[0]))
+        .collect();
     let xm = math_max_of(&[vec![1.0], xs].concat());
     let conv = &STANDARDS.conv;
     format!(
@@ -513,18 +742,39 @@ pub(crate) fn app_convergence(c: &mut Ctx) -> String {
         c.table(
             "Table C1 \u{b7} Convergence",
             Tbl::new(
-                vec![h("Scenario"), h("Period"), hn("Iterations"), hn("Final %GAP"), hn("P, last 4"), h("Converged"), h("Note")],
+                vec![
+                    h("Scenario"),
+                    h("Period"),
+                    hn("Iterations"),
+                    hn("Final %GAP"),
+                    hn("P, last 4"),
+                    h("Converged"),
+                    h("Note")
+                ],
                 rows
             )
             .empty("No stored runs."),
-            &TableOpts { source: Some(esc(conv.src.edition)), note: Some(esc(conv.note)), ..TableOpts::default() }
+            &TableOpts {
+                source: Some(esc(conv.src.edition)),
+                note: Some(esc(conv.note)),
+                ..TableOpts::default()
+            }
         ),
         if series.is_empty() {
             String::new()
         } else {
             format!(
                 "<figure class=\"chart\">{}<figcaption>Gap trace, {} (higher is better converged)</figcaption></figure>",
-                kit_line(&series, xm, 6.0, "10\u{207b}\u{2076}", ["iteration 1", &format!("iteration {}", number_to_js_string(xm))]),
+                kit_line(
+                    &series,
+                    xm,
+                    6.0,
+                    "10\u{207b}\u{2076}",
+                    [
+                        "iteration 1",
+                        &format!("iteration {}", number_to_js_string(xm))
+                    ]
+                ),
                 esc(r.sc(c.sel.with.unwrap_or(0)).name())
             )
         }
@@ -545,8 +795,16 @@ pub(crate) fn app_counts(c: &mut Ctx) -> String {
                 None => "undefined".to_string(),
                 Some(v) => v.js_string(),
             },
-            if js::truthy(js::get(Some(k), "virtual")) { "estimate" } else { "count" },
-            if role.is_empty() { "calibration".to_string() } else { role }
+            if js::truthy(js::get(Some(k), "virtual")) {
+                "estimate"
+            } else {
+                "count"
+            },
+            if role.is_empty() {
+                "calibration".to_string()
+            } else {
+                role
+            }
         );
         match by.iter_mut().find(|(x, _)| *x == key) {
             Some(e) => e.1 += 1,
@@ -557,7 +815,11 @@ pub(crate) fn app_counts(c: &mut Ctx) -> String {
         .iter()
         .map(|(k, n)| {
             let mut it = k.split('|');
-            let (s, m, rl) = (it.next().unwrap_or(""), it.next().unwrap_or(""), it.next().unwrap_or(""));
+            let (s, m, rl) = (
+                it.next().unwrap_or(""),
+                it.next().unwrap_or(""),
+                it.next().unwrap_or(""),
+            );
             Row::new(vec![
                 esc(crate::datahub::source(s).map_or(s, |x| x.label)),
                 esc(m),
@@ -574,12 +836,23 @@ pub(crate) fn app_counts(c: &mut Ctx) -> String {
             let Some(res) = r.results[sc].get(p) else {
                 continue;
             };
-            let obs_t = js::get(Some(j), "obs").filter(|v| v.truthy()).map(|o| js::num(o.get(p))).filter(|t| *t > 0.0);
+            let obs_t = js::get(Some(j), "obs")
+                .filter(|v| v.truthy())
+                .map(|o| js::num(o.get(p)))
+                .filter(|t| *t > 0.0);
             let ob: Option<(f64, String)> = obs_t.map(|t| {
                 let src = js::text_or_empty(js::path(Some(j), &["obs", "src"]));
-                (t, if src.is_empty() { "Observed".to_string() } else { src })
+                (
+                    t,
+                    if src.is_empty() {
+                        "Observed".to_string()
+                    } else {
+                        src
+                    },
+                )
             });
-            let g = js::path(Some(j), &["g", p]).filter(|v| v.truthy() && js::num(v.get("t")) > 0.0);
+            let g =
+                js::path(Some(j), &["g", p]).filter(|v| v.truthy() && js::num(v.get("t")) > 0.0);
             if ob.is_none() && g.is_none() {
                 continue;
             }
@@ -587,15 +860,22 @@ pub(crate) fn app_counts(c: &mut Ctx) -> String {
             let to = js::text(js::get(Some(j), "to"));
             let mut mt: Option<f64> = None;
             let mut ml: Option<f64> = None;
-            if scn.nodes.contains_key(&from) && scn.nodes.contains_key(&to)
-                && let Some(crate::results::Travel::Route(t)) = crate::results::travel(scn, r.st(), Some(res), &from, &to)
+            if scn.nodes.contains_key(&from)
+                && scn.nodes.contains_key(&to)
+                && let Some(crate::results::Travel::Route(t)) =
+                    crate::results::travel(scn, r.st(), Some(res), &from, &to)
             {
                 mt = Some(t.time);
                 ml = Some(t.len);
             }
-            let reference = ob.as_ref().map_or_else(|| js::num(g.and_then(|x| x.get("t"))), |o| o.0);
+            let reference = ob
+                .as_ref()
+                .map_or_else(|| js::num(g.and_then(|x| x.get("t"))), |o| o.0);
             let k = mt.and_then(|m| crate::datahub::jt_check(m, reference));
-            let glen = g.and_then(|x| x.get("len")).filter(|v| v.truthy()).map(JsonValue::to_number);
+            let glen = g
+                .and_then(|x| x.get("len"))
+                .filter(|v| v.truthy())
+                .map(JsonValue::to_number);
             let len = glen.or(ml);
             jt.push(Row::new(vec![
                 esc(&js::text(js::get(Some(j), "name"))),
@@ -611,14 +891,23 @@ pub(crate) fn app_counts(c: &mut Ctx) -> String {
                         let when = js::text_or_empty(g.and_then(|x| x.get("when")));
                         format!(
                             "Google Routes typical time (predicted, not observed{})",
-                            if when.is_empty() { String::new() } else { format!(", {}", esc(&when)) }
+                            if when.is_empty() {
+                                String::new()
+                            } else {
+                                format!(", {}", esc(&when))
+                            }
                         )
                     }
                 },
                 mt.map_or(fmt::DASH.to_string(), |m| rfmt::num(m, 0)),
-                k.as_ref().map_or(fmt::DASH.to_string(), |k| rfmt::pct(k.pct * 100.0)),
-                k.as_ref().map_or(fmt::DASH.to_string(), |k| if k.tier1 { "Pass" } else { "Fail" }.to_string()),
-                k.as_ref().map_or(fmt::DASH.to_string(), |k| if k.tier2 { "Pass" } else { "Fail" }.to_string()),
+                k.as_ref()
+                    .map_or(fmt::DASH.to_string(), |k| rfmt::pct(k.pct * 100.0)),
+                k.as_ref().map_or(fmt::DASH.to_string(), |k| {
+                    if k.tier1 { "Pass" } else { "Fail" }.to_string()
+                }),
+                k.as_ref().map_or(fmt::DASH.to_string(), |k| {
+                    if k.tier2 { "Pass" } else { "Fail" }.to_string()
+                }),
             ]));
         }
     }
@@ -649,7 +938,10 @@ pub(crate) fn app_movements(c: &mut Ctx) -> String {
     let r = c.r;
     let sel = c.sel.clone();
     let mut parts: Vec<String> = Vec::new();
-    for sc in [sel.without, sel.with, sel.mitigation].into_iter().flatten() {
+    for sc in [sel.without, sel.with, sel.mitigation]
+        .into_iter()
+        .flatten()
+    {
         let scn = r.scenario(sc);
         let mut rows: Vec<Row> = Vec::new();
         for x in junction_rows(r, &sel, sc, None) {
@@ -665,7 +957,14 @@ pub(crate) fn app_movements(c: &mut Ctx) -> String {
                     String::new(),
                     format!("<b>{}</b>", rfmt::dos(nr.dos)),
                     format!("<b>{}</b>", rfmt::delay(j_sum(nr).delay)),
-                    format!("<b>{}</b>", esc(if nr.los_text.is_empty() { &nr.los } else { &nr.los_text })),
+                    format!(
+                        "<b>{}</b>",
+                        esc(if nr.los_text.is_empty() {
+                            &nr.los
+                        } else {
+                            &nr.los_text
+                        })
+                    ),
                     String::new(),
                     String::new(),
                     String::new(),
@@ -683,12 +982,22 @@ pub(crate) fn app_movements(c: &mut Ctx) -> String {
                     rfmt::veh(a.cap),
                     rfmt::dos(a.dos),
                     rfmt::delay(a.delay),
-                    esc(&if a.los.is_empty() { fmt::DASH.to_string() } else { a.los.clone() }),
-                    if a.q95veh.is_nan() { fmt::DASH.to_string() } else { rfmt::num(a.q95veh, 1) },
+                    esc(&if a.los.is_empty() {
+                        fmt::DASH.to_string()
+                    } else {
+                        a.los.clone()
+                    }),
+                    if a.q95veh.is_nan() {
+                        fmt::DASH.to_string()
+                    } else {
+                        rfmt::num(a.q95veh, 1)
+                    },
                     rfmt::q(a.q95),
                     a.psc.map_or(fmt::DASH.to_string(), rfmt::pct),
                     match st {
-                        Some(s) if s != 0.0 && !s.is_nan() && a.q95 != 0.0 && !a.q95.is_nan() => rfmt::num(a.q95 / s, 2),
+                        Some(s) if s != 0.0 && !s.is_nan() && a.q95 != 0.0 && !a.q95.is_nan() => {
+                            rfmt::num(a.q95 / s, 2)
+                        }
                         _ => fmt::DASH.to_string(),
                     },
                 ]));
@@ -719,7 +1028,11 @@ pub(crate) fn app_movements(c: &mut Ctx) -> String {
         ));
     }
     let body = parts.join("");
-    if body.is_empty() { note("No junction results.", false) } else { body }
+    if body.is_empty() {
+        note("No junction results.", false)
+    } else {
+        body
+    }
 }
 
 /// `report-app-crashes`.
@@ -770,15 +1083,41 @@ pub(crate) fn app_crashes(c: &mut Ctx) -> String {
                 sev(&sv).map_or(esc(&sv), str::to_string),
                 esc(&js::text_or_empty(g(4))),
                 int(g(6)),
-                esc(&if flags.is_empty() { fmt::DASH.to_string() } else { flags }),
-                format!("{}, {}", rfmt::num(rfmt::v(g(0)), 5), rfmt::num(rfmt::v(g(1)), 5)),
+                esc(&if flags.is_empty() {
+                    fmt::DASH.to_string()
+                } else {
+                    flags
+                }),
+                format!(
+                    "{}, {}",
+                    rfmt::num(rfmt::v(g(0)), 5),
+                    rfmt::num(rfmt::v(g(1)), 5)
+                ),
             ])
         })
         .collect();
     c.table(
-        &format!("Reported crashes ({})", plural(cr.len() as f64, "crash", "crashes")),
-        Tbl::new(vec![h("Year"), h("Severity"), h("Location"), hn("Speed limit"), h("Vulnerable users"), h("Lat, lng")], rows).empty("No crashes loaded."),
-        &TableOpts { source: Some(esc(attrib::CAS)), d: vec!["D8"], ..TableOpts::default() },
+        &format!(
+            "Reported crashes ({})",
+            plural(cr.len() as f64, "crash", "crashes")
+        ),
+        Tbl::new(
+            vec![
+                h("Year"),
+                h("Severity"),
+                h("Location"),
+                hn("Speed limit"),
+                h("Vulnerable users"),
+                h("Lat, lng"),
+            ],
+            rows,
+        )
+        .empty("No crashes loaded."),
+        &TableOpts {
+            source: Some(esc(attrib::CAS)),
+            d: vec!["D8"],
+            ..TableOpts::default()
+        },
     )
 }
 
@@ -786,7 +1125,10 @@ pub(crate) fn app_crashes(c: &mut Ctx) -> String {
 pub(crate) fn app_anop(_c: &mut Ctx) -> String {
     format!(
         "{}{}",
-        note("The ANOP tool inputs (anop.csv) are produced by the ANOP feature when it is installed. None are recorded in this project.", false),
+        note(
+            "The ANOP tool inputs (anop.csv) are produced by the ANOP feature when it is installed. None are recorded in this project.",
+            false
+        ),
         disc("D5")
     )
 }
@@ -799,7 +1141,10 @@ pub(crate) fn app_datapack(c: &mut Ctx) -> String {
             Row::new(vec![
                 format!("<code>{}</code>", esc(f)),
                 esc(FILES.iter().find(|(n, _)| n == f).map_or("", |(_, t)| t)),
-                cols.iter().map(|(k, u)| format!("<code>{}</code> {}", esc(k), esc(u))).collect::<Vec<_>>().join("; "),
+                cols.iter()
+                    .map(|(k, u)| format!("<code>{}</code> {}", esc(k), esc(u)))
+                    .collect::<Vec<_>>()
+                    .join("; "),
             ])
         })
         .collect();
@@ -809,8 +1154,16 @@ pub(crate) fn app_datapack(c: &mut Ctx) -> String {
             "The ITA data pack (Report \u{203a} Download the data pack) holds every table of this report as UTF-8 CSV, with the network, settings and project file: <code>{}</code>.",
             esc(&c.r.pack_name())
         )),
-        c.table("Data pack files and columns", Tbl::new(vec![h("File"), h("Contents"), h("Columns (units)")], rows), &TableOpts::default()),
-        disc_with("D12", None, Some("SIDRA / SATURN / Aimsun / AT ANOP tool / NZTA IER tool / MBCM workbook"))
+        c.table(
+            "Data pack files and columns",
+            Tbl::new(vec![h("File"), h("Contents"), h("Columns (units)")], rows),
+            &TableOpts::default()
+        ),
+        disc_with(
+            "D12",
+            None,
+            Some("SIDRA / SATURN / Aimsun / AT ANOP tool / NZTA IER tool / MBCM workbook")
+        )
     )
 }
 

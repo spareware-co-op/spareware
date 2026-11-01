@@ -8,7 +8,9 @@ use crate::datahub::{Data, matches};
 use crate::edit::IdSource;
 use crate::edit::net::{LinkProps, add_link, auto_control, delete_link, links_at, nearest_node};
 use crate::graph::{connector_map, js_sort_by};
-use crate::jsnum::{Maybe, Num, math_max, math_round, number_to_js_string, value_to_js_string, value_to_number};
+use crate::jsnum::{
+    Maybe, Num, math_max, math_round, number_to_js_string, value_to_js_string, value_to_number,
+};
 use crate::project::{Point, Scenario, Settings};
 use crate::util::{self, LatLng};
 use serde_json::{Map, Value, json};
@@ -40,7 +42,12 @@ pub fn node_on(sc: &Scenario, ll: LatLng, road: &str, max_m: f64) -> Option<Stri
             ids.insert(&l.b);
         }
     }
-    nearest_node(sc, ll, max_m, Some(&|n: &crate::project::Node| ids.contains(n.id.as_str())))
+    nearest_node(
+        sc,
+        ll,
+        max_m,
+        Some(&|n: &crate::project::Node| ids.contains(n.id.as_str())),
+    )
 }
 
 /// A junction site `site_with` found and where its middle is.
@@ -57,11 +64,17 @@ pub fn site_with(sc: &Scenario, pats: &[&str], ll: LatLng) -> Option<SiteHit> {
     let sites = sc.sites.get()?;
     let mut list: Vec<SiteHit> = Vec::new();
     for s in sites.values() {
-        let t = s.nodes.iter().map(|id| names(sc, id)).collect::<Vec<_>>().join(" | ");
+        let t = s
+            .nodes
+            .iter()
+            .map(|id| names(sc, id))
+            .collect::<Vec<_>>()
+            .join(" | ");
         if !pats.iter().all(|p| has_word(&t, p)) {
             continue;
         }
-        let n: Vec<&crate::project::Node> = s.nodes.iter().filter_map(|id| sc.nodes.get(id)).collect();
+        let n: Vec<&crate::project::Node> =
+            s.nodes.iter().filter_map(|id| sc.nodes.get(id)).collect();
         let (mut sa, mut so) = (0.0, 0.0);
         for x in &n {
             sa += x.lat.num();
@@ -69,9 +82,14 @@ pub fn site_with(sc: &Scenario, pats: &[&str], ll: LatLng) -> Option<SiteHit> {
         for x in &n {
             so += x.lng.num();
         }
-        list.push(SiteHit { site: s.id.clone(), c: [sa / n.len() as f64, so / n.len() as f64] });
+        list.push(SiteHit {
+            site: s.id.clone(),
+            c: [sa / n.len() as f64, so / n.len() as f64],
+        });
     }
-    js_sort_by(&mut list, |a, b| util::dist(&a.c, &ll) - util::dist(&b.c, &ll));
+    js_sort_by(&mut list, |a, b| {
+        util::dist(&a.c, &ll) - util::dist(&b.c, &ll)
+    });
     list.into_iter().next()
 }
 
@@ -79,7 +97,11 @@ pub fn site_with(sc: &Scenario, pats: &[&str], ll: LatLng) -> Option<SiteHit> {
 pub fn compass(b: f64) -> &'static str {
     const COMPASS: [&str; 4] = ["N", "E", "S", "W"];
     let i = math_round((((b % 360.0) + 360.0) % 360.0) / 90.0) % 4.0;
-    if i.is_nan() { "undefined" } else { COMPASS[i as usize] }
+    if i.is_nan() {
+        "undefined"
+    } else {
+        COMPASS[i as usize]
+    }
 }
 
 /// What `turn_count_csv` is asked for: the name to print (else the site's, else "junction") and the date of the count (default 2026-03-10).
@@ -108,7 +130,11 @@ pub struct TurnCsv {
 /// compass side, 15-minute light and heavy counts for 07:00 to 09:00 and 16:00 to 18:00.
 pub fn turn_count_csv(sc: &Scenario, site: &crate::project::Site, opts: &CsvOpts) -> TurnCsv {
     let ms: HashSet<&str> = site.nodes.iter().map(String::as_str).collect();
-    let pts: Vec<&crate::project::Node> = site.nodes.iter().filter_map(|id| sc.nodes.get(id)).collect();
+    let pts: Vec<&crate::project::Node> = site
+        .nodes
+        .iter()
+        .filter_map(|id| sc.nodes.get(id))
+        .collect();
     let (mut sa, mut so) = (0.0, 0.0);
     for n in &pts {
         sa += n.lat.num();
@@ -121,23 +147,56 @@ pub fn turn_count_csv(sc: &Scenario, site: &crate::project::Site, opts: &CsvOpts
     let mut legs: Vec<(String, String)> = Vec::new();
     for l in sc.links.values() {
         let nm = l.name.as_str().unwrap_or("");
-        if l.status.is("closed") || ms.contains(l.a.as_str()) == ms.contains(l.b.as_str()) || nm.is_empty() || l.ring.truthy() {
+        if l.status.is("closed")
+            || ms.contains(l.a.as_str()) == ms.contains(l.b.as_str())
+            || nm.is_empty()
+            || l.ring.truthy()
+        {
             continue;
         }
         let g = sc.geom(l);
-        let b = if ms.contains(l.a.as_str()) { util::bearing(&g[0], &g[1]) } else { util::bearing(&g[g.len() - 1], &g[g.len() - 2]) };
+        let b = if ms.contains(l.a.as_str()) {
+            util::bearing(&g[0], &g[1])
+        } else {
+            util::bearing(&g[g.len() - 1], &g[g.len() - 2])
+        };
         let k = compass(b);
         if !legs.iter().any(|(x, _)| x == k) {
             legs.push((k.to_string(), nm.to_string()));
         }
     }
     let hv = 0.06;
-    let shown = opts.name.as_deref().filter(|s| !s.is_empty()).or(site.name.as_str().filter(|s| !s.is_empty())).unwrap_or("junction");
+    let shown = opts
+        .name
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .or(site.name.as_str().filter(|s| !s.is_empty()))
+        .unwrap_or("junction");
     let name = format!("{ILLUSTRATIVE}: {shown}");
-    let date = opts.date.as_deref().filter(|s| !s.is_empty()).unwrap_or("2026-03-10");
+    let date = opts
+        .date
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("2026-03-10");
     let s = |x: &str| Value::String(x.to_string());
     let mut rows: Vec<Vec<Value>> = vec![
-        ["site_id", "site_name", "lat", "lng", "date", "time_start", "interval_min", "from_leg", "from_road", "movement", "class", "count"].iter().map(|h| s(h)).collect(),
+        [
+            "site_id",
+            "site_name",
+            "lat",
+            "lng",
+            "date",
+            "time_start",
+            "interval_min",
+            "from_leg",
+            "from_road",
+            "movement",
+            "class",
+            "count",
+        ]
+        .iter()
+        .map(|h| s(h))
+        .collect(),
     ];
     let (lat7, lng7) = (util::r7(c[0]), util::r7(c[1]));
     for p in PERIODS {
@@ -145,7 +204,9 @@ pub fn turn_count_csv(sc: &Scenario, site: &crate::project::Site, opts: &CsvOpts
             let t = window(p) + 15.0 * i as f64;
             let hh = format!("{:02}:{:02}", (t / 60.0).floor() as i64, (t % 60.0) as i64);
             for (leg, mv) in turn_vol(p) {
-                let Some((_, road)) = legs.iter().find(|(k, _)| k == leg) else { continue };
+                let Some((_, road)) = legs.iter().find(|(k, _)| k == leg) else {
+                    continue;
+                };
                 for (m, v) in mv {
                     let n = v * bin;
                     let h = math_round(n * hv);
@@ -170,14 +231,26 @@ pub fn turn_count_csv(sc: &Scenario, site: &crate::project::Site, opts: &CsvOpts
             }
         }
     }
-    TurnCsv { csv: util::csv(&rows), legs, centre: c, name }
+    TurnCsv {
+        csv: util::csv(&rows),
+        legs,
+        centre: c,
+        name,
+    }
 }
 
 /// `codeLanes(sc, site, JN)`: illustrative lane coding on every approach into a junction site: a kerb lane for left and through and a right lane for through and
 /// right; a one-lane road gets a 40 m flare for the right lane. Stored on the site (junction tools).
 pub fn code_lanes(sc: &mut Scenario, site_id: &str, hooks: &mut dyn SampleHooks) {
     const SRC: &str = "illustrative (sample)";
-    let Some(nodes) = sc.sites.get().and_then(|m| m.get(site_id)).map(|s| s.nodes.clone()) else { return };
+    let Some(nodes) = sc
+        .sites
+        .get()
+        .and_then(|m| m.get(site_id))
+        .map(|s| s.nodes.clone())
+    else {
+        return;
+    };
     let ms: HashSet<&str> = nodes.iter().map(String::as_str).collect();
     if let Some(site) = sc.sites.get_mut().and_then(|m| m.get_mut(site_id))
         && !site.lanes.is_set()
@@ -186,11 +259,17 @@ pub fn code_lanes(sc: &mut Scenario, site_id: &str, hooks: &mut dyn SampleHooks)
     }
     for nid in &nodes {
         for ap in hooks.approaches(sc, nid) {
-            let Some(l) = sc.links.get(&ap.link) else { continue };
+            let Some(l) = sc.links.get(&ap.link) else {
+                continue;
+            };
             if ms.contains(l.a.as_str()) && ms.contains(l.b.as_str()) {
                 continue;
             }
-            let site = sc.sites.get_mut().and_then(|m| m.get_mut(site_id)).expect("the site");
+            let site = sc
+                .sites
+                .get_mut()
+                .and_then(|m| m.get_mut(site_id))
+                .expect("the site");
             let lanes = site.lanes.get_mut().expect("lanes");
             // an empty record on the site first, so the lanes are stored on the junction site rather than the node
             if !lanes.get(&ap.link).is_some_and(crate::jsnum::value_truthy) {
@@ -201,7 +280,11 @@ pub fn code_lanes(sc: &mut Scenario, site_id: &str, hooks: &mut dyn SampleHooks)
             if let Some(o) = cur.as_object_mut() {
                 o.insert("lanes".into(), json!([{ "d": "LT", "len": 0 }, { "d": "TR", "len": if ap.gl >= 2.0 { 0 } else { 40 } }]));
                 o.insert("src".into(), json!("user"));
-                let mut by = o.get("srcBy").and_then(Value::as_object).cloned().unwrap_or_default();
+                let mut by = o
+                    .get("srcBy")
+                    .and_then(Value::as_object)
+                    .cloned()
+                    .unwrap_or_default();
                 by.insert("lanes".into(), json!("user"));
                 by.insert("len".into(), json!("user"));
                 o.insert("srcBy".into(), Value::Object(by));
@@ -254,7 +337,11 @@ pub fn clip_ways(elements: &[Value], b: &Bx) -> Clipped {
             nodes.insert(id_key(e.get("id").unwrap_or(&Value::Null)), e);
         }
     }
-    let mut out: Vec<Value> = elements.iter().filter(|e| e.get("type").and_then(Value::as_str) != Some("way")).cloned().collect();
+    let mut out: Vec<Value> = elements
+        .iter()
+        .filter(|e| e.get("type").and_then(Value::as_str) != Some("way"))
+        .cloned()
+        .collect();
     let mut extra: Vec<Value> = Vec::new();
     let (mut cut, mut k) = (0usize, 0usize);
     let num = |o: &Value, key: &str| o.get(key).map_or(f64::NAN, value_to_number);
@@ -280,8 +367,19 @@ pub fn clip_ways(elements: &[Value], b: &Bx) -> Clipped {
         if w.get("type").and_then(Value::as_str) != Some("way") {
             continue;
         }
-        let ids: Vec<&Value> = w.get("nodes").and_then(Value::as_array).map(|a| a.iter().filter(|id| nodes.contains_key(&id_key(id))).collect()).unwrap_or_default();
-        let ins: Vec<bool> = ids.iter().map(|id| node_in_box(b, nodes.get(&id_key(id)).copied())).collect();
+        let ids: Vec<&Value> = w
+            .get("nodes")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter(|id| nodes.contains_key(&id_key(id)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ins: Vec<bool> = ids
+            .iter()
+            .map(|id| node_in_box(b, nodes.get(&id_key(id)).copied()))
+            .collect();
         if ins.iter().all(|x| *x) {
             out.push(w.clone());
             continue;
@@ -308,7 +406,15 @@ pub fn clip_ways(elements: &[Value], b: &Bx) -> Clipped {
             }
             if run.len() > 1 {
                 let mut piece = w.as_object().cloned().unwrap_or_default();
-                let id = if r > 0 { Value::String(format!("{}-{}", value_to_js_string(w.get("id").unwrap_or(&Value::Null)), r)) } else { w.get("id").cloned().unwrap_or(Value::Null) };
+                let id = if r > 0 {
+                    Value::String(format!(
+                        "{}-{}",
+                        value_to_js_string(w.get("id").unwrap_or(&Value::Null)),
+                        r
+                    ))
+                } else {
+                    w.get("id").cloned().unwrap_or(Value::Null)
+                };
                 piece.insert("id".into(), id);
                 piece.insert("nodes".into(), Value::Array(run));
                 out.push(Value::Object(piece));
@@ -372,7 +478,9 @@ pub fn prune_stubs(sc: &mut Scenario, s: &Settings, data: &Data) -> usize {
             if d != 1 || keep_n.contains(&id) {
                 continue;
             }
-            let first = links_at(sc, &id).first().map(|l| (l.id.clone(), l.status.is("existing")));
+            let first = links_at(sc, &id)
+                .first()
+                .map(|l| (l.id.clone(), l.status.is("existing")));
             match first {
                 Some((lid, existing)) if existing && !keep_l.contains(&lid) => {
                     delete_link(sc, &lid);
@@ -409,7 +517,8 @@ pub fn simplify(sc: &mut Scenario, tol: f64) -> usize {
             let mut k: Option<usize> = None;
             let mut dm = tol;
             for m in i + 1..j {
-                let d = util::seg_dist(xy[m][0], xy[m][1], xy[i][0], xy[i][1], xy[j][0], xy[j][1]).d;
+                let d =
+                    util::seg_dist(xy[m][0], xy[m][1], xy[i][0], xy[i][1], xy[j][0], xy[j][1]).d;
                 if d > dm {
                     dm = d;
                     k = Some(m);
@@ -421,7 +530,12 @@ pub fn simplify(sc: &mut Scenario, tol: f64) -> usize {
                 st.push((k, j));
             }
         }
-        let pts: Vec<Point> = g[1..g.len() - 1].iter().enumerate().filter(|(m, _)| keep[m + 1]).map(|(_, p)| Point(*p)).collect();
+        let pts: Vec<Point> = g[1..g.len() - 1]
+            .iter()
+            .enumerate()
+            .filter(|(m, _)| keep[m + 1])
+            .map(|(_, p)| Point(*p))
+            .collect();
         let before = sc.links[id.as_str()].pts.get().map_or(0, Vec::len);
         dropped += before - pts.len();
         sc.links.get_mut(&id).expect("the link").pts = Maybe::Set(pts);
@@ -436,7 +550,13 @@ pub fn option_a(sc: &mut Scenario, ids: &mut dyn IdSource) -> Vec<String> {
     let n2 = node_on(sc, [-37.0936, 174.9552], "Sutton", 600.0);
     let mut made: Vec<String> = Vec::new();
     let props = |cls: &str, name: &str| {
-        let mut p = LinkProps::new().cls(cls).lanes(1.0, 1.0).speed(50.0).status("proposed").name(name).cycle("separated");
+        let mut p = LinkProps::new()
+            .cls(cls)
+            .lanes(1.0, 1.0)
+            .speed(50.0)
+            .status("proposed")
+            .name(name)
+            .cycle("separated");
         p.0.stage = Maybe::Set("proposal".to_string());
         p
     };
@@ -446,12 +566,27 @@ pub fn option_a(sc: &mut Scenario, ids: &mut dyn IdSource) -> Vec<String> {
             ids,
             s,
             e,
-            &[[-37.0983, 174.9628], [-37.0981, 174.9660], [-37.0987, 174.9692], [-37.0997, 174.9710]],
+            &[
+                [-37.0983, 174.9628],
+                [-37.0981, 174.9660],
+                [-37.0987, 174.9692],
+                [-37.0997, 174.9710],
+            ],
             &props("collector", "Drury East Link (Option A, illustrative)"),
         ));
     }
     if let (Some(s), Some(n2)) = (&s, &n2) {
-        made.push(add_link(sc, ids, s, n2, &[[-37.0968, 174.9590], [-37.0950, 174.9570]], &props("arterial", "Takotowhenua Avenue extension (Option A, illustrative)")));
+        made.push(add_link(
+            sc,
+            ids,
+            s,
+            n2,
+            &[[-37.0968, 174.9590], [-37.0950, 174.9570]],
+            &props(
+                "arterial",
+                "Takotowhenua Avenue extension (Option A, illustrative)",
+            ),
+        ));
     }
     let list: Vec<String> = [&s, &e, &n2].into_iter().flatten().cloned().collect();
     auto_control(sc, &list);
@@ -474,8 +609,12 @@ pub fn option_b(sc: &mut Scenario) -> usize {
         if !has_word(l.name.as_str().unwrap_or(""), "waihoehoe") || l.ring.truthy() {
             continue;
         }
-        let (Some(a), Some(b)) = (sc.nodes.get(&l.a), sc.nodes.get(&l.b)) else { continue };
-        if math_max(a.lng.num(), b.lng.num()) > 174.9600 || crate::jsnum::math_min(a.lng.num(), b.lng.num()) < 174.9519 {
+        let (Some(a), Some(b)) = (sc.nodes.get(&l.a), sc.nodes.get(&l.b)) else {
+            continue;
+        };
+        if math_max(a.lng.num(), b.lng.num()) > 174.9600
+            || crate::jsnum::math_min(a.lng.num(), b.lng.num()) < 174.9519
+        {
             continue;
         }
         let l = sc.links.get_mut(&id).expect("the link");
@@ -491,8 +630,13 @@ pub fn option_b(sc: &mut Scenario) -> usize {
 }
 
 /// The object a JSON value is, made when it is not one (`x ||= {}` on a project key).
-pub(crate) fn object_at<'a>(m: &'a mut Map<String, Value>, key: &str) -> &'a mut Map<String, Value> {
-    let v = m.entry(key.to_string()).or_insert_with(|| Value::Object(Map::new()));
+pub(crate) fn object_at<'a>(
+    m: &'a mut Map<String, Value>,
+    key: &str,
+) -> &'a mut Map<String, Value> {
+    let v = m
+        .entry(key.to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
     if !v.is_object() {
         *v = Value::Object(Map::new());
     }

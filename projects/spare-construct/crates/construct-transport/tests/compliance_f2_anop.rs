@@ -21,12 +21,20 @@ impl ReportCtx for TestCtx {
 /// A fixture, read from disk once.
 fn cached_fixture(name: &str) -> V {
     thread_local! { static CACHE: std::cell::RefCell<std::collections::HashMap<String, V>> = std::cell::RefCell::new(std::collections::HashMap::new()); }
-    CACHE.with(|c| c.borrow_mut().entry(name.to_string()).or_insert_with(|| fixture(name)).clone())
+    CACHE.with(|c| {
+        c.borrow_mut()
+            .entry(name.to_string())
+            .or_insert_with(|| fixture(name))
+            .clone()
+    })
 }
 
 /// The recorded cases with their sets and args in the order the generator wrote them (`Object.entries` order matters to some checks).
 fn ordered(name: &str) -> V {
-    V::parse(&support::read_truth(&format!("expected/compliance-{name}.json"))).expect("expected file")
+    V::parse(&support::read_truth(&format!(
+        "expected/compliance-{name}.json"
+    )))
+    .expect("expected file")
 }
 
 #[test]
@@ -41,7 +49,10 @@ fn anop_levels_fit_and_exports() {
         let call = case["call"].as_str().unwrap();
         let oc = ord.g("cases").ix(i);
         if case_error(case).is_some() {
-            panic!("{id}: the prototype refused this case: {}", case_error(case).unwrap());
+            panic!(
+                "{id}: the prototype refused this case: {}",
+                case_error(case).unwrap()
+            );
         }
         let want = case_ok(case);
         let ok = oc.g("ok");
@@ -56,7 +67,10 @@ fn anop_levels_fit_and_exports() {
                     for k in ["mode", "h", "lu"] {
                         o.set(k, r.g(k).clone());
                     }
-                    o.set("pref", anop::anop_pref(&r.g("mode").s(), &r.g("h").s(), &r.g("lu").s()));
+                    o.set(
+                        "pref",
+                        anop::anop_pref(&r.g("mode").s(), &r.g("h").s(), &r.g("lu").s()),
+                    );
                     o
                 })
                 .collect();
@@ -71,7 +85,10 @@ fn anop_levels_fit_and_exports() {
                 .map(|r| {
                     let mut o = V::object();
                     o.set("modes", r.g("modes").clone());
-                    o.set("fit", anop::anop_fit(r.g("modes").items()).map_or(V::Null, V::String));
+                    o.set(
+                        "fit",
+                        anop::anop_fit(r.g("modes").items()).map_or(V::Null, V::String),
+                    );
                     o
                 })
                 .collect();
@@ -82,14 +99,27 @@ fn anop_levels_fit_and_exports() {
         for (k, v) in oc.g("sets").entries() {
             set_path(&mut p, k, v.clone());
         }
-        let sc_arg: Option<V> = if args.has("sc") { Some(p.g("scenarios").ix(args.g("sc").n() as usize).clone()) } else { None };
+        let sc_arg: Option<V> = if args.has("sc") {
+            Some(p.g("scenarios").ix(args.g("sc").n() as usize).clone())
+        } else {
+            None
+        };
         let ids: Vec<String> = args.g("ids").items().iter().map(|x| x.s()).collect();
         let got: V = match call {
-            "hierOf" => anop::hier_of(sc_arg.as_ref().expect("scenario"), args.g("corridor"), &args.g("mode").s()),
-            "corridorAxis" => anop::corridor_axis(sc_arg.as_ref().expect("scenario"), &ids).map_or(V::Null, V::Number),
+            "hierOf" => anop::hier_of(
+                sc_arg.as_ref().expect("scenario"),
+                args.g("corridor"),
+                &args.g("mode").s(),
+            ),
+            "corridorAxis" => anop::corridor_axis(sc_arg.as_ref().expect("scenario"), &ids)
+                .map_or(V::Null, V::Number),
             "corridorSpeed" => {
                 let sc = sc_arg.as_ref().expect("scenario");
-                let res = if args.g("per").nullish() { V::Null } else { sc.g("res").g(&args.g("per").s()).clone() };
+                let res = if args.g("per").nullish() {
+                    V::Null
+                } else {
+                    sc.g("res").g(&args.g("per").s()).clone()
+                };
                 anop::corridor_speed(sc, &res, &ids, args.g("pt").t())
             }
             "anopLoS" => {
@@ -101,13 +131,23 @@ fn anop_levels_fit_and_exports() {
             "anopCSV" => V::String(anop::anop_csv(&p)),
             "export-anop" => {
                 let mut r = V::object();
-                r.set("text", V::String(extra::export_build("compliance-extra-anop", &p).expect("export")));
-                r.set("enabled", V::Bool(extra::export_enabled("compliance-extra-anop", &p).expect("enabled")));
+                r.set(
+                    "text",
+                    V::String(extra::export_build("compliance-extra-anop", &p).expect("export")),
+                );
+                r.set(
+                    "enabled",
+                    V::Bool(extra::export_enabled("compliance-extra-anop", &p).expect("enabled")),
+                );
                 r
             }
             "report-anop" | "report-anop-ctx" => {
                 let ctx = TestCtx;
-                let c: Option<&dyn ReportCtx> = if call.ends_with("-ctx") { Some(&ctx) } else { None };
+                let c: Option<&dyn ReportCtx> = if call.ends_with("-ctx") {
+                    Some(&ctx)
+                } else {
+                    None
+                };
                 V::String(extra::report("compliance-extra-anop", &p, c).expect("report section"))
             }
             other => panic!("{id}: unknown call {other}"),

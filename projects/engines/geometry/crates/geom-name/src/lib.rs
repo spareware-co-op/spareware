@@ -26,25 +26,28 @@
 //!
 //! Status: faces with their names and roles ([`mod@faces`]) built (G102); the hash-consed name
 //! graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`])
-//! and the duplicate-name detector ([`unique`]) built (G87); references and their resolution
-//! ([`resolve`]) built (G89); attribute classes in G90, `PruneHistory` in G109 and placement
-//! references in G374.
+//! and the duplicate-name detector ([`unique`]) built (G87); the one shared attribute step,
+//! [`classes`], which applies attribute behaviours from an operation's history and sets a value as
+//! an operation of its own, built (G90); references and their resolution ([`resolve`]) built
+//! (G89); `PruneHistory` in G109 and placement references in G374.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
+pub mod classes;
 pub mod faces;
 pub mod graph;
 pub mod ordinal;
 pub mod resolve;
 pub mod unique;
 
+pub use classes::{AttrError, Mover, Note, Step, apply, set};
 pub use faces::{NamedFace, faces, roles_of};
 pub use graph::{GraphError, NameGraph, parents};
 pub use ordinal::{OrderError, WeakOrder, ordinals, reference, weak_names};
 pub use resolve::{
-    Body, CarrierIx, DocRef, ElementId, EntityKind, Lookup, Reference, Resolution, Signature, Step,
+    Body, CarrierIx, DocRef, ElementId, EntityKind, Lookup, Reference, Resolution, Signature,
     Target, UnresolvedReason, Want, resolve,
 };
 pub use unique::{DuplicateName, expect_unique, first_duplicate};

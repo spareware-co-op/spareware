@@ -116,7 +116,10 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
     if ctl.kind == "roundabout" {
         let mx = math_min(
             2.0,
-            math_max(1.0, math_max_of(&ent.iter().map(|e| e.gl).collect::<Vec<_>>())),
+            math_max(
+                1.0,
+                math_max_of(&ent.iter().map(|e| e.gl).collect::<Vec<_>>()),
+            ),
         );
         for e in &mut ent {
             if !crate::jsnum::truthy_number(e.nc.unwrap_or(0.0)) {

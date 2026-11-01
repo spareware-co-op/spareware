@@ -24,7 +24,11 @@ pub fn run_both(p: &mut Project, sc_id: &str) {
 
 /// Runs and stores one period of a scenario.
 pub fn run_period(p: &mut Project, sc_id: &str, pd: &str) {
-    let idx = p.scenarios.iter().position(|s| s.id == sc_id).expect("scenario");
+    let idx = p
+        .scenarios
+        .iter()
+        .position(|s| s.id == sc_id)
+        .expect("scenario");
     let res = assign(
         p,
         &p.scenarios[idx],
@@ -53,7 +57,12 @@ pub fn snapshot(p: &Project, sc_id: &str, label: &str, level: &str, full: bool) 
     rec.insert("label".into(), json!(label));
     rec.insert("scenario".into(), json!(sc_id));
     let role_map = |pd: &str, raw: bool| -> Value {
-        Value::Object(by_key(ctx.data.counts.iter().map(|c| (c.id.clone(), ctx.role_of(c, pd, raw).to_string()))))
+        Value::Object(by_key(
+            ctx.data
+                .counts
+                .iter()
+                .map(|c| (c.id.clone(), ctx.role_of(c, pd, raw).to_string())),
+        ))
     };
     rec.insert("roles".into(), json!({ "AM": role_map("AM", false), "PM": role_map("PM", false), "rawAM": role_map("AM", true) }));
     rec.insert(
@@ -62,14 +71,32 @@ pub fn snapshot(p: &Project, sc_id: &str, label: &str, level: &str, full: bool) 
             ctx.data
                 .counts
                 .iter()
-                .map(|c| (c.id.clone(), json!({ "AM": method_of(c, "AM"), "PM": method_of(c, "PM") })))
+                .map(|c| {
+                    (
+                        c.id.clone(),
+                        json!({ "AM": method_of(c, "AM"), "PM": method_of(c, "PM") }),
+                    )
+                })
                 .collect(),
         ),
     );
     let gw = ctx.gateway_ids();
-    rec.insert("gatewayIds".into(), json!(ctx.data.counts.iter().filter(|c| gw.contains(&c.id)).map(|c| c.id.clone()).collect::<Vec<_>>()));
+    rec.insert(
+        "gatewayIds".into(),
+        json!(
+            ctx.data
+                .counts
+                .iter()
+                .filter(|c| gw.contains(&c.id))
+                .map(|c| c.id.clone())
+                .collect::<Vec<_>>()
+        ),
+    );
     rec.insert("core".into(), core_out(&core_area(&ctx, sc)));
-    rec.insert("store".into(), serde_json::to_value(&ctx.store).expect("store"));
+    rec.insert(
+        "store".into(),
+        serde_json::to_value(&ctx.store).expect("store"),
+    );
     let mut periods = Map::new();
     for pd in ["AM", "PM"] {
         let res = stored_res(sc, pd);
@@ -80,9 +107,15 @@ pub fn snapshot(p: &Project, sc_id: &str, label: &str, level: &str, full: bool) 
             continue;
         };
         let rows = count_rows(&ctx, sc, pd, Some(&res), false);
-        pr.insert("rows".into(), Value::Array(rows.iter().map(count_row_out).collect()));
+        pr.insert(
+            "rows".into(),
+            Value::Array(rows.iter().map(count_row_out).collect()),
+        );
         let raw = count_rows(&ctx, sc, pd, Some(&res), true);
-        pr.insert("rowsRaw".into(), Value::Array(raw.iter().map(count_row_out).collect()));
+        pr.insert(
+            "rowsRaw".into(),
+            Value::Array(raw.iter().map(count_row_out).collect()),
+        );
         let all_refs: Vec<&CountRow> = rows.iter().collect();
         let scored_refs: Vec<&CountRow> = rows.iter().filter(|r| r.scored).collect();
         pr.insert("stats".into(), json!({ "all": cal_stats_out(&stats_of_count_rows(&all_refs)), "scored": cal_stats_out(&stats_of_count_rows(&scored_refs)) }));
@@ -102,15 +135,24 @@ pub fn snapshot(p: &Project, sc_id: &str, label: &str, level: &str, full: bool) 
         pr.insert("sl".into(), Value::Object(sls));
         let mut obs = Map::new();
         for set in ["valid", "calib", "all"] {
-            obs.insert(set.to_string(), sl_obs_out(&sl_observations(&ctx, sc, pd, set, Some(&res)), &ctx.store));
+            obs.insert(
+                set.to_string(),
+                sl_obs_out(&sl_observations(&ctx, sc, pd, set, Some(&res)), &ctx.store),
+            );
         }
         pr.insert("slObs".into(), Value::Object(obs));
         let jr = journeys(&ctx, sc, pd, Some(&res));
-        pr.insert("journeys".into(), Value::Array(jr.iter().map(jr_out).collect()));
+        pr.insert(
+            "journeys".into(),
+            Value::Array(jr.iter().map(jr_out).collect()),
+        );
         pr.insert("jtStats".into(), jt_stats_out(&jt_stats(&jr)));
         let mut turn = Map::new();
         for s in &ctx.store.turn_sites {
-            turn.insert(s.id.clone(), site_rows_out(&site_rows(&ctx, sc, s, pd, Some(&res)), &s.id));
+            turn.insert(
+                s.id.clone(),
+                site_rows_out(&site_rows(&ctx, sc, s, pd, Some(&res)), &s.id),
+            );
         }
         pr.insert("turn".into(), Value::Object(turn));
         let nc = network_checks(&ctx, sc, pd, Some(&res));
@@ -136,38 +178,93 @@ pub fn snapshot(p: &Project, sc_id: &str, label: &str, level: &str, full: bool) 
         let mut evs = Map::new();
         for set in sets {
             for area in areas {
-                let o = EvOpts { set: Some(set.to_string()), area: Some(area.to_string()), ..EvOpts::default() };
-                evs.insert(format!("{set}|{area}"), ev_out(&evidence(&ctx, sc, pd, Some(&res), &o), &ctx.store, *set == "valid" && *area == "auto"));
+                let o = EvOpts {
+                    set: Some(set.to_string()),
+                    area: Some(area.to_string()),
+                    ..EvOpts::default()
+                };
+                evs.insert(
+                    format!("{set}|{area}"),
+                    ev_out(
+                        &evidence(&ctx, sc, pd, Some(&res), &o),
+                        &ctx.store,
+                        *set == "valid" && *area == "auto",
+                    ),
+                );
                 if *set == "valid" && *area == "auto" {
-                    let o2 = EvOpts { strict: true, ..o.clone() };
-                    evs.insert("valid|auto|strict".into(), ev_out(&evidence(&ctx, sc, pd, Some(&res), &o2), &ctx.store, false));
+                    let o2 = EvOpts {
+                        strict: true,
+                        ..o.clone()
+                    };
+                    evs.insert(
+                        "valid|auto|strict".into(),
+                        ev_out(&evidence(&ctx, sc, pd, Some(&res), &o2), &ctx.store, false),
+                    );
                 }
             }
         }
         if level != "min" {
-            let o = EvOpts { set: Some("valid".into()), raw: true, ..EvOpts::default() };
-            evs.insert("valid|auto|raw".into(), ev_out(&evidence(&ctx, sc, pd, Some(&res), &o), &ctx.store, false));
+            let o = EvOpts {
+                set: Some("valid".into()),
+                raw: true,
+                ..EvOpts::default()
+            };
+            evs.insert(
+                "valid|auto|raw".into(),
+                ev_out(&evidence(&ctx, sc, pd, Some(&res), &o), &ctx.store, false),
+            );
         }
         pr.insert("evidence".into(), Value::Object(evs));
         let mut asx = Map::new();
-        let stds: &[&str] = if level == "max" { &["tmdg", "rms", "atap"] } else { &["tmdg", "rms"] };
+        let stds: &[&str] = if level == "max" {
+            &["tmdg", "rms", "atap"]
+        } else {
+            &["tmdg", "rms"]
+        };
         for std in stds {
             let cats: Vec<char> = if *std == "tmdg" {
-                if level == "max" { vec!['A', 'B', 'C', 'D', 'E', 'F', 'G'] } else { vec!['A', 'E', 'F'] }
+                if level == "max" {
+                    vec!['A', 'B', 'C', 'D', 'E', 'F', 'G']
+                } else {
+                    vec!['A', 'E', 'F']
+                }
             } else {
                 vec!['E']
             };
             for cat in cats {
-                let sets2: Vec<&str> = if *std == "tmdg" && cat == 'E' { vec!["valid", "calib", "all"] } else { vec!["valid"] };
+                let sets2: Vec<&str> = if *std == "tmdg" && cat == 'E' {
+                    vec!["valid", "calib", "all"]
+                } else {
+                    vec!["valid"]
+                };
                 for set in sets2 {
-                    let o = EvOpts { standard: Some(std.to_string()), category: Some(cat), set: Some(set.to_string()), ..EvOpts::default() };
-                    asx.insert(format!("{std}|{cat}|{set}"), assess_out(&assess(&ctx, sc, pd, Some(&res), &o)));
+                    let o = EvOpts {
+                        standard: Some(std.to_string()),
+                        category: Some(cat),
+                        set: Some(set.to_string()),
+                        ..EvOpts::default()
+                    };
+                    asx.insert(
+                        format!("{std}|{cat}|{set}"),
+                        assess_out(&assess(&ctx, sc, pd, Some(&res), &o)),
+                    );
                 }
             }
         }
-        asx.insert("default".into(), assess_out(&assess(&ctx, sc, pd, Some(&res), &EvOpts::default())));
-        let o = EvOpts { set: Some("valid".into()), strict: true, area: Some("auto".into()), ..EvOpts::default() };
-        asx.insert("valid|strict|auto".into(), assess_out(&assess(&ctx, sc, pd, Some(&res), &o)));
+        asx.insert(
+            "default".into(),
+            assess_out(&assess(&ctx, sc, pd, Some(&res), &EvOpts::default())),
+        );
+        let o = EvOpts {
+            set: Some("valid".into()),
+            strict: true,
+            area: Some("auto".into()),
+            ..EvOpts::default()
+        };
+        asx.insert(
+            "valid|strict|auto".into(),
+            assess_out(&assess(&ctx, sc, pd, Some(&res), &o)),
+        );
         pr.insert("assess".into(), Value::Object(asx));
         periods.insert(pd.to_string(), Value::Object(pr));
     }
@@ -177,18 +274,41 @@ pub fn snapshot(p: &Project, sc_id: &str, label: &str, level: &str, full: bool) 
         let _ = prior;
         let mut tests = Map::new();
         for std in ["tmdg", "rms", "atap"] {
-            let cats: Vec<char> = if std == "tmdg" { vec!['A', 'B', 'C', 'D', 'E', 'F', 'G'] } else { vec!['E'] };
+            let cats: Vec<char> = if std == "tmdg" {
+                vec!['A', 'B', 'C', 'D', 'E', 'F', 'G']
+            } else {
+                vec!['E']
+            };
             for cat in cats {
-                tests.insert(format!("{std}|{cat}"), Value::Array(tests_for(&ctx, std, cat).iter().map(test_out).collect()));
+                tests.insert(
+                    format!("{std}|{cat}"),
+                    Value::Array(tests_for(&ctx, std, cat).iter().map(test_out).collect()),
+                );
             }
         }
         rec.insert("tests".into(), Value::Object(tests));
         let e = tests_for(&ctx, "tmdg", 'E');
         rec.insert(
             "tagPeers".into(),
-            Value::Object(e.iter().map(|t| (t.id.clone(), tag_peer(t).map_or(Value::Null, |p| test_out(&p)))).collect()),
+            Value::Object(
+                e.iter()
+                    .map(|t| {
+                        (
+                            t.id.clone(),
+                            tag_peer(t).map_or(Value::Null, |p| test_out(&p)),
+                        )
+                    })
+                    .collect(),
+            ),
         );
-        rec.insert("targetText".into(), Value::Object(e.iter().map(|t| (t.id.clone(), json!(target_text(t)))).collect()));
+        rec.insert(
+            "targetText".into(),
+            Value::Object(
+                e.iter()
+                    .map(|t| (t.id.clone(), json!(target_text(t))))
+                    .collect(),
+            ),
+        );
         let mut tips = Map::new();
         for t in e.iter().chain(tests_for(&ctx, "tmdg", 'A').iter()) {
             tips.insert(t.id.clone(), json!(tooltip(t)));
@@ -221,7 +341,11 @@ fn count_roles(p: &Project) -> Value {
         Some(Value::Array(a)) => a.clone(),
         _ => Vec::new(),
     };
-    Value::Array(arr.iter().map(|c| json!([c["id"], c.get("role").cloned().unwrap_or(Value::Null)])).collect())
+    Value::Array(
+        arr.iter()
+            .map(|c| json!([c["id"], c.get("role").cloned().unwrap_or(Value::Null)]))
+            .collect(),
+    )
 }
 
 fn stale_flags(p: &Project) -> Value {
@@ -232,7 +356,17 @@ fn stale_flags(p: &Project) -> Value {
                 let mut m = Map::new();
                 if let Some(Value::Object(r)) = s.res.get() {
                     for (k, v) in r {
-                        m.insert(k.clone(), if v.is_null() { Value::Null } else { json!(v.get("stale").is_some_and(construct_transport::jsnum::value_truthy)) });
+                        m.insert(
+                            k.clone(),
+                            if v.is_null() {
+                                Value::Null
+                            } else {
+                                json!(
+                                    v.get("stale")
+                                        .is_some_and(construct_transport::jsnum::value_truthy)
+                                )
+                            },
+                        );
                     }
                 }
                 Value::Object(m)
@@ -280,7 +414,12 @@ fn period_res_flag(p: &Project, sc_id: &str, pd: &str) -> Option<Res> {
 }
 
 /// The steps one panel state takes on the project (a fresh copy with both periods run), and the records it makes.
-pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Value) -> Map<String, Value> {
+pub fn replay_state(
+    p: &mut Project,
+    name: &str,
+    fixture: &str,
+    extra_core: &Value,
+) -> Map<String, Value> {
     let sc_id = p.scenarios[0].id.clone();
     let mut out = Map::new();
     let date = ISO_NOW;
@@ -316,17 +455,41 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
             hold_out_default(p, &sc_id);
             let mut prog: Vec<Value> = Vec::new();
             let mut cb = |k: f64, n: f64, m: &str| prog.push(json!([pn(k), pn(n), m]));
-            let r = run_me(p, &sc_id, &RunMeOpts { period: Some("AM"), xamax: None, date: Some(date) }, Some(&mut cb)).expect("runME");
+            let r = run_me(
+                p,
+                &sc_id,
+                &RunMeOpts {
+                    period: Some("AM"),
+                    xamax: None,
+                    date: Some(date),
+                },
+                Some(&mut cb),
+            )
+            .expect("runME");
             out.insert("runMe".into(), json!({ "ok": r.ok, "note": r.note, "out": r.out.as_ref().map_or(Value::Null, fit_json), "progress": prog }));
             out.insert("me".into(), serde_json::to_value(&p.me).expect("me"));
             let sc = p.scenario(&sc_id).expect("sc").clone();
-            out.insert("meReport".into(), me_report(p, &sc, "AM", date).map_or(Value::Null, |m| {
-                let mut v = serde_json::to_value(&m).expect("m1");
-                null_non_finite(&mut v);
-                v
-            }));
+            out.insert(
+                "meReport".into(),
+                me_report(p, &sc, "AM", date).map_or(Value::Null, |m| {
+                    let mut v = serde_json::to_value(&m).expect("m1");
+                    null_non_finite(&mut v);
+                    v
+                }),
+            );
             out.insert("meStats".into(), me_out(&me_stats(p, "AM")));
-            let (r2, tried) = reduce_me(p, &sc_id, &RunMeOpts { period: Some("PM"), xamax: None, date: Some(date) }, Some(2.0), None).expect("reduceME");
+            let (r2, tried) = reduce_me(
+                p,
+                &sc_id,
+                &RunMeOpts {
+                    period: Some("PM"),
+                    xamax: None,
+                    date: Some(date),
+                },
+                Some(2.0),
+                None,
+            )
+            .expect("reduceME");
             out.insert(
                 "reduceMe".into(),
                 json!({ "ok": r2.ok, "note": r2.note, "tried": tried.iter().map(|t| json!({ "xamax": pn(t.xamax), "ok": t.ok, "note": t.note })).collect::<Vec<_>>(),
@@ -343,56 +506,143 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
                 "validation".into(),
                 json!({ "recorded": { "AM": am, "PM": pm }, "refreshed": refreshed, "P": serde_json::to_value(&p.validation).expect("validation") }),
             );
-            out.insert("reportScenario".into(), json!(report_scenario(p).map(|s| s.id.clone())));
+            out.insert(
+                "reportScenario".into(),
+                json!(report_scenario(p).map(|s| s.id.clone())),
+            );
         }
         "after-tef" => {
             hold_out_default(p, &sc_id);
             let mut prog: Vec<Value> = Vec::new();
             let mut cb = |k: f64, n: f64, m: &str| prog.push(json!([pn(k), pn(n), m]));
-            let r = trip_end_factors(p, &sc_id, &TefOpts { period: Some("AM"), date: Some(date) }, Some(&mut cb)).expect("tef");
+            let r = trip_end_factors(
+                p,
+                &sc_id,
+                &TefOpts {
+                    period: Some("AM"),
+                    date: Some(date),
+                },
+                Some(&mut cb),
+            )
+            .expect("tef");
             out.insert("tef".into(), tef_json(&r));
             out.insert("tefProgress".into(), Value::Array(prog));
             out.insert("sc_calib".into(), calib_of(p.scenario(&sc_id).expect("sc")));
-            out.insert("canApply".into(), can_apply_json(&can_apply(p.scenario(&sc_id).expect("sc"), "AM")));
+            out.insert(
+                "canApply".into(),
+                can_apply_json(&can_apply(p.scenario(&sc_id).expect("sc"), "AM")),
+            );
             let applied = apply_factors(p, &sc_id, "AM", date);
             out.insert("applied".into(), json!(applied));
-            out.insert("luFactors".into(), serde_json::to_value(&p.lu_factors).expect("lu"));
-            out.insert("scCalibApplied".into(), calib_of(p.scenario(&sc_id).expect("sc")));
-            out.insert("canApplyAfter".into(), can_apply_json(&can_apply(p.scenario(&sc_id).expect("sc"), "AM")));
+            out.insert(
+                "luFactors".into(),
+                serde_json::to_value(&p.lu_factors).expect("lu"),
+            );
+            out.insert(
+                "scCalibApplied".into(),
+                calib_of(p.scenario(&sc_id).expect("sc")),
+            );
+            out.insert(
+                "canApplyAfter".into(),
+                can_apply_json(&can_apply(p.scenario(&sc_id).expect("sc"), "AM")),
+            );
             out.insert("staleAfter".into(), stale_flags(p));
             run_both(p, &sc_id);
             let rv = revert_factors(p, &sc_id, "AM");
             out.insert("revert".into(), json!(rv));
-            out.insert("luAfterRevert".into(), serde_json::to_value(&p.lu_factors).expect("lu"));
-            out.insert("scCalibReverted".into(), calib_of(p.scenario(&sc_id).expect("sc")));
+            out.insert(
+                "luAfterRevert".into(),
+                serde_json::to_value(&p.lu_factors).expect("lu"),
+            );
+            out.insert(
+                "scCalibReverted".into(),
+                calib_of(p.scenario(&sc_id).expect("sc")),
+            );
             apply_factors(p, &sc_id, "AM", date);
             out.insert("setupApplyAgain".into(), json!(true));
             run_both(p, &sc_id);
-            let t2 = trip_end_factors(p, &sc_id, &TefOpts { period: Some("PM"), date: Some(date) }, None).expect("tef");
+            let t2 = trip_end_factors(
+                p,
+                &sc_id,
+                &TefOpts {
+                    period: Some("PM"),
+                    date: Some(date),
+                },
+                None,
+            )
+            .expect("tef");
             out.insert("tefPM".into(), tef_json(&t2));
-            out.insert("canApplyPM".into(), can_apply_json(&can_apply(p.scenario(&sc_id).expect("sc"), "PM")));
-            out.insert("canApplyNone".into(), can_apply_json(&can_apply(p.scenario(&sc_id).expect("sc"), "PM")));
+            out.insert(
+                "canApplyPM".into(),
+                can_apply_json(&can_apply(p.scenario(&sc_id).expect("sc"), "PM")),
+            );
+            out.insert(
+                "canApplyNone".into(),
+                can_apply_json(&can_apply(p.scenario(&sc_id).expect("sc"), "PM")),
+            );
             let last = p.scenarios.last().expect("scenario").clone();
-            out.insert("canApplyNoRec".into(), can_apply_json(&can_apply(&last, "AM")));
+            out.insert(
+                "canApplyNoRec".into(),
+                can_apply_json(&can_apply(&last, "AM")),
+            );
         }
         "tef-screenlines-off" => {
             let mut st = CalibStore::read(p);
             st.screenlines.retain(|s| s.is_type("core") || s.is_valid());
             st.write(p);
-            let r = trip_end_factors(p, &sc_id, &TefOpts { period: Some("AM"), date: Some(date) }, None).expect("tef");
+            let r = trip_end_factors(
+                p,
+                &sc_id,
+                &TefOpts {
+                    period: Some("AM"),
+                    date: Some(date),
+                },
+                None,
+            )
+            .expect("tef");
             out.insert("tef".into(), tef_json(&r));
             let ids: Vec<String> = Data::read(p).counts.iter().map(|c| c.id.clone()).collect();
             for id in &ids {
                 set_role(p, id, "valid");
             }
-            let r2 = trip_end_factors(p, &sc_id, &TefOpts { period: Some("PM"), date: Some(date) }, None).expect("tef");
+            let r2 = trip_end_factors(
+                p,
+                &sc_id,
+                &TefOpts {
+                    period: Some("PM"),
+                    date: Some(date),
+                },
+                None,
+            )
+            .expect("tef");
             out.insert("tefNone".into(), tef_json(&r2));
             for id in &ids {
                 set_role(p, id, "off");
             }
-            let r3 = run_me(p, &sc_id, &RunMeOpts { period: Some("AM"), xamax: None, date: Some(date) }, None).expect("runME");
+            let r3 = run_me(
+                p,
+                &sc_id,
+                &RunMeOpts {
+                    period: Some("AM"),
+                    xamax: None,
+                    date: Some(date),
+                },
+                None,
+            )
+            .expect("runME");
             out.insert("runMeNone".into(), json!({ "ok": r3.ok, "note": r3.note }));
-            let (r4, tried) = reduce_me(p, &sc_id, &RunMeOpts { period: Some("AM"), xamax: None, date: Some(date) }, None, None).expect("reduceME");
+            let (r4, tried) = reduce_me(
+                p,
+                &sc_id,
+                &RunMeOpts {
+                    period: Some("AM"),
+                    xamax: None,
+                    date: Some(date),
+                },
+                None,
+                None,
+            )
+            .expect("reduceME");
             out.insert(
                 "reduceNone".into(),
                 json!({ "ok": r4.ok, "note": r4.note, "tried": tried.iter().map(|t| json!({ "xamax": pn(t.xamax), "ok": t.ok, "note": t.note })).collect::<Vec<_>>() }),
@@ -420,7 +670,10 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
             };
             out.insert("scenarioIndex".into(), json!(1));
             out.insert("core2".into(), ctx_core);
-            out.insert("snap2".into(), snapshot(p, &s2_id, "scenario 1", "mid", true));
+            out.insert(
+                "snap2".into(),
+                snapshot(p, &s2_id, "scenario 1", "mid", true),
+            );
             let ctx = Ctx::new(p);
             let s2 = p.scenario(&s2_id).expect("sc");
             let res = stored_res(s2, "AM");
@@ -438,8 +691,18 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
             }
             out.insert("cordon".into(), Value::Object(cordon));
             let cord = ctx.store.screenlines.iter().find(|s| s.is_type("cordon"));
-            out.insert("cordonNoRes".into(), cordon_od(&ctx, s2, None, cord).err().map_or(Value::Null, |e| json!({ "error": e })));
-            out.insert("cordonNoCordon".into(), cordon_od(&ctx, s2, res.as_ref(), None).err().map_or(Value::Null, |e| json!({ "error": e })));
+            out.insert(
+                "cordonNoRes".into(),
+                cordon_od(&ctx, s2, None, cord)
+                    .err()
+                    .map_or(Value::Null, |e| json!({ "error": e })),
+            );
+            out.insert(
+                "cordonNoCordon".into(),
+                cordon_od(&ctx, s2, res.as_ref(), None)
+                    .err()
+                    .map_or(Value::Null, |e| json!({ "error": e })),
+            );
         }
         "core-drawn" => {
             let mut st = CalibStore::read(p);
@@ -447,10 +710,18 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
             st.screenlines.push(core);
             st.write(p);
             hold_out_default(p, &sc_id);
-            p.settings.calib = Maybe::Set(serde_json::from_value::<CalibSettings>(json!({ "coreBuffer": 300 })).expect("calib"));
+            p.settings.calib = Maybe::Set(
+                serde_json::from_value::<CalibSettings>(json!({ "coreBuffer": 300 }))
+                    .expect("calib"),
+            );
         }
         "settings" => {
-            p.settings.tmdg = Maybe::Set(serde_json::from_value::<TmdgSettings>(json!({ "category": "c", "justification": "Corridor assessment" })).expect("tmdg"));
+            p.settings.tmdg = Maybe::Set(
+                serde_json::from_value::<TmdgSettings>(
+                    json!({ "category": "c", "justification": "Corridor assessment" }),
+                )
+                .expect("tmdg"),
+            );
             p.settings.calib = Maybe::Set(
                 serde_json::from_value::<CalibSettings>(json!({ "standard": "rms", "set": "all", "area": "all", "minComplete": 0.95, "priorQuality": "low",
                     "xamax": 1.5, "freezeGG": false, "windows": { "AM": ["07:30", "08:30"], "PM": ["16:30", "17:30"] } }))
@@ -480,7 +751,12 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
             if let Some(d) = p.data.get_mut()
                 && let Some(Value::Array(a)) = d.extra.get_mut("counts")
             {
-                let user: Vec<Value> = a.iter().filter(|c| c["src"] == "user").take(6).cloned().collect();
+                let user: Vec<Value> = a
+                    .iter()
+                    .filter(|c| c["src"] == "user")
+                    .take(6)
+                    .cloned()
+                    .collect();
                 *a = user;
             }
             let mut st = CalibStore::read(p);
@@ -498,8 +774,17 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
             let gw_src: Map<String, Value> = p.scenarios[0]
                 .zones
                 .iter()
-                .filter(|(_, z)| z.gw_src.get().is_some_and(construct_transport::jsnum::value_truthy))
-                .map(|(id, z)| (id.to_string(), z.gw_src.get().cloned().unwrap_or(Value::Null)))
+                .filter(|(_, z)| {
+                    z.gw_src
+                        .get()
+                        .is_some_and(construct_transport::jsnum::value_truthy)
+                })
+                .map(|(id, z)| {
+                    (
+                        id.to_string(),
+                        z.gw_src.get().cloned().unwrap_or(Value::Null),
+                    )
+                })
                 .collect();
             out.insert("gwSrc".into(), Value::Object(gw_src));
             hold_out_default(p, &sc_id);
@@ -509,15 +794,24 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
             match_sites(p, &sc_id);
             let res = period_res_flag(p, &sc_id, "AM");
             let (audit, n) = balance(p, &sc_id, "AM", None, res.as_ref());
-            out.insert("balance".into(), json!({ "audit": audit_json(&audit), "sites": n }));
+            out.insert(
+                "balance".into(),
+                json!({ "audit": audit_json(&audit), "sites": n }),
+            );
             out.insert("balStore".into(), bal_store(p, true));
             let res = period_res_flag(p, &sc_id, "PM");
             let (audit2, n2) = balance(p, &sc_id, "PM", Some(true), res.as_ref());
-            out.insert("balanceNoSinks".into(), json!({ "audit": audit_json(&audit2), "sites": n2 }));
+            out.insert(
+                "balanceNoSinks".into(),
+                json!({ "audit": audit_json(&audit2), "sites": n2 }),
+            );
             out.insert("balStore2".into(), bal_store(p, false));
             let res = period_res_flag(p, &sc_id, "AM");
             let (audit3, n3) = balance(p, &sc_id, "AM", Some(false), res.as_ref());
-            out.insert("balanceAgain".into(), json!({ "audit": audit_json(&audit3), "sites": n3 }));
+            out.insert(
+                "balanceAgain".into(),
+                json!({ "audit": audit_json(&audit3), "sites": n3 }),
+            );
             let st = CalibStore::read(p);
             let sc = p.scenario(&sc_id).expect("sc");
             let mut phf_all = Map::new();
@@ -555,7 +849,13 @@ pub fn replay_state(p: &mut Project, name: &str, fixture: &str, extra_core: &Val
                 Value::Array(
                     st.turn_sites
                         .iter()
-                        .map(|s| json!([s.id, serde_json::to_value(&s.node).expect("node"), serde_json::to_value(&s.site).expect("site")]))
+                        .map(|s| {
+                            json!([
+                                s.id,
+                                serde_json::to_value(&s.node).expect("node"),
+                                serde_json::to_value(&s.site).expect("site")
+                            ])
+                        })
                         .collect(),
                 ),
             );
@@ -590,7 +890,10 @@ fn bal_store(p: &Project, with_node: bool) -> Value {
                     o.insert("bal".into(), serde_json::to_value(&s.bal).expect("bal"));
                 }
                 if s.audit.is_set() {
-                    o.insert("audit".into(), serde_json::to_value(&s.audit).expect("audit"));
+                    o.insert(
+                        "audit".into(),
+                        serde_json::to_value(&s.audit).expect("audit"),
+                    );
                 }
                 Value::Object(o)
             })

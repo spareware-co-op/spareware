@@ -1,11 +1,11 @@
 //! The turning diagrams: the report figure with 'AM (PM)' labels rounded to 5 veh/h, the turn ban editor's diagram (the
 //! calculations behind it: which turns exist, which are banned) and the lane editor's approach data.
 
+use super::text::r5;
 use super::text::{ctl_name, per_name};
 use super::{
-    FIGURE_STEP, Entry, TURN_ORDER, Tools, entry_for, legs_of, moves_of, node_legs, norm, Leg,
+    Entry, FIGURE_STEP, Leg, TURN_ORDER, Tools, entry_for, legs_of, moves_of, node_legs, norm,
 };
-use super::text::r5;
 use crate::edit::sites;
 use crate::graph::{js_sort_by, turn_set, turn_type, u_pen};
 use crate::jsmath::{cos, sin};
@@ -63,18 +63,33 @@ fn lane_of(mv: &str) -> f64 {
 }
 
 /// `arrow(h, R1, aw, bIn, bOut, mv, inTwo, outTwo)`: the curve of one movement.
-fn arrow(h: f64, r1: f64, aw: f64, b_in: f64, b_out: f64, mv: &str, in_two: bool, out_two: bool) -> Arrow {
+fn arrow(
+    h: f64,
+    r1: f64,
+    aw: f64,
+    b_in: f64,
+    b_out: f64,
+    mv: &str,
+    in_two: bool,
+    out_two: bool,
+) -> Arrow {
     let ui = vec(b_in);
     let uo = vec(b_out);
     let n_in = [-ui[1], ui[0]];
     let n_out = [uo[1], -uo[0]];
     let lane = lane_of(mv);
-    let p = |r: f64, u: [f64; 2], n: [f64; 2], d: f64| [h + u[0] * r + n[0] * d, h + u[1] * r + n[1] * d];
+    let p = |r: f64, u: [f64; 2], n: [f64; 2], d: f64| {
+        [h + u[0] * r + n[0] * d, h + u[1] * r + n[1] * d]
+    };
     let s0 = p(
         r1,
         ui,
         n_in,
-        if in_two { aw * lane } else { aw * 0.6 * (lane - 0.215) },
+        if in_two {
+            aw * lane
+        } else {
+            aw * 0.6 * (lane - 0.215)
+        },
     );
     let e = p(r1, uo, n_out, if out_two { aw * 0.25 } else { aw * 0.02 });
     let k = r1 * if mv == "U" { 0.9 } else { 0.75 };
@@ -219,7 +234,11 @@ impl<'a> Tools<'a> {
                     let i = match mv.iter().position(|m| m.r.id == r.id) {
                         Some(i) => i,
                         None => {
-                            mv.push(Mv { r: r.clone(), a: 0.0, b: 0.0 });
+                            mv.push(Mv {
+                                r: r.clone(),
+                                a: 0.0,
+                                b: 0.0,
+                            });
                             mv.len() - 1
                         }
                     };
@@ -311,7 +330,12 @@ impl<'a> Tools<'a> {
                 .iter()
                 .filter(|m| m.r.leg == a.leg && math_max(m.a, m.b) >= 0.5)
                 .collect();
-            let ix = |t: &str| TURN_ORDER.iter().position(|x| *x == t).map_or(-1.0, |i| i as f64);
+            let ix = |t: &str| {
+                TURN_ORDER
+                    .iter()
+                    .position(|x| *x == t)
+                    .map_or(-1.0, |i| i as f64)
+            };
             js_sort_by(&mut sel, |p2, q| ix(p2.r.turn) - ix(q.r.turn));
             let lines: Vec<String> = sel
                 .iter()
@@ -375,7 +399,11 @@ impl<'a> Tools<'a> {
         s.push(north(size, fs, &font, "var(--muted, #56635f)"));
         let lab = format!(
             "{}{}",
-            if pa.is_some() { res_a.map_or("", |r| r.period.as_str()) } else { "" },
+            if pa.is_some() {
+                res_a.map_or("", |r| r.period.as_str())
+            } else {
+                ""
+            },
             if pb.is_some() {
                 match res_b {
                     Some(r) if pa.is_some() => format!(" ({})", r.period),
@@ -496,7 +524,11 @@ impl<'a> Tools<'a> {
                     turn_type(norm(ar.b + 180.0), x.b)
                 };
                 if mv == "U" && ar.id != x.id && deg < 3 {
-                    mv = if util::turn(norm(ar.b + 180.0), x.b) > 0.0 { "R" } else { "L" };
+                    mv = if util::turn(norm(ar.b + 180.0), x.b) > 0.0 {
+                        "R"
+                    } else {
+                        "L"
+                    };
                 }
                 let key = format!("{}>{}", ar.id, x.id);
                 let explicit = bans.contains(&key);
@@ -521,14 +553,15 @@ impl<'a> Tools<'a> {
                 });
             }
         }
-        let ix = |t: &str| TURN_ORDER.iter().position(|x| *x == t).map_or(-1.0, |i| i as f64);
+        let ix = |t: &str| {
+            TURN_ORDER
+                .iter()
+                .position(|x| *x == t)
+                .map_or(-1.0, |i| i as f64)
+        };
         js_sort_by(&mut out, |p, q| {
             let d = p.from.o as f64 - q.from.o as f64;
-            if d != 0.0 {
-                d
-            } else {
-                ix(p.turn) - ix(q.turn)
-            }
+            if d != 0.0 { d } else { ix(p.turn) - ix(q.turn) }
         });
         out
     }
@@ -604,15 +637,32 @@ impl<'a> Tools<'a> {
             if m.rule {
                 continue; // U-turns banned by the default rule are not drawn; the switch beside the diagram allows them
             }
-            let g = arrow(h, r1, aw, m.from.b, m.to.b, m.mv, m.from.is_in && m.from.is_out, m.to.is_in && m.to.is_out);
-            let col = if m.banned { "var(--danger)" } else { "var(--accent)" };
+            let g = arrow(
+                h,
+                r1,
+                aw,
+                m.from.b,
+                m.to.b,
+                m.mv,
+                m.from.is_in && m.from.is_out,
+                m.to.is_in && m.to.is_out,
+            );
+            let col = if m.banned {
+                "var(--danger)"
+            } else {
+                "var(--accent)"
+            };
             let w = 2.2;
             let tip = format!(
                 "{}: {} to {} \u{b7} {}",
                 m.id,
                 m.from.leg_label,
                 m.to.leg_label,
-                if m.banned { "banned. Click to allow" } else { "allowed. Click to ban" }
+                if m.banned {
+                    "banned. Click to allow"
+                } else {
+                    "allowed. Click to ban"
+                }
             );
             let mut e = format!(
                 "<g data-jban=\"{}\" data-node=\"{}\" style=\"cursor:pointer;stroke:{};fill:{}\"><title>{}</title>",
@@ -743,8 +793,19 @@ pub fn node_approaches(sc: &Scenario, node_id: &str) -> Vec<ApproachInfo> {
         let Some(l) = sc.links.get(link_id) else {
             continue;
         };
-        let lanes = if l.a == node_id { l.lanes_ba.int32() } else { l.lanes_ab.int32() } as f64;
-        let gl = math_max(1.0, if l.bus_lane.truthy() && lanes >= 2.0 { lanes - 1.0 } else { lanes });
+        let lanes = if l.a == node_id {
+            l.lanes_ba.int32()
+        } else {
+            l.lanes_ab.int32()
+        } as f64;
+        let gl = math_max(
+            1.0,
+            if l.bus_lane.truthy() && lanes >= 2.0 {
+                lanes - 1.0
+            } else {
+                lanes
+            },
+        );
         let site_raw = site.and_then(|s| s.lanes.get()).and_then(|m| m.get(&l.id));
         let on_site = site_raw.is_some_and(value_truthy);
         let raw: Option<Value> = if on_site {
@@ -774,7 +835,11 @@ pub fn node_approaches(sc: &Scenario, node_id: &str) -> Vec<ApproachInfo> {
                 return src.clone();
             }
             if src != "user" {
-                return if field(k).is_some_and(|v| !v.is_null()) { src.clone() } else { "default".to_string() };
+                return if field(k).is_some_and(|v| !v.is_null()) {
+                    src.clone()
+                } else {
+                    "default".to_string()
+                };
             }
             if by.is_none() && field(k).is_some_and(value_truthy) {
                 "user".to_string()
@@ -786,7 +851,9 @@ pub fn node_approaches(sc: &Scenario, node_id: &str) -> Vec<ApproachInfo> {
             Some(Value::Array(ls)) if !ls.is_empty() => ls
                 .iter()
                 .map(|x| {
-                    let d = truthy_text(x.get("d")).or_else(|| truthy_text(x.get("mv"))).unwrap_or_default();
+                    let d = truthy_text(x.get("d"))
+                        .or_else(|| truthy_text(x.get("mv")))
+                        .unwrap_or_default();
                     let len = crate::jsnum::or_default(
                         x.get("len").map_or(f64::NAN, crate::jsnum::value_to_number),
                         0.0,

@@ -124,13 +124,7 @@ pub struct FitOptions {
 /// `rows` are fitting units. A path takes the weighted mean of the log ratios of the units it crosses (so counts in
 /// sequence do not compound), times the largest weight among them (weight 0: left out). `f` holds the cumulative
 /// factors by OD pair key, in the order the pairs were first changed.
-pub fn step(
-    view: &Scenario,
-    res: &Res,
-    rows: &[Unit],
-    f: &mut OrderedMap<f64>,
-    o: &FitOptions,
-) {
+pub fn step(view: &Scenario, res: &Res, rows: &[Unit], f: &mut OrderedMap<f64>, o: &FitOptions) {
     let lr: Vec<Option<f64>> = rows
         .iter()
         .map(|r| {
@@ -286,7 +280,9 @@ pub fn matrix_change(z: usize, prior: &[f64], est: &[f64]) -> MatrixChange {
         }
     }
     // Zones with no trips either way are left out of the trip-end tests
-    let live: Vec<usize> = (0..z).filter(|&i| ro[i] + co[i] + re[i] + ce[i] > 0.0).collect();
+    let live: Vec<usize> = (0..z)
+        .filter(|&i| ro[i] + co[i] + re[i] + ce[i] > 0.0)
+        .collect();
     let pick = |a: &[f64]| -> Vec<f64> { live.iter().map(|&i| a[i]).collect() };
     let row_r2 = pearson2(&pick(&ro), &pick(&re));
     let col_r2 = pearson2(&pick(&co), &pick(&ce));
@@ -296,8 +292,16 @@ pub fn matrix_change(z: usize, prior: &[f64], est: &[f64]) -> MatrixChange {
     MatrixChange {
         prior_total: tp,
         total: te,
-        total_pct: if tp > 0.0 { (te - tp) / tp * 100.0 } else { 0.0 },
-        mean_abs_cell_pct: if cells > 0 { dev / cells as f64 * 100.0 } else { 0.0 },
+        total_pct: if tp > 0.0 {
+            (te - tp) / tp * 100.0
+        } else {
+            0.0
+        },
+        mean_abs_cell_pct: if cells > 0 {
+            dev / cells as f64 * 100.0
+        } else {
+            0.0
+        },
         pairs,
         cells,
         cell_r2: pearson2(&cp, &cq),
@@ -351,7 +355,9 @@ pub fn base_view<'a>(sc: &'a Scenario, s: &Settings) -> BaseView<'a> {
             links.insert(id.to_string(), l.clone());
         }
     }
-    let same = year_of(Some(sc), s) == by && zones.len() == sc.zones.len() && links.len() == sc.links.len();
+    let same = year_of(Some(sc), s) == by
+        && zones.len() == sc.zones.len()
+        && links.len() == sc.links.len();
     if same {
         return BaseView {
             view: Cow::Borrowed(sc),

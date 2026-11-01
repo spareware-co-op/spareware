@@ -19,9 +19,17 @@ fn label(c: &Count) -> String {
         "{}{} {} {}{}",
         short,
         if c.virtual_.truthy() { " estimate" } else { "" },
-        if c.reference.truthy() { c.reference.js_string() } else { String::new() },
+        if c.reference.truthy() {
+            c.reference.js_string()
+        } else {
+            String::new()
+        },
         c.name.js_string(),
-        if c.adt.truthy() { format!(" ({}/day)", fmt::int(c.adt.num())) } else { String::new() }
+        if c.adt.truthy() {
+            format!(" ({}/day)", fmt::int(c.adt.num()))
+        } else {
+            String::new()
+        }
     )
 }
 
@@ -63,12 +71,18 @@ pub fn gateways_from_counts(sc: &mut Scenario, s: &Settings, data: &Data) -> usi
     let ids: Vec<String> = sc.zones.keys().map(String::from).collect();
     for zid in ids {
         let (flows, src) = {
-            let Some(z) = sc.zones.get(&zid) else { continue };
+            let Some(z) = sc.zones.get(&zid) else {
+                continue;
+            };
             if !z.kind.is("gateway") {
                 continue;
             }
-            let Some(node) = z.node.as_str().filter(|n| !n.is_empty()) else { continue };
-            let Some(g_node) = sc.nodes.get(node) else { continue };
+            let Some(node) = z.node.as_str().filter(|n| !n.is_empty()) else {
+                continue;
+            };
+            let Some(g_node) = sc.nodes.get(node) else {
+                continue;
+            };
             let ls = links_at(sc, node);
             let Some(lg) = ls.first() else { continue };
             let g_name = norm(lg.name.as_str().unwrap_or(""));
@@ -96,9 +110,13 @@ pub fn gateways_from_counts(sc: &mut Scenario, s: &Settings, data: &Data) -> usi
                         if c.src_is("nzta") && c.ramp.truthy() != lg.cls.is("ramp") {
                             return None;
                         }
-                        let same = !g_name.is_empty() && norm(lc.name.as_str().unwrap_or("")) == g_name;
+                        let same =
+                            !g_name.is_empty() && norm(lc.name.as_str().unwrap_or("")) == g_name;
                         if same || (g_rank >= 5.0 && d < 3000.0) {
-                            Some(Cand { c: c.clone(), dist: d })
+                            Some(Cand {
+                                c: c.clone(),
+                                dist: d,
+                            })
                         } else {
                             None
                         }
@@ -127,12 +145,20 @@ pub fn gateways_from_counts(sc: &mut Scenario, s: &Settings, data: &Data) -> usi
             for per in ["AM", "PM"] {
                 let mut vin: Option<f64> = None;
                 let mut vout: Option<f64> = None;
-                let dirs: Vec<&Cand> = cand.iter().filter(|x| x.c.directional.truthy() && x.c.dir.truthy()).collect();
+                let dirs: Vec<&Cand> = cand
+                    .iter()
+                    .filter(|x| x.c.directional.truthy() && x.c.dir.truthy())
+                    .collect();
                 if !dirs.is_empty() {
-                    let in_c = dirs.iter().find(|x| ang_diff(super::dir_bearing(&x.c.dir.js_string()), in_b) < 70.0);
-                    let out_c = dirs
+                    let in_c = dirs
                         .iter()
-                        .find(|x| ang_diff(super::dir_bearing(&x.c.dir.js_string()), (in_b + 180.0) % 360.0) < 70.0);
+                        .find(|x| ang_diff(super::dir_bearing(&x.c.dir.js_string()), in_b) < 70.0);
+                    let out_c = dirs.iter().find(|x| {
+                        ang_diff(
+                            super::dir_bearing(&x.c.dir.js_string()),
+                            (in_b + 180.0) % 360.0,
+                        ) < 70.0
+                    });
                     if let Some(x) = in_c {
                         vin = period_vol(&x.c, per, s).map(|p| p.v);
                         if vin.is_some() {
@@ -179,7 +205,11 @@ pub fn gateways_from_counts(sc: &mut Scenario, s: &Settings, data: &Data) -> usi
                     uniq.push(c.clone());
                 }
             }
-            let src = if uniq.is_empty() { None } else { Some(uniq.iter().map(|c| label(c)).collect::<Vec<_>>().join("; ")) };
+            let src = if uniq.is_empty() {
+                None
+            } else {
+                Some(uniq.iter().map(|c| label(c)).collect::<Vec<_>>().join("; "))
+            };
             (flows, src)
         };
         if let Some(z) = sc.zones.get_mut(&zid) {

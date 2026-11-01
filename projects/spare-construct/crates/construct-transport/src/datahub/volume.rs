@@ -105,7 +105,9 @@ pub fn period_vol(c: &Count, period: &str, s: &Settings) -> Option<PeriodVol> {
             Some(Value::Object(m)) if t_truthy => Some(m),
             _ => None,
         };
-        let mean = t_obj.map_or(f64::NAN, |m| m.get("mean").map_or(f64::NAN, value_to_number));
+        let mean = t_obj.map_or(f64::NAN, |m| {
+            m.get("mean").map_or(f64::NAN, value_to_number)
+        });
         let ok_not_false = t_obj.is_none_or(|m| m.get("ok") != Some(&Value::Bool(false)));
         let tm = if t_truthy && mean > 0.0 && mean.is_finite() && ok_not_false {
             Some(mean)

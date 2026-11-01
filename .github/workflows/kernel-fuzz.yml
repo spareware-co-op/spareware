@@ -15,7 +15,7 @@ name: Kernel fuzzing and proofs
 # - Kani: each `<target>_proof` test, bolero's harness unchanged, proven by Kani for every case of
 #   its domain (the target module's header says which).
 # - Kani for geom-num: each `#[kani::proof]` harness beside geom-num's code (piece G41), proven
-#   on its own.
+#   on its own; and geom-format's (piece G92), in the job kani-format.
 # - kernel-fuzz-campaign.yml runs a target for hours instead, on demand: the wide integers' 25-hour
 #   campaign (G26).
 # - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
@@ -49,34 +49,35 @@ on:
     paths:
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
-      - "projects/kit/crates/kit-core/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
-      - "projects/engines/geometry/crates/geom-curve/**"
-      - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-check/**"
+      - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
+      - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-field/**"
+      - "projects/engines/geometry/crates/geom-format/**"
+      - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
-      - "projects/engines/geometry/crates/geom-gen/**"
-      - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
-      - "projects/engines/geometry/crates/geom-nurbs/**"
-      - "projects/engines/geometry/crates/geom-surface/**"
-      - "projects/engines/geometry/crates/geom-topo/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
       - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-sketch/**"
+      - "projects/engines/geometry/crates/geom-spatial/**"
+      - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
+      - "projects/kit/crates/kit-core/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -89,34 +90,35 @@ on:
     paths:
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
-      - "projects/kit/crates/kit-core/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
-      - "projects/engines/geometry/crates/geom-curve/**"
-      - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-check/**"
+      - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
+      - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-field/**"
+      - "projects/engines/geometry/crates/geom-format/**"
+      - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
-      - "projects/engines/geometry/crates/geom-gen/**"
-      - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
-      - "projects/engines/geometry/crates/geom-nurbs/**"
-      - "projects/engines/geometry/crates/geom-surface/**"
-      - "projects/engines/geometry/crates/geom-topo/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
       - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-sketch/**"
+      - "projects/engines/geometry/crates/geom-spatial/**"
+      - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
+      - "projects/kit/crates/kit-core/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -151,7 +153,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, cdt_fuzz, exact_fuzz, make_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, solids_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, exact_fuzz, make_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, sequence_fuzz, solids_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -434,10 +436,63 @@ jobs:
           cargo kani setup
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, the narrowing
+      # to a shorter float dropping a set bit (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-op --
+          cargo kani -p geom-op --harness cbor::proofs::binary16_is_exact_and_shortest --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
           cargo kani -p geom-op --harness "${{ matrix.proof }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
+  # Bounded proofs beside geom-format's own code (chapter 28.7; piece G92): the range checks of
+  # 24.7, proven for every value of their domain, so the frame's edge at ±(2^40 − 1) and one beyond
+  # are covered by the proof, not only by tests. geom-format's tests/kani_harnesses.rs holds this
+  # list to the harnesses in the source.
+  kani-format:
+    name: Kani, geom-format (${{ matrix.proof }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        proof:
+          - range::proofs::bits_is_the_magnitude_width
+          - range::proofs::grid_accepts_exactly_the_frame
+          - range::proofs::real_accepts_exactly_the_finite_frame
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          cargo kani setup
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, a magnitude's
+      # width one too many (geom-test's trip module and binary).
+      - name: Kani fails on a planted violation
+        if: strategy.job-index == 0
+        run: >-
+          cargo run --locked -q -p geom-test --bin trip -- kani-format --
+          cargo kani -p geom-format --harness range::proofs::bits_is_the_magnitude_width --exact
+      - name: Prove ${{ matrix.proof }}
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-format --harness "${{ matrix.proof }}" --exact
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock

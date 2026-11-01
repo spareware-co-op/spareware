@@ -4,11 +4,11 @@
 //! user confirms them, and then the counts in the study area are downloaded and turned into the user's own counts ([`CouncilImport`]).
 
 use super::arcgis::{Bounds, FetchFailure, HttpRequest};
-use super::flow::{env_params, resolve_fields, Answer, ArcQuery, Flow, LayerMeta, MetaCache};
+use super::flow::{Answer, ArcQuery, Flow, LayerMeta, MetaCache, env_params, resolve_fields};
 use super::gtfs::hash_str;
 use super::jsregex::Regex;
-use super::nztime::{civil_from_days, today, DAY_MS};
-use super::sources::{council, SRC_COUNCIL};
+use super::nztime::{DAY_MS, civil_from_days, today};
+use super::sources::{SRC_COUNCIL, council};
 use super::vintage::stamp;
 use crate::datahub::Count;
 use crate::edit::json::JsonValue;
@@ -16,7 +16,7 @@ use crate::jsnum::{json_number, math_round, number_to_js_string};
 use crate::project::Project;
 use crate::util::{self, r7};
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// The fields guessed to hold each value of a layer (`guessFields`): empty text when none looks right.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -58,7 +58,10 @@ pub fn guess_fields(meta: &JsonValue) -> GuessedFields {
             .collect(),
         _ => Vec::new(),
     };
-    let name_of = |f: &JsonValue| f.get("name").map_or_else(|| "undefined".to_string(), JsonValue::js_string);
+    let name_of = |f: &JsonValue| {
+        f.get("name")
+            .map_or_else(|| "undefined".to_string(), JsonValue::js_string)
+    };
     let alias_of = |f: &JsonValue| match f.get("alias") {
         Some(a) if a.truthy() => a.js_string(),
         _ => String::new(),
@@ -66,7 +69,10 @@ pub fn guess_fields(meta: &JsonValue) -> GuessedFields {
     let best = |res: &[&str]| -> String {
         for re in res {
             let re = Regex::lit(re, "i");
-            if let Some(f) = fields.iter().find(|x| re.test(&name_of(x)) || re.test(&alias_of(x))) {
+            if let Some(f) = fields
+                .iter()
+                .find(|x| re.test(&name_of(x)) || re.test(&alias_of(x)))
+            {
                 return name_of(f);
             }
         }
@@ -78,7 +84,13 @@ pub fn guess_fields(meta: &JsonValue) -> GuessedFields {
         .filter_map(|f| {
             let n = name_of(f);
             let u: Vec<u16> = n.encode_utf16().collect();
-            year_re.exec_units(&u, 0).map(|m| (n.clone(), m.text(&u, 1).map_or(f64::NAN, |t| crate::jsnum::string_to_number(&t))))
+            year_re.exec_units(&u, 0).map(|m| {
+                (
+                    n.clone(),
+                    m.text(&u, 1)
+                        .map_or(f64::NAN, |t| crate::jsnum::string_to_number(&t)),
+                )
+            })
         })
         .collect();
     crate::graph::js_sort_by(&mut years, |p, q| q.1 - p.1);
@@ -88,7 +100,14 @@ pub fn guess_fields(meta: &JsonValue) -> GuessedFields {
         peak_time: best(&["peak_?hour$", "peak_?time"]),
         hcv: best(&["heavy|hcv|pc_?hv"]),
         date: best(&["count_?date", "^date$", "survey_?date"]),
-        name: best(&["road_?name", "^name$", "street", "location", "site_?desc", "description"]),
+        name: best(&[
+            "road_?name",
+            "^name$",
+            "street",
+            "location",
+            "site_?desc",
+            "description",
+        ]),
         dir: best(&["^dir", "direction"]),
         latest: best(&["^latest$"]),
         years: years.into_iter().map(|(n, _)| n).collect(),
@@ -116,8 +135,16 @@ pub fn council_url(url: &str) -> Result<String, String> {
     let q1 = Regex::lit(r"\/query.*$", "i");
     let q2 = Regex::lit(r"\?.*$", "");
     let q3 = Regex::lit(r"\/+$", "");
-    let u = q3.replace(&q2.replace(&q1.replace(t, |_, _| String::new()), |_, _| String::new()), |_, _| String::new());
-    if !Regex::lit(r"^https:\/\/[^/]+\/.+\/(FeatureServer|MapServer)\/\d+$", "i").test(&u) {
+    let u = q3.replace(
+        &q2.replace(&q1.replace(t, |_, _| String::new()), |_, _| String::new()),
+        |_, _| String::new(),
+    );
+    if !Regex::lit(
+        r"^https:\/\/[^/]+\/.+\/(FeatureServer|MapServer)\/\d+$",
+        "i",
+    )
+    .test(&u)
+    {
         return Err("Paste the address of one ArcGIS layer, ending in /FeatureServer/0 (or another layer number).".to_string());
     }
     Ok(u)
@@ -133,20 +160,35 @@ impl CouncilRead {
     /// Reads a layer; Err when the text is not the address of a layer.
     pub fn new(url: &str, timeout_ms: f64, cache: &MetaCache) -> Result<CouncilRead, String> {
         let u = council_url(url)?;
-        Ok(CouncilRead { meta: LayerMeta::new(&u, cache, timeout_ms), url: u })
+        Ok(CouncilRead {
+            meta: LayerMeta::new(&u, cache, timeout_ms),
+            url: u,
+        })
     }
     /// The layer, once its description was read; Err when it has no fields.
     pub fn finish(self) -> Result<CouncilLayer, String> {
         let meta = self.meta.meta().cloned().ok_or("The layer was not read.")?;
         let fields: Vec<String> = match meta.get("fields") {
-            Some(JsonValue::Array(a)) => a.iter().map(|f| f.get("name").map_or_else(|| "undefined".to_string(), JsonValue::js_string)).collect(),
+            Some(JsonValue::Array(a)) => a
+                .iter()
+                .map(|f| {
+                    f.get("name")
+                        .map_or_else(|| "undefined".to_string(), JsonValue::js_string)
+                })
+                .collect(),
             _ => return Err("That address is not a feature layer with fields.".to_string()),
         };
         let name = match meta.get("name") {
             Some(n) if n.truthy() => n.js_string(),
             _ => "Count layer".to_string(),
         };
-        Ok(CouncilLayer { url: self.url, name, map: guess_fields(&meta), meta, fields })
+        Ok(CouncilLayer {
+            url: self.url,
+            name,
+            map: guess_fields(&meta),
+            meta,
+            fields,
+        })
     }
 }
 
@@ -177,7 +219,9 @@ pub fn year_of_val(v: Option<&JsonValue>) -> Option<f64> {
     let s = v.js_string();
     let re = Regex::lit(r"(\d{4})", "");
     let u: Vec<u16> = s.encode_utf16().collect();
-    re.exec_units(&u, 0).and_then(|m| m.text(&u, 1)).map(|t| crate::jsnum::string_to_number(&t))
+    re.exec_units(&u, 0)
+        .and_then(|m| m.text(&u, 1))
+        .map(|t| crate::jsnum::string_to_number(&t))
 }
 
 /// The fields the user confirmed: an ordered object of field names (adt, peak, peakTime, hcv, date, name, dir, latest) and the year columns (`years`, a list).
@@ -204,12 +248,21 @@ fn map_str(map: &CouncilMap, k: &str) -> String {
 
 impl CouncilImport {
     /// A download of the layer's counts in an area; `preset` is "hamilton" or "qldc" (or None).
-    pub fn new(layer: CouncilLayer, map: CouncilMap, b: &Bounds, preset: Option<&str>, now_ms: f64, timeout_ms: f64) -> CouncilImport {
+    pub fn new(
+        layer: CouncilLayer,
+        map: CouncilMap,
+        b: &Bounds,
+        preset: Option<&str>,
+        now_ms: f64,
+        timeout_ms: f64,
+    ) -> CouncilImport {
         let mut fields: Vec<String> = vec!["OBJECTID".to_string()];
         if let Some(o) = map.as_object() {
             for (_, v) in o.iter() {
                 match v {
-                    JsonValue::Array(a) => fields.extend(a.iter().filter(|x| x.truthy()).map(JsonValue::js_string)),
+                    JsonValue::Array(a) => {
+                        fields.extend(a.iter().filter(|x| x.truthy()).map(JsonValue::js_string))
+                    }
                     x if x.truthy() => fields.push(x.js_string()),
                     _ => {}
                 }
@@ -222,13 +275,33 @@ impl CouncilImport {
             }
         }
         let latest = map_str(&map, "latest");
-        let where_ = if !latest.is_empty() { format!("{latest} IN ('Y','Yes','YES','y')") } else { "1=1".to_string() };
+        let where_ = if !latest.is_empty() {
+            format!("{latest} IN ('Y','Yes','YES','y')")
+        } else {
+            "1=1".to_string()
+        };
         let want: Vec<&str> = uniq.iter().map(String::as_str).collect();
         let resolved = resolve_fields(Some(&layer.meta), &want).join(",");
-        let mut params: Vec<(String, String)> = vec![("where".into(), where_), ("outFields".into(), if resolved.is_empty() { "*".to_string() } else { resolved })];
+        let mut params: Vec<(String, String)> = vec![
+            ("where".into(), where_),
+            (
+                "outFields".into(),
+                if resolved.is_empty() {
+                    "*".to_string()
+                } else {
+                    resolved
+                },
+            ),
+        ];
         params.extend(env_params(b));
         let query = ArcQuery::new(&layer.url, params, 40, timeout_ms);
-        CouncilImport { layer, map, preset: preset.map(str::to_string), now_ms, query }
+        CouncilImport {
+            layer,
+            map,
+            preset: preset.map(str::to_string),
+            now_ms,
+            query,
+        }
     }
     /// How many features have been downloaded (for a progress line).
     pub fn count(&self) -> usize {
@@ -244,8 +317,15 @@ impl CouncilImport {
         let max_age = preset.and_then(|pr| pr.max_age_years).filter(|a| *a != 0.0);
         let key = hash_str(&self.layer.url);
         let label = preset.map_or_else(|| self.layer.name.clone(), |pr| pr.label.to_string());
-        let (m_adt, m_date, m_peak, m_ptime, m_hcv, m_name, m_dir) =
-            (map_str(&self.map, "adt"), map_str(&self.map, "date"), map_str(&self.map, "peak"), map_str(&self.map, "peakTime"), map_str(&self.map, "hcv"), map_str(&self.map, "name"), map_str(&self.map, "dir"));
+        let (m_adt, m_date, m_peak, m_ptime, m_hcv, m_name, m_dir) = (
+            map_str(&self.map, "adt"),
+            map_str(&self.map, "date"),
+            map_str(&self.map, "peak"),
+            map_str(&self.map, "peakTime"),
+            map_str(&self.map, "hcv"),
+            map_str(&self.map, "name"),
+            map_str(&self.map, "dir"),
+        );
         let year_cols: Vec<String> = match self.map.get("years") {
             Some(JsonValue::Array(a)) => a.iter().map(JsonValue::js_string).collect(),
             _ => Vec::new(),
@@ -256,17 +336,25 @@ impl CouncilImport {
         let mut list: Vec<Count> = Vec::new();
         for x in &feats {
             let a = x.get("attributes").filter(|a| a.truthy()).unwrap_or(&empty);
-            let Some(g) = x.get("geometry").filter(|g| g.truthy()) else { continue };
+            let Some(g) = x.get("geometry").filter(|g| g.truthy()) else {
+                continue;
+            };
             let at = |k: &str| a.get(k);
             let ll: Option<[f64; 2]> = if g.get("x").is_some_and(|v| !v.is_null()) {
-                Some([g.get("y").map_or(f64::NAN, JsonValue::to_number), g.get("x").map_or(f64::NAN, JsonValue::to_number)])
+                Some([
+                    g.get("y").map_or(f64::NAN, JsonValue::to_number),
+                    g.get("x").map_or(f64::NAN, JsonValue::to_number),
+                ])
             } else if let Some(JsonValue::Array(paths)) = g.get("paths").filter(|p| p.truthy()) {
                 match paths.first() {
                     Some(JsonValue::Array(p0)) => {
                         let pa: Vec<[f64; 2]> = p0
                             .iter()
                             .map(|q| match q {
-                                JsonValue::Array(c) => [c.get(1).map_or(f64::NAN, JsonValue::to_number), c.first().map_or(f64::NAN, JsonValue::to_number)],
+                                JsonValue::Array(c) => [
+                                    c.get(1).map_or(f64::NAN, JsonValue::to_number),
+                                    c.first().map_or(f64::NAN, JsonValue::to_number),
+                                ],
                                 _ => [f64::NAN, f64::NAN],
                             })
                             .collect();
@@ -277,7 +365,10 @@ impl CouncilImport {
                 }
             } else if let Some(JsonValue::Array(pts)) = g.get("points").filter(|p| p.truthy()) {
                 match pts.first() {
-                    Some(JsonValue::Array(c)) => Some([c.get(1).map_or(f64::NAN, JsonValue::to_number), c.first().map_or(f64::NAN, JsonValue::to_number)]),
+                    Some(JsonValue::Array(c)) => Some([
+                        c.get(1).map_or(f64::NAN, JsonValue::to_number),
+                        c.first().map_or(f64::NAN, JsonValue::to_number),
+                    ]),
                     _ => None,
                 }
             } else {
@@ -285,8 +376,16 @@ impl CouncilImport {
             };
             let Some(ll) = ll else { continue };
             let oid = at("OBJECTID").filter(|v| !v.is_null());
-            let mut adt: Option<f64> = if !m_adt.is_empty() { Some(at(&m_adt).map_or(f64::NAN, JsonValue::to_number)) } else { None };
-            let mut year: Option<f64> = if !m_date.is_empty() { year_of_val(at(&m_date)) } else { None };
+            let mut adt: Option<f64> = if !m_adt.is_empty() {
+                Some(at(&m_adt).map_or(f64::NAN, JsonValue::to_number))
+            } else {
+                None
+            };
+            let mut year: Option<f64> = if !m_date.is_empty() {
+                year_of_val(at(&m_date))
+            } else {
+                None
+            };
             if !adt.is_some_and(|v| v > 0.0) && !year_cols.is_empty() {
                 for f in &year_cols {
                     let v = at(f).map_or(f64::NAN, JsonValue::to_number);
@@ -297,7 +396,9 @@ impl CouncilImport {
                     }
                 }
             }
-            let Some(adt) = adt.filter(|v| *v > 0.0) else { continue };
+            let Some(adt) = adt.filter(|v| *v > 0.0) else {
+                continue;
+            };
             if let Some(ma) = max_age
                 && let Some(yr) = year.filter(|y| *y != 0.0)
                 && y_now - yr > ma
@@ -311,13 +412,20 @@ impl CouncilImport {
                 }
                 .to_uppercase();
                 let u: Vec<u16> = t.encode_utf16().collect();
-                dir_re.exec_units(&u, 0).and_then(|m| m.text(&u, 1)).filter(|s| !s.is_empty())
+                dir_re
+                    .exec_units(&u, 0)
+                    .and_then(|m| m.text(&u, 1))
+                    .filter(|s| !s.is_empty())
             } else {
                 None
             };
             let peak: Option<f64> = if !m_peak.is_empty() {
                 let v = at(&m_peak).map_or(f64::NAN, JsonValue::to_number);
-                if v == 0.0 || v.is_nan() { None } else { Some(v) }
+                if v == 0.0 || v.is_nan() {
+                    None
+                } else {
+                    Some(v)
+                }
             } else {
                 None
             };
@@ -328,7 +436,11 @@ impl CouncilImport {
                 };
                 let digits = digits_re.replace(&t, |_, _| String::new());
                 let n = digits.encode_utf16().count();
-                if n >= 4 { digits } else { format!("{}{}", "0".repeat(4 - n), digits) }
+                if n >= 4 {
+                    digits
+                } else {
+                    format!("{}{}", "0".repeat(4 - n), digits)
+                }
             } else {
                 String::new()
             };
@@ -336,7 +448,11 @@ impl CouncilImport {
                 None
             } else {
                 let u: Vec<u16> = pt.encode_utf16().collect();
-                let part = |a: usize, b: usize| crate::jsnum::string_to_number(&String::from_utf16_lossy(&u[a.min(u.len())..b.min(u.len())]));
+                let part = |a: usize, b: usize| {
+                    crate::jsnum::string_to_number(&String::from_utf16_lossy(
+                        &u[a.min(u.len())..b.min(u.len())],
+                    ))
+                };
                 Some(part(0, 2) + part(2, 4) / 60.0)
             };
             let oid_text = oid.map_or_else(|| list.len().to_string(), JsonValue::js_string);
@@ -344,11 +460,19 @@ impl CouncilImport {
                 Some(v) => v.js_string(),
                 None => number_to_js_string((list.len() + 1) as f64),
             };
-            let name = match at(&m_name).filter(|_| !m_name.is_empty()).filter(|v| v.truthy()) {
+            let name = match at(&m_name)
+                .filter(|_| !m_name.is_empty())
+                .filter(|v| v.truthy())
+            {
                 Some(v) => v.js_string(),
                 None => format!("{} site {}", self.layer.name, site_no),
             };
-            let hv = if !m_hcv.is_empty() && at(&m_hcv).is_some_and(|v| !v.is_null()) && at(&m_hcv).map_or(f64::NAN, JsonValue::to_number).is_finite() {
+            let hv = if !m_hcv.is_empty()
+                && at(&m_hcv).is_some_and(|v| !v.is_null())
+                && at(&m_hcv)
+                    .map_or(f64::NAN, JsonValue::to_number)
+                    .is_finite()
+            {
                 json_number(at(&m_hcv).map_or(f64::NAN, JsonValue::to_number))
             } else {
                 Value::Null
@@ -366,10 +490,34 @@ impl CouncilImport {
             o.insert("hv".into(), hv);
             o.insert("dir".into(), dir.as_ref().map_or(Value::Null, |d| json!(d)));
             o.insert("directional".into(), json!(dir.is_some()));
-            o.insert("date".into(), yr_text.as_ref().map_or(Value::Null, |y| json!(y)));
-            o.insert("am".into(), if in_am { json_number(peak.expect("peak")) } else { Value::Null });
-            o.insert("pm".into(), if in_pm { json_number(peak.expect("peak")) } else { Value::Null });
-            o.insert("note".into(), json!(format!("{}{}", label, yr_text.as_ref().map_or(String::new(), |y| format!(", {y}")))));
+            o.insert(
+                "date".into(),
+                yr_text.as_ref().map_or(Value::Null, |y| json!(y)),
+            );
+            o.insert(
+                "am".into(),
+                if in_am {
+                    json_number(peak.expect("peak"))
+                } else {
+                    Value::Null
+                },
+            );
+            o.insert(
+                "pm".into(),
+                if in_pm {
+                    json_number(peak.expect("peak"))
+                } else {
+                    Value::Null
+                },
+            );
+            o.insert(
+                "note".into(),
+                json!(format!(
+                    "{}{}",
+                    label,
+                    yr_text.as_ref().map_or(String::new(), |y| format!(", {y}"))
+                )),
+            );
             o.insert("obsMethod".into(), json!("council count"));
             o.insert("feed".into(), json!({ "source": label, "url": self.layer.url, "date": today(self.now_ms), "licence": SRC_COUNCIL.licence }));
             list.push(serde_json::from_value::<Count>(Value::Object(o)).expect("a count reads"));
@@ -381,7 +529,15 @@ impl CouncilImport {
                 Some(Value::Array(a)) => a.clone(),
                 _ => Vec::new(),
             };
-            let mut counts: Vec<Value> = old.into_iter().filter(|c| c.get("feed").and_then(|f| f.get("url")).and_then(Value::as_str) != Some(self.layer.url.as_str())).collect();
+            let mut counts: Vec<Value> = old
+                .into_iter()
+                .filter(|c| {
+                    c.get("feed")
+                        .and_then(|f| f.get("url"))
+                        .and_then(Value::as_str)
+                        != Some(self.layer.url.as_str())
+                })
+                .collect();
             counts.extend(list.iter().map(|c| serde_json::to_value(c).expect("count")));
             d.extra.insert("counts".to_string(), Value::Array(counts));
         }
@@ -390,7 +546,9 @@ impl CouncilImport {
         if let Some(o) = self.map.as_object() {
             for (k, v) in o.iter() {
                 let items: Vec<String> = match v {
-                    JsonValue::Array(a) if !a.is_empty() => a.iter().take(3).map(JsonValue::js_string).collect(),
+                    JsonValue::Array(a) if !a.is_empty() => {
+                        a.iter().take(3).map(JsonValue::js_string).collect()
+                    }
                     JsonValue::String(s) if !s.is_empty() => vec![s.clone()],
                     _ => continue,
                 };
@@ -401,10 +559,17 @@ impl CouncilImport {
             "Fields used: {}.{}{}",
             used.join("; "),
             match max_age {
-                Some(a) => format!(" Counts older than {} years left out.", number_to_js_string(a)),
+                Some(a) => format!(
+                    " Counts older than {} years left out.",
+                    number_to_js_string(a)
+                ),
                 None => String::new(),
             },
-            if complete { "" } else { " Not every page downloaded." }
+            if complete {
+                ""
+            } else {
+                " Not every page downloaded."
+            }
         );
         let mut extra = Map::new();
         extra.insert("key".into(), json!(format!("council:{key}")));
@@ -413,7 +578,11 @@ impl CouncilImport {
         extra.insert("n".into(), json!(list.len()));
         extra.insert("note".into(), json!(note));
         stamp(p, "council", &extra, self.now_ms);
-        CouncilImported { n: list.len(), of_: n_features, complete }
+        CouncilImported {
+            n: list.len(),
+            of_: n_features,
+            complete,
+        }
     }
     /// The layer being imported.
     pub fn layer(&self) -> &CouncilLayer {

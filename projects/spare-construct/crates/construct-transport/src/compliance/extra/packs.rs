@@ -32,17 +32,29 @@ pub fn or_n(v: &V, d: f64) -> f64 {
 
 /// `v || ''` for a loose value.
 pub fn or_blank(v: &V) -> V {
-    if v.t() { v.clone() } else { V::String(String::new()) }
+    if v.t() {
+        v.clone()
+    } else {
+        V::String(String::new())
+    }
 }
 
 /// `r1(v)`: a value rounded to 1 decimal, an empty cell when it is missing or not finite.
 pub fn r1(v: &V) -> V {
-    if v.nullish() || !v.n().is_finite() { V::String(String::new()) } else { V::Number(math_round(v.n() * 10.0) / 10.0) }
+    if v.nullish() || !v.n().is_finite() {
+        V::String(String::new())
+    } else {
+        V::Number(math_round(v.n() * 10.0) / 10.0)
+    }
 }
 
 /// `r3(v)`: a value rounded to 3 decimals, an empty cell when it is missing or not finite.
 pub fn r3(v: &V) -> V {
-    if v.nullish() || !v.n().is_finite() { V::String(String::new()) } else { V::Number(math_round(v.n() * 1000.0) / 1000.0) }
+    if v.nullish() || !v.n().is_finite() {
+        V::String(String::new())
+    } else {
+        V::Number(math_round(v.n() * 1000.0) / 1000.0)
+    }
 }
 
 /// `r1(x)` for a number.
@@ -94,7 +106,12 @@ pub fn res_ok(p: &V) -> bool {
 
 /// `signalNodes(sc)`: the ids of the signalised junctions.
 pub fn signal_nodes(sc: &V) -> Vec<String> {
-    sc.g("nodes").vals().into_iter().filter(|n| n.g("control").eq_s("signals")).map(|n| n.g("id").s()).collect()
+    sc.g("nodes")
+        .vals()
+        .into_iter()
+        .filter(|n| n.g("control").eq_s("signals"))
+        .map(|n| n.g("id").s())
+        .collect()
 }
 
 /* ---------- the pack builder ---------- */
@@ -114,15 +131,36 @@ pub struct Section {
 }
 
 /// A section of a pack.
-pub fn section(title: &str, note: Option<String>, head: &[&str], rows: Vec<Vec<V>>, empty: Option<&str>) -> Section {
-    Section { title: title.to_string(), note, head: head.iter().map(|h| h.to_string()).collect(), rows, empty: empty.map(|e| e.to_string()) }
+pub fn section(
+    title: &str,
+    note: Option<String>,
+    head: &[&str],
+    rows: Vec<Vec<V>>,
+    empty: Option<&str>,
+) -> Section {
+    Section {
+        title: title.to_string(),
+        note,
+        head: head.iter().map(|h| h.to_string()).collect(),
+        rows,
+        empty: empty.map(|e| e.to_string()),
+    }
 }
 
 /// `packCSV(P, title, tool, sections)`: a hand-over CSV: the manifest, project, date and version stamp, then each section, then the footer.
 pub fn pack_csv(p: &V, title: &str, tool: &str, sections: &[Section]) -> String {
     let mut rows: Vec<Vec<V>> = vec![
         vec![V::String(format!("# {title}"))],
-        vec![sv("# Manifest"), V::String(sections.iter().map(|x| x.title.as_str()).collect::<Vec<_>>().join(" | "))],
+        vec![
+            sv("# Manifest"),
+            V::String(
+                sections
+                    .iter()
+                    .map(|x| x.title.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" | "),
+            ),
+        ],
         vec![sv("# Project"), or_blank(p.g("name"))],
         vec![sv("# Prepared"), V::String(today())],
         vec![sv("# Version stamp"), V::String(stamp(p))],
@@ -140,7 +178,12 @@ pub fn pack_csv(p: &V, title: &str, tool: &str, sections: &[Section]) -> String 
             rows.push(r.clone());
         }
         if sec.rows.is_empty() {
-            rows.push(vec![V::String(sec.empty.clone().filter(|e| !e.is_empty()).unwrap_or_else(|| "None".to_string()))]);
+            rows.push(vec![V::String(
+                sec.empty
+                    .clone()
+                    .filter(|e| !e.is_empty())
+                    .unwrap_or_else(|| "None".to_string()),
+            )]);
         }
     }
     stamped(&csv(&rows), p, Some(tool))
@@ -161,18 +204,30 @@ pub fn anop_inputs_csv(p: &V) -> String {
             let b = corridor_speed(pr.opt, r, &ids, true);
             let rel = if c.g("rel").t() { c.g("rel") } else { &NULL };
             let mut put = |mode: &str, x: &V, rv: &V| {
-                let dirs: Vec<&V> = if x.t() && x.g("dirs").t() { x.g("dirs").items().iter().collect() } else { vec![&NULL] };
+                let dirs: Vec<&V> = if x.t() && x.g("dirs").t() {
+                    x.g("dirs").items().iter().collect()
+                } else {
+                    vec![&NULL]
+                };
                 for d in dirs {
                     let dv = if d.t() { d } else { &NULL };
                     rows.push(vec![
                         c.g("name").clone(),
-                        if d.t() { d.g("name").clone() } else { sv("\u{2013}") },
+                        if d.t() {
+                            d.g("name").clone()
+                        } else {
+                            sv("\u{2013}")
+                        },
                         sv(per),
                         sv(mode),
                         r1(if dv.t() { dv.g("pct") } else { &NULL }),
                         r1(if dv.t() { dv.g("spd") } else { &NULL }),
                         r1(if dv.t() { dv.g("limit") } else { &NULL }),
-                        if x.t() { x.g("limitSrc").clone() } else { sv("") },
+                        if x.t() {
+                            x.g("limitSrc").clone()
+                        } else {
+                            sv("")
+                        },
                         if rv.t() { rv.clone() } else { sv("N/A") },
                     ]);
                 }
@@ -261,7 +316,11 @@ pub fn export_build(id: &str, p: &V) -> Option<String> {
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
     Some(match id {
-        "compliance-extra-anop-inputs" | "compliance-extra-tsdg" | "compliance-extra-ssa" | "compliance-extra-sh" | "compliance-extra-mbcm" => res_ok(p),
+        "compliance-extra-anop-inputs"
+        | "compliance-extra-tsdg"
+        | "compliance-extra-ssa"
+        | "compliance-extra-sh"
+        | "compliance-extra-mbcm" => res_ok(p),
         "compliance-extra-rltp" | "compliance-extra-msm" => true,
         _ => return None,
     })

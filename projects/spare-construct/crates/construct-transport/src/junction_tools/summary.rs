@@ -1,9 +1,7 @@
 //! J2 summary and J3 comparison: one line a junction and period, and the changes between two scenarios.
 
 use super::text::{ctl_name, d1, dos_cell, los_badge, n0, per_name, sgn, x2};
-use super::{
-    Entry, LABEL, Sc, Tools, entries, legs_of, periods_of_all, xid,
-};
+use super::{Entry, LABEL, Sc, Tools, entries, legs_of, periods_of_all, xid};
 use crate::graph::js_sort_by;
 use crate::jsnum::{math_max, math_max_of, number_to_js_string, plain_number};
 use crate::project::Project;
@@ -89,7 +87,10 @@ pub struct J2Row {
 
 impl J2Row {
     fn get(&self, per: &str) -> Option<&Summary> {
-        self.p.iter().find(|(k, _)| k == per).and_then(|(_, s)| s.as_ref())
+        self.p
+            .iter()
+            .find(|(k, _)| k == per)
+            .and_then(|(_, s)| s.as_ref())
     }
     /// As JSON.
     pub fn to_value(&self) -> Value {
@@ -235,9 +236,7 @@ impl<'a> Tools<'a> {
         }
         let mut qa: Option<&crate::results::Approach> = None;
         for a in nr.appr {
-            if a.ctrl != "free"
-                && qa.is_none_or(|q| or0(a.q95) > or0(q.q95))
-            {
+            if a.ctrl != "free" && qa.is_none_or(|q| or0(a.q95) > or0(q.q95)) {
                 qa = Some(a);
             }
         }
@@ -308,8 +307,7 @@ impl<'a> Tools<'a> {
         }
         let worst = |r: &J2Row| {
             math_max_of(
-                &r.p
-                    .iter()
+                &r.p.iter()
                     .map(|(_, s)| s.as_ref().map_or(0.0, |s| s.delay))
                     .collect::<Vec<_>>(),
             )
@@ -445,7 +443,11 @@ impl<'a> Tools<'a> {
         }
         for (i, a) in a_rows.iter().enumerate() {
             if !used[i] {
-                let how = if b_rows.iter().any(|y| share(a, y) > 0) { "regrouped" } else { "" };
+                let how = if b_rows.iter().any(|y| share(a, y) > 0) {
+                    "regrouped"
+                } else {
+                    ""
+                };
                 pairs.push((Some(i), None, how));
             }
         }
@@ -532,7 +534,12 @@ impl<'a> Tools<'a> {
     }
 
     /// `j3Html(from, to, periods, opts)`: the comparison as a table with its notes.
-    pub fn j3_html(&self, from: Option<Sc<'a>>, to: Option<Sc<'a>>, periods: Option<&[String]>) -> String {
+    pub fn j3_html(
+        &self,
+        from: Option<Sc<'a>>,
+        to: Option<Sc<'a>>,
+        periods: Option<&[String]>,
+    ) -> String {
         let (Some(from), Some(to)) = (from, to) else {
             return "<p class=\"note\">Add a second scenario and run both to compare junctions.</p>".to_string();
         };
@@ -554,7 +561,12 @@ impl<'a> Tools<'a> {
         }
         let grp: String = ps
             .iter()
-            .map(|p| format!("<th colspan=\"4\" style=\"text-align:center\">{}</th>", esc(&per_name(p))))
+            .map(|p| {
+                format!(
+                    "<th colspan=\"4\" style=\"text-align:center\">{}</th>",
+                    esc(&per_name(p))
+                )
+            })
             .collect();
         let sub: String = ps
             .iter()
@@ -563,7 +575,9 @@ impl<'a> Tools<'a> {
         let pill = |only: &str| match only {
             "new" => " <span class=\"pill\">new</span>",
             "gone" => " <span class=\"pill\">removed</span>",
-            "regrouped" => " <span class=\"pill\" title=\"Grouped into a junction site differently in the two scenarios\">regrouped</span>",
+            "regrouped" => {
+                " <span class=\"pill\" title=\"Grouped into a junction site differently in the two scenarios\">regrouped</span>"
+            }
             _ => "",
         };
         let body: String = c

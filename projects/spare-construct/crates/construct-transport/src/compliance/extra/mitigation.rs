@@ -20,7 +20,11 @@ pub use trigger::{anop_fit_of, fails_at, ordinal, storage_of, trigger_finder, tr
 
 /// `${o[k]}` of a loose object in a template string: "undefined" when the field is missing.
 fn tstr(o: &V, k: &str) -> String {
-    if o.has(k) { o.g(k).s() } else { "undefined".to_string() }
+    if o.has(k) {
+        o.g(k).s()
+    } else {
+        "undefined".to_string()
+    }
 }
 
 /// `a || b` of two fields of an object in a template string (`${o[a] || o[b]}`).
@@ -80,8 +84,8 @@ fn set_opt(o: &mut V, k: &str, v: Option<&V>) {
 }
 
 /* =====================================================================================
-   Effects
-   ===================================================================================== */
+Effects
+===================================================================================== */
 
 /// The sort key of an effect (`x.dos || x.vc || 0`).
 fn effect_key(x: &V) -> f64 {
@@ -105,17 +109,38 @@ pub fn effects(p: &V, sc: Option<&V>) -> V {
     };
     let base = pr.base;
     let eff = xdata("EFFECT");
-    let (e_dos, e_dd, e_vc, e_dvc) = (eff.g("dos").n(), eff.g("dDelay").n(), eff.g("vc").n(), eff.g("dvc").n());
+    let (e_dos, e_dd, e_vc, e_dvc) = (
+        eff.g("dos").n(),
+        eff.g("dDelay").n(),
+        eff.g("vc").n(),
+        eff.g("dvc").n(),
+    );
     let mut out: Vec<V> = Vec::new();
     for per in ctx::periods_of(opt) {
         let ro = opt.g("res").g(per);
-        let rb: Option<&V> = if base.t() && !std::ptr::eq(base, opt) { ctx::res_of(base, per) } else { None };
+        let rb: Option<&V> = if base.t() && !std::ptr::eq(base, opt) {
+            ctx::res_of(base, per)
+        } else {
+            None
+        };
         for (id, nr) in ro.g("nodes").entries() {
             let b = rb.map(|r| r.g("nodes").g(id)).filter(|b| b.t());
             let d_d: Option<f64> = b.map(|b| nr.g("delay").n() - b.g("delay").n());
-            let xp = if truthy_number(nr.g("xp").n()) { nr.g("xp").n() } else { e_dos };
-            let los = if nr.g("los").t() { nr.g("los").s() } else { String::new() };
-            if !(nr.g("dos").n() > math_min(xp, e_dos) || los.contains('E') || los.contains('F') || d_d.is_some_and(|d| d >= e_dd)) {
+            let xp = if truthy_number(nr.g("xp").n()) {
+                nr.g("xp").n()
+            } else {
+                e_dos
+            };
+            let los = if nr.g("los").t() {
+                nr.g("los").s()
+            } else {
+                String::new()
+            };
+            if !(nr.g("dos").n() > math_min(xp, e_dos)
+                || los.contains('E')
+                || los.contains('F')
+                || d_d.is_some_and(|d| d >= e_dd))
+            {
                 continue;
             }
             let mut e = jobj! { "id" => format!("J:{id}:{per}"), "kind" => "junction", "node" => id, "period" => per };
@@ -129,7 +154,17 @@ pub fn effects(p: &V, sc: Option<&V>) -> V {
                 Some(d) => format!(", {} s against {}", fmt::signed(d, 1), tstr(base, "name")),
                 None => String::new(),
             };
-            e.set("text", V::String(format!("{} {}: DoS {}, LoS {}{}", ctx::node_name(opt, id), per, num(nr.g("dos"), 2), or_str(nr, "losText", "los"), against)));
+            e.set(
+                "text",
+                V::String(format!(
+                    "{} {}: DoS {}, LoS {}{}",
+                    ctx::node_name(opt, id),
+                    per,
+                    num(nr.g("dos"), 2),
+                    or_str(nr, "losText", "los"),
+                    against
+                )),
+            );
             out.push(e);
         }
         for (key, a) in ro.g("arcs").entries() {
@@ -142,12 +177,25 @@ pub fn effects(p: &V, sc: Option<&V>) -> V {
                 continue;
             }
             let l = opt.g("links").g(&ctx::arc_link(key));
-            let dir = if key.ends_with(":ab") { "A\u{2192}B" } else { "B\u{2192}A" };
+            let dir = if key.ends_with(":ab") {
+                "A\u{2192}B"
+            } else {
+                "B\u{2192}A"
+            };
             let mut e = jobj! { "id" => format!("L:{key}:{per}"), "kind" => "link", "key" => key, "period" => per };
             if let Some(v) = a.get("vc") {
                 e.set("vc", v.clone());
             }
-            e.set("text", V::String(format!("{} ({}) {}: v/c {}", ctx::link_name(l), dir, per, num(a.g("vc"), 2))));
+            e.set(
+                "text",
+                V::String(format!(
+                    "{} ({}) {}: v/c {}",
+                    ctx::link_name(l),
+                    dir,
+                    per,
+                    num(a.g("vc"), 2)
+                )),
+            );
             out.push(e);
         }
     }
@@ -156,13 +204,13 @@ pub fn effects(p: &V, sc: Option<&V>) -> V {
 }
 
 /* =====================================================================================
-   Mitigation register and condition parameters
-   ===================================================================================== */
+Mitigation register and condition parameters
+===================================================================================== */
 
 /// `blankMit()`: a new row of the mitigation register.
 pub fn blank_mit() -> V {
     jobj! { "id" => uid("mit"), "ref" => "", "measure" => "", "effect" => "", "options" => "", "nonInfra" => false, "trigger" => "", "responsible" => "applicant", "cost" => V::Null,
-        "funder" => "applicant", "rltp" => "", "mechanism" => "condition", "committed" => V::Null, "landOutside" => false }
+    "funder" => "applicant", "rltp" => "", "mechanism" => "condition", "committed" => V::Null, "landOutside" => false }
 }
 
 /// `blankCond()`: a new row of the condition parameters.
@@ -173,7 +221,11 @@ pub fn blank_cond() -> V {
 /// `x && x !== 'applicant'` for a field that may be missing: the value itself when it is falsy, else whether it names a third party.
 fn names_third_party(v: Option<&V>) -> Option<V> {
     let x = v?;
-    Some(if x.t() { V::Bool(!x.eq_s("applicant")) } else { x.clone() })
+    Some(if x.t() {
+        V::Bool(!x.eq_s("applicant"))
+    } else {
+        x.clone()
+    })
 }
 
 /// `mitigationTable(P)`: the mitigation register rows (AT ITA Appendix 3), each with its effect text and the limited-consideration tag: the row's own
@@ -187,27 +239,72 @@ pub fn mitigation_table(p: &V) -> V {
     let mut rows: Vec<V> = Vec::new();
     for (i, m) in cx.g("mitigation").items().iter().enumerate() {
         // a Map keeps the last effect of an id
-        let e = eff.items().iter().rev().find(|e| e.g("id").strict_eq(m.g("effect")));
+        let e = eff
+            .items()
+            .iter()
+            .rev()
+            .find(|e| e.g("id").strict_eq(m.g("effect")));
         let first = names_third_party(m.get("funder"));
-        let third = if first.as_ref().is_some_and(|v| v.t()) { first } else { names_third_party(m.get("responsible")) };
-        let limited: Option<V> = if m.get("committed").is_some_and(|c| matches!(c, V::Bool(false))) { Some(V::Bool(true)) } else { third };
+        let third = if first.as_ref().is_some_and(|v| v.t()) {
+            first
+        } else {
+            names_third_party(m.get("responsible"))
+        };
+        let limited: Option<V> = if m
+            .get("committed")
+            .is_some_and(|c| matches!(c, V::Bool(false)))
+        {
+            Some(V::Bool(true))
+        } else {
+            third
+        };
         let is_limited = limited.as_ref().is_some_and(|v| v.t());
         let mut o = m.clone();
-        o.set("ref", if m.g("ref").t() { m.g("ref").clone() } else { V::String(format!("M{}", i + 1)) });
+        o.set(
+            "ref",
+            if m.g("ref").t() {
+                m.g("ref").clone()
+            } else {
+                V::String(format!("M{}", i + 1))
+            },
+        );
         o.set(
             "effectText",
             match e {
                 Some(e) => e.g("text").clone(),
-                None if m.g("effect").t() => V::String(format!("{} (no longer in the results: re-run or relink)", m.g("effect").s())),
+                None if m.g("effect").t() => V::String(format!(
+                    "{} (no longer in the results: re-run or relink)",
+                    m.g("effect").s()
+                )),
                 None => V::String("Not linked".into()),
             },
         );
         o.set("effectFound", V::Bool(e.is_some()));
         set_opt(&mut o, "limited", limited.as_ref());
-        o.set("tag", if is_limited { labels.g("limited").clone() } else { V::String(String::new()) });
-        o.set("mechanismText", label_or(mechanisms, m.g("mechanism"), "\u{2013}"));
-        o.set("responsibleText", label_or(responsible, m.g("responsible"), "\u{2013}"));
-        o.set("s84a", if ftaa && m.g("mechanism").eq_s("s84a") { labels.g("s84a").clone() } else { V::String(String::new()) });
+        o.set(
+            "tag",
+            if is_limited {
+                labels.g("limited").clone()
+            } else {
+                V::String(String::new())
+            },
+        );
+        o.set(
+            "mechanismText",
+            label_or(mechanisms, m.g("mechanism"), "\u{2013}"),
+        );
+        o.set(
+            "responsibleText",
+            label_or(responsible, m.g("responsible"), "\u{2013}"),
+        );
+        o.set(
+            "s84a",
+            if ftaa && m.g("mechanism").eq_s("s84a") {
+                labels.g("s84a").clone()
+            } else {
+                V::String(String::new())
+            },
+        );
         rows.push(o);
     }
     V::Array(rows)
@@ -223,7 +320,10 @@ pub fn condition_table(p: &V) -> V {
     let labels = xdata("STD.labels");
     let mut rows: Vec<V> = Vec::new();
     for (i, r) in cx.g("conditions").items().iter().enumerate() {
-        let m = mits.items().iter().find(|x| same(x.get("id"), r.get("mitigation")));
+        let m = mits
+            .items()
+            .iter()
+            .find(|x| same(x.get("id"), r.get("mitigation")));
         let effect: V = if r.g("effect").t() {
             r.g("effect").clone()
         } else if m.is_some_and(|m| m.g("effect").t()) {
@@ -244,8 +344,16 @@ pub fn condition_table(p: &V) -> V {
             "agreed" => "Applicant agreement (s108AA(1)(a))".to_string(),
             _ => "No nexus: link a modelled effect or record the applicant's agreement".to_string(),
         };
-        let metric = if r.g("metric").t() { r.g("metric").s() } else { "metric".to_string() };
-        let threshold = if r.g("threshold").t() { r.g("threshold").s() } else { "the threshold".to_string() };
+        let metric = if r.g("metric").t() {
+            r.g("metric").s()
+        } else {
+            "metric".to_string()
+        };
+        let threshold = if r.g("threshold").t() {
+            r.g("threshold").s()
+        } else {
+            "the threshold".to_string()
+        };
         let mut o = r.clone();
         o.set("ref", V::String(format!("C{}", i + 1)));
         match m {
@@ -259,7 +367,14 @@ pub fn condition_table(p: &V) -> V {
             "review",
             if r.g("review").t() { r.g("review").clone() } else { V::String(format!("Review under s128(1)(a) if the monitored {metric} passes {threshold} before the measure is in place")) },
         );
-        o.set("ftaa", if c.g("ftaa").t() { labels.g("s84a").clone() } else { V::String(String::new()) });
+        o.set(
+            "ftaa",
+            if c.g("ftaa").t() {
+                labels.g("s84a").clone()
+            } else {
+                V::String(String::new())
+            },
+        );
         o.set("ok", V::Bool(nexus != "missing"));
         rows.push(o);
     }
@@ -274,20 +389,35 @@ pub fn seed_mitigation(p: &mut V) -> usize {
         let cx = ctx::data(pv);
         let pr = ctx::pair(pv);
         let eff = effects(pv, None);
-        let seen: Vec<String> = cx.g("mitigation").items().iter().map(|m| m.g("seed")).filter(|s| s.t()).map(|s| s.s()).collect();
-        let mut linked: Vec<String> = cx.g("mitigation").items().iter().filter_map(|m| m.g("effect").as_str().map(|s| s.to_string())).collect();
+        let seen: Vec<String> = cx
+            .g("mitigation")
+            .items()
+            .iter()
+            .map(|m| m.g("seed"))
+            .filter(|s| s.t())
+            .map(|s| s.s())
+            .collect();
+        let mut linked: Vec<String> = cx
+            .g("mitigation")
+            .items()
+            .iter()
+            .filter_map(|m| m.g("effect").as_str().map(|s| s.to_string()))
+            .collect();
         let econ = pv.g("settings").g("econ");
         // the capital cost of a change in the mitigation scenario (NZ$m), null when it cannot be priced
         let capital = |sc: &V, d: &V| -> V {
             if d.g("kind").eq_s("node") {
-                let v = econ.g("node").g(&sc.g("nodes").g(&d.g("id").s()).g("control").s());
+                let v = econ
+                    .g("node")
+                    .g(&sc.g("nodes").g(&d.g("id").s()).g("control").s());
                 if v.nullish() { V::Null } else { v.clone() }
             } else {
                 let l = sc.g("links").g(&d.g("id").s());
                 if !l.t() {
                     return V::Null;
                 }
-                let lanes = to_int32(l.g("lanesAB").n()) as f64 + to_int32(l.g("lanesBA").n()) as f64;
+                let lanes =
+                    to_int32(l.g("lanesAB").n()) as f64 + to_int32(l.g("lanesBA").n()) as f64;
                 let k = econ.g("laneKm").g(&l.g("cls").s());
                 V::Number(net::len(sc, l) / 1000.0 * lanes * if k.nullish() { 3.0 } else { k.n() })
             }
@@ -300,14 +430,22 @@ pub fn seed_mitigation(p: &mut V) -> usize {
                     continue;
                 }
                 let e = if d.g("kind").eq_s("node") {
-                    eff.items().iter().find(|x| x.g("node").strict_eq(d.g("id")))
+                    eff.items()
+                        .iter()
+                        .find(|x| x.g("node").strict_eq(d.g("id")))
                 } else {
-                    eff.items().iter().find(|x| x.g("key").t() && V::String(ctx::arc_link(&x.g("key").s())).strict_eq(d.g("id")))
+                    eff.items().iter().find(|x| {
+                        x.g("key").t()
+                            && V::String(ctx::arc_link(&x.g("key").s())).strict_eq(d.g("id"))
+                    })
                 };
                 let mut r = blank_mit();
                 r.set("seed", V::String(seed));
                 r.set("measure", d.g("text").clone());
-                r.set("effect", e.map_or(V::String(String::new()), |e| e.g("id").clone()));
+                r.set(
+                    "effect",
+                    e.map_or(V::String(String::new()), |e| e.g("id").clone()),
+                );
                 r.set("cost", capital(mit, d));
                 r.set("options", V::String("Seeded from the mitigation scenario: record the options considered, including non-infrastructure ones.".into()));
                 rows.push(r);
@@ -326,7 +464,12 @@ pub fn seed_mitigation(p: &mut V) -> usize {
             r.set("measure", V::String(String::new()));
             r.set("effect", e.g("id").clone());
             r.set("mechanism", V::String("none".into()));
-            r.set("options", V::String("Effect not yet addressed: record a measure or why none is needed.".into()));
+            r.set(
+                "options",
+                V::String(
+                    "Effect not yet addressed: record a measure or why none is needed.".into(),
+                ),
+            );
             rows.push(r);
         }
         rows
@@ -342,7 +485,12 @@ pub fn seed_conditions(p: &mut V) -> usize {
     let added: Vec<V> = {
         let pv: &V = p;
         let cx = ctx::data(pv);
-        let have: Vec<Option<&V>> = cx.g("conditions").items().iter().map(|c| c.get("mitigation")).collect();
+        let have: Vec<Option<&V>> = cx
+            .g("conditions")
+            .items()
+            .iter()
+            .map(|c| c.get("mitigation"))
+            .collect();
         let first = cx.g("triggers").g("rows").ix(0).g("first");
         let mut rows: Vec<V> = Vec::new();
         for m in mitigation_table(pv).items() {
@@ -355,11 +503,29 @@ pub fn seed_conditions(p: &mut V) -> usize {
             r.set("agreed", V::Bool(false));
             r.set(
                 "threshold",
-                if first.t() { V::String(format!("{} dwellings", fmt::int(first.g("before").n()))) } else if m.g("trigger").t() { m.g("trigger").clone() } else { V::String(String::new()) },
+                if first.t() {
+                    V::String(format!("{} dwellings", fmt::int(first.g("before").n())))
+                } else if m.g("trigger").t() {
+                    m.g("trigger").clone()
+                } else {
+                    V::String(String::new())
+                },
             );
-            r.set("survey", V::String("Building consent and s224(c) records; turning counts at the affected junction".into()));
+            r.set(
+                "survey",
+                V::String(
+                    "Building consent and s224(c) records; turning counts at the affected junction"
+                        .into(),
+                ),
+            );
             r.set("frequency", V::String("Annual".into()));
-            r.set("response", V::String(format!("{} operational before the threshold", m.g("measure").s())));
+            r.set(
+                "response",
+                V::String(format!(
+                    "{} operational before the threshold",
+                    m.g("measure").s()
+                )),
+            );
             rows.push(r);
         }
         rows
@@ -370,22 +536,43 @@ pub fn seed_conditions(p: &mut V) -> usize {
 }
 
 /* =====================================================================================
-   CSV and report
-   ===================================================================================== */
+CSV and report
+===================================================================================== */
 
 /// `r1(v)` of the hand-over packs as text: one decimal, empty for null and values that are not finite.
 fn r1t(v: &V) -> String {
-    if v.nullish() || !v.n().is_finite() { String::new() } else { number_to_js_string(math_round(v.n() * 10.0) / 10.0) }
+    if v.nullish() || !v.n().is_finite() {
+        String::new()
+    } else {
+        number_to_js_string(math_round(v.n() * 10.0) / 10.0)
+    }
 }
 
 /// `r3(v)` of the hand-over packs as text: three decimals, empty for null and values that are not finite.
 fn r3t(v: &V) -> String {
-    if v.nullish() || !v.n().is_finite() { String::new() } else { number_to_js_string(math_round(v.n() * 1000.0) / 1000.0) }
+    if v.nullish() || !v.n().is_finite() {
+        String::new()
+    } else {
+        number_to_js_string(math_round(v.n() * 1000.0) / 1000.0)
+    }
 }
 
 /// `mval(x)` of the CSV: a junction's values at a build-out as text ("DoS 0.95, delay 12.3 s, LoS D"), empty when there are none.
 fn mval(x: &V) -> String {
-    if x.t() { format!("DoS {}, delay {} s, LoS {}", r3t(x.g("dos")), r1t(x.g("delay")), if x.g("los").t() { x.g("los").s() } else { String::new() }) } else { String::new() }
+    if x.t() {
+        format!(
+            "DoS {}, delay {} s, LoS {}",
+            r3t(x.g("dos")),
+            r1t(x.g("delay")),
+            if x.g("los").t() {
+                x.g("los").s()
+            } else {
+                String::new()
+            }
+        )
+    } else {
+        String::new()
+    }
 }
 
 /// `mitigationCSV(P)`: the mitigation register, the condition parameters and (when the trigger finder has run) the trigger table and the existing
@@ -400,12 +587,28 @@ pub fn mitigation_csv(p: &V) -> String {
     let mut rows: Vec<Vec<V>> = vec![
         strs(&["Table M1 \u{b7} Mitigation register"]),
         strs(&[
-            "Ref", "Measure", "Effect addressed", "Options considered", "Non-infrastructure option", "Trigger", "Responsible", "Cost (NZ$m)", "Funder", "RLTP/LTP status", "Mechanism",
-            "Committed by applicant", "Land outside applicant control", "Tag",
+            "Ref",
+            "Measure",
+            "Effect addressed",
+            "Options considered",
+            "Non-infrastructure option",
+            "Trigger",
+            "Responsible",
+            "Cost (NZ$m)",
+            "Funder",
+            "RLTP/LTP status",
+            "Mechanism",
+            "Committed by applicant",
+            "Land outside applicant control",
+            "Tag",
         ]),
     ];
     for r in m.items() {
-        let tags: Vec<String> = [r.g("tag"), r.g("s84a")].iter().filter(|x| x.t()).map(|x| x.s()).collect();
+        let tags: Vec<String> = [r.g("tag"), r.g("s84a")]
+            .iter()
+            .filter(|x| x.t())
+            .map(|x| x.s())
+            .collect();
         rows.push(vec![
             r.g("ref").clone(),
             r.g("measure").clone(),
@@ -424,15 +627,57 @@ pub fn mitigation_csv(p: &V) -> String {
         ]);
     }
     rows.push(vec![]);
-    rows.push(strs(&["Condition parameters (Spare Construct never writes condition wording)"]));
-    rows.push(strs(&["Ref", "Measure", "Trigger metric", "Threshold", "Survey method", "Frequency", "Response", "Nexus or agreement", "Review clause suggestion", "Label"]));
+    rows.push(strs(&[
+        "Condition parameters (Spare Construct never writes condition wording)",
+    ]));
+    rows.push(strs(&[
+        "Ref",
+        "Measure",
+        "Trigger metric",
+        "Threshold",
+        "Survey method",
+        "Frequency",
+        "Response",
+        "Nexus or agreement",
+        "Review clause suggestion",
+        "Label",
+    ]));
     for r in c.items() {
-        rows.push(["ref", "measure", "metric", "threshold", "survey", "frequency", "response", "basis", "review", "ftaa"].iter().map(|k| r.g(k).clone()).collect());
+        rows.push(
+            [
+                "ref",
+                "measure",
+                "metric",
+                "threshold",
+                "survey",
+                "frequency",
+                "response",
+                "basis",
+                "review",
+                "ftaa",
+            ]
+            .iter()
+            .map(|k| r.g(k).clone())
+            .collect(),
+        );
     }
     if t.t() {
         rows.push(vec![]);
-        rows.push(vec![s("Table M2 \u{b7} Trigger finder"), t.g("basis").clone(), t.g("label").clone()]);
-        rows.push(strs(&["Variant", "First failing build-out (%)", "Dwellings at trigger", "Before dwelling", "Site", "Period", "Why", "Resolved by the upgrade"]));
+        rows.push(vec![
+            s("Table M2 \u{b7} Trigger finder"),
+            t.g("basis").clone(),
+            t.g("label").clone(),
+        ]);
+        rows.push(strs(&[
+            "Variant",
+            "First failing build-out (%)",
+            "Dwellings at trigger",
+            "Before dwelling",
+            "Site",
+            "Period",
+            "Why",
+            "Resolved by the upgrade",
+        ]));
         for r in t.g("rows").items() {
             let f = r.g("first");
             let or_blank = |k: &str| if f.t() { f.g(k).clone() } else { s("") };
@@ -443,8 +688,16 @@ pub fn mitigation_csv(p: &V) -> String {
                 or_blank("before"),
                 or_blank("name"),
                 or_blank("period"),
-                if f.t() { f.g("why").clone() } else { r.g("text").clone() },
-                if r.g("resolved").t() { r.g("resolved").g("text").clone() } else { s("") },
+                if f.t() {
+                    f.g("why").clone()
+                } else {
+                    r.g("text").clone()
+                },
+                if r.g("resolved").t() {
+                    r.g("resolved").g("text").clone()
+                } else {
+                    s("")
+                },
             ]);
         }
         let mut ex: Vec<Vec<V>> = Vec::new();
@@ -456,14 +709,26 @@ pub fn mitigation_csv(p: &V) -> String {
                     e.g("period").clone(),
                     s(&mval(e.g("at0"))),
                     s(&mval(e.g("at100"))),
-                    if !e.g("worsenedAt").nullish() { s(&format!("{}%", e.g("worsenedAt").s())) } else { s("not worsened beyond the threshold") },
+                    if !e.g("worsenedAt").nullish() {
+                        s(&format!("{}%", e.g("worsenedAt").s()))
+                    } else {
+                        s("not worsened beyond the threshold")
+                    },
                     e.g("why").clone(),
                 ]);
             }
         }
         rows.push(vec![]);
         rows.push(strs(&["Existing deficiencies (fail at 0% build-out)"]));
-        rows.push(strs(&["Variant", "Junction", "Period", "At 0%", "At 100%", "Worsened by the development from", "Why it fails at 0%"]));
+        rows.push(strs(&[
+            "Variant",
+            "Junction",
+            "Period",
+            "At 0%",
+            "At 100%",
+            "Worsened by the development from",
+            "Why it fails at 0%",
+        ]));
         if ex.is_empty() {
             rows.push(strs(&["None"]));
         } else {
@@ -481,32 +746,86 @@ fn mitigation_report(p: &V, rctx: Option<&dyn ReportCtx>) -> String {
         return String::new();
     }
     let responsible = xdata("RESPONSIBLE");
-    let head = ["Ref", "Measure", "Effect addressed", "Options considered", "Trigger", "Responsible", "Cost NZ$m", "Funder", "RLTP/LTP", "Mechanism", "Committed", "Land outside control"].map(th);
+    let head = [
+        "Ref",
+        "Measure",
+        "Effect addressed",
+        "Options considered",
+        "Trigger",
+        "Responsible",
+        "Cost NZ$m",
+        "Funder",
+        "RLTP/LTP",
+        "Mechanism",
+        "Committed",
+        "Land outside control",
+    ]
+    .map(th);
     let rows: Vec<_> = m
         .items()
         .iter()
         .map(|r| {
             tr([
                 esc(r.g("ref")),
-                format!("{}{}", esc(r.g("measure")), if r.g("tag").t() { format!("<br><i>{}</i>", esc(r.g("tag"))) } else { String::new() }),
+                format!(
+                    "{}{}",
+                    esc(r.g("measure")),
+                    if r.g("tag").t() {
+                        format!("<br><i>{}</i>", esc(r.g("tag")))
+                    } else {
+                        String::new()
+                    }
+                ),
                 esc(r.g("effectText")),
                 esc(r.g("options")),
                 esc(r.g("trigger")),
                 esc(r.g("responsibleText")),
-                if !r.g("cost").nullish() { num(r.g("cost"), 2) } else { "\u{2013}".to_string() },
+                if !r.g("cost").nullish() {
+                    num(r.g("cost"), 2)
+                } else {
+                    "\u{2013}".to_string()
+                },
                 esc(&label_or(responsible, r.g("funder"), "")),
                 esc(r.g("rltp")),
-                format!("{}{}", esc(r.g("mechanismText")), if r.g("s84a").t() { format!(" ({})", esc(r.g("s84a"))) } else { String::new() }),
+                format!(
+                    "{}{}",
+                    esc(r.g("mechanismText")),
+                    if r.g("s84a").t() {
+                        format!(" ({})", esc(r.g("s84a")))
+                    } else {
+                        String::new()
+                    }
+                ),
                 committed_text(r.g("committed")).to_string(),
-                if r.g("landOutside").t() { "Y".to_string() } else { "N".to_string() },
+                if r.g("landOutside").t() {
+                    "Y".to_string()
+                } else {
+                    "N".to_string()
+                },
             ])
         })
         .collect();
-    let first = rt(rctx, "Mitigation register (AT ITA Appendix 3)", &kit_table(&head, &rows, true, "", ""), &ctx::esc_s(xdata("EFFECT.basis").as_str().unwrap_or("")));
+    let first = rt(
+        rctx,
+        "Mitigation register (AT ITA Appendix 3)",
+        &kit_table(&head, &rows, true, "", ""),
+        &ctx::esc_s(xdata("EFFECT.basis").as_str().unwrap_or("")),
+    );
     let second = if cd.items().is_empty() {
         String::new()
     } else {
-        let head = ["Ref", "Measure", "Trigger metric", "Threshold", "Survey", "Frequency", "Response", "Nexus", "Review"].map(th);
+        let head = [
+            "Ref",
+            "Measure",
+            "Trigger metric",
+            "Threshold",
+            "Survey",
+            "Frequency",
+            "Response",
+            "Nexus",
+            "Review",
+        ]
+        .map(th);
         let rows: Vec<_> = cd
             .items()
             .iter()
@@ -519,12 +838,25 @@ fn mitigation_report(p: &V, rctx: Option<&dyn ReportCtx>) -> String {
                     esc(r.g("survey")),
                     esc(r.g("frequency")),
                     esc(r.g("response")),
-                    format!("{}{}", esc(r.g("basis")), if r.g("ftaa").t() { format!("; {}", esc(r.g("ftaa"))) } else { String::new() }),
+                    format!(
+                        "{}{}",
+                        esc(r.g("basis")),
+                        if r.g("ftaa").t() {
+                            format!("; {}", esc(r.g("ftaa")))
+                        } else {
+                            String::new()
+                        }
+                    ),
                     esc(r.g("review")),
                 ])
             })
             .collect();
-        rt(rctx, "Condition parameters (not condition wording)", &kit_table(&head, &rows, true, "", ""), "")
+        rt(
+            rctx,
+            "Condition parameters (not condition wording)",
+            &kit_table(&head, &rows, true, "", ""),
+            "",
+        )
     };
     format!("{first}\n        {second}")
 }
@@ -536,10 +868,29 @@ fn triggers_report(p: &V, rctx: Option<&dyn ReportCtx>) -> String {
     if !t.t() {
         return String::new();
     }
-    let periods = t.g("periods").items().iter().map(|x| x.sn()).collect::<Vec<_>>().join(" and ");
-    let title = format!("Build-out at which the criteria first fail ({}, {})", esc(t.g("scName")), ctx::esc_s(&periods));
-    let note = format!("{}. {}. {}", esc(t.g("basis")), esc(t.g("label")), esc(t.g("copy")));
-    format!("{}{}", rt(rctx, &title, &trigger_tables(t), &note), ctx::disc("D3", p, None))
+    let periods = t
+        .g("periods")
+        .items()
+        .iter()
+        .map(|x| x.sn())
+        .collect::<Vec<_>>()
+        .join(" and ");
+    let title = format!(
+        "Build-out at which the criteria first fail ({}, {})",
+        esc(t.g("scName")),
+        ctx::esc_s(&periods)
+    );
+    let note = format!(
+        "{}. {}. {}",
+        esc(t.g("basis")),
+        esc(t.g("label")),
+        esc(t.g("copy"))
+    );
+    format!(
+        "{}{}",
+        rt(rctx, &title, &trigger_tables(t), &note),
+        ctx::disc("D3", p, None)
+    )
 }
 
 /// The report sections of this part the report lane can ask for (see [`report`]).

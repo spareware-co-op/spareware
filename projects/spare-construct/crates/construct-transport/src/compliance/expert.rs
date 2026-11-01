@@ -22,7 +22,11 @@ use crate::util;
 
 /// `${o[k]}`: a field printed in a template string (a field that is not there prints as undefined).
 fn tpl(o: &V, k: &str) -> String {
-    if o.has(k) { o.g(k).s() } else { "undefined".to_string() }
+    if o.has(k) {
+        o.g(k).s()
+    } else {
+        "undefined".to_string()
+    }
 }
 
 /// `o[k] = src[field]` unless the source field is undefined (JSON drops it).
@@ -43,8 +47,8 @@ fn or_obj(v: &V) -> V {
 }
 
 /* ====================================================================================================
-   12. Expert disclosure, sign-off and assumption diff (reg-expert)
-   ==================================================================================================== */
+12. Expert disclosure, sign-off and assumption diff (reg-expert)
+==================================================================================================== */
 
 /// `signOff(P, who, now)`: records a sign-off of the inputs for a role by a named person with qualifications (`{ role, name, quals, date, fp }`); an error text when the name or qualifications are missing. Changes the project.
 pub fn sign_off(p: &mut V, who: &V, now: &V) -> Result<V, String> {
@@ -53,20 +57,37 @@ pub fn sign_off(p: &mut V, who: &V, now: &V) -> Result<V, String> {
     let author = c.g("expert").g("author");
     // String(who.x || author.x || '').trim()
     let pick = |a: &V, b: &V| -> String {
-        let t = if a.t() { a.s() } else if b.t() { b.s() } else { String::new() };
+        let t = if a.t() {
+            a.s()
+        } else if b.t() {
+            b.s()
+        } else {
+            String::new()
+        };
         trim(&t).to_string()
     };
     let name = pick(who.g("name"), author.g("name"));
     let quals = pick(who.g("quals"), author.g("quals"));
     // ROLES[who.role]: the three roles (and, as on any object, the names every object has)
     let key = who.g("role").s();
-    let role = if matches!(key.as_str(), "prepared" | "reviewed" | "approved") || is_object_key(&key) { who.g("role").clone() } else { st("prepared") };
+    let role =
+        if matches!(key.as_str(), "prepared" | "reviewed" | "approved") || is_object_key(&key) {
+            who.g("role").clone()
+        } else {
+            st("prepared")
+        };
     if name.is_empty() || quals.is_empty() {
         return Err("Enter the name and qualifications of the person signing off.".to_string());
     }
     let s = jobj! { "role" => &role, "name" => name.as_str(), "quals" => quals.as_str(), "date" => today(now), "fp" => fingerprint(p) };
     let e = obj_at(state_mut(p), "expert");
-    let mut kept: Vec<V> = e.g("signoffs").items().iter().filter(|x| !x.g("role").strict_eq(&role)).cloned().collect();
+    let mut kept: Vec<V> = e
+        .g("signoffs")
+        .items()
+        .iter()
+        .filter(|x| !x.g("role").strict_eq(&role))
+        .cloned()
+        .collect();
     kept.push(s.clone());
     e.set("signoffs", V::Array(kept));
     e.set("supplementary", V::Null);
@@ -82,7 +103,12 @@ pub fn clear_stale(p: &mut V, now: &V) -> usize {
         return 0;
     }
     let fp = fingerprint(p);
-    let stale: Vec<V> = signoffs.items().iter().filter(|s| !s.g("fp").eq_s(&fp)).cloned().collect();
+    let stale: Vec<V> = signoffs
+        .items()
+        .iter()
+        .filter(|s| !s.g("fp").eq_s(&fp))
+        .cloned()
+        .collect();
     if stale.is_empty() {
         return 0;
     }
@@ -90,9 +116,18 @@ pub fn clear_stale(p: &mut V, now: &V) -> usize {
     let e = obj_at(state_mut(p), "expert");
     let history = arr_at(e, "history");
     for s in &stale {
-        history.push(merge(s, &jobj! { "cleared" => d.as_str(), "reason" => "inputs changed after sign-off" }));
+        history.push(merge(
+            s,
+            &jobj! { "cleared" => d.as_str(), "reason" => "inputs changed after sign-off" },
+        ));
     }
-    let kept: Vec<V> = e.g("signoffs").items().iter().filter(|s| s.g("fp").eq_s(&fp)).cloned().collect();
+    let kept: Vec<V> = e
+        .g("signoffs")
+        .items()
+        .iter()
+        .filter(|s| s.g("fp").eq_s(&fp))
+        .cloned()
+        .collect();
     e.set("signoffs", V::Array(kept));
     e.set("supplementary", jobj! { "at" => d.as_str(), "text" => "Inputs changed after sign-off. Has the opinion changed? A supplementary statement may be needed (Practice Note s9.3(f))." });
     stale.len()
@@ -110,20 +145,34 @@ pub fn data_sources(p: &V) -> V {
         ("user", "Counts imported from a file"),
         ("fc", "AT Future Connect network classes"),
         ("controlled", "AT controlled intersections"),
-        ("osm", "Road network (OpenStreetMap contributors, ODbL, via the Overpass API) as imported and edited"),
+        (
+            "osm",
+            "Road network (OpenStreetMap contributors, ODbL, via the Overpass API) as imported and edited",
+        ),
     ];
     for (k, v) in loaded.entries() {
         if v.t() && v.g("at").t() {
             let source = if v.g("source").t() {
                 v.g("source").clone()
             } else {
-                names.iter().find(|n| n.0 == k).map_or_else(|| st(k), |n| st(n.1))
+                names
+                    .iter()
+                    .find(|n| n.0 == k)
+                    .map_or_else(|| st(k), |n| st(n.1))
             };
-            let detail = [if !v.g("n").nullish() { format!("{} records", v.g("n").s()) } else { String::new() }, or_blank(v.g("label")), or_blank(v.g("licence"))]
-                .into_iter()
-                .filter(|x| !x.is_empty())
-                .collect::<Vec<_>>()
-                .join(" \u{b7} ");
+            let detail = [
+                if !v.g("n").nullish() {
+                    format!("{} records", v.g("n").s())
+                } else {
+                    String::new()
+                },
+                or_blank(v.g("label")),
+                or_blank(v.g("licence")),
+            ]
+            .into_iter()
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<_>>()
+            .join(" \u{b7} ");
             rows.push(jobj! { "source" => source, "date" => today(v.g("at")), "detail" => detail, "basis" => if k == "user" { "user" } else { "measured" } });
         }
     }
@@ -152,13 +201,24 @@ pub fn data_sources(p: &V) -> V {
         let mut o = V::object();
         put_if(&mut o, "source", sh, "source");
         put_if(&mut o, "date", sh, "date");
-        o.set("detail", st(format!("{} links matched \u{b7} {}", tpl(sh, "n"), tpl(sh, "licence"))));
+        o.set(
+            "detail",
+            st(format!(
+                "{} links matched \u{b7} {}",
+                tpl(sh, "n"),
+                tpl(sh, "licence")
+            )),
+        );
         o.set("basis", st("measured"));
         rows.push(o);
     }
     // the road network and the trip rates carry a date too (reg-expert: every data source with its date)
     if !(loaded.g("osm").t() && loaded.g("osm").g("at").t()) {
-        let osm = p.g("scenarios").items().iter().any(|s| s.g("links").vals().iter().any(|l| l.g("osm").t()));
+        let osm = p
+            .g("scenarios")
+            .items()
+            .iter()
+            .any(|s| s.g("links").vals().iter().any(|l| l.g("osm").t()));
         rows.push(jobj! { "source" => "Road network (OpenStreetMap contributors, ODbL) as imported and edited", "date" => if osm { "import date not recorded" } else { "drawn in Spare Construct" },
             "detail" => "Spare Construct network", "basis" => if osm { "derived" } else { "user" } });
     }
@@ -177,8 +237,16 @@ pub fn data_sources(p: &V) -> V {
     }
     for k in &used {
         let r = rate_of(&settings, k);
-        let src = if r.g("src").t() { r.g("src").clone() } else { r.g("source").clone() };
-        let yr = if r.g("year").n() > 0.0 { Some(r.g("year").s()) } else { None };
+        let src = if r.g("src").t() {
+            r.g("src").clone()
+        } else {
+            r.g("source").clone()
+        };
+        let yr = if r.g("year").n() > 0.0 {
+            Some(r.g("year").s())
+        } else {
+            None
+        };
         let label = landuse_label(k).unwrap_or_else(|| "undefined".to_string());
         let date = match &yr {
             Some(y) => format!("survey year {y}"),
@@ -201,16 +269,33 @@ pub fn appendix_g(p: &V) -> V {
     let e = c.g("expert");
     let sg = sign_state(p);
     let ev = engine_view(p);
-    let ms: Vec<V> = ["AM", "PM"].iter().map(|per| engine::model_status(&ev, per)).collect();
+    let ms: Vec<V> = ["AM", "PM"]
+        .iter()
+        .map(|per| engine::model_status(&ev, per))
+        .collect();
     let st0 = stamp(p, &V::Null);
-    let sens: Vec<String> = p.g("scenarios").items().iter().filter(|s| s.g("role").eq_s("sensitivity")).map(|s| s.g("name").sn()).collect();
+    let sens: Vec<String> = p
+        .g("scenarios")
+        .items()
+        .iter()
+        .filter(|s| s.g("role").eq_s("sensitivity"))
+        .map(|s| s.g("name").sn())
+        .collect();
     let author = e.g("author");
     let qualifications = if author.g("name").t() {
         format!(
             "{}{}{}",
             author.g("name").s(),
-            if author.g("quals").t() { format!(", {}", author.g("quals").s()) } else { String::new() },
-            if author.g("org").t() { format!(" ({})", author.g("org").s()) } else { String::new() }
+            if author.g("quals").t() {
+                format!(", {}", author.g("quals").s())
+            } else {
+                String::new()
+            },
+            if author.g("org").t() {
+                format!(" ({})", author.g("org").s())
+            } else {
+                String::new()
+            }
         )
     } else {
         "[Author to enter name and qualifications]".to_string()
@@ -218,38 +303,95 @@ pub fn appendix_g(p: &V) -> V {
     let sources = data_sources(p)
         .items()
         .iter()
-        .map(|r| format!("{} ({}; {}{})", tpl(r, "source"), tpl(r, "date"), tpl(r, "basis"), if r.g("detail").t() { format!("; {}", r.g("detail").s()) } else { String::new() }))
+        .map(|r| {
+            format!(
+                "{} ({}; {}{})",
+                tpl(r, "source"),
+                tpl(r, "date"),
+                tpl(r, "basis"),
+                if r.g("detail").t() {
+                    format!("; {}", r.g("detail").s())
+                } else {
+                    String::new()
+                }
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
-    let standards = st0.g("lines").items().iter().skip(2).map(|l| format!("{}: {}", l.ix(0).s(), l.ix(1).s())).collect::<Vec<_>>().join("\n");
-    let limits = [e.g("limitations"), e.g("gaps")].iter().filter(|x| x.t()).map(|x| x.s()).collect::<Vec<_>>().join("\n");
-    let tests = if e.g("tests").t() { e.g("tests").clone() } else { st("[Author to list the tests and who ran them]") };
+    let standards = st0
+        .g("lines")
+        .items()
+        .iter()
+        .skip(2)
+        .map(|l| format!("{}: {}", l.ix(0).s(), l.ix(1).s()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let limits = [e.g("limitations"), e.g("gaps")]
+        .iter()
+        .filter(|x| x.t())
+        .map(|x| x.s())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let tests = if e.g("tests").t() {
+        e.g("tests").clone()
+    } else {
+        st("[Author to list the tests and who ran them]")
+    };
     let conf = e.g("confidence");
     let standing = engine::standards_table().g("tmdg").g("standing").s();
     let sections = V::Array(vec![
         V::Array(vec![st("Qualifications"), st(qualifications)]),
-        V::Array(vec![st("Data, facts and assumptions relied on"), st(sources)]),
-        V::Array(vec![st("Literature and standards, with editions"), st(standards)]),
+        V::Array(vec![
+            st("Data, facts and assumptions relied on"),
+            st(sources),
+        ]),
+        V::Array(vec![
+            st("Literature and standards, with editions"),
+            st(standards),
+        ]),
         V::Array(vec![st("Tests run and by whom"), tests]),
         V::Array(vec![
             st("Model description and status"),
             st(format!(
                 "Spare Construct static assignment (conjugate Frank-Wolfe), HCM 6 / Akcelik-based junction delay (indicative, not SIDRA output). {}. {}",
-                ms.iter().map(|m| m.g("footer").s()).collect::<Vec<_>>().join("; "),
+                ms.iter()
+                    .map(|m| m.g("footer").s())
+                    .collect::<Vec<_>>()
+                    .join("; "),
                 standing
             )),
         ]),
         V::Array(vec![
             st("Sensitivity and uncertainty"),
-            st(if sens.is_empty() { "No sensitivity scenario recorded yet (Practice Note s9.3(a)(x)).".to_string() } else { format!("Sensitivity scenarios: {}.", sens.join(", ")) }),
+            st(if sens.is_empty() {
+                "No sensitivity scenario recorded yet (Practice Note s9.3(a)(x)).".to_string()
+            } else {
+                format!("Sensitivity scenarios: {}.", sens.join(", "))
+            }),
         ]),
-        V::Array(vec![st("Limitations and knowledge gaps"), st(if limits.is_empty() { "[Author to state limitations and knowledge gaps]".to_string() } else { limits })]),
+        V::Array(vec![
+            st("Limitations and knowledge gaps"),
+            st(if limits.is_empty() {
+                "[Author to state limitations and knowledge gaps]".to_string()
+            } else {
+                limits
+            }),
+        ]),
         V::Array(vec![
             st("Confidence"),
             st(if conf.g("level").t() {
-                format!("{}: {}", conf.g("level").s(), if conf.g("why").t() { conf.g("why").s() } else { "[justify]".to_string() })
+                format!(
+                    "{}: {}",
+                    conf.g("level").s(),
+                    if conf.g("why").t() {
+                        conf.g("why").s()
+                    } else {
+                        "[justify]".to_string()
+                    }
+                )
             } else {
-                "[Author to choose high, moderate or low and justify it (Practice Note s9.3(e))]".to_string()
+                "[Author to choose high, moderate or low and justify it (Practice Note s9.3(e))]"
+                    .to_string()
             }),
         ]),
     ]);
@@ -286,7 +428,9 @@ fn bad_seg(s: &str) -> bool {
 
 /// `safeKey(k)`: a dotted path of one of the compared parameters, with no empty or refused segment.
 fn safe_key(k: &str) -> bool {
-    k.encode_utf16().count() < 200 && !k.split('.').any(|s| s.is_empty() || bad_seg(s)) && DIFF_KEYS.iter().any(|re| rx(re, "").test(k))
+    k.encode_utf16().count() < 200
+        && !k.split('.').any(|s| s.is_empty() || bad_seg(s))
+        && DIFF_KEYS.iter().any(|re| rx(re, "").test(k))
 }
 
 /// `flatten(o, pre, out)`: the leaves of an object by dotted path (a refused key is skipped; an array is a leaf).
@@ -295,7 +439,11 @@ fn flatten(o: &V, pre: &str, out: &mut V) {
         if bad_seg(k) {
             continue;
         }
-        let p = if pre.is_empty() { k.to_string() } else { format!("{pre}.{k}") };
+        let p = if pre.is_empty() {
+            k.to_string()
+        } else {
+            format!("{pre}.{k}")
+        };
         if v.is_obj() {
             flatten(v, &p, out);
         } else {
@@ -349,7 +497,11 @@ pub fn parse_other(text: &str) -> Result<V, String> {
     let mut o = V::object();
     if rx(r"^[{[]", "").test(t) {
         let j = jsonparse::parse(t).map_err(|e| format!("That is not valid JSON: {e}"))?;
-        let s = if j.t() && j.g("settings").is_obj() { j.g("settings") } else { &j };
+        let s = if j.t() && j.g("settings").is_obj() {
+            j.g("settings")
+        } else {
+            &j
+        };
         if !s.is_obj() {
             return Err("That JSON holds no settings. Paste a Spare Construct project file or a settings object.".to_string());
         }
@@ -362,9 +514,15 @@ pub fn parse_other(text: &str) -> Result<V, String> {
     }
     // a key,value template, or Spare Construct's own 'Assumptions (CSV)' export (setting,label,value,default,unit): read the value column
     let re_hash = rx(r"^\s*#", "");
-    let mut rows: Vec<Vec<String>> = parse_csv(t).into_iter().filter(|r| !r.is_empty() && !re_hash.test(r.first().map_or("", |s| s.as_str()))).collect();
+    let mut rows: Vec<Vec<String>> = parse_csv(t)
+        .into_iter()
+        .filter(|r| !r.is_empty() && !re_hash.test(r.first().map_or("", |s| s.as_str())))
+        .collect();
     let (mut ki, mut vi) = (0usize, 1usize);
-    let h: Vec<String> = rows.first().map(|r| r.iter().map(|x| lower(trim(x))).collect()).unwrap_or_default();
+    let h: Vec<String> = rows
+        .first()
+        .map(|r| r.iter().map(|x| lower(trim(x))).collect())
+        .unwrap_or_default();
     let re_key = rx(r"^(setting|key|item|parameter)$", "");
     if h.iter().any(|x| x == "value") && h.iter().any(|x| re_key.test(x)) {
         ki = h.iter().position(|x| re_key.test(x)).unwrap_or(0);
@@ -489,7 +647,11 @@ fn metric(r: &V) -> V {
 ///
 /// `opts` can hold `sc` (the scenario, the active one by default), `period` (the project's by default) and `maxIter` for the assignments.
 pub fn run_diff(p: &V, diffs: &V, opts: &V) -> V {
-    let sc = if opts.g("sc").t() { opts.g("sc").clone() } else { active_sc(p).clone() };
+    let sc = if opts.g("sc").t() {
+        opts.g("sc").clone()
+    } else {
+        active_sc(p).clone()
+    };
     let period = if opts.g("period").t() {
         opts.g("period").s()
     } else if p.g("settings").g("period").t() {
@@ -506,8 +668,19 @@ pub fn run_diff(p: &V, diffs: &V, opts: &V) -> V {
         let mut s2 = p.g("settings").clone();
         kit_set_path(&mut s2, &d.g("key").s(), d.g("b").clone());
         let m = metric(&engine::assign(p, &sc, Some(&s2), &run_opts));
-        let rel = |x: f64, y: f64| if y > 0.0 { (x - y).abs() / y } else if (x - y).abs() > 0.0 { 1.0 } else { 0.0 };
-        let score = rel(m.g("dos").n(), central.g("dos").n()) + rel(m.g("delay").n(), central.g("delay").n()) + rel(m.g("queue").n(), central.g("queue").n()) + rel(m.g("over").n(), central.g("over").n());
+        let rel = |x: f64, y: f64| {
+            if y > 0.0 {
+                (x - y).abs() / y
+            } else if (x - y).abs() > 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        };
+        let score = rel(m.g("dos").n(), central.g("dos").n())
+            + rel(m.g("delay").n(), central.g("delay").n())
+            + rel(m.g("queue").n(), central.g("queue").n())
+            + rel(m.g("over").n(), central.g("over").n());
         let arrow = "\u{2192}";
         let effect = format!(
             "worst DoS {} {arrow} {}; worst delay {} {arrow} {} s; longest queue {} {arrow} {} m; roads over capacity {} {arrow} {}",
@@ -520,19 +693,44 @@ pub fn run_diff(p: &V, diffs: &V, opts: &V) -> V {
             tpl(&central, "over"),
             tpl(&m, "over")
         );
-        let name = format!("{} \u{b7} {} = {}", tpl(&sc, "name"), tpl(d, "key"), tpl(d, "b"));
-        rows.push(merge(d, &jobj! { "m" => &m, "score" => util::r3(score), "name" => name, "effect" => effect }));
+        let name = format!(
+            "{} \u{b7} {} = {}",
+            tpl(&sc, "name"),
+            tpl(d, "key"),
+            tpl(d, "b")
+        );
+        rows.push(merge(
+            d,
+            &jobj! { "m" => &m, "score" => util::r3(score), "name" => name, "effect" => effect },
+        ));
     }
     js_sort_by(&mut rows, |a, b| b.g("score").n() - a.g("score").n());
     jobj! { "period" => period, "central" => central, "rows" => V::Array(rows), "ms" => now_ms() - t0,
-        "note" => "Each difference is run alone against this project (one-at-a-time), as an unsaved scenario variant." }
+    "note" => "Each difference is run alone against this project (one-at-a-time), as an unsaved scenario variant." }
 }
 
 /// `jwsCSV(P, result)`: the joint witness statement input table as a stamped CSV.
 pub fn jws_csv(p: &V, result: &V) -> String {
-    let mut rows: Vec<Vec<V>> = vec![["Item", "Party A (this project)", "Party B", "Effect", "Agreed?"].iter().map(|x| st(*x)).collect()];
+    let mut rows: Vec<Vec<V>> = vec![
+        [
+            "Item",
+            "Party A (this project)",
+            "Party B",
+            "Effect",
+            "Agreed?",
+        ]
+        .iter()
+        .map(|x| st(*x))
+        .collect(),
+    ];
     for r in result.g("rows").items() {
-        rows.push(vec![r.g("key").clone(), r.g("a").clone(), r.g("b").clone(), r.g("effect").clone(), st("")]);
+        rows.push(vec![
+            r.g("key").clone(),
+            r.g("a").clone(),
+            r.g("b").clone(),
+            r.g("effect").clone(),
+            st(""),
+        ]);
     }
     // text where a list of rows should be is read a character at a time, and a character has none of the fields
     if let V::String(s) = result.g("rows") {
@@ -544,8 +742,8 @@ pub fn jws_csv(p: &V, result: &V) -> String {
 }
 
 /* ====================================================================================================
-   13. Model status badge, disclaimers, standards supersession
-   ==================================================================================================== */
+13. Model status badge, disclaimers, standards supersession
+==================================================================================================== */
 
 /// `badge(P, period)`: the model status badge: the model status with `html` and `text`.
 pub fn badge(p: &V, period: &str) -> V {
@@ -557,12 +755,21 @@ pub fn badge(p: &V, period: &str) -> V {
     } else {
         "warn"
     };
-    merge(&m, &jobj! { "html" => format!("{} <span class=\"note\">{}</span>", pill(&esc(m.g("short")), tone), esc(m.g("footer"))), "text" => m.g("footer") })
+    merge(
+        &m,
+        &jobj! { "html" => format!("{} <span class=\"note\">{}</span>", pill(&esc(m.g("short")), tone), esc(m.g("footer"))), "text" => m.g("footer") },
+    )
 }
 
 /// `decode(h)`: the HTML entities a disclaimer's text arrives with, as plain text.
 fn decode(h: &str) -> String {
-    h.replace("&quot;", "\"").replace("&#39;", "'").replace("&#x27;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ").replace("&amp;", "&")
+    h.replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&#x27;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
 }
 
 /// `missingDisclaimers(html, kinds)`: the standing disclaimers a block of HTML must carry but does not, by what it shows.
@@ -570,8 +777,19 @@ fn decode(h: &str) -> String {
 /// A disclaimer counts as present when the HTML marks it (`data-disclaimer` or `data-d`) or carries its opening words. The HTML is decoded
 /// first and only the text before any placeholder is compared. A kind that is not one of the known ones asks for nothing.
 pub fn missing_disclaimers(html: &str, kinds: &[&str]) -> Vec<String> {
-    let map: [(&str, &str); 11] =
-        [("junction", "D3"), ("economics", "D4"), ("anop", "D5"), ("validation", "D6"), ("model", "D7"), ("safety", "D8"), ("cbds", "D9"), ("regulatory", "D10"), ("authority", "D11"), ("handover", "D12"), ("assumption", "D13")];
+    let map: [(&str, &str); 11] = [
+        ("junction", "D3"),
+        ("economics", "D4"),
+        ("anop", "D5"),
+        ("validation", "D6"),
+        ("model", "D7"),
+        ("safety", "D8"),
+        ("cbds", "D9"),
+        ("regulatory", "D10"),
+        ("authority", "D11"),
+        ("handover", "D12"),
+        ("assumption", "D13"),
+    ];
     let mut need: Vec<&str> = vec!["D1"];
     for k in kinds {
         if let Some(m) = map.iter().find(|m| m.0 == *k)
@@ -605,7 +823,13 @@ pub fn supersession(p: &V, now: &V) -> V {
         let used = c.g("used").g(&s.g("id").s());
         let next = s.g("next");
         // `used < next.date` is a text comparison for text, and false for anything else (a date is not a number)
-        if used.t() && next.t() && next.g("date").t() && d.as_str() >= next.g("date").s().as_str() && used.is_str() && used.s().as_str() < next.g("date").s().as_str() {
+        if used.t()
+            && next.t()
+            && next.g("date").t()
+            && d.as_str() >= next.g("date").s().as_str()
+            && used.is_str()
+            && used.s().as_str() < next.g("date").s().as_str()
+        {
             out.push(jobj! { "id" => s.g("id"), "doc" => s.g("doc"), "edition" => s.g("edition"), "next" => next, "used" => used,
                 "text" => format!("{} ({}) has changed since this project's outputs were stamped on {}: {} ({}). Re-check the affected outputs before relying on them.",
                     s.g("doc").s(), s.g("edition").s(), long_date_v(used), next.g("what").s(), long_date_v(next.g("date"))) });

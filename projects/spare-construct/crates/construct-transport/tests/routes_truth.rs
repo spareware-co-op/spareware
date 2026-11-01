@@ -26,9 +26,16 @@ fn travel_isochrone_and_select_link_between_graph_nodes() {
                 let r = &rec["scenarios"][&sc.id][period];
                 let path = format!("{name}.{}.{period}", sc.id);
                 for t in r["travel"].as_array().expect("travel") {
-                    let (from, to) = (t["from"].as_str().expect("from"), t["to"].as_str().expect("to"));
+                    let (from, to) = (
+                        t["from"].as_str().expect("from"),
+                        t["to"].as_str().expect("to"),
+                    );
                     let got = travel(sc, &p.settings, Some(&res), from, to);
-                    assert_close(&json(&got), &t["out"], &format!("{path}.travel {from} to {to}"));
+                    assert_close(
+                        &json(&got),
+                        &t["out"],
+                        &format!("{path}.travel {from} to {to}"),
+                    );
                     n_travel += 1;
                 }
                 for t in r["isochrone"].as_array().expect("isochrone") {

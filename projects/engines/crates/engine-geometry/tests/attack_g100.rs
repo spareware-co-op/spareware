@@ -153,6 +153,7 @@ const fn schema(name: &'static str, version: u32) -> OpSchema {
         classes: &[Class::Exact],
         charges: &[],
         batch: false,
+        name_free: false,
         example: "",
     }
 }

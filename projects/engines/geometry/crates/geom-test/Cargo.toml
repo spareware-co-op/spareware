@@ -9,9 +9,19 @@ description = "Spare Kit geometry kernel, development only: shared test support,
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The native format, for fixtures' operation logs (src/fixture, piece G97): a log is a standalone
+# `.skgf` file of operation records, so a fixture is held to the format's own rules.
+geom-format = { path = "../geom-format" }
+# The curves the first outside oracle is compared with (src/oracle/geomdl.rs, piece G113).
+geom-nurbs = { path = "../geom-nurbs" }
+geom-run = { path = "../geom-run" }
 # The operation contract, for the history-law kit (src/history.rs, piece G88): the kit checks
 # histories through geom-op's own checker, so every operation's tests use the same laws.
 geom-op = { path = "../geom-op" }
+# What the fixture runner replays (pieces G97, G101): the operations, and the types of their inputs.
+geom-make = { path = "../geom-make" }
+geom-math = { path = "../geom-math" }
+geom-topo = { path = "../geom-topo" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
 # Cargo's metadata in its typed model, and the command that asks for it, so the dependency rule
@@ -63,11 +73,20 @@ lcov = "0.8.2"
 # MIT OR Apache-2.0, the Rust project's regex crate without Unicode tables, already in the lock
 # (divan's), with no dependencies of its own.
 regex-lite = "=0.1.9"
+# A fixture's names and logs in hexadecimal (src/fixture). MIT OR Apache-2.0, already in the lock
+# (the G21 tools' dependency tree), with its default `alloc` and `std`.
+hex = "=0.4.3"
 # The exact rationals of the NURBS reference implementation (G57, `nurbs_reference`): big integers
 # and rationals. MIT OR Apache-2.0, the versions geom-num's and geom-linalg's tests use, without
 # the default num-order and dashu-float features, which the reference does not use.
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+# The timeout of `fixture fails`, so a fixture that hangs on the merge base counts as failing there
+# rather than holding the job. MIT OR Apache-2.0. Native only: it has no WebAssembly build, and
+# WebAssembly starts no processes.
+wait-timeout = "=0.2.1"
 
 [dev-dependencies]
 # A CommonMark parser, so tests/attack_g17.rs reads the kernel's README.md, AGENTS.md and
@@ -86,17 +105,11 @@ unicode-normalization = "0.1.26"
 num-rational = "0.4.2"
 # The workflow test reads `.github/workflows/kernel-quality.yml` as YAML (G21). MIT OR Apache-2.0.
 yaml-rust2 = { version = "0.13.0", default-features = false }
-# The kernel crates the NURBS reference is compared with on every pull request (G57,
-# tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
-# MPL-2.0; development dependencies, so no kernel crate comes to depend on this one.
-geom-nurbs = { path = "../geom-nurbs" }
-geom-run = { path = "../geom-run" }
 # The kinds and transforms the law catalogue checks on every pull request and nightly (G69,
 # tests/laws_curves.rs and tests/laws_surfaces.rs). Ours, MPL-2.0; development dependencies, as
 # above.
 geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
-geom-math = { path = "../geom-math" }
 
 [lints.rust]
 unsafe_code = "forbid"

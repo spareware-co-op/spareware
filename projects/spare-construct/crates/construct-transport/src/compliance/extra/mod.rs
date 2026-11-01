@@ -8,20 +8,20 @@
 pub mod ctx;
 pub mod shared;
 
+pub mod anop;
+pub mod climate;
+pub mod ftaa;
+pub mod gps;
 pub mod lint;
-pub mod precinct;
 pub mod mitigation;
 pub mod options;
-pub mod ftaa;
-pub mod speed;
-pub mod anop;
-pub mod parking;
-pub mod subdivision;
-pub mod policy;
-pub mod gps;
-pub mod tou;
-pub mod climate;
 pub mod packs;
+pub mod parking;
+pub mod policy;
+pub mod precinct;
+pub mod speed;
+pub mod subdivision;
+pub mod tou;
 
 use crate::compliance::html::ReportCtx;
 use crate::compliance::jv::V;

@@ -7,8 +7,8 @@
 //! ahead of UTC in summer, 12 in winter). The truth tests check the rule against Node's own time zone data.
 //! Local time here always means New Zealand time.
 
-use crate::jsnum::{number_to_js_string, string_to_number};
 use crate::edit::json::JsonValue;
+use crate::jsnum::{number_to_js_string, string_to_number};
 
 /// Milliseconds in a day.
 pub const DAY_MS: f64 = 86_400_000.0;
@@ -64,20 +64,32 @@ fn sunday_on_or_before(y: i64, m: u32, d: u32) -> i64 {
 
 // The UTC instant daylight saving starts in a year: a Sunday 02:00 standard time is 14:00 UTC the day before
 fn dst_start_ms(y: i64) -> f64 {
-    let sun = if y <= 2006 { sunday_on_or_after(y, 10, 1) } else { sunday_on_or_before(y, 9, 30) };
+    let sun = if y <= 2006 {
+        sunday_on_or_after(y, 10, 1)
+    } else {
+        sunday_on_or_before(y, 9, 30)
+    };
     sun as f64 * DAY_MS - 10.0 * 3_600_000.0
 }
 
 // The UTC instant daylight saving ends in a year: a Sunday 03:00 summer time is 14:00 UTC the day before
 fn dst_end_ms(y: i64) -> f64 {
-    let sun = if y <= 2007 { sunday_on_or_after(y, 3, 15) } else { sunday_on_or_after(y, 4, 1) };
+    let sun = if y <= 2007 {
+        sunday_on_or_after(y, 3, 15)
+    } else {
+        sunday_on_or_after(y, 4, 1)
+    };
     sun as f64 * DAY_MS - 10.0 * 3_600_000.0
 }
 
 /// Hours New Zealand is ahead of UTC at an instant (12, or 13 in daylight saving time).
 pub fn nz_offset_hours(utc_ms: f64) -> f64 {
     let (y, _, _) = civil_from_days((utc_ms / DAY_MS).floor() as i64);
-    if utc_ms < dst_end_ms(y) || utc_ms >= dst_start_ms(y) { 13.0 } else { 12.0 }
+    if utc_ms < dst_end_ms(y) || utc_ms >= dst_start_ms(y) {
+        13.0
+    } else {
+        12.0
+    }
 }
 
 /// A New Zealand calendar date and clock time.
@@ -105,7 +117,14 @@ pub fn nz_parts(utc_ms: f64) -> NzParts {
     let (y, m, d) = civil_from_days(days as i64);
     let hour = (rem / 3_600_000.0).floor();
     let minute = ((rem - hour * 3_600_000.0) / 60_000.0).floor();
-    NzParts { year: y, month: m, day: d, hour: hour as u32, minute: minute as u32, weekday: weekday_of_days(days as i64) }
+    NzParts {
+        year: y,
+        month: m,
+        day: d,
+        hour: hour as u32,
+        minute: minute as u32,
+        weekday: weekday_of_days(days as i64),
+    }
 }
 
 /// The UTC instant of midnight at the start of a New Zealand date (`new Date(y, m0, d)` in a New Zealand browser).
@@ -113,7 +132,11 @@ pub fn nz_midnight_ms(year: f64, month0: f64, day: f64) -> f64 {
     let local = date_utc(year, month0, day);
     // The offset in force at that local time: try summer time first, and take it when the instant agrees
     let guess13 = local - 13.0 * 3_600_000.0;
-    if nz_offset_hours(guess13) == 13.0 { guess13 } else { local - 12.0 * 3_600_000.0 }
+    if nz_offset_hours(guess13) == 13.0 {
+        guess13
+    } else {
+        local - 12.0 * 3_600_000.0
+    }
 }
 
 /// `today(now)` of feeds.js: the New Zealand date as YYYY-MM-DD.
@@ -129,7 +152,11 @@ pub fn nz_year(utc_ms: f64) -> i64 {
 
 /// What a JavaScript `Date` holds: whole milliseconds within 8.64e15 of 1970, else invalid (None).
 pub fn time_clip(ms: f64) -> Option<f64> {
-    if ms.is_finite() && ms.abs() <= 8.64e15 { Some(ms.trunc() + 0.0) } else { None }
+    if ms.is_finite() && ms.abs() <= 8.64e15 {
+        Some(ms.trunc() + 0.0)
+    } else {
+        None
+    }
 }
 
 fn digits(s: &[u8], from: usize, n: usize) -> Option<f64> {
@@ -143,13 +170,19 @@ fn digits(s: &[u8], from: usize, n: usize) -> Option<f64> {
     Some(v)
 }
 
-const MONTH_NAMES: [&str; 12] = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const MONTH_NAMES: [&str; 12] = [
+    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+];
 
 // The date a server sends in a header, "Wed, 21 Oct 2026 07:28:00 GMT" (the weekday and the seconds are optional; the zone is GMT, UTC, Z or +hhmm, else New Zealand time)
 fn parse_header_date(text: &str) -> Option<f64> {
     let t = text.trim();
     let t = match t.split_once(',') {
-        Some((day, rest)) if day.trim().len() >= 3 && day.trim().chars().all(|c| c.is_ascii_alphabetic()) => rest.trim(),
+        Some((day, rest))
+            if day.trim().len() >= 3 && day.trim().chars().all(|c| c.is_ascii_alphabetic()) =>
+        {
+            rest.trim()
+        }
         _ => t,
     };
     let mut parts = t.split_whitespace();
@@ -163,7 +196,8 @@ fn parse_header_date(text: &str) -> Option<f64> {
     let mi: f64 = c.next().unwrap_or("0").parse().ok()?;
     let sec: f64 = c.next().unwrap_or("0").parse().ok()?;
     let zone = parts.next();
-    if parts.next().is_some() || !(1.0..=31.0).contains(&day) || h > 24.0 || mi > 59.0 || sec > 59.0 {
+    if parts.next().is_some() || !(1.0..=31.0).contains(&day) || h > 24.0 || mi > 59.0 || sec > 59.0
+    {
         return None;
     }
     let local = date_utc(year, month, day) + h * 3_600_000.0 + mi * 60_000.0 + sec * 1000.0;
@@ -187,7 +221,9 @@ fn parse_header_date(text: &str) -> Option<f64> {
 /// other orders, and so on) are not read (None).
 pub fn parse_date(text: &str) -> Option<f64> {
     let s = text.as_bytes();
-    let Some(year) = digits(s, 0, 4) else { return parse_header_date(text) };
+    let Some(year) = digits(s, 0, 4) else {
+        return parse_header_date(text);
+    };
     let mut i = 4;
     let (mut month, mut day) = (1.0, 1.0);
     if i < s.len() && s[i] == b'-' {
@@ -234,7 +270,8 @@ pub fn parse_date(text: &str) -> Option<f64> {
             i = j;
         }
     }
-    if h > 24.0 || mi > 59.0 || sec > 59.0 || (h == 24.0 && (mi > 0.0 || sec > 0.0 || milli > 0.0)) {
+    if h > 24.0 || mi > 59.0 || sec > 59.0 || (h == 24.0 && (mi > 0.0 || sec > 0.0 || milli > 0.0))
+    {
         return None;
     }
     let clock = h * 3_600_000.0 + mi * 60_000.0 + sec * 1000.0 + milli;
@@ -257,7 +294,11 @@ pub fn parse_date(text: &str) -> Option<f64> {
 
 // The hours ahead of UTC that apply to a New Zealand wall-clock time given as if it were UTC
 fn nz_offset_for_local(local_as_utc: f64) -> f64 {
-    if nz_offset_hours(local_as_utc - 13.0 * 3_600_000.0) == 13.0 { 13.0 } else { 12.0 }
+    if nz_offset_hours(local_as_utc - 13.0 * 3_600_000.0) == 13.0 {
+        13.0
+    } else {
+        12.0
+    }
 }
 
 /// `new Date(v).getTime()` for a value read from JSON: a number is milliseconds, text is parsed, true is 1 and null is 0;
@@ -272,7 +313,9 @@ pub fn date_of(v: &JsonValue) -> Option<f64> {
     }
 }
 
-const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+const MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec",
+];
 
 /// The short month name `toLocaleDateString('en-NZ', { month: 'short' })` gives (September is "Sept").
 pub fn month_short(month: u32) -> &'static str {

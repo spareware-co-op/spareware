@@ -164,7 +164,10 @@ impl TurnCtx<'_> {
                 return true;
             }
         }
-        if u_pen(self.turn_s).is_some() || self.deg[n] <= 1 || node.is_some_and(|n| n.allow_u.is_true()) {
+        if u_pen(self.turn_s).is_some()
+            || self.deg[n] <= 1
+            || node.is_some_and(|n| n.allow_u.is_true())
+        {
             return false;
         }
         self.movement(a, b) == Some("U")

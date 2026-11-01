@@ -13,13 +13,19 @@ pub const NOW: f64 = 1_792_540_800_000.0;
 
 /// The text of a file under tools/transport-truth/fixtures/data.
 pub fn fixture_text(file: &str) -> String {
-    let p = crate::support::truth_dir().join("fixtures").join("data").join(file);
+    let p = crate::support::truth_dir()
+        .join("fixtures")
+        .join("data")
+        .join(file);
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("cannot read {}: {e}", p.display()))
 }
 
 /// The bytes of a file under tools/transport-truth/fixtures/data.
 pub fn fixture_bytes(file: &str) -> Vec<u8> {
-    let p = crate::support::truth_dir().join("fixtures").join("data").join(file);
+    let p = crate::support::truth_dir()
+        .join("fixtures")
+        .join("data")
+        .join(file);
     std::fs::read(&p).unwrap_or_else(|e| panic!("cannot read {}: {e}", p.display()))
 }
 
@@ -62,7 +68,12 @@ pub fn answer_of(desc: &Value) -> Result<Answer, FetchFailure> {
     let file = || desc["file"].as_str().expect("answer file");
     match kind {
         "features" if desc.get("inline").is_some() => {
-            let feats: Vec<JsonValue> = desc["inline"].as_array().unwrap().iter().map(JsonValue::from_value).collect();
+            let feats: Vec<JsonValue> = desc["inline"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(JsonValue::from_value)
+                .collect();
             let mut ans = JsonValue::object();
             ans.set("features", JsonValue::Array(feats));
             if desc["exceeded"].as_bool() == Some(true) {
@@ -72,7 +83,10 @@ pub fn answer_of(desc: &Value) -> Result<Answer, FetchFailure> {
         }
         "features" => {
             let all = fixture_features(file());
-            let want: Option<Vec<String>> = desc.get("fields").and_then(Value::as_array).map(|a| a.iter().map(|x| x.as_str().unwrap().to_string()).collect());
+            let want: Option<Vec<String>> = desc
+                .get("fields")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().map(|x| x.as_str().unwrap().to_string()).collect());
             let feats: Vec<JsonValue> = desc["idx"]
                 .as_array()
                 .unwrap()
@@ -83,7 +97,16 @@ pub fn answer_of(desc: &Value) -> Result<Answer, FetchFailure> {
                         None => f,
                         Some(w) => {
                             let mut g = f.clone();
-                            let attrs = f.get("attributes").and_then(JsonValue::as_object).map(|a| a.iter().filter(|(k, _)| w.contains(&k.to_lowercase())).map(|(k, v)| (k.to_string(), v.clone())).collect::<Vec<_>>()).unwrap_or_default();
+                            let attrs = f
+                                .get("attributes")
+                                .and_then(JsonValue::as_object)
+                                .map(|a| {
+                                    a.iter()
+                                        .filter(|(k, _)| w.contains(&k.to_lowercase()))
+                                        .map(|(k, v)| (k.to_string(), v.clone()))
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default();
                             g.set("attributes", JsonValue::from_pairs(attrs));
                             g
                         }
@@ -101,11 +124,18 @@ pub fn answer_of(desc: &Value) -> Result<Answer, FetchFailure> {
         "literal" => Ok(Answer::Json(JsonValue::from_value(&desc["value"]))),
         "text" => Ok(Answer::Text(fixture_text(file()))),
         "literal-text" => Ok(Answer::Text(desc["value"].as_str().unwrap().to_string())),
-        "bytes" => Ok(Answer::Bytes { data: fixture_bytes(file()), last_modified: desc["lastModified"].as_str().map(str::to_string) }),
-        "head" => Ok(Answer::Head { last_modified: desc["lastModified"].as_str().map(str::to_string) }),
+        "bytes" => Ok(Answer::Bytes {
+            data: fixture_bytes(file()),
+            last_modified: desc["lastModified"].as_str().map(str::to_string),
+        }),
+        "head" => Ok(Answer::Head {
+            last_modified: desc["lastModified"].as_str().map(str::to_string),
+        }),
         "fail" => Err(match desc["failure"].as_str().unwrap() {
             "http" => FetchFailure::Http(desc["status"].as_u64().unwrap() as u16),
-            "unreachable" => FetchFailure::Unreachable(desc["message"].as_str().unwrap().to_string()),
+            "unreachable" => {
+                FetchFailure::Unreachable(desc["message"].as_str().unwrap().to_string())
+            }
             "unreadable" => FetchFailure::Unreadable(desc["message"].as_str().unwrap().to_string()),
             "timeout" => FetchFailure::TimedOut,
             "timeout-reading" => FetchFailure::TimedOutReading,
@@ -118,12 +148,26 @@ pub fn answer_of(desc: &Value) -> Result<Answer, FetchFailure> {
 
 /// Panics unless a request is the recorded one.
 pub fn check_request(req: &HttpRequest, rec: &Value, label: &str) {
-    assert_eq!(req.method, rec["method"].as_str().unwrap(), "{label}: method of {}", req.url);
+    assert_eq!(
+        req.method,
+        rec["method"].as_str().unwrap(),
+        "{label}: method of {}",
+        req.url
+    );
     assert_eq!(req.url, rec["url"].as_str().unwrap(), "{label}: address");
-    assert_eq!(req.body.as_deref(), rec["body"].as_str(), "{label}: body of {}", req.url);
+    assert_eq!(
+        req.body.as_deref(),
+        rec["body"].as_str(),
+        "{label}: body of {}",
+        req.url
+    );
     if let Some(h) = rec["headers"].as_object() {
         for (k, v) in h {
-            let got = req.headers.iter().find(|(n, _)| n.eq_ignore_ascii_case(k)).map(|(_, v)| v.as_str());
+            let got = req
+                .headers
+                .iter()
+                .find(|(n, _)| n.eq_ignore_ascii_case(k))
+                .map(|(_, v)| v.as_str());
             assert_eq!(got, v.as_str(), "{label}: header {k} of {}", req.url);
         }
     }
@@ -131,10 +175,21 @@ pub fn check_request(req: &HttpRequest, rec: &Value, label: &str) {
 
 /// Runs a flow against a recorded log starting at an entry: each request it makes must be the next recorded one. Gives the position
 /// after the last entry used and how the flow ended (Err with its message when a request failed the flow).
-pub fn replay<F: Flow>(flow: &mut F, log: &[Value], from: usize, label: &str) -> (usize, Result<(), String>) {
+pub fn replay<F: Flow>(
+    flow: &mut F,
+    log: &[Value],
+    from: usize,
+    label: &str,
+) -> (usize, Result<(), String>) {
     let mut k = from;
     while let Some(req) = flow.next_request() {
-        let rec = log.get(k).unwrap_or_else(|| panic!("{label}: the flow asks for request {k} ({}) but only {} were recorded", req.url, log.len()));
+        let rec = log.get(k).unwrap_or_else(|| {
+            panic!(
+                "{label}: the flow asks for request {k} ({}) but only {} were recorded",
+                req.url,
+                log.len()
+            )
+        });
         check_request(&req, rec, &format!("{label} request {k}"));
         k += 1;
         let ans = answer_of(&rec["answer"]);
@@ -147,12 +202,22 @@ pub fn replay<F: Flow>(flow: &mut F, log: &[Value], from: usize, label: &str) ->
 
 /// Panics unless every recorded request was used.
 pub fn all_used(log: &[Value], used: usize, label: &str) {
-    assert_eq!(used, log.len(), "{label}: the flow made {used} requests, the recording has {}", log.len());
+    assert_eq!(
+        used,
+        log.len(),
+        "{label}: the flow made {used} requests, the recording has {}",
+        log.len()
+    );
 }
 
 /// A recorded bounds object as bounds.
 pub fn bounds_of(v: &Value) -> construct_transport::feeds::Bounds {
-    construct_transport::feeds::Bounds { south: v["south"].as_f64().unwrap(), west: v["west"].as_f64().unwrap(), north: v["north"].as_f64().unwrap(), east: v["east"].as_f64().unwrap() }
+    construct_transport::feeds::Bounds {
+        south: v["south"].as_f64().unwrap(),
+        west: v["west"].as_f64().unwrap(),
+        north: v["north"].as_f64().unwrap(),
+        east: v["east"].as_f64().unwrap(),
+    }
 }
 
 /// A recorded value with the generator's "NaN" marker read as null: the prototype's JSON writes a number that is not a number as null, as the Rust does.
@@ -160,7 +225,9 @@ pub fn nan_as_null(v: &Value) -> Value {
     match v {
         Value::String(s) if s == "NaN" => Value::Null,
         Value::Array(a) => Value::Array(a.iter().map(nan_as_null).collect()),
-        Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (k.clone(), nan_as_null(x))).collect()),
+        Value::Object(o) => {
+            Value::Object(o.iter().map(|(k, x)| (k.clone(), nan_as_null(x))).collect())
+        }
         other => other.clone(),
     }
 }
@@ -179,11 +246,17 @@ impl construct_transport::edit::ids::IdSource for Unused {
 
 /// A project reopened as the prototype's `reopen` does: read from its text and migrated (years written as text become numbers).
 pub fn reopen(text: &str) -> Project {
-    construct_transport::edit::migrate::migrate_text(text, &mut Unused(0)).expect("the project migrates")
+    construct_transport::edit::migrate::migrate_text(text, &mut Unused(0))
+        .expect("the project migrates")
 }
 
 /// A recorded section with its key order kept (for values the prototype read as ordered objects).
 pub fn expected_ordered(section: &str) -> JsonValue {
-    let p = crate::support::truth_dir().join("expected").join(format!("feeds-{section}.json"));
-    JsonValue::parse(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("cannot read {}: {e}", p.display()))).expect("recorded JSON")
+    let p = crate::support::truth_dir()
+        .join("expected")
+        .join(format!("feeds-{section}.json"));
+    JsonValue::parse(
+        &std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("cannot read {}: {e}", p.display())),
+    )
+    .expect("recorded JSON")
 }

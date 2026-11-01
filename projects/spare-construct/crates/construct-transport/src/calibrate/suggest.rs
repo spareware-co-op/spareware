@@ -10,7 +10,9 @@ use super::screen::sl_crossings;
 use super::store::{CalibStore, Screenline};
 use crate::edit::IdSource;
 use crate::graph::js_sort_by;
-use crate::jsnum::{JsNum, Maybe, js_trim, number_to_js_string, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{
+    JsNum, Maybe, js_trim, number_to_js_string, value_to_js_string, value_to_number, value_truthy,
+};
 use crate::project::{Point, Project, Scenario};
 use crate::util::{LatLng, r7};
 use serde_json::{Map, Value, json};
@@ -37,7 +39,12 @@ pub fn osm_bbox(sc: &Scenario) -> Option<[f64; 4]> {
     if sc.nodes.len() < 2 {
         return None;
     }
-    let (mut s, mut w, mut n, mut e) = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let (mut s, mut w, mut n, mut e) = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
     for nd in sc.nodes.values() {
         let (la, ln) = (nd.lat.num(), nd.lng.num());
         s = crate::jsnum::math_min(s, la);
@@ -84,11 +91,22 @@ pub fn join_ways(ways: &[&Value]) -> Vec<JoinedWay> {
             let pts: Vec<LatLng> = w
                 .get("geometry")
                 .and_then(Value::as_array)
-                .map(|g| g.iter().map(|p| [p.get("lat").map_or(f64::NAN, value_to_number), p.get("lon").map_or(f64::NAN, value_to_number)]).collect())
+                .map(|g| {
+                    g.iter()
+                        .map(|p| {
+                            [
+                                p.get("lat").map_or(f64::NAN, value_to_number),
+                                p.get("lon").map_or(f64::NAN, value_to_number),
+                            ]
+                        })
+                        .collect()
+                })
                 .unwrap_or_default();
             (w.get("id").cloned().unwrap_or(Value::Null), pts)
         })
-        .filter(|(_, pts)| !pts.is_empty() && pts.iter().all(|p| p[0].is_finite() && p[1].is_finite()))
+        .filter(|(_, pts)| {
+            !pts.is_empty() && pts.iter().all(|p| p[0].is_finite() && p[1].is_finite())
+        })
         .collect();
     let mut out: Vec<JoinedWay> = Vec::new();
     while !left.is_empty() {
@@ -103,11 +121,22 @@ pub fn join_ways(ways: &[&Value]) -> Vec<JoinedWay> {
                 let j: Option<Vec<LatLng>> = if same(&b, &w[0]) {
                     Some(pts.iter().copied().chain(w[1..].iter().copied()).collect())
                 } else if same(&b, &w[w.len() - 1]) {
-                    Some(pts.iter().copied().chain(w[..w.len() - 1].iter().rev().copied()).collect())
+                    Some(
+                        pts.iter()
+                            .copied()
+                            .chain(w[..w.len() - 1].iter().rev().copied())
+                            .collect(),
+                    )
                 } else if same(&a, &w[w.len() - 1]) {
                     Some(w.iter().copied().chain(pts[1..].iter().copied()).collect())
                 } else if same(&a, &w[0]) {
-                    Some(w.iter().rev().copied().chain(pts[1..].iter().copied()).collect())
+                    Some(
+                        w.iter()
+                            .rev()
+                            .copied()
+                            .chain(pts[1..].iter().copied())
+                            .collect(),
+                    )
                 } else {
                     None
                 };
@@ -173,7 +202,11 @@ fn text_of(v: Option<&Value>) -> String {
 /// `suggestScreenlines(sc)` on an Overpass reply: rivers, canals and main railways (no sidings, yards or spurs) that cross at least two roads, joined into lines, most crossings first.
 pub fn suggest_screenlines(sc: &Scenario, store: &CalibStore, reply: &Value) -> Suggestions {
     if sc.nodes.len() < 2 {
-        return Suggestions { ok: false, list: Vec::new(), note: "Import or draw roads first.".to_string() };
+        return Suggestions {
+            ok: false,
+            list: Vec::new(),
+            note: "Import or draw roads first.".to_string(),
+        };
     }
     let mut keys: Vec<String> = Vec::new();
     let mut groups: Vec<Vec<&Value>> = Vec::new();
@@ -188,7 +221,9 @@ pub fn suggest_screenlines(sc: &Scenario, store: &CalibStore, reply: &Value) -> 
             let waterway = text_of(tags.get("waterway"));
             let kind = if waterway == "river" || waterway == "canal" {
                 Some(waterway)
-            } else if tags.get("railway").and_then(Value::as_str) == Some("rail") && !tags.get("service").is_some_and(value_truthy) {
+            } else if tags.get("railway").and_then(Value::as_str) == Some("rail")
+                && !tags.get("service").is_some_and(value_truthy)
+            {
                 Some("railway".to_string())
             } else {
                 None
@@ -229,7 +264,8 @@ pub fn suggest_screenlines(sc: &Scenario, store: &CalibStore, reply: &Value) -> 
                 src: Maybe::Missing,
                 extra: Map::new(),
             };
-            let links: HashSet<String> = sl_crossings(sc, &sl).into_iter().map(|x| x.link).collect();
+            let links: HashSet<String> =
+                sl_crossings(sc, &sl).into_iter().map(|x| x.link).collect();
             if links.len() < 2 {
                 continue;
             }
@@ -256,16 +292,30 @@ pub fn suggest_screenlines(sc: &Scenario, store: &CalibStore, reply: &Value) -> 
         }
     }
     js_sort_by(&mut list, |a, b| b.crossings as f64 - a.crossings as f64);
-    let note = if list.is_empty() { "No river, canal or railway crosses two or more roads in this network.".to_string() } else { String::new() };
-    Suggestions { ok: true, list, note }
+    let note = if list.is_empty() {
+        "No river, canal or railway crosses two or more roads in this network.".to_string()
+    } else {
+        String::new()
+    };
+    Suggestions {
+        ok: true,
+        list,
+        note,
+    }
 }
 
 /// `addSuggested(item, role)`: adds a suggestion to the project's screenlines as a screenline (role "valid" or "me"), crediting OpenStreetMap, and marks it added. None for a suggestion with fewer than two points.
-pub fn add_suggested(p: &mut Project, item: &mut Suggestion, role: &str, ids: &mut dyn IdSource) -> Option<Screenline> {
+pub fn add_suggested(
+    p: &mut Project,
+    item: &mut Suggestion,
+    role: &str,
+    ids: &mut dyn IdSource,
+) -> Option<Screenline> {
     if item.pts.len() < 2 {
         return None;
     }
-    let name: String = String::from_utf16_lossy(&item.name.encode_utf16().take(80).collect::<Vec<u16>>());
+    let name: String =
+        String::from_utf16_lossy(&item.name.encode_utf16().take(80).collect::<Vec<u16>>());
     let sl = Screenline {
         id: ids.uid("sl"),
         name: Maybe::Set(JsNum::Text(name)),
@@ -273,7 +323,9 @@ pub fn add_suggested(p: &mut Project, item: &mut Suggestion, role: &str, ids: &m
         role: Maybe::Set(JsNum::Text(role.to_string())),
         motorways: Maybe::Set(JsNum::Bool(true)),
         pts: item.pts.iter().map(|q| Point(*q)).collect(),
-        src: Maybe::Set(json!({ "source": OSM_SOURCE, "licence": OSM_LICENCE, "basis": "derived", "date": ids.today(), "osm": item.osm, "feature": item.kind })),
+        src: Maybe::Set(
+            json!({ "source": OSM_SOURCE, "licence": OSM_LICENCE, "basis": "derived", "date": ids.today(), "osm": item.osm, "feature": item.kind }),
+        ),
         extra: Map::new(),
     };
     let mut st = CalibStore::read(p);

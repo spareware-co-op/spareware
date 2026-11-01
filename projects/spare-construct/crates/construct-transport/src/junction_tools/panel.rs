@@ -4,13 +4,16 @@
 use super::summary::fly_of;
 use super::text::{ctl_name, d1, dos_cell, los_badge, n0, per_name};
 use super::{
-    BALANCE, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, SIDRA, STORAGE, STORAGE_AMBER, STORAGE_RED, Standard, Tools, entries,
+    BALANCE, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, SIDRA, STORAGE, STORAGE_AMBER, STORAGE_RED,
+    Standard, Tools, entries,
 };
-use crate::edit::sites::{self, SiteRules};
-use crate::edit::net::links_at;
 use crate::edit::CONTROLS;
+use crate::edit::net::links_at;
+use crate::edit::sites::{self, SiteRules};
 use crate::graph::js_sort_by;
-use crate::jsnum::{Maybe, math_round, number_to_js_string, to_fixed, value_to_js_string, value_truthy};
+use crate::jsnum::{
+    Maybe, math_round, number_to_js_string, to_fixed, value_to_js_string, value_truthy,
+};
 use crate::project::Scenario;
 use crate::standards::STANDARDS;
 use crate::turns::junction_name;
@@ -85,7 +88,11 @@ fn kit_fld(label: &str, inner: &str, unit: &str) -> String {
         "<label class=\"fld\"><span>{}</span><span class=\"fld-in\">{}{}</span></label>",
         label,
         inner,
-        if unit.is_empty() { String::new() } else { format!("<span class=\"unit\">{unit}</span>") }
+        if unit.is_empty() {
+            String::new()
+        } else {
+            format!("<span class=\"unit\">{unit}</span>")
+        }
     )
 }
 
@@ -131,7 +138,11 @@ impl<'a> Tools<'a> {
             c_opts.push_str(&format!(
                 "<option value=\"{}\" {}>{}</option>",
                 esc(k),
-                if own.as_deref() == Some(*k) { "selected" } else { "" },
+                if own.as_deref() == Some(*k) {
+                    "selected"
+                } else {
+                    ""
+                },
                 esc(l)
             ));
         }
@@ -158,7 +169,11 @@ impl<'a> Tools<'a> {
         let pinned: Vec<String> = sc
             .zones
             .values()
-            .filter(|z| z.node.as_str().is_some_and(|n| s.nodes.iter().any(|x| x == n)))
+            .filter(|z| {
+                z.node
+                    .as_str()
+                    .is_some_and(|n| s.nodes.iter().any(|x| x == n))
+            })
             .map(|z| match z.name.as_str() {
                 Some(n) if !n.is_empty() => n.to_string(),
                 _ => z.id.clone(),
@@ -170,7 +185,11 @@ impl<'a> Tools<'a> {
             format!(
                 "<p class=\"note warn\">{} {} straight to a node inside this site, which adds movements SIDRA would not have. Connect {} part-way along a road, or add a driveway leg.</p>",
                 pinned.iter().map(|n| esc(n)).collect::<Vec<_>>().join(", "),
-                if pinned.len() == 1 { "connects" } else { "connect" },
+                if pinned.len() == 1 {
+                    "connects"
+                } else {
+                    "connect"
+                },
                 if pinned.len() == 1 { "it" } else { "them" }
             )
         };
@@ -199,7 +218,13 @@ impl<'a> Tools<'a> {
         let at_site = match s.at_site_no.get() {
             Some(Value::Array(a)) => a
                 .iter()
-                .map(|v| if v.is_null() { String::new() } else { value_to_js_string(v) })
+                .map(|v| {
+                    if v.is_null() {
+                        String::new()
+                    } else {
+                        value_to_js_string(v)
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(", "),
             Some(Value::Null) | None => String::new(),
@@ -210,15 +235,25 @@ impl<'a> Tools<'a> {
                 "{}<label class=\"check\"><input type=\"checkbox\" data-jsite=\"fixedTiming\" {}> Keep equal green splits (don\u{2019}t optimise)</label>",
                 kit_fld(
                     "Cycle time",
-                    &format!("<input type=\"number\" min=\"40\" max=\"180\" step=\"5\" data-jsite=\"cycle\" value=\"{}\" placeholder=\"auto\">", esc(&cycle)),
+                    &format!(
+                        "<input type=\"number\" min=\"40\" max=\"180\" step=\"5\" data-jsite=\"cycle\" value=\"{}\" placeholder=\"auto\">",
+                        esc(&cycle)
+                    ),
                     "s"
                 ),
-                if s.fixed_timing.truthy() { "checked" } else { "" }
+                if s.fixed_timing.truthy() {
+                    "checked"
+                } else {
+                    ""
+                }
             )
         } else {
             String::new()
         };
-        let auto = s.src.get().is_some_and(|x| x.nodes.is(&"auto".to_string().as_str().to_string()));
+        let auto = s
+            .src
+            .get()
+            .is_some_and(|x| x.nodes.is(&"auto".to_string().as_str().to_string()));
         let rules = SiteRules::default();
         let results = if per.is_empty() {
             "<div class=\"ins-sec\"><p class=\"note\">Run the model to see this site's results.</p></div>".to_string()
@@ -235,11 +270,18 @@ impl<'a> Tools<'a> {
             "<div class=\"ins-head\"><div class=\"ins-kind\">Junction site<span style=\"margin-left:auto\"><button class=\"btn small icon\" data-act=\"close\" title=\"Close (Esc)\" aria-label=\"Close\">\u{2715}</button></span></div>\n      <input class=\"ins-title\" data-jsite=\"name\" value=\"{}\" placeholder=\"{}\" aria-label=\"Name\"></div>\n      <div class=\"ins-sec\"><h4>Control</h4>{}\n        {}\n        {}\n        <p class=\"note\">{} nodes modelled as one junction: one controller, legs grouped by road, and no junction delay on the links inside the site.{}</p>{}</div>\n      {}\n      {}\n      <div class=\"ins-sec\"><h4>Nodes in this site</h4>{}</div>\n      <div class=\"ins-sec\"><div class=\"actions\"><button class=\"btn small\" data-jx-do=\"zoomsite\" data-site=\"{}\">Zoom to</button><button class=\"btn small danger\" data-jx-do=\"split\" data-site=\"{}\">Split site</button></div></div>",
             esc(name),
             esc(&sites::name(sc, &unnamed)),
-            kit_fld("Control", &format!("<select data-jsite=\"control\">{c_opts}</select>"), ""),
+            kit_fld(
+                "Control",
+                &format!("<select data-jsite=\"control\">{c_opts}</select>"),
+                ""
+            ),
             signals,
             kit_fld(
                 "AT site number",
-                &format!("<input data-jsite=\"atSiteNo\" value=\"{}\" placeholder=\"optional\">", esc(&at_site)),
+                &format!(
+                    "<input data-jsite=\"atSiteNo\" value=\"{}\" placeholder=\"optional\">",
+                    esc(&at_site)
+                ),
                 ""
             ),
             s.nodes.len(),
@@ -269,7 +311,11 @@ fn verified(v: bool) -> &'static str {
 fn link(u: Option<&str>, t: &str) -> String {
     match u {
         Some(u) if !u.is_empty() => {
-            format!("<a href=\"{}\" target=\"_blank\" rel=\"noopener\">{}</a>", esc(u), esc(t))
+            format!(
+                "<a href=\"{}\" target=\"_blank\" rel=\"noopener\">{}</a>",
+                esc(u),
+                esc(t)
+            )
         }
         _ => esc(t),
     }
@@ -288,7 +334,10 @@ pub fn about_rows() -> Vec<[String; 3]> {
         [
             "Level of service".to_string(),
             link(hcm.src.url, hcm.src.edition),
-            format!("{} DoS above 1 is F. Give way and stop report the worst movement.", verified(hcm.src.verified)),
+            format!(
+                "{} DoS above 1 is F. Give way and stop report the worst movement.",
+                verified(hcm.src.verified)
+            ),
         ],
         [
             "Practical degree of saturation".to_string(),
@@ -304,7 +353,10 @@ pub fn about_rows() -> Vec<[String; 3]> {
         [
             "Movement capacity".to_string(),
             link(st.gaps.src.url, st.gaps.src.edition),
-            format!("{} Used when Capacity method is per movement.", verified(st.gaps.src.verified)),
+            format!(
+                "{} Used when Capacity method is per movement.",
+                verified(st.gaps.src.verified)
+            ),
         ],
         [
             "Back of queue".to_string(),
@@ -314,12 +366,21 @@ pub fn about_rows() -> Vec<[String; 3]> {
         std_row(
             "Queue storage ratio",
             &STORAGE,
-            format!("{} Amber above {}, red above {}.", verified(STORAGE.verified), n(STORAGE_AMBER), n(STORAGE_RED)),
+            format!(
+                "{} Amber above {}, red above {}.",
+                verified(STORAGE.verified),
+                n(STORAGE_AMBER),
+                n(STORAGE_RED)
+            ),
         ),
         std_row(
             "Flow-scale test",
             &FLOW_SCALE,
-            format!("{} Flows \u{d7} {}, junctions only.", verified(FLOW_SCALE.verified), to_fixed(FLOW_SCALE_FACTOR, 2)),
+            format!(
+                "{} Flows \u{d7} {}, junctions only.",
+                verified(FLOW_SCALE.verified),
+                to_fixed(FLOW_SCALE_FACTOR, 2)
+            ),
         ),
         std_row(
             "SIDRA hand-off",

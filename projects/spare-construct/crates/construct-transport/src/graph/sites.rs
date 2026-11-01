@@ -185,7 +185,9 @@ pub fn site_flows(g: &Graph, site_turns: Option<&Value>, f: f64) -> Option<Vec<f
             let pcu = t.get("pcu");
             let add = match pcu {
                 Some(p) if !p.is_null() && value_to_number(p).is_finite() => value_to_number(p),
-                _ => crate::jsnum::or_default(t.get("v").map_or(f64::NAN, value_to_number), 0.0) * pf,
+                _ => {
+                    crate::jsnum::or_default(t.get("v").map_or(f64::NAN, value_to_number), 0.0) * pf
+                }
             };
             x[st.off + e * st.nx + o] += add * f;
         }

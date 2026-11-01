@@ -16,7 +16,11 @@ pub fn assumption() -> &'static str {
 
 /// `nn(v)`: a number the user entered, None for null, blank or not a number.
 pub fn nn(v: &V) -> Option<f64> {
-    if v.nullish() || v.eq_s("") || !v.n().is_finite() { None } else { Some(v.n()) }
+    if v.nullish() || v.eq_s("") || !v.n().is_finite() {
+        None
+    } else {
+        Some(v.n())
+    }
 }
 
 /// `num(v, d)`: a number printed with d decimals, an en dash for null and non-finite values.
@@ -40,8 +44,8 @@ pub fn esc_s(s: &str) -> String {
 }
 
 /* =====================================================================================
-   Assumptions the user can change (Settings > Compliance+)
-   ===================================================================================== */
+Assumptions the user can change (Settings > Compliance+)
+===================================================================================== */
 
 /// `A(P)`: the assumptions (`ASSUME` with the project's `settings.complianceExtra` entries over it where they are numbers).
 pub fn assumptions(p: &V) -> V {
@@ -57,8 +61,8 @@ pub fn assumptions(p: &V) -> V {
 }
 
 /* =====================================================================================
-   The project record (P.complianceExtra)
-   ===================================================================================== */
+The project record (P.complianceExtra)
+===================================================================================== */
 
 /// `BLANK()`: the blank Compliance+ record.
 pub fn blank() -> V {
@@ -87,7 +91,11 @@ pub fn blank() -> V {
 
 /// `data(P)`: the project's Compliance+ record with the defaults filled in (the project is not changed).
 pub fn data(p: &V) -> V {
-    let mut c = if p.g("complianceExtra").is_obj() { p.g("complianceExtra").clone() } else { V::object() };
+    let mut c = if p.g("complianceExtra").is_obj() {
+        p.g("complianceExtra").clone()
+    } else {
+        V::object()
+    };
     record::fill(&mut c, &blank());
     c
 }
@@ -104,20 +112,26 @@ pub fn data_mut(p: &mut V) -> &mut V {
 }
 
 /* =====================================================================================
-   Dates, regulatory context and authority (read from the Compliance module)
-   ===================================================================================== */
+Dates, regulatory context and authority (read from the Compliance module)
+===================================================================================== */
 
 /// `isISO(s)`: text that starts with a YYYY-MM-DD day (and nothing shorter).
 pub fn is_iso(v: &V) -> bool {
     match v {
-        V::String(s) => s.chars().count() >= 10 && rx(r"^\d{4}-\d{2}-\d{2}$", "").test(&slice(s, 0, Some(10))),
+        V::String(s) => {
+            s.chars().count() >= 10 && rx(r"^\d{4}-\d{2}-\d{2}$", "").test(&slice(s, 0, Some(10)))
+        }
         _ => false,
     }
 }
 
 /// `day(s)`: the YYYY-MM-DD at the start of text, or "".
 pub fn day(v: &V) -> String {
-    if is_iso(v) { slice(&v.s(), 0, Some(10)) } else { String::new() }
+    if is_iso(v) {
+        slice(&v.s(), 0, Some(10))
+    } else {
+        String::new()
+    }
 }
 
 /// `dOf(s)`: midnight UTC of the day, in milliseconds (NaN when it is not a day).
@@ -130,7 +144,9 @@ pub fn today() -> String {
     nz_today(&V::Null)
 }
 
-const SHORT_MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const SHORT_MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 
 /// `longDate(s)`: "21 Oct 2026", or an en dash when it is not a day.
 pub fn long_date(v: &V) -> String {
@@ -159,7 +175,9 @@ pub fn add_months(v: &V, m: f64) -> Option<String> {
     let ty = y as f64 + (total / 12.0).floor();
     let tm = total.rem_euclid(12.0);
     let t1 = date_utc(ty, tm, 1.0);
-    let last = parts(date_utc(ty, tm + 1.0, 0.0)).map(|p| p.2).unwrap_or(28);
+    let last = parts(date_utc(ty, tm + 1.0, 0.0))
+        .map(|p| p.2)
+        .unwrap_or(28);
     let (ry, rm, rd, _) = parts(t1 + ((d.min(last) - 1) as f64) * DAY)?;
     Some(format!("{}-{:02}-{:02}", ry, rm + 1, rd))
 }
@@ -198,10 +216,18 @@ pub fn context(p: &V) -> V {
     let reg = record::regime(p);
     let pick = |k: &str| -> V {
         let v = ext_ctx.g(k);
-        if !v.nullish() && !v.eq_s("") { v.clone() } else { own_ctx.g(k).clone() }
+        if !v.nullish() && !v.eq_s("") {
+            v.clone()
+        } else {
+            own_ctx.g(k).clone()
+        }
     };
     let pathway = pick("pathway");
-    let pathway = if pathway.t() { pathway.s() } else { String::new() };
+    let pathway = if pathway.t() {
+        pathway.s()
+    } else {
+        String::new()
+    };
     let lodgement = day(&pick("lodgement"));
     let notification = day(&pick("notificationDate"));
     let as_at = {
@@ -237,11 +263,22 @@ pub fn context(p: &V) -> V {
     let side: V = if reg.g("side").t() {
         reg.g("side").clone()
     } else if !lodgement.is_empty() {
-        V::String(if lodgement.as_str() < transition.as_str() { "pre" } else { "transition" }.to_string())
+        V::String(
+            if lodgement.as_str() < transition.as_str() {
+                "pre"
+            } else {
+                "transition"
+            }
+            .to_string(),
+        )
     } else {
         V::Null
     };
-    let key = if !lodgement.is_empty() { lodgement.clone() } else { as_at.clone() };
+    let key = if !lodgement.is_empty() {
+        lodgement.clone()
+    } else {
+        as_at.clone()
+    };
     let regime_text = if reg.t() {
         reg.g("text").clone()
     } else if lodgement.is_empty() {
@@ -280,15 +317,18 @@ pub fn authority_of(p: &V, l: &V, sc: &V) -> V {
 }
 
 /* =====================================================================================
-   Shared model helpers
-   ===================================================================================== */
+Shared model helpers
+===================================================================================== */
 
 /// The modelled periods, in the order the checks list them (`PERIODS`).
 pub const PERIODS: [&str; 3] = ["AM", "PM", "IP"];
 
 /// `periodsOf(sc)`: the periods that have results that are not a year mismatch.
 pub fn periods_of(sc: &V) -> Vec<&'static str> {
-    PERIODS.into_iter().filter(|p| sc.g("res").g(p).t() && !sc.g("res").g(p).g("mismatch").t()).collect()
+    PERIODS
+        .into_iter()
+        .filter(|p| sc.g("res").g(p).t() && !sc.g("res").g(p).g("mismatch").t())
+        .collect()
 }
 
 /// `resOf(sc, p)`: a scenario's results for a period.
@@ -299,22 +339,32 @@ pub fn res_of<'a>(sc: &'a V, p: &str) -> Option<&'a V> {
 
 /// `scById(P, id)`.
 pub fn sc_by_id<'a>(p: &'a V, id: &V) -> Option<&'a V> {
-    p.g("scenarios").items().iter().find(|s| s.g("id").strict_eq(id))
+    p.g("scenarios")
+        .items()
+        .iter()
+        .find(|s| s.g("id").strict_eq(id))
 }
 
 /// `activeSc(P)`.
 pub fn active_sc(p: &V) -> &V {
-    sc_by_id(p, p.g("active")).or_else(|| p.g("scenarios").items().first()).unwrap_or(&NULL)
+    sc_by_id(p, p.g("active"))
+        .or_else(|| p.g("scenarios").items().first())
+        .unwrap_or(&NULL)
 }
 
 /// `baseSc(P)`.
 pub fn base_sc(p: &V) -> &V {
-    sc_by_id(p, p.g("base")).or_else(|| p.g("scenarios").items().first()).unwrap_or(&NULL)
+    sc_by_id(p, p.g("base"))
+        .or_else(|| p.g("scenarios").items().first())
+        .unwrap_or(&NULL)
 }
 
 /// `roleSc(P, role)`: the first scenario with a role.
 pub fn role_sc<'a>(p: &'a V, role: &str) -> Option<&'a V> {
-    p.g("scenarios").items().iter().find(|s| s.g("role").eq_s(role))
+    p.g("scenarios")
+        .items()
+        .iter()
+        .find(|s| s.g("role").eq_s(role))
 }
 
 /// The scenarios a check compares (`pair(P)`): the do-minimum, the option (the active scenario) and the mitigation scenario.
@@ -341,7 +391,12 @@ pub fn pair(p: &V) -> Pair<'_> {
             }
         }
     }
-    Pair { base, opt, mit, same: std::ptr::eq(base, opt) }
+    Pair {
+        base,
+        opt,
+        mit,
+        same: std::ptr::eq(base, opt),
+    }
 }
 
 /// `nodeName(sc, id)`: the name of a junction.
@@ -356,7 +411,11 @@ pub fn is_dev(z: &V) -> bool {
 
 /// `devZones(sc)`.
 pub fn dev_zones(sc: &V) -> Vec<&V> {
-    sc.g("zones").vals().into_iter().filter(|z| is_dev(z)).collect()
+    sc.g("zones")
+        .vals()
+        .into_iter()
+        .filter(|z| is_dev(z))
+        .collect()
 }
 
 /// `luOf(z, k)`: the quantity of a land use in a zone.
@@ -380,11 +439,21 @@ pub fn sum_dw(sc: &V) -> f64 {
 }
 
 /// The land uses counted as gross floor area (`GFA_KEYS`).
-pub const GFA_KEYS: [&str; 7] = ["retail", "supermarket", "fastfood", "office", "medical", "industrial", "warehouse"];
+pub const GFA_KEYS: [&str; 7] = [
+    "retail",
+    "supermarket",
+    "fastfood",
+    "office",
+    "medical",
+    "industrial",
+    "warehouse",
+];
 
 /// `sumGfa(sc)`: the floor area in the development zones at the scenario's build-out.
 pub fn sum_gfa(sc: &V) -> f64 {
-    dev_zones(sc).iter().fold(0.0, |s, z| s + GFA_KEYS.iter().fold(0.0, |t, k| t + lu_of(z, k)) * stage_of(z, sc))
+    dev_zones(sc).iter().fold(0.0, |s, z| {
+        s + GFA_KEYS.iter().fold(0.0, |t, k| t + lu_of(z, k)) * stage_of(z, sc)
+    })
 }
 
 /// `cloneSc(sc, over)`: a copy of a scenario without results, with fields replaced.
@@ -401,7 +470,10 @@ pub fn clone_sc(sc: &V, over: &[(&str, V)]) -> V {
 pub fn arc_link(key: &str) -> String {
     match key.rfind(':') {
         Some(i) => key[..i].to_string(),
-        None => key.chars().take(key.chars().count().saturating_sub(1)).collect(),
+        None => key
+            .chars()
+            .take(key.chars().count().saturating_sub(1))
+            .collect(),
     }
 }
 
@@ -409,7 +481,11 @@ pub fn arc_link(key: &str) -> String {
 pub fn class_of(cls: &V) -> &'static V {
     let t = model("CLASSES");
     let k = cls.s();
-    if cls.t() && t.has(&k) { t.g(&k) } else { t.g("local") }
+    if cls.t() && t.has(&k) {
+        t.g(&k)
+    } else {
+        t.g("local")
+    }
 }
 
 /// `linkName(L)`: the road's name, or "Unnamed arterial road" and so on.
@@ -418,7 +494,14 @@ pub fn link_name(l: &V) -> String {
         return l.g("name").s();
     }
     if l.t() && model("CLASSES").has(&l.g("cls").s()) {
-        return format!("Unnamed {} road", model("CLASSES").g(&l.g("cls").s()).g("label").s().to_lowercase());
+        return format!(
+            "Unnamed {} road",
+            model("CLASSES")
+                .g(&l.g("cls").s())
+                .g("label")
+                .s()
+                .to_lowercase()
+        );
     }
     "Unnamed road".to_string()
 }
@@ -444,12 +527,21 @@ pub fn posted(l: &V) -> f64 {
 
 /// `pct(a, b)`: the change from b to a as a percentage of b, None when b is not above 0.
 pub fn pct(a: f64, b: f64) -> Option<f64> {
-    if b > 0.0 && a.is_finite() { Some((a - b) / b * 100.0) } else { None }
+    if b > 0.0 && a.is_finite() {
+        Some((a - b) / b * 100.0)
+    } else {
+        None
+    }
 }
 
 /// `LETTERS.indexOf(a) > LETTERS.indexOf(b)`: level of service a is worse than b.
 pub fn los_worse(a: &str, b: &str) -> bool {
-    let idx = |x: &str| ["A", "B", "C", "D", "E", "F"].iter().position(|l| *l == x).map_or(-1, |i| i as i32);
+    let idx = |x: &str| {
+        ["A", "B", "C", "D", "E", "F"]
+            .iter()
+            .position(|l| *l == x)
+            .map_or(-1, |i| i as i32)
+    };
     idx(a) > idx(b)
 }
 
@@ -470,17 +562,28 @@ pub fn disclaimer(id: &str, p: &V, tool: Option<&str>) -> String {
 
 /// `disc(id, P, tool)`: the disclaimer as a paragraph of a report.
 pub fn disc(id: &str, p: &V, tool: Option<&str>) -> String {
-    format!("<p class=\"note disclaimer\" data-disclaimer=\"{id}\"><b>{id}.</b> {}</p>", esc_s(&disclaimer(id, p, tool)))
+    format!(
+        "<p class=\"note disclaimer\" data-disclaimer=\"{id}\"><b>{id}.</b> {}</p>",
+        esc_s(&disclaimer(id, p, tool))
+    )
 }
 
 /// `verify(s)`: the "verify" tag for a source that has not been checked against the document.
 pub fn verify(s: &V) -> String {
-    if s.g("verified").strict_eq(&V::Bool(false)) { " <span class=\"pill warn\" title=\"Not yet checked against the source document\">verify</span>".to_string() } else { String::new() }
+    if s.g("verified").strict_eq(&V::Bool(false)) {
+        " <span class=\"pill warn\" title=\"Not yet checked against the source document\">verify</span>".to_string()
+    } else {
+        String::new()
+    }
 }
 
 /// `link(url, t)`: a link that opens in a new tab.
 pub fn link(url: &str, t: &str) -> String {
-    format!("<a href=\"{}\" target=\"_blank\" rel=\"noopener\">{}</a>", esc_s(url), esc_s(t))
+    format!(
+        "<a href=\"{}\" target=\"_blank\" rel=\"noopener\">{}</a>",
+        esc_s(url),
+        esc_s(t)
+    )
 }
 
 /// `assumed(t)`: a value with the assumption label.
@@ -490,6 +593,10 @@ pub fn assumed(t: &str) -> String {
 
 /// The day number (days since 1970) of a YYYY-MM-DD day, for ordering.
 pub fn day_number(s: &str) -> Option<i64> {
-    let (y, m, d) = (s.get(0..4)?.parse::<i64>().ok()?, s.get(5..7)?.parse::<u32>().ok()?, s.get(8..10)?.parse::<u32>().ok()?);
+    let (y, m, d) = (
+        s.get(0..4)?.parse::<i64>().ok()?,
+        s.get(5..7)?.parse::<u32>().ok()?,
+        s.get(8..10)?.parse::<u32>().ok()?,
+    );
     Some(days_from_civil(y, m, d))
 }

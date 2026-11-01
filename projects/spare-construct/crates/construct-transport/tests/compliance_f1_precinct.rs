@@ -37,7 +37,9 @@ fn precinct_staging() {
             "precinctCSV" => V::String(precinct::precinct_csv(&p)),
             "report" => run_report(case, &p),
             "export" => run_export(case, &p),
-            "mixTrips" => precinct::mix_trips(&p, a.g("mix"), p.g("scenarios").ix(a.g("sc").n() as usize)),
+            "mixTrips" => {
+                precinct::mix_trips(&p, a.g("mix"), p.g("scenarios").ix(a.g("sc").n() as usize))
+            }
             other => panic!("{id}: unknown call {other}"),
         };
         check(id, &got, want);

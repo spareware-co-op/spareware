@@ -22,11 +22,16 @@ pub const LEGS: [&str; 8] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 /// `legBearing(l)`: the bearing of a leg's compass point (N 0, NE 45, ...); -45 for an unknown leg (`indexOf` is -1).
 pub fn leg_bearing(l: &str) -> f64 {
-    LEGS.iter().position(|x| *x == l).map_or(-45.0, |i| i as f64 * 45.0)
+    LEGS.iter()
+        .position(|x| *x == l)
+        .map_or(-45.0, |i| i as f64 * 45.0)
 }
 
 fn is_move(mv: &str) -> bool {
-    matches!(mv, "L" | "T" | "R" | "U" | "L1" | "L2" | "L3" | "T1" | "R1" | "R2" | "R3")
+    matches!(
+        mv,
+        "L" | "T" | "R" | "U" | "L1" | "L2" | "L3" | "T1" | "R1" | "R2" | "R3"
+    )
 }
 
 const VEH: [&str; 3] = ["LV", "HV", "BUS"];
@@ -40,9 +45,11 @@ pub fn class_of(v: &str) -> Option<&'static str> {
         .filter(|c| !(crate::jsnum::is_js_space(*c) || *c == '_' || *c == '.' || *c == '-'))
         .collect();
     Some(match key.as_str() {
-        "LV" | "L" | "LIGHT" | "CAR" | "CARS" | "PC" | "LCV" | "VAN" | "UTE" | "MC" | "MCY" | "MOTORCYCLE" | "TAXI" => "LV",
+        "LV" | "L" | "LIGHT" | "CAR" | "CARS" | "PC" | "LCV" | "VAN" | "UTE" | "MC" | "MCY"
+        | "MOTORCYCLE" | "TAXI" => "LV",
         "BUS" | "BUSES" | "COACH" => "BUS",
-        "HV" | "H" | "HEAVY" | "MCV" | "HCV" | "HCVI" | "HCVII" | "HCV1" | "HCV2" | "TRUCK" | "TRUCKS" => "HV",
+        "HV" | "H" | "HEAVY" | "MCV" | "HCV" | "HCVI" | "HCVII" | "HCV1" | "HCV2" | "TRUCK"
+        | "TRUCKS" => "HV",
         "CYC" | "CYCLE" | "CYCLES" | "BIKE" | "BICYCLE" => "CYC",
         _ => return None,
     })
@@ -86,7 +93,9 @@ pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
         row.push(cur);
         rows.push(row);
     }
-    rows.into_iter().filter(|r| r.iter().any(|v| !js_trim(v).is_empty())).collect()
+    rows.into_iter()
+        .filter(|r| r.iter().any(|v| !js_trim(v).is_empty()))
+        .collect()
 }
 
 /// What reading a turning-count file gives (`parseTurnCSV`'s result).
@@ -104,7 +113,8 @@ pub struct ParsedTurnCsv {
     pub from_model: bool,
 }
 
-const SHARED_LANE_FLAG: &str = "shared-lane detector counts split equally (Spare Construct assumption)";
+const SHARED_LANE_FLAG: &str =
+    "shared-lane detector counts split equally (Spare Construct assumption)";
 
 /// `JSON.stringify(cfg().windows)`: the peak-hour windows as text, in the order they are given.
 pub fn windows_json(cfg: &CalibCfg) -> String {
@@ -142,7 +152,9 @@ fn col(h: &[String], names: &[&str]) -> Option<usize> {
 // /\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4}/.test(s)
 fn looks_dated(s: &str) -> bool {
     let c: Vec<char> = s.chars().collect();
-    let digs = |from: usize, n: usize| -> bool { from + n <= c.len() && c[from..from + n].iter().all(|x| x.is_ascii_digit()) };
+    let digs = |from: usize, n: usize| -> bool {
+        from + n <= c.len() && c[from..from + n].iter().all(|x| x.is_ascii_digit())
+    };
     let sep = |i: usize| i < c.len() && matches!(c[i], '-' | '/' | '.');
     for i in 0..c.len() {
         for a in 1..=4usize {
@@ -179,7 +191,11 @@ fn add(s: &mut TurnSite, t: f64, iv: f64, leg: &str, mv: &str, cls: &str, n: f64
     let e = class_entry(bin, &format!("{leg}-{mv}"));
     let cur = e.get(cls).copied().unwrap_or(0.0);
     e.insert(cls.to_string(), cur + n);
-    s.interval = if s.interval.truthy() { Num::number(math_max(s.interval.num(), iv)) } else { Num::number(iv) };
+    s.interval = if s.interval.truthy() {
+        Num::number(math_max(s.interval.num(), iv))
+    } else {
+        Num::number(iv)
+    };
 }
 
 /// `parseTurnCSV(text, name)`: reads a turning-count file.
@@ -190,7 +206,12 @@ fn add(s: &mut TurnSite, t: f64, iv: f64, leg: &str, mv: &str, cls: &str, n: f64
 /// FROM; movement IN or OUT gives leg totals for turn estimation. Counts in 5- or 10-minute intervals fold into
 /// 15-minute bins. Each site gets its peak hours (`cfg.windows`), flags for weekend and school-holiday counts, and the
 /// role "valid". Errors with the prototype's messages.
-pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSource) -> Result<ParsedTurnCsv, String> {
+pub fn parse_turn_csv(
+    text: &str,
+    name: &str,
+    cfg: &CalibCfg,
+    ids: &mut dyn IdSource,
+) -> Result<ParsedTurnCsv, String> {
     let raw0 = text.strip_prefix('\u{feff}').unwrap_or(text);
     let rows = parse_csv(raw0);
     if rows.len() < 2 {
@@ -217,7 +238,8 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
             out
         })
         .collect();
-    let i_t = col(&h, &["time_start", "time", "start", "interval_start"]).ok_or("Add a time_start column (HH:MM).")?;
+    let i_t = col(&h, &["time_start", "time", "start", "interval_start"])
+        .ok_or("Add a time_start column (HH:MM).")?;
     let i_site = col(&h, &["site_id", "site"]);
     let i_name = col(&h, &["site_name", "name"]);
     let i_lat = col(&h, &["lat", "latitude"]);
@@ -235,16 +257,28 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
     for (i, x) in h.iter().enumerate() {
         let parts: Vec<&str> = x.split('_').collect();
         let ok_leg = |s: &str| ["n", "ne", "e", "se", "s", "sw", "w", "nw"].contains(&s);
-        let ok_mv = |s: &str| ["l", "t", "r", "u", "l1", "l2", "l3", "t1", "r1", "r2", "r3", "in", "out"].contains(&s);
+        let ok_mv = |s: &str| {
+            [
+                "l", "t", "r", "u", "l1", "l2", "l3", "t1", "r1", "r2", "r3", "in", "out",
+            ]
+            .contains(&s)
+        };
         let ok_cl = |s: &str| ["lv", "hv", "bus", "cyc"].contains(&s);
         match parts.as_slice() {
-            [l, m] if ok_leg(l) && ok_mv(m) => wide.push((i, l.to_uppercase(), m.to_uppercase(), "LV".to_string())),
-            [l, m, c] if ok_leg(l) && ok_mv(m) && ok_cl(c) => wide.push((i, l.to_uppercase(), m.to_uppercase(), c.to_uppercase())),
+            [l, m] if ok_leg(l) && ok_mv(m) => {
+                wide.push((i, l.to_uppercase(), m.to_uppercase(), "LV".to_string()))
+            }
+            [l, m, c] if ok_leg(l) && ok_mv(m) && ok_cl(c) => {
+                wide.push((i, l.to_uppercase(), m.to_uppercase(), c.to_uppercase()))
+            }
             _ => {}
         }
     }
     if i_lat.is_none() || i_lng.is_none() {
-        return Err("Add lat and lng columns (WGS84) so each site can be matched to a junction.".to_string());
+        return Err(
+            "Add lat and lng columns (WGS84) so each site can be matched to a junction."
+                .to_string(),
+        );
     }
     if wide.is_empty() && (i_leg.is_none() || i_mv.is_none() || i_n.is_none()) {
         return Err("Use the long layout (from_leg, movement, count columns) or the wide layout (columns such as N_L_LV).".to_string());
@@ -279,7 +313,11 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
         let iso = iso_date(&raw);
         let sid = {
             let s = cell(r, i_site);
-            if s.is_empty() { "site 1".to_string() } else { s }
+            if s.is_empty() {
+                "site 1".to_string()
+            } else {
+                s
+            }
         };
         let date = iso.clone().unwrap_or_else(|| raw.clone());
         let key = format!("{sid}|{date}");
@@ -295,11 +333,17 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
                     let mut s = TurnSite {
                         id: ids.uid("tc"),
                         reference: Maybe::Set(JsNum::Text(sid.clone())),
-                        name: Maybe::Set(JsNum::Text(if nm.is_empty() { format!("Turning count {sid}") } else { nm })),
+                        name: Maybe::Set(JsNum::Text(if nm.is_empty() {
+                            format!("Turning count {sid}")
+                        } else {
+                            nm
+                        })),
                         lat: Num::number(r7(lat)),
                         lng: Num::number(r7(lng)),
                         date: Maybe::Set(JsNum::Text(date.clone())),
-                        src: Maybe::Set(JsNum::Text(if i_det.is_some() { "scats" } else { "mcc" }.to_string())),
+                        src: Maybe::Set(JsNum::Text(
+                            if i_det.is_some() { "scats" } else { "mcc" }.to_string(),
+                        )),
                         file: Maybe::Set(JsNum::Text(name.to_string())),
                         role: Maybe::Set(JsNum::Text("valid".to_string())),
                         obs_method: Maybe::Set(JsNum::Text("measured_hour".to_string())),
@@ -317,7 +361,8 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
                         extra: Map::new(),
                     };
                     if i_det.is_some() {
-                        s.flags.push("stop-line throughput (SCATS detectors)".to_string());
+                        s.flags
+                            .push("stop-line throughput (SCATS detectors)".to_string());
                     }
                     sites.push((key.clone(), s));
                     Some(sites.len() - 1)
@@ -348,10 +393,20 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
         let mv = cell(r, i_mv).to_uppercase();
         let n = string_to_number(&cell(r, i_n));
         let rc = cell(r, i_cls);
-        let cls = if rc.is_empty() { Some("LV") } else { class_of(&rc) };
+        let cls = if rc.is_empty() {
+            Some("LV")
+        } else {
+            class_of(&rc)
+        };
         let Some(cls) = cls else {
-            let shown: String = String::from_utf16_lossy(&rc.encode_utf16().take(20).collect::<Vec<u16>>());
-            skip(li, &format!("vehicle class \u{201c}{shown}\u{201d} not recognised"), &mut errs, &mut why);
+            let shown: String =
+                String::from_utf16_lossy(&rc.encode_utf16().take(20).collect::<Vec<u16>>());
+            skip(
+                li,
+                &format!("vehicle class \u{201c}{shown}\u{201d} not recognised"),
+                &mut errs,
+                &mut why,
+            );
             continue;
         };
         if !LEGS.contains(&leg.as_str()) {
@@ -363,14 +418,17 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
             continue;
         }
         if i_road.is_some() && !cell(r, i_road).is_empty() {
-            s.leg_roads.insert(leg.clone(), Maybe::Set(JsNum::Text(cell(r, i_road))));
+            s.leg_roads
+                .insert(leg.clone(), Maybe::Set(JsNum::Text(cell(r, i_road))));
         }
         if mv == "IN" || mv == "OUT" || is_move(&mv) {
             add(s, t, iv, &leg, &mv, cls, n);
             continue;
         }
         // SCATS shared lane: split equally between its movements
-        if (2..=4).contains(&mv.chars().count()) && mv.chars().all(|c| matches!(c, 'L' | 'T' | 'R' | 'U')) {
+        if (2..=4).contains(&mv.chars().count())
+            && mv.chars().all(|c| matches!(c, 'L' | 'T' | 'R' | 'U'))
+        {
             let k = mv.chars().count() as f64;
             for x in mv.chars() {
                 add(s, t, iv, &leg, &x.to_string(), cls, n / k);
@@ -380,21 +438,41 @@ pub fn parse_turn_csv(text: &str, name: &str, cfg: &CalibCfg, ids: &mut dyn IdSo
             }
             continue;
         }
-        skip(li, "movement not L, T, R, U, IN or OUT", &mut errs, &mut why);
+        skip(
+            li,
+            "movement not L, T, R, U, IN or OUT",
+            &mut errs,
+            &mut why,
+        );
     }
     let _ = i_cls;
-    let mut list: Vec<TurnSite> = sites.into_iter().map(|(_, s)| s).filter(|s| !s.bins.is_empty()).collect();
+    let mut list: Vec<TurnSite> = sites
+        .into_iter()
+        .map(|(_, s)| s)
+        .filter(|s| !s.bins.is_empty())
+        .collect();
     let reasons: Vec<String> = why.iter().map(|(w, k)| format!("{k} \u{d7} {w}")).collect();
     if list.is_empty() {
         return Err(format!(
             "No rows could be read{}. Check the time_start, from_leg (N, NE \u{2026} NW), movement (L, T, R, U), class and count columns.",
-            if reasons.is_empty() { String::new() } else { format!(" ({})", reasons.join("; ")) }
+            if reasons.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", reasons.join("; "))
+            }
         ));
     }
     for s in list.iter_mut() {
-        s.interval = if s.interval.truthy() { s.interval.clone() } else { Num::number(15.0) };
+        s.interval = if s.interval.truthy() {
+            s.interval.clone()
+        } else {
+            Num::number(15.0)
+        };
         if s.interval.num() > 15.0 {
-            s.flags.push(format!("{}-minute intervals: no peak hour factor", s.interval.js_string()));
+            s.flags.push(format!(
+                "{}-minute intervals: no peak hour factor",
+                s.interval.js_string()
+            ));
         }
         peaks(s, &windows);
         s.peak_win = Maybe::Set(wjson.clone());
@@ -415,7 +493,11 @@ fn weekday(y: i64, m: i64, d: i64) -> Option<i64> {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
         2 => {
-            if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 { 29 } else { 28 }
+            if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 {
+                29
+            } else {
+                28
+            }
         }
         _ => return None,
     };
@@ -434,9 +516,16 @@ pub fn flag_date(s: &mut TurnSite) {
     }
     let date = s.date.js_string();
     let shape = date.chars().count() == 10
-        && date.chars().enumerate().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() });
+        && date.chars().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                c == '-'
+            } else {
+                c.is_ascii_digit()
+            }
+        });
     if !shape {
-        let shown: String = String::from_utf16_lossy(&date.encode_utf16().take(20).collect::<Vec<u16>>());
+        let shown: String =
+            String::from_utf16_lossy(&date.encode_utf16().take(20).collect::<Vec<u16>>());
         s.flags.push(format!(
             "count date \u{201c}{shown}\u{201d} could not be read, so the weekend and school-holiday checks were not made"
         ));
@@ -451,9 +540,12 @@ pub fn flag_date(s: &mut TurnSite) {
         s.flags.push("weekend count".to_string());
     }
     if let Some(t) = &t
-        && !t.iter().any(|(a, b)| date.as_str() >= *a && date.as_str() <= *b)
+        && !t
+            .iter()
+            .any(|(a, b)| date.as_str() >= *a && date.as_str() <= *b)
     {
-        s.flags.push("counted in the school holidays (term dates to verify)".to_string());
+        s.flags
+            .push("counted in the school holidays (term dates to verify)".to_string());
     }
     if t.is_none() {
         s.flags.push(format!(
@@ -497,7 +589,9 @@ pub fn peaks(s: &mut TurnSite, windows: &[(String, [String; 2])]) {
     let mut peak: OrderedMap<Peak> = OrderedMap::new();
     let iv = s.interval.num();
     for (p, w) in windows {
-        let (Some(a), Some(b)) = (to_min(&w[0]), to_min(&w[1])) else { continue };
+        let (Some(a), Some(b)) = (to_min(&w[0]), to_min(&w[1])) else {
+            continue;
+        };
         struct Best {
             start: u32,
             v: f64,
@@ -531,8 +625,20 @@ pub fn peaks(s: &mut TurnSite, windows: &[(String, [String; 2])]) {
             }
             let v = ts.iter().fold(0.0f64, |q, x| q + tot[x]);
             if best.as_ref().is_none_or(|bst| v > bst.v) {
-                let v15 = if fine { Some(ts.iter().fold(f64::NEG_INFINITY, |m, x| math_max(m, tot[x]))) } else { None };
-                best = Some(Best { start: t, v, ts, v15 });
+                let v15 = if fine {
+                    Some(
+                        ts.iter()
+                            .fold(f64::NEG_INFINITY, |m, x| math_max(m, tot[x])),
+                    )
+                } else {
+                    None
+                };
+                best = Some(Best {
+                    start: t,
+                    v,
+                    ts,
+                    v15,
+                });
             }
         }
         let Some(best) = best else { continue };
@@ -541,10 +647,13 @@ pub fn peaks(s: &mut TurnSite, windows: &[(String, [String; 2])]) {
         for t in &best.ts {
             if let Some(bin) = s.bins.get(t) {
                 for (k, e) in bin.iter() {
-                    let sum = VEH.iter().fold(0.0f64, |q, c| q + e.get(*c).copied().unwrap_or(0.0));
+                    let sum = VEH
+                        .iter()
+                        .fold(0.0f64, |q, c| q + e.get(*c).copied().unwrap_or(0.0));
                     let cur = mv.get(k).copied().unwrap_or(0.0);
                     mv.insert(k.to_string(), cur + sum);
-                    let hvs = e.get("HV").copied().unwrap_or(0.0) + e.get("BUS").copied().unwrap_or(0.0);
+                    let hvs =
+                        e.get("HV").copied().unwrap_or(0.0) + e.get("BUS").copied().unwrap_or(0.0);
                     let cur = hv.get(k).copied().unwrap_or(0.0);
                     hv.insert(k.to_string(), cur + hvs);
                 }
@@ -593,12 +702,21 @@ pub fn repeak(p: &mut Project) -> usize {
 }
 
 /// `importTurnCSV(text, name)`: reads a turning-count file into the project; a site and date that are already there are replaced.
-pub fn import_turn_csv(p: &mut Project, text: &str, name: &str, ids: &mut dyn IdSource) -> Result<ParsedTurnCsv, String> {
+pub fn import_turn_csv(
+    p: &mut Project,
+    text: &str,
+    name: &str,
+    ids: &mut dyn IdSource,
+) -> Result<ParsedTurnCsv, String> {
     let cfg = super::common::calib_cfg(Some(&p.settings));
     let r = parse_turn_csv(text, name, &cfg, ids)?;
     let mut st = CalibStore::read(p);
     for s in &r.sites {
-        match st.turn_sites.iter().position(|x| x.reference == s.reference && x.date == s.date) {
+        match st
+            .turn_sites
+            .iter()
+            .position(|x| x.reference == s.reference && x.date == s.date)
+        {
             Some(i) => st.turn_sites[i] = s.clone(),
             None => st.turn_sites.push(s.clone()),
         }
@@ -627,10 +745,21 @@ pub fn ci_of(c: &Count) -> Option<(String, Value)> {
         let x = value_to_number(ci);
         if x.is_finite() {
             let mean = t.get("mean").map_or(f64::NAN, value_to_number);
-            let n = t.get("n").map(crate::jsnum::value_to_js_string).unwrap_or_else(|| "undefined".to_string());
+            let n = t
+                .get("n")
+                .map(crate::jsnum::value_to_js_string)
+                .unwrap_or_else(|| "undefined".to_string());
             return Some((
-                format!("\u{b1} {} veh/day on the TMS mean of {} veh/day ({} weekdays)", fmt::int(x), fmt::int(mean), n),
-                Value::String(format!("\u{b1}{} veh/day (TMS)", crate::jsnum::number_to_js_string(crate::jsnum::math_round(x)))),
+                format!(
+                    "\u{b1} {} veh/day on the TMS mean of {} veh/day ({} weekdays)",
+                    fmt::int(x),
+                    fmt::int(mean),
+                    n
+                ),
+                Value::String(format!(
+                    "\u{b1}{} veh/day (TMS)",
+                    crate::jsnum::number_to_js_string(crate::jsnum::math_round(x))
+                )),
             ));
         }
     }
@@ -657,7 +786,12 @@ pub fn multi_node(sc: &Scenario, id: &str) -> bool {
     links_at(sc, id).iter().any(|l| {
         !l.status.is("closed")
             && (l.ring.truthy()
-                || (deg.get(if l.a == id { &l.b } else { &l.a }).copied().unwrap_or(0) >= 3 && link_len(sc, l) <= near))
+                || (deg
+                    .get(if l.a == id { &l.b } else { &l.a })
+                    .copied()
+                    .unwrap_or(0)
+                    >= 3
+                    && link_len(sc, l) <= near))
     })
 }
 
@@ -667,7 +801,10 @@ pub fn match_sites(p: &mut Project, sc_id: &str) {
     let Some(sc) = p.scenario(sc_id) else { return };
     for s in st.turn_sites.iter_mut() {
         let node = site_node(sc, s);
-        let site = node.as_deref().and_then(|n| sites::of(sc, n)).map(|x| x.id.clone());
+        let site = node
+            .as_deref()
+            .and_then(|n| sites::of(sc, n))
+            .map(|x| x.id.clone());
         s.node = node.map_or(Maybe::Null, Maybe::Set);
         s.site = site.map_or(Maybe::Null, Maybe::Set);
     }

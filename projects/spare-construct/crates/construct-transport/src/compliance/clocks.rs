@@ -71,7 +71,10 @@ pub fn holidays(y: i64) -> Vec<(String, String)> {
     put(iso_utc(e - 2.0 * DAY), "Good Friday".into());
     put(iso_utc(e + DAY), "Easter Monday".into());
     mond(date_utc(yf, 3.0, 25.0), "Anzac Day", &mut put);
-    put(iso_utc(nth_monday(y, 5.0, 1.0)), "Sovereign's birthday".into());
+    put(
+        iso_utc(nth_monday(y, 5.0, 1.0)),
+        "Sovereign's birthday".into(),
+    );
     put(iso_utc(nth_monday(y, 9.0, 4.0)), "Labour Day".into());
     let mat = table("MATARIKI").g(&y.to_string());
     if mat.t() {
@@ -102,8 +105,17 @@ pub fn excluded(t: f64, kind: &str) -> Option<String> {
         return Some(h);
     }
     let (from, to) = (wd.g("from"), wd.g("to"));
-    if (m as f64 == from.ix(0).n() && day as f64 >= from.ix(1).n()) || (m as f64 == to.ix(0).n() && day as f64 <= to.ix(1).n()) {
-        return Some(if kind == "ftaa" { "Christmas and New Year period (25 Dec \u{2013} 2 Jan)" } else { "Christmas period (20 Dec \u{2013} 10 Jan)" }.to_string());
+    if (m as f64 == from.ix(0).n() && day as f64 >= from.ix(1).n())
+        || (m as f64 == to.ix(0).n() && day as f64 <= to.ix(1).n())
+    {
+        return Some(
+            if kind == "ftaa" {
+                "Christmas and New Year period (25 Dec \u{2013} 2 Jan)"
+            } else {
+                "Christmas period (20 Dec \u{2013} 10 Jan)"
+            }
+            .to_string(),
+        );
     }
     if wd.g("newYear").t() && m == 1 {
         // Legislation Act s13: if 1 Jan is a Friday, the following Monday; if a Saturday or Sunday, the following Monday and Tuesday
@@ -173,9 +185,18 @@ pub fn clock_for(ev: &V) -> Option<V> {
     let date = ev.g("date").s();
     let mut out: Vec<V> = Vec::new();
     let mut warns: Vec<V> = Vec::new();
-    let year: i64 = date.chars().take(4).collect::<String>().parse().unwrap_or(0);
-    if holidays(year).iter().any(|e| e.0 == "matariki-unknown") || holidays(year + 1).iter().any(|e| e.0 == "matariki-unknown") {
-        warns.push(st("Matariki is not in the Act's schedule for this year: check the dates by hand."));
+    let year: i64 = date
+        .chars()
+        .take(4)
+        .collect::<String>()
+        .parse()
+        .unwrap_or(0);
+    if holidays(year).iter().any(|e| e.0 == "matariki-unknown")
+        || holidays(year + 1).iter().any(|e| e.0 == "matariki-unknown")
+    {
+        warns.push(st(
+            "Matariki is not in the Act's schedule for this year: check the dates by hand.",
+        ));
     }
     for r in def.g("rules").items() {
         if r.g("months").t() {
@@ -187,7 +208,11 @@ pub fn clock_for(ev: &V) -> Option<V> {
         }
         if r.g("max").t() {
             let limit = add_working_days(&date, r.g("max").n(), &kind);
-            let set = if valid_day(ev.g("set")) { ev.g("set").s() } else { limit.clone().unwrap_or_default() };
+            let set = if valid_day(ev.g("set")) {
+                ev.g("set").s()
+            } else {
+                limit.clone().unwrap_or_default()
+            };
             if limit.as_deref().is_some_and(|l| set.as_str() > l) {
                 warns.push(st(format!("The panel-set date {} is more than {} working days after the direction (latest {}, s67(3)).", long_date(&set), super::jv::ns(r.g("max").n()), long_date(limit.as_deref().unwrap_or("")))));
             }
@@ -213,13 +238,19 @@ pub fn clocks(p: &V) -> V {
     let c = state(p);
     let mut ev: Vec<V> = c.g("rfi").g("events").items().to_vec();
     if valid_day(c.g("rfi").g("hearing")) && !ev.iter().any(|e| e.g("kind").eq_s("hearing")) {
-        ev.push(jobj! { "id" => "hearing", "kind" => "hearing", "date" => c.g("rfi").g("hearing") });
+        ev.push(
+            jobj! { "id" => "hearing", "kind" => "hearing", "date" => c.g("rfi").g("hearing") },
+        );
     }
     if valid_day(c.g("rfi").g("worksDate")) {
         ev.push(jobj! { "id" => "works", "kind" => "works", "date" => c.g("rfi").g("worksDate") });
     }
     let ctx = c.g("ctx");
-    if valid_day(ctx.g("lodgement")) && ctx.g("lodgementActual").t() && !ev.iter().any(|e| e.g("kind").eq_s("lodged")) && super::record::pathway_entry(ctx.g("pathway")).is_some_and(|e| e.g("kind").eq_s("rc")) {
+    if valid_day(ctx.g("lodgement"))
+        && ctx.g("lodgementActual").t()
+        && !ev.iter().any(|e| e.g("kind").eq_s("lodged"))
+        && super::record::pathway_entry(ctx.g("pathway")).is_some_and(|e| e.g("kind").eq_s("rc"))
+    {
         ev.push(jobj! { "id" => "lodged", "kind" => "lodged", "date" => ctx.g("lodgement") });
     }
     V::Array(ev.iter().filter_map(clock_for).collect()).into_sorted_by_date()
@@ -230,12 +261,16 @@ pub fn rfi_template(p: &V) -> String {
     let r = super::record::regime(p);
     let c = state(p);
     let pe = super::record::pathway_entry(c.g("ctx").g("pathway"));
-    let s2aa = r.g("side").eq_s("transition") && pe.is_some_and(|e| e.g("kind").eq_s("rc")) && !c.g("ctx").g("pathway").eq_s("rc-subdivision");
+    let s2aa = r.g("side").eq_s("transition")
+        && pe.is_some_and(|e| e.g("kind").eq_s("rc"))
+        && !c.g("ctx").g("pathway").eq_s("rc-subdivision");
     let mut t = "Response to the request for further information dated [date]. The applicant has provided the information below in proportion to the scale and significance of the transport effects (RMA s92(2B)).".to_string();
     if s2aa {
         t.push_str(" Under s92(2AA) the council may not request information about effects that must be disregarded under s104(1A) for a district land use consent lodged on or after 30 October 2026; items [x] are outside that scope.");
     }
-    t.push_str(" [For each item: the request, the response, and where the evidence is in the assessment.]");
+    t.push_str(
+        " [For each item: the request, the response, and where the evidence is in the assessment.]",
+    );
     t
 }
 
@@ -246,8 +281,16 @@ trait SortByDate {
 impl SortByDate for V {
     /// `.sort((a, b) => a.date < b.date ? -1 : 1)`: a comparator that never says equal, run as V8 runs it.
     fn into_sorted_by_date(self) -> V {
-        let V::Array(mut items) = self else { return self };
-        crate::graph::js_sort_by(&mut items, |a, b| if a.g("date").s().as_str() < b.g("date").s().as_str() { -1.0 } else { 1.0 });
+        let V::Array(mut items) = self else {
+            return self;
+        };
+        crate::graph::js_sort_by(&mut items, |a, b| {
+            if a.g("date").s().as_str() < b.g("date").s().as_str() {
+                -1.0
+            } else {
+                1.0
+            }
+        });
         V::Array(items)
     }
 }

@@ -34,7 +34,12 @@ fn every_download_asks_what_the_prototype_asked_and_words_failures_the_same() {
     for case in ex.as_array().expect("cases") {
         let name = case["name"].as_str().expect("name");
         let b = &case["bounds"];
-        let bounds = Bx::new(b["s"].as_f64().unwrap(), b["w"].as_f64().unwrap(), b["n"].as_f64().unwrap(), b["e"].as_f64().unwrap());
+        let bounds = Bx::new(
+            b["s"].as_f64().unwrap(),
+            b["w"].as_f64().unwrap(),
+            b["n"].as_f64().unwrap(),
+            b["e"].as_f64().unwrap(),
+        );
         let mut net = Replay::new(&case["log"], &table);
         let mut dl = Downloads::default();
         let mut status: Vec<String> = Vec::new();
@@ -71,13 +76,32 @@ fn every_download_asks_what_the_prototype_asked_and_words_failures_the_same() {
         };
         let first = run(&mut dl, &mut net, &mut status);
         ck.check(&format!("{name}: first answer"), &first, &case["first"]);
-        ck.same(&format!("{name}: requests made by the first call"), &net.used(), &case["firstRequests"].as_u64().unwrap().try_into().unwrap());
-        ck.check(&format!("{name}: messages of the first call"), &json!(status[..status.len().min(case["firstStatus"].as_u64().unwrap() as usize)]), &json!(case["status"].as_array().unwrap()[..case["firstStatus"].as_u64().unwrap() as usize]));
+        ck.same(
+            &format!("{name}: requests made by the first call"),
+            &net.used(),
+            &case["firstRequests"].as_u64().unwrap().try_into().unwrap(),
+        );
+        ck.check(
+            &format!("{name}: messages of the first call"),
+            &json!(
+                status[..status
+                    .len()
+                    .min(case["firstStatus"].as_u64().unwrap() as usize)]
+            ),
+            &json!(
+                case["status"].as_array().unwrap()
+                    [..case["firstStatus"].as_u64().unwrap() as usize]
+            ),
+        );
         if !case["second"].is_null() {
             let second = run(&mut dl, &mut net, &mut status);
             ck.check(&format!("{name}: second answer"), &second, &case["second"]);
         }
-        ck.check(&format!("{name}: every message"), &json!(status), &case["status"]);
+        ck.check(
+            &format!("{name}: every message"),
+            &json!(status),
+            &case["status"],
+        );
         ck.same(&format!("{name}: every request"), &net.done(), &true);
     }
     ck.finish("downloads");

@@ -1,7 +1,7 @@
 //! The junction CSVs: junction_movements.csv, turning_movements.csv and one junction's turning count.
 
 use super::j1::{J1Row, J1Sub};
-use super::{Entry, Sc, Tools, entries, js_str, moves_of, nc_text, per_name, xid, STORAGE_RED};
+use super::{Entry, STORAGE_RED, Sc, Tools, entries, js_str, moves_of, nc_text, per_name, xid};
 use crate::jsnum::{math_min, math_round, number_to_js_string};
 use crate::results::export_ready;
 use crate::util::{csv_cell, r1, r3, r7};
@@ -165,7 +165,11 @@ impl<'a> Tools<'a> {
     }
 
     /// `junctionMovementsCSV(P, which, periods)`: the movement summary of every junction, scenario and period (docs/spec/sidra-tables).
-    pub fn junction_movements_csv(&self, which: Option<&[Sc<'a>]>, periods: Option<&[String]>) -> String {
+    pub fn junction_movements_csv(
+        &self,
+        which: Option<&[Sc<'a>]>,
+        periods: Option<&[String]>,
+    ) -> String {
         let mut out: Vec<Vec<Cell>> = vec![heads(&JM_HEAD)];
         for s in self.sc_list(which) {
             let ps: Vec<String> = match periods {
@@ -194,34 +198,39 @@ impl<'a> Tools<'a> {
                         },
                         Cell::Num(j.pff),
                     ];
-                    let method = if j.method.is_empty() { d.method.clone() } else { j.method.clone() };
-                    let row = |out: &mut Vec<Vec<Cell>>, leg: &str, road: &str, mv: &str, r: &RowView| {
-                        let mut c = base.clone();
-                        c.push(txt(leg));
-                        c.push(txt(road));
-                        c.push(txt(mv));
-                        c.push(opt(r.v.map(math_round)));
-                        c.push(opt(r.hv_pct.map(r1)));
-                        c.push(opt(r.cap.map(math_round)));
-                        c.push(opt(r.dos.map(r3)));
-                        c.push(opt(r.xp));
-                        c.push(opt(r.psc));
-                        c.push(opt(r.delay.map(r1)));
-                        c.push(match r.los {
-                            Some(l) if !l.is_empty() && l != "\u{2013}" => txt(l),
-                            _ => blank(),
-                        });
-                        c.push(txt(&method));
-                        c.push(opt(r.q95veh));
-                        c.push(opt(r.q95));
-                        c.push(Cell::Num(j.queue_space));
-                        c.push(opt(r.storage.map(math_round)));
-                        c.push(match r.rq {
-                            Some(q) => txt(if q > STORAGE_RED { "yes" } else { "no" }),
-                            None => blank(),
-                        });
-                        out.push(c);
+                    let method = if j.method.is_empty() {
+                        d.method.clone()
+                    } else {
+                        j.method.clone()
                     };
+                    let row =
+                        |out: &mut Vec<Vec<Cell>>, leg: &str, road: &str, mv: &str, r: &RowView| {
+                            let mut c = base.clone();
+                            c.push(txt(leg));
+                            c.push(txt(road));
+                            c.push(txt(mv));
+                            c.push(opt(r.v.map(math_round)));
+                            c.push(opt(r.hv_pct.map(r1)));
+                            c.push(opt(r.cap.map(math_round)));
+                            c.push(opt(r.dos.map(r3)));
+                            c.push(opt(r.xp));
+                            c.push(opt(r.psc));
+                            c.push(opt(r.delay.map(r1)));
+                            c.push(match r.los {
+                                Some(l) if !l.is_empty() && l != "\u{2013}" => txt(l),
+                                _ => blank(),
+                            });
+                            c.push(txt(&method));
+                            c.push(opt(r.q95veh));
+                            c.push(opt(r.q95));
+                            c.push(Cell::Num(j.queue_space));
+                            c.push(opt(r.storage.map(math_round)));
+                            c.push(match r.rq {
+                                Some(q) => txt(if q > STORAGE_RED { "yes" } else { "no" }),
+                                None => blank(),
+                            });
+                            out.push(c);
+                        };
                     for g in &d.groups {
                         for x in &g.appr {
                             for r in &x.rows {

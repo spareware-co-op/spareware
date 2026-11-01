@@ -33,7 +33,8 @@ pub struct Variant {
 
 /// Reads fixtures/data/<prefix>-<name>.json.
 pub fn load_variant(prefix: &str, name: &str) -> Variant {
-    let file = JsonValue::parse(&text(&format!("fixtures/data/{prefix}-{name}.json"))).expect("fixture JSON");
+    let file = JsonValue::parse(&text(&format!("fixtures/data/{prefix}-{name}.json")))
+        .expect("fixture JSON");
     let raw = file.get("project").expect("project").clone();
     let project: Project = serde_json::from_str(&raw.stringify()).expect("the project reads");
     let res_json = file.get("results").expect("results");
@@ -114,7 +115,12 @@ impl Checker {
                 .zip(expected.chars())
                 .position(|(a, e)| a != e)
                 .unwrap_or_else(|| actual.chars().count().min(expected.chars().count()));
-            let ctx = |s: &str| s.chars().skip(at.saturating_sub(60)).take(160).collect::<String>();
+            let ctx = |s: &str| {
+                s.chars()
+                    .skip(at.saturating_sub(60))
+                    .take(160)
+                    .collect::<String>()
+            };
             let _ = write!(
                 self.report,
                 "\n{path}: texts differ at character {at} (lengths {} and {})\n      expected ...{:?}\n      actual   ...{:?}",
@@ -127,14 +133,21 @@ impl Checker {
     }
     /// Prints the counts and panics when any check failed.
     pub fn finish(self, what: &str) {
-        println!("{what}: {} of {} checks match the JavaScript", self.passed, self.run);
+        println!(
+            "{what}: {} of {} checks match the JavaScript",
+            self.passed, self.run
+        );
         if self.passed != self.run {
             let mut r = self.report;
             if r.len() > 60000 {
                 r.truncate(60000);
                 r.push_str("\n...");
             }
-            panic!("{what}: {} of {} checks differ from the JavaScript:{r}", self.run - self.passed, self.run);
+            panic!(
+                "{what}: {} of {} checks differ from the JavaScript:{r}",
+                self.run - self.passed,
+                self.run
+            );
         }
     }
 }

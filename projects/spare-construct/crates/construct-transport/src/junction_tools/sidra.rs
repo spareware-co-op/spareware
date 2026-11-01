@@ -4,15 +4,15 @@
 use super::csv::{Cell, at_site_cell, blank, split, txt, write_csv};
 use super::export_text::{GRIDS, LOADER};
 use super::{
-    D1, D12, Entry, Sc, SIDRA_GROWTH_PCT, SIDRA_PEAK_FLOW_PERIOD, SIDRA_PHF_PERIOD, SIDRA_SETUP,
-    SIDRA_TYPE_NAME, SIDRA_UNIT_TIME, TURN_ORDER, Tools, entries, js_str, legs_of, moves_of, nc_text,
-    per_name, sidra_site_type, xid, LABEL,
+    D1, D12, Entry, LABEL, SIDRA_GROWTH_PCT, SIDRA_PEAK_FLOW_PERIOD, SIDRA_PHF_PERIOD, SIDRA_SETUP,
+    SIDRA_TYPE_NAME, SIDRA_UNIT_TIME, Sc, TURN_ORDER, Tools, entries, js_str, legs_of, moves_of,
+    nc_text, per_name, sidra_site_type, xid,
 };
 use crate::edit::json::JsonValue;
 use crate::jsnum::{math_max, math_min, number_to_js_string, value_to_number};
 use crate::project::Scenario;
 use crate::results::Res;
-use crate::turns::{LEG_CODES, LEG_NAMES, leg_label, sidra_export, SidraOpts as TurnsSidraOpts};
+use crate::turns::{LEG_CODES, LEG_NAMES, SidraOpts as TurnsSidraOpts, leg_label, sidra_export};
 use crate::util::{esc, r7};
 use serde_json::Value;
 
@@ -135,7 +135,10 @@ pub struct VolumeRow {
 }
 
 fn leg_index(code: &str) -> f64 {
-    LEG_CODES.iter().position(|c| *c == code).map_or(-1.0, |i| i as f64)
+    LEG_CODES
+        .iter()
+        .position(|c| *c == code)
+        .map_or(-1.0, |i| i as f64)
 }
 
 fn num_cell(x: Option<f64>) -> Cell {
@@ -240,7 +243,11 @@ impl VolumeRow {
 }
 
 fn at_site_cell_of(v: &Value) -> Cell {
-    if v.is_null() { blank() } else { Cell::Val(v.clone()) }
+    if v.is_null() {
+        blank()
+    } else {
+        Cell::Val(v.clone())
+    }
 }
 
 /// The gate for turn-volume exports (`Turns.sidraExport`): whether the runs are converged and fresh enough, and if not, why.
@@ -394,7 +401,11 @@ impl<'a> Tools<'a> {
                         from: m.leg_label.clone(),
                         to: leg_label(dd as usize, &m.to_road),
                         year: res.year,
-                        pff_src: if phf.is_some() { "turning count PHF" } else { "model setting" },
+                        pff_src: if phf.is_some() {
+                            "turning count PHF"
+                        } else {
+                            "model setting"
+                        },
                         id: e.id.clone(),
                     });
                 }
@@ -445,7 +456,11 @@ impl<'a> Tools<'a> {
                 let i = k.rfind(':').map_or(-1, |p| p as isize);
                 let id = if i < 0 { &k[..] } else { &k[..i as usize] };
                 if let Some(l) = sc.links.get(id) {
-                    let lanes = if k.ends_with(":ab") { l.lanes_ab.int32() } else { l.lanes_ba.int32() };
+                    let lanes = if k.ends_with(":ab") {
+                        l.lanes_ab.int32()
+                    } else {
+                        l.lanes_ba.int32()
+                    };
                     n = math_max(n, lanes as f64);
                 }
             }
@@ -553,9 +568,16 @@ impl<'a> Tools<'a> {
             }
             let ok: Vec<&str> = seen
                 .into_iter()
-                .filter(|p| (1..=12).contains(&p.chars().count()) && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+                .filter(|p| {
+                    (1..=12).contains(&p.chars().count())
+                        && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                })
                 .collect();
-            if ok.is_empty() { "none".to_string() } else { ok.join(", ") }
+            if ok.is_empty() {
+                "none".to_string()
+            } else {
+                ok.join(", ")
+            }
         };
         let nc = if opts.force {
             let mut parts: Vec<String> = Vec::new();
@@ -578,7 +600,9 @@ impl<'a> Tools<'a> {
             let mut out: Vec<String> = Vec::new();
             let mut line = String::new();
             for word in split_ws(t) {
-                if !line.is_empty() && line.encode_utf16().count() + word.encode_utf16().count() + 1 > w {
+                if !line.is_empty()
+                    && line.encode_utf16().count() + word.encode_utf16().count() + 1 > w
+                {
                     out.push(std::mem::take(&mut line));
                     line = word.to_string();
                 } else if line.is_empty() {
@@ -590,7 +614,10 @@ impl<'a> Tools<'a> {
             if !line.is_empty() {
                 out.push(line);
             }
-            out.iter().map(|l| format!("#   {l}")).collect::<Vec<_>>().join("\n")
+            out.iter()
+                .map(|l| format!("#   {l}"))
+                .collect::<Vec<_>>()
+                .join("\n")
         };
         let notice = format!("D1 Screening status: {D1}\nD12 Hand-over: {D12}");
         let name = s.name_or_id();
@@ -868,7 +895,11 @@ pub fn parse_volumes_csv(text: &str) -> Vec<CsvRow> {
         "growth_pct",
     ];
     let mut rows = crate::calibrate::parse_csv(text);
-    let head: Vec<String> = if rows.is_empty() { Vec::new() } else { rows.remove(0) };
+    let head: Vec<String> = if rows.is_empty() {
+        Vec::new()
+    } else {
+        rows.remove(0)
+    };
     rows.iter()
         .map(|r| {
             let mut o: CsvRow = Vec::new();
@@ -988,10 +1019,17 @@ impl<'a> Tools<'a> {
                     Some(t) => t,
                     None => {
                         let d = window_start(&r.period);
-                        if d.is_empty() { "07:00".to_string() } else { d.to_string() }
+                        if d.is_empty() {
+                            "07:00".to_string()
+                        } else {
+                            d.to_string()
+                        }
                     }
                 };
-                let leg = if r.origin_leg >= 0.0 && r.origin_leg.fract() == 0.0 && (r.origin_leg as usize) < LEG_CODES.len() {
+                let leg = if r.origin_leg >= 0.0
+                    && r.origin_leg.fract() == 0.0
+                    && (r.origin_leg as usize) < LEG_CODES.len()
+                {
                     txt(LEG_CODES[r.origin_leg as usize])
                 } else {
                     blank()

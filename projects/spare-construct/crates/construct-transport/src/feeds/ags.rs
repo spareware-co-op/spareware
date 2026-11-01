@@ -5,18 +5,21 @@
 //! area, within 10 km of the gateway and within 60 degrees of the direction from the study area's centre to it.
 
 use super::arcgis::{Bounds, FetchFailure, HttpRequest};
-use super::flow::{env_params, resolve_fields, Answer, ArcQuery, Flow, LayerMeta, MetaCache};
-use super::geo::{bounds_of_box, box_of_bounds, centroid, in_box, in_rings, net_box, pad_box, rings_box, rings_of, Ring, RingsBox};
+use super::flow::{Answer, ArcQuery, Flow, LayerMeta, MetaCache, env_params, resolve_fields};
+use super::geo::{
+    Ring, RingsBox, bounds_of_box, box_of_bounds, centroid, in_box, in_rings, net_box, pad_box,
+    rings_box, rings_of,
+};
 use super::nztime::today;
 use super::sources::{AGS_GATEWAY_DEG, AGS_GATEWAY_KM, AGS_GROUPS, AGS_YEARS, SRC_AGS};
 use super::vintage::{feeds_of, stamp};
 use crate::edit::json::JsonValue;
-use crate::jsnum::{json_number, math_round, to_fixed, value_to_number, JsNum, Maybe, Num};
-use crate::project::{land_use, Project, Scenario, Zone};
+use crate::jsnum::{JsNum, Maybe, Num, json_number, math_round, to_fixed, value_to_number};
+use crate::project::{Project, Scenario, Zone, land_use};
 use crate::standards::year_of;
-use crate::util::{ang_diff, bearing, clamp, dist, fmt, LatLng};
+use crate::util::{LatLng, ang_diff, bearing, clamp, dist, fmt};
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
 /// The land-use growth basis text kept on every zone Spare Construct grows (`agsBasisText`).
@@ -68,7 +71,10 @@ pub struct AgsData {
 fn get3(a: &JsonValue, k: &str, y: f64) -> Option<f64> {
     let want = format!("{}_{}", k, crate::jsnum::number_to_js_string(y)).to_lowercase();
     match a {
-        JsonValue::Object(o) => o.keys().find(|x| x.to_lowercase() == want).map(|f| o.get(f).map_or(f64::NAN, JsonValue::to_number)),
+        JsonValue::Object(o) => o
+            .keys()
+            .find(|x| x.to_lowercase() == want)
+            .map(|f| o.get(f).map_or(f64::NAN, JsonValue::to_number)),
         _ => None,
     }
 }
@@ -78,18 +84,29 @@ pub fn parse_ags(features: &[JsonValue], ys: &[f64]) -> Vec<AgsZone> {
     let empty = JsonValue::object();
     features
         .iter()
-        .filter(|x| x.get("geometry").and_then(|g| g.get("rings")).is_some_and(JsonValue::truthy))
+        .filter(|x| {
+            x.get("geometry")
+                .and_then(|g| g.get("rings"))
+                .is_some_and(JsonValue::truthy)
+        })
         .map(|x| {
             let a = x.get("attributes").filter(|a| a.truthy()).unwrap_or(&empty);
             let mut v = BTreeMap::new();
             for &y in ys {
                 v.insert(
                     crate::jsnum::number_to_js_string(y),
-                    AgsYear { hh: get3(a, "HH", y), emp: get3(a, "EMP", y), pop: get3(a, "POP", y) },
+                    AgsYear {
+                        hh: get3(a, "HH", y),
+                        emp: get3(a, "EMP", y),
+                        pop: get3(a, "POP", y),
+                    },
                 );
             }
             let rings = rings_of(x.get("geometry").and_then(|g| g.get("rings")));
-            let msm = ["MSM", "msm", "OBJECTID"].iter().find_map(|k| a.get(k).filter(|v| !v.is_null())).map_or_else(|| "undefined".to_string(), JsonValue::js_string);
+            let msm = ["MSM", "msm", "OBJECTID"]
+                .iter()
+                .find_map(|k| a.get(k).filter(|v| !v.is_null()))
+                .map_or_else(|| "undefined".to_string(), JsonValue::js_string);
             AgsZone {
                 msm,
                 board: match a.get("LocalBoard") {
@@ -128,8 +145,20 @@ pub struct AgsLoad {
 
 impl AgsLoad {
     /// A download for an area, the forecast years (`years`) and the base year.
-    pub fn new(bounds: Bounds, years: &[f64], base: f64, timeout_ms: f64, cache: &MetaCache) -> AgsLoad {
-        AgsLoad { meta: LayerMeta::new(SRC_AGS.url, cache, timeout_ms), bounds, ys: ags_years(years, base), timeout_ms, query: None }
+    pub fn new(
+        bounds: Bounds,
+        years: &[f64],
+        base: f64,
+        timeout_ms: f64,
+        cache: &MetaCache,
+    ) -> AgsLoad {
+        AgsLoad {
+            meta: LayerMeta::new(SRC_AGS.url, cache, timeout_ms),
+            bounds,
+            ys: ags_years(years, base),
+            timeout_ms,
+            query: None,
+        }
     }
     fn start_query(&mut self) {
         let mut want: Vec<String> = vec!["OBJECTID".into(), "MSM".into(), "LocalBoard".into()];
@@ -139,8 +168,14 @@ impl AgsLoad {
         }
         let want_refs: Vec<&str> = want.iter().map(String::as_str).collect();
         let fields = resolve_fields(self.meta.meta(), &want_refs);
-        let padded = bounds_of_box(&pad_box(&box_of_bounds(&self.bounds), AGS_GATEWAY_KM * 1000.0));
-        let mut p: Vec<(String, String)> = vec![("where".into(), "1=1".into()), ("outFields".into(), fields.join(","))];
+        let padded = bounds_of_box(&pad_box(
+            &box_of_bounds(&self.bounds),
+            AGS_GATEWAY_KM * 1000.0,
+        ));
+        let mut p: Vec<(String, String)> = vec![
+            ("where".into(), "1=1".into()),
+            ("outFields".into(), fields.join(",")),
+        ];
         p.extend(env_params(&padded));
         p.push(("orderByFields".into(), "OBJECTID".into()));
         self.query = Some(ArcQuery::new(SRC_AGS.url, p, 40, self.timeout_ms));
@@ -148,7 +183,10 @@ impl AgsLoad {
     /// The zones, once the download is done.
     pub fn finish(self) -> AgsData {
         let feats = self.query.map(ArcQuery::into_features).unwrap_or_default();
-        AgsData { zones: parse_ags(&feats, &self.ys), years: self.ys }
+        AgsData {
+            zones: parse_ags(&feats, &self.ys),
+            years: self.ys,
+        }
     }
 }
 
@@ -179,7 +217,13 @@ impl Flow for AgsLoad {
 pub fn apply_ags_load(p: &mut Project, data: &AgsData, now_ms: f64) {
     let mut extra = Map::new();
     extra.insert("n".into(), json!(data.zones.len()));
-    extra.insert("note".into(), json!(format!("{}; factor method by MSM zone. Not saved with the project.", SRC_AGS.attribution.unwrap_or(""))));
+    extra.insert(
+        "note".into(),
+        json!(format!(
+            "{}; factor method by MSM zone. Not saved with the project.",
+            SRC_AGS.attribution.unwrap_or("")
+        )),
+    );
     stamp(p, "ags", &extra, now_ms);
 }
 
@@ -232,11 +276,25 @@ pub fn ags_range_text(base: &str, year: &str, f_base: f64, f_year: f64) -> Strin
 }
 
 /// `agsZoneFactor(ll, base, year, data)`: the factors of the MSM zone that holds a point ([lat, lng]); None outside every zone or without values for the years.
-pub fn ags_zone_factor(ll: LatLng, base: f64, year: f64, data: Option<&AgsData>) -> Option<AgsFactor> {
+pub fn ags_zone_factor(
+    ll: LatLng,
+    base: f64,
+    year: f64,
+    data: Option<&AgsData>,
+) -> Option<AgsFactor> {
     let data = data?;
     let (b, y) = (ags_year(base), ags_year(year));
-    let z = data.zones.iter().find(|m| ll[1] >= m.bb[0] && ll[1] <= m.bb[2] && ll[0] >= m.bb[1] && ll[0] <= m.bb[3] && in_rings(ll[1], ll[0], &m.rings))?;
-    let (vb, vy) = (z.v.get(&crate::jsnum::number_to_js_string(b))?, z.v.get(&crate::jsnum::number_to_js_string(y))?);
+    let z = data.zones.iter().find(|m| {
+        ll[1] >= m.bb[0]
+            && ll[1] <= m.bb[2]
+            && ll[0] >= m.bb[1]
+            && ll[0] <= m.bb[3]
+            && in_rings(ll[1], ll[0], &m.rings)
+    })?;
+    let (vb, vy) = (
+        z.v.get(&crate::jsnum::number_to_js_string(b))?,
+        z.v.get(&crate::jsnum::number_to_js_string(y))?,
+    );
     Some(AgsFactor {
         msm: z.msm.clone(),
         board: z.board.clone(),
@@ -250,7 +308,11 @@ pub fn ags_zone_factor(ll: LatLng, base: f64, year: f64, data: Option<&AgsData>)
 
 /// `existingZone(z)`: a zone that stands for existing land use.
 pub fn existing_zone(z: &Zone) -> bool {
-    z.kind.is("zone") && (z.existing.is_true() || z.src.get().is_some_and(|s| s.as_str() == Some("existing-lu")))
+    z.kind.is("zone")
+        && (z.existing.is_true()
+            || z.src
+                .get()
+                .is_some_and(|s| s.as_str() == Some("existing-lu")))
 }
 
 /// A proposed growth of one existing-land-use zone in a forecast scenario.
@@ -308,12 +370,25 @@ pub fn ags_proposals(p: &Project, data: Option<&AgsData>) -> Vec<AgsRow> {
             // the base land use: luBase, else lu
             let base: Vec<(String, Value)> = match z.extra.get("luBase") {
                 Some(Value::Object(o)) => o.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-                _ => z.lu.get().map(|l| l.iter().map(|(k, v)| (k.to_string(), v.get().map_or(Value::Null, JsNum::to_value))).collect()).unwrap_or_default(),
+                _ => {
+                    z.lu.get()
+                        .map(|l| {
+                            l.iter()
+                                .map(|(k, v)| {
+                                    (k.to_string(), v.get().map_or(Value::Null, JsNum::to_value))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                }
             };
             let mut lu: BTreeMap<String, (Value, f64)> = BTreeMap::new();
             if let Some(f) = &f {
                 for (k, q) in &base {
-                    let g = land_use(k).map(|l| l.group).and_then(|grp| AGS_GROUPS.iter().find(|(gk, _)| *gk == grp)).map_or("emp", |(_, v)| v);
+                    let g = land_use(k)
+                        .map(|l| l.group)
+                        .and_then(|grp| AGS_GROUPS.iter().find(|(gk, _)| *gk == grp))
+                        .map_or("emp", |(_, v)| v);
                     let m = match g {
                         "hh" => f.hh,
                         "pop" => f.pop,
@@ -324,7 +399,9 @@ pub fn ags_proposals(p: &Project, data: Option<&AgsData>) -> Vec<AgsRow> {
                         && qn != 0.0
                         && !qn.is_nan()
                     {
-                        let cur = z.lu.get().and_then(|l| l.get(k)).map_or(Value::Null, |v| v.get().map_or(Value::Null, JsNum::to_value));
+                        let cur = z.lu.get().and_then(|l| l.get(k)).map_or(Value::Null, |v| {
+                            v.get().map_or(Value::Null, JsNum::to_value)
+                        });
                         lu.insert(k.clone(), (cur, math_round(qn * m * 10.0) / 10.0));
                     }
                 }
@@ -332,7 +409,9 @@ pub fn ags_proposals(p: &Project, data: Option<&AgsData>) -> Vec<AgsRow> {
             // A land use the user edited after Spare Construct applied a factor is the user's
             let user = match z.extra.get("ags").and_then(|a| a.get("lu")) {
                 Some(Value::Object(o)) => o.iter().any(|(k, q)| {
-                    let cur = z.lu.get().and_then(|l| l.get(k)).map_or(Value::Null, |v| v.get().map_or(Value::Null, JsNum::to_value));
+                    let cur = z.lu.get().and_then(|l| l.get(k)).map_or(Value::Null, |v| {
+                        v.get().map_or(Value::Null, JsNum::to_value)
+                    });
                     let have = z.lu.get().and_then(|l| l.get(k)).is_some();
                     !(have && JsonValue::from_value(&cur).strict_eq(&JsonValue::from_value(q)))
                 }),
@@ -340,7 +419,12 @@ pub fn ags_proposals(p: &Project, data: Option<&AgsData>) -> Vec<AgsRow> {
             };
             // AGS23 runs 2022 to 2052: a year outside that uses the nearest AGS23 year, and the row says so
             let clamped = match &f {
-                Some(f) if f.year != y || !strict_eq(&s.base_year, f.base) => ags_range_text(&num_text(&s.base_year), &crate::jsnum::number_to_js_string(y), f.base, f.year),
+                Some(f) if f.year != y || !strict_eq(&s.base_year, f.base) => ags_range_text(
+                    &num_text(&s.base_year),
+                    &crate::jsnum::number_to_js_string(y),
+                    f.base,
+                    f.year,
+                ),
                 _ => String::new(),
             };
             rows.push(AgsRow {
@@ -369,10 +453,26 @@ pub fn apply_ags(p: &mut Project, rows: &[AgsRow], pick: &[String], when: &str) 
             continue;
         }
         let Some(f) = &r.f else { continue };
-        let Some(sc) = p.scenarios.iter_mut().find(|s| s.id == r.sc) else { continue };
-        let Some(z) = sc.zones.get_mut(&r.zone) else { continue };
-        if !z.extra.get("luBase").is_some_and(crate::jsnum::value_truthy) {
-            let lu_now: Map<String, Value> = z.lu.get().map(|l| l.iter().map(|(k, v)| (k.to_string(), v.get().map_or(Value::Null, JsNum::to_value))).collect()).unwrap_or_default();
+        let Some(sc) = p.scenarios.iter_mut().find(|s| s.id == r.sc) else {
+            continue;
+        };
+        let Some(z) = sc.zones.get_mut(&r.zone) else {
+            continue;
+        };
+        if !z
+            .extra
+            .get("luBase")
+            .is_some_and(crate::jsnum::value_truthy)
+        {
+            let lu_now: Map<String, Value> = z
+                .lu
+                .get()
+                .map(|l| {
+                    l.iter()
+                        .map(|(k, v)| (k.to_string(), v.get().map_or(Value::Null, JsNum::to_value)))
+                        .collect()
+                })
+                .unwrap_or_default();
             z.extra.insert("luBase".to_string(), Value::Object(lu_now));
         }
         // A new object, never an edit in place
@@ -385,8 +485,18 @@ pub fn apply_ags(p: &mut Project, rows: &[AgsRow], pick: &[String], when: &str) 
         a.insert("msm".into(), json!(f.msm));
         a.insert("base".into(), json_number(f.base));
         a.insert("year".into(), json_number(f.year));
-        a.insert("f".into(), json!({ "hh": f.hh, "emp": f.emp, "pop": f.pop }));
-        a.insert("lu".into(), Value::Object(r.lu.iter().map(|(k, (_, to))| (k.clone(), json_number(*to))).collect()));
+        a.insert(
+            "f".into(),
+            json!({ "hh": f.hh, "emp": f.emp, "pop": f.pop }),
+        );
+        a.insert(
+            "lu".into(),
+            Value::Object(
+                r.lu.iter()
+                    .map(|(k, (_, to))| (k.clone(), json_number(*to)))
+                    .collect(),
+            ),
+        );
         a.insert("at".into(), json!(when));
         a.insert("src".into(), json!(AGS_BASIS_TEXT));
         if !r.clamped.is_empty() {
@@ -420,7 +530,13 @@ pub struct AgsGateway {
 /// `agsGateway(sc, z, base, year, data)`: households plus jobs of MSM zones whose centre lies outside the study area, within 10 km of the gateway and within 60 degrees of the direction from the study-area centre to the gateway.
 ///
 /// `base` and `year` are the settings' values as given (the sentence quotes them when they were clamped). None without data, a network, or with the same year twice.
-pub fn ags_gateway(sc: &Scenario, z: &Zone, base: &Num, year: f64, data: Option<&AgsData>) -> Option<AgsGateway> {
+pub fn ags_gateway(
+    sc: &Scenario,
+    z: &Zone,
+    base: &Num,
+    year: f64,
+    data: Option<&AgsData>,
+) -> Option<AgsGateway> {
     let data = data?;
     let (b, y) = (ags_year(base.num()), ags_year(year));
     let area = net_box(sc)?;
@@ -432,12 +548,20 @@ pub fn ags_gateway(sc: &Scenario, z: &Zone, base: &Num, year: f64, data: Option<
     let dir = bearing(&c, &g);
     let (mut b0, mut b1) = (0.0, 0.0);
     let mut used: Vec<String> = Vec::new();
-    let (kb, ky) = (crate::jsnum::number_to_js_string(b), crate::jsnum::number_to_js_string(y));
+    let (kb, ky) = (
+        crate::jsnum::number_to_js_string(b),
+        crate::jsnum::number_to_js_string(y),
+    );
     for m in &data.zones {
-        if in_box(&area, &m.c) || dist(&g, &m.c) > AGS_GATEWAY_KM * 1000.0 || ang_diff(bearing(&c, &m.c), dir) > AGS_GATEWAY_DEG {
+        if in_box(&area, &m.c)
+            || dist(&g, &m.c) > AGS_GATEWAY_KM * 1000.0
+            || ang_diff(bearing(&c, &m.c), dir) > AGS_GATEWAY_DEG
+        {
             continue;
         }
-        let (Some(v0), Some(v1)) = (m.v.get(&kb), m.v.get(&ky)) else { continue };
+        let (Some(v0), Some(v1)) = (m.v.get(&kb), m.v.get(&ky)) else {
+            continue;
+        };
         let or0 = |x: Option<f64>| match x {
             Some(v) if v != 0.0 && !v.is_nan() => v,
             _ => 0.0,
@@ -459,13 +583,24 @@ pub fn ags_gateway(sc: &Scenario, z: &Zone, base: &Num, year: f64, data: Option<
             pct: None,
             n: 0,
             msm: Vec::new(),
-            basis: format!("No AGS23 zones lie beyond this gateway within {} km.", crate::jsnum::number_to_js_string(AGS_GATEWAY_KM)),
+            basis: format!(
+                "No AGS23 zones lie beyond this gateway within {} km.",
+                crate::jsnum::number_to_js_string(AGS_GATEWAY_KM)
+            ),
         });
     }
     let factor = b1 / b0;
     let pct = (factor - 1.0) / (y - b) * 100.0;
     let cl = if y != year || b != base.num() {
-        format!(" {}.", ags_range_text(&num_text(base), &crate::jsnum::number_to_js_string(year), b, y))
+        format!(
+            " {}.",
+            ags_range_text(
+                &num_text(base),
+                &crate::jsnum::number_to_js_string(year),
+                b,
+                y
+            )
+        )
     } else {
         String::new()
     };
@@ -515,7 +650,12 @@ pub fn ags_gateways(p: &mut Project, data: Option<&AgsData>, now_ms: f64) -> Vec
     let mut out = Vec::new();
     for sc in p.scenarios.iter_mut() {
         let y = year_of(Some(sc), &settings);
-        let ids: Vec<String> = sc.zones.values().filter(|z| z.kind.is("gateway")).map(|z| z.id.clone()).collect();
+        let ids: Vec<String> = sc
+            .zones
+            .values()
+            .filter(|z| z.kind.is("gateway"))
+            .map(|z| z.id.clone())
+            .collect();
         for id in ids {
             let g = ags_gateway(sc, &sc.zones[id.as_str()], &settings.base_year, y, data);
             if let Some(g) = g {
@@ -526,7 +666,12 @@ pub fn ags_gateways(p: &mut Project, data: Option<&AgsData>, now_ms: f64) -> Vec
                     o.insert("src".into(), json!(SRC_AGS.attribution.unwrap_or("")));
                 }
                 z.extra.insert("agsGrowth".to_string(), v);
-                out.push(AgsGatewayRow { sc: sc.id.clone(), zone: id, name: z.name.as_str().map(str::to_string), g });
+                out.push(AgsGatewayRow {
+                    sc: sc.id.clone(),
+                    zone: id,
+                    name: z.name.as_str().map(str::to_string),
+                    g,
+                });
             }
         }
     }

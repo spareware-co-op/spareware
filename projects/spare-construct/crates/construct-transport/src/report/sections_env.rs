@@ -1,17 +1,21 @@
 //! Chapters 1 and 2: introduction, scoping, the existing transport and land use environment.
 
-use super::consts::{AT_FREQUENT, PERIODS, RR422_ROWS, SCOPES, attrib, level, level_of, rr422, scope, walk_factor, AT_LICENCE_DEFAULT};
-use super::ctx::{Ctx, FigRequest, Head, Row, Tbl, TableOpts, cells, h, hn, note, para};
+use super::consts::{
+    AT_FREQUENT, AT_LICENCE_DEFAULT, PERIODS, RR422_ROWS, SCOPES, attrib, level, level_of, rr422,
+    scope, walk_factor,
+};
+use super::ctx::{Ctx, FigRequest, Head, Row, TableOpts, Tbl, cells, h, hn, note, para};
 use super::js;
 use super::rfmt;
 use super::sections_front::{int, int_f, year_txt};
 use super::shared::{
-    RoadGroup, assessed_sites, crash_years, cx, ctext, cnum, kit_junction_name, road_groups, speed_of, junction_groups, plural,
+    RoadGroup, assessed_sites, cnum, crash_years, ctext, cx, junction_groups, kit_junction_name,
+    plural, road_groups, speed_of,
 };
 use super::{Rep, Sel};
+use crate::edit::CONTROLS;
 use crate::edit::json::JsonValue;
 use crate::edit::net::links_at;
-use crate::edit::CONTROLS;
 use crate::graph::{js_sort_by, zone_class};
 use crate::jsnum::{JsNum, Maybe, math_max, math_min, number_to_js_string, value_truthy};
 use crate::project::{Link, Scenario, road_class};
@@ -54,7 +58,11 @@ pub(crate) fn study_bounds(r: &Rep, sel: &Sel) -> Option<JsonValue> {
             ]));
         }
     }
-    let sc = sel.with.or(if r.project.scenarios.is_empty() { None } else { Some(0) })?;
+    let sc = sel.with.or(if r.project.scenarios.is_empty() {
+        None
+    } else {
+        Some(0)
+    })?;
     let pts: Vec<[f64; 2]> = r
         .scenario(sc)
         .zones
@@ -84,7 +92,14 @@ fn show(items: &[(&str, bool)]) -> Vec<(String, bool)> {
     items.iter().map(|(k, v)| (k.to_string(), *v)).collect()
 }
 
-fn fig(id: &str, title: &str, mode: &str, scenario_id: &str, bounds: Option<JsonValue>, show: Vec<(String, bool)>) -> FigRequest {
+fn fig(
+    id: &str,
+    title: &str,
+    mode: &str,
+    scenario_id: &str,
+    bounds: Option<JsonValue>,
+    show: Vec<(String, bool)>,
+) -> FigRequest {
     FigRequest {
         id: id.to_string(),
         title: title.to_string(),
@@ -114,16 +129,15 @@ pub(crate) fn reason(c: &mut Ctx) -> String {
 
 /// `report-engagement`.
 pub(crate) fn engagement(c: &mut Ctx) -> String {
-    let rows: Vec<Row> = c
-        .r
-        .rs
-        .engagement
-        .iter()
-        .map(|r| {
-            let g = |k: &str| esc(&js::text(r.get(k)));
-            Row::new(vec![g("date"), g("party"), g("topic"), g("outcome")])
-        })
-        .collect();
+    let rows: Vec<Row> =
+        c.r.rs
+            .engagement
+            .iter()
+            .map(|r| {
+                let g = |k: &str| esc(&js::text(r.get(k)));
+                Row::new(vec![g("date"), g("party"), g("topic"), g("outcome")])
+            })
+            .collect();
     c.table(
         "Scoping and engagement log",
         Tbl::new(vec![h("Date"), h("Party"), h("Topic"), h("Outcome")], rows)
@@ -134,7 +148,11 @@ pub(crate) fn engagement(c: &mut Ctx) -> String {
 
 /// `hasRes(P, pred)`: some scenario has a result for AM, PM or IP the predicate accepts.
 fn has_res(r: &Rep, pred: impl Fn(&crate::results::Res) -> bool) -> bool {
-    (0..r.project.scenarios.len()).any(|i| PERIODS.iter().any(|p| r.results[i].get(p).is_some_and(&pred)))
+    (0..r.project.scenarios.len()).any(|i| {
+        PERIODS
+            .iter()
+            .any(|p| r.results[i].get(p).is_some_and(&pred))
+    })
 }
 
 /// Whether a row of RR 422 Table 6.3 is covered (`r.done(P)`).
@@ -144,7 +162,9 @@ pub(crate) fn rr422_done(r: &Rep, id: &str) -> bool {
     match id {
         "crash" => len("crashes"),
         "flows" => len("counts"),
-        "times" => js::items(js::get(data, "jt")).iter().any(|j| js::truthy(js::get(Some(j), "g"))),
+        "times" => js::items(js::get(data, "jt"))
+            .iter()
+            .any(|j| js::truthy(js::get(Some(j), "g"))),
         "congestion" => has_res(r, |x| !x.nodes.is_empty()),
         "vehtrips" => has_res(r, |x| x.kpi.trips > 0.0),
         "persontrips" => r.project.scenarios.iter().any(|s| {
@@ -180,13 +200,20 @@ pub(crate) fn rr422_section(c: &mut Ctx) -> String {
                 })
                 .collect();
             let ok = rr422_done(r, row.id);
-            let l = if sc.is_empty() { None } else { Some(level_of(row, sc)) };
+            let l = if sc.is_empty() {
+                None
+            } else {
+                Some(level_of(row, sc))
+            };
             let mut cs = vec![esc(row.label)];
             cs.extend(lv);
             cs.push(if ok {
                 "<span class=\"ok\">Included</span>".to_string()
             } else if l == Some('P') {
-                format!("<span class=\"bad\">Missing (Probable)</span> {}", esc(row.how))
+                format!(
+                    "<span class=\"bad\">Missing (Probable)</span> {}",
+                    esc(row.how)
+                )
             } else {
                 format!("<span class=\"muted\">Not included</span> {}", esc(row.how))
             });
@@ -199,8 +226,14 @@ pub(crate) fn rr422_section(c: &mut Ctx) -> String {
     format!(
         "{}\n      {}",
         match scope(sc) {
-            Some(s) => para(&format!("Scope chosen: <b>{}</b>. The chosen scope's column is outlined.", s.label)),
-            None => note("Choose the scope in the Report tab to check the content against it.", true),
+            Some(s) => para(&format!(
+                "Scope chosen: <b>{}</b>. The chosen scope's column is outlined.",
+                s.label
+            )),
+            None => note(
+                "Choose the scope in the Report tab to check the content against it.",
+                true
+            ),
         },
         c.table(
             "RR 422 Table 6.3 content checklist",
@@ -220,8 +253,18 @@ pub(crate) fn locality(c: &mut Ctx) -> String {
     let id = c.r.scenario(sc).id.clone();
     format!(
         "{}\n      {}",
-        c.author("locality", "Describe the site, its surroundings and the study area."),
-        c.figure(fig("locality", "Locality and study area", "class", &id, bounds, show(&[("counts", false), ("crashes", false), ("connectors", false)])))
+        c.author(
+            "locality",
+            "Describe the site, its surroundings and the study area."
+        ),
+        c.figure(fig(
+            "locality",
+            "Locality and study area",
+            "class",
+            &id,
+            bounds,
+            show(&[("counts", false), ("crashes", false), ("connectors", false)])
+        ))
     )
 }
 
@@ -287,7 +330,11 @@ impl Aup {
                 return Some(crate::jsnum::value_to_js_string(v));
             }
         }
-        if self.loaded { Some(String::new()) } else { None }
+        if self.loaded {
+            Some(String::new())
+        } else {
+            None
+        }
     }
 }
 
@@ -304,7 +351,8 @@ pub(crate) fn aup_of(r: &Rep, sc: usize) -> Aup {
             _ => None,
         })
         .unwrap_or_default();
-    let loaded = ov.is_some_and(|o| !js::items(js::get(Some(o), "sources")).is_empty()) || !art.is_empty();
+    let loaded =
+        ov.is_some_and(|o| !js::items(js::get(Some(o), "sources")).is_empty()) || !art.is_empty();
     let mut vmap = std::collections::HashMap::new();
     if let Some(o) = ov {
         let var = js::get(Some(o), "var");
@@ -314,8 +362,14 @@ pub(crate) fn aup_of(r: &Rep, sc: usize) -> Aup {
                     .iter()
                     .map(|v| {
                         JsonValue::from_pairs([
-                            ("tag", js::get(Some(v), "type").cloned().unwrap_or(JsonValue::Null)),
-                            ("pts", js::get(Some(v), "pts").cloned().unwrap_or(JsonValue::Null)),
+                            (
+                                "tag",
+                                js::get(Some(v), "type").cloned().unwrap_or(JsonValue::Null),
+                            ),
+                            (
+                                "pts",
+                                js::get(Some(v), "pts").cloned().unwrap_or(JsonValue::Null),
+                            ),
                         ])
                     })
                     .collect(),
@@ -340,7 +394,9 @@ fn uniq(v: impl Iterator<Item = String>) -> Vec<String> {
 
 /// `g0nslr(groups)`: some link's speed comes from the NSLR.
 fn g0nslr(groups: &[RoadGroup]) -> bool {
-    groups.iter().any(|g| g.links.iter().any(|l| speed_of(l).src == "NSLR"))
+    groups
+        .iter()
+        .any(|g| g.links.iter().any(|l| speed_of(l).src == "NSLR"))
 }
 
 /// `report-roads`.
@@ -354,10 +410,19 @@ pub(crate) fn roads(c: &mut Ctx) -> String {
         .iter()
         .take(40)
         .map(|g| {
-            let l = g.links.iter().copied().find(|l| l.fc.get().is_some_and(value_truthy)).or(g.links.first().copied());
+            let l = g
+                .links
+                .iter()
+                .copied()
+                .find(|l| l.fc.get().is_some_and(value_truthy))
+                .or(g.links.first().copied());
             let sp = uniq(g.links.iter().map(|l| {
                 let s = speed_of(l);
-                format!("{} ({})", s.v.map_or(fmt::DASH.to_string(), number_to_js_string), s.src)
+                format!(
+                    "{} ({})",
+                    s.v.map_or(fmt::DASH.to_string(), number_to_js_string),
+                    s.src
+                )
             }))
             .join(", ");
             let lanes = g
@@ -373,7 +438,12 @@ pub(crate) fn roads(c: &mut Ctx) -> String {
             } else {
                 fmt::DASH
             };
-            let vr = uniq(g.links.iter().filter_map(|l| a.vr(l)).filter(|v| !v.is_empty()));
+            let vr = uniq(
+                g.links
+                    .iter()
+                    .filter_map(|l| a.vr(l))
+                    .filter(|v| !v.is_empty()),
+            );
             Row::new(vec![
                 esc(&g.name),
                 esc(road_class(Some(g.cls.as_str())).label),
@@ -398,13 +468,32 @@ pub(crate) fn roads(c: &mut Ctx) -> String {
     let source = format!(
         "{}{}{}{}",
         attrib::OSM,
-        if has("fc") { format!("; Future Connect: {}", esc(AT_LICENCE_DEFAULT)) } else { String::new() },
-        if has("nslr") || g0nslr(&groups) { format!("; {}", attrib::NSLR) } else { String::new() },
-        if a.loaded { format!("; AUP arterial and vehicle access restriction controls: {}", esc(attrib::COUNCIL)) } else { String::new() }
+        if has("fc") {
+            format!("; Future Connect: {}", esc(AT_LICENCE_DEFAULT))
+        } else {
+            String::new()
+        },
+        if has("nslr") || g0nslr(&groups) {
+            format!("; {}", attrib::NSLR)
+        } else {
+            String::new()
+        },
+        if a.loaded {
+            format!(
+                "; AUP arterial and vehicle access restriction controls: {}",
+                esc(attrib::COUNCIL)
+            )
+        } else {
+            String::new()
+        }
     );
     let nt = format!(
         "{}Local roads are left out. '\u{2013}' means the layer is not loaded for this study area (AUP controls: Compliance tab).",
-        if groups.len() > 40 { format!("The 40 longest of {} roads are shown. ", groups.len()) } else { String::new() }
+        if groups.len() > 40 {
+            format!("The 40 longest of {} roads are shown. ", groups.len())
+        } else {
+            String::new()
+        }
     );
     format!(
         "{}\n      {}",
@@ -430,7 +519,10 @@ pub(crate) fn roads(c: &mut Ctx) -> String {
         if has("fc") {
             String::new()
         } else {
-            note("Load AT Future Connect (Traffic data) to fill the Future Connect columns; outside Auckland, tag classes by hand.", false)
+            note(
+                "Load AT Future Connect (Traffic data) to fill the Future Connect columns; outside Auckland, tag classes by hand.",
+                false,
+            )
         }
     )
 }
@@ -480,9 +572,17 @@ fn stops_of(r: &Rep) -> Stops {
         let text = format!(
             "GTFS timetable from {}{} ({}), loaded {}",
             who,
-            if dt.is_empty() { String::new() } else { format!(", service day {dt}") },
+            if dt.is_empty() {
+                String::new()
+            } else {
+                format!(", service day {dt}")
+            },
             lic,
-            if at.is_empty() { "date not recorded".to_string() } else { at }
+            if at.is_empty() {
+                "date not recorded".to_string()
+            } else {
+                at
+            }
         );
         let list = stops
             .iter()
@@ -511,11 +611,18 @@ fn stops_of(r: &Rep) -> Stops {
 
 /// `fcPtNear(sc, s)`: the Future Connect PT class of the nearest link (within 50 m) that has one.
 fn fc_pt_near(sc: &Scenario, s: &JsonValue) -> Option<String> {
-    let at = [js::num(js::get(Some(s), "lat")), js::num(js::get(Some(s), "lng"))];
+    let at = [
+        js::num(js::get(Some(s), "lat")),
+        js::num(js::get(Some(s), "lng")),
+    ];
     let mut best: Option<String> = None;
     let mut bd = 50.0;
     for l in sc.links.values() {
-        let Some(pt) = l.fc.get().and_then(|f| f.get("pt")).filter(|v| value_truthy(v)) else {
+        let Some(pt) =
+            l.fc.get()
+                .and_then(|f| f.get("pt"))
+                .filter(|v| value_truthy(v))
+        else {
             continue;
         };
         if l.status.is("closed") {
@@ -534,7 +641,11 @@ fn fc_pt_near(sc: &Scenario, s: &JsonValue) -> Option<String> {
 
 /// `siteCentre(sc)`: the mean position of the development zones.
 fn site_centre(sc: &Scenario) -> Option<[f64; 2]> {
-    let z: Vec<&crate::project::Zone> = sc.zones.values().filter(|z| zone_class(Some(z)) == "development").collect();
+    let z: Vec<&crate::project::Zone> = sc
+        .zones
+        .values()
+        .filter(|z| zone_class(Some(z)) == "development")
+        .collect();
     if z.is_empty() {
         return None;
     }
@@ -585,7 +696,18 @@ pub(crate) fn active(c: &mut Ctx) -> String {
         let mut ds: Vec<(&JsonValue, f64)> = st
             .list
             .iter()
-            .map(|s| (s, util::dist(&ctr, &[js::num(js::get(Some(s), "lat")), js::num(js::get(Some(s), "lng"))]) * walk_factor::VALUE))
+            .map(|s| {
+                (
+                    s,
+                    util::dist(
+                        &ctr,
+                        &[
+                            js::num(js::get(Some(s), "lat")),
+                            js::num(js::get(Some(s), "lng")),
+                        ],
+                    ) * walk_factor::VALUE,
+                )
+            })
             .filter(|(_, d)| *d <= 1200.0)
             .collect();
         js_sort_by(&mut ds, |a, b| a.1 - b.1);
@@ -597,44 +719,97 @@ pub(crate) fn active(c: &mut Ctx) -> String {
                 let code = js::text_or_empty(g("code"));
                 let mode = js::text_or_empty(g("mode"));
                 let routes = match g("routes") {
-                    Some(JsonValue::Array(a)) => a.iter().map(|x| if x.is_null() { String::new() } else { x.js_string() }).collect::<Vec<_>>().join(", "),
+                    Some(JsonValue::Array(a)) => a
+                        .iter()
+                        .map(|x| {
+                            if x.is_null() {
+                                String::new()
+                            } else {
+                                x.js_string()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     _ => String::new(),
                 };
                 let buses = match g("busesAM") {
-                    Some(b) if !b.is_null() && !matches!(b, JsonValue::String(t) if t.is_empty()) => rfmt::num(b.to_number(), 1),
+                    Some(b)
+                        if !b.is_null() && !matches!(b, JsonValue::String(t) if t.is_empty()) =>
+                    {
+                        rfmt::num(b.to_number(), 1)
+                    }
                     _ => fmt::DASH.to_string(),
                 };
                 let fc = js::text_or_empty(g("fcPt"));
-                let fc = if !fc.is_empty() { fc } else { fc_pt_near(scn, s).unwrap_or_else(|| fmt::DASH.to_string()) };
+                let fc = if !fc.is_empty() {
+                    fc
+                } else {
+                    fc_pt_near(scn, s).unwrap_or_else(|| fmt::DASH.to_string())
+                };
                 Row::new(vec![
                     esc(&js::text(g("name"))),
-                    esc(&if code.is_empty() { js::text(g("id")) } else { code }),
-                    esc(&if mode.is_empty() { "Bus".to_string() } else { mode }),
+                    esc(&if code.is_empty() {
+                        js::text(g("id"))
+                    } else {
+                        code
+                    }),
+                    esc(&if mode.is_empty() {
+                        "Bus".to_string()
+                    } else {
+                        mode
+                    }),
                     rfmt::q(*d),
                     rfmt::num(d / 80.0, 1),
                     esc(&routes),
                     buses,
                     esc(&fc),
-                    (if *d <= 400.0 { "400 m" } else if *d <= 800.0 { "800 m" } else { "1,200 m" }).to_string(),
+                    (if *d <= 400.0 {
+                        "400 m"
+                    } else if *d <= 800.0 {
+                        "800 m"
+                    } else {
+                        "1,200 m"
+                    })
+                    .to_string(),
                 ])
             })
             .collect();
         c.table(
             "Table PT-1 \u{b7} Public transport stops near the site",
             Tbl::new(
-                vec![h("Stop or station"), h("Code"), h("Mode"), hn("Walk m"), hn("Walk min"), h("Routes"), hn("Buses/h AM"), h("Future Connect PT"), h("Within")],
+                vec![
+                    h("Stop or station"),
+                    h("Code"),
+                    h("Mode"),
+                    hn("Walk m"),
+                    hn("Walk min"),
+                    h("Routes"),
+                    hn("Buses/h AM"),
+                    h("Future Connect PT"),
+                    h("Within"),
+                ],
                 rows,
             )
             .empty("No stops within 1,200 m."),
             &TableOpts {
                 source: Some(st.src.clone()),
-                note: Some(format!("{}. Walk time at 80 m/min. {}", esc(walk_factor::BASIS), esc(AT_FREQUENT))),
+                note: Some(format!(
+                    "{}. Walk time at 80 m/min. {}",
+                    esc(walk_factor::BASIS),
+                    esc(AT_FREQUENT)
+                )),
                 d: vec!["D13"],
                 ..TableOpts::default()
             },
         )
     } else {
-        note(&format!("Public transport stops are not loaded for this study area, so Table PT-1 is not filled. Load the bus timetable (GTFS) or AT bus and train stops (data feeds). {}", esc(AT_FREQUENT)), false)
+        note(
+            &format!(
+                "Public transport stops are not loaded for this study area, so Table PT-1 is not filled. Load the bus timetable (GTFS) or AT bus and train stops (data feeds). {}",
+                esc(AT_FREQUENT)
+            ),
+            false,
+        )
     };
     let groups = road_groups(scn);
     let ptd = {
@@ -655,7 +830,11 @@ pub(crate) fn active(c: &mut Ctx) -> String {
             Row::new(vec![
                 esc(&g.name),
                 esc(at_facility(l.cycle.as_str())),
-                if lts != 0 { format!("LTS {}", lts) } else { "Not allowed".to_string() },
+                if lts != 0 {
+                    format!("LTS {}", lts)
+                } else {
+                    "Not allowed".to_string()
+                },
                 anop_cycle(l, aadt).to_string(),
             ])
         })
@@ -663,13 +842,29 @@ pub(crate) fn active(c: &mut Ctx) -> String {
     let figs = if ctr.is_some() {
         let mut f = fig(
             "pt-catchments",
-            &format!("Public transport stops and the {} m walking catchments of the site", ["400", "800", "1,200"].join(" / ")),
+            &format!(
+                "Public transport stops and the {} m walking catchments of the site",
+                ["400", "800", "1,200"].join(" / ")
+            ),
             "class",
             &sc_id,
             bounds.clone(),
-            show(&[("counts", false), ("crashes", false), ("report-catchments", true), ("feeds-bus-stops", true)]),
+            show(&[
+                ("counts", false),
+                ("crashes", false),
+                ("report-catchments", true),
+                ("feeds-bus-stops", true),
+            ]),
         );
-        f.source = Some(format!("{}Catchments: {}", if st.text.is_empty() { String::new() } else { format!("{}. ", st.text) }, walk_factor::BASIS));
+        f.source = Some(format!(
+            "{}Catchments: {}",
+            if st.text.is_empty() {
+                String::new()
+            } else {
+                format!("{}. ", st.text)
+            },
+            walk_factor::BASIS
+        ));
         c.figure(f)
     } else {
         String::new()
@@ -685,7 +880,10 @@ pub(crate) fn active(c: &mut Ctx) -> String {
     );
     let mut lts_fig = fig(
         "cycle-lts",
-        &format!("Cycle network: level of traffic stress, {}", scn.name.as_str().unwrap_or("")),
+        &format!(
+            "Cycle network: level of traffic stress, {}",
+            scn.name.as_str().unwrap_or("")
+        ),
         "lts",
         &sc_id,
         bounds,
@@ -713,7 +911,9 @@ struct CountRow<'a> {
 }
 
 fn one_day(dur: &str) -> bool {
-    let d = dur.trim_start_matches(crate::jsnum::is_js_space).to_lowercase();
+    let d = dur
+        .trim_start_matches(crate::jsnum::is_js_space)
+        .to_lowercase();
     let after_ws = |s: &str| s.trim_start_matches(crate::jsnum::is_js_space).to_string();
     if let Some(rest) = d.strip_prefix('1') {
         let r = after_ws(rest);
@@ -745,17 +945,27 @@ fn count_rows<'a>(r: &Rep<'a>) -> Vec<CountRow<'a>> {
                 let h: String = t.chars().take(2).collect();
                 crate::jsnum::string_to_number(&h) < 12.0
             });
-            let hist: Option<Vec<f64>> = js::get(Some(c), "hist")
-                .filter(|h| h.truthy())
-                .map(|h| js::items(Some(h)).iter().map(JsonValue::to_number).filter(|v| *v > 0.0).collect());
-            let growth = hist.as_ref().filter(|h| h.len() >= 2).map(|h| (h[h.len() - 1] - h[0]) / h[0] / (h.len() as f64 - 1.0) * 100.0);
+            let hist: Option<Vec<f64>> = js::get(Some(c), "hist").filter(|h| h.truthy()).map(|h| {
+                js::items(Some(h))
+                    .iter()
+                    .map(JsonValue::to_number)
+                    .filter(|v| *v > 0.0)
+                    .collect()
+            });
+            let growth = hist
+                .as_ref()
+                .filter(|h| h.len() >= 2)
+                .map(|h| (h[h.len() - 1] - h[0]) / h[0] / (h.len() as f64 - 1.0) * 100.0);
             let dur = match js::get(Some(c), "dur").filter(|v| v.truthy()) {
                 Some(d) => d.js_string(),
                 None => {
                     if js::get(Some(c), "src").and_then(|v| v.as_str()) == Some("nzta") {
                         if js::truthy(js::get(Some(c), "virtual")) {
                             "NZTA estimate".to_string()
-                        } else if js::text_or_empty(js::get(Some(c), "note")).to_lowercase().contains("continuous") {
+                        } else if js::text_or_empty(js::get(Some(c), "note"))
+                            .to_lowercase()
+                            .contains("continuous")
+                        {
                             "Continuous".to_string()
                         } else {
                             "Periodic".to_string()
@@ -799,7 +1009,11 @@ pub(crate) fn peak_statement(r: &Rep) -> String {
             let d = js::get(Some(x.c), "date").filter(|v| v.truthy())?;
             let y: String = d.js_string().chars().take(4).collect();
             let n = crate::jsnum::string_to_number(&y);
-            if n != 0.0 && !n.is_nan() { Some(n) } else { None }
+            if n != 0.0 && !n.is_nan() {
+                Some(n)
+            } else {
+                None
+            }
         })
         .collect();
     let yr = if years.is_empty() {
@@ -826,7 +1040,12 @@ pub(crate) fn peak_statement(r: &Rep) -> String {
     let hh = |t: &str| {
         let hr = crate::jsnum::string_to_number(&t.chars().take(2).collect::<String>());
         let n = number_to_js_string(hr + 1.0);
-        format!("{}\u{2013}{}:{}", t, if n.len() < 2 { format!("0{n}") } else { n }, t.chars().skip(3).collect::<String>())
+        format!(
+            "{}\u{2013}{}:{}",
+            t,
+            if n.len() < 2 { format!("0{n}") } else { n },
+            t.chars().skip(3).collect::<String>()
+        )
     };
     let am_list: Vec<&CountRow> = hours.iter().copied().filter(|x| x.am).collect();
     let pm_list: Vec<&CountRow> = hours.iter().copied().filter(|x| !x.am).collect();
@@ -842,7 +1061,10 @@ pub(crate) fn peak_statement(r: &Rep) -> String {
         );
     }
     let part = |m: &Option<(String, usize)>, n: usize, w: &str| match m {
-        Some((t, k)) => format!("{w} peak hour {} (the busiest hour at {k} of {n} counts with a {w} peak)", hh(t)),
+        Some((t, k)) => format!(
+            "{w} peak hour {} (the busiest hour at {k} of {n} counts with a {w} peak)",
+            hh(t)
+        ),
         None => format!("no {w} peak hour reported"),
     };
     format!(
@@ -871,7 +1093,10 @@ pub(crate) fn volumes(c: &mut Ctx) -> String {
                 Some(d) => d.js_string(),
                 None if is_nzta => format!(
                     "Latest NZTA AADT year{}",
-                    nzta_at.map_or(String::new(), |a| format!(" (loaded {})", super::ctx::day_of(Some(a))))
+                    nzta_at.map_or(String::new(), |a| format!(
+                        " (loaded {})",
+                        super::ctx::day_of(Some(a))
+                    ))
                 ),
                 None => fmt::DASH.to_string(),
             };
@@ -886,13 +1111,25 @@ pub(crate) fn volumes(c: &mut Ctx) -> String {
                     "{} {}{}",
                     esc(&src),
                     esc(&js::text_or_empty(g("ref"))),
-                    if js::truthy(g("virtual")) { " (estimate)" } else { "" }
+                    if js::truthy(g("virtual")) {
+                        " (estimate)"
+                    } else {
+                        ""
+                    }
                 ),
                 esc(&date),
                 format!(
                     "{}{}",
-                    esc(&if cr.dur.is_empty() { fmt::DASH.to_string() } else { cr.dur.clone() }),
-                    if cr.one_day { " <b class=\"warn\" title=\"One day only\">24H</b>" } else { "" }
+                    esc(&if cr.dur.is_empty() {
+                        fmt::DASH.to_string()
+                    } else {
+                        cr.dur.clone()
+                    }),
+                    if cr.one_day {
+                        " <b class=\"warn\" title=\"One day only\">24H</b>"
+                    } else {
+                        ""
+                    }
                 ),
                 rfmt::adt(adt),
                 esc(&if !dir.is_empty() {
@@ -922,7 +1159,14 @@ pub(crate) fn volumes(c: &mut Ctx) -> String {
         .collect();
     let id = c.r.scenario(sc_of(c, c.sel.existing)).id.clone();
     let bounds = study_bounds(r, &c.sel);
-    let mut f = fig("counts", "Traffic count sites", "class", &id, bounds, show(&[("counts", true), ("crashes", false)]));
+    let mut f = fig(
+        "counts",
+        "Traffic count sites",
+        "class",
+        &id,
+        bounds,
+        show(&[("counts", true), ("crashes", false)]),
+    );
     f.source = Some(format!("{}; {}", attrib::NZTA, attrib::AT));
     format!(
         "{}\n      {}\n      {}",
@@ -970,7 +1214,13 @@ pub(crate) fn j2_table(c: &mut Ctx, sc: usize, title: &str) -> String {
     }
     let scn = r.scenario(sc);
     if rows.is_empty() {
-        return note(&format!("{} has no junction results. Run the model.", esc(r.sc(sc).name())), false);
+        return note(
+            &format!(
+                "{} has no junction results. Run the model.",
+                esc(r.sc(sc).name())
+            ),
+            false,
+        );
     }
     let ri = match c.refs.iter().position(|(k, _)| *k == scn.id) {
         Some(i) => i,
@@ -996,20 +1246,37 @@ pub(crate) fn j2_table(c: &mut Ctx, sc: usize, title: &str) -> String {
         };
         let mut cs = vec![reff, esc(&first.name), esc(&ctl)];
         for p in &pers {
-            let s = rows.iter().find(|x| x.id == *id && x.p == *p).and_then(|x| x.s.as_ref());
+            let s = rows
+                .iter()
+                .find(|x| x.id == *id && x.p == *p)
+                .and_then(|x| x.s.as_ref());
             match s {
                 Some(s) => {
                     cs.push(format!(
                         "{}{}",
                         rfmt::dos(s.dos),
-                        if s.dos > (if s.xp == 0.0 || s.xp.is_nan() { 1.0 } else { s.xp }) { " <b class=\"bad\">!</b>" } else { "" }
+                        if s.dos
+                            > (if s.xp == 0.0 || s.xp.is_nan() {
+                                1.0
+                            } else {
+                                s.xp
+                            })
+                        {
+                            " <b class=\"bad\">!</b>"
+                        } else {
+                            ""
+                        }
                     ));
                     cs.push(rfmt::delay(s.delay));
                     cs.push(esc(&s.los_text));
                     cs.push(format!(
                         "{}{}",
                         rfmt::q(s.q95),
-                        if s.leg.is_empty() { String::new() } else { format!(" <span class=\"muted\">({})</span>", esc(&s.leg)) }
+                        if s.leg.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" <span class=\"muted\">({})</span>", esc(&s.leg))
+                        }
                     ));
                 }
                 None => {
@@ -1067,7 +1334,11 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
         let mut by: Vec<(String, Option<f64>, String, Vec<&Link>, f64)> = Vec::new();
         for l in &g.links {
             let s = speed_of(l);
-            let k = format!("{}|{}", s.v.map_or("null".to_string(), number_to_js_string), s.src);
+            let k = format!(
+                "{}|{}",
+                s.v.map_or("null".to_string(), number_to_js_string),
+                s.src
+            );
             let i = match by.iter().position(|x| x.0 == k) {
                 Some(i) => i,
                 None => {
@@ -1083,7 +1354,12 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
         for x in by {
             secs.push(Part {
                 name: if multi {
-                    format!("{} ({} km at {} km/h)", g.name, rfmt::num(x.4, 2), x.1.map_or("?".to_string(), number_to_js_string))
+                    format!(
+                        "{} ({} km at {} km/h)",
+                        g.name,
+                        rfmt::num(x.4, 2),
+                        x.1.map_or("?".to_string(), number_to_js_string)
+                    )
                 } else {
                     g.name.clone()
                 },
@@ -1118,14 +1394,25 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
             let obs = g
                 .links
                 .iter()
-                .map(|l| l.extra.get("obsSpeed").map_or(f64::NAN, crate::jsnum::value_to_number))
+                .map(|l| {
+                    l.extra
+                        .get("obsSpeed")
+                        .map_or(f64::NAN, crate::jsnum::value_to_number)
+                })
                 .find(|v| *v > 0.0);
             let lim_v = g.v;
             let mut cs = vec![
                 esc(&g.name),
-                format!("{} ({})", lim_v.map_or(fmt::DASH.to_string(), |v| rfmt::num(v, 0)), esc(&g.src)),
+                format!(
+                    "{} ({})",
+                    lim_v.map_or(fmt::DASH.to_string(), |v| rfmt::num(v, 0)),
+                    esc(&g.src)
+                ),
             ];
-            cs.extend(mod_.iter().map(|v| v.map_or(fmt::DASH.to_string(), |x| rfmt::num(x, 0))));
+            cs.extend(
+                mod_.iter()
+                    .map(|v| v.map_or(fmt::DASH.to_string(), |x| rfmt::num(x, 0))),
+            );
             cs.extend(mod_.iter().map(|v| match (v, lim_v) {
                 (Some(x), Some(l)) if l > 0.0 => rfmt::pct(x / l * 100.0),
                 _ => fmt::DASH.to_string(),
@@ -1155,16 +1442,22 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
         },
     );
     let figs = if let Some(p0) = pers.first() {
-        let bands = js::path(Some(r.raw), &["settings", "display", "speedBands"]).filter(|v| v.truthy());
+        let bands =
+            js::path(Some(r.raw), &["settings", "display", "speedBands"]).filter(|v| v.truthy());
         let hcm = bands.map_or("anop".to_string(), JsonValue::js_string) == "hcm";
         let mut f = fig(
             &format!("speed-{}-{}", scn.id, p0),
             &format!(
                 "Modelled speed as a share of the {}, {}, {} peak hour {} (indicative)",
-                if hcm { "free-flow speed" } else { "speed limit" },
+                if hcm {
+                    "free-flow speed"
+                } else {
+                    "speed limit"
+                },
                 r.sc(sc).name(),
                 p0,
-                r.year_of(sc).map_or("null".to_string(), number_to_js_string)
+                r.year_of(sc)
+                    .map_or("null".to_string(), number_to_js_string)
             ),
             "speed",
             &scn.id,
@@ -1172,13 +1465,11 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
             show(&[("counts", false), ("crashes", false)]),
         );
         f.period = Some(p0.to_string());
-        f.source = Some(
-            if scn.links.values().any(|l| speed_of(l).src == "NSLR") {
-                attrib::NSLR.to_string()
-            } else {
-                "Speed limits: coded speeds (NSLR not loaded)".to_string()
-            },
-        );
+        f.source = Some(if scn.links.values().any(|l| speed_of(l).src == "NSLR") {
+            attrib::NSLR.to_string()
+        } else {
+            "Speed limits: coded speeds (NSLR not loaded)".to_string()
+        });
         c.figure(f)
     } else {
         String::new()
@@ -1188,7 +1479,19 @@ pub(crate) fn speeds(c: &mut Ctx) -> String {
 }
 
 fn _unused(_: Head, _: &[&str], _: Maybe<JsNum>) -> Vec<String> {
-    let _ = (cells::<&str>, int, int_f, year_txt, cx::ID, ctext, cnum, kit_junction_name, crash_years, junction_groups, links_at);
+    let _ = (
+        cells::<&str>,
+        int,
+        int_f,
+        year_txt,
+        cx::ID,
+        ctext,
+        cnum,
+        kit_junction_name,
+        crash_years,
+        junction_groups,
+        links_at,
+    );
     Vec::new()
 }
 
@@ -1271,7 +1574,10 @@ pub(crate) fn external_legs<'a>(sc: &'a Scenario, members: &[String]) -> Vec<Ext
     let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
     let ns: Vec<&crate::project::Node> = members.iter().filter_map(|id| sc.nodes.get(id)).collect();
     let n = ns.len() as f64;
-    let ctr = [ns.iter().fold(0.0, |s, x| s + x.lat.num()) / n, ns.iter().fold(0.0, |s, x| s + x.lng.num()) / n];
+    let ctr = [
+        ns.iter().fold(0.0, |s, x| s + x.lat.num()) / n,
+        ns.iter().fold(0.0, |s, x| s + x.lng.num()) / n,
+    ];
     let one_way = |l: &Link| !(l.lanes_ab.int32() > 0 && l.lanes_ba.int32() > 0);
     struct G<'a> {
         links: Vec<&'a Link>,
@@ -1282,15 +1588,26 @@ pub(crate) fn external_legs<'a>(sc: &'a Scenario, members: &[String]) -> Vec<Ext
     let mut legs: Vec<G> = Vec::new();
     for id in members {
         for l in links_at(sc, id) {
-            if l.status.is("closed") || seen.contains(l.id.as_str()) || (inside.contains(l.a.as_str()) && inside.contains(l.b.as_str())) {
+            if l.status.is("closed")
+                || seen.contains(l.id.as_str())
+                || (inside.contains(l.a.as_str()) && inside.contains(l.b.as_str()))
+            {
                 continue;
             }
             seen.insert(&l.id);
-            let far = sc.nodes.get(if inside.contains(l.a.as_str()) { &l.b } else { &l.a });
+            let far = sc.nodes.get(if inside.contains(l.a.as_str()) {
+                &l.b
+            } else {
+                &l.a
+            });
             let b = far.map_or(0.0, |f| util::bearing(&ctr, &f.ll()));
             let nm = crate::jsnum::js_trim(l.name.as_str().unwrap_or("")).to_lowercase();
             let pos = legs.iter().position(|g| {
-                !nm.is_empty() && g.nm == nm && one_way(l) && g.links.iter().all(|x| one_way(x)) && util::ang_diff(g.b, b) < 45.0
+                !nm.is_empty()
+                    && g.nm == nm
+                    && one_way(l)
+                    && g.links.iter().all(|x| one_way(x))
+                    && util::ang_diff(g.b, b) < 45.0
             });
             match pos {
                 Some(p) => legs[p].links.push(l),
@@ -1303,5 +1620,10 @@ pub(crate) fn external_legs<'a>(sc: &'a Scenario, members: &[String]) -> Vec<Ext
             }
         }
     }
-    legs.into_iter().map(|g| ExtLeg { links: g.links, name: g.name }).collect()
+    legs.into_iter()
+        .map(|g| ExtLeg {
+            links: g.links,
+            name: g.name,
+        })
+        .collect()
 }

@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "id": "budget/0001-work",
+  "source": {
+    "closed-form": {
+      "derivation": "a box's work runs past a budget of 8 units"
+    }
+  },
+  "fixed_by": null,
+  "speed": "fast",
+  "log": "d9d9f8da534b474643424f5286010101805834878201000001a70118400210031902800419190005190c800601073821831200007173706172652d6b69742066697874757265a01ab36d7aa38614010180583986815000000000000000010000000000000000686d616b652e626f7801804f828300000083191900190c8019064082081b00000100000000001a26f417d2860201018058248202582098e83c739392e8f87319194b5b51a15297a00a82296bcd837ac6879a685745af1ad290f559",
+  "expect": [
+    {
+      "edition": "pre-edition",
+      "operations": {
+        "make.box": 1
+      },
+      "expect": {
+        "err": {
+          "kind": "BudgetExceeded",
+          "entities": [],
+          "work": {
+            "work": 9,
+            "logical_bytes": 0
+          }
+        }
+      }
+    }
+  ],
+  "status": "pass",
+  "history": []
+}

@@ -2,7 +2,10 @@
 
 use super::consts::{GFA_USES, NO_YIELD, NO_YIELD_GROUPS, aup_name, std as std_, yield_row};
 use crate::edit::IdSource;
-use crate::jsnum::{Maybe, Num, json_number, math_round, number_to_js_string, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{
+    Maybe, Num, json_number, math_round, number_to_js_string, value_to_js_string, value_to_number,
+    value_truthy,
+};
 use crate::project::{OrderedMap, Project, Zone, land_use};
 use crate::util::fmt;
 use serde_json::{Map, Value, json};
@@ -63,8 +66,12 @@ pub fn yield_def(code: f64, p: Option<&Project>) -> YieldDef {
         dph: base.and_then(|b| b.dph),
         homes: base.and_then(|b| b.homes).map(str::to_string),
         far: base.and_then(|b| b.far),
-        mix: base.and_then(|b| b.mix).map(|m| m.iter().map(|(k, v)| (k.to_string(), *v)).collect()),
-        per: base.and_then(|b| b.per).map(|m| m.iter().map(|(k, v)| (k.to_string(), *v)).collect()),
+        mix: base
+            .and_then(|b| b.mix)
+            .map(|m| m.iter().map(|(k, v)| (k.to_string(), *v)).collect()),
+        per: base
+            .and_then(|b| b.per)
+            .map(|m| m.iter().map(|(k, v)| (k.to_string(), *v)).collect()),
         assumed: base.is_some_and(|b| b.assumed),
         note: base.and_then(|b| b.note).map(str::to_string),
         net_pct: std_::YIELDS_NET_PCT,
@@ -78,7 +85,10 @@ pub fn yield_def(code: f64, p: Option<&Project>) -> YieldDef {
         d.far = Some(x);
     }
     d.net_pct = num("netPct").unwrap_or(std_::YIELDS_NET_PCT);
-    let use_ = over.get("use").and_then(Value::as_str).filter(|u| GFA_USES.contains(u));
+    let use_ = over
+        .get("use")
+        .and_then(Value::as_str)
+        .filter(|u| GFA_USES.contains(u));
     d.user = ["dph", "far", "netPct"].iter().any(|k| num(k).is_some()) || use_.is_some();
     if d.far.is_some_and(|f| f > 0.0) && !base.is_some_and(|b| b.mix.is_some()) {
         match use_ {
@@ -134,7 +144,11 @@ impl Yield {
 }
 
 fn lu_value(lu: &[(String, f64)]) -> Value {
-    Value::Object(lu.iter().map(|(k, v)| (k.clone(), json_number(*v))).collect::<Map<_, _>>())
+    Value::Object(
+        lu.iter()
+            .map(|(k, v)| (k.clone(), json_number(*v)))
+            .collect::<Map<_, _>>(),
+    )
 }
 
 fn set(lu: &mut Vec<(String, f64)>, k: &str, v: f64) {
@@ -162,7 +176,11 @@ pub fn yield_of(code: f64, ha: f64, p: Option<&Project>, name: Option<&str>) -> 
     }
     if d.far.is_some_and(|x| x > 0.0) {
         for (k, s) in d.mix.iter().flatten() {
-            set(&mut lu, k, math_round(net * 1e4 * d.far.expect("far") * s / 10.0) * 10.0);
+            set(
+                &mut lu,
+                k,
+                math_round(net * 1e4 * d.far.expect("far") * s / 10.0) * 10.0,
+            );
         }
     }
     for (k, per_ha) in d.per.iter().flatten() {
@@ -175,22 +193,53 @@ pub fn yield_of(code: f64, ha: f64, p: Option<&Project>, name: Option<&str>) -> 
         note_parts.push(n.clone());
     }
     if d.needs_use {
-        note_parts.push("Choose what the floor area is used for, so the GFA ratio gives a land use".to_string());
+        note_parts.push(
+            "Choose what the floor area is used for, so the GFA ratio gives a land use".to_string(),
+        );
     }
-    let mut basis = format!("{} ha \u{d7} {}% developable", fmt::num(hav, 2), number_to_js_string(d.net_pct));
+    let mut basis = format!(
+        "{} ha \u{d7} {}% developable",
+        fmt::num(hav, 2),
+        number_to_js_string(d.net_pct)
+    );
     if d.dph.is_some_and(crate::jsnum::truthy_number) {
-        basis.push_str(&format!(" \u{d7} {} dwellings/ha", number_to_js_string(d.dph.expect("dph"))));
+        basis.push_str(&format!(
+            " \u{d7} {} dwellings/ha",
+            number_to_js_string(d.dph.expect("dph"))
+        ));
     }
     if d.far.is_some_and(crate::jsnum::truthy_number) {
-        basis.push_str(&format!(" \u{d7} GFA ratio {}", number_to_js_string(d.far.expect("far"))));
+        basis.push_str(&format!(
+            " \u{d7} GFA ratio {}",
+            number_to_js_string(d.far.expect("far"))
+        ));
     }
     if let Some(per) = &d.per {
         basis.push_str(" \u{d7} ");
-        basis.push_str(&per.iter().map(|(k, v)| format!("{} {}/ha", number_to_js_string(*v), land_use(k).map_or("", |l| l.unit))).collect::<Vec<_>>().join(", "));
+        basis.push_str(
+            &per.iter()
+                .map(|(k, v)| {
+                    format!(
+                        "{} {}/ha",
+                        number_to_js_string(*v),
+                        land_use(k).map_or("", |l| l.unit)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
     }
     Yield {
         code,
-        name: name.filter(|n| !n.is_empty()).map(str::to_string).unwrap_or_else(|| aup_name(code).map_or_else(|| format!("AUP zone {}", number_to_js_string(code)), str::to_string)),
+        name: name
+            .filter(|n| !n.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                aup_name(code).map_or_else(
+                    || format!("AUP zone {}", number_to_js_string(code)),
+                    str::to_string,
+                )
+            }),
         ha: hav,
         net_pct: d.net_pct,
         dph: d.dph.filter(|x| crate::jsnum::truthy_number(*x)),
@@ -200,7 +249,13 @@ pub fn yield_of(code: f64, ha: f64, p: Option<&Project>, name: Option<&str>) -> 
         user: d.user,
         assumed: d.assumed,
         needs_use: d.needs_use,
-        label: if d.user { std_::YIELDS_USER.to_string() } else if known { std_::YIELDS_LABEL.to_string() } else { std_::YIELDS_NONE.to_string() },
+        label: if d.user {
+            std_::YIELDS_USER.to_string()
+        } else if known {
+            std_::YIELDS_LABEL.to_string()
+        } else {
+            std_::YIELDS_NONE.to_string()
+        },
         note: note_parts.join(". "),
         basis,
     }
@@ -260,7 +315,8 @@ impl ZonedCapacity {
             });
             v
         };
-        let list = |k: &str| Value::Array(self.rows.iter().filter(|r| r.kind == k).map(row).collect());
+        let list =
+            |k: &str| Value::Array(self.rows.iter().filter(|r| r.kind == k).map(row).collect());
         json!({
             "rows": self.rows.iter().map(row).collect::<Vec<_>>(), "zoned": list("zoned"), "assumed": list("assumed"), "missing": list("missing"),
             "total": lu_value(&self.total), "assumedTotal": lu_value(&self.assumed_total), "proposedTotal": self.proposed_total.as_ref().map_or(Value::Null, |t| lu_value(t)),
@@ -271,13 +327,19 @@ impl ZonedCapacity {
 }
 
 fn no_yield(code: f64, group: &str) -> bool {
-    NO_YIELD.iter().any(|c| f64::from(*c) == code) || NO_YIELD_GROUPS.iter().any(|g| g.eq_ignore_ascii_case(group))
+    NO_YIELD.iter().any(|c| f64::from(*c) == code)
+        || NO_YIELD_GROUPS
+            .iter()
+            .any(|g| g.eq_ignore_ascii_case(group))
 }
 
 /// `proposedOf(code, P)`: the zone code the user proposes in place of an operative one, if it has a yield.
 pub fn proposed_of(code: f64, p: &Project) -> Option<f64> {
     let l = landuse_of(p)?;
-    let t = l.get("proposed").filter(|x| value_truthy(x)).and_then(|x| x.get(key_of(code)))?;
+    let t = l
+        .get("proposed")
+        .filter(|x| value_truthy(x))
+        .and_then(|x| x.get(key_of(code)))?;
     if !value_truthy(t) {
         return None;
     }
@@ -286,13 +348,19 @@ pub fn proposed_of(code: f64, p: &Project) -> Option<f64> {
         return None;
     }
     let has_default = yield_row(tn).is_some();
-    let has_user = l.get("yields").is_some_and(|y| y.get(key_of(tn)).is_some_and(value_truthy));
+    let has_user = l
+        .get("yields")
+        .is_some_and(|y| y.get(key_of(tn)).is_some_and(value_truthy));
     (has_default || has_user).then_some(tn)
 }
 
 /// The zoned areas of the last fill (`P.landuse.aupSummary`).
 pub fn aup_summary(p: &Project) -> Vec<Value> {
-    landuse_of(p).and_then(|l| l.get("aupSummary")).and_then(Value::as_array).cloned().unwrap_or_default()
+    landuse_of(p)
+        .and_then(|l| l.get("aupSummary"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// `zonedCapacity(summary, opts)`: every zoned area in the study area with a kind: 'zoned' (a yield counted in full build-out), 'missing' (no
@@ -301,12 +369,20 @@ pub fn aup_summary(p: &Project) -> Vec<Value> {
 pub fn zoned_capacity(p: &Project, summary: &[Value], codes: Option<&[f64]>) -> ZonedCapacity {
     let rows: Vec<CapRow> = summary
         .iter()
-        .filter(|r| codes.is_none_or(|c| c.contains(&r.get("code").map_or(f64::NAN, value_to_number))))
+        .filter(|r| {
+            codes.is_none_or(|c| c.contains(&r.get("code").map_or(f64::NAN, value_to_number)))
+        })
         .map(|r| {
             let code = r.get("code").map_or(f64::NAN, value_to_number);
             let ha = r.get("ha").map_or(f64::NAN, value_to_number);
-            let name = r.get("name").filter(|x| value_truthy(x)).map(value_to_js_string);
-            let group = r.get("group").filter(|x| value_truthy(x)).map_or(String::new(), value_to_js_string);
+            let name = r
+                .get("name")
+                .filter(|x| value_truthy(x))
+                .map(value_to_js_string);
+            let group = r
+                .get("group")
+                .filter(|x| value_truthy(x))
+                .map_or(String::new(), value_to_js_string);
             let y = yield_of(code, ha, Some(p), name.as_deref());
             let none = no_yield(code, &group);
             let to = if none { None } else { proposed_of(code, p) };
@@ -319,8 +395,20 @@ pub fn zoned_capacity(p: &Project, summary: &[Value], codes: Option<&[f64]>) -> 
             } else {
                 "missing"
             };
-            let label = if none { std_::YIELDS_NOT_LAND.to_string() } else if y.assumed { std_::YIELDS_ASSUMED.to_string() } else { y.label.clone() };
-            CapRow { proposed: to.map(|t| yield_of(t, ha, Some(p), None)), y, group, kind, label }
+            let label = if none {
+                std_::YIELDS_NOT_LAND.to_string()
+            } else if y.assumed {
+                std_::YIELDS_ASSUMED.to_string()
+            } else {
+                y.label.clone()
+            };
+            CapRow {
+                proposed: to.map(|t| yield_of(t, ha, Some(p), None)),
+                y,
+                group,
+                kind,
+                label,
+            }
         })
         .collect();
     let (mut total, mut assumed_total, mut proposed_total) = (Vec::new(), Vec::new(), Vec::new());
@@ -338,7 +426,12 @@ pub fn zoned_capacity(p: &Project, summary: &[Value], codes: Option<&[f64]>) -> 
         }
     }
     let any = rows.iter().any(|r| r.proposed.is_some());
-    ZonedCapacity { rows, total, assumed_total, proposed_total: any.then_some(proposed_total) }
+    ZonedCapacity {
+        rows,
+        total,
+        assumed_total,
+        proposed_total: any.then_some(proposed_total),
+    }
 }
 
 /// `applyYield(z, code, ha, P)`: fills a zone's land use from the zoned yield of an AUP zone code and a site area, with the source of each quantity.
@@ -349,12 +442,24 @@ pub fn apply_yield(z: &mut Zone, p: &Project, ids: &dyn IdSource, code: f64, ha:
         lu.insert(k.clone(), Num::number(*q));
     }
     z.lu = Maybe::Set(lu);
-    z.extra.insert("site".into(), json!({ "code": json_number(code), "ha": json_number(ha) }));
+    z.extra.insert(
+        "site".into(),
+        json!({ "code": json_number(code), "ha": json_number(ha) }),
+    );
     let mut src = Map::new();
     let source = if y.user {
         format!("User-entered yield for {}", y.name)
     } else {
-        format!("{} ({}{})", std_::YIELDS_LABEL, y.name, if y.assumed { format!("; {}", std_::YIELDS_ASSUMED) } else { String::new() })
+        format!(
+            "{} ({}{})",
+            std_::YIELDS_LABEL,
+            y.name,
+            if y.assumed {
+                format!("; {}", std_::YIELDS_ASSUMED)
+            } else {
+                String::new()
+            }
+        )
     };
     let today = ids.today();
     for (k, q) in &y.lu {

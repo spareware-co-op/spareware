@@ -23,7 +23,8 @@ pub fn args(case: &Value) -> V {
 
 /// A recorded case's `ok` answer, or None when the prototype threw.
 pub fn ok_of(case: &Value) -> &Value {
-    case.get("ok").unwrap_or_else(|| panic!("case {} has no ok answer: {}", case["id"], case))
+    case.get("ok")
+        .unwrap_or_else(|| panic!("case {} has no ok answer: {}", case["id"], case))
 }
 
 /// Replaces the ids the prototype makes at random (`mit...`, `cond...`) by "<uid>", as the generator does in the recorded answers.
@@ -31,7 +32,11 @@ pub fn norm_uids(v: &mut V) {
     match v {
         V::String(s) => {
             let tail = s.strip_prefix("mit").or_else(|| s.strip_prefix("cond"));
-            if tail.is_some_and(|t| t.len() >= 6 && t.chars().all(|c| c.is_ascii_digit() || c.is_ascii_lowercase())) {
+            if tail.is_some_and(|t| {
+                t.len() >= 6
+                    && t.chars()
+                        .all(|c| c.is_ascii_digit() || c.is_ascii_lowercase())
+            }) {
                 *s = "<uid>".to_string();
             }
         }
@@ -55,9 +60,14 @@ pub fn run_report(case: &Value, p: &V) -> V {
 /// `{ enabled, text }` of the export of a case `{ id }` (the prototype's registry id is "compliance-extra-<id>").
 pub fn run_export(case: &Value, p: &V) -> V {
     let id = format!("compliance-extra-{}", args(case).g("id").s());
-    let enabled = extra::export_enabled(&id, p).unwrap_or_else(|| panic!("{}: no export {id}", case["id"]));
-    let text = extra::export_build(&id, p).unwrap_or_else(|| panic!("{}: no export {id}", case["id"]));
-    obj(vec![("enabled", V::Bool(enabled)), ("text", V::String(text))])
+    let enabled =
+        extra::export_enabled(&id, p).unwrap_or_else(|| panic!("{}: no export {id}", case["id"]));
+    let text =
+        extra::export_build(&id, p).unwrap_or_else(|| panic!("{}: no export {id}", case["id"]));
+    obj(vec![
+        ("enabled", V::Bool(enabled)),
+        ("text", V::String(text)),
+    ])
 }
 
 /// `{ k: v, ... }` from pairs.
