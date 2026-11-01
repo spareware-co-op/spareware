@@ -418,9 +418,15 @@ fn run(case: &Case) -> Result<Run, Finding> {
         let (call, input) = match &entry.item {
             Item::Make { shape, at } => {
                 let point = at.and_then(|(which, near)| {
-                    let points: Vec<&P3> = taken?.body.arenas().points.iter().collect();
+                    let points: Vec<P3> = taken?
+                        .body
+                        .arenas()
+                        .points
+                        .iter()
+                        .filter_map(|point| point.grid())
+                        .collect();
                     let which = usize::from(which).checked_rem(points.len())?;
-                    Some(beside(**points.get(which)?, near))
+                    Some(beside(*points.get(which)?, near))
                 });
                 (make_call(shape, point), None)
             }

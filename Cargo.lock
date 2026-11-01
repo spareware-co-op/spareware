@@ -371,6 +371,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
+name = "clipper2-rust"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "210e9ea90a5f6c731c23bf642383ad7c006d8b24803c5c33afd5aaeae5a33f66"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "condtype"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -579,6 +588,12 @@ dependencies = [
 
 [[package]]
 name = "dashu-base"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a64b04cdfc4c8533100fe00304eb9687173bda47b1f1dac8af12ba13712ed49d"
+
+[[package]]
+name = "dashu-base"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "861a614e79388a4c72aa66b0bdabc91e3a4f30d53e0c8d962953e207d75884d0"
@@ -588,14 +603,40 @@ dependencies = [
 
 [[package]]
 name = "dashu-int"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6ee98721d5d223e5b64b642dd9588b79d9ef415554b13720308b77d628c3be6"
+dependencies = [
+ "cfg-if",
+ "dashu-base 0.5.1",
+ "num-modular",
+ "num-traits",
+ "rustversion",
+ "static_assertions",
+]
+
+[[package]]
+name = "dashu-int"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64a0490b40a6a3f6427970035f17f76fd59c01d3cd9f9140809672863a0d64c8"
 dependencies = [
  "cfg-if",
- "dashu-base",
+ "dashu-base 0.6.1",
  "num-modular",
  "static_assertions",
+]
+
+[[package]]
+name = "dashu-ratio"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "727613e0312d442301147d9e45eb2e7c2797230fc6d223a2c51ecf0e98dfeb5e"
+dependencies = [
+ "dashu-base 0.5.1",
+ "dashu-int 0.5.1",
+ "num-traits",
+ "rustversion",
 ]
 
 [[package]]
@@ -604,8 +645,8 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb0b7e2610ae7f28b2ab8b09229afedc9cbc7a32e7c647b916a3a49ca00123c1"
 dependencies = [
- "dashu-base",
- "dashu-int",
+ "dashu-base 0.6.1",
+ "dashu-int 0.6.2",
 ]
 
 [[package]]
@@ -998,8 +1039,8 @@ dependencies = [
 name = "geom-curve"
 version = "0.0.0"
 dependencies = [
- "dashu-int",
- "dashu-ratio",
+ "dashu-int 0.6.2",
+ "dashu-ratio 0.6.1",
  "geom-math",
  "geom-num",
  "geom-nurbs",
@@ -1131,8 +1172,8 @@ dependencies = [
 name = "geom-gen"
 version = "0.0.0"
 dependencies = [
- "dashu-int",
- "dashu-ratio",
+ "dashu-int 0.6.2",
+ "dashu-ratio 0.6.1",
  "engine-geometry",
  "geom-num",
  "geom-test",
@@ -1210,8 +1251,8 @@ dependencies = [
 name = "geom-linalg"
 version = "0.0.0"
 dependencies = [
- "dashu-int",
- "dashu-ratio",
+ "dashu-int 0.6.2",
+ "dashu-ratio 0.6.1",
  "geom-num",
  "geom-test",
 ]
@@ -1304,8 +1345,8 @@ dependencies = [
 name = "geom-num"
 version = "0.0.0"
 dependencies = [
- "dashu-int",
- "dashu-ratio",
+ "dashu-int 0.6.2",
+ "dashu-ratio 0.6.1",
  "geom-run",
  "geom-test",
  "libm",
@@ -1322,8 +1363,8 @@ dependencies = [
 name = "geom-nurbs"
 version = "0.0.0"
 dependencies = [
- "dashu-int",
- "dashu-ratio",
+ "dashu-int 0.6.2",
+ "dashu-ratio 0.6.1",
  "geom-linalg",
  "geom-math",
  "geom-num",
@@ -1508,7 +1549,7 @@ dependencies = [
 name = "geom-surface"
 version = "0.0.0"
 dependencies = [
- "dashu-ratio",
+ "dashu-ratio 0.6.1",
  "geom-curve",
  "geom-math",
  "geom-num",
@@ -1561,20 +1602,23 @@ version = "0.0.0"
 dependencies = [
  "cargo_metadata",
  "clap",
- "dashu-int",
- "dashu-ratio",
+ "dashu-int 0.6.2",
+ "dashu-ratio 0.6.1",
  "geom-curve",
  "geom-format",
  "geom-make",
  "geom-math",
+ "geom-mesh",
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-poly",
  "geom-run",
  "geom-surface",
  "geom-topo",
  "hex",
  "lcov",
+ "manifold-rust",
  "num-rational",
  "petgraph",
  "proc-macro2",
@@ -1859,6 +1903,19 @@ name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
+
+[[package]]
+name = "manifold-rust"
+version = "0.19.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddad329fd20646de626e339ea1146de838464060824cb3edd5593d8d061a3f95"
+dependencies = [
+ "clipper2-rust",
+ "dashu-int 0.5.1",
+ "dashu-ratio 0.5.1",
+ "num-traits",
+ "rustc-hash",
+]
 
 [[package]]
 name = "memchr"
@@ -2315,6 +2372,12 @@ name = "robust"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
+
+[[package]]
+name = "rustc-hash"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
 name = "rustc_version"

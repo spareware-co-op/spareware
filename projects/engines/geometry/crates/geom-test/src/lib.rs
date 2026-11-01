@@ -125,6 +125,14 @@
 //!   its documentation); fixed seeds on pull requests, fresh ones nightly (`kernel-nightly.yml`).
 //!
 //! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
+//!
+//! Piece G136 adds the reference for flat solids:
+//!
+//! - [`flat_reference`]: booleans, imprint, cells, plane sections, In-On-Out, volumes, centroids,
+//!   clash and first contact in exact rationals, by brute force over a full plane arrangement,
+//!   written from the definitions alone; `tests/flat_reference.rs` holds it to hand cases.
+//!
+//! The other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
@@ -197,6 +205,8 @@
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
 //! - `geom-nurbs` (MPL-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
 //!   reference, and `oracle::geomdl` (G113) with the first outside oracle.
+//! - `geom-mesh` and `geom-poly` (MPL-2.0, ours): the booleans `oracle::meshes` (G154) compares
+//!   with the mesh oracles.
 //! - `geom-format` and `geom-run` (MPL-2.0, ours), dependencies (G97): a fixture's operation log is
 //!   a standalone native file, and the meter its readers take.
 //! - `geom-curve`, `geom-surface` and `geom-math` (MPL-2.0, ours), development dependencies (G69):
@@ -233,6 +243,7 @@ pub mod coverage;
 pub mod deps;
 pub mod fixed;
 pub mod fixture;
+pub mod flat_reference;
 pub mod foundation;
 pub mod golden;
 pub mod grid;

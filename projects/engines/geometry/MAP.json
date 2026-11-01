@@ -10833,6 +10833,32 @@
           "target": "lib"
         },
         {
+          "cost": "`p` planes cut the box into up to O(p³) cells, each cut costing every face of every cell, and rationals grow with each cut. This reference accepts that, because it runs on small cases only. No recursion.",
+          "does": "a [`Solid`] is a closed, oriented set of planar polygons with rational corners. Everything else comes from one object, the arrangement of a set of planes: every plane cuts a large box and every cell already cut, so [`arrangement`] gives convex [`Cell`]s meeting face to face. Each cell lies wholly in or out of each solid whose face planes were among the cuts, and one point of it decides which, by [`Solid::locate`]: a ray from the point, counted against every face.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/flat_reference.rs",
+          "guarantees": [
+            "**Exact.** Every value is an exact rational; nothing rounds, and every comparison is a comparison of rationals.",
+            "**Independent of the kernel.** Written from the definitions below, without reading any kernel boolean (none exists as it is written), sharing no code with the kernel and calling none (chapter 28.9: a different author, a different agent session). A cell method, where a kernel follows surfaces.",
+            "**Refused, never guessed.** A polygon of fewer than three corners, one with no area or not in a plane, and a solid whose edges do not pair up are [`ReferenceError`]s.",
+            "**Regularised.** A boolean's result is the closure of its interior: a shared face or edge leaves nothing behind."
+          ],
+          "job": "The reference implementation of flat solids (chapter 28.9): booleans, imprint, cells, plane sections, In-On-Out, volumes, centroids, clash and first contact, in exact rationals, by brute force, to check the kernel against.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/360767.360802",
+              "https://doi.org/10.1137/0215024",
+              "https://doi.org/10.1016/0020-0190(79",
+              "https://doi.org/10.1109/TPAMI.1986.4767788"
+            ],
+            "text": "Sutherland and Hodgman's clip of a polygon by a plane, \"Reentrant polygon clipping\", CACM 17(1), 1974, <https://doi.org/10.1145/360767.360802>; ray parity for point location; Edelsbrunner, O'Rourke and Seidel, \"Constructing arrangements of lines and hyperplanes\", SIAM J. Computing 15(2), 1986, <https://doi.org/10.1137/0215024>, for the arrangement as a cell complex, whose faces meet exactly; Andrew's monotone chain, 1979, <https://doi.org/10.1016/0020-0190(79)90072-3>, for a cut's outline; the divergence theorem over a fan of tetrahedra for volume and centroid; Canny's vertex-face and edge-edge contact events for polyhedra under translation, <https://doi.org/10.1109/TPAMI.1986.4767788>."
+          },
+          "path": "geom_test::flat_reference",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the length of the path; [`kernel_crates`] reads one directory.",
           "does": "[`place`] says, for a path relative to the repository root, which kernel crate it belongs to and whether it is in the foundation set, a development crate, or outside the kernel. [`kernel_crates`] lists the kernel crates in the kernel's folder. The mutation gate ([`crate::mutants`]) and the coverage gate ([`crate::coverage`]) both classify with these, so the two gates can never disagree about what the foundation set is.",
           "family": [],

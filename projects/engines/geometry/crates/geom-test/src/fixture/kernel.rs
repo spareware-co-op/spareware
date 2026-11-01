@@ -39,7 +39,7 @@ use geom_topo::Body;
 use super::calls::Call;
 use super::run::{Engine, Ran, Step};
 use super::{Class, Counts, Measures, Spend};
-use crate::oracle::geomdl;
+use crate::oracle::{geomdl, meshes};
 
 /// What an operation charged, as its context reports it.
 #[derive(Debug, Default)]
@@ -170,6 +170,9 @@ impl Engine for Kernel {
 
     fn run(&mut self, operation: &Operation) -> Ran {
         if let Some(ran) = geomdl::replay(operation) {
+            return ran;
+        }
+        if let Some(ran) = meshes::replay(operation) {
             return ran;
         }
         let call = match Call::read(&operation.name, operation.version, &operation.params) {

@@ -112,6 +112,18 @@
       "piece": "G441"
     },
     {
+      "id": "cherchi",
+      "what": "Cherchi, Pellacini, Attene and Livesu's exact mesh booleans",
+      "licence": "MIT AND LGPL-3.0-or-later",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Mesh booleans, compared exactly",
+      "source": "https://github.com/gcherchi/InteractiveAndRobustMeshBooleans",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G154"
+    },
+    {
       "id": "manifold",
       "what": "Manifold",
       "licence": "Apache-2.0",
@@ -128,10 +140,10 @@
       "what": "manifold-rust's rational engine",
       "licence": "Apache-2.0",
       "run": "dev-dependency",
-      "state": "planned",
+      "state": "live",
       "checks": "Mesh booleans",
       "source": "crates.io: manifold-rust",
-      "pin": null,
+      "pin": "0.19.2",
       "never_linked": [],
       "piece": "G154"
     },
