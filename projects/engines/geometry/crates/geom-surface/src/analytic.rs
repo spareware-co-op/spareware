@@ -1420,6 +1420,26 @@ fn blend(
     Ok(out)
 }
 
+/// The 3 × 3 matrix a·I + b·p·pᵀ + c·q·qᵀ, entry by entry.
+fn outer(
+    a: Interval,
+    (b, p): (Interval, &[Interval; 3]),
+    (c, q): (Interval, &[Interval; 3]),
+) -> Result<[[Interval; 3]; 3], CurveError> {
+    let zero = Interval::point(0.0)?;
+    let mut out = [[zero; 3]; 3];
+    for (i, row) in out.iter_mut().enumerate() {
+        for (j, cell) in row.iter_mut().enumerate() {
+            let at = |v: &[Interval; 3], k: usize| v.get(k).copied().ok_or(CurveError::Defect);
+            let diagonal = if i == j { a } else { zero };
+            let pp = b.mul(at(p, i)?.mul(at(p, j)?)?)?;
+            let qq = c.mul(at(q, i)?.mul(at(q, j)?)?)?;
+            *cell = diagonal.add(pp)?.add(qq)?;
+        }
+    }
+    Ok(out)
+}
+
 impl Round {
     /// A point's parts about the axis: its component w perpendicular to n̂, its height h along n̂,
     /// and n̂. Every round kind's equation reads these.
@@ -1439,6 +1459,12 @@ impl Round {
 }
 
 impl ImplicitBound for Plane {
+    /// F is linear: ∇²F = 0.
+    fn hessian_box(&self, _: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let zero = Interval::point(0.0)?;
+        Ok(Some([[zero; 3]; 3]))
+    }
+
     /// F(x) = (x − o)·(a × b).
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
         let [a0, a1, a2] = self.a.map(Interval::point);
@@ -1462,6 +1488,13 @@ impl ImplicitBound for Plane {
 }
 
 impl ImplicitBound for Sphere {
+    /// ∇²F = 2·I.
+    fn hessian_box(&self, _: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let (zero, two) = (Interval::point(0.0)?, Interval::point(2.0)?);
+        let none = [zero; 3];
+        Ok(Some(outer(two, (zero, &none), (zero, &none))?))
+    }
+
     /// F(x) = |x − c|² − r².
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
         let (w, h, n) = self.round.parts(&region)?;
@@ -1476,6 +1509,13 @@ impl ImplicitBound for Sphere {
 }
 
 impl ImplicitBound for Cylinder {
+    /// ∇²F = 2·(I − n̂n̂ᵀ).
+    fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let (_, _, n) = self.round.parts(&region)?;
+        let (zero, two) = (Interval::point(0.0)?, Interval::point(2.0)?);
+        Ok(Some(outer(two, (two.neg(), &n), (zero, &n))?))
+    }
+
     /// F(x) = |w|² − r², for w the point's component perpendicular to the axis.
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
         let (w, _, n) = self.round.parts(&region)?;
@@ -1490,6 +1530,20 @@ impl ImplicitBound for Cylinder {
 }
 
 impl ImplicitBound for Cone {
+    /// F = |x − c|² − h² − (r₀ + σ·h)², σ = k·s, so ∇²F = 2·I − 2·(1 + σ²)·n̂n̂ᵀ.
+    fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let (_, _, n) = self.round.parts(&region)?;
+        let [_, k] = self.round.lengths;
+        let slope = Interval::point(k * self.round.sign)?;
+        let (zero, one, two) = (
+            Interval::point(0.0)?,
+            Interval::point(1.0)?,
+            Interval::point(2.0)?,
+        );
+        let along = two.mul(one.add(slope.square()?)?)?.neg();
+        Ok(Some(outer(two, (along, &n), (zero, &n))?))
+    }
+
     /// F(x) = |w|² − (r₀ + k·s·h)², for w and h the point's parts about the axis. It vanishes on
     /// both nappes: past the apex as well as on the kind.
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
@@ -1507,6 +1561,24 @@ impl ImplicitBound for Cone {
 }
 
 impl ImplicitBound for Torus {
+    /// With g = x − c and A = |g|² + R² − r², ∇F = 4A·g − 8R²·w, so
+    /// ∇²F = 8·g·gᵀ + 4A·I − 8R²·(I − n̂n̂ᵀ) = (4A − 8R²)·I + 8·g·gᵀ + 8R²·n̂n̂ᵀ.
+    fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let (w, h, n) = self.round.parts(&region)?;
+        let [major, minor] = self.round.lengths;
+        let (big, small) = (
+            Interval::point(major)?.square()?,
+            Interval::point(minor)?.square()?,
+        );
+        let a = squared(&w)?.add(h.square()?)?.add(big)?.sub(small)?;
+        let one = Interval::point(1.0)?;
+        let g = blend(&w, one, &n, h)?;
+        let (four, eight) = (Interval::point(4.0)?, Interval::point(8.0)?);
+        let base = four.mul(a)?.sub(eight.mul(big)?)?;
+        let first = outer(base, (eight, &g), (eight.mul(big)?, &n))?;
+        Ok(Some(first))
+    }
+
     /// F(x) = (|w|² + h² + R² − r²)² − 4R²|w|², the quartic, for w and h the point's parts about
     /// the axis.
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {

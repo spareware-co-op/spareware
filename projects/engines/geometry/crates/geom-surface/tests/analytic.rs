@@ -309,3 +309,68 @@ fn a_cones_equation_vanishes_on_it() {
         );
     }
 }
+
+/// Each analytic kind's ∇²F holds the change of its gradient across a box: ∇F(y) − ∇F(x) lies in
+/// ∇²F(box)·(y − x), the mean value theorem, so the two enclosures of that change must meet. At
+/// random points, on a tilted frame, for every kind (G174's tangent tubes read these).
+#[test]
+fn each_kinds_hessian_holds_its_gradients_change() {
+    let f = Frame::new([1.0, 0.5, 0.25], [0.25, -0.5, 1.0]).unwrap();
+    let turn = (0.0, 2.0);
+    let kinds: Vec<Box<dyn ImplicitBound>> = vec![
+        Box::new(
+            Plane::new(
+                [0.5, -1.0, 2.0],
+                [1.0, 0.25, 0.0],
+                [0.0, 1.0, 0.5],
+                ((-9.0, 9.0), (-9.0, 9.0)),
+            )
+            .unwrap(),
+        ),
+        Box::new(Sphere::new([0.5, -1.0, 2.0], 3.0, f, (turn, (-0.5, 0.5))).unwrap()),
+        Box::new(Cylinder::new([0.5, -1.0, 2.0], 3.0, f, (turn, (-4.0, 4.0))).unwrap()),
+        Box::new(Cone::new([0.5, -1.0, 2.0], 1.0, 0.75, f, (turn, (-2.0, 2.0))).unwrap()),
+        Box::new(Torus::new([0.5, -1.0, 2.0], 5.0, 1.5, f, (turn, turn)).unwrap()),
+    ];
+    let mut rng = Lcg(0x5eed_0174);
+    let point = |x: [f64; 3]| x.map(|t| Interval::point(t).unwrap());
+    for kind in &kinds {
+        for _ in 0..200 {
+            let x = [
+                rng.range(-6.0, 6.0),
+                rng.range(-6.0, 6.0),
+                rng.range(-6.0, 6.0),
+            ];
+            let d = [
+                rng.range(-0.25, 0.25),
+                rng.range(-0.25, 0.25),
+                rng.range(-0.25, 0.25),
+            ];
+            let y = [x[0] + d[0], x[1] + d[1], x[2] + d[2]];
+            let step = [0, 1, 2].map(|k| y[k] - x[k]);
+            let region = [0, 1, 2].map(|k| Interval::new(x[k].min(y[k]), x[k].max(y[k])).unwrap());
+            let hessian = kind
+                .hessian_box(region)
+                .unwrap()
+                .expect("every analytic kind has one");
+            let (gx, gy) = (
+                kind.enclose_box(point(x)).unwrap().gradient,
+                kind.enclose_box(point(y)).unwrap().gradient,
+            );
+            for i in 0..3 {
+                let change = gy[i].sub(gx[i]).unwrap();
+                let mut bound = Interval::point(0.0).unwrap();
+                for j in 0..3 {
+                    let term = hessian[i][j]
+                        .mul(Interval::point(step[j]).unwrap())
+                        .unwrap();
+                    bound = bound.add(term).unwrap();
+                }
+                assert!(
+                    change.lo() <= bound.hi() && bound.lo() <= change.hi(),
+                    "{i}: {change:?} against {bound:?} at {x:?} + {d:?}"
+                );
+            }
+        }
+    }
+}
