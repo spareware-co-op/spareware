@@ -677,6 +677,33 @@ fn any_budget_gives_the_answer_or_stops_cleanly() {
 }
 
 #[test]
+fn a_budget_that_runs_out_at_the_very_end_stops_cleanly() {
+    let a = cuboid([0, 0, 0], [40, 40, 40]);
+    let b = cuboid([20, 20, 20], [40, 40, 40]);
+    let run = |budget: u64| {
+        let small = OpContext::new(
+            OpPath::new(OpId::from_bytes([7; 16])),
+            Budget::new(budget, u64::MAX),
+        );
+        unite(&small, &SERIAL, &[solid(1, &a), solid(2, &b)])
+    };
+    let (mut low, mut high) = (0u64, 1 << 24);
+    while high - low > 1 {
+        let middle = low + (high - low) / 2;
+        if run(middle).is_ok() {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    // Publication, the checker and the certificate are the last to charge.
+    for budget in high.saturating_sub(400)..high {
+        let e = run(budget).unwrap_err();
+        assert_eq!(e.kind(), ErrorKind::BudgetExceeded, "{e:?}");
+    }
+}
+
+#[test]
 fn keep_takes_a_sheet_that_lies_on_a_solids_face() {
     let block = cuboid([0, 0, 0], [40, 40, 40]);
     let on_face = sheet(0, 0, [10, 10], [30, 30]);
