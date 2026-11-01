@@ -15,7 +15,7 @@
 //! below shows holds it and every step a checked method, so a step that did not fit would give
 //! `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is proven
 //! (chapter 28.6): Gappa proves it for binary64 in one problem per case, which together cover every
-//! input (`gappa-circle-gap-x.g`, `gappa-circle-gap-y.g`, `gappa-circle-gap-t.g`, in
+//! input (`gappa-circle-gap-t-t.g`, `gappa-circle-gap-y-y.g`, `gappa-circle-gap-x-x.g`, in
 //! `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor`
 //! bounds it independently, and HOL Light checks its certificate (`fptaylor-circle-gap.fpt`);
 //! `kernel-certificates.yml` runs them on every change and every night.
