@@ -577,6 +577,19 @@ fn two_faces_that_meet_at_their_lowest_corner_keep_their_numbers() {
 }
 
 #[test]
+fn two_faces_in_a_line_that_touch_at_a_vertex_keep_their_own_edges() {
+    let mut polygons = Vec::new();
+    let one = [[0, 0, 0], [10, 0, 0], [2, 8, 0], [4, 3, 9]];
+    let two = [[10, 0, 0], [20, 0, 0], [18, 8, 0], [15, 3, 9]];
+    tetrahedron(one, 0, &mut polygons).unwrap();
+    tetrahedron(two, 1, &mut polygons).unwrap();
+    let pieces = kept(&polygons, &WindingTest::unite(), LEAF_POLYGONS);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&m, &pieces);
+    assert_eq!(counts(&m), [2, 8, 8, 12, 7]);
+}
+
+#[test]
 fn an_edge_breaks_where_a_corner_rests_on_it() {
     let mut polygons = scene(&[A]);
     let tip = [[2, 4, 4], [2, 8, 5], [3, 9, 9], [1, 5, 9]];
