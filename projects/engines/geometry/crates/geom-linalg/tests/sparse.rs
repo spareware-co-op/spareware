@@ -211,6 +211,22 @@ fn an_entry_is_found_and_set_in_place() {
 }
 
 #[test]
+fn an_entry_adds_up_and_clearing_keeps_the_pattern() {
+    let mut a = Sparse::from_triplets(3, 2, &[(0, 0, 1.0), (2, 0, 2.0), (1, 1, 3.0)]).unwrap();
+    a.add_at(1, 0.5).unwrap();
+    assert_eq!(a.column(0).unwrap().1, &[1.0, 2.5]);
+    a.add_at(1, -3.0).unwrap();
+    assert_eq!(a.column(0).unwrap().1, &[1.0, -0.5]);
+    assert_eq!(a.add_at(3, 1.0), Err(LinalgError::Shape));
+    assert_eq!(a.add_at(2, f64::MAX), Ok(()));
+    assert_eq!(a.add_at(2, f64::MAX), Err(LinalgError::NotFinite));
+    a.clear_values();
+    assert_eq!(a.column(0).unwrap(), (&[0, 2][..], &[0.0, 0.0][..]));
+    assert_eq!(a.column(1).unwrap(), (&[1][..], &[0.0][..]));
+    assert_eq!(a.nonzeros(), 3);
+}
+
+#[test]
 fn it_multiplies_transposes_and_goes_to_and_from_dense() {
     let dense = Matrix::from_rows(2, 3, &[1.0, 0.0, 2.0, 0.0, 3.0, -4.0]).unwrap();
     let a = Sparse::from_dense(&dense).unwrap();
@@ -694,4 +710,112 @@ fn a_solve_charges_what_it_reads() {
     let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
     let qr = SparseQr::factor(&symbolic, &a, Real::ZERO, &mut work()).unwrap();
     assert!(charged_exactly(|w| qr.least_squares(&[1.0, 2.0, 3.0], w)) > 1);
+}
+
+#[test]
+fn a_column_lost_to_rounding_in_the_second_factorisation_is_singular() {
+    // Columns 1 and 2 are alike. With no tolerance the first factorisation keeps a diagonal of
+    // rounding where column 2 should be dead, and the factorisation of Rᵀ then loses that row: the
+    // rank is on its edge, which is refused rather than solved through.
+    let a = Sparse::from_triplets(
+        3,
+        5,
+        &[
+            (1, 1, 3.0),
+            (2, 1, 3.0),
+            (1, 2, 1.0),
+            (2, 2, 1.0),
+            (0, 4, -1.0),
+            (1, 4, -2.0),
+            (2, 4, 2.0),
+        ],
+    )
+    .unwrap();
+    let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
+    assert_eq!(
+        SparseQr::factor(&symbolic, &a, Real::ZERO, &mut work()).err(),
+        Some(LinalgError::Singular)
+    );
+    // With the usual tolerance the alike column is dead, and the system solves.
+    assert!(SparseQr::factor(&symbolic, &a, tol(), &mut work()).is_ok());
+}
+
+/// `a` without row `drop`, as a matrix one row shorter.
+fn without_row(a: &Sparse, drop: usize) -> Sparse {
+    let mut triplets = Vec::new();
+    for j in 0..a.cols() {
+        let (rows, values) = a.column(j).unwrap();
+        for (&i, &value) in rows.iter().zip(values) {
+            if i != drop {
+                triplets.push((if i > drop { i - 1 } else { i }, j, value));
+            }
+        }
+    }
+    Sparse::from_triplets(a.rows() - 1, a.cols(), &triplets).unwrap()
+}
+
+#[test]
+fn a_row_is_dense_only_past_ten_times_the_root() {
+    // A full row of n entries is dense when n² > 100·n, so from n = 101: then it is set aside and
+    // the order is that of the matrix without it. At n = 100 it is exactly 10·√n, not dense, and
+    // its clique shapes the order.
+    let mut rng = rng("colamd dense boundary");
+    let mut shaped = 0;
+    for _ in 0..20 {
+        for n in [100_usize, 101] {
+            let mut triplets: Vec<(usize, usize, f64)> = (0..n).map(|j| (0, j, 1.0)).collect();
+            for _ in 0..3 * n {
+                let (i, j) = (
+                    1 + below(&mut rng, (n - 1) as u64) as usize,
+                    below(&mut rng, n as u64) as usize,
+                );
+                triplets.push((i, j, 1.0));
+            }
+            let a = Sparse::from_triplets(n, n, &triplets).unwrap();
+            let (with, without) = (
+                colamd(&a, &mut work()).unwrap(),
+                colamd(&without_row(&a, 0), &mut work()).unwrap(),
+            );
+            if n == 101 {
+                assert_eq!(with, without);
+            } else if with != without {
+                shaped += 1;
+            }
+        }
+    }
+    assert!(shaped >= 10, "{shaped}");
+}
+
+#[test]
+fn a_symmetric_order_reads_only_above_the_diagonal() {
+    // The diagonal and anything below it change nothing: the order of a symmetric pattern is that
+    // of its upper triangle alone, whatever is stored on and under it.
+    let mut rng = rng("colamd symmetric triangle");
+    for _ in 0..60 {
+        let n = 5 + below(&mut rng, 30) as usize;
+        let mut upper = Vec::new();
+        for _ in 0..2 * n {
+            let (i, j) = (
+                below(&mut rng, n as u64) as usize,
+                below(&mut rng, n as u64) as usize,
+            );
+            if i < j {
+                upper.push((i, j, 1.0));
+            }
+        }
+        let mut full = upper.clone();
+        for &(i, j, v) in &upper {
+            full.push((j, i, v));
+        }
+        for i in 0..n {
+            full.push((i, i, 1.0));
+        }
+        let only_upper = Sparse::from_triplets(n, n, &upper).unwrap();
+        let everything = Sparse::from_triplets(n, n, &full).unwrap();
+        assert_eq!(
+            symmetric(&everything, &mut work()).unwrap(),
+            symmetric(&only_upper, &mut work()).unwrap(),
+            "{n}"
+        );
+    }
 }
