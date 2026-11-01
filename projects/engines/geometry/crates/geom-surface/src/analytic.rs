@@ -27,7 +27,8 @@
 //!   deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).
 //! - **Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale,
 //!   the frame carried, a mirror flipping the axial sign); any other transform gives the moved
-//!   NURBS form. A plane takes every affine map.
+//!   NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly
+//!   is exact: deviation 0 (chapter 7; piece G69).
 //! - **Exact split and reversal.**
 //!
 //! Method: the elementary surfaces of ISO 10303-42 (`plane`, `cylindrical_surface`,
@@ -50,12 +51,14 @@ use geom_curve::moved::Motion;
 use geom_curve::tight::{self, point};
 use geom_curve::{CurveError, DerivativeBound, Frame};
 use geom_math::TypedTransform;
-use geom_num::eft::two_sum;
+use geom_num::eft::{two_prod, two_sum};
+use geom_num::exact_sum::ExactSum;
 use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
 
 use crate::extent::{self, Factored};
+use crate::implicit::{ImplicitBound, ImplicitEnclosure};
 use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
 use crate::terms::{Fun, Term, Terms};
 
@@ -390,18 +393,39 @@ impl Round {
         }
     }
 
-    /// The sign of the radius r₀ + k·v (cone) or R + r·cos πv (torus) over v: Some(true) if
-    /// certainly positive, Some(false) if certainly negative, None if it may be either.
+    /// The sign of the radius r₀ + k·v (cone) or R + r·cos πv (torus) over v: Some(true) if never
+    /// negative and not everywhere zero, Some(false) if never positive and not everywhere zero,
+    /// None if it may be either. Where the radius reaches zero only from one side, as at a cone's
+    /// apex at an end of its v, the normal there is the limit from that side: the factor that
+    /// vanishes is divided out, as chapter 12.10 asks of a collapsed edge. A cone's sign is exact;
+    /// a torus's comes from its radius's enclosure, so a zero only it proves is one-sided counts.
     fn radius_sign(&self, which: Which, v: Interval) -> Result<Option<bool>, CurveError> {
         let [l0, l1] = self.lengths;
         let rho = match which {
             Which::Cylinder | Which::Sphere => return Ok(Some(true)),
-            Which::Cone => tight::add(point(l0)?, tight::mul(point(l1)?, v)?)?,
+            Which::Cone => {
+                // r₀ + k·v is linear, so its ends bound it, and each end's sign is exact: k·v is
+                // the error-free pair p + e, and the sum r₀ + p + e is rounded once, correctly.
+                let at = |x: f64| -> Result<f64, CurveError> {
+                    let (p, e) = two_prod(l1, x);
+                    let mut sum = ExactSum::new();
+                    sum.add_slice(&[l0, p, e]);
+                    Ok(sum.round()?.get())
+                };
+                let (a, b) = (at(v.lo())?, at(v.hi())?);
+                return Ok(if a >= 0.0 && b >= 0.0 && (a > 0.0 || b > 0.0) {
+                    Some(true)
+                } else if a <= 0.0 && b <= 0.0 && (a < 0.0 || b < 0.0) {
+                    Some(false)
+                } else {
+                    None
+                });
+            }
             Which::Torus => tight::add(point(l0)?, tight::mul(point(l1)?, v.cospi()?)?)?,
         };
-        Ok(if rho.lo() > 0.0 {
+        Ok(if rho.lo() >= 0.0 && rho.hi() > 0.0 {
             Some(true)
-        } else if rho.hi() < 0.0 {
+        } else if rho.hi() <= 0.0 && rho.lo() < 0.0 {
             Some(false)
         } else {
             None
@@ -887,6 +911,14 @@ macro_rules! round_surface {
                     return affine_image(&self.terms, self.round.domain, angular($which), &m);
                 }
                 let k = $kind::build(self.round.moved(&m)?)?;
+                if m.exact_for(&[self.round.center])? {
+                    // A grid transform moving the centre exactly carries the frame, and its unit
+                    // vectors, exactly too (piece G69).
+                    return Ok(Changed {
+                        value: SurfaceKind::$variant(k),
+                        deviation: 0.0,
+                    });
+                }
                 let image = image_terms(&self.terms, &m)?;
                 let deviation = k.terms.distance(&image, self.round.domain)?;
                 Ok(Changed {
@@ -1196,6 +1228,15 @@ fn affine_image(
     })
 }
 
+impl AffineSurface {
+    /// Whether u, then v, is an angle in half-turns, as in the kind it is the image of: an
+    /// angular parameter over a whole turn closes on itself (chapter 12.10).
+    #[must_use]
+    pub const fn angular(&self) -> (bool, bool) {
+        self.angular
+    }
+}
+
 impl ParamSurface for AffineSurface {
     fn domain(&self) -> ParamBox {
         self.domain
@@ -1344,5 +1385,222 @@ impl ParamSurface for AffineSurface {
         let m = Motion::of::<3>(transform)?;
         meter.charge(1)?;
         affine_image(&self.terms, self.domain, self.angular, &m)
+    }
+}
+
+/// `a·b`.
+fn inner(a: &[Interval; 3], b: &[Interval; 3]) -> Result<Interval, CurveError> {
+    let mut sum = Interval::point(0.0)?;
+    for (x, y) in a.iter().zip(b) {
+        sum = sum.add(x.mul(*y)?)?;
+    }
+    Ok(sum)
+}
+
+/// `a·a`, tighter than [`inner`] where a coordinate spans zero.
+fn squared(a: &[Interval; 3]) -> Result<Interval, CurveError> {
+    let mut sum = Interval::point(0.0)?;
+    for x in a {
+        sum = sum.add(x.square()?)?;
+    }
+    Ok(sum)
+}
+
+/// `a·k + b·m`, coordinate by coordinate.
+fn blend(
+    a: &[Interval; 3],
+    k: Interval,
+    b: &[Interval; 3],
+    m: Interval,
+) -> Result<[Interval; 3], CurveError> {
+    let mut out = [Interval::point(0.0)?; 3];
+    for ((o, x), y) in out.iter_mut().zip(a).zip(b) {
+        *o = x.mul(k)?.add(y.mul(m)?)?;
+    }
+    Ok(out)
+}
+
+/// The 3 × 3 matrix a·I + b·p·pᵀ + c·q·qᵀ, entry by entry.
+fn outer(
+    a: Interval,
+    (b, p): (Interval, &[Interval; 3]),
+    (c, q): (Interval, &[Interval; 3]),
+) -> Result<[[Interval; 3]; 3], CurveError> {
+    let zero = Interval::point(0.0)?;
+    let mut out = [[zero; 3]; 3];
+    for (i, row) in out.iter_mut().enumerate() {
+        for (j, cell) in row.iter_mut().enumerate() {
+            let at = |v: &[Interval; 3], k: usize| v.get(k).copied().ok_or(CurveError::Defect);
+            let diagonal = if i == j { a } else { zero };
+            let pp = b.mul(at(p, i)?.mul(at(p, j)?)?)?;
+            let qq = c.mul(at(q, i)?.mul(at(q, j)?)?)?;
+            *cell = diagonal.add(pp)?.add(qq)?;
+        }
+    }
+    Ok(out)
+}
+
+impl Round {
+    /// A point's parts about the axis: its component w perpendicular to n̂, its height h along n̂,
+    /// and n̂. Every round kind's equation reads these.
+    fn parts(
+        &self,
+        region: &[Interval; 3],
+    ) -> Result<([Interval; 3], Interval, [Interval; 3]), CurveError> {
+        let (_, [_, _, n]) = self.frame.unit_vectors()?;
+        let mut gap = [Interval::point(0.0)?; 3];
+        for ((g, x), c) in gap.iter_mut().zip(region).zip(&self.center) {
+            *g = x.sub(Interval::point(*c)?)?;
+        }
+        let h = inner(&gap, &n)?;
+        let one = Interval::point(1.0)?;
+        Ok((blend(&gap, one, &n, h.neg())?, h, n))
+    }
+}
+
+impl ImplicitBound for Plane {
+    /// F is linear: ∇²F = 0.
+    fn hessian_box(&self, _: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let zero = Interval::point(0.0)?;
+        Ok(Some([[zero; 3]; 3]))
+    }
+
+    /// F(x) = (x − o)·(a × b).
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let [a0, a1, a2] = self.a.map(Interval::point);
+        let [b0, b1, b2] = self.b.map(Interval::point);
+        let ([a0, a1, a2], [b0, b1, b2]) = ([a0?, a1?, a2?], [b0?, b1?, b2?]);
+        let gradient = [
+            a1.mul(b2)?.sub(a2.mul(b1)?)?,
+            a2.mul(b0)?.sub(a0.mul(b2)?)?,
+            a0.mul(b1)?.sub(a1.mul(b0)?)?,
+        ];
+        let mut gap = [Interval::point(0.0)?; 3];
+        for ((g, x), o) in gap.iter_mut().zip(&region).zip(&self.origin) {
+            *g = x.sub(Interval::point(*o)?)?;
+        }
+        Ok(ImplicitEnclosure {
+            value: inner(&gap, &gradient)?,
+            gradient,
+            smooth: true,
+        })
+    }
+}
+
+impl ImplicitBound for Sphere {
+    /// ∇²F = 2·I.
+    fn hessian_box(&self, _: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let (zero, two) = (Interval::point(0.0)?, Interval::point(2.0)?);
+        let none = [zero; 3];
+        Ok(Some(outer(two, (zero, &none), (zero, &none))?))
+    }
+
+    /// F(x) = |x − c|² − r².
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let (w, h, n) = self.round.parts(&region)?;
+        let r = Interval::point(self.round.lengths[0])?;
+        let two = Interval::point(2.0)?;
+        Ok(ImplicitEnclosure {
+            value: squared(&w)?.add(h.square()?)?.sub(r.square()?)?,
+            gradient: blend(&w, two, &n, two.mul(h)?)?,
+            smooth: true,
+        })
+    }
+}
+
+impl ImplicitBound for Cylinder {
+    /// ∇²F = 2·(I − n̂n̂ᵀ).
+    fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let (_, _, n) = self.round.parts(&region)?;
+        let (zero, two) = (Interval::point(0.0)?, Interval::point(2.0)?);
+        Ok(Some(outer(two, (two.neg(), &n), (zero, &n))?))
+    }
+
+    /// F(x) = |w|² − r², for w the point's component perpendicular to the axis.
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let (w, _, n) = self.round.parts(&region)?;
+        let r = Interval::point(self.round.lengths[0])?;
+        let two = Interval::point(2.0)?;
+        Ok(ImplicitEnclosure {
+            value: squared(&w)?.sub(r.square()?)?,
+            gradient: blend(&w, two, &n, Interval::point(0.0)?)?,
+            smooth: true,
+        })
+    }
+}
+
+impl ImplicitBound for Cone {
+    /// F = |x − c|² − h² − (r₀ + σ·h)², σ = k·s, so ∇²F = 2·I − 2·(1 + σ²)·n̂n̂ᵀ.
+    fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let (_, _, n) = self.round.parts(&region)?;
+        let [_, k] = self.round.lengths;
+        let slope = Interval::point(k * self.round.sign)?;
+        let (zero, one, two) = (
+            Interval::point(0.0)?,
+            Interval::point(1.0)?,
+            Interval::point(2.0)?,
+        );
+        let along = two.mul(one.add(slope.square()?)?)?.neg();
+        Ok(Some(outer(two, (along, &n), (zero, &n))?))
+    }
+
+    /// F(x) = |w|² − (r₀ + k·s·h)², for w and h the point's parts about the axis. It vanishes on
+    /// both nappes: past the apex as well as on the kind.
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let (w, h, n) = self.round.parts(&region)?;
+        let [r0, k] = self.round.lengths;
+        let slope = Interval::point(k * self.round.sign)?;
+        let radius = Interval::point(r0)?.add(slope.mul(h)?)?;
+        let two = Interval::point(2.0)?;
+        Ok(ImplicitEnclosure {
+            value: squared(&w)?.sub(radius.square()?)?,
+            gradient: blend(&w, two, &n, two.mul(radius)?.mul(slope)?.neg())?,
+            smooth: true,
+        })
+    }
+}
+
+impl ImplicitBound for Torus {
+    /// With g = x − c and A = |g|² + R² − r², ∇F = 4A·g − 8R²·w, so
+    /// ∇²F = 8·g·gᵀ + 4A·I − 8R²·(I − n̂n̂ᵀ) = (4A − 8R²)·I + 8·g·gᵀ + 8R²·n̂n̂ᵀ.
+    fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
+        let (w, h, n) = self.round.parts(&region)?;
+        let [major, minor] = self.round.lengths;
+        let (big, small) = (
+            Interval::point(major)?.square()?,
+            Interval::point(minor)?.square()?,
+        );
+        let a = squared(&w)?.add(h.square()?)?.add(big)?.sub(small)?;
+        let one = Interval::point(1.0)?;
+        let g = blend(&w, one, &n, h)?;
+        let (four, eight) = (Interval::point(4.0)?, Interval::point(8.0)?);
+        let base = four.mul(a)?.sub(eight.mul(big)?)?;
+        let first = outer(base, (eight, &g), (eight.mul(big)?, &n))?;
+        Ok(Some(first))
+    }
+
+    /// F(x) = (|w|² + h² + R² − r²)² − 4R²|w|², the quartic, for w and h the point's parts about
+    /// the axis.
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let (w, h, n) = self.round.parts(&region)?;
+        let [major, minor] = self.round.lengths;
+        let (big, small) = (
+            Interval::point(major)?.square()?,
+            Interval::point(minor)?.square()?,
+        );
+        let across = squared(&w)?;
+        let a = across.add(h.square()?)?.add(big)?.sub(small)?;
+        let four = Interval::point(4.0)?;
+        let eight = Interval::point(8.0)?;
+        Ok(ImplicitEnclosure {
+            value: a.square()?.sub(four.mul(big)?.mul(across)?)?,
+            gradient: blend(
+                &w,
+                four.mul(a)?.sub(eight.mul(big)?)?,
+                &n,
+                four.mul(a)?.mul(h)?,
+            )?,
+            smooth: true,
+        })
     }
 }

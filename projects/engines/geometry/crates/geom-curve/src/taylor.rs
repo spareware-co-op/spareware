@@ -137,7 +137,9 @@ fn bernstein<const D: usize>(
 }
 
 /// An upper bound on the norm of the (p + 1)-th derivative over `span`, and whether it is exactly
-/// zero.
+/// zero; [`CurveError::Unbounded`] where the kind cannot bound it there (a span too wide for an
+/// offset to separate its normal from zero, say), so a caller may try narrower pieces (piece G69:
+/// this was a `Defect`).
 fn derivative_norm<K: ParamCurve<D>, const D: usize>(
     kind: &K,
     span: (f64, f64),
@@ -145,7 +147,7 @@ fn derivative_norm<K: ParamCurve<D>, const D: usize>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(f64, bool), CurveError> {
     let DerivativeBound::Bounded(b) = kind.derivative_bound(span, order, meter)? else {
-        return Err(CurveError::Defect);
+        return Err(CurveError::Unbounded);
     };
     let zero = b.lo.iter().chain(&b.hi).all(|&x| x == 0.0);
     let mut m = Vec::with_capacity(D);
@@ -160,8 +162,9 @@ fn derivative_norm<K: ParamCurve<D>, const D: usize>(
 ///
 /// # Errors
 ///
-/// [`CurveError::Unbounded`] if the domain is not finite; [`CurveError::Degenerate`] if it is too
-/// narrow to cut; the kind's own errors; [`CurveError::Stopped`].
+/// [`CurveError::Unbounded`] if the domain is not finite, or where the kind cannot bound its
+/// derivative of order `degree` + 1 over a piece; [`CurveError::Degenerate`] if it is too narrow
+/// to cut; the kind's own errors; [`CurveError::Stopped`].
 pub fn same_parameter<K: ParamCurve<D>, const D: usize>(
     kind: &K,
     degree: usize,
@@ -173,6 +176,9 @@ pub fn same_parameter<K: ParamCurve<D>, const D: usize>(
         return Err(CurveError::Unbounded);
     }
     let n = pieces(b - a, width)?;
+    // Charged before the cuts are allocated, so the budget stops a domain too long to cut, not the
+    // allocator.
+    meter.charge(u64::try_from(n).map_err(|_| CurveError::Defect)?)?;
     let cuts = breaks((a, b), n)?;
     from_cuts(kind, degree, &cuts, meter)
 }

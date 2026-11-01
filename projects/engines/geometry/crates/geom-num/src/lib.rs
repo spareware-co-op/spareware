@@ -88,6 +88,7 @@
 //!
 //! - MIT: `libm`.
 #![cfg_attr(not(test), no_std)]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 // The work list of the root-isolation engine ([`isolate`]) grows with the system, so it is a
 // vector, reserved fallibly and charged to the caller's logical-memory budget (chapter 23.10).
@@ -114,10 +115,12 @@ pub mod plane;
 pub mod predicate;
 pub mod quadrature;
 pub mod quadrature_rules;
+pub mod quadric;
 pub mod real;
 pub mod rng;
 pub mod scalar;
 pub mod sign;
+pub mod sturm;
 pub mod wide;
 pub mod wide32;
 
