@@ -492,6 +492,9 @@ fn stand_in(case: &Case) -> Result<Intersection, IntersectError> {
     Intersection::new(items, Coverage::TopologyCertified, vec![], &mut meter())
 }
 
+/// A method the laws judge: a case's answer, in the roles the laws read.
+type Method = dyn Fn(&Case) -> Result<Intersection, IntersectError>;
+
 /// G165's answer in the roles the laws read, the plane's unknowns first, as `natural` gives them for
 /// its arguments in that order. A pair it calls not natural is no answer, which the laws report.
 fn closed_form(case: &Case) -> Result<Intersection, IntersectError> {
@@ -949,8 +952,7 @@ fn plane_and_quadric_classify_as_stated() {
 fn the_laws_hold() {
     let mut rng = rng("laws_intersections laws");
     let mut findings = Findings::default();
-    let methods: [(&str, &dyn Fn(&Case) -> Result<Intersection, IntersectError>); 2] =
-        [("natural", &closed_form), ("stated", &stand_in)];
+    let methods: [(&str, &Method); 2] = [("natural", &closed_form), ("stated", &stand_in)];
     for _ in 0..scale(8) {
         let mv = Move::draw(&mut rng);
         for case in &cases(&mv, TRUE) {
