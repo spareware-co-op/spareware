@@ -5,7 +5,7 @@
 //! - **Every join an exact shared point**: read back through [`Pt2::on`] against both its carriers,
 //!   for every pairing of line, circle and ellipse.
 //! - **Exact for rational normals and parallels**: exactly tangent, gap exactly zero.
-//! - **Within ε_ang**: every Certified gap at most the ladder's angular bound, at every scale.
+//! - **Within `ε_ang`**: every Certified gap at most the ladder's angular bound, at every scale.
 //! - **No extra contact**: the other crossing of each neighbour lies off the arc.
 //! - **Accepted, atomic**: a refusal says what it would reach, and adds nothing to the table.
 //! - **Every corner**: 100,000 corners of every turn, the same on any number of threads.
@@ -21,6 +21,10 @@
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     reason = "oracles and generators; the rules are for kernel code"
+)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "c, r, p, q and the like are the geometry's"
 )]
 #![allow(
     clippy::unwrap_used,
@@ -164,7 +168,12 @@ fn a_fillet_of_rational_normals_is_exactly_tangent() {
 
 #[test]
 fn every_rational_corner_is_exact_in_every_turn() {
-    let turns = [p2(1_000, 500), p2(1_000, -500), p2(700, 400), p2(1_300, 400)];
+    let turns = [
+        p2(1_000, 500),
+        p2(1_000, -500),
+        p2(700, 400),
+        p2(1_300, 400),
+    ];
     for to in turns {
         let corner = p2(1_000, 0);
         let (mut carriers, [a, b]) = table([line(p2(0, 0), corner), line(corner, to)]);
@@ -182,7 +191,15 @@ fn every_rational_corner_is_exact_in_every_turn() {
         } else {
             (touch(b), touch(a))
         };
-        let done = fillet(&mut carriers, &from, &into, 40, GridStep::Q1, &Accept::Exact).unwrap();
+        let done = fillet(
+            &mut carriers,
+            &from,
+            &into,
+            40,
+            GridStep::Q1,
+            &Accept::Exact,
+        )
+        .unwrap();
         assert_eq!(done.exactness, Exactness::Exact);
         sound(&carriers, &done, from.curve, into.curve);
     }
@@ -195,11 +212,21 @@ fn a_fillet_of_other_lines_goes_a_hair_past_them_and_keeps_its_radius() {
     let cases = if cfg!(debug_assertions) { 40 } else { 800 };
     for _ in 0..cases {
         let s = 1 + (rng.next() % (1 << 38)) as i64;
-        let to = p2(s + 1 + (rng.next() % 1_000) as i64, 1 + (rng.next() % 1_000) as i64);
+        let to = p2(
+            s + 1 + (rng.next() % 1_000) as i64,
+            1 + (rng.next() % 1_000) as i64,
+        );
         let bits = rng.next() % 16;
         let r = i128::from(1 + (rng.next() % (1 << bits)) as i64);
         let (mut carriers, [a, b], [first, second]) = left_corner(s, to);
-        let Ok(done) = fillet(&mut carriers, &first, &second, r, GridStep::Q0, &certified()) else {
+        let Ok(done) = fillet(
+            &mut carriers,
+            &first,
+            &second,
+            r,
+            GridStep::Q0,
+            &certified(),
+        ) else {
             panic!("{s} {to:?} {r}");
         };
         sound(&carriers, &done, a, b);
@@ -221,7 +248,15 @@ fn a_fillet_of_other_lines_goes_a_hair_past_them_and_keeps_its_radius() {
 #[test]
 fn neither_cap_is_on_the_arc() {
     let (mut carriers, [a, b], [first, second]) = left_corner(10_000, p2(10_301, 703));
-    let done = fillet(&mut carriers, &first, &second, 900, GridStep::Q0, &certified()).unwrap();
+    let done = fillet(
+        &mut carriers,
+        &first,
+        &second,
+        900,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
     assert!(matches!(done.exactness, Exactness::Certified { .. }));
     let disc = disc_of(&carriers, done.circle);
     let (Some(Curve2::Line(l)), Some(Curve2::Line(m))) = (carriers.get(a), carriers.get(b)) else {
@@ -286,10 +321,19 @@ fn a_semicircle_refuses_what_is_not_one() {
         line(p2(3, 0), p2(7, 0)),
     ]);
     let refused = PointError::Num(NumError::Degenerate);
-    assert_eq!(semicircle(&mut carriers, a, b, p2(0, 0)).err(), Some(refused));
-    assert_eq!(semicircle(&mut carriers, a, c, p2(0, 0)).err(), Some(refused));
+    assert_eq!(
+        semicircle(&mut carriers, a, b, p2(0, 0)).err(),
+        Some(refused)
+    );
+    assert_eq!(
+        semicircle(&mut carriers, a, c, p2(0, 0)).err(),
+        Some(refused)
+    );
     let (mut carriers, [d, e]) = table([line(p2(0, 0), p2(10, 0)), line(p2(0, 5), p2(10, 5))]);
-    assert_eq!(semicircle(&mut carriers, d, e, p2(1, 1)).err(), Some(refused));
+    assert_eq!(
+        semicircle(&mut carriers, d, e, p2(1, 1)).err(),
+        Some(refused)
+    );
     assert_eq!(carriers.len(), 2);
 }
 
@@ -310,7 +354,14 @@ fn a_fillet_of_a_line_and_a_circle_each_way_round() {
         side: Sign::Positive,
         near: p2(20_000, 0),
     };
-    let done = fillet(&mut carriers, &first, &second, 8_000, GridStep::Q0, &certified());
+    let done = fillet(
+        &mut carriers,
+        &first,
+        &second,
+        8_000,
+        GridStep::Q0,
+        &certified(),
+    );
     let done = done.unwrap();
     assert!(matches!(done.exactness, Exactness::Certified { .. }));
     sound(&carriers, &done, wheel, ground);
@@ -329,17 +380,22 @@ fn a_fillet_of_a_line_and_a_circle_each_way_round() {
         side: Sign::Positive,
         near: p2(23_600, 10_000),
     };
-    let done = fillet(&mut carriers, &above, &inside, 3_000, GridStep::Q0, &certified());
+    let done = fillet(
+        &mut carriers,
+        &above,
+        &inside,
+        3_000,
+        GridStep::Q0,
+        &certified(),
+    );
     let done = done.unwrap();
     sound(&carriers, &done, chord, wheel);
 }
 
 #[test]
 fn a_fillet_of_two_circles() {
-    let (mut carriers, [left, right]) = table([
-        circle(p2(0, 0), 3_000),
-        circle(p2(8_000, 1_000), 4_000),
-    ]);
+    let (mut carriers, [left, right]) =
+        table([circle(p2(0, 0), 3_000), circle(p2(8_000, 1_000), 4_000)]);
     let touch = |curve, near| Touch {
         curve,
         side: Sign::Positive,
@@ -371,7 +427,15 @@ fn a_fillet_of_a_line_and_an_ellipse_joins_at_a_root() {
             near: p2(16_000, -3_000),
         },
     );
-    let done = fillet(&mut carriers, &over, &out, 2_000, GridStep::Q0, &certified()).unwrap();
+    let done = fillet(
+        &mut carriers,
+        &over,
+        &out,
+        2_000,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
     assert!(matches!(done.end, Pt2::ConicRoot { .. }), "{:?}", done.end);
     sound(&carriers, &done, ground, oval);
 }
@@ -434,7 +498,11 @@ fn a_line_to_a_circle_ends_on_it_past_the_touch() {
         joined(&carriers, &done.start, done.line, done.line);
         assert!(done.gap.get() <= ANGULAR.get(), "{}", done.gap.get());
         assert_eq!(
-            carriers.get(done.line).unwrap().side(&disc.centre()).unwrap(),
+            carriers
+                .get(done.line)
+                .unwrap()
+                .side(&disc.centre())
+                .unwrap(),
             side
         );
     }
@@ -485,7 +553,10 @@ fn common_tangents_of_every_kind_at_every_scale() {
     let mut fine = 0;
     for _ in 0..cases {
         let far = 1_i64 << (16 + rng.next() % 22);
-        let (centre, other) = (p2(rng.up_to(far), rng.up_to(far)), p2(rng.up_to(far), rng.up_to(far)));
+        let (centre, other) = (
+            p2(rng.up_to(far), rng.up_to(far)),
+            p2(rng.up_to(far), rng.up_to(far)),
+        );
         let r = 8 + i128::from(rng.sized(15).abs());
         let s = 8 + i128::from(rng.sized(15).abs());
         let (mut carriers, [one, two]) = table([circle(centre, r), circle(other, s)]);
@@ -506,8 +577,7 @@ fn common_tangents_of_every_kind_at_every_scale() {
         if apart(centre, other) <= (r + s) * (r + s) {
             continue;
         }
-        let Ok(done) =
-            common_tangent(&mut carriers, one, two, sides, GridStep::Q0, &certified())
+        let Ok(done) = common_tangent(&mut carriers, one, two, sides, GridStep::Q0, &certified())
         else {
             let why = common_tangent(&mut carriers, one, two, sides, GridStep::Q0, &certified());
             panic!("{centre:?} {other:?} {r} {s} {sides:?}: {:?}", why.err());
@@ -536,7 +606,14 @@ fn one_circle_inside_another_has_no_common_tangent() {
 #[test]
 fn a_refused_result_says_what_it_would_reach_and_adds_nothing() {
     let (mut carriers, _, [first, second]) = left_corner(10_000, p2(10_301, 703));
-    let refused = fillet(&mut carriers, &first, &second, 900, GridStep::Q0, &Accept::Exact);
+    let refused = fillet(
+        &mut carriers,
+        &first,
+        &second,
+        900,
+        GridStep::Q0,
+        &Accept::Exact,
+    );
     assert!(matches!(
         refused.err(),
         Some(PointError::ExactnessNotAccepted {
@@ -556,7 +633,10 @@ fn a_fillet_refuses_what_is_no_fillet() {
     let at = |r| fillet(&mut carriers.clone(), &first, &second, r, step, &accept);
     assert_eq!(at(0).err(), Some(degenerate));
     assert_eq!(at(-1).err(), Some(degenerate));
-    assert_eq!(at(1 << 41).err(), Some(PointError::Num(NumError::BudgetExceeded)));
+    assert_eq!(
+        at(1 << 41).err(),
+        Some(PointError::Num(NumError::BudgetExceeded))
+    );
     let none = Touch {
         side: Sign::Zero,
         ..first
@@ -569,7 +649,14 @@ fn a_fillet_refuses_what_is_no_fillet() {
             side: Sign::Positive,
             near: p2(0, 0),
         };
-        fillet(&mut more, &touch(names[0]), &touch(names[1]), 5, step, &accept)
+        fillet(
+            &mut more,
+            &touch(names[0]),
+            &touch(names[1]),
+            5,
+            step,
+            &accept,
+        )
     };
     assert_eq!(parallel.err(), Some(degenerate));
     assert_eq!(carriers.len(), 2);
@@ -585,7 +672,14 @@ fn a_centre_at_the_frames_edge() {
         side: Sign::Negative,
         near: corner,
     };
-    let done = fillet(&mut carriers, &touch(b), &touch(a), 1 << 30, GridStep::Q0, &Accept::Exact);
+    let done = fillet(
+        &mut carriers,
+        &touch(b),
+        &touch(a),
+        1 << 30,
+        GridStep::Q0,
+        &Accept::Exact,
+    );
     let done = done.unwrap();
     sound(&carriers, &done, b, a);
 }
@@ -606,13 +700,12 @@ fn zigzag(count: usize, rng: &mut Rng) -> Vec<Corner> {
             1 => (p2(x, y + a), p2(x + 30_000, y + 40_000)),
             2 => (p2(x - a, y - c), p2(x + b, y + d)),
             3 => (p2(x + a, y + c), p2(x - b, y + d)),
-            _ => (p2(x - 4 * 1_000, y - 3 * 1_000), p2(x + 4 * 1_000, y + 3 * 1_000)),
+            _ => (
+                p2(x - 4 * 1_000, y - 3 * 1_000),
+                p2(x + 4 * 1_000, y + 3 * 1_000),
+            ),
         };
-        out.push(Corner {
-            before,
-            at,
-            after,
-        });
+        out.push(Corner { before, at, after });
     }
     out
 }
@@ -620,7 +713,11 @@ fn zigzag(count: usize, rng: &mut Rng) -> Vec<Corner> {
 #[test]
 fn every_corner_of_a_hundred_thousand() {
     let mut rng = Rng::new();
-    let count = if cfg!(debug_assertions) { 5_000 } else { 100_000 };
+    let count = if cfg!(debug_assertions) {
+        5_000
+    } else {
+        100_000
+    };
     let corners = zigzag(count, &mut rng);
     let mut carriers = Carriers::new();
     let accept = certified();

@@ -622,3 +622,224 @@ fn an_integer_is_enclosed() {
     let zero = enclose(&Big::from_i64(0)).unwrap();
     assert_eq!((zero.lo(), zero.hi()), (0.0, 0.0));
 }
+
+#[test]
+fn a_disc_s_side_keeps_its_laws() {
+    let mut rng = Rng::new();
+    for _ in 0..cases() {
+        let (w, v) = (rng.sized(20).abs().max(1), rng.sized(20).abs().max(1));
+        let (cx, cy, x, y) = (rng.sized(60), rng.sized(60), rng.sized(60), rng.sized(60));
+        let r = rng.sized(60);
+        let rr = I256::from_i128(r).checked_mul(&I256::from_i128(r)).unwrap();
+        let Ok(d) = Disc::new(Rational2::new(cx, cy, w).unwrap(), rr) else {
+            continue;
+        };
+        let z = Rational2::new(x, y, v).unwrap();
+        let sign = d.side(&z).unwrap();
+        assert_eq!(sign, side_oracle(&d, &z));
+        // Moved together by a grid vector: the centre by its weight, the point by its own.
+        let (tx, ty) = (rng.sized(30), rng.sized(30));
+        let moved = Disc::new(Rational2::new(cx + tx * w, cy + ty * w, w).unwrap(), rr).unwrap();
+        let there = Rational2::new(x + tx * v, y + ty * v, v).unwrap();
+        assert_eq!(moved.side(&there).unwrap(), sign);
+        // The same point over a larger weight.
+        let k = rng.sized(8).abs().max(1);
+        let scaled = Rational2::new(x * k, y * k, v * k).unwrap();
+        assert_eq!(d.side(&scaled).unwrap(), sign);
+    }
+}
+
+#[test]
+fn a_fine_line_s_side_is_exact_at_the_extremes() {
+    let (top, offset) = (
+        (1_i128 << FINE_NORMAL_BITS) - 1,
+        (1_i128 << FINE_OFFSET_BITS) - 1,
+    );
+    let signs = [1_i128, -1];
+    for sa in signs {
+        for sb in signs {
+            for sc in signs {
+                let (a, b, c) = (sa * top, sb * top, sc * offset);
+                let l = FineLine::new(a, b, c).unwrap();
+                for sx in signs {
+                    for sy in signs {
+                        let (x, y) = (sx * TOP_POINT, sy * TOP_POINT);
+                        let z = Rational2::new(x, y, TOP_WEIGHT).unwrap();
+                        let value = big(a) * big(x) + big(b) * big(y) - big(c) * big(TOP_WEIGHT);
+                        assert_eq!(l.side(&z).unwrap(), sign_of(&value));
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_fine_line_s_side_keeps_its_laws() {
+    let mut rng = Rng::new();
+    for _ in 0..cases() {
+        let (a, b, c) = (rng.sized(75), rng.sized(75).abs().max(1), rng.sized(116));
+        let l = FineLine::new(a, b, c).unwrap();
+        let w = rng.sized(WEIGHT_BITS - 8).abs().max(1);
+        let (x, y) = (rng.sized(POINT_BITS - 8), rng.sized(POINT_BITS - 8));
+        let z = Rational2::new(x, y, w).unwrap();
+        let sign = l.side(&z).unwrap();
+        // The line turned round: the other side.
+        let turned = FineLine::new(-a, -b, -c).unwrap();
+        assert_eq!(turned.side(&z).unwrap(), sign.mul(Sign::Negative));
+        // The same point over a larger weight.
+        let k = rng.sized(8).abs().max(1);
+        let scaled = Rational2::new(x * k, y * k, w * k).unwrap();
+        assert_eq!(l.side(&scaled).unwrap(), sign);
+        // A carrier answers as the fine line it makes.
+        let m = Carrier::new(rng.sized(41), rng.sized(41).abs().max(1), rng.sized(82)).unwrap();
+        assert_eq!(FineLine::from(m).side(&z).unwrap(), m.side(&z).unwrap());
+    }
+}
+
+/// A line through the inside of `disc`, as a carrier, and where it crosses the disc.
+fn crossing_of(disc: &Disc, rng: &mut Rng) -> Option<(Carrier, Crossing2)> {
+    let ([a, b], c) = crossing_line(disc, rng);
+    let l = Carrier::new(a, b, c).ok()?;
+    let root = if rng.next() & 1 == 0 {
+        Root::First
+    } else {
+        Root::Second
+    };
+    Some((l, Crossing2::of_disc(&l, disc, root).ok()?))
+}
+
+/// A disc about a centre of up to 80 bits over a power-of-two weight.
+fn small_disc(rng: &mut Rng) -> Disc {
+    let w = 1 << (rng.next() % 40);
+    let centre = Rational2::new(rng.sized(80), rng.sized(80), w).unwrap();
+    let r = I256::from_i128(w * (1 + rng.sized(30).abs()));
+    Disc::new(centre, r.checked_mul(&r).unwrap()).unwrap()
+}
+
+/// A round through a grid point.
+fn random_round(rng: &mut Rng) -> Round {
+    let on = p2(
+        rng.sized(40).clamp(-1 << 39, 1 << 39) as i64,
+        rng.sized(40).clamp(-1 << 39, 1 << 39) as i64,
+    );
+    let w = rng.sized(WEIGHT_BITS).abs().max(1);
+    Round::new(
+        on,
+        Rational2::new(rng.sized(POINT_BITS), rng.sized(POINT_BITS), w).unwrap(),
+    )
+}
+
+#[test]
+fn crossings_read_discs_and_fine_lines_as_their_rounds_and_carriers() {
+    let mut rng = Rng::new();
+    let mut made = 0;
+    for _ in 0..cases() {
+        let Some((_, z)) = crossing_of(&small_disc(&mut rng), &mut rng) else {
+            continue;
+        };
+        made += 1;
+        let round = random_round(&mut rng);
+        let disc = Disc::of_round(&round).unwrap();
+        assert_eq!(
+            z.against_disc(&disc).unwrap(),
+            z.against_round(&round).unwrap()
+        );
+        let m = Carrier::new(rng.sized(41), rng.sized(41).abs().max(1), rng.sized(82)).unwrap();
+        assert_eq!(
+            z.side_of_fine(&FineLine::from(m)).unwrap(),
+            z.side(&m).unwrap()
+        );
+    }
+    assert!(made > 100, "{made}");
+}
+
+#[test]
+fn one_step_from_a_disc_or_a_fine_line_is_decided_by_the_exact_path() {
+    let mut rng = Rng::new();
+    let mut made = 0;
+    for _ in 0..cases() {
+        let disc = small_disc(&mut rng);
+        let Some((l, z)) = crossing_of(&disc, &mut rng) else {
+            continue;
+        };
+        made += 1;
+        // On the circle: a step of rr either way puts the point inside or outside.
+        let rr = disc.squared_radius();
+        let one = I256::from_i64(1);
+        let wider = Disc::new(disc.centre(), rr.checked_add(&one).unwrap()).unwrap();
+        assert_eq!(z.against_disc(&disc).unwrap(), Sign::Zero);
+        assert_eq!(z.against_disc(&wider).unwrap(), Sign::Negative);
+        // A squared radius of one has no narrower disc.
+        if let Ok(narrower) = Disc::new(disc.centre(), rr.checked_sub(&one).unwrap()) {
+            assert_eq!(z.against_disc(&narrower).unwrap(), Sign::Positive);
+        }
+        // On the line, which a fine line writes 2^20 times as large: one step of c either way.
+        let ([a, b], c) = l.coefficients();
+        let fine = |c: i128| FineLine::new(a << 20, b << 20, c).unwrap();
+        assert_eq!(z.side_of_fine(&fine(c << 20)).unwrap(), Sign::Zero);
+        assert_eq!(
+            z.side_of_fine(&fine((c << 20) + 1)).unwrap(),
+            Sign::Negative
+        );
+        assert_eq!(
+            z.side_of_fine(&fine((c << 20) - 1)).unwrap(),
+            Sign::Positive
+        );
+    }
+    assert!(made > 100, "{made}");
+}
+
+#[test]
+fn crossings_at_the_extremes_read_discs_and_fine_lines_exactly() {
+    let centre = Rational2::new(-TOP_POINT, TOP_POINT, TOP_WEIGHT).unwrap();
+    let disc = Disc::new(centre, top_rr()).unwrap();
+    let (top, offset) = (
+        (1_i128 << FINE_NORMAL_BITS) - 1,
+        (1_i128 << FINE_OFFSET_BITS) - 1,
+    );
+    let signs = [1_i128, -1];
+    for sx in signs {
+        for sy in signs {
+            let p = Rational2::new(sx * TOP_POINT, sy * TOP_POINT, TOP_WEIGHT).unwrap();
+            let z = Crossing2::of_point(&p).unwrap();
+            assert_eq!(z.against_disc(&disc).unwrap(), disc.side(&p).unwrap());
+            for (sa, sc) in [(1, 1), (1, -1), (-1, 1)] {
+                let l = FineLine::new(sa * top, top, sc * offset).unwrap();
+                assert_eq!(z.side_of_fine(&l).unwrap(), l.side(&p).unwrap());
+            }
+        }
+    }
+}
+
+#[test]
+fn a_crossing_s_disc_and_fine_line_keep_their_laws() {
+    let mut rng = Rng::new();
+    let mut made = 0;
+    for _ in 0..cases() {
+        let disc = small_disc(&mut rng);
+        let Some((_, z)) = crossing_of(&small_disc(&mut rng), &mut rng) else {
+            continue;
+        };
+        made += 1;
+        let sign = z.against_disc(&disc).unwrap();
+        // The same circle over a weight three times as large.
+        let ([x, y], w) = disc.centre().coordinates();
+        let nine = I256::from_i64(9);
+        let same = Disc::new(
+            Rational2::new(3 * x, 3 * y, 3 * w).unwrap(),
+            disc.squared_radius().checked_mul(&nine).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(z.against_disc(&same).unwrap(), sign);
+        // A fine line turned round: the other side; scaled up: the same side.
+        let (a, b, c) = (rng.sized(60), rng.sized(60).abs().max(1), rng.sized(100));
+        let l = FineLine::new(a, b, c).unwrap();
+        let side = z.side_of_fine(&l).unwrap();
+        let turned = FineLine::new(-a, -b, -c).unwrap();
+        assert_eq!(z.side_of_fine(&turned).unwrap(), side.mul(Sign::Negative));
+        let larger = FineLine::new(a << 10, b << 10, c << 10).unwrap();
+        assert_eq!(z.side_of_fine(&larger).unwrap(), side);
+    }
+    assert!(made > 100, "{made}");
+}

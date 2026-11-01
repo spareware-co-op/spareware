@@ -20,7 +20,7 @@
 //! - **Exact or within the bounds.** Exact when no choice was needed, with a gap of exactly zero.
 //!   Otherwise the gap is from the exact discriminants, rounded up, and the join stays within half a
 //!   step of the ideal where the numbers allow it; [`Accept::admit`] refuses what the caller did not
-//!   accept. Chapter 14.3's ε_ang is the ladder's angular bound, 2^−34.
+//!   accept. Chapter 14.3's `ε_ang` is the ladder's angular bound, 2^−34.
 //! - **Within the budget.** A centre is a [`Rational2`] and a squared radius within [`Disc`]'s, and a
 //!   line is a [`Carrier`] where it fits and a [`FineLine`] where it does not, so every width is
 //!   `geom-num`'s.
@@ -29,7 +29,7 @@
 //!   [`fillet_all`] is alone, so the result does not depend on how the work is shared.
 //!
 //! Method: chapter 14.3's rational choices (`projects/engines/geometry/architecture/14-2d-drafting.md`):
-//! a centre within η ≈ ε_ang² · r / 2 of the ideal, a line in a whole direction, the simplest fraction
+//! a centre within η ≈ `ε_ang`² · r / 2 of the ideal, a line in a whole direction, the simplest fraction
 //! in the window of directions that cross, by continued fractions (Canny, Donald and Ressler 1992,
 //! <https://doi.org/10.1145/142675.142726>, for rational directions). The fillet of two lines is by
 //! offset, intersect and project (Rossignac and Requicha 1986,
@@ -38,6 +38,12 @@
 //! Cost: a few hundred double-double operations and a few dozen products of wide integers for a
 //! corner, about 100 µs; a curve with an ellipse adds its quartic and its roots. [`fillet_all`] is
 //! linear in its corners.
+
+#![allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "c, r, p, q and the like are the formulas' centres, radii and ratios, and cosine and sine are a pair"
+)]
 
 use alloc::vec::Vec;
 
@@ -334,8 +340,15 @@ fn aims_about<const N: usize>(
 
 /// A grid point as an offset from `origin`.
 fn from_origin(p: P2, origin: P2) -> Result<Pair, NumError> {
-    let part = |a: i64, b: i64| a.checked_sub(b).map(DD::from_i64).ok_or(NumError::BudgetExceeded);
-    Ok([part(p.x.get(), origin.x.get())?, part(p.y.get(), origin.y.get())?])
+    let part = |a: i64, b: i64| {
+        a.checked_sub(b)
+            .map(DD::from_i64)
+            .ok_or(NumError::BudgetExceeded)
+    };
+    Ok([
+        part(p.x.get(), origin.x.get())?,
+        part(p.y.get(), origin.y.get())?,
+    ])
 }
 
 /// `from`, shifted by the whole part of `by`, as a grid point.
@@ -368,7 +381,11 @@ fn two_to(e: i32) -> Result<f64, NumError> {
 /// The disc of a solve: its centre rounded to bits fine enough for its least depth, and its radius.
 fn disc_of_solved<const N: usize>(solved: &Solved<N>, origin: P2) -> Result<Disc, PointError> {
     let least = solved.depths.iter().fold(f64::INFINITY, |least, d| {
-        if d.depth.hi() < least { d.depth.hi() } else { least }
+        if d.depth.hi() < least {
+            d.depth.hi()
+        } else {
+            least
+        }
     });
     if !least.is_finite() || least <= 0.0 {
         return Err(NumError::Degenerate.into());
@@ -472,7 +489,9 @@ fn circle_meet(other: &Disc, disc: &Disc, toward: bool) -> Result<Meet, PointErr
 fn angle_of_sine(sine: Interval) -> Result<f64, NumError> {
     let top = larger(sine.hi(), sine.neg().hi());
     let factor = if top < 1.0 / 1_024.0 { 1.000_001 } else { 1.6 };
-    Interval::point(top)?.mul(Interval::point(factor)?).map(Interval::hi)
+    Interval::point(top)?
+        .mul(Interval::point(factor)?)
+        .map(Interval::hi)
 }
 
 /// The larger of two doubles.
@@ -574,7 +593,11 @@ fn ellipse_meet(
         return Err(NumError::Degenerate.into());
     };
     let (e, l) = (name(earlier)?, name(later)?);
-    let (leaving, arriving) = if side == Sign::Negative { (l, e) } else { (e, l) };
+    let (leaving, arriving) = if side == Sign::Negative {
+        (l, e)
+    } else {
+        (e, l)
+    };
     let [c1, s1] = at(earlier)?;
     let [c2, s2] = at(later)?;
     let swept = angle_of_sine(c1.mul(s2)?.sub(s1.mul(c2)?)?)?;
@@ -620,11 +643,7 @@ fn meet(
             let (normal, _) = l.coefficients();
             line_meet(normal, side, disc, disc.gap_to_fine(l)?)
         }
-        Curve2::Circle(c) => circle_meet(
-            &c.disc()?,
-            disc,
-            side == Sign::Positive || reach < 0.0,
-        ),
+        Curve2::Circle(c) => circle_meet(&c.disc()?, disc, side == Sign::Positive || reach < 0.0),
         Curve2::Ellipse(e) => ellipse_meet(e, disc, side, foot, origin),
     }
 }
@@ -685,7 +704,9 @@ fn planned<const N: usize>(
             *way = (meeting.leaving, meeting.arriving);
         }
         for other in meets.iter().take(k).flatten() {
-            let both = Interval::point(meeting.gap)?.add(Interval::point(other.gap)?)?.hi();
+            let both = Interval::point(meeting.gap)?
+                .add(Interval::point(other.gap)?)?
+                .hi();
             if !clear(meeting.spoke, other.spoke, both)? {
                 return Err(NumError::Degenerate.into());
             }
@@ -1135,22 +1156,18 @@ pub fn tangent_from(
         Sign::Zero => {
             let ([x, y], w) = disc.centre().coordinates();
             let fits = NumError::BudgetExceeded;
-            let across = |c: i128, at: i128| {
-                w.checked_mul(at).and_then(|p| c.checked_sub(p)).ok_or(fits)
-            };
+            let across =
+                |c: i128, at: i128| w.checked_mul(at).and_then(|p| c.checked_sub(p)).ok_or(fits);
             let (vx, vy) = (across(x, px)?, across(y, py)?);
-            let common = i128::try_from(gcd(vx.unsigned_abs(), vy.unsigned_abs()))
-                .map_err(|_| fits)?;
+            let common =
+                i128::try_from(gcd(vx.unsigned_abs(), vy.unsigned_abs())).map_err(|_| fits)?;
             let lowest = |v: i128| v.checked_div(common).ok_or(fits);
             // The way is the radius turned, clockwise for a centre on the left.
             let (a, b) = (lowest(vx)?, lowest(vy)?);
             let made = if side == Sign::Positive {
                 through(a, b)?
             } else {
-                through(
-                    a.checked_neg().ok_or(fits)?,
-                    b.checked_neg().ok_or(fits)?,
-                )?
+                through(a.checked_neg().ok_or(fits)?, b.checked_neg().ok_or(fits)?)?
             };
             let gap = Real::new(0.0)?;
             let exactness = accept.admit(Exactness::Exact, gap)?;
@@ -1168,7 +1185,7 @@ pub fn tangent_from(
             let (exactness, gap) = line_class(&[gap], &disc, step, accept)?;
             finished(carriers, made, Root::Second, exactness, gap)
         }
-        }
+    }
 }
 
 /// The line from the circle at `first` to the circle at `second`, each centre on its `sides` of the
@@ -1201,7 +1218,10 @@ pub fn common_tangent(
     let (reach, depth) = (ideal::plain_depth(near)?, ideal::plain_depth(far)?);
     let start = near.sub(reach)?.mul_f64(s)?;
     let aim = |share: f64| -> Result<Pair, PointError> {
-        way(delta, far.sub(depth.mul_f64(share)?)?.mul_f64(t)?.sub(start)?)
+        way(
+            delta,
+            far.sub(depth.mul_f64(share)?)?.mul_f64(t)?.sub(start)?,
+        )
     };
     let [dx, dy] = between(aim(0.5)?, aim(1.5)?)?;
     let length = norm([dd(dx)?, dd(dy)?])?;

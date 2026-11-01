@@ -1444,7 +1444,8 @@ struct Row {
 }
 
 /// Every test file the matrix names, read when the test is built.
-const FILES: [(&str, &str); 10] = [
+const FILES: [(&str, &str); 11] = [
+    ("attack_g193.rs", include_str!("attack_g193.rs")),
     ("attack_g190.rs", include_str!("attack_g190.rs")),
     ("attack_g189.rs", include_str!("attack_g189.rs")),
     ("attack_g188.rs", include_str!("attack_g188.rs")),
@@ -1589,6 +1590,74 @@ fn on_carrier(
                 Test(
                     "attack_g187.rs",
                     "order_and_turn_change_sign_as_they_should",
+                ),
+            ),
+        ],
+    }
+}
+
+/// A predicate with no filter, every call on the exact path: every class but the boundary in
+/// `attack_g193.rs`.
+fn exact_only(
+    predicate: &'static str,
+    random: &'static str,
+    one_step: &'static str,
+    corners: &'static str,
+    laws: &'static str,
+) -> Row {
+    use Class::*;
+    use Where::{NotApplicable, Test};
+    Row {
+        predicate,
+        call: ".side",
+        classes: [
+            (Random, Test("attack_g193.rs", random)),
+            (OneStep, Test("attack_g193.rs", one_step)),
+            (
+                Boundary,
+                NotApplicable("no filter: every call takes the exact path"),
+            ),
+            (Corners, Test("attack_g193.rs", corners)),
+            (Laws, Test("attack_g193.rs", laws)),
+        ],
+    }
+}
+
+/// A predicate of `one_root` that piece G193 added: every class in `attack_g193.rs`.
+fn on_g193_crossing(predicate: &'static str, call: &'static str, boundary: Where) -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate,
+        call,
+        classes: [
+            (
+                Random,
+                Test(
+                    "attack_g193.rs",
+                    "crossings_read_discs_and_fine_lines_as_their_rounds_and_carriers",
+                ),
+            ),
+            (
+                OneStep,
+                Test(
+                    "attack_g193.rs",
+                    "one_step_from_a_disc_or_a_fine_line_is_decided_by_the_exact_path",
+                ),
+            ),
+            (Boundary, boundary),
+            (
+                Corners,
+                Test(
+                    "attack_g193.rs",
+                    "crossings_at_the_extremes_read_discs_and_fine_lines_exactly",
+                ),
+            ),
+            (
+                Laws,
+                Test(
+                    "attack_g193.rs",
+                    "a_crossing_s_disc_and_fine_line_keep_their_laws",
                 ),
             ),
         ],
@@ -1923,6 +1992,32 @@ fn matrix() -> Vec<Row> {
             "arc::Circle2::side",
             ".side",
             "circle_filters_cross_their_boundary_both_ways",
+        ),
+        exact_only(
+            "arc::Disc::side",
+            "a_disc_answers_as_the_oracle_does_at_random",
+            "a_disc_on_the_circle_exactly_is_zero_and_one_step_off_is_not",
+            "a_disc_answers_as_the_oracle_does_at_the_extremes",
+            "a_disc_s_side_keeps_its_laws",
+        ),
+        on_g193_crossing(
+            "one_root::Crossing2::against_disc",
+            ".against_disc",
+            Where::NotApplicable("no filter: every call takes the exact path"),
+        ),
+        on_g193_crossing(
+            "one_root::Crossing2::side_of_fine",
+            ".side_of_fine",
+            Where::NotApplicable(
+                "its filter is `Crossing2::side`'s: both read one `side_of`, whose boundary the row of `side` crosses",
+            ),
+        ),
+        exact_only(
+            "carrier::FineLine::side",
+            "a_fine_line_has_its_side",
+            "a_fine_line_has_its_side",
+            "a_fine_line_s_side_is_exact_at_the_extremes",
+            "a_fine_line_s_side_keeps_its_laws",
         ),
         Row {
             predicate: "arc::Arc2::order",

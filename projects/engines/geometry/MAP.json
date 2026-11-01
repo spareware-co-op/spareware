@@ -113,11 +113,11 @@
         },
         {
           "cost": "constant time per question, as `geom-num`'s predicates are; the table is a `Vec`, one `push` for each carrier.",
-          "does": "a carrier is the whole curve under an entity, the infinite line under a segment or the full circle under an arc (chapter 14.2). [`Curve2`] is the closed list of the kinds this layer decides on exactly: a [`Line2`], a [`Circle2`] and an [`Ellipse2`], each the form `geom-num` holds, so that this crate adds no number type of its own (principle 8). A point made from carriers names them by their [`CurveIx`] in a [`Carriers`] table.",
+          "does": "a carrier is the whole curve under an entity, the infinite line under a segment or the full circle under an arc (chapter 14.2). [`Curve2`] is the closed list of the kinds this layer decides on exactly: a [`Line2`], a [`FineLine`], a [`Circle2`] and an [`Ellipse2`], each the form `geom-num` holds, so that this crate adds no number type of its own (principle 8). A point made from carriers names them by their [`CurveIx`] in a [`Carriers`] table.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-2d/src/carrier.rs",
           "guarantees": [
-            "**Budgets are geom-num's.** A [`Line2`] is a [`Carrier`], within 15.10's budget. A circle is a grid centre with a whole radius, or a rational centre through a grid point; an ellipse is 32.25's. So every predicate on them has the fixed width its module derives, and nothing here widens one.",
+            "**Budgets are geom-num's.** A [`Line2`] is a [`Carrier`], within 15.10's budget, and a [`FineLine`] is a line a construction made past it. A circle is a grid centre with a whole radius, a rational centre through a grid point, or a rational centre with an exact squared radius; an ellipse is 32.25's. So every predicate on them has the fixed width its module derives, and nothing here widens one.",
             "**Exact.** [`Curve2::side`] is the sign of a predicate of `geom-num`, zero exactly on the curve.",
             "**Stable names.** A [`CurveIx`] is a place in the table, which only grows, and never a memory address."
           ],
@@ -160,6 +160,27 @@
           "target": "lib"
         },
         {
+          "cost": "a few hundred double-double operations for lines, some thousands for ellipses.",
+          "does": "a tangent circle's centre needs square roots that stay closed under nothing, so it is never stored. Chapter 14.3 keeps a rational centre near it instead, and this module says where near is. Every curve of [`crate::carrier::Curve2`] is a conic, so one solver serves them all: the foot of a point on a curve is where the normal through the point meets it, and the distance from a curve moves with the point by the unit normal at the foot, which is Newton's step for the centre.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/ideal.rs",
+          "guarantees": [
+            "**Nothing here is a decision.** These are aims: a wrong aim makes the exact questions of [`crate::tangent`] refuse the circle, or report a larger gap. Doubles of doubles reach these numbers because each curve's equation is written about a grid point beside the centre by exact integers ([`geom_num::conic::Conic::about`]), so the size of the coordinates is not in them.",
+            "**Deterministic.** Double-doubles from `geom_num::dd`, a fixed limit of steps, and no platform maths; no allocation."
+          ],
+          "job": "The ideal a construction aims at: feet on curves, and the circle at a given distance from them.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md"
+            ],
+            "text": "the distance function's gradient is the unit normal at the foot, which makes this Newton's method on the distances; the foot is Newton's method on the curve's equation and the condition that the normal passes through the point. The depths are chapter 14.3's η (`projects/engines/geometry/architecture/14-2d-drafting.md`); the numbers that matter are the exact ones of [`crate::tangent`]."
+          },
+          "path": "geom_2d::ideal",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "reading a one-root point is one `Crossing2` construction, a few dozen products; reading a conic root is a quartic and its roots, as [`geom_num::quartic`] says. No allocation.",
           "does": "a [`Pt2`] is one of chapter 14.2's four classes. A grid point is whole steps and a rational point homogeneous integers. The other two are implicit: where two carriers cross, stored as the carriers and which crossing, or where an ellipse meets another conic, stored as the two and which root. [`Pt2::place`] reads a point's definition into exact numbers each time it is asked, and every question is asked of those: a rounded copy is never kept, so nothing decided here can differ from what the definition says (chapter 6.3).",
           "family": [],
@@ -181,13 +202,40 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "a few hundred double-double operations and a few dozen products of wide integers for a corner, about 100 µs; a curve with an ellipse adds its quartic and its roots. [`fillet_all`] is linear in its corners.",
+          "does": "the ideal result of a tangent construction needs square roots that stay closed under nothing, and rounding it to the grid opens a gap (chapter 14.3). So a construction takes a nearby rational choice and builds everything else exactly from it. Where both lines' normals are rational the fillet is exact: its circle is tangent to each line, a discriminant exactly zero. Everywhere else the circle or line goes a hair past its neighbour, so that the two cross at an exact one-root or conic-root point of their own carriers, which is the join, and the result is Certified with the largest direction gap at a join, always within what the caller accepted.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/tangent.rs",
+          "guarantees": [
+            "**Every join is an exact shared point.** A join is a [`Pt2`] defined by the two carriers it joins, so it is on both whatever is asked of it; nothing is snapped.",
+            "**No extra contact.** A curve crossing its neighbour at a hair's angle crosses it twice, the two a short chord apart, and between them it is on the far side: a cap. [`Fillet`] leaves one cap from its counter-clockwise end and arrives at the other's clockwise end, so the arc holds neither cap, and it is refused unless each cap is proven clear of the other. Likewise a line kept from the near crossing of one circle to the far crossing of another, and a [`Join`]'s two points.",
+            "**Exact or within the bounds.** Exact when no choice was needed, with a gap of exactly zero. Otherwise the gap is from the exact discriminants, rounded up, and the join stays within half a step of the ideal where the numbers allow it; [`Accept::admit`] refuses what the caller did not accept. Chapter 14.3's `ε_ang` is the ladder's angular bound, 2^−34.",
+            "**Within the budget.** A centre is a [`Rational2`] and a squared radius within [`Disc`]'s, and a line is a [`Carrier`] where it fits and a [`FineLine`] where it does not, so every width is `geom-num`'s.",
+            "**Atomic.** A construction that fails adds nothing to the table.",
+            "**Deterministic.** The aim is `crate::ideal`'s, integers do the rest; each corner of [`fillet_all`] is alone, so the result does not depend on how the work is shared."
+          ],
+          "job": "Tangent constructions: fillets, tangent circles and lines, and common tangents, with exact joins.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "https://doi.org/10.1145/142675.142726",
+              "https://doi.org/10.1016/0167-8396(86"
+            ],
+            "text": "chapter 14.3's rational choices (`projects/engines/geometry/architecture/14-2d-drafting.md`): a centre within η ≈ `ε_ang`² · r / 2 of the ideal, a line in a whole direction, the simplest fraction in the window of directions that cross, by continued fractions (Canny, Donald and Ressler 1992, <https://doi.org/10.1145/142675.142726>, for rational directions). The fillet of two lines is by offset, intersect and project (Rossignac and Requicha 1986, <https://doi.org/10.1016/0167-8396(86)90017-8>)."
+          },
+          "path": "geom_2d::tangent",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-2d",
       "provenance": [],
       "sections": "14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "carriers, points and commits (G192); built on by pieces G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
+      "status": "carriers, points and commits (G192), tangent constructions (G193); built on by pieces G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
       "summary": "Spare Kit geometry kernel: 2D drafting."
     },
     {
@@ -4631,7 +4679,7 @@
           "file": "projects/engines/geometry/crates/geom-num/src/arc.rs",
           "guarantees": [
             "Every result is exact, or an error. A [`Sign`] is decided by integer arithmetic alone, after a generated `f64` filter whose answers are the exact sign or no answer (chapter 6.2).",
-            "Nothing overflows silently. A [`Round`], an [`Arc2`] and a [`Circle2`] can only be made within the budget of [`crate::carrier`], and every width below is what the generated certificate derives for every input in that budget, tested at the extreme values. | Question | As a polynomial | Width with its sign | | --- | --- | --- | | Grid point against a [`Round`] | (Z − P) · (W(Z + P) − 2C) | 169 bits | | Rational point against a [`Round`] | (Z − vP) · (w(Z + vP) − 2vC) | 336 bits | | Carrier against a [`Round`] | h² − ((wP − C)²)(a² + b²), h = a · C − c · w | 336 bits | | Rational point against a [`Circle2`] | (Z − vC)² − r²v² | 253 bits | | Carrier against a [`Circle2`] | h² − r²(a² + b²), h = a · C − c | 168 bits | | Two [`Circle2`]s | d² − t², t the sum or difference of their radii | 85 bits | Chapter 15.10 writes 170, 337 and 253 bits for the first, second and fourth, and adds the side of an arc's chord for its centre, 169 bits, which [`crate::carrier::Carrier::side`] answers.",
+            "Nothing overflows silently. A [`Round`], an [`Arc2`], a [`Circle2`] and a [`Disc`] can only be made within the budget of [`crate::carrier`], and every width below is what the generated certificate derives for every input in that budget, tested at the extreme values; a [`Disc`]'s are written out, as its squared radius is wider than the generator's inputs. | Question | As a polynomial | Width with its sign | | --- | --- | --- | | Grid point against a [`Round`] | (Z − P) · (W(Z + P) − 2C) | 169 bits | | Rational point against a [`Round`] | (Z − vP) · (w(Z + vP) − 2vC) | 336 bits | | Carrier against a [`Round`] | h² − ((wP − C)²)(a² + b²), h = a · C − c · w | 336 bits | | Rational point against a [`Circle2`] | (Z − vC)² − r²v² | 253 bits | | Carrier against a [`Circle2`] | h² − r²(a² + b²), h = a · C − c | 168 bits | | Two [`Circle2`]s | d² − t², t the sum or difference of their radii | 85 bits | | Rational point against a [`Disc`] | ‖wZ − vC‖² − rr · v² | 420 bits | | Carrier against a [`Disc`] | h² − rr(a² + b²), h = a · C − c · w | 337 bits | | [`FineLine`] against a [`Disc`] | the same | 405 bits | Chapter 15.10 writes 170, 337 and 253 bits for the first, second and fourth, and adds the side of an arc's chord for its centre, 169 bits, which [`crate::carrier::Carrier::side`] answers.",
             "Which way an arc runs is fixed: counter-clockwise from its start to its end, about its centre. A point of the circle is on the arc exactly when it is not to the left of the chord from start to end; points of the arc come in the order they turn from its start.",
             "Deterministic: integers only, except the generated filters; no platform maths and no allocation."
           ],
@@ -4703,7 +4751,7 @@
           "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
           "guarantees": [
             "Every result is exact, or an error. A [`Sign`] is decided by integer arithmetic alone, after a generated `f64` filter whose answers are proven to be the exact sign or no answer (chapter 6.2); nothing rounds a point to answer a question about it.",
-            "Nothing overflows silently. A [`Carrier`] and a [`Rational2`] can only be made within the budget below, and every step is a checked operation or the generated exact path, whose certificate holds every step in its type for every input in these budgets (`generated`). A step that did not fit would be [`NumError::BudgetExceeded`], never an answer. Every width in the table is asserted when the crate compiles, and tested at the extreme values. | Quantity | Bound | Width with its sign | | --- | --- | --- | | A carrier's a and b | 2^41 | | | A carrier's c | 2^82 | | | A rational point's X and Y | 2^124 | | | A rational point's W | 2^83 | | | Side of a carrier | a · X + b · Y − c · W | 168 bits | | Order along a carrier | (q − p) · (b, −a) · `W_p` · `W_q` | 251 bits | | Comparing one coordinate | X · `W_q` − `X_q` · W | 209 bits | | Which way three points turn | their rows' determinant | 335 bits |",
+            "Nothing overflows silently. A [`Carrier`] and a [`Rational2`] can only be made within the budget below, and every step is a checked operation or the generated exact path, whose certificate holds every step in its type for every input in these budgets (`generated`). A step that did not fit would be [`NumError::BudgetExceeded`], never an answer. Every width in the table is asserted when the crate compiles, and tested at the extreme values. | Quantity | Bound | Width with its sign | | --- | --- | --- | | A carrier's a and b | 2^41 | | | A carrier's c | 2^82 | | | A rational point's X and Y | 2^124 | | | A rational point's W | 2^83 | | | Side of a carrier | a · X + b · Y − c · W | 168 bits | | Order along a carrier | (q − p) · (b, −a) · `W_p` · `W_q` | 251 bits | | Comparing one coordinate | X · `W_q` − `X_q` · W | 209 bits | | Which way three points turn | their rows' determinant | 335 bits | | A [`FineLine`]'s a and b | 2^75 | | | A [`FineLine`]'s c | 2^116 | | | Side of a [`FineLine`] | a · X + b · Y − c · W | 202 bits |",
             "A weight is positive. [`Rational2::new`] turns the three integers' signs so that W > 0, so no predicate here multiplies by the sign of a weight.",
             "Deterministic: integers only, except the generated filters; no platform maths and no allocation."
           ],
@@ -5853,7 +5901,7 @@
           "guarantees": [
             "Every result is exact, or an error. [`sign_of_root`] and [`sign_of_two_roots`] square only when the terms' signs differ, and read off what squaring leaves in integers; nothing rounds.",
             "Filter first, certified. Each crossing keeps its coordinates as [`Interval`]s, rounded outward from its integers and an outward-rounded root, so a comparison whose intervals are apart costs two subtractions; the filter's answer is the exact sign or no answer.",
-            "Nothing overflows silently. Every step is a checked operation in [`Wide`], and a step that did not fit would be [`NumError::BudgetExceeded`], never an answer. The widths below follow from [`crate::carrier`]'s budgets and are asserted when the crate compiles; every width is reached at the extreme values in `tests/attack_g189.rs`. | Quantity | Carrier and circle | Carrier and ellipse | Two circles | Where | | --- | --- | --- | --- | --- | | a, of a crossing | 209 | 252 | 628 | cx · N + a · h; 2D · x₁ · w₂ + h · Aₓ | | b, of a crossing | 42 | 147 | 209 | the carrier's own coefficients; A, turned | | k, of a crossing | 336 | 209 | 837 | rr · N − h²; 4D · ρ₁ · w₂² − h² | | w, of a crossing | 166 | 209 | 585 | cw · N; 2D · w₁ · w₂ | | Side of a carrier | 505 | 505 | 1,343 | E² − F²k, E = a · x + b · y − c · w | | Against a circle | 1,010 | 1,264 | 2,689 | E² − F²k, E and F from (Z − P) · (Z + P − 2C) | | Two crossings' coordinates | 1,506 | 1,850 | 4,857 | A² − B²k₁, A, B from the first squaring | | The turn of a grid point and two | 1,688 | 2,024 | 5,041 | the same, with the fourth term | The last sets [`BIG_LIMBS`]. Rendering these by the description language of `geom-gen` would take inputs wider than its `i128`, and a filter of `f64`s past 2^1023, which is why this one module's exact paths are written out, each step named by its derivation, as `plane.rs`'s are.",
+            "Nothing overflows silently. Every step is a checked operation in [`Wide`], and a step that did not fit would be [`NumError::BudgetExceeded`], never an answer. The widths below follow from [`crate::carrier`]'s budgets and are asserted when the crate compiles; every width is reached at the extreme values in `tests/attack_g189.rs`. | Quantity | Carrier and circle | Carrier and ellipse | Two circles | Where | | --- | --- | --- | --- | --- | | a, of a crossing | 209 | 252 | 628 | cx · N + a · h; 2D · x₁ · w₂ + h · Aₓ | | b, of a crossing | 42 | 147 | 209 | the carrier's own coefficients; A, turned | | k, of a crossing | 336 | 209 | 837 | rr · N − h²; 4D · ρ₁ · w₂² − h² | | w, of a crossing | 166 | 209 | 585 | cw · N; 2D · w₁ · w₂ | | Side of a carrier | 505 | 505 | 1,343 | E² − F²k, E = a · x + b · y − c · w | | Against a circle | 1,010 | 1,264 | 2,689 | E² − F²k, E and F from (Z − P) · (Z + P − 2C) | | Two crossings' coordinates | 1,506 | 1,850 | 4,857 | A² − B²k₁, A, B from the first squaring | | The turn of a grid point and two | 1,688 | 2,024 | 5,041 | the same, with the fourth term | A [`Disc`] is within the rational column of the two circles, and a [`FineLine`] and a [`Disc`] meet within them too: a below 2^277, b below 2^75, k below 2^404, w below 2^234. The last sets [`BIG_LIMBS`]. Rendering these by the description language of `geom-gen` would take inputs wider than its `i128`, and a filter of `f64`s past 2^1023, which is why this one module's exact paths are written out, each step named by its derivation, as `plane.rs`'s are.",
             "Deterministic: integers only, except the certified filter, whose answers are exact; no platform maths and no allocation."
           ],
           "job": "One-root numbers in 2D, exact: where a line meets a circle or two circles meet, and every question about such points.",
@@ -6023,7 +6071,7 @@
           "guarantees": [
             "Every result is exact, or an error. Nothing here is a floating-point number; a root is two whole numbers and a power of two, and a sign is a sign of a whole number.",
             "Every root is found, once, with its multiplicity. Descartes' rule over-counts only, so a stretch whose count is 0 holds no root, and one whose count is 1 holds exactly one, simple.",
-            "Nothing overflows silently. Every step is a checked operation in [`Big`] or the wider integers of the exact paths; a step that did not fit, or a bisection past its limit, is [`NumError::BudgetExceeded`], never an answer. For coefficients below 2^[`COEFFICIENT_BITS`] no input reaches either, by the bounds below and the module's asserts: | Quantity | Bound | Where | | --- | --- | --- | | A factor's coefficients | 2^299 | Mignotte's bound, 2^4 · ‖c‖₂ | | Two roots of one factor, apart | 2^−909 | Davenport (1985) and Mahler (1964) | | Roots of two quartics, apart if not one | 2^−2,410 | their resultant, a whole number | | A polynomial bisected s times | 2^(4s + 303) | the terms of 2^(4s) · c((x + a) / 2^s) |",
+            "Nothing overflows silently. Every step is a checked operation in [`Big`] or the wider integers of the exact paths; a step that did not fit, or a bisection past its limit, is [`NumError::BudgetExceeded`], never an answer. For coefficients below 2^[`COEFFICIENT_BITS`] no input reaches either, by the bounds below and the module's asserts: | Quantity | Bound | Where | | --- | --- | --- | | A factor's coefficients | 2^303 | Mignotte's bound, 2^4 · ‖c‖₂ | | Two roots of one factor, apart | 2^−921 | Davenport (1985) and Mahler (1964) | | Roots of two quartics, apart if not one | 2^−2,442 | their resultant, a whole number | | A polynomial bisected s times | 2^(4s + 307) | the terms of 2^(4s) · c((x + a) / 2^s) |",
             "Bounded work. Live stretches each count at least two, and Descartes' counts of disjoint stretches sum to at most four, so at most two are live at once and the frontier is a fixed array of three nodes."
           ],
           "job": "The real roots of a quartic with whole-number coefficients, exact: how many, how multiple, and in what order.",
@@ -10686,7 +10734,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/trip.rs",
           "guarantees": [
-            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own build and fuzzing must report through whichever target meets it first (each target's law names its own break, \"broken law: \"; its address sanitizer reports the abort that follows); `Sign::of_i128` reading its argument through an opaque copy (`core::hint::black_box`), the same answer for more work, which both count gates must report as a rise of more than 5% on its benchmark; the error bound orient2d's Gappa problem claims, halved, which Gappa must fail to prove, so that its Rocq output holds no theorem and Rocq refuses it; and the bounds of orient2d's `FPTaylor` certificate, every one halved as HOL Light's session loads it, which HOL Light must refuse to prove.",
+            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; a set bit the canonical encoder's narrowing proofs keep; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own build and fuzzing must report through whichever target meets it first (each target's law names its own break, \"broken law: \"; its address sanitizer reports the abort that follows); `Sign::of_i128` reading its argument through an opaque copy (`core::hint::black_box`), the same answer for more work, which both count gates must report as a rise of more than 5% on its benchmark; the error bound orient2d's Gappa problem claims, halved, which Gappa must fail to prove, so that its Rocq output holds no theorem and Rocq refuses it; and the bounds of orient2d's `FPTaylor` certificate, every one halved as HOL Light's session loads it, which HOL Light must refuse to prove.",
             "**An anchor found once, or no run.** [`apply`] refuses a file that holds the anchor line other than exactly once, so a refactor that moves it fails `tests/attack_g43.rs` (which checks every anchor in the repository) and the job, loudly, instead of planting nothing.",
             "**A trip counts only for the right reason.** [`verdict`] accepts a run only when the command failed and printed every line [`Violation::caught`] names: the tool's own words for a found violation. A build error, a missing tool or any other failure proves nothing and is refused.",
             "**Line ends kept.** The anchor is matched on a line with its line end set aside, so a Windows checkout's CRLF files work the same, and the line end is kept."

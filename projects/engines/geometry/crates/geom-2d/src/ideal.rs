@@ -23,6 +23,11 @@
 //!
 //! Cost: a few hundred double-double operations for lines, some thousands for ellipses.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "c, r, x, y and the like are the formulas' centre, radius and coordinates"
+)]
+
 use geom_num::conic::Conic;
 use geom_num::grid::P2;
 use geom_num::ladder::ANGULAR;
@@ -36,7 +41,7 @@ pub(crate) type Pair = [DD; 2];
 const STEPS: u32 = 48;
 
 /// A step this small, relative to the size of the point, has met it: 2^−96.
-const SMALL: f64 = 1.262_177_448_353_618_9e-29;
+const SMALL: f64 = 1.262_177_448_353_619e-29;
 
 /// The angle aimed at where a circle crosses a curve, of [`ANGULAR`]: leaves room for the centre's
 /// rounding, as a gap goes by the square root of the depth, and for the bound's looseness.
@@ -254,7 +259,11 @@ pub(crate) struct Depth {
 fn depth(foot: &Foot, aim: &Aim, c: Pair, r: DD) -> Result<Depth, NumError> {
     let d = dot(minus(c, foot.at)?, foot.normal)?;
     let bend = foot.curvature.mul(d)?.add(DD::from_i64(1))?;
-    let reach = if bend.sign() == Sign::Negative { -1.0 } else { 1.0 };
+    let reach = if bend.sign() == Sign::Negative {
+        -1.0
+    } else {
+        1.0
+    };
     let bend = bend.abs();
     let angle = if aim.loose {
         AIM * ANGULAR.get() * TIGHTER
@@ -276,9 +285,9 @@ fn depth(foot: &Foot, aim: &Aim, c: Pair, r: DD) -> Result<Depth, NumError> {
 /// of the centre: two lines nearly parallel leave the centre ill-determined along them, and their
 /// distances not.
 fn settled<const N: usize>(miss: &[DD; N], depths: &[Depth; N], rough: Option<f64>) -> bool {
-    miss.iter().zip(depths).all(|(off, deep)| {
-        off.abs().hi() <= rough.map_or(deep.depth.hi() / 256.0, |steps| steps)
-    })
+    miss.iter()
+        .zip(depths)
+        .all(|(off, deep)| off.abs().hi() <= rough.unwrap_or(deep.depth.hi() / 256.0))
 }
 
 /// The depth of a circle of radius `r` past a line, as [`Depth`] says.
@@ -322,12 +331,11 @@ pub(crate) struct Solved<const N: usize> {
     pub(crate) depths: [Depth; N],
 }
 
+/// Each curve's foot and depth, and how far the circle misses that depth.
+type Missed<const N: usize> = ([Foot; N], [Depth; N], [DD; N]);
+
 /// How far the circle about `c` of radius `r` misses each curve's depth, with the feet and depths.
-fn residual<const N: usize>(
-    aims: &mut [Aim; N],
-    c: Pair,
-    r: DD,
-) -> Result<([Foot; N], [Depth; N], [DD; N]), NumError> {
+fn residual<const N: usize>(aims: &mut [Aim; N], c: Pair, r: DD) -> Result<Missed<N>, NumError> {
     let mut feet = [Foot {
         at: c,
         normal: c,
@@ -480,7 +488,10 @@ mod tests {
 
     #[test]
     fn two_lines_settle_with_the_circle_past_them_by_the_depth() {
-        let (x, y) = (Carrier::new(0, 1, 0).unwrap(), Carrier::new(1, 0, 0).unwrap());
+        let (x, y) = (
+            Carrier::new(0, 1, 0).unwrap(),
+            Carrier::new(1, 0, 0).unwrap(),
+        );
         let mut aims = [
             aim(&Conic::of_carrier(&x).unwrap(), 1.0),
             aim(&Conic::of_carrier(&y).unwrap(), 1.0),
