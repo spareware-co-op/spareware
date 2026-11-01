@@ -847,6 +847,84 @@ fn a_small_budget_stops_the_call() {
     assert!(got.is_err());
 }
 
+/// The exact corners of `body`, sorted, and its counts of shells, faces and edges: its shape.
+fn shape(body: &Body) -> (Vec<[i64; 3]>, [u32; 3]) {
+    let a = body.arenas();
+    let mut corners = Vec::new();
+    for row in 0..a.points.len() {
+        match a.points.get(geom_topo::Ix::new(row).unwrap()) {
+            Some(geom_topo::PointKind::Grid(g)) => {
+                corners.push([g.x.get(), g.y.get(), g.z.get()]);
+            }
+            other => panic!("not on the grid: {other:?}"),
+        }
+    }
+    corners.sort_unstable();
+    (corners, [a.shells.len(), a.faces.len(), a.edges.len()])
+}
+
+#[test]
+#[ignore = "a benchmark's shape, far too long for every mutant: G140 runs and times it"]
+fn a_thousand_operands_unite_in_one_arrangement() {
+    let mut boxes = Vec::new();
+    for i in 0..10 {
+        for j in 0..10 {
+            for k in 0..10 {
+                boxes.push(cuboid([3 * i, 3 * j, 3 * k], [2, 2, 2]));
+            }
+        }
+    }
+    let operands: Vec<Operand<'_>> = boxes
+        .iter()
+        .enumerate()
+        .map(|(i, b)| Operand {
+            key: OperandKey((i as u128).to_be_bytes()),
+            ..solid(0, b)
+        })
+        .collect();
+    let out = unite(&ctx(), &SERIAL, &operands).unwrap();
+    assert_eq!(out.result.arenas().shells.len(), 1000);
+    assert_eq!(sixfold(&out.result), 6 * 8 * 1000);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+
+    #[test]
+    fn many_at_once_is_one_after_another_in_any_order(
+        boxes in prop::collection::vec(
+            ([-6i64..6, -6i64..6, -6i64..6], [1u64..6, 1u64..6, 1u64..6]),
+            2..6,
+        ),
+        turn in 0usize..6,
+    ) {
+        let bodies: Vec<Body> = boxes.iter().map(|(low, size)| cuboid(*low, *size)).collect();
+        let operands: Vec<Operand<'_>> = bodies
+            .iter()
+            .enumerate()
+            .map(|(i, b)| solid(i as u8, b))
+            .collect();
+        let mut shuffled = operands.clone();
+        let spin = turn % shuffled.len();
+        shuffled.rotate_left(spin);
+        let whole = unite(&ctx(), &SERIAL, &shuffled).unwrap().result;
+        prop_assert_eq!(&whole, &unite(&ctx(), &SERIAL, &operands).unwrap().result);
+        let mut held = bodies[0].clone();
+        for (i, body) in bodies.iter().enumerate().skip(1) {
+            let pair = [solid(0, &held), solid(i as u8, body)];
+            held = unite(&ctx(), &SERIAL, &pair).unwrap().result;
+        }
+        prop_assert_eq!(shape(&whole), shape(&held));
+        let cut = subtract(&ctx(), &SERIAL, key(0), &shuffled).unwrap().result;
+        let mut left = bodies[0].clone();
+        for (i, body) in bodies.iter().enumerate().skip(1) {
+            let pair = [solid(0, &left), solid(i as u8, body)];
+            left = subtract(&ctx(), &SERIAL, key(0), &pair).unwrap().result;
+        }
+        prop_assert_eq!(shape(&cut), shape(&left));
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(48))]
 
