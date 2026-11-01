@@ -854,8 +854,8 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 
 **Result: not yet passed (2026-11-01).** On main through #453 (d1e6a9ff): G68, G69, #392's libm survivors, #411, G49's golden (#417), geom-num's coverage with G47's `awaiting_proof` lines gone (#433), the count benchmarks (#434), the full run's findings outside geom-num (#446), the last four `ln` ledger keys (#449) and the fuzz targets (#453). What is left, in order:
 
-1. On main: the fix for Ruled's Taylor forms (#468), the first night's finding, with its own mutation judge. The full `kernel-quality.yml` run on d1e6a9ff, before it, left nothing unexplained (run 41235502078, 109 jobs).
-2. Seven consecutive green nights of the kind laws, counted after that fix. 0 of 7: the first scheduled run with `laws` was red.
+1. Done: the fix for Ruled's Taylor forms (#468), the first night's finding, is on main (614e5ec4) with its own mutation judge. The full `kernel-quality.yml` run on d1e6a9ff, before it, left nothing unexplained (run 41235502078, 109 jobs).
+2. Seven consecutive green nights of the kind laws, counted from the first scheduled run on 614e5ec4 or later. 0 of 7: the one scheduled run so far with `laws` was red, on the code before the fix.
 3. The owner's record.
 
 Off CI, on a development machine, on `piece/G69` at 8ed3fe32 (G68 and G69 on main as of 4ee15994): every kernel crate's tests in release with overflow checks; `geom-curve`, `geom-surface`, `geom-test` and `engine-geometry` in debug; fmt, clippy, the map, provenance, golden and recursion checks. G69's law catalogue found four kernel defects there, each fixed with a permanent test (28.3's as-built note): a surface of revolution about an axis off the origin placed as if the axis passed through it; circles, bulge polylines, cylinders, cones, spheres and tori stating a rounding under grid transforms that move them exactly; and offset curves whose conversion failed as a defect.
