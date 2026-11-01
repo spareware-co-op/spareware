@@ -136,6 +136,8 @@ pub enum Selection {
     },
     /// Only the curves where operands meet, as a wire body.
     Section,
+    /// Every cell inside a solid, as one General body whose regions are the cells.
+    GeneralFuse,
     /// The cells that pass a test, each a body. With seeds, the cells that hold them, named by
     /// their keys; with none, every such cell, labelled with the operands around it.
     Cells {
@@ -516,6 +518,7 @@ fn target_of(
         | Selection::Intersect
         | Selection::Where(_)
         | Selection::Section
+        | Selection::GeneralFuse
         | Selection::Cells { .. } => {
             return Ok(None);
         }
@@ -541,7 +544,9 @@ fn test_of(
             .ok_or(PrepareError::UnknownOperand(*key))
     };
     Ok(match selection {
-        Selection::Unite | Selection::Trim { .. } | Selection::Section => WindingTest::unite(),
+        Selection::Unite | Selection::Trim { .. } | Selection::Section | Selection::GeneralFuse => {
+            WindingTest::unite()
+        }
         Selection::Intersect => WindingTest::intersect(solids),
         Selection::Subtract { target } => WindingTest::subtract(entry_of(target)?),
         Selection::Imprint { target } | Selection::Split { target } => {

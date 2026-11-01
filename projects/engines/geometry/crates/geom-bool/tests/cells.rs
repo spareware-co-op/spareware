@@ -282,3 +282,19 @@ fn a_small_storey_has_the_boundaries_counted_by_hand() {
     assert_eq!(on(Beyond::Element(key(2))), 1);
     assert_eq!(on(Beyond::Outside), 5);
 }
+
+#[test]
+fn a_general_fuse_keeps_every_cell() {
+    let a = cuboid(1, [0, 0, 0], [40, 40, 40]);
+    let b = cuboid(2, [20, 0, 0], [40, 40, 40]);
+    let out = picked(vec![solid(1, &a), solid(2, &b)], Selection::GeneralFuse);
+    let fused = &out.result[0][0].body;
+    let arenas = fused.arenas();
+    assert_eq!(
+        arenas.regions.len(),
+        3 + 1,
+        "left, both, right, and outside"
+    );
+    assert_eq!(arenas.shells.len(), 3);
+    checked(fused);
+}

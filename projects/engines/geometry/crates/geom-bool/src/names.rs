@@ -156,9 +156,10 @@ fn keyed_role(name: &str, key: OperandKey) -> Result<Role, NameError> {
 }
 
 /// A rank for 20.2's order: an entity's vertex numbers, the lowest first, which follow the exact
-/// lexicographic order of the points.
+/// lexicographic order of the points, then its row, which only two faces back to back need: the
+/// row follows the sheet, and the sheet the plane and which way it faces.
 #[derive(Clone, Debug)]
-struct Rank(Vec<usize>);
+struct Rank(Vec<usize>, usize);
 
 impl WeakOrder for Rank {
     fn least_point(&self, other: &Self) -> Option<Ordering> {
@@ -169,8 +170,8 @@ impl WeakOrder for Rank {
         Some(self.0.cmp(&other.0))
     }
 
-    fn direction(&self, _: &Self) -> Option<Ordering> {
-        Some(Ordering::Equal)
+    fn direction(&self, other: &Self) -> Option<Ordering> {
+        Some(self.1.cmp(&other.1))
     }
 }
 
@@ -559,7 +560,7 @@ fn face_ranks(merged: &Merged) -> Vec<Rank> {
         .map(|at| {
             let mut list: Vec<usize> = fins_of(merged, at).map(|fin| fin.from).collect();
             list.sort_unstable();
-            Rank(list)
+            Rank(list, at)
         })
         .collect()
 }
@@ -754,7 +755,8 @@ fn name_edges(
         };
         rows.names.push(name);
         rows.origins.push(origin);
-        rows.ranks.push(Rank(alloc::vec![edge.low, edge.high]));
+        rows.ranks
+            .push(Rank(alloc::vec![edge.low, edge.high], rows.names.len()));
     }
     Ok(rows)
 }
@@ -817,7 +819,7 @@ fn name_vertices(
         };
         rows.names.push(name);
         rows.origins.push(origin);
-        rows.ranks.push(Rank(alloc::vec![at]));
+        rows.ranks.push(Rank(alloc::vec![at], at));
     }
     Ok(rows)
 }
@@ -990,7 +992,9 @@ pub fn name_curves(
             from: set,
             role: Role::new("section", [])?,
         });
-        edges.ranks.push(Rank(alloc::vec![*low, *high]));
+        edges
+            .ranks
+            .push(Rank(alloc::vec![*low, *high], edges.names.len()));
     }
     let mut vertices = Rows::default();
     for (at, by) in at_vertex.into_iter().enumerate() {
@@ -1005,7 +1009,7 @@ pub fn name_curves(
             from: set,
             role: Role::new("section", [])?,
         });
-        vertices.ranks.push(Rank(alloc::vec![at]));
+        vertices.ranks.push(Rank(alloc::vec![at], at));
     }
     let edges = edges.finished(&mut records)?;
     let vertices = vertices.finished(&mut records)?;

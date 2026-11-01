@@ -211,6 +211,10 @@ struct Partition {
     lists: BTreeMap<usize, Vec<Held>>,
     /// Whether any wall stood.
     walled: bool,
+    /// Every piece, walls both ways, merged.
+    whole: Merged,
+    /// Those pieces.
+    pieces: Vec<Outward>,
 }
 
 /// What a selection gives.
@@ -512,7 +516,7 @@ impl<'a> Scene<'a> {
             Ok(held.holder.unwrap_or(shell))
         };
         let mut lists: BTreeMap<usize, Vec<Held>> = BTreeMap::new();
-        for (at, piece) in pieces.into_iter().enumerate() {
+        for (at, piece) in pieces.iter().cloned().enumerate() {
             // A wall's other side lies next to it among the pieces.
             let other = (at >= base).then(|| {
                 let twin = base.saturating_add(at.saturating_sub(base) ^ 1);
@@ -524,9 +528,12 @@ impl<'a> Scene<'a> {
             };
             lists.entry(cell_of(at)?).or_default().push(held);
         }
+        let walled = !walls.is_empty();
         Ok(Partition {
             lists,
-            walled: !walls.is_empty(),
+            walled,
+            whole: merged,
+            pieces,
         })
     }
 
@@ -537,7 +544,7 @@ impl<'a> Scene<'a> {
         target: Option<usize>,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Picked, Refused> {
-        let Partition { lists, walled } = self.partition(test, meter)?;
+        let Partition { lists, walled, .. } = self.partition(test, meter)?;
         let split = self.split_faces(&lists)?;
         let mut picked = Picked {
             results: Vec::with_capacity(lists.len()),
@@ -670,6 +677,24 @@ impl<'a> Scene<'a> {
             elements: elements.into_iter().collect(),
             boundaries: boundaries.into_iter().collect(),
         }
+    }
+
+    /// Every cell of `test` in one General body, a wall as a face of each cell, back to back.
+    fn fused(&self, test: &WindingTest, meter: &mut WorkMeter<'_>) -> Result<Picked, Refused> {
+        let Partition { whole, pieces, .. } = self.partition(test, meter)?;
+        let job = Job {
+            target: None,
+            open: false,
+            split: &BTreeSet::new(),
+            seed: None,
+        };
+        let (result, qualified) = self.finished(&whole, job, &pieces, meter)?;
+        Ok(Picked {
+            results: alloc::vec![result],
+            separated: true,
+            qualified,
+            leaks: Vec::new(),
+        })
     }
 
     /// The cells of `test`: with seeds, those that hold them; with none, every one.
@@ -942,6 +967,7 @@ pub fn combine(
                 scene.kept(test, &scene.others(*target), *target, &mut meter)
             }
             Selection::Split { .. } => scene.split(test, *target, &mut meter),
+            Selection::GeneralFuse => scene.fused(test, &mut meter),
             Selection::Cells { seeds, .. } => scene.cells(test, seeds, &mut meter),
             Selection::Keep { .. } => scene.keep(test, *target, &mut meter),
             Selection::Trim { seeds, .. } => scene.trim(*target, seeds, &mut meter),
