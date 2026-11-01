@@ -219,6 +219,36 @@ pub fn plates(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {
     })
 }
 
+/// A plane patch and a sphere resting on it, for `analyse`.
+#[must_use]
+pub fn rests(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::rests", class);
+    batch_of(|_| {
+        let at = point(&mut g);
+        let patch = Plane::new(
+            [at[0], at[1], 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-8.0, 8.0), (-8.0, 8.0)),
+        );
+        let radius = f64::from(i32::try_from(g.range(1, 4)).ok()?);
+        // Its axis lies along the plane, so the contact is on its equator and far from a pole.
+        let ball = Sphere::new(
+            [at[0], at[1], radius],
+            radius,
+            Frame::new([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]).ok()?,
+            ((0.0625, 2.0), (-0.49, 0.49)),
+        );
+        Some((
+            SurfaceKind::Plane(patch.ok()?),
+            SurfaceKind::Sphere(ball.ok()?),
+        ))
+    })
+}
+
 /// Most of a torus and a view direction, for a silhouette.
 #[must_use]
 pub fn tori(class: Class) -> Vec<(SurfaceKind, [f64; 3])> {

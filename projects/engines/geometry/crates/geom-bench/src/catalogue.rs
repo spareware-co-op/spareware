@@ -448,6 +448,8 @@ pub static OPS: &[Op] = &[
     Op { group: "intersect", name: "subdivide_patch", measures: "geom_intersect::general::subdivide", classes: T, prepare: |c| bind(inputs::intersect::sheets(c), kernels::intersect::subdivided) },
     // Marching (piece G170; decision 32.44): the branches of a sphere through a plane patch.
     Op { group: "intersect", name: "march_plate", measures: "geom_intersect::march::march", classes: T, prepare: |c| bind(inputs::intersect::plates(c), kernels::intersect::marched) },
+    // Contact analysis (piece G171; decision 32.44): a sphere resting on a plane patch.
+    Op { group: "intersect", name: "analyse_rest", measures: "geom_intersect::contact::analyse", classes: T, prepare: |c| bind(inputs::intersect::rests(c), kernels::intersect::touched) },
     Op { group: "intersect", name: "trace_silhouette", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::tori(c), kernels::intersect::silhouettes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },

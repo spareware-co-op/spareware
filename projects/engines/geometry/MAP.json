@@ -2565,16 +2565,16 @@
           "target": "lib"
         },
         {
-          "cost": "one subdivision, one budgeted rerun and one march, and [`CELLS`] squared evaluations.",
+          "cost": "one subdivision, one budgeted rerun, one march and one analysis, and [`CELLS`] squared evaluations.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of four surfaces on small lattice sizes, and a sphere or a plane through it. [`check`] subdivides the pair and holds the answer to the laws below, with a dense grid of the implicit form of the second surface on the first as the oracle: a sign change between neighbours proves the surfaces cross there, and [`crate::general`]'s pairs must cover it. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/general.rs",
           "guarantees": [
             "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
             "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
-            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd count, a chord past its ceiling, an internal error, or a budget that changes an answer instead of stopping it."
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd count, a chord past its ceiling, a contact whose point is on one surface only, a bound past its ceiling, a region off its surface, an internal error, or a budget that changes an answer instead of stopping it."
           ],
-          "job": "Fuzz target: `geom-intersect`'s subdivision leaves no crossing outside its settled or flagged pairs, and its marching stays on both surfaces, on any bytes.",
+          "job": "Fuzz target: `geom-intersect`'s subdivision leaves no crossing outside its settled or flagged pairs, its marching stays on both surfaces, and its analysis of the flagged pairs says nothing the surfaces deny, on any bytes.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/12-intersections.md",
@@ -3566,6 +3566,30 @@
             "text": "the closed forms of 12.6 and 12.7, on Goldman and Miller's geometric conditions (SMA '91, doi:10.1145/112515.112545; GMIP 57(1), 1995, doi:10.1006/gmip.1995.1006), whose planar sections are the two quadrics' rotational symmetry and a sphere tangent to both about the meeting of their axes. `projects/engines/geometry/architecture/12-intersections.md` holds the table."
           },
           "path": "geom_intersect::closed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each cluster is one run of [`crate::solve`] on the collinear-normal system, boxes in four unknowns, each a read of both surfaces to the second order; joining and covering are quadratic in the flagged pairs. All of it is charged to the meter. Recursion: none.",
+          "does": "[`analyse`] joins the flagged pairs that touch into clusters. Near a contact most of them are flagged for starts that could not be proven, so a cluster is taken whole, and one with no pair at the floor is left as it was flagged. Each other cluster is read:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/contact.rs",
+          "guarantees": [
+            "**Every flagged pair is accounted for.** Each one is in a cluster with at least one [`Reading`], or is proven to hold nothing, or is read as it was flagged, and a cluster's points explain all the branches that reach it.",
+            "**Nothing is called tangent on a gap not proven small.** A zero's gap is an enclosure, and only one that contains zero goes on to the second-order test.",
+            "**The form's sign is proven.** The determinant of the forms' difference is an interval. One that spans zero is a contact of higher order, whatever its middle says.",
+            "**A band is an upper bound.** Its width comes from what the cluster's boxes reach and the least its pairs' forms can differ by, and a band past the ceiling is a [`Unresolved::TangentBand`].",
+            "**Overlap is by identity or by a covered area.** Two surfaces are identical only if their data are equal, and a cluster overlaps only if patches of both surfaces cover its hulls, so that every point of each has a box of the other within reach, and its hull ends at an edge: a contact in the open, where the surfaces part on every side, is not an overlap however flat."
+          ],
+          "job": "Tangent, singular and coincident analysis: what the flagged pairs of [`crate::general::subdivide`] are (12.9).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.9 (`projects/engines/geometry/architecture/12-intersections.md`). The forms are Dupin's comparison of two indicatrices, re-derived there, and written here as the difference H₁ − H₂ of each surface's form in one orthonormal frame of the tangent plane: H = A⁻ᵀ·II·A⁻¹, for A the first partials in that frame. Two surfaces at a contact are graphs z = ½xᵀHx over that plane, so H₁ − H₂ is the Hessian of their gap. The chapter's third-order test asks whether branches leave a contact whose form is degenerate. Here that is read directly, from the proven starts of the settled pairs around the cluster, which needs no frame at a contact that cannot be isolated and also reaches the contacts of fourth order and past. The section's limit to analytic pairs stands, because only their data can make a form exactly degenerate; on other pairs a degenerate form is as likely a pair of near crossings, so it stays flagged."
+          },
+          "path": "geom_intersect::contact",
           "provenance": [],
           "spdx": null,
           "target": "lib"

@@ -929,6 +929,12 @@ impl Canonical for geom_intersect::general::Subdivided {
     }
 }
 
+impl Canonical for geom_intersect::contact::Reading {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_intersect::march::Traced {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);

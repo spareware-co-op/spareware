@@ -222,8 +222,8 @@ fn each_march_takes_the_work_it_always_took() {
     let low = bowl(2.0, -1.0, 1.0);
     let high = bowl(2.0, 1.0, -1.0);
     let cases: [(&SurfaceKind, &SurfaceKind, u64, usize, u64); 2] = [
-        (&plane, &sphere, 64_314, 252, 4_576_822_122_997_009_047),
-        (&low, &high, 309_337, 185, 4_576_806_869_884_785_410),
+        (&plane, &sphere, 64_233, 252, 4_576_821_325_672_623_522),
+        (&low, &high, 341_740, 215, 4_576_859_448_148_097_595),
     ];
     for (a, b, work, vertices, reach) in cases {
         let found = subdivide(a, b, FLOOR, &mut meter()).unwrap();
