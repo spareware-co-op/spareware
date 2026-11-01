@@ -1307,6 +1307,21 @@ mod tests {
             hull.sort();
             assert_eq!(hull, [point(1, 1, 4), point(1, 5, 0), point(5, 1, 0)]);
         }
+        // An irregular pentagon with points inside: a grid's symmetry can hide a wrong turn.
+        let corners = [flat(1, 1), flat(8, 2), flat(10, 7), flat(5, 10), flat(2, 6)];
+        let mut scattered = vec![flat(4, 4), flat(6, 5), flat(7, 6), flat(3, 5)];
+        scattered.extend(corners.iter().cloned());
+        let around = |hull: &[Point], order: &[Point]| {
+            assert_eq!(hull.len(), order.len(), "{hull:?}");
+            let start = hull.iter().position(|p| *p == order[0]).expect("a corner");
+            for (i, want) in order.iter().enumerate() {
+                assert_eq!(&hull[(start + i) % hull.len()], want);
+            }
+        };
+        around(&outline(&scattered, &point(0, 0, 1)), &corners);
+        let mut backwards = corners.to_vec();
+        backwards.reverse();
+        around(&outline(&scattered, &point(0, 0, -1)), &backwards);
     }
 
     #[test]
