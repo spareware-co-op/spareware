@@ -15,6 +15,15 @@ geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 
+[dev-dependencies]
+# The tests' seeded generator and seed printing (geom_test::rng and geom_test::seed).
+geom-test = { path = "../geom-test" }
+
+# The names benchmark (piece G87), with the standard library's clock only: `cargo bench -p geom-name`.
+[[bench]]
+name = "names"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

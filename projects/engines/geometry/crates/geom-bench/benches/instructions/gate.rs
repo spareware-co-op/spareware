@@ -2582,9 +2582,16 @@ pub mod mesh {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/exact_build/typical"))]
+    fn exact_build(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = mesh;
-        benchmarks = cdt
+        benchmarks = cdt, exact_build
     );
 }
 

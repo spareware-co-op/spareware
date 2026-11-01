@@ -2290,6 +2290,11 @@ fn mesh_typical_batches_all_succeed() {
             .flatten()
             .all(|c| c.triangles.len() >= usize::from(m::POINTS))
     );
+    let polygons = m::exact_build(Typical);
+    all_ok("exact_build", k::exact_build, &polygons);
+    let mut built = Vec::new();
+    k::exact_build(&polygons, &mut built);
+    assert!(built.iter().flatten().all(|mesh| mesh.faces() == m::FACES));
 }
 
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and

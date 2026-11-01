@@ -743,7 +743,7 @@ const HAND_TWINS: [HandTwin; 3] = [
             "weight_and_offset",
             "within_budget",
         ],
-        &["through", "new", "new"],
+        &["through", "new", "new", "new"],
     ),
     (
         "crossing",

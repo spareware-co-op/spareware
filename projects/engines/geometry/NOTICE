@@ -460,12 +460,26 @@ CGAL `FPU.h`
     projects/engines/geometry/crates/geom-num/src/interval.rs
       for its widening with `nextafter` when the rounding mode cannot change, which the Method above names.
 
+ciborium-ll
+  Licence:      Apache-2.0
+  Link:         https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-op/src/cbor.rs
+      its choice of the shortest float that keeps a double's bits; used as a test oracle only.
+
 Clippy's `clippy_dev` token cursor
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/map/errors.rs
       for the approach of finding declarations with a token cursor. No code copied.
+
+csgrs
+  Licence:      MIT
+  Link:         https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-mesh/src/exact/check.rs
+      for which rules a closure certificate holds; its method, not its code.
 
 Geogram `CDT_2d`
   Licence:      BSD-3-Clause
@@ -570,6 +584,13 @@ libmalloc's xzone malloc
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       with `src/xzone_malloc/xzone_malloc.h` (MIT) at the same commit, for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists, its four pools per size class and its keyed choice of pool), to explain what CI measured. No code copied.
+
+Manifold
+  Licence:      Apache-2.0
+  Link:         https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/shared.h
+  Consulted by:
+    projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs
+      for half-edges as parallel arrays, and <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/include/manifold/mesh.h>, for property vertices and runs; its data model, not its code.
 
 npm `hosted-git-info` 10.1.1
   Licence:      ISC
@@ -705,3 +726,5 @@ every other crate compiled into a shipped binary, go in the generated third-part
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml
+  sha2 0.11.0 (Apache-2.0 OR MIT), https://crates.io/crates/sha2/0.11.0, named by projects/engines/geometry/crates/geom-op/Cargo.toml
+  unicode-normalization =0.1.26 ((Apache-2.0 OR MIT) AND Unicode-3.0), https://crates.io/crates/unicode-normalization, named by projects/engines/geometry/crates/geom-op/Cargo.toml
