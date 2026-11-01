@@ -45,7 +45,7 @@ use core::fmt;
 use geom_math::gcd_u128;
 use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{I256, I320, NumError, Sign, Wide};
-use geom_run::{Stopped, WorkMeter};
+use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 
 use crate::convex::{Piece, opposite};
 use crate::order::{Flap, Line, Meeting, Ray, about, around};
@@ -53,6 +53,18 @@ use crate::plane::canonical;
 use crate::subdivide::around as box_around;
 use crate::trace::{Classified, Polygon, TraceError, classify};
 use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
+
+/// Making corners, a few dozen pieces a task.
+const PIECES: ChunkPlan = ChunkPlan::fixed::<64>();
+
+/// The sort of corners, in runs of this many.
+const SORT_PLAN: ChunkPlan = ChunkPlan::fixed::<4096>();
+
+/// Making each piece's corners.
+const CORNERS: Phase = Phase::new("merge: corners");
+
+/// Sorting the corners.
+const SORT_CORNERS: Phase = Phase::new("merge: sort corners");
 
 /// What merges (11.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,6 +117,9 @@ pub enum MergeError {
     Open,
     /// A shell faces inward with no shell around it.
     Inside,
+    /// The parallel helper broke one of its own rules: a defect, reported instead of a wrong
+    /// merge.
+    Defect,
 }
 
 impl fmt::Display for MergeError {
@@ -113,6 +128,7 @@ impl fmt::Display for MergeError {
             MergeError::Num(e) => write!(f, "pieces that cannot be merged: {e:?}"),
             MergeError::Trace(e) => write!(f, "{e}"),
             MergeError::Stopped(_) => f.write_str("the meter stopped the merge"),
+            MergeError::Defect => f.write_str("the merge's parallel helper broke a rule"),
             MergeError::Overlap => f.write_str("two pieces of one face overlap"),
             MergeError::Open => f.write_str("kept pieces do not close"),
             MergeError::Inside => f.write_str("a shell faces inward with no shell around it"),
@@ -405,6 +421,50 @@ fn wide_of(corner: &Corner) -> Option<([I320; 3], I256)> {
         ],
         weight.checked_neg()?,
     ))
+}
+
+/// A corner's place in [`point_order`] where it has [`Cell`]s, for a sort on the pool: comparing
+/// cells cannot fail, as each product they need is of two `i128`s, below 2^254 in [`I256`].
+#[derive(Clone, Copy, Debug)]
+struct CellKey([Cell; 3]);
+
+impl PartialEq for CellKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for CellKey {}
+
+impl PartialOrd for CellKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CellKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        for (p, q) in self.0.iter().zip(&other.0) {
+            // `None` needs a product past 2^255, which two `i128`s cannot make.
+            let order = p.order(q).unwrap_or(Ordering::Equal);
+            if order != Ordering::Equal {
+                return order;
+            }
+        }
+        Ordering::Equal
+    }
+}
+
+/// A parallel phase's error as the merge's: the item's own, or the meter's stop, which the helper
+/// latches; a stop it did not latch is the helper's defect.
+fn phase_error(error: RunError<MergeError>, meter: &mut WorkMeter<'_>) -> MergeError {
+    match error {
+        RunError::Failed(e) => e,
+        _ => meter
+            .poll()
+            .err()
+            .map_or(MergeError::Defect, MergeError::Stopped),
+    }
 }
 
 /// Points lexicographically: by [`Cell`]s where both have them, else at most 2^294 · 2^252 in
@@ -762,24 +822,39 @@ fn sheets_of(pieces: &[Outward], merge: Merge) -> Result<(Vec<Sheet>, Vec<Held<'
 /// points in order.
 fn numbered(
     held: &[Held<'_>],
+    exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<usize>, Vec<Corner>), MergeError> {
-    let mut corners = Vec::new();
-    for piece in held {
+    let made = exec.try_map(meter, CORNERS, PIECES, held, |_, piece, m| {
         let after = piece.piece.bounds.iter().cycle().skip(1);
+        let mut out = Vec::with_capacity(piece.piece.bounds.len());
         for (bound, next) in piece.piece.bounds.iter().zip(after) {
-            meter.charge(1)?;
-            corners.push(Some(corner(piece.piece.face, *bound, *next)?));
+            m.charge(1)?;
+            out.push(corner(piece.piece.face, *bound, *next)?);
         }
-    }
-    let mut order: Vec<usize> = (0..corners.len()).collect();
-    let mut failed = false;
-    let at = |i: &usize| corners.get(*i).and_then(Option::as_ref);
-    order.sort_by(|a, b| {
-        let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
-        noted(found, &mut failed)
+        Ok::<_, MergeError>(out)
     });
-    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
+    let made = made.map_err(|e| phase_error(e, meter))?;
+    let mut corners: Vec<Option<Corner>> = made.into_iter().flatten().map(Some).collect();
+    let keys: Option<Vec<CellKey>> = corners
+        .iter()
+        .map(|c| c.as_ref().and_then(|c| c.cells).map(CellKey))
+        .collect();
+    let order = if let Some(keys) = keys {
+        // Equal points keep their order, as the serial stable sort keeps it.
+        let sorted = exec.sort_stable(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| *k);
+        sorted.map_err(|e| phase_error(e, meter))?
+    } else {
+        let mut order: Vec<usize> = (0..corners.len()).collect();
+        let mut failed = false;
+        let at = |i: &usize| corners.get(*i).and_then(Option::as_ref);
+        order.sort_by(|a, b| {
+            let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
+            noted(found, &mut failed)
+        });
+        (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
+        order
+    };
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
     for i in order {
@@ -1207,7 +1282,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
             given,
         })
         .collect();
-    let (number, points) = numbered(&held, meter)?;
+    let (number, points) = numbered(&held, &Exec::serial(), meter)?;
     let sides = sides_of(&held, &number, meter)?;
     let mut runs: Vec<Run> = Vec::new();
     let mut start = 0usize;
@@ -1273,6 +1348,25 @@ pub fn merge_with(
     rules: Rules<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Merged, MergeError> {
+    merge_on(&Exec::serial(), pieces, (mode, rules), meter)
+}
+
+/// [`merge_with`], its corners made and sorted on `exec`'s pool: the same merge on any pool
+/// (23.4).
+///
+/// # Errors
+///
+/// As [`merge_with`], and [`MergeError::Defect`] if the parallel helper breaks one of its rules.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the steps of one merge in their order, each short, sharing the numbers they fill"
+)]
+pub fn merge_on(
+    exec: &Exec<'_>,
+    pieces: &[Outward],
+    (mode, rules): (Merge, Rules<'_>),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Merged, MergeError> {
     let (sheets, mut held) = sheets_of(pieces, mode)?;
     let kept = held.len();
     held.extend(rules.cuts.iter().map(|piece| Held {
@@ -1280,7 +1374,7 @@ pub fn merge_with(
         piece,
         given: CUT,
     }));
-    let (number, points) = numbered(&held, meter)?;
+    let (number, points) = numbered(&held, exec, meter)?;
     let sides = sides_of(&held, &number, meter)?;
     held.truncate(kept);
 

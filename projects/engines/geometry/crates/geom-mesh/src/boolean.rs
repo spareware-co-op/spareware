@@ -47,7 +47,7 @@ use geom_num::plane::{Plane, Tpi};
 use geom_op::{
     History, NameId, NameSet, OpPath, Ordinal, Origin, PieceKey, Record, Side, TopoName,
 };
-use geom_poly::merge::{Merge, Merged, Outward, merge, select};
+use geom_poly::merge::{Merge, Merged, Outward, Rules, merge_on, select};
 use geom_poly::order::normals_det;
 use geom_poly::plane::canonical;
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange_with};
@@ -528,7 +528,12 @@ fn outcome(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Outcome, MeshError> {
     let kept = select(test, classified)?;
-    let merged = merge(&kept, Merge::RemoveRedundant, meter)?;
+    let merged = merge_on(
+        exec,
+        &kept,
+        (Merge::RemoveRedundant, Rules::default()),
+        meter,
+    )?;
     let (history, face_run, runs) = account(&merged, &kept, gathered, op)?;
     let polygons = polygons_of(&merged, face_run, runs)?;
     Ok(Outcome {
