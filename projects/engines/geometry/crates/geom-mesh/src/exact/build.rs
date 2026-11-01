@@ -642,25 +642,6 @@ fn ordered_loops(
     Ok(ordered)
 }
 
-/// A face's whole canonical key: its vertices in order, and how many loops they make.
-fn whole_key(input: &Polygons, vertex: &[u32], key: &FaceKey) -> Result<Vec<u32>, MeshFault> {
-    let ordered = ordered_loops(input, vertex, key)?;
-    let mut sequence = Vec::new();
-    for &(looped, from) in &ordered {
-        let corners = span(&input.loop_start, looped)?;
-        let mut corner = from;
-        loop {
-            sequence.push(*at(vertex, corner)?);
-            corner = next_corner(corner, corners);
-            if corner == from {
-                break;
-            }
-        }
-        sequence.push(NONE);
-    }
-    Ok(sequence)
-}
-
 /// One half-edge's use of its edge.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Use {
@@ -737,7 +718,7 @@ pub(super) fn grouped(
 }
 
 /// A plane through `v` that crosses `line`.
-fn crossing(parts: &Parts, line: &Line, v: u32) -> Result<Plane, MeshError> {
+pub(super) fn crossing(parts: &Parts, line: &Line, v: u32) -> Result<Plane, MeshError> {
     let [p, q] = line.planes();
     let candidates: [Option<Plane>; 3] = match *at(&parts.verts, v)? {
         Vertex::Grid(c) => [
@@ -1017,25 +998,6 @@ fn sorted_faces(
     let mut sorted = Vec::with_capacity(keys.len());
     for i in order {
         sorted.push(*keys.get(i).ok_or(MeshFault::Shape)?);
-    }
-    // Faces tied so far differ later in their vertices: the whole key settles them.
-    let mut start = 0;
-    while let Some(head) = sorted.get(start).copied() {
-        let tail = sorted.get(start..).unwrap_or(&[]);
-        let same = tail.iter().take_while(|k| first(k) == first(&head)).count();
-        let end = start.saturating_add(same);
-        if same > 1 {
-            let tied = sorted.get_mut(start..end).ok_or(MeshFault::Shape)?;
-            let mut whole = Vec::with_capacity(tied.len());
-            for key in tied.iter() {
-                whole.push((whole_key(input, corner_vertex, key)?, key.face, *key));
-            }
-            whole.sort_unstable_by(|p, q| (&p.0, p.1).cmp(&(&q.0, q.1)));
-            for (slot, (_, _, key)) in tied.iter_mut().zip(whole) {
-                *slot = key;
-            }
-        }
-        start = end;
     }
     Ok(sorted)
 }
