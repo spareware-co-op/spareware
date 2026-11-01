@@ -16,12 +16,13 @@
 
 use std::num::{NonZeroU64, NonZeroUsize};
 
-use geom_mesh::boolean::{Outcome, boolean};
+use geom_mesh::boolean::{Outcome, boolean, soup as kept_pieces};
 use geom_mesh::exact::build::{Corner, Polygons, build};
 use geom_mesh::exact::mass::Volume;
 use geom_mesh::exact::{ExactMesh, MeshError, MeshKind};
 use geom_num::wide::I256;
 use geom_op::{NameId, NameSet, OpId, OpPath, Origin, PieceKey, Side, TopoName};
+use geom_poly::merge::{Merge, Rules, merge_on};
 use geom_poly::winding::{Term, WindingTest};
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
@@ -232,6 +233,44 @@ fn holds_up(a: &ExactMesh, b: &ExactMesh) {
 /// A boolean's result is a solid, and booleans of solids give what the same arrays give, not known
 /// to be solids: a solid's boxes away from the others are solved without cuts or tracing (11.3
 /// step 4), whatever the test and the threads.
+#[test]
+fn the_soup_is_what_the_merge_takes() {
+    // Two overlapping boxes and a wedge: for each test, the soup's pieces merged are the result's
+    // faces, and every piece faces out of a non-empty result.
+    let a = solid([0, 0, 0], [10, 10, 10], 1);
+    let b = solid([5, 3, 2], [15, 8, 12], 2);
+    let c = wedge(4, [20, 31, 27, 29], 3);
+    let tests = [
+        WindingTest::unite(),
+        WindingTest::intersect(3),
+        WindingTest::subtract(0),
+    ];
+    let operands = [&a, &b, &c];
+    let soups = kept_pieces(&operands, &tests, &Exec::serial(), &mut meter()).unwrap();
+    let whole = boolean(&operands, &tests, &step(), &Exec::serial(), &mut meter()).unwrap();
+    assert_eq!(soups.len(), tests.len());
+    for (kept, outcome) in soups.iter().zip(&whole) {
+        let merged = merge_on(
+            &Exec::serial(),
+            kept,
+            (Merge::RemoveRedundant, Rules::default()),
+            &mut meter(),
+        )
+        .unwrap();
+        assert_eq!(merged.faces.len(), outcome.mesh.faces());
+        assert!(kept.len() >= outcome.mesh.faces());
+    }
+    // A test that keeps nothing has an empty soup.
+    let apart = solid([40, 40, 40], [41, 41, 41], 4);
+    let none = kept_pieces(
+        &[&a, &apart],
+        &[WindingTest::intersect(2)],
+        &Exec::serial(),
+        &mut meter(),
+    );
+    assert!(none.unwrap()[0].is_empty());
+}
+
 #[test]
 fn solids_give_what_their_arrays_give() {
     let a = one(&[&wedge(0, [20, 31, 27, 29], 1)], WindingTest::unite()).mesh;

@@ -743,6 +743,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Can the arrangement split cells at grid positions that do not depend on content, so a local re-cut is bit-identical to a full one? Otherwise the 4 ms door move holds only up to about 50 openings | 23 | Pieces "Adaptive subdivision and the parallel task tree" and "Local re-cut" |
 | Names in symmetric selections: qualify by operand key only on a collision (chosen), or always | 11 | Piece "Boolean names and history" |
 | Booleans with subdivision operands near extraordinary vertices depend on section 16's certified Stam bounds; otherwise they fail, with a NURBS conversion as the remedy | 11 | Piece "SubD limit surface kind" (16) |
+| What G148's "3 times EMBER's 1.6 ms" is timed against, when EMBER's output is a polygon soup (each output polygon part of an input polygon) and G148's boolean also merges into maximal faces and builds a mesh | G148 build | Decision note `projects/kit/notes/G148-stage-budgets.md`: the soup stage, `geom_mesh::boolean::soup`, against 3 times EMBER, unchanged; the merge and build against 0.5 µs for each kept piece and each result face, two of G146's builds; the whole time reported beside both |
 
 ### Chapter 12: Intersections
 

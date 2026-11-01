@@ -3,7 +3,8 @@
 //! What it does: [`boolean`] hands the faces of closed meshes and their planes to `geom-poly`'s
 //! arrangement, and for each [`WindingTest`] keeps the pieces its indicator keeps, merges them into
 //! maximal faces with `geom-poly`'s merge, and builds an [`ExactMesh`] with the history of its runs.
-//! Cutting 300 openings is one call, and several results share one arrangement.
+//! Cutting 300 openings is one call, and several results share one arrangement. [`soup`] stops
+//! after the selection, with the kept pieces as a polygon soup, the stage EMBER times.
 //!
 //! Guarantees:
 //!
@@ -11,7 +12,7 @@
 //!   mesh is [`MeshError::NotClosed`], whose remedy is healing. Self-intersections are fine.
 //! - **A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no
 //!   two of its faces cross. A solid operand's boxes away from the others are solved without
-//!   cuts or tracing (11.3 step 4), with the same pieces.
+//!   cuts or tracing (11.3 step 4): fewer pieces, the same vectors, the same mesh.
 //! - **Bounded results only.** A test the outside passes, such as "not A", has no finite boundary:
 //!   [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.
 //! - **Conforming and exact.** The merge gives maximal faces and edges that end where other edges
@@ -32,7 +33,10 @@
 //! over their winding numbers, rewritten from 19.5's description.
 //!
 //! Cost: the arrangement's, in `geom-poly`, then the merge's O(n log n) exact comparisons for n
-//! sides of kept pieces, for each test, and the mesh's build.
+//! sides of kept pieces, for each test, and the mesh's build. G148's budgets, timed apart: the
+//! soup within 3 times EMBER's 1.6 ms on `Thingi10K` pairs, and the merge and build within 0.5 µs
+//! for each kept piece and each result face, two of G146's builds, whose done-when is a million
+//! faces built and checked in 0.5 s (`projects/kit/notes/G148-stage-budgets.md`).
 
 #![allow(
     clippy::many_single_char_names,
@@ -592,6 +596,21 @@ pub fn boolean(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Outcome>, MeshError> {
+    let (gathered, classified) = classified(operands, tests, exec, meter)?;
+    let mut out = Vec::with_capacity(tests.len());
+    for test in tests {
+        out.push(outcome(&gathered, &classified, test, (op, exec), meter)?);
+    }
+    Ok(out)
+}
+
+/// The operands gathered, and every piece of one arrangement for `tests`.
+fn classified(
+    operands: &[&ExactMesh],
+    tests: &[WindingTest],
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Gathered, Vec<Classified>), MeshError> {
     let outside = Winding::new();
     if let Some(test) = tests.iter().position(|t| t.holds(&outside)) {
         return Err(MeshError::UnboundedResult { test: index(test)? });
@@ -604,9 +623,29 @@ pub fn boolean(
         .map(|(entry, _)| entry)
         .collect();
     let classified = arranged((&gathered, &solids), tests, exec, meter)?;
+    Ok((gathered, classified))
+}
+
+/// [`boolean`]'s first stage alone: for each of `tests`, the pieces it keeps, each a convex part
+/// of an input face turned to face out of the result, with nothing merged and no mesh built. This
+/// is the output EMBER gives, a polygon soup whose every polygon is part of an input polygon, so
+/// timing it against EMBER's 1.6 ms compares like with like (G148's stage budgets,
+/// `projects/kit/notes/G148-stage-budgets.md`). [`boolean`] merges the same pieces into maximal
+/// faces and builds each result.
+///
+/// # Errors
+///
+/// As [`boolean`], short of the merge's and the mesh build's.
+pub fn soup(
+    operands: &[&ExactMesh],
+    tests: &[WindingTest],
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Vec<Outward>>, MeshError> {
+    let (_, classified) = classified(operands, tests, exec, meter)?;
     let mut out = Vec::with_capacity(tests.len());
     for test in tests {
-        out.push(outcome(&gathered, &classified, test, (op, exec), meter)?);
+        out.push(select(test, &classified)?);
     }
     Ok(out)
 }

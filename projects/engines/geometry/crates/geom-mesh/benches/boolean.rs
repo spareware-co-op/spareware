@@ -7,6 +7,11 @@
 //! 11.3 step 4 has every checked operand be). Prints one line per run; the gate is the count
 //! benchmark in `geom-bench`.
 //!
+//! Each run is timed twice, as G148's stage budgets ask (`projects/kit/notes/G148-stage-budgets.md`):
+//! the polygon soup alone (`soup`), the stage EMBER's 1.6 ms times, against 3 times that, 4.8 ms;
+//! and the whole boolean, whose merge and build, the difference, are held to 0.5 µs for each kept
+//! piece and each result face. The whole time is printed beside both.
+//!
 //! Arguments: a side (23, 71 or 224; all three by default), then text a run's line must hold to
 //! run, such as "in a strip, as solids, 1 thread". Each timed run is the call `timed`, so a
 //! profiler can count it alone: `valgrind --tool=callgrind --collect-atstart=no
@@ -28,9 +33,9 @@
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::num::{NonZeroU64, NonZeroUsize};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use geom_mesh::boolean::boolean;
+use geom_mesh::boolean::{boolean, soup};
 use geom_mesh::exact::ExactMesh;
 use geom_mesh::exact::build::{Corner, Polygons, Source, build};
 use geom_mesh::exact::{PropTable, Role};
@@ -122,6 +127,13 @@ fn timed(a: &ExactMesh, b: &ExactMesh, step: &OpPath, exec: &Exec<'_>) -> usize 
     done[0].mesh.faces()
 }
 
+/// The union's polygon soup alone, and how many pieces it keeps.
+#[inline(never)]
+fn soup_only(a: &ExactMesh, b: &ExactMesh, exec: &Exec<'_>) -> usize {
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    soup(&[a, b], &[WindingTest::unite()], exec, &mut meter).unwrap()[0].len()
+}
+
 fn main() {
     let rayon = Rayon::new(NonZeroUsize::new(8).unwrap()).unwrap();
     let step = OpPath::new(OpId::from_bytes([7; 16]));
@@ -177,9 +189,16 @@ fn main() {
                 continue;
             }
             let start = Instant::now();
+            let kept = soup_only(a, b, &exec);
+            let staged = start.elapsed();
+            let start = Instant::now();
             let faces = timed(a, b, &step, &exec);
             let time = start.elapsed();
-            println!("{run}: {faces} faces in {time:?}");
+            let budget = Duration::from_nanos(500 * (kept + faces) as u64);
+            println!(
+                "{run}: soup of {kept} pieces in {staged:?} (3 x EMBER: 4.8ms); {faces} faces in                  {time:?}, so merge and build {:?} (budget {budget:?})",
+                time.saturating_sub(staged)
+            );
         }
     }
 }
