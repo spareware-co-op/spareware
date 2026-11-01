@@ -17,6 +17,8 @@ geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 
 [dev-dependencies]
+# The surfaces of the bodies tests/publish.rs publishes. Ours, MPL-2.0.
+geom-surface = { path = "../geom-surface" }
 # The big-integer oracle of the arrangement predicates, the one chapter 29.3 names. MIT OR
 # Apache-2.0.
 num-bigint = "0.4.8"

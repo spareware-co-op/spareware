@@ -6017,6 +6017,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant turns every flap over at once, which moves each by half a circle about the edge and leaves their order round it, and so the pairs, as they were."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/publish.rs",
+      "mutant": "replace < with <= in arenas",
+      "line_text": "sense: if fin.from < fin.to {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices of the merge, so its ends are never equal and the two comparisons agree on every fin."
     }
   ],
   "coverage_off": [
