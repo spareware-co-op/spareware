@@ -66,7 +66,7 @@ fn corners(piece: &Piece, plane: &Plane) -> Result<Vec<Sign>, NumError> {
         .bounds
         .iter()
         .zip(after)
-        .map(|(bound, next)| plane.side_of_tpi(&Tpi::new(piece.face, *bound, *next)?))
+        .map(|(bound, next)| plane.side_of_tpi(&Tpi::meeting(piece.face, *bound, *next)?))
         .collect()
 }
 

@@ -36,7 +36,7 @@
 use std::cmp::Ordering;
 
 use geom_num::grid::COORD_MAX;
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Plane, Tpi, determinant_sign, normals_sign};
 use geom_num::{NumError, P3, Sign, Wide};
 use num_bigint::BigInt;
 use num_integer::Integer;
@@ -1096,4 +1096,73 @@ fn a_point_says_the_sign_of_its_weight() {
     let (x, y, z) = (at([1, 0, 0]), at([0, 1, 0]), at([0, 0, 1]));
     assert_eq!(Tpi::new(x, y, z).unwrap().weight(), Sign::Positive);
     assert_eq!(Tpi::new(y, x, z).unwrap().weight(), Sign::Negative);
+}
+
+/// A coefficient of any length from a bit to past a machine word, so that every step of the word
+/// path overflows in some case.
+fn any_length() -> impl Strategy<Value = i128> {
+    (0u32..70, -3i128..=3).prop_map(|(bits, low)| (1i128 << bits) * low.signum() + low)
+}
+
+fn any_length_plane() -> impl Strategy<Value = Plane> {
+    (prop::array::uniform3(any_length()), any_length())
+        .prop_filter_map("a normal", |(n, d)| Plane::new(n, d).ok())
+}
+
+/// A plane of very short coefficients, so that determinants are often zero.
+fn short_plane() -> impl Strategy<Value = Plane> {
+    (prop::array::uniform3(-2i128..=2), -3i128..=3)
+        .prop_filter_map("a normal", |(n, d)| Plane::new(n, d).ok())
+}
+
+fn normals_big(p: &Plane, q: &Plane, r: &Plane) -> BigInt {
+    det3(&[plane_big(p).0, plane_big(q).0, plane_big(r).0])
+}
+
+/// The 4 × 4 determinant, expanded in big integers.
+fn determinant_big(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> BigInt {
+    let offset = |plane: &Plane| plane_big(plane).1;
+    offset(q) * normals_big(p, r, s)
+        - offset(p) * normals_big(q, r, s)
+        - offset(r) * normals_big(p, q, s)
+        + offset(s) * normals_big(p, q, r)
+}
+
+fn check_determinants(p: &Plane, q: &Plane, r: &Plane, s: &Plane) {
+    let want = sign_big(&determinant_big(p, q, r, s));
+    assert_eq!(determinant_sign(p, q, r, s).unwrap(), want);
+    let weight = sign_big(&normals_big(p, q, r));
+    assert_eq!(normals_sign(p, q, r).unwrap(), weight);
+    let (full, quick) = (Tpi::new(*p, *q, *r), Tpi::meeting(*p, *q, *r));
+    assert_eq!(full, quick);
+    if weight == Sign::Zero {
+        assert_eq!(quick, Err(NumError::Degenerate));
+    } else {
+        assert_eq!(quick.unwrap().weight(), weight);
+        assert_eq!(s.side_of_tpi(&quick.unwrap()).unwrap(), want.mul(weight));
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(2000))]
+
+    #[test]
+    fn determinants_are_exact_at_any_length(
+        p in any_length_plane(),
+        q in any_length_plane(),
+        r in any_length_plane(),
+        s in any_length_plane(),
+    ) {
+        check_determinants(&p, &q, &r, &s);
+    }
+
+    #[test]
+    fn determinants_are_exact_when_they_vanish(
+        p in short_plane(),
+        q in short_plane(),
+        r in short_plane(),
+        s in short_plane(),
+    ) {
+        check_determinants(&p, &q, &r, &s);
+    }
 }

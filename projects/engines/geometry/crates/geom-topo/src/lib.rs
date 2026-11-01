@@ -83,5 +83,6 @@ pub use error::{Refusal, TopoError};
 // which chapter 27's crate table does not give them.
 pub use geom_curve::{CurveKind, Line};
 pub use geom_math::Box3;
+pub use geom_surface::Plane as FlatSurface;
 pub use geom_surface::SurfaceKind;
 pub use ix::{Arena, Ix, Kind};

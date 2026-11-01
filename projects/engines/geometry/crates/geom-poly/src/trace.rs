@@ -43,8 +43,8 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use geom_num::plane::Plane;
-use geom_num::{NumError, Sign, generated};
+use geom_num::plane::{Plane, determinant_sign};
+use geom_num::{NumError, Sign};
 use geom_run::{Stopped, WorkMeter};
 
 use crate::convex::{ConvexError, Piece};
@@ -171,29 +171,6 @@ impl Moved {
     }
 }
 
-/// The sign of the 4 × 4 determinant of four planes' coefficients, rows in the order given and the
-/// offset last, through the generated predicate: its filter, then its exact path (6.2). It is
-/// n · X + d · w for the point where the first three meet, and is defined whether they meet or not.
-#[allow(
-    clippy::many_single_char_names,
-    reason = "p, q, r and s are the planes, and a, b and c the first three's normals"
-)]
-fn determinant(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Result<Sign, NumError> {
-    let ([ax, ay, az], ad) = (p.n(), p.d());
-    let ([bx, by, bz], bd) = (q.n(), q.d());
-    let ([cx, cy, cz], cd) = (r.n(), r.d());
-    let ([sx, sy, sz], sd) = (s.n(), s.d());
-    generated::tpi_side::filter(
-        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
-    )
-    .or_else(|| {
-        generated::tpi_side::exact(
-            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
-        )
-    })
-    .ok_or(NumError::BudgetExceeded)
-}
-
 /// The sign of the 4 × 4 determinant of the four planes' coefficients, each moved. The determinant
 /// is linear in each offset, and the moves are of different orders, so its sign is that of the
 /// unmoved determinant, or failing that of the largest move with a non-zero cofactor. A plane's
@@ -204,7 +181,7 @@ fn determinant(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Result<Sign, NumEr
 )]
 fn moved_determinant(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign, NumError> {
     let [a, b, c, d] = [&p.plane, &q.plane, &r.plane, &s.plane];
-    let base = determinant(a, b, c, d)?;
+    let base = determinant_sign(a, b, c, d)?;
     if base != Sign::Zero {
         return Ok(base);
     }
@@ -504,6 +481,41 @@ pub fn reference_above(
         count_crossing(&segment, polygon, &mut above)?;
     }
     Ok(above)
+}
+
+/// The vector at the point where `planes` meet, reached from `cell`'s corner, whose vector is
+/// `reference`. The point must lie in `cell` and on no polygon.
+///
+/// # Errors
+///
+/// A [`TraceError`]: a stopped meter, or what the numbers layer refuses.
+pub fn winding_at(
+    cell: &Cell,
+    reference: &Winding,
+    polygons: &[Polygon],
+    planes: [Plane; 3],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Winding, TraceError> {
+    let faces = faces(cell)?;
+    let [a, b, c] = planes;
+    let moved = |plane, rank| Moved {
+        plane,
+        rank,
+        by: Sign::Positive,
+    };
+    let (face, first, second) = (
+        moved(a, Rank::Face),
+        moved(b, Rank::First),
+        moved(c, Rank::Second),
+    );
+    let mut here = reference.clone();
+    for segment in path(face, first, second, &faces)? {
+        for polygon in polygons {
+            meter.charge(1)?;
+            count_crossing(&segment, polygon, &mut here)?;
+        }
+    }
+    Ok(here)
 }
 
 /// Every piece of `pieces`, `pieces[i]` being polygon `i`'s as [`crate::cut::local_cuts`] left it,
