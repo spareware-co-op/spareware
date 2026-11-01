@@ -70,6 +70,12 @@ impl Rng {
         z ^ (z >> 31)
     }
 
+    /// A whole number of magnitude up to a random power of two below 2^`bits`.
+    fn sized(&mut self, bits: u64) -> i64 {
+        let k = self.next() % bits;
+        self.up_to(1 << k)
+    }
+
     /// A whole number of magnitude up to `limit`.
     fn up_to(&mut self, limit: i64) -> i64 {
         (self.next() % (2 * limit as u64 + 1)) as i64 - limit
@@ -407,7 +413,7 @@ fn a_line_to_a_circle_ends_on_it_past_the_touch() {
         let far = 1 << (10 + rng.next() % 28);
         let from = p2(rng.up_to(far), rng.up_to(far));
         let centre = p2(rng.up_to(far), rng.up_to(far));
-        let r = 1 + i128::from(rng.up_to(1 << (rng.next() % 20)).abs());
+        let r = 1 + i128::from(rng.sized(20).abs());
         let (mut carriers, [wheel]) = table([circle(centre, r)]);
         let side = if rng.next() & 1 == 0 {
             Sign::Positive
@@ -480,8 +486,8 @@ fn common_tangents_of_every_kind_at_every_scale() {
     for _ in 0..cases {
         let far = 1_i64 << (16 + rng.next() % 22);
         let (centre, other) = (p2(rng.up_to(far), rng.up_to(far)), p2(rng.up_to(far), rng.up_to(far)));
-        let r = 8 + i128::from(rng.up_to(1 << (4 + rng.next() % 11)).abs());
-        let s = 8 + i128::from(rng.up_to(1 << (4 + rng.next() % 11)).abs());
+        let r = 8 + i128::from(rng.sized(15).abs());
+        let s = 8 + i128::from(rng.sized(15).abs());
         let (mut carriers, [one, two]) = table([circle(centre, r), circle(other, s)]);
         let sides = match rng.next() % 4 {
             0 => [Sign::Positive, Sign::Positive],
@@ -637,7 +643,7 @@ fn every_corner_of_a_hundred_thousand() {
     }
     println!("exact {exact}, certified {near}, no turn {none}");
     assert!(exact > 0 && near > 0 && none > 0);
-    assert_eq!(meter.used().work(), count as u128);
+    assert_eq!(meter.used().work, count as u128);
 }
 
 #[test]
