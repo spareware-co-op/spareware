@@ -489,3 +489,41 @@ fn ruled_surfaces_convert_unclamped_and_broken_curves() {
     let r = Ruled::new(broken(0.0), broken(2.0), (0.0, 1.0)).unwrap();
     assert_eq!(r.to_nurbs(m).unwrap().deviation, 0.0);
 }
+
+/// Claim: a rational rail's Taylor pieces stop at its knots, so the form stays within the deviation
+/// it states on either side of a join that falls inside a piece of even width. The nightly laws
+/// found a form five times further than it said, at a knot at 2/3.
+#[test]
+fn a_ruled_surfaces_taylor_forms_are_cut_at_its_rails_knots() {
+    let m = &mut meter();
+    let third = 2.0 / 3.0;
+    let basis = Basis::new(2, vec![0.0, 0.0, 0.0, third, third, 1.0, 1.0, 1.0]).unwrap();
+    let points = [
+        [0.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [3.0, 2.0, 0.0],
+        [4.0, 0.0, 0.0],
+    ];
+    let curve = Curve::new_rational(basis, &points, &[1.0, 2.0, 1.0, 0.5, 1.0]).unwrap();
+    let rail = Trimmed::new(Leaf::Nurbs(curve), (0.0, 1.0)).unwrap();
+    let kind = SurfaceKind::Ruled(
+        Ruled::new(rail, line([0.0, 0.0, 2.0], [4.0, 0.0, 0.0]), (0.0, 1.0)).unwrap(),
+    );
+    let form = kind.to_nurbs(m).unwrap();
+    assert!(form.deviation < 1e-3, "{}", form.deviation);
+    let sides = (Limit::FromRight, Limit::FromRight);
+    for k in 0..600 {
+        let u = f64::from(k) / 600.0;
+        for v in [0.0, 0.5, 1.0 - 1e-9] {
+            let exact = kind.point(u, v, sides).unwrap();
+            let near = form.value.surface.point(u, v, sides).unwrap();
+            let gap: f64 = exact
+                .iter()
+                .zip(&near)
+                .fold(0.0, |sum, (a, b)| sum + (a - b) * (a - b))
+                .sqrt();
+            assert!(gap <= form.deviation + 1e-12, "{u} {v}: {gap}");
+        }
+    }
+}
