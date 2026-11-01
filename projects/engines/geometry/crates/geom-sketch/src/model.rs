@@ -578,9 +578,8 @@ impl Sketch {
     /// [`SketchError::NotFinite`]; [`SketchError::NotPositive`]; [`SketchError::OutOfMemory`].
     pub fn add_entity(&mut self, entity: Entity) -> Result<(), SketchError> {
         entity.kind.check(self)?;
-        let place = match self.entities.binary_search_by_key(&entity.id, |e| e.id) {
-            Ok(_) => return Err(SketchError::Duplicate(entity.id)),
-            Err(place) => place,
+        let Err(place) = self.entities.binary_search_by_key(&entity.id, |e| e.id) else {
+            return Err(SketchError::Duplicate(entity.id));
         };
         self.entities
             .try_reserve(1)
@@ -597,12 +596,11 @@ impl Sketch {
     /// dimension; what its names and values refuse, as [`Sketch::add_entity`].
     pub fn add_constraint(&mut self, constraint: Constraint) -> Result<(), SketchError> {
         self.check_constraint(&constraint)?;
-        let place = match self
+        let Err(place) = self
             .constraints
             .binary_search_by_key(&constraint.id, |c| c.id)
-        {
-            Ok(_) => return Err(SketchError::Duplicate(constraint.id)),
-            Err(place) => place,
+        else {
+            return Err(SketchError::Duplicate(constraint.id));
         };
         self.constraints
             .try_reserve(1)
