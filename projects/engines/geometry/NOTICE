@@ -706,3 +706,4 @@ every other crate compiled into a shipped binary, go in the generated third-part
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml
   sha2 0.11.0 (Apache-2.0 OR MIT), https://crates.io/crates/sha2/0.11.0, named by projects/engines/geometry/crates/geom-op/Cargo.toml
+  unicode-normalization =0.1.26 ((Apache-2.0 OR MIT) AND Unicode-3.0), https://crates.io/crates/unicode-normalization, named by projects/engines/geometry/crates/geom-op/Cargo.toml
