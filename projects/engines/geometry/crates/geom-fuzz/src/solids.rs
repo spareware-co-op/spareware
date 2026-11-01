@@ -26,8 +26,6 @@
 //!
 //! Cost: at most [`MAX_BOXES`] boxes, one arrangement, and about a hundred more exact operations.
 
-use std::collections::BTreeSet;
-
 use geom_mesh::boolean::{Outcome, boolean};
 use geom_mesh::classify::{Classifier, Located};
 use geom_mesh::contact::{Contact, triangles};
