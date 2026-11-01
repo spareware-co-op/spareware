@@ -90,7 +90,8 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
         }
         boxes.push((low, high));
     }
-    (Case { boxes, scale }, src.read())
+    let read = data.len().saturating_sub(src.remaining());
+    (Case { boxes, scale }, read)
 }
 
 /// A meter no case reaches.

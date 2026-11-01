@@ -1305,14 +1305,13 @@
       "layer": "6",
       "modules": [
         {
-          "cost": "linear in what [`merge`] returns, after its cost.",
-          "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge`] make them faces, edges and shells, and writes those into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.",
+          "cost": "[`merge`]'s, and [`publish`]'s, linear in what [`merge`] returns.",
+          "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge`] make them faces, edges and shells, and has [`publish`] write those into a body.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
           "guarantees": [
             "**The same bytes however the boxes fell.** Every row comes in the order [`merge`] numbers the shape, which depends on the shape alone (11.3; tested).",
-            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
-            "**Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a [`RebuildError`]."
+            "**Refused, never guessed.** What [`merge`] and [`publish`] refuse is a [`RebuildError`]."
           ],
           "job": "The canonical rebuild: merged pieces published as a body (11.3, step 5).",
           "method": {
@@ -1320,7 +1319,7 @@
               "projects/engines/geometry/architecture/11-booleans.md",
               "https://doi.org/10.1145/3528223.3530181"
             ],
-            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), into the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
           },
           "path": "geom_bool::rebuild",
           "provenance": [],
@@ -5304,6 +5303,28 @@
           "target": "lib"
         },
         {
+          "cost": "the merge's O(n log n) exact comparisons for n sides of pieces, then the publication.",
+          "does": "[`faceted`] makes a closed mesh a body: adjacent faces on one plane merge into one face, and what is left of their edges merges into maximal edges.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/faceted.rs",
+          "guarantees": [
+            "**Planes are matched exactly.** Faces are on one plane when their reduced coefficients are equal, found by sorting those keys, never by comparing pairs of faces, which is what stalls on large slabs (19.5).",
+            "**The body is the mesh.** Its vertices are the mesh's points, grid points or three planes, and nothing moves.",
+            "**Closed meshes only.** An open mesh bounds nothing: [`MeshError::NotClosed`]."
+          ],
+          "job": "Exact meshes as faceted B-reps (19.5): an edge of the conversion graph.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.5's \"Mesh to faceted B-rep\" (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`): each face's convex pieces go through `geom-poly`'s merge and publication, the same two steps a boolean's result takes. A surface's `f64` frame is drawn from the plane's integer coefficients; the body's corners and edges stand on the planes, so the frame only shows where the face is for evaluation."
+          },
+          "path": "geom_mesh::faceted",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "about O(n log n) orientation tests for points in general position, O(n²) at worst, charged to the meter one by one, then a sort of the triangles by plane.",
           "does": "[`Hull::of`] finds the convex hull of a set of grid points: its corners, and the ring of corners round each of its faces, outward. [`Hull::mesh`] makes it a closed exact mesh.",
           "family": [],
@@ -9200,6 +9221,30 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why merged pieces could not be made into a body.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/publish.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The topology refused.",
+              "name": "Topo",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A row past the end of a list: a defect, reported instead of a wrong body.",
+              "name": "Broken",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_poly::publish",
+          "name": "PublishError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a box could not be classified.",
           "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
           "kinds": [
@@ -9391,6 +9436,28 @@
             "text": "canonical plane coefficients as chapter 23.2 and 23.9 fix them (`projects/engines/geometry/architecture/23-performance.md`), on the plane-based geometry of Nehring-Wirxel, Trettner and Kobbelt 2021, <https://doi.org/10.1016/j.cad.2021.103015>."
           },
           "path": "geom_poly::plane",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in what the merge returns.",
+          "does": "[`publish`] writes what [`merge`](crate::merge::merge) made into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/publish.rs",
+          "guarantees": [
+            "**The same bytes however the boxes fell.** Every row comes in the order the merge numbers the shape, which depends on the shape alone (11.3).",
+            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
+            "**Refused, never guessed.** What the arenas refuse is a [`PublishError`]."
+          ],
+          "job": "Merged pieces published as a body (11.3, step 5), shared by `geom-bool`'s rebuild and `geom-mesh`'s faceted B-rep.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+          },
+          "path": "geom_poly::publish",
           "provenance": [],
           "spdx": null,
           "target": "lib"
