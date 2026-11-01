@@ -313,7 +313,9 @@ const KERNEL_YML: &str = include_str!("../../../../../../.github/workflows/kerne
 
 #[test]
 fn format_round_trips_run_on_a_big_endian_target() {
-    let job = KERNEL_YML
+    // A Windows checkout may hold the workflow with \r\n.
+    let yml = KERNEL_YML.replace("\r\n", "\n");
+    let job = yml
         .split("\n  big-endian:\n")
         .nth(1)
         .and_then(|rest| rest.split("\n  guard:\n").next())

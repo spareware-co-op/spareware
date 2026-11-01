@@ -609,7 +609,7 @@
             "test": "museum",
             "function": "every_exhibit_opens_and_replays_on_this_target"
           },
-          "sha256": "327cc8119248efc09f90bab421c65b0125f0c897b1abcd3ed6f69a05ac3777cd"
+          "sha256": "76634dd5ae283981eb2fbe1e5cf6e76a8e0d586a56ffbfa7a8bcb50c97749aa5"
         }
       ]
     }
