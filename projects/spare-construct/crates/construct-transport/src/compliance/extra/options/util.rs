@@ -5,7 +5,11 @@ use crate::jsnum::to_int32;
 
 /// `${o[k]}` of a field that may be missing: a missing field reads "undefined", as a template string prints it.
 pub fn fld_s(o: &V, k: &str) -> String {
-    if o.has(k) { o.g(k).s() } else { "undefined".to_string() }
+    if o.has(k) {
+        o.g(k).s()
+    } else {
+        "undefined".to_string()
+    }
 }
 
 /// `+o[k]` of a field that may be missing: a missing field reads NaN (null reads 0).
@@ -31,7 +35,11 @@ pub fn or_v(a: &V, b: &V) -> V {
 
 /// `a || 'text'`.
 pub fn or_s(a: &V, b: &str) -> V {
-    if a.t() { a.clone() } else { V::String(b.to_string()) }
+    if a.t() {
+        a.clone()
+    } else {
+        V::String(b.to_string())
+    }
 }
 
 /// `o[k] = v` only when the value exists (a JavaScript `undefined` leaves the field out of the JSON).
@@ -84,13 +92,17 @@ pub fn xs(path: &str) -> String {
 
 /// A table of the report sections: `Kit.table({ head, rows, empty })` with the default compact layout.
 pub fn tbl(head: &[&str], rows: Vec<Vec<String>>, empty: &str) -> String {
-    let h: Vec<crate::compliance::html::Th> = head.iter().map(|x| crate::compliance::html::th(x)).collect();
+    let h: Vec<crate::compliance::html::Th> = head
+        .iter()
+        .map(|x| crate::compliance::html::th(x))
+        .collect();
     tbl_th(&h, rows, empty)
 }
 
 /// A table whose headings may be numeric columns.
 pub fn tbl_th(head: &[crate::compliance::html::Th], rows: Vec<Vec<String>>, empty: &str) -> String {
-    let r: Vec<crate::compliance::html::Tr> = rows.into_iter().map(crate::compliance::html::tr).collect();
+    let r: Vec<crate::compliance::html::Tr> =
+        rows.into_iter().map(crate::compliance::html::tr).collect();
     crate::compliance::html::kit_table(head, &r, true, "", empty)
 }
 

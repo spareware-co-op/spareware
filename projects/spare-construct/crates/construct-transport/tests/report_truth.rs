@@ -10,7 +10,8 @@ use construct_transport::edit::json::JsonValue;
 use construct_transport::junction_tools::Features;
 use construct_transport::project::Project;
 use construct_transport::report::{
-    BuildOpts, ForeignSection, MapImage, LinkRiskInfo, NodeRiskInfo, Regime, Rep, ReportHost, crc32, pick, zip,
+    BuildOpts, ForeignSection, LinkRiskInfo, MapImage, NodeRiskInfo, Regime, Rep, ReportHost,
+    crc32, pick, zip,
 };
 use construct_transport::results::Results;
 use serde_json::Value;
@@ -29,7 +30,11 @@ struct Replay {
 
 impl Features for Replay {
     fn supplementary(&self, _p: &Project) -> String {
-        self.host.get("supplementary").and_then(Value::as_str).unwrap_or("").to_string()
+        self.host
+            .get("supplementary")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
     }
 }
 
@@ -37,13 +42,26 @@ impl ReportHost for Replay {
     fn regime(&self, _p: &Project) -> Option<Regime> {
         let r = self.host.get("regime")?;
         let s = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-        Some(Regime { pathway: s("pathway"), pathway_label: s("pathwayLabel"), date: s("date"), text: s("text"), short: s("short") })
+        Some(Regime {
+            pathway: s("pathway"),
+            pathway_label: s("pathwayLabel"),
+            date: s("date"),
+            text: s("text"),
+            short: s("short"),
+        })
     }
     fn stamp_footer(&self, _p: &Project) -> String {
-        self.host.pointer("/stamp/footer").and_then(Value::as_str).unwrap_or("").to_string()
+        self.host
+            .pointer("/stamp/footer")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
     }
     fn export_block(&self, _p: &Project) -> Option<String> {
-        self.host.get("exportBlock").and_then(Value::as_str).map(str::to_string)
+        self.host
+            .get("exportBlock")
+            .and_then(Value::as_str)
+            .map(str::to_string)
     }
     fn conflate(&self, sc: usize, _items: &JsonValue) -> Option<HashMap<String, String>> {
         if self.host.is_null() {
@@ -58,15 +76,32 @@ impl ReportHost for Replay {
         self.foreign.clone()
     }
     fn junction_of(&self, sc: usize, node: &str) -> Option<String> {
-        self.crash.get(sc)?.pointer(&format!("/junctionOf/{node}"))?.as_str().map(str::to_string)
+        self.crash
+            .get(sc)?
+            .pointer(&format!("/junctionOf/{node}"))?
+            .as_str()
+            .map(str::to_string)
     }
     fn node_risk(&self, sc: usize) -> Option<Vec<(String, NodeRiskInfo)>> {
         let o = self.crash.get(sc)?.get("nodeRisk")?.as_object()?;
         Some(
             o.iter()
                 .map(|(k, v)| {
-                    let nodes = v["nodes"].as_array().map(|a| a.iter().map(|x| x.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default();
-                    (k.clone(), NodeRiskInfo { name: v["name"].as_str().unwrap_or("").to_string(), nodes })
+                    let nodes = v["nodes"]
+                        .as_array()
+                        .map(|a| {
+                            a.iter()
+                                .map(|x| x.as_str().unwrap_or("").to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    (
+                        k.clone(),
+                        NodeRiskInfo {
+                            name: v["name"].as_str().unwrap_or("").to_string(),
+                            nodes,
+                        },
+                    )
                 })
                 .collect(),
         )
@@ -75,7 +110,15 @@ impl ReportHost for Replay {
         let o = self.crash.get(sc)?.get("linkRisk")?.as_object()?;
         Some(
             o.iter()
-                .map(|(k, v)| (k.clone(), LinkRiskInfo { aadt: v["aadt"].as_f64(), aadt_src: v["aadtSrc"].as_str().map(str::to_string) }))
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        LinkRiskInfo {
+                            aadt: v["aadt"].as_f64(),
+                            aadt_src: v["aadtSrc"].as_str().map(str::to_string),
+                        },
+                    )
+                })
                 .collect(),
         )
     }
@@ -85,18 +128,39 @@ impl ReportHost for Replay {
 }
 
 fn first_diff(a: &str, b: &str) -> String {
-    let at = a.chars().zip(b.chars()).position(|(x, y)| x != y).unwrap_or(a.chars().count().min(b.chars().count()));
-    let c = |s: &str| s.chars().skip(at.saturating_sub(80)).take(200).collect::<String>();
-    format!("differ at char {at} (lengths {} and {})\n  expected ...{:?}\n  actual   ...{:?}", b.chars().count(), a.chars().count(), c(b), c(a))
+    let at = a
+        .chars()
+        .zip(b.chars())
+        .position(|(x, y)| x != y)
+        .unwrap_or(a.chars().count().min(b.chars().count()));
+    let c = |s: &str| {
+        s.chars()
+            .skip(at.saturating_sub(80))
+            .take(200)
+            .collect::<String>()
+    };
+    format!(
+        "differ at char {at} (lengths {} and {})\n  expected ...{:?}\n  actual   ...{:?}",
+        b.chars().count(),
+        a.chars().count(),
+        c(b),
+        c(a)
+    )
 }
 
 fn run(name: &str) -> usize {
-    let file = JsonValue::parse(&read_truth(&format!("fixtures/data/report-{name}.json"))).expect("fixture");
+    let file = JsonValue::parse(&read_truth(&format!("fixtures/data/report-{name}.json")))
+        .expect("fixture");
     let raw = file.get("project").expect("project").clone();
     let project: Project = serde_json::from_str(&raw.stringify()).expect("project reads");
     let res = file.get("results").expect("results");
-    let results: Vec<Results> =
-        project.scenarios.iter().map(|s| serde_json::from_str(&res.get(&s.id).expect("res").stringify()).expect("results read")).collect();
+    let results: Vec<Results> = project
+        .scenarios
+        .iter()
+        .map(|s| {
+            serde_json::from_str(&res.get(&s.id).expect("res").stringify()).expect("results read")
+        })
+        .collect();
     let fx = |k: &str| file.get(k).map(JsonValue::to_value).unwrap_or(Value::Null);
     let foreign: Vec<ForeignSection> = fx("foreign")
         .as_array()
@@ -114,7 +178,20 @@ fn run(name: &str) -> usize {
         .unwrap_or_default();
     let conflated: HashMap<String, HashMap<String, String>> = fx("conflated")
         .as_object()
-        .map(|o| o.iter().map(|(k, v)| (k.clone(), v.as_object().unwrap().iter().map(|(a, b)| (a.clone(), b.as_str().unwrap().to_string())).collect())).collect())
+        .map(|o| {
+            o.iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        v.as_object()
+                            .unwrap()
+                            .iter()
+                            .map(|(a, b)| (a.clone(), b.as_str().unwrap().to_string()))
+                            .collect(),
+                    )
+                })
+                .collect()
+        })
         .unwrap_or_default();
     let host = Replay {
         host: fx("host"),
@@ -124,7 +201,8 @@ fn run(name: &str) -> usize {
         foreign,
     };
     let rep = Rep::new(&project, &raw, &results, &host, NOW);
-    let exp = serde_json::from_str::<Value>(&read_truth(&format!("expected/report-{name}.json"))).expect("expected");
+    let exp = serde_json::from_str::<Value>(&read_truth(&format!("expected/report-{name}.json")))
+        .expect("expected");
     let mut checks = 0;
     let mut fails: Vec<String> = Vec::new();
     let mut same = |what: &str, a: &str, b: &str| {
@@ -155,7 +233,20 @@ fn run(name: &str) -> usize {
     same("html", &rep.doc(&built), exp["html"].as_str().unwrap());
     let pack = rep.pack_files();
     let want = exp["pack"].as_array().unwrap();
-    same("pack names", &pack.files.iter().map(|f| f.name.clone()).collect::<Vec<_>>().join("|"), &want.iter().map(|f| f["name"].as_str().unwrap()).collect::<Vec<_>>().join("|"));
+    same(
+        "pack names",
+        &pack
+            .files
+            .iter()
+            .map(|f| f.name.clone())
+            .collect::<Vec<_>>()
+            .join("|"),
+        &want
+            .iter()
+            .map(|f| f["name"].as_str().unwrap())
+            .collect::<Vec<_>>()
+            .join("|"),
+    );
     for w in want {
         let n = w["name"].as_str().unwrap();
         if let Some(f) = pack.files.iter().find(|f| f.name == n) {
@@ -168,14 +259,44 @@ fn run(name: &str) -> usize {
         let _ = std::io::stdout().flush();
         z
     };
-    same("zip crc", &crc32(&zb).to_string(), &crc32(&base64_decode(exp["zipB64"].as_str().unwrap())).to_string());
+    same(
+        "zip crc",
+        &crc32(&zb).to_string(),
+        &crc32(&base64_decode(exp["zipB64"].as_str().unwrap())).to_string(),
+    );
     let sel = pick(&rep.tools());
-    same("pick", &format!("{:?}", (sel.with, sel.without, sel.mitigation, sel.existing, sel.base)), &{
-        let g = |k: &str| exp["pick"][k].as_u64().map(|x| x as usize);
-        format!("{:?}", (g("with"), g("without"), g("mitigation"), g("existing"), g("base")))
-    });
+    same(
+        "pick",
+        &format!(
+            "{:?}",
+            (
+                sel.with,
+                sel.without,
+                sel.mitigation,
+                sel.existing,
+                sel.base
+            )
+        ),
+        &{
+            let g = |k: &str| exp["pick"][k].as_u64().map(|x| x as usize);
+            format!(
+                "{:?}",
+                (
+                    g("with"),
+                    g("without"),
+                    g("mitigation"),
+                    g("existing"),
+                    g("base")
+                )
+            )
+        },
+    );
     if !fails.is_empty() {
-        panic!("{} of {checks} checks differ:\n{}", fails.len(), fails.join("\n"));
+        panic!(
+            "{} of {checks} checks differ:\n{}",
+            fails.len(),
+            fails.join("\n")
+        );
     }
     checks
 }
@@ -203,7 +324,14 @@ fn base64_decode(s: &str) -> Vec<u8> {
 #[test]
 fn report_matches_the_prototype() {
     let mut total = 0;
-    for v in ["corridor", "grid", "corridor-full", "grid-full", "corridor-comp", "grid-maps"] {
+    for v in [
+        "corridor",
+        "grid",
+        "corridor-full",
+        "grid-full",
+        "corridor-comp",
+        "grid-maps",
+    ] {
         total += run(v);
     }
     println!("report: {total} checks match the JavaScript");

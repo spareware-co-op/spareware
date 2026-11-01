@@ -43,8 +43,17 @@ enum Node {
     Group(Box<Node>, Option<usize>),
     Cat(Vec<Node>),
     Alt(Vec<Node>),
-    Repeat { node: Box<Node>, min: usize, max: usize, greedy: bool },
-    Look { node: Box<Node>, behind: bool, neg: bool },
+    Repeat {
+        node: Box<Node>,
+        min: usize,
+        max: usize,
+        greedy: bool,
+    },
+    Look {
+        node: Box<Node>,
+        behind: bool,
+        neg: bool,
+    },
     BackRef(usize),
 }
 
@@ -107,7 +116,11 @@ impl<'a> Parser<'a> {
         while self.eat('|') {
             alts.push(self.cat()?);
         }
-        Ok(if alts.len() == 1 { alts.pop().unwrap() } else { Node::Alt(alts) })
+        Ok(if alts.len() == 1 {
+            alts.pop().unwrap()
+        } else {
+            Node::Alt(alts)
+        })
     }
     fn cat(&mut self) -> Result<Node, String> {
         let mut v = Vec::new();
@@ -178,7 +191,12 @@ impl<'a> Parser<'a> {
         };
         self.i += 1;
         let greedy = !self.eat('?');
-        Ok(Node::Repeat { node: Box::new(atom), min, max, greedy })
+        Ok(Node::Repeat {
+            node: Box::new(atom),
+            min,
+            max,
+            greedy,
+        })
     }
     fn atom(&mut self) -> Result<Node, String> {
         let c = self.peek().ok_or("unexpected end")?;
@@ -198,7 +216,11 @@ impl<'a> Parser<'a> {
                         }
                         '=' | '!' => {
                             let n = self.alt()?;
-                            Node::Look { node: Box::new(n), behind: false, neg: k == '!' }
+                            Node::Look {
+                                node: Box::new(n),
+                                behind: false,
+                                neg: k == '!',
+                            }
                         }
                         '<' => {
                             let k2 = self.peek().ok_or("bad group")?;
@@ -207,7 +229,11 @@ impl<'a> Parser<'a> {
                                 return Err("named groups are not supported".into());
                             }
                             let n = self.alt()?;
-                            Node::Look { node: Box::new(n), behind: true, neg: k2 == '!' }
+                            Node::Look {
+                                node: Box::new(n),
+                                behind: true,
+                                neg: k2 == '!',
+                            }
                         }
                         _ => return Err(format!("unsupported group (?{k}")),
                     };
@@ -262,7 +288,10 @@ impl<'a> Parser<'a> {
         }
         let t: String = self.s[self.i..self.i + n].iter().collect();
         self.i += n;
-        u32::from_str_radix(&t, 16).ok().and_then(char::from_u32).ok_or_else(|| "bad escape".to_string())
+        u32::from_str_radix(&t, 16)
+            .ok()
+            .and_then(char::from_u32)
+            .ok_or_else(|| "bad escape".to_string())
     }
     fn class(&mut self) -> Result<Node, String> {
         let neg = self.eat('^');
@@ -321,7 +350,11 @@ impl Regex {
     /// Compiles a pattern with flags (any of "i", "g", "m"; others are ignored).
     pub fn new(source: &str, flags: &str) -> Result<Regex, String> {
         let chars: Vec<char> = source.chars().collect();
-        let mut p = Parser { s: &chars, i: 0, groups: 0 };
+        let mut p = Parser {
+            s: &chars,
+            i: 0,
+            groups: 0,
+        };
         let node = p.alt()?;
         if p.i < chars.len() {
             return Err(format!("unmatched ) in /{source}/"));
@@ -369,12 +402,21 @@ impl Regex {
         hit != neg
     }
 
-    fn m(&self, n: &Node, s: &[char], i: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
+    fn m(
+        &self,
+        n: &Node,
+        s: &[char],
+        i: usize,
+        caps: &mut Caps,
+        k: &mut dyn FnMut(usize, &mut Caps) -> bool,
+    ) -> bool {
         match n {
             Node::Empty => k(i, caps),
             Node::Char(c) => i < s.len() && self.ch_eq(*c, s[i]) && k(i + 1, caps),
             Node::Any => i < s.len() && !is_line_term(s[i]) && k(i + 1, caps),
-            Node::Class(items, neg) => i < s.len() && self.class_has(items, *neg, s[i]) && k(i + 1, caps),
+            Node::Class(items, neg) => {
+                i < s.len() && self.class_has(items, *neg, s[i]) && k(i + 1, caps)
+            }
             Node::Start => (i == 0 || (self.multiline && is_line_term(s[i - 1]))) && k(i, caps),
             Node::End => (i == s.len() || (self.multiline && is_line_term(s[i]))) && k(i, caps),
             Node::WordB(want) => {
@@ -409,11 +451,18 @@ impl Regex {
                 }
                 false
             }
-            Node::Repeat { node, min, max, greedy } => self.rep(node, *min, *max, *greedy, 0, s, i, caps, k),
+            Node::Repeat {
+                node,
+                min,
+                max,
+                greedy,
+            } => self.rep(node, *min, *max, *greedy, 0, s, i, caps, k),
             Node::Look { node, behind, neg } => {
                 let mut c2 = caps.clone();
                 let found = if *behind {
-                    (0..=i).rev().any(|j| self.m(node, s, j, &mut c2, &mut |e, _| e == i))
+                    (0..=i)
+                        .rev()
+                        .any(|j| self.m(node, s, j, &mut c2, &mut |e, _| e == i))
                 } else {
                     self.m(node, s, i, &mut c2, &mut |_, _| true)
                 };
@@ -430,21 +479,44 @@ impl Regex {
                 None => k(i, caps),
                 Some((a, b)) => {
                     let len = b - a;
-                    i + len <= s.len() && (0..len).all(|t| self.ch_eq(s[a + t], s[i + t])) && k(i + len, caps)
+                    i + len <= s.len()
+                        && (0..len).all(|t| self.ch_eq(s[a + t], s[i + t]))
+                        && k(i + len, caps)
                 }
             },
         }
     }
 
-    fn seq(&self, v: &[Node], j: usize, s: &[char], i: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
+    fn seq(
+        &self,
+        v: &[Node],
+        j: usize,
+        s: &[char],
+        i: usize,
+        caps: &mut Caps,
+        k: &mut dyn FnMut(usize, &mut Caps) -> bool,
+    ) -> bool {
         if j == v.len() {
             return k(i, caps);
         }
-        self.m(&v[j], s, i, caps, &mut |e, c2: &mut Caps| self.seq(v, j + 1, s, e, c2, k))
+        self.m(&v[j], s, i, caps, &mut |e, c2: &mut Caps| {
+            self.seq(v, j + 1, s, e, c2, k)
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn rep(&self, node: &Node, min: usize, max: usize, greedy: bool, count: usize, s: &[char], i: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
+    fn rep(
+        &self,
+        node: &Node,
+        min: usize,
+        max: usize,
+        greedy: bool,
+        count: usize,
+        s: &[char],
+        i: usize,
+        caps: &mut Caps,
+        k: &mut dyn FnMut(usize, &mut Caps) -> bool,
+    ) -> bool {
         if greedy {
             if count < max {
                 let saved = caps.clone();
@@ -494,7 +566,11 @@ impl Regex {
         for g in 1..=self.groups {
             groups.push(caps[g].map(|(a, b)| text[a..b].iter().collect()));
         }
-        Captures { index: start, end, groups }
+        Captures {
+            index: start,
+            end,
+            groups,
+        }
     }
 
     /// `re.exec(text)` from character `from` (the first match at or after it).
@@ -533,7 +609,9 @@ impl Regex {
         let mut pos = 0usize;
         let mut from = 0usize;
         while from <= t.len() {
-            let Some(m) = self.exec_from(&t, from) else { break };
+            let Some(m) = self.exec_from(&t, from) else {
+                break;
+            };
             out.extend(&t[pos..m.index]);
             out.push_str(&f(&m));
             pos = m.end;
@@ -557,7 +635,11 @@ impl Regex {
     pub fn split(&self, s: &str) -> Vec<String> {
         let t: Vec<char> = s.chars().collect();
         if t.is_empty() {
-            return if self.match_at(&t, 0).is_some() { vec![] } else { vec![String::new()] };
+            return if self.match_at(&t, 0).is_some() {
+                vec![]
+            } else {
+                vec![String::new()]
+            };
         }
         let mut out = Vec::new();
         let (mut p, mut q) = (0usize, 0usize);
@@ -592,7 +674,9 @@ pub fn rx(source: &str, flags: &str) -> Rc<Regex> {
         if let Some(r) = c.borrow().get(&key) {
             return r.clone();
         }
-        let r = Rc::new(Regex::new(source, flags).unwrap_or_else(|e| panic!("bad pattern /{source}/: {e}")));
+        let r = Rc::new(
+            Regex::new(source, flags).unwrap_or_else(|e| panic!("bad pattern /{source}/: {e}")),
+        );
         c.borrow_mut().insert(key, r.clone());
         r
     })
@@ -616,27 +700,66 @@ mod tests {
     use super::*;
 
     fn t(p: &str, f: &str, s: &str) -> Option<String> {
-        Regex::new(p, f).unwrap().exec(s).map(|m| m.text().to_string())
+        Regex::new(p, f)
+            .unwrap()
+            .exec(s)
+            .map(|m| m.text().to_string())
     }
 
     #[test]
     fn matches_like_javascript() {
-        assert_eq!(t(r"^(\d{4})-(\d{2})", "", "2026-10-21").as_deref(), Some("2026-10"));
-        assert_eq!(t(r"city centre zone|town", "i", "The City Centre Zone").as_deref(), Some("City Centre Zone"));
-        assert_eq!(t(r"\bAT\b(?:\s*\))?[^.;]{0,20}?\b(?:road controlling authority|RCA)\b", "", "AT is the road controlling authority").as_deref(), Some("AT is the road controlling authority"));
+        assert_eq!(
+            t(r"^(\d{4})-(\d{2})", "", "2026-10-21").as_deref(),
+            Some("2026-10")
+        );
+        assert_eq!(
+            t(r"city centre zone|town", "i", "The City Centre Zone").as_deref(),
+            Some("City Centre Zone")
+        );
+        assert_eq!(
+            t(
+                r"\bAT\b(?:\s*\))?[^.;]{0,20}?\b(?:road controlling authority|RCA)\b",
+                "",
+                "AT is the road controlling authority"
+            )
+            .as_deref(),
+            Some("AT is the road controlling authority")
+        );
         assert_eq!(t(r"^Drury East\b", "i", "Drury Eastern"), None);
         assert_eq!(t(r"a{2,3}?", "", "aaaa").as_deref(), Some("aa"));
         assert_eq!(t(r"a(?=b)", "", "ac ab").as_deref(), Some("a"));
-        assert_eq!(Regex::new(r"(?<=[.!?])\s+|\n+", "").unwrap().split("One. Two!  Three\nFour"), vec!["One.", "Two!", "Three", "Four"]);
-        assert_eq!(Regex::new(r"[^w~-]", "g").unwrap().replace_with("a~b-c w1", "_"), "_~_-__w_");
-        assert_eq!(Regex::new(r"(?:\r?\n)*$", "").unwrap().replace_with("x\r\n\r\n", ""), "x");
+        assert_eq!(
+            Regex::new(r"(?<=[.!?])\s+|\n+", "")
+                .unwrap()
+                .split("One. Two!  Three\nFour"),
+            vec!["One.", "Two!", "Three", "Four"]
+        );
+        assert_eq!(
+            Regex::new(r"[^w~-]", "g")
+                .unwrap()
+                .replace_with("a~b-c w1", "_"),
+            "_~_-__w_"
+        );
+        assert_eq!(
+            Regex::new(r"(?:\r?\n)*$", "")
+                .unwrap()
+                .replace_with("x\r\n\r\n", ""),
+            "x"
+        );
     }
 
     #[test]
     fn captures_and_replace() {
-        let m = Regex::new(r"^(\d+) (\w{3})\w* ", "").unwrap().exec("31 December 2027").unwrap();
+        let m = Regex::new(r"^(\d+) (\w{3})\w* ", "")
+            .unwrap()
+            .exec("31 December 2027")
+            .unwrap();
         assert_eq!((m.get(1), m.get(2)), ("31", "Dec"));
-        let r = Regex::new(r"^(\d+) (\w{3})\w* ", "").unwrap().replace("31 December 2027", |m| format!("{} {} ", m.get(1), m.get(2)));
+        let r = Regex::new(r"^(\d+) (\w{3})\w* ", "")
+            .unwrap()
+            .replace("31 December 2027", |m| {
+                format!("{} {} ", m.get(1), m.get(2))
+            });
         assert_eq!(r, "31 Dec 2027");
     }
 }

@@ -23,7 +23,10 @@ pub fn fixed_ids() -> Ids<Mulberry32> {
 
 /// The made-up project a case starts from (fixtures/data/<name>.json).
 pub fn project(name: &str) -> Project {
-    Project::from_json(&crate::support::read_truth(&format!("fixtures/data/{name}.json"))).expect("the project reads")
+    Project::from_json(&crate::support::read_truth(&format!(
+        "fixtures/data/{name}.json"
+    )))
+    .expect("the project reads")
 }
 
 /// A box recorded as `[[south, west], [north, east]]`.

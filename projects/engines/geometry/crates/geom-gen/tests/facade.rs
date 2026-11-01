@@ -59,6 +59,7 @@ static BOX: OpSchema = OpSchema {
     classes: &[Class::Exact],
     charges: &[PER_ROW],
     batch: true,
+    name_free: false,
     example: "make.box { corner: [0, 0, 0], size: 10 }",
 };
 static PLAIN: OpSchema = OpSchema {
@@ -74,6 +75,7 @@ static PLAIN: OpSchema = OpSchema {
     classes: &[Class::Certified, Class::Approximate],
     charges: &[],
     batch: false,
+    name_free: false,
     example: "query.count {}",
 };
 

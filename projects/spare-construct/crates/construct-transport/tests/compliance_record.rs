@@ -26,7 +26,11 @@ fn record_regime_stamp() {
             "recheck" => compliance::recheck(&p),
             "stamp" => {
                 // the case name carries the day the stamp was made on
-                let now = id.split(' ').nth(1).filter(|d| d.starts_with("20")).map_or(V::Null, |d| V::String(d.to_string()));
+                let now = id
+                    .split(' ')
+                    .nth(1)
+                    .filter(|d| d.starts_with("20"))
+                    .map_or(V::Null, |d| V::String(d.to_string()));
                 compliance::stamp(&p, &now)
             }
             "today" => {
@@ -49,7 +53,10 @@ fn record_regime_stamp() {
                 let mut r = V::object();
                 r.set("o", o);
                 r.set("used", used.get("used").cloned().unwrap());
-                r.set("docs", V::Number(compliance::used_docs(&V::object()).len() as f64));
+                r.set(
+                    "docs",
+                    V::Number(compliance::used_docs(&V::object()).len() as f64),
+                );
                 r
             }
             other => panic!("{id}: unknown call {other}"),

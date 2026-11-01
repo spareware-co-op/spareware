@@ -17,7 +17,9 @@ fn is_word(c: char) -> bool {
 /// `\bx\b` for a one-letter word.
 fn lone(k: &str, x: char) -> bool {
     let cs: Vec<char> = k.chars().collect();
-    cs.iter().enumerate().any(|(i, c)| *c == x && (i == 0 || !is_word(cs[i - 1])) && (i + 1 == cs.len() || !is_word(cs[i + 1])))
+    cs.iter().enumerate().any(|(i, c)| {
+        *c == x && (i == 0 || !is_word(cs[i - 1])) && (i + 1 == cs.len() || !is_word(cs[i + 1]))
+    })
 }
 
 /// `/veh\/h|%|km\/h|\bm\b|\bs\b/.test(k)`.
@@ -49,7 +51,9 @@ fn gj_unit(k: &str) -> &'static str {
 
 fn csv_unit(name: &str) -> Option<&'static str> {
     Some(match name {
-        "corridor-sidra-volumes.csv" => "veh/h where the column says so; Period AM or PM; Site is the SIDRA site number",
+        "corridor-sidra-volumes.csv" => {
+            "veh/h where the column says so; Period AM or PM; Site is the SIDRA site number"
+        }
         "anop.csv" => "AT ANOP tool v10.2 input sheet columns; LoS A to F (indicative, D5)",
         "screenlines.csv" => "veh/h; diff_pct a fraction; geh unitless; completeness a fraction",
         _ => return None,
@@ -60,9 +64,17 @@ fn csv_unit(name: &str) -> Option<&'static str> {
 pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String]) -> String {
     let mut l: Vec<String> = Vec::new();
     let d1 = super::consts::disclaimer_text("D1", None, None);
-    let d12 = super::consts::disclaimer_text("D12", None, Some("SIDRA / SATURN / Aimsun / AT ANOP tool / NZTA IER tool / MBCM workbook"));
+    let d12 = super::consts::disclaimer_text(
+        "D12",
+        None,
+        Some("SIDRA / SATURN / Aimsun / AT ANOP tool / NZTA IER tool / MBCM workbook"),
+    );
     l.push(format!("Spare Construct ITA data pack: {}", r.name()));
-    l.push(format!("Made {} UTC with {}.", iso_minute(r.now_ms), model_version(r)));
+    l.push(format!(
+        "Made {} UTC with {}.",
+        iso_minute(r.now_ms),
+        model_version(r)
+    ));
     l.push(String::new());
     l.push("DISCLAIMER D1 (screening status)".to_string());
     l.push(d1);
@@ -95,7 +107,11 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
     l.push(String::new());
     l.push("FILES".to_string());
     for f in files {
-        let text = FILES.iter().find(|(n, _)| *n == f.name).map(|(_, t)| *t).filter(|t| !t.is_empty());
+        let text = FILES
+            .iter()
+            .find(|(n, _)| *n == f.name)
+            .map(|(_, t)| *t)
+            .filter(|t| !t.is_empty());
         l.push(format!(
             "- {}{}",
             f.name,
@@ -126,7 +142,12 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
         }
     }
     // files made outside the dictionary: their header row, as written (units are in the names or listed here)
-    for f in files.iter().filter(|f| f.name.ends_with(".csv") && !COLS.iter().any(|(n, _)| *n == f.name) && f.of.is_none() && !f.name.starts_with("od_")) {
+    for f in files.iter().filter(|f| {
+        f.name.ends_with(".csv")
+            && !COLS.iter().any(|(n, _)| *n == f.name)
+            && f.of.is_none()
+            && !f.name.starts_with("od_")
+    }) {
         let text = f.data.strip_prefix('\u{feff}').unwrap_or(&f.data);
         let rows: Vec<&str> = text
             .split('\n')
@@ -150,13 +171,29 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
             l.push(format!("  ({u})"));
         }
         for k in head {
-            l.push(format!("  {k}: {}", if has_unit(&k) { "unit in the name" } else { "-" }));
+            l.push(format!(
+                "  {k}: {}",
+                if has_unit(&k) {
+                    "unit in the name"
+                } else {
+                    "-"
+                }
+            ));
         }
     }
     if let Some(gj) = files.iter().find(|f| f.name == "network.geojson") {
         let props: Vec<String> = JsonValue::parse(&gj.data)
             .ok()
-            .and_then(|o| js::idx(js::get(Some(&o), "features"), 0).and_then(|f| js::get(Some(f), "properties")).map(|p| js::entries(Some(p)).into_iter().map(|(k, _)| k.to_string()).collect()))
+            .and_then(|o| {
+                js::idx(js::get(Some(&o), "features"), 0)
+                    .and_then(|f| js::get(Some(f), "properties"))
+                    .map(|p| {
+                        js::entries(Some(p))
+                            .into_iter()
+                            .map(|(k, _)| k.to_string())
+                            .collect()
+                    })
+            })
             .unwrap_or_default();
         l.push(String::new());
         l.push("network.geojson (WGS84; the file carries D1 and the model version)".to_string());
@@ -181,7 +218,9 @@ pub(crate) fn readme(r: &Rep, sel: &Sel, files: &[PackFile], missing: &[String])
 fn res_json(res: &Res) -> JsonValue {
     fn fix(v: &mut JsonValue) {
         match v {
-            JsonValue::String(s) if s == "NaN" || s == "Infinity" || s == "-Infinity" => *v = JsonValue::Null,
+            JsonValue::String(s) if s == "NaN" || s == "Infinity" || s == "-Infinity" => {
+                *v = JsonValue::Null
+            }
             JsonValue::Array(a) => a.iter_mut().for_each(fix),
             JsonValue::Object(m) => m.iter_mut().for_each(|(_, x)| fix(x)),
             _ => {}
@@ -215,13 +254,31 @@ fn normalise_data(p: &mut JsonValue) {
     let Some(d) = p.get_mut("data") else {
         return;
     };
-    for (k, empty_array) in [("counts", true), ("crashes", true), ("loaded", false), ("jt", true)] {
+    for (k, empty_array) in [
+        ("counts", true),
+        ("crashes", true),
+        ("loaded", false),
+        ("jt", true),
+    ] {
         if !d.get(k).is_some_and(JsonValue::truthy) {
-            d.set(k, if empty_array { JsonValue::Array(Vec::new()) } else { JsonValue::object() });
+            d.set(
+                k,
+                if empty_array {
+                    JsonValue::Array(Vec::new())
+                } else {
+                    JsonValue::object()
+                },
+            );
         }
     }
     let mut u = JsonValue::object();
-    for (k, v) in [("nzta", true), ("at", true), ("user", true), ("virtual", false), ("ramm", true)] {
+    for (k, v) in [
+        ("nzta", true),
+        ("at", true),
+        ("user", true),
+        ("virtual", false),
+        ("ramm", true),
+    ] {
         u.set(k, JsonValue::Bool(v));
     }
     if let Some(JsonValue::Object(m)) = d.get("use").filter(|x| x.truthy()).cloned() {

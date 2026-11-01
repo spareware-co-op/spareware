@@ -1,10 +1,10 @@
 //! The junctions feature's report sections: the flow-scale test, the movement summaries by turn (Appendix C), the junction
 //! comparison and the turning movement diagrams.
 
-use super::text::per_name;
-use super::{FIGURE_STEP, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, Sc, Tools, entries};
 use super::figure::FigureOpts;
 use super::j1::J1HtmlOpts;
+use super::text::per_name;
+use super::{FIGURE_STEP, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, Sc, Tools, entries};
 use crate::jsnum::{math_round, number_to_js_string, to_fixed};
 use crate::report::Sel;
 use crate::util::esc;
@@ -29,7 +29,10 @@ pub fn pct() -> f64 {
 
 /// The title of the flow-scale section (`PERF_TITLE`).
 pub fn perf_title() -> String {
-    format!("Junction flow-scale test (+{}%)", number_to_js_string(pct()))
+    format!(
+        "Junction flow-scale test (+{}%)",
+        number_to_js_string(pct())
+    )
 }
 
 /// The ids of the report sections this feature registers.
@@ -115,7 +118,9 @@ impl<'a> Tools<'a> {
             let b = list
                 .iter()
                 .copied()
-                .find(|i| self.project.base.as_str() == Some(self.project.scenarios[*i].id.as_str()))
+                .find(|i| {
+                    self.project.base.as_str() == Some(self.project.scenarios[*i].id.as_str())
+                })
                 .or_else(|| list.first().copied());
             let pairs = match b {
                 Some(b) => list
@@ -129,19 +134,37 @@ impl<'a> Tools<'a> {
             return ReportSelection { list, pairs };
         };
         let mut list: Vec<usize> = Vec::new();
-        for x in [sel.existing, sel.without, sel.with, sel.mitigation].into_iter().flatten() {
+        for x in [sel.existing, sel.without, sel.with, sel.mitigation]
+            .into_iter()
+            .flatten()
+        {
             if !list.contains(&x) && self.has_run(Some(x)) {
                 list.push(x);
             }
         }
         let mut pairs = Vec::new();
         if self.has_run(sel.without) && self.has_run(sel.with) {
-            pairs.push((sel.without.expect("run"), sel.with.expect("run"), "Effect of the development", "development"));
+            pairs.push((
+                sel.without.expect("run"),
+                sel.with.expect("run"),
+                "Effect of the development",
+                "development",
+            ));
         } else if self.has_run(sel.existing) && self.has_run(sel.with) && sel.existing != sel.with {
-            pairs.push((sel.existing.expect("run"), sel.with.expect("run"), "Change from the existing network", "existing"));
+            pairs.push((
+                sel.existing.expect("run"),
+                sel.with.expect("run"),
+                "Change from the existing network",
+                "existing",
+            ));
         }
         if self.has_run(sel.with) && self.has_run(sel.mitigation) {
-            pairs.push((sel.with.expect("run"), sel.mitigation.expect("run"), "Effect of the mitigation", "mitigation"));
+            pairs.push((
+                sel.with.expect("run"),
+                sel.mitigation.expect("run"),
+                "Effect of the mitigation",
+                "mitigation",
+            ));
         }
         ReportSelection { list, pairs }
     }
@@ -156,14 +179,13 @@ impl<'a> Tools<'a> {
         let Some(res) = res else {
             return Vec::new();
         };
-        let ext: Option<Vec<String>> = s
-            .sc
-            .extent
-            .get()
-            .and_then(|e| e.get("sites"))
-            .and_then(|x| x.as_array())
-            .filter(|a| !a.is_empty())
-            .map(|a| a.iter().map(super::js_str).collect());
+        let ext: Option<Vec<String>> =
+            s.sc.extent
+                .get()
+                .and_then(|e| e.get("sites"))
+                .and_then(|x| x.as_array())
+                .filter(|a| !a.is_empty())
+                .map(|a| a.iter().map(super::js_str).collect());
         let es = entries(s.sc, res, false);
         let mut chosen: Vec<&super::Entry> = match &ext {
             Some(ext) => es
@@ -235,9 +257,13 @@ impl<'a> Tools<'a> {
             esc(&perf_title()),
             self.supp_note(),
             if scale.is_empty() {
-                format!("<p>No junction crosses its practical degree of saturation when flows rise by {pct}%.</p>")
+                format!(
+                    "<p>No junction crosses its practical degree of saturation when flows rise by {pct}%.</p>"
+                )
             } else {
-                format!("<p>Junctions whose degree of saturation crosses the practical limit when flows rise by {pct}%:</p><ul>{scale}</ul>")
+                format!(
+                    "<p>Junctions whose degree of saturation crosses the practical limit when flows rise by {pct}%:</p><ul>{scale}</ul>"
+                )
             },
             esc(FLOW_SCALE.name),
             esc(FLOW_SCALE.edition),

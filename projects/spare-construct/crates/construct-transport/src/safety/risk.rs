@@ -6,10 +6,12 @@
 //! no later than the crash window. Links shorter than 500 m, or with under 200 veh/day, get no risk band: KiwiRAP
 //! measures risk over sections several kilometres long.
 
-use super::assign::{assign_crashes, Assignment, CasLoad, Tally, Years, LINK_R, LOW_AADT, NODE_R, SHORT_KM};
+use super::assign::{
+    Assignment, CasLoad, LINK_R, LOW_AADT, NODE_R, SHORT_KM, Tally, Years, assign_crashes,
+};
 use super::cas::Crash;
 use crate::calibrate::stored_res;
-use crate::datahub::{matches, Data};
+use crate::datahub::{Data, matches};
 use crate::edit::net::project;
 use crate::graph::js_sort_by;
 use crate::jsnum::number_to_js_string;
@@ -40,10 +42,22 @@ struct Bands {
 
 fn bands_of(kind: &str) -> Bands {
     match kind {
-        "personal" => Bands { cuts: [4.0, 5.0, 7.0, 9.0], basis: "KiwiRAP personal risk bands (rural state highways), indicative here" },
-        "injury" => Bands { cuts: [0.5, 1.0, 2.0, 4.0], basis: "Indicative bands set by Spare Construct, not an NZTA threshold" },
-        "node" => Bands { cuts: [0.1, 0.2, 0.4, 0.6], basis: "Indicative bands set by Spare Construct, not an NZTA threshold" },
-        _ => Bands { cuts: [0.04, 0.07, 0.11, 0.19], basis: "KiwiRAP collective risk bands (rural state highways), indicative here" },
+        "personal" => Bands {
+            cuts: [4.0, 5.0, 7.0, 9.0],
+            basis: "KiwiRAP personal risk bands (rural state highways), indicative here",
+        },
+        "injury" => Bands {
+            cuts: [0.5, 1.0, 2.0, 4.0],
+            basis: "Indicative bands set by Spare Construct, not an NZTA threshold",
+        },
+        "node" => Bands {
+            cuts: [0.1, 0.2, 0.4, 0.6],
+            basis: "Indicative bands set by Spare Construct, not an NZTA threshold",
+        },
+        _ => Bands {
+            cuts: [0.04, 0.07, 0.11, 0.19],
+            basis: "KiwiRAP collective risk bands (rural state highways), indicative here",
+        },
     }
 }
 
@@ -61,9 +75,19 @@ pub fn risk_band(value: Option<f64>, kind: &str) -> Band {
             while i < b.cuts.len() && v >= b.cuts[i] {
                 i += 1;
             }
-            Band { band: Some(BAND_NAMES[i]), label: BAND_LABELS[i].to_string(), colour: BAND_COLOURS[i], basis: b.basis.to_string() }
+            Band {
+                band: Some(BAND_NAMES[i]),
+                label: BAND_LABELS[i].to_string(),
+                colour: BAND_COLOURS[i],
+                basis: b.basis.to_string(),
+            }
         }
-        _ => Band { band: None, label: "No data".to_string(), colour: NO_COLOUR, basis: b.basis.to_string() },
+        _ => Band {
+            band: None,
+            label: "No data".to_string(),
+            colour: NO_COLOUR,
+            basis: b.basis.to_string(),
+        },
     }
 }
 
@@ -73,7 +97,10 @@ pub fn no_band(why: &str) -> Band {
         band: None,
         label: why.to_string(),
         colour: NO_COLOUR,
-        basis: format!("No band: {}. KiwiRAP bands are for sections several kilometres long.", why.to_lowercase()),
+        basis: format!(
+            "No band: {}. KiwiRAP bands are for sections several kilometres long.",
+            why.to_lowercase()
+        ),
     }
 }
 
@@ -231,7 +258,12 @@ pub struct SafetySummary {
 /// Two-way link: a two-way count wins, then both directions summed, then one direction doubled. One-way carriageway:
 /// counts in its own direction win; a count with no direction is a two-way total, so it is halved where the road's other
 /// carriageway runs alongside. Gives the volume and where it came from, by link id.
-pub fn link_aadt(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String, String>) -> HashMap<String, (f64, &'static str)> {
+pub fn link_aadt(
+    sc: &Scenario,
+    s: &Settings,
+    data: &Data,
+    pair: &HashMap<String, String>,
+) -> HashMap<String, (f64, &'static str)> {
     #[derive(Default)]
     struct Entry {
         both: Vec<f64>,
@@ -242,7 +274,10 @@ pub fn link_aadt(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String
     let mut by: HashMap<String, Entry> = HashMap::new();
     let nzta_on = data.use_of("nzta").truthy();
     for c in &data.counts {
-        if c.off.truthy() || !(c.adt.num() > 0.0) || !(data.in_use(c) || (c.virtual_.truthy() && nzta_on)) {
+        if c.off.truthy()
+            || !(c.adt.num() > 0.0)
+            || !(data.in_use(c) || (c.virtual_.truthy() && nzta_on))
+        {
             continue;
         }
         let Some(mt) = m.get(&c.id) else { continue };
@@ -259,20 +294,36 @@ pub fn link_aadt(sc: &Scenario, s: &Settings, data: &Data, pair: &HashMap<String
     for (id, e) in &by {
         let Some(lk) = sc.links.get(id) else { continue };
         let two = lk.lanes_ab.num() > 0.0 && lk.lanes_ba.num() > 0.0;
-        let own = if lk.lanes_ab.num() > 0.0 { &e.ab } else { &e.ba };
+        let own = if lk.lanes_ab.num() > 0.0 {
+            &e.ab
+        } else {
+            &e.ba
+        };
         if two {
             if !e.both.is_empty() {
                 out.insert(id.clone(), (mean(&e.both), "count"));
             } else if !e.ab.is_empty() && !e.ba.is_empty() {
                 out.insert(id.clone(), (mean(&e.ab) + mean(&e.ba), "count"));
             } else {
-                out.insert(id.clone(), (mean(if !e.ab.is_empty() { &e.ab } else { &e.ba }) * 2.0, "count (one direction, doubled)"));
+                out.insert(
+                    id.clone(),
+                    (
+                        mean(if !e.ab.is_empty() { &e.ab } else { &e.ba }) * 2.0,
+                        "count (one direction, doubled)",
+                    ),
+                );
             }
         } else if !own.is_empty() {
             out.insert(id.clone(), (mean(own), "count"));
         } else if !e.both.is_empty() {
             if pair.contains_key(id) {
-                out.insert(id.clone(), (mean(&e.both) / 2.0, "count (two-way total, halved for this carriageway)"));
+                out.insert(
+                    id.clone(),
+                    (
+                        mean(&e.both) / 2.0,
+                        "count (two-way total, halved for this carriageway)",
+                    ),
+                );
             } else {
                 out.insert(id.clone(), (mean(&e.both), "count"));
             }
@@ -318,10 +369,22 @@ impl<'a> SafetyModel<'a> {
         if crashes.is_empty() {
             return None;
         }
-        let cas = CasLoad::from_value(p.data.get().and_then(|d| d.loaded.get()).and_then(|l| l.get("cas")));
+        let cas = CasLoad::from_value(
+            p.data
+                .get()
+                .and_then(|d| d.loaded.get())
+                .and_then(|l| l.get("cas")),
+        );
         let assignment = assign_crashes(sc, &crashes, &cas);
         let base = p.base_scenario().filter(|b| !std::ptr::eq(*b, sc));
-        Some(SafetyModel { sc, settings: &p.settings, data: Data::read(p), base, crashes, assignment })
+        Some(SafetyModel {
+            sc,
+            settings: &p.settings,
+            data: Data::read(p),
+            base,
+            crashes,
+            assignment,
+        })
     }
 
     /// The crashes, as read.
@@ -337,17 +400,29 @@ impl<'a> SafetyModel<'a> {
     pub fn link_risk(&self, res: Option<&Res>) -> OrderedMap<LinkRisk> {
         let a = &self.assignment;
         let yr = &a.years;
-        let current = |r: &Res| !(r.year > 0.0 && yr.to.is_some_and(|t| t > 0.0 && r.year > t + 1.0));
+        let current =
+            |r: &Res| !(r.year > 0.0 && yr.to.is_some_and(|t| t > 0.0 && r.year > t + 1.0));
         let mut rs: Vec<Res> = match res {
             Some(r) => vec![r.clone()],
-            None => ["AM", "PM"].iter().filter_map(|p| stored_res(self.sc, p)).collect(),
+            None => ["AM", "PM"]
+                .iter()
+                .filter_map(|p| stored_res(self.sc, p))
+                .collect(),
         };
-        let forecast = if !rs.is_empty() && !rs.iter().any(current) { Some(rs[0].year) } else { None };
+        let forecast = if !rs.is_empty() && !rs.iter().any(current) {
+            Some(rs[0].year)
+        } else {
+            None
+        };
         rs.retain(current);
         if rs.is_empty()
             && let Some(b) = self.base
         {
-            rs = ["AM", "PM"].iter().filter_map(|p| stored_res(b, p)).filter(current).collect();
+            rs = ["AM", "PM"]
+                .iter()
+                .filter_map(|p| stored_res(b, p))
+                .filter(current)
+                .collect();
         }
         let ptd = self.settings.peak_to_daily.or(10.0);
         let aadt = link_aadt(self.sc, self.settings, &self.data, &a.pair);
@@ -375,13 +450,20 @@ impl<'a> SafetyModel<'a> {
                 && f != 0.0
                 && !f.is_nan()
             {
-                src = Some(format!("model (forecast year {}, not used)", number_to_js_string(f)));
+                src = Some(format!(
+                    "model (forecast year {}, not used)",
+                    number_to_js_string(f)
+                ));
             }
             let divided = a.pair.contains_key(id);
             let road_km = if divided { it.km / 2.0 } else { it.km };
             let ky = road_km * yrs_n;
             let v = vol.unwrap_or(0.0);
-            let vkm = if vol.is_some() && v > 0.0 && it.km > 0.0 && yrs_n > 0.0 { v * 365.0 * it.km * yrs_n } else { 0.0 };
+            let vkm = if vol.is_some() && v > 0.0 && it.km > 0.0 && yrs_n > 0.0 {
+                v * 365.0 * it.km * yrs_n
+            } else {
+                0.0
+            };
             out.insert(
                 id.clone(),
                 LinkRisk {
@@ -392,9 +474,21 @@ impl<'a> SafetyModel<'a> {
                     years: yrs,
                     aadt: vol,
                     aadt_src: src,
-                    per_km_yr: if ky > 0.0 { Some(t.injury as f64 / ky) } else { None },
-                    dsi_per_km_yr: if ky > 0.0 { Some(t.dsi as f64 / ky) } else { None },
-                    personal: if vkm > 0.0 { Some(t.dsi as f64 / vkm * 1e8) } else { None },
+                    per_km_yr: if ky > 0.0 {
+                        Some(t.injury as f64 / ky)
+                    } else {
+                        None
+                    },
+                    dsi_per_km_yr: if ky > 0.0 {
+                        Some(t.dsi as f64 / ky)
+                    } else {
+                        None
+                    },
+                    personal: if vkm > 0.0 {
+                        Some(t.dsi as f64 / vkm * 1e8)
+                    } else {
+                        None
+                    },
                     short: it.km < SHORT_KM,
                     low_volume: !(vol.is_some() && v >= LOW_AADT),
                 },
@@ -427,7 +521,10 @@ impl<'a> SafetyModel<'a> {
 
     /// `junctionOf(sc, nodeId)`: the junction (the `node_risk` key) a node belongs to, or None.
     pub fn junction_of(&self, node_id: &str) -> Option<&str> {
-        self.assignment.j_of_node.get(node_id).map(|&j| self.assignment.jn[j].id.as_str())
+        self.assignment
+            .j_of_node
+            .get(node_id)
+            .map(|&j| self.assignment.jn[j].id.as_str())
     }
 
     /// `safetySummary(sc, res)`: study-area totals by severity and year, vulnerable road users, the top ten links (500 m or longer) and junctions by DSI then injury crashes, and interchange merges apart.
@@ -437,7 +534,12 @@ impl<'a> SafetyModel<'a> {
         let nr = self.node_risk();
         let mut total = Tally::default();
         let mut years: Vec<(Option<f64>, Tally)> = Vec::new();
-        let mut vul = Vulnerable { p: Tally::default(), c: Tally::default(), m: Tally::default(), any: Tally::default() };
+        let mut vul = Vulnerable {
+            p: Tally::default(),
+            c: Tally::default(),
+            m: Tally::default(),
+            any: Tally::default(),
+        };
         for c in &self.crashes {
             total.add(c);
             let y = if c.year > 0.0 { Some(c.year) } else { None };
@@ -486,7 +588,11 @@ impl<'a> SafetyModel<'a> {
                     risk: r.clone(),
                     collective: risk_band(r.dsi_per_km_yr, "collective"),
                     personal_band: if r.low_volume {
-                        no_band(if r.aadt.is_some_and(|v| v > 0.0) { "Under 200 veh/day" } else { "No traffic volume" })
+                        no_band(if r.aadt.is_some_and(|v| v > 0.0) {
+                            "Under 200 veh/day"
+                        } else {
+                            "No traffic volume"
+                        })
                     } else {
                         risk_band(r.personal, "personal")
                     },
@@ -498,22 +604,40 @@ impl<'a> SafetyModel<'a> {
         let mut nodes: Vec<TopNode> = nr
             .iter()
             .filter(|(_, r)| r.t.crashes > 0)
-            .map(|(id, r)| TopNode { id: id.to_string(), risk: r.clone(), band: risk_band(r.dsi_per_yr, "node") })
+            .map(|(id, r)| TopNode {
+                id: id.to_string(),
+                risk: r.clone(),
+                band: risk_band(r.dsi_per_yr, "node"),
+            })
             .collect();
         js_sort_by(&mut nodes, |p, q| rank(&p.risk.t, &q.risk.t));
-        let top_nodes: Vec<TopNode> = nodes.iter().filter(|n| !n.risk.interchange).take(10).cloned().collect();
-        let interchanges: Vec<TopNode> = nodes.iter().filter(|n| n.risk.interchange).take(5).cloned().collect();
+        let top_nodes: Vec<TopNode> = nodes
+            .iter()
+            .filter(|n| !n.risk.interchange)
+            .take(10)
+            .cloned()
+            .collect();
+        let interchanges: Vec<TopNode> = nodes
+            .iter()
+            .filter(|n| n.risk.interchange)
+            .take(5)
+            .cloned()
+            .collect();
         let on_links = a.link_of.iter().filter(|&&i| i >= 0).count();
         let at_nodes = a.node_of.iter().filter(|&&i| i >= 0).count();
         let short_n = lr.values().filter(|r| r.t.crashes > 0 && r.short).count();
         let mut by_year: Vec<(Option<f64>, Tally)> = years;
-        js_sort_by(&mut by_year, |x, y| x.0.unwrap_or(9999.0) - y.0.unwrap_or(9999.0));
+        js_sort_by(&mut by_year, |x, y| {
+            x.0.unwrap_or(9999.0) - y.0.unwrap_or(9999.0)
+        });
         let by_year: Vec<YearRow> = by_year
             .into_iter()
             .map(|(year, t)| YearRow {
                 year,
                 ytd: a.years.window && year.is_some() && year == a.years.ytd,
-                may_be_incomplete: year.is_some() && a.years.lag_year.flatten().is_some_and(|l| l != 0.0) && year == a.years.lag_year.flatten(),
+                may_be_incomplete: year.is_some()
+                    && a.years.lag_year.flatten().is_some_and(|l| l != 0.0)
+                    && year == a.years.lag_year.flatten(),
                 t,
             })
             .collect();
@@ -527,7 +651,11 @@ impl<'a> SafetyModel<'a> {
             number_to_js_string(NODE_R),
             yr_text(a.years.from),
             yr_text(a.years.to),
-            if a.years.partial { " (latest year to date)" } else { "" },
+            if a.years.partial {
+                " (latest year to date)"
+            } else {
+                ""
+            },
             number_to_js_string(SHORT_KM * 1000.0)
         );
         SafetySummary {
@@ -551,12 +679,18 @@ impl<'a> SafetyModel<'a> {
 
 /// `linkBand(r, kind)`: the band of one link's rate for display: no data without a risk, no band for a short link (or a quiet one for personal risk).
 pub fn link_band(r: Option<&LinkRisk>, kind: &str) -> Band {
-    let Some(r) = r else { return risk_band(None, kind) };
+    let Some(r) = r else {
+        return risk_band(None, kind);
+    };
     if r.short {
         return no_band("Under 500 m");
     }
     if kind == "personal" && r.low_volume {
-        return no_band(if r.aadt.is_some_and(|v| v > 0.0) { "Under 200 veh/day" } else { "No traffic volume" });
+        return no_band(if r.aadt.is_some_and(|v| v > 0.0) {
+            "Under 200 veh/day"
+        } else {
+            "No traffic volume"
+        });
     }
     risk_band(
         match kind {
@@ -602,12 +736,24 @@ pub enum Near<'a> {
 ///
 /// `long` reads the ten-year set (`crashesLong`) for state highway accesses. None when the project holds no crashes of
 /// that set, or the junction or link is not in the scenario; the prototype's default radius is 25 m.
-pub fn crashes_near(p: &Project, sc: &Scenario, sel: Near, r: f64, long: bool) -> Option<CrashesNear> {
+pub fn crashes_near(
+    p: &Project,
+    sc: &Scenario,
+    sel: Near,
+    r: f64,
+    long: bool,
+) -> Option<CrashesNear> {
     let cr = crashes_of(p, if long { "crashesLong" } else { "crashes" });
     if cr.is_empty() {
         return None;
     }
-    let mut out = CrashesNear { f: 0, s: 0, m: 0, n: 0, list: Vec::new() };
+    let mut out = CrashesNear {
+        f: 0,
+        s: 0,
+        m: 0,
+        n: 0,
+        list: Vec::new(),
+    };
     let mut count = |c: &Crash| {
         match c.severity.as_str() {
             "F" => out.f += 1,
@@ -631,7 +777,12 @@ pub fn crashes_near(p: &Project, sc: &Scenario, sel: Near, r: f64, long: bool) -
         Near::Link(id) => {
             let lk = sc.links.get(id)?;
             let g = sc.geom(lk);
-            let (mut la0, mut la1, mut ln0, mut ln1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+            let (mut la0, mut la1, mut ln0, mut ln1) = (
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+            );
             for q in &g {
                 la0 = crate::jsnum::math_min(la0, q[0]);
                 la1 = crate::jsnum::math_max(la1, q[0]);
@@ -640,7 +791,11 @@ pub fn crashes_near(p: &Project, sc: &Scenario, sel: Near, r: f64, long: bool) -
             }
             let pad = r / 90000.0;
             for c in &cr {
-                if c.lat < la0 - pad || c.lat > la1 + pad || c.lng < ln0 - pad * 1.3 || c.lng > ln1 + pad * 1.3 {
+                if c.lat < la0 - pad
+                    || c.lat > la1 + pad
+                    || c.lng < ln0 - pad * 1.3
+                    || c.lng > ln1 + pad * 1.3
+                {
                     continue;
                 }
                 if project(sc, lk, [c.lat, c.lng]).d <= r {

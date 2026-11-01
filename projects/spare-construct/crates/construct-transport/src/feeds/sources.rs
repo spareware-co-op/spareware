@@ -1,7 +1,7 @@
 //! The official data sources and the thresholds the feeds use, as data (`SRC`, `COUNCILS`, `NZ_FEEDS`, `RULES`, `TERMS`, `MATARIKI`, `DEFAULTS`).
 
 use super::load::AT_LICENCE;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The NZTA ArcGIS services folder.
 pub const NZTA: &str = "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/rest/services";
@@ -128,7 +128,9 @@ pub const SRC_AGS: Src = Src {
     label: "Growth (Auckland)",
     name: "Auckland Council AGS23 v1.1 (Auckland Growth Scenario)",
     url: "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Auckland_Growth_Scenario_v1_1/FeatureServer/0",
-    page: Some("https://www.knowledgeauckland.org.nz/publications/auckland-growth-scenario-2023-version-11-ags23v11-data/"),
+    page: Some(
+        "https://www.knowledgeauckland.org.nz/publications/auckland-growth-scenario-2023-version-11-ags23v11-data/",
+    ),
     licence: "Auckland Council terms: fetched live for this study area; never bundled or republished",
     attribution: Some("Auckland Council AGS23 v1.1"),
     note: None,
@@ -224,7 +226,11 @@ pub fn src(id: &str) -> Option<&'static Src> {
 
 /// `SRC` as the prototype's object, keyed by source.
 pub fn src_value() -> Value {
-    Value::Object(SRC.iter().map(|s| (s.id.to_string(), s.to_value())).collect())
+    Value::Object(
+        SRC.iter()
+            .map(|s| (s.id.to_string(), s.to_value()))
+            .collect(),
+    )
 }
 
 /// A council count preset (`COUNCILS[key]`).
@@ -299,17 +305,46 @@ pub struct NzFeed {
 
 /// `NZ_FEEDS`.
 pub const NZ_FEEDS: [NzFeed; 6] = [
-    NzFeed { id: "mdb-1029", provider: "Auckland Transport", box_: [-37.45, 174.15, -36.05, 175.6] },
-    NzFeed { id: "mdb-1132", provider: "Metlink (Greater Wellington)", box_: [-41.65, 174.55, -40.6, 176.1] },
-    NzFeed { id: "mdb-1313", provider: "Metro (Christchurch)", box_: [-43.95, 171.9, -43.2, 173.1] },
-    NzFeed { id: "mdb-983", provider: "Otago Regional Council", box_: [-46.3, 168.3, -44.6, 170.9] },
-    NzFeed { id: "tld-6738", provider: "Waikato Regional Council", box_: [-38.6, 174.6, -37.25, 176.3] },
-    NzFeed { id: "mdb-1071", provider: "BayBus (Bay of Plenty)", box_: [-38.4, 175.8, -37.4, 177.3] },
+    NzFeed {
+        id: "mdb-1029",
+        provider: "Auckland Transport",
+        box_: [-37.45, 174.15, -36.05, 175.6],
+    },
+    NzFeed {
+        id: "mdb-1132",
+        provider: "Metlink (Greater Wellington)",
+        box_: [-41.65, 174.55, -40.6, 176.1],
+    },
+    NzFeed {
+        id: "mdb-1313",
+        provider: "Metro (Christchurch)",
+        box_: [-43.95, 171.9, -43.2, 173.1],
+    },
+    NzFeed {
+        id: "mdb-983",
+        provider: "Otago Regional Council",
+        box_: [-46.3, 168.3, -44.6, 170.9],
+    },
+    NzFeed {
+        id: "tld-6738",
+        provider: "Waikato Regional Council",
+        box_: [-38.6, 174.6, -37.25, 176.3],
+    },
+    NzFeed {
+        id: "mdb-1071",
+        provider: "BayBus (Bay of Plenty)",
+        box_: [-38.4, 175.8, -37.4, 177.3],
+    },
 ];
 
 /// `NZ_FEEDS` as the prototype's list.
 pub fn nz_feeds_value() -> Value {
-    Value::Array(NZ_FEEDS.iter().map(|f| json!({ "id": f.id, "provider": f.provider, "box": f.box_ })).collect())
+    Value::Array(
+        NZ_FEEDS
+            .iter()
+            .map(|f| json!({ "id": f.id, "provider": f.provider, "box": f.box_ }))
+            .collect(),
+    )
 }
 
 /// `RULES.nslr.samples`: where along a link the register is read (fractions of its length).
@@ -355,7 +390,12 @@ pub const AGS_GATEWAY_DEG: f64 = 60.0;
 /// `RULES.ags.years`: the years the scenario covers.
 pub const AGS_YEARS: [f64; 2] = [2022.0, 2052.0];
 /// `RULES.ags.groups`: which growth a land use group follows.
-pub const AGS_GROUPS: [(&str, &str); 4] = [("Residential", "hh"), ("Commercial", "emp"), ("Industrial", "emp"), ("Community", "pop")];
+pub const AGS_GROUPS: [(&str, &str); 4] = [
+    ("Residential", "hh"),
+    ("Commercial", "emp"),
+    ("Industrial", "emp"),
+    ("Community", "pop"),
+];
 /// `RULES.gtfs.bufferM`: the study area is widened by this much for stops (m).
 pub const GTFS_BUFFER_M: f64 = 500.0;
 /// `RULES.gtfs.linkM`: a stop snaps to a road within this distance (m).
@@ -390,16 +430,59 @@ pub const TERMS_SOURCE: &str = "Ministry of Education school term dates, https:/
 
 /// `TERMS.dates`: NZ state school terms by year (start and end of each term, YYYY-MM-DD). Tuesday to Thursday calibration days must fall in term.
 pub const TERM_DATES: [(u32, [(&str, &str); 4]); 5] = [
-    (2022, [("2022-02-07", "2022-04-14"), ("2022-05-02", "2022-07-08"), ("2022-07-25", "2022-09-30"), ("2022-10-17", "2022-12-20")]),
-    (2023, [("2023-02-07", "2023-04-06"), ("2023-04-24", "2023-06-30"), ("2023-07-17", "2023-09-22"), ("2023-10-09", "2023-12-20")]),
-    (2024, [("2024-02-07", "2024-04-12"), ("2024-04-29", "2024-07-05"), ("2024-07-22", "2024-09-27"), ("2024-10-14", "2024-12-20")]),
-    (2025, [("2025-02-07", "2025-04-11"), ("2025-04-28", "2025-07-04"), ("2025-07-21", "2025-09-26"), ("2025-10-13", "2025-12-19")]),
-    (2026, [("2026-02-06", "2026-04-02"), ("2026-04-20", "2026-07-03"), ("2026-07-20", "2026-09-25"), ("2026-10-12", "2026-12-18")]),
+    (
+        2022,
+        [
+            ("2022-02-07", "2022-04-14"),
+            ("2022-05-02", "2022-07-08"),
+            ("2022-07-25", "2022-09-30"),
+            ("2022-10-17", "2022-12-20"),
+        ],
+    ),
+    (
+        2023,
+        [
+            ("2023-02-07", "2023-04-06"),
+            ("2023-04-24", "2023-06-30"),
+            ("2023-07-17", "2023-09-22"),
+            ("2023-10-09", "2023-12-20"),
+        ],
+    ),
+    (
+        2024,
+        [
+            ("2024-02-07", "2024-04-12"),
+            ("2024-04-29", "2024-07-05"),
+            ("2024-07-22", "2024-09-27"),
+            ("2024-10-14", "2024-12-20"),
+        ],
+    ),
+    (
+        2025,
+        [
+            ("2025-02-07", "2025-04-11"),
+            ("2025-04-28", "2025-07-04"),
+            ("2025-07-21", "2025-09-26"),
+            ("2025-10-13", "2025-12-19"),
+        ],
+    ),
+    (
+        2026,
+        [
+            ("2026-02-06", "2026-04-02"),
+            ("2026-04-20", "2026-07-03"),
+            ("2026-07-20", "2026-09-25"),
+            ("2026-10-12", "2026-12-18"),
+        ],
+    ),
 ];
 
 /// `TERMS.dates[year]`.
 pub fn term_dates(year: i64) -> Option<&'static [(&'static str, &'static str); 4]> {
-    TERM_DATES.iter().find(|(y, _)| *y as i64 == year).map(|(_, t)| t)
+    TERM_DATES
+        .iter()
+        .find(|(y, _)| *y as i64 == year)
+        .map(|(_, t)| t)
 }
 
 /// `TERMS` as the prototype's object.

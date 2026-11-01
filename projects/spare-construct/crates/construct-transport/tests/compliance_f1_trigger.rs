@@ -32,7 +32,11 @@ fn run_file(name: &str, at_least: usize) {
         } else {
             "other"
         };
-        check(id, &obj(vec![("r", r), ("saved", V::String(state.to_string()))]), ok_of(case));
+        check(
+            id,
+            &obj(vec![("r", r), ("saved", V::String(state.to_string()))]),
+            ok_of(case),
+        );
     }
 }
 

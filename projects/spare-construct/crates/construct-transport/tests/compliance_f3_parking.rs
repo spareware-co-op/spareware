@@ -26,22 +26,38 @@ fn parking_matches_the_prototype() {
                 check_ok(case, &got);
             }
             "showersFor" => check_ok(case, &V::Number(parking::showers_for(args.g("g").n()))),
-            "loadingFor" => check_ok(case, &V::Number(parking::loading_for(&args.g("grp").s(), args.g("g").n()))),
+            "loadingFor" => check_ok(
+                case,
+                &V::Number(parking::loading_for(&args.g("grp").s(), args.g("g").n())),
+            ),
             "accessibleFor" => check_ok(case, &V::Number(parking::accessible_for(args.g("n").n()))),
             "parking" => check_ok(case, &parking::parking(&project(case))),
             "parkingCSV" => check_text(case, &parking::parking_csv(&project(case))),
             "report" => {
                 let p = project(case);
                 let rid = case.g("report").s();
-                let got = if case.g("ctx").t() { parking::report(&rid, &p, Some(&Mock)) } else { parking::report(&rid, &p, None) };
-                check_text(case, &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")));
+                let got = if case.g("ctx").t() {
+                    parking::report(&rid, &p, Some(&Mock))
+                } else {
+                    parking::report(&rid, &p, None)
+                };
+                check_text(
+                    case,
+                    &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")),
+                );
             }
             "export" => {
                 let p = project(case);
                 let eid = case.g("export").s();
                 let mut got = V::object();
-                got.set("build", V::String(parking::export_build(&eid, &p).expect("export")));
-                got.set("enabled", V::Bool(parking::export_enabled(&eid, &p).expect("export")));
+                got.set(
+                    "build",
+                    V::String(parking::export_build(&eid, &p).expect("export")),
+                );
+                got.set(
+                    "enabled",
+                    V::Bool(parking::export_enabled(&eid, &p).expect("export")),
+                );
                 got.set("label", case.g("ok").g("label").clone());
                 check_ok(case, &got);
             }

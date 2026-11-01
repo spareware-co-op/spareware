@@ -8,10 +8,11 @@
 mod calibrate_support;
 mod support;
 
-use calibrate_support::{po, pv, pn, store_res};
+use calibrate_support::{pn, po, pv, store_res};
 use construct_transport::assign::assign;
 use construct_transport::calibrate::{
-    GEH_BANDS, MIN_SITES, RULES, base_view, eligible, js_log, matrix_change, ols, origin, report, stats_of, stored_res,
+    GEH_BANDS, MIN_SITES, RULES, base_view, eligible, js_log, matrix_change, ols, origin, report,
+    stats_of, stored_res,
 };
 use construct_transport::datahub::*;
 use construct_transport::jsnum::{JsNum, Maybe, Num, string_to_number};
@@ -56,10 +57,16 @@ fn rules_and_constants() {
         &c["jtCriteria"],
         "JT_CRITERIA",
     );
-    let labels: Map<String, Value> = REG_LABELS.iter().map(|(k, l)| (k.to_string(), json!(l))).collect();
+    let labels: Map<String, Value> = REG_LABELS
+        .iter()
+        .map(|(k, l)| (k.to_string(), json!(l)))
+        .collect();
     assert_close(&Value::Object(labels), &c["regLabels"], "REG_LABELS");
     assert_eq!(MIN_SITES, 10);
-    let bands: Vec<Value> = GEH_BANDS.iter().map(|&(lo, hi)| json!([pn(lo), pn(hi)])).collect();
+    let bands: Vec<Value> = GEH_BANDS
+        .iter()
+        .map(|&(lo, hi)| json!([pn(lo), pn(hi)]))
+        .collect();
     assert_eq!(bands.len(), 5);
 }
 
@@ -91,7 +98,11 @@ fn settings_with(sv: &Value) -> Settings {
     let mut d = s.data.get().cloned().expect("data settings");
     d.am_share = value_num(&sv["amShare"]);
     d.pm_share = value_num(&sv["pmShare"]);
-    d.match_radius = if sv.get("matchRadius").is_some() { value_num(&sv["matchRadius"]) } else { Maybe::Missing };
+    d.match_radius = if sv.get("matchRadius").is_some() {
+        value_num(&sv["matchRadius"])
+    } else {
+        Maybe::Missing
+    };
     s.data = Maybe::Set(d);
     s
 }
@@ -106,15 +117,37 @@ fn counts_as_period_volumes_methods_and_weights() {
         let id = cnt.id.clone();
         for per in ["AM", "PM"] {
             let want = &rec["periods"][per];
-            let got = period_vol(&cnt, per, &s)
-                .map_or(Value::Null, |p| json!({ "v": pn(p.v), "how": p.how, "basis": p.basis }));
-            assert_close(&got, &want["pv"], &format!("periodVol({id}, {per}) with {}", rec["settings"]));
-            assert_eq!(obs_method(&cnt, per, &s), want["method"].as_str().expect("method"), "obsMethod({id}, {per})");
-            assert_close(&pn(count_weight(&cnt, per, &s)), &want["weight"], &format!("countWeight({id}, {per})"));
+            let got = period_vol(&cnt, per, &s).map_or(
+                Value::Null,
+                |p| json!({ "v": pn(p.v), "how": p.how, "basis": p.basis }),
+            );
+            assert_close(
+                &got,
+                &want["pv"],
+                &format!("periodVol({id}, {per}) with {}", rec["settings"]),
+            );
+            assert_eq!(
+                obs_method(&cnt, per, &s),
+                want["method"].as_str().expect("method"),
+                "obsMethod({id}, {per})"
+            );
+            assert_close(
+                &pn(count_weight(&cnt, per, &s)),
+                &want["weight"],
+                &format!("countWeight({id}, {per})"),
+            );
             n += 1;
         }
-        assert_eq!(is_estimate(&cnt), rec["isEstimate"].as_bool().expect("isEstimate"), "isEstimate({id})");
-        assert_eq!(validation_ok(&cnt), rec["validationOK"].as_bool().expect("validationOK"), "validationOK({id})");
+        assert_eq!(
+            is_estimate(&cnt),
+            rec["isEstimate"].as_bool().expect("isEstimate"),
+            "isEstimate({id})"
+        );
+        assert_eq!(
+            validation_ok(&cnt),
+            rec["validationOK"].as_bool().expect("validationOK"),
+            "validationOK({id})"
+        );
     }
     assert!(n > 400, "{n}");
 }
@@ -141,20 +174,37 @@ fn counts_in_use_and_shadowed() {
             let want = rec["inUse"][&cnt.id].as_bool().expect("inUse");
             assert_eq!(d.in_use(cnt), want, "inUse({}) with {}", cnt.id, rec["use"]);
             let want = rec["shadowed"][&cnt.id].as_bool().expect("shadowed");
-            assert_eq!(d.shadowed(cnt), want, "shadowed({}) with {}", cnt.id, rec["use"]);
+            assert_eq!(
+                d.shadowed(cnt),
+                want,
+                "shadowed({}) with {}",
+                cnt.id,
+                rec["use"]
+            );
         }
     }
 }
 
 fn xy(v: &Value) -> (Vec<f64>, Vec<f64>) {
-    let f = |k: &str| v[k].as_array().expect(k).iter().map(num_of).collect::<Vec<f64>>();
+    let f = |k: &str| {
+        v[k].as_array()
+            .expect(k)
+            .iter()
+            .map(num_of)
+            .collect::<Vec<f64>>()
+    };
     (f("x"), f("y"))
 }
 
 #[test]
 fn regressions_and_fits() {
     let c = cases();
-    for (k, rec) in c["regression"].as_array().expect("regression").iter().enumerate() {
+    for (k, rec) in c["regression"]
+        .as_array()
+        .expect("regression")
+        .iter()
+        .enumerate()
+    {
         let (x, y) = xy(rec);
         let r = regression(&x, &y);
         let got = json!({ "n": r.n, "b0": po(r.b0), "r2OriginCentred": po(r.r2_origin_centred), "r2OriginExcel": po(r.r2_origin_excel),
@@ -163,8 +213,16 @@ fn regressions_and_fits() {
     }
     for (k, rec) in c["origin"].as_array().expect("origin").iter().enumerate() {
         let (x, y) = xy(rec);
-        assert_close(&serde_json::to_value(origin(&x, &y)).expect("origin"), &rec["origin"], &format!("origin[{k}]"));
-        assert_close(&serde_json::to_value(ols(&x, &y)).expect("ols"), &rec["ols"], &format!("ols[{k}]"));
+        assert_close(
+            &serde_json::to_value(origin(&x, &y)).expect("origin"),
+            &rec["origin"],
+            &format!("origin[{k}]"),
+        );
+        assert_close(
+            &serde_json::to_value(ols(&x, &y)).expect("ols"),
+            &rec["ols"],
+            &format!("ols[{k}]"),
+        );
     }
     for (k, rec) in c["stats"].as_array().expect("stats").iter().enumerate() {
         let rows: Vec<(f64, f64, f64)> = rec["rows"]
@@ -176,7 +234,11 @@ fn regressions_and_fits() {
                 (o, m, geh(m, o))
             })
             .collect();
-        assert_close(&serde_json::to_value(stats_of(&rows)).expect("stats"), &rec["out"], &format!("stats[{k}]"));
+        assert_close(
+            &serde_json::to_value(stats_of(&rows)).expect("stats"),
+            &rec["out"],
+            &format!("stats[{k}]"),
+        );
     }
 }
 
@@ -193,11 +255,27 @@ fn journey_time_checks() {
 #[test]
 fn matrix_changes() {
     let c = cases();
-    for (k, rec) in c["matrixChange"].as_array().expect("matrixChange").iter().enumerate() {
+    for (k, rec) in c["matrixChange"]
+        .as_array()
+        .expect("matrixChange")
+        .iter()
+        .enumerate()
+    {
         let z = rec["Z"].as_u64().expect("Z") as usize;
-        let f = |key: &str| rec[key].as_array().expect(key).iter().map(num_of).collect::<Vec<f64>>();
+        let f = |key: &str| {
+            rec[key]
+                .as_array()
+                .expect(key)
+                .iter()
+                .map(num_of)
+                .collect::<Vec<f64>>()
+        };
         let mc = matrix_change(z, &f("prior"), &f("est"));
-        assert_close(&serde_json::to_value(mc).expect("mc"), &rec["out"], &format!("matrixChange[{k}]"));
+        assert_close(
+            &serde_json::to_value(mc).expect("mc"),
+            &rec["out"],
+            &format!("matrixChange[{k}]"),
+        );
     }
 }
 
@@ -233,10 +311,19 @@ fn math_log_bit_for_bit() {
         let got = js_log(x);
         let same = (got.is_nan() && want.is_nan()) || got.to_bits() == want.to_bits();
         if !same {
-            bad.push(format!("log({x:e}): got {got:e} ({:#x}), want {want:e} ({:#x})", got.to_bits(), want.to_bits()));
+            bad.push(format!(
+                "log({x:e}): got {got:e} ({:#x}), want {want:e} ({:#x})",
+                got.to_bits(),
+                want.to_bits()
+            ));
         }
     }
-    assert!(bad.is_empty(), "{} differ, first: {:?}", bad.len(), &bad[..bad.len().min(5)]);
+    assert!(
+        bad.is_empty(),
+        "{} differ, first: {:?}",
+        bad.len(),
+        &bad[..bad.len().min(5)]
+    );
 }
 
 fn match_out(m: &Matches) -> Value {
@@ -268,7 +355,10 @@ fn cal_out(c: Option<CalibrationSummary>) -> Value {
         }
         m.insert("slope".into(), po(s.b0));
         m.insert("r2Ols".into(), po(s.r2));
-        let labels: Map<String, Value> = REG_LABELS.iter().map(|(k, l)| (k.to_string(), json!(l))).collect();
+        let labels: Map<String, Value> = REG_LABELS
+            .iter()
+            .map(|(k, l)| (k.to_string(), json!(l)))
+            .collect();
         m.insert("labels".into(), Value::Object(labels));
     }
     Value::Object(m)
@@ -291,13 +381,21 @@ fn matches_calibration_base_views_and_reports() {
         let p = Project::from_json(rec["projectText"].as_str().expect("text")).expect("project");
         let sc = &p.scenarios[0];
         let data = Data::read(&p);
-        assert_close(&match_out(&matches(sc, &p.settings, &data)), &rec["matches"], &format!("{name}.matches"));
+        assert_close(
+            &match_out(&matches(sc, &p.settings, &data)),
+            &rec["matches"],
+            &format!("{name}.matches"),
+        );
         for (key, r) in [("matchesR15", 15.0), ("matchesR120", 120.0)] {
             let mut s = p.settings.clone();
             let mut d = s.data.get().cloned().expect("data");
             d.match_radius = Num::number(r);
             s.data = Maybe::Set(d);
-            assert_close(&match_out(&matches(sc, &s, &data)), &rec[key], &format!("{name}.{key}"));
+            assert_close(
+                &match_out(&matches(sc, &s, &data)),
+                &rec[key],
+                &format!("{name}.{key}"),
+            );
         }
         {
             let mut q = p.clone();
@@ -306,15 +404,32 @@ fn matches_calibration_base_views_and_reports() {
             sc2.links.get_mut(&ids[1]).expect("link").status = Maybe::Set("closed".into());
             sc2.links.get_mut(&ids[2]).expect("link").lanes_ba = Num::number(0.0);
             sc2.links.get_mut(&ids[3]).expect("link").cls = Maybe::Set("ramp".into());
-            assert_close(&match_out(&matches(&q.scenarios[0], &q.settings, &data)), &rec["matchesEdited"], &format!("{name}.matchesEdited"));
+            assert_close(
+                &match_out(&matches(&q.scenarios[0], &q.settings, &data)),
+                &rec["matchesEdited"],
+                &format!("{name}.matchesEdited"),
+            );
         }
         // the model against the counts
         let mut q = p.clone();
         for period in ["AM", "PM"] {
-            let res = assign(&q, &q.scenarios[0], &q.settings, &AssignOpts { period: Some(period.into()), ..AssignOpts::default() }, None);
+            let res = assign(
+                &q,
+                &q.scenarios[0],
+                &q.settings,
+                &AssignOpts {
+                    period: Some(period.into()),
+                    ..AssignOpts::default()
+                },
+                None,
+            );
             store_res(&mut q.scenarios[0], period, &res);
             let cs = calibration(&q.scenarios[0], Some(&res), period, &q.settings, &data);
-            assert_close(&cal_out(cs), &rec["calibration"][period], &format!("{name}.calibration.{period}"));
+            assert_close(
+                &cal_out(cs),
+                &rec["calibration"][period],
+                &format!("{name}.calibration.{period}"),
+            );
         }
         // base views
         for bv in rec["baseViews"].as_array().expect("baseViews") {
@@ -328,7 +443,13 @@ fn matches_calibration_base_views_and_reports() {
                         sc.links.get_mut(&id).expect("link").status = Maybe::Set("proposed".into());
                     }
                     "late-zone" | "zone-year-ok" => {
-                        let id = sc.zones.values().find(|z| !z.kind.is("gateway")).expect("zone").id.clone();
+                        let id = sc
+                            .zones
+                            .values()
+                            .find(|z| !z.kind.is("gateway"))
+                            .expect("zone")
+                            .id
+                            .clone();
                         let z = sc.zones.get_mut(&id).expect("zone");
                         z.year = Num::number(if bn == "late-zone" { 2030.0 } else { 2020.0 });
                         z.existing = Num::from(true);
@@ -359,34 +480,71 @@ fn matches_calibration_base_views_and_reports() {
         }
         // reports in each state
         let none = report(&p, &p.scenarios[0], "AM", None);
-        assert_close(&serde_json::to_value(&none).expect("report"), &rec["reportNoRes"], &format!("{name}.reportNoRes"));
-        let mut r = assign(&p, &p.scenarios[0], &p.settings, &AssignOpts { period: Some("AM".into()), ..AssignOpts::default() }, None);
+        assert_close(
+            &serde_json::to_value(&none).expect("report"),
+            &rec["reportNoRes"],
+            &format!("{name}.reportNoRes"),
+        );
+        let mut r = assign(
+            &p,
+            &p.scenarios[0],
+            &p.settings,
+            &AssignOpts {
+                period: Some("AM".into()),
+                ..AssignOpts::default()
+            },
+            None,
+        );
         let run = report(&p, &p.scenarios[0], "AM", Some(&r));
-        assert_close(&serde_json::to_value(&run).expect("report"), &rec["reportRun"], &format!("{name}.reportRun"));
+        assert_close(
+            &serde_json::to_value(&run).expect("report"),
+            &rec["reportRun"],
+            &format!("{name}.reportRun"),
+        );
         let user_counts: Vec<Value> = match &p.data.get().expect("data").extra["counts"] {
             Value::Array(a) => a.iter().filter(|x| x["src"] == "user").cloned().collect(),
             _ => vec![],
         };
         let few = with_counts(&p, user_counts.iter().take(5).cloned().collect());
         let rf = report(&few, &few.scenarios[0], "AM", Some(&r));
-        assert_close(&serde_json::to_value(&rf).expect("report"), &rec["reportFew"], &format!("{name}.reportFew"));
+        assert_close(
+            &serde_json::to_value(&rf).expect("report"),
+            &rec["reportFew"],
+            &format!("{name}.reportFew"),
+        );
         r.stale = true;
         r.converged = false;
         r.conv_note = "Stopped at 20 iterations (gap 0.5%).".to_string();
         let rs = report(&few, &few.scenarios[0], "AM", Some(&r));
-        assert_close(&serde_json::to_value(&rs).expect("report"), &rec["reportStale"], &format!("{name}.reportStale"));
+        assert_close(
+            &serde_json::to_value(&rs).expect("report"),
+            &rec["reportStale"],
+            &format!("{name}.reportStale"),
+        );
         let one = with_counts(&p, user_counts.iter().take(5).take(1).cloned().collect());
         let ro = report(&one, &one.scenarios[0], "AM", Some(&r));
-        assert_close(&serde_json::to_value(&ro).expect("report"), &rec["reportOne"], &format!("{name}.reportOne"));
+        assert_close(
+            &serde_json::to_value(&ro).expect("report"),
+            &rec["reportOne"],
+            &format!("{name}.reportOne"),
+        );
         r.stale = false;
         r.converged = true;
         r.conv_note = String::new();
         let mut tb = one.clone();
         tb.settings.base_year = Maybe::Set(JsNum::Text("2026".into()));
         let rt = report(&tb, &tb.scenarios[0], "AM", Some(&r));
-        assert_close(&serde_json::to_value(&rt).expect("report"), &rec["reportTextBase"], &format!("{name}.reportTextBase"));
+        assert_close(
+            &serde_json::to_value(&rt).expect("report"),
+            &rec["reportTextBase"],
+            &format!("{name}.reportTextBase"),
+        );
         n_reports += 6;
-        let _ = (stored_res(&p.scenarios[0], "AM"), pv(&[]), string_to_number("1"));
+        let _ = (
+            stored_res(&p.scenarios[0], "AM"),
+            pv(&[]),
+            string_to_number("1"),
+        );
     }
     assert_eq!(n_reports, 18);
 }
@@ -400,15 +558,39 @@ fn geh_bands_and_the_count_needed() {
     assert_eq!(band_rows.len(), 357);
     for (g, b) in geh_rows.iter().zip(band_rows) {
         let (m, obs) = (num_of(&g[0]), num_of(&g[1]));
-        assert_close(&json!(construct_transport::datahub::geh(m, obs)), &g[2], &format!("geh({m}, {obs})"));
-        assert_eq!(construct_transport::calibrate::tmdg_band(m, obs), b[2].as_bool().expect("bool"), "tmdgBand({m}, {obs})");
-        assert_eq!(construct_transport::calibrate::tag_band(m, obs), b[3].as_bool().expect("bool"), "tagBand({m}, {obs})");
+        assert_close(
+            &json!(construct_transport::datahub::geh(m, obs)),
+            &g[2],
+            &format!("geh({m}, {obs})"),
+        );
+        assert_eq!(
+            construct_transport::calibrate::tmdg_band(m, obs),
+            b[2].as_bool().expect("bool"),
+            "tmdgBand({m}, {obs})"
+        );
+        assert_eq!(
+            construct_transport::calibrate::tag_band(m, obs),
+            b[3].as_bool().expect("bool"),
+            "tagBand({m}, {obs})"
+        );
     }
     for g in c["gehOdd"].as_array().expect("gehOdd") {
         let (m, obs) = (num_of(&g[0]), num_of(&g[1]));
-        assert_close(&json!(pn(construct_transport::datahub::geh(m, obs))), &g[2], &format!("geh({m}, {obs})"));
-        assert_eq!(construct_transport::calibrate::tmdg_band(m, obs), g[3].as_bool().expect("bool"), "tmdgBand({m}, {obs})");
-        assert_eq!(construct_transport::calibrate::tag_band(m, obs), g[4].as_bool().expect("bool"), "tagBand({m}, {obs})");
+        assert_close(
+            &json!(pn(construct_transport::datahub::geh(m, obs))),
+            &g[2],
+            &format!("geh({m}, {obs})"),
+        );
+        assert_eq!(
+            construct_transport::calibrate::tmdg_band(m, obs),
+            g[3].as_bool().expect("bool"),
+            "tmdgBand({m}, {obs})"
+        );
+        assert_eq!(
+            construct_transport::calibrate::tag_band(m, obs),
+            g[4].as_bool().expect("bool"),
+            "tagBand({m}, {obs})"
+        );
     }
     for n in c["need"].as_array().expect("need") {
         let got = construct_transport::calibrate::need(num_of(&n[0]), num_of(&n[1]) as usize);

@@ -19,11 +19,16 @@ fn sensitivity_table_from_the_real_assignment() {
         let (p, rec) = project_and_record(name);
         let runs = load_json(&format!("expected/sensitivity-runs-{name}.json"));
         let calls = runs["calls"].as_array().expect("recorded runs");
-        let sc = p.scenario(runs["scenario"].as_str().expect("scenario id")).expect("scenario");
+        let sc = p
+            .scenario(runs["scenario"].as_str().expect("scenario id"))
+            .expect("scenario");
         let mut i = 0usize;
         let table = sensitivity(&p, sc, SensOpts::default(), |s1, s, ao| {
             let call = &calls[i];
-            let path = format!("{name}.run[{i}] {} {} {}", call["label"], call["period"], call["which"]);
+            let path = format!(
+                "{name}.run[{i}] {} {} {}",
+                call["label"], call["period"], call["which"]
+            );
             let res = assign(&p, s1, s, ao, None);
             assert_close(&json(&res), &call["res"], &format!("{path}.res"));
             i += 1;
@@ -32,7 +37,11 @@ fn sensitivity_table_from_the_real_assignment() {
         .unwrap_or_else(|e| panic!("{name}: {}", e.error));
         assert_eq!(i, calls.len(), "{name}: runs made");
         total_runs += i;
-        assert_close(&json(&table), &rec.sensitivity, &format!("{name}.sensitivity"));
+        assert_close(
+            &json(&table),
+            &rec.sensitivity,
+            &format!("{name}.sensitivity"),
+        );
     }
     assert_eq!(total_runs, 36, "runs made");
 }

@@ -18,12 +18,20 @@ fn u16_len(s: &str) -> usize {
 fn u16_slice(s: &str, a: usize, b: usize) -> String {
     let u: Vec<u16> = s.encode_utf16().collect();
     let (a, b) = (a.min(u.len()), b.min(u.len()));
-    if a >= b { String::new() } else { String::from_utf16_lossy(&u[a..b]) }
+    if a >= b {
+        String::new()
+    } else {
+        String::from_utf16_lossy(&u[a..b])
+    }
 }
 
 /// `modelValidated(P)`: the model is validated for the AM or PM peak (false when the status cannot be read).
 fn model_validated(p: &V) -> bool {
-    let run = || ["AM", "PM"].iter().any(|per| engine::model_status(p, per).g("status").eq_s("validated"));
+    let run = || {
+        ["AM", "PM"]
+            .iter()
+            .any(|per| engine::model_status(p, per).g("status").eq_s("validated"))
+    };
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).unwrap_or(false)
 }
 
@@ -31,9 +39,16 @@ fn model_validated(p: &V) -> bool {
 fn rule_applies(id: &str, c: &V, p: &V) -> bool {
     let kind = c.g("kind");
     match id {
-        "scope-1a" => (kind.eq_s("rc") || c.g("pathway").eq_s("ftaa-consent")) && !c.g("pathway").eq_s("rc-subdivision") && c.g("side").eq_s("transition"),
+        "scope-1a" => {
+            (kind.eq_s("rc") || c.g("pathway").eq_s("ftaa-consent"))
+                && !c.g("pathway").eq_s("rc-subdivision")
+                && c.g("side").eq_s("transition")
+        }
         "scope-95a9" => c.g("post").t() && !kind.eq_s("pc"),
-        "scope-1c" => (kind.eq_s("rc") || kind.eq_s("nor") || kind.eq_s("ftaa")) && (c.g("side").eq_s("transition") || !c.g("lodgement").t()),
+        "scope-1c" => {
+            (kind.eq_s("rc") || kind.eq_s("nor") || kind.eq_s("ftaa"))
+                && (c.g("side").eq_s("transition") || !c.g("lodgement").t())
+        }
         "scope-rca" => c.g("asAt").s().as_str() >= xdata("STD.dates.rca").s().as_str(),
         "scope-mbcm" => !(c.g("mbcmFull").t() && model_validated(p)),
         // scope-cl7, scope-e27-ita, scope-tmdg and scope-rasf apply to every project
@@ -47,7 +62,12 @@ fn rule_level(r: &V, c: &V) -> String {
         return r.g("level").s();
     }
     if r.g("id").eq_s("scope-1c") {
-        return if c.g("side").eq_s("transition") { "block" } else { "warn" }.to_string();
+        return if c.g("side").eq_s("transition") {
+            "block"
+        } else {
+            "warn"
+        }
+        .to_string();
     }
     "warn".to_string()
 }
@@ -87,7 +107,12 @@ pub fn lint_sources(p: &V) -> Vec<V> {
 
 /// `sentences(t)`: the text split after a full stop, exclamation or question mark and at line breaks, each trimmed, blanks left out.
 pub fn sentences(t: &V) -> Vec<String> {
-    rx(r"(?<=[.!?])\s+|\n+", "").split(&t.s()).into_iter().map(|s| trim(&s).to_string()).filter(|s| !s.is_empty()).collect()
+    rx(r"(?<=[.!?])\s+|\n+", "")
+        .split(&t.s())
+        .into_iter()
+        .map(|s| trim(&s).to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 /// `lint(P, text)`: the findings of the statutory scope and wording linter for the project's texts (or only `text`): `{ findings, blocking, applies, context }`.
@@ -98,7 +123,11 @@ pub fn lint(p: &V, text: Option<&str>) -> V {
     let lx = cx.g("lint");
     let (ign, ovr) = (lx.g("ignore"), lx.g("override"));
     let rules = xdata("LINT");
-    let applies: Vec<&V> = rules.items().iter().filter(|r| rule_applies(&r.g("id").s(), &c, p)).collect();
+    let applies: Vec<&V> = rules
+        .items()
+        .iter()
+        .filter(|r| rule_applies(&r.g("id").s(), &c, p))
+        .collect();
     let srcs: Vec<V> = match text {
         Some(t) => vec![jobj! { "where" => "Text", "text" => t }],
         None => lint_sources(p),
@@ -107,8 +136,14 @@ pub fn lint(p: &V, text: Option<&str>) -> V {
     for s in &srcs {
         for sen in sentences(s.g("text")) {
             for r in &applies {
-                let res: Vec<&V> = if r.g("re").is_arr() { r.g("re").items().iter().collect() } else { vec![r.g("re")] };
-                let Some(m) = res.iter().find_map(|x| re_of(x).exec(&sen)) else { continue };
+                let res: Vec<&V> = if r.g("re").is_arr() {
+                    r.g("re").items().iter().collect()
+                } else {
+                    vec![r.g("re")]
+                };
+                let Some(m) = res.iter().find_map(|x| re_of(x).exec(&sen)) else {
+                    continue;
+                };
                 if r.g("also").t() && !re_of(r.g("also")).test(&sen) {
                     continue;
                 }
@@ -121,9 +156,24 @@ pub fn lint(p: &V, text: Option<&str>) -> V {
                     continue;
                 }
                 let reason = ovr.g(&key).g("reason");
-                let released = level == "block" && ovr.g(&key).t() && !trim(&if reason.t() { reason.s() } else { String::new() }).is_empty();
-                let sentence = if u16_len(&sen) > 240 { format!("{}\u{2026}", u16_slice(&sen, 0, 237)) } else { sen.clone() };
-                let suggest = if level == "block" || !r.g("warnText").t() { r.g("suggest") } else { r.g("warnText") };
+                let released = level == "block"
+                    && ovr.g(&key).t()
+                    && !trim(&if reason.t() {
+                        reason.s()
+                    } else {
+                        String::new()
+                    })
+                    .is_empty();
+                let sentence = if u16_len(&sen) > 240 {
+                    format!("{}\u{2026}", u16_slice(&sen, 0, 237))
+                } else {
+                    sen.clone()
+                };
+                let suggest = if level == "block" || !r.g("warnText").t() {
+                    r.g("suggest")
+                } else {
+                    r.g("warnText")
+                };
                 let overridden = if released {
                     let o = ovr.g(&key);
                     jobj! { "reason" => o.g("reason").s(), "at" => if o.g("at").t() { o.g("at").clone() } else { V::String(String::new()) } }
@@ -137,7 +187,11 @@ pub fn lint(p: &V, text: Option<&str>) -> V {
             }
         }
     }
-    let blocking: Vec<V> = findings.iter().filter(|f| f.g("level").eq_s("block") && !f.g("overridden").t()).cloned().collect();
+    let blocking: Vec<V> = findings
+        .iter()
+        .filter(|f| f.g("level").eq_s("block") && !f.g("overridden").t())
+        .cloned()
+        .collect();
     jobj! { "findings" => findings, "blocking" => blocking, "applies" => applies.iter().map(|r| r.g("id").clone()).collect::<Vec<V>>(), "context" => c }
 }
 
@@ -148,7 +202,10 @@ pub fn override_lint(p: &mut V, key: &str, reason: &str) -> V {
     let lx = obj_at(cx, "lint");
     let ov = obj_at(lx, "override");
     if !trim(reason).is_empty() {
-        ov.set(key, jobj! { "reason" => trim(reason), "at" => ctx::today() });
+        ov.set(
+            key,
+            jobj! { "reason" => trim(reason), "at" => ctx::today() },
+        );
     } else {
         ov.remove(key);
     }
@@ -160,17 +217,40 @@ pub fn override_lint(p: &mut V, key: &str, reason: &str) -> V {
 pub fn export_block(p: &V) -> Option<String> {
     let l = lint(p, None);
     let f = l.g("blocking").items().first()?;
-    Some(format!("Export blocked by the scope linter: {} (\"{}\" in {}). {}", f.g("rule").s(), f.g("match").s(), f.g("where").s(), f.g("suggest").s()))
+    Some(format!(
+        "Export blocked by the scope linter: {} (\"{}\" in {}). {}",
+        f.g("rule").s(),
+        f.g("match").s(),
+        f.g("where").s(),
+        f.g("suggest").s()
+    ))
 }
 
 /// `lintCSV(P)`: the findings as a CSV with the version stamp and disclaimers in footer rows.
 pub fn lint_csv(p: &V) -> String {
     let l = lint(p, None);
     let s = |x: &str| V::String(x.to_string());
-    let mut rows: Vec<Vec<V>> = vec![["Rule", "Level", "Where", "Text", "Source", "Suggested change", "Author override"].iter().map(|h| s(h)).collect()];
+    let mut rows: Vec<Vec<V>> = vec![
+        [
+            "Rule",
+            "Level",
+            "Where",
+            "Text",
+            "Source",
+            "Suggested change",
+            "Author override",
+        ]
+        .iter()
+        .map(|h| s(h))
+        .collect(),
+    ];
     for f in l.g("findings").items() {
         let level = if f.g("level").eq_s("block") {
-            if f.g("overridden").t() { "Blocks export (overridden)" } else { "Blocks export" }
+            if f.g("overridden").t() {
+                "Blocks export (overridden)"
+            } else {
+                "Blocks export"
+            }
         } else {
             "Check"
         };
@@ -182,7 +262,11 @@ pub fn lint_csv(p: &V) -> String {
             f.g("sentence").clone(),
             f.g("source").clone(),
             f.g("suggest").clone(),
-            if ov.t() { s(&format!("{} ({})", ov.g("reason").s(), ov.g("at").s())) } else { s("") },
+            if ov.t() {
+                s(&format!("{} ({})", ov.g("reason").s(), ov.g("at").s()))
+            } else {
+                s("")
+            },
         ]);
     }
     stamped(&csv(&rows), p, None)

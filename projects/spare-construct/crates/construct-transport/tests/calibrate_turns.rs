@@ -6,7 +6,9 @@
 mod calibrate_support;
 mod support;
 
-use construct_transport::calibrate::{LEGS, TurnSite, calib_cfg, class_of, furness, iso_date, parse_turn_csv, peaks, to_min};
+use construct_transport::calibrate::{
+    LEGS, TurnSite, calib_cfg, class_of, furness, iso_date, parse_turn_csv, peaks, to_min,
+};
 use construct_transport::edit::IdSource;
 use construct_transport::jsnum::number_to_js_string;
 use serde_json::{Value, json};
@@ -68,7 +70,11 @@ fn dates() {
 fn classes() {
     for c in cases()["classOf"].as_array().expect("classOf") {
         let got = class_of(&text_of(&c["v"]));
-        assert_close(&got.map_or(Value::Null, |d| json!(d)), &c["out"], &format!("classOf({})", c["v"]));
+        assert_close(
+            &got.map_or(Value::Null, |d| json!(d)),
+            &c["out"],
+            &format!("classOf({})", c["v"]),
+        );
     }
     assert_close(&json!(LEGS), &cases()["legBearings"], "the compass legs");
 }
@@ -81,7 +87,10 @@ fn files() {
     assert_eq!(list.len(), 34, "file cases");
     for rec in list {
         let name = rec["name"].as_str().expect("name");
-        let mut ids = Ids { n: 0, made: Vec::new() };
+        let mut ids = Ids {
+            n: 0,
+            made: Vec::new(),
+        };
         let r = parse_turn_csv(rec["text"].as_str().expect("text"), "f.csv", &cfg, &mut ids);
         match (&r, rec.get("error")) {
             (Err(e), Some(x)) => assert_close(&json!(e), x, &format!("{name}: error")),
@@ -111,8 +120,16 @@ fn peak_hours() {
             .map(|(p, w)| (p.clone(), [text_of(&w[0]), text_of(&w[1])]))
             .collect();
         peaks(&mut site, &windows);
-        let got = if site.peak.is_set() { serde_json::to_value(&site.peak).expect("peak") } else { Value::Null };
-        assert_close(&got, rec.get("peak").unwrap_or(&Value::Null), &format!("peaks case {k} {}", rec["windows"]));
+        let got = if site.peak.is_set() {
+            serde_json::to_value(&site.peak).expect("peak")
+        } else {
+            Value::Null
+        };
+        assert_close(
+            &got,
+            rec.get("peak").unwrap_or(&Value::Null),
+            &format!("peaks case {k} {}", rec["windows"]),
+        );
     }
 }
 
@@ -121,11 +138,28 @@ fn furness_turns() {
     let all = cases();
     let list = all["furness"].as_array().expect("furness");
     assert_eq!(list.len(), 10);
-    let nums = |v: &Value| -> Vec<f64> { v.as_array().expect("array").iter().map(|x| x.as_f64().unwrap_or(f64::NAN)).collect() };
+    let nums = |v: &Value| -> Vec<f64> {
+        v.as_array()
+            .expect("array")
+            .iter()
+            .map(|x| x.as_f64().unwrap_or(f64::NAN))
+            .collect()
+    };
     for (k, rec) in list.iter().enumerate() {
-        let seed: Vec<Vec<f64>> = rec["seed"].as_array().expect("seed").iter().map(nums).collect();
-        let tol = rec["opts"].get("tol").and_then(Value::as_f64).unwrap_or(0.001);
-        let max_it = rec["opts"].get("maxIt").and_then(Value::as_u64).unwrap_or(50) as usize;
+        let seed: Vec<Vec<f64>> = rec["seed"]
+            .as_array()
+            .expect("seed")
+            .iter()
+            .map(nums)
+            .collect();
+        let tol = rec["opts"]
+            .get("tol")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.001);
+        let max_it = rec["opts"]
+            .get("maxIt")
+            .and_then(Value::as_u64)
+            .unwrap_or(50) as usize;
         let r = furness(&nums(&rec["ins"]), &nums(&rec["outs"]), &seed, tol, max_it);
         let mut want = rec["out"].clone();
         want.as_object_mut().expect("out").remove("tag");

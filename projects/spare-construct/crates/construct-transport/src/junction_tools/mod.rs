@@ -50,7 +50,8 @@ pub const LABEL: &str = crate::junction::JUNCTION_LABEL;
 /// The AT Integrated Transport Assessment Guidelines link the storage ratio cites.
 pub const ITA_URL: &str = "https://at.govt.nz/media/ezemv4cz/auckland-transport-integrated-transport-assessment-guidelines-2025-vestion-2.pdf";
 /// The TTOC-06 traffic signals modelling guidelines link.
-pub const TTOC_URL: &str = "https://www.qldc.govt.nz/media/lekcx4iu/ttoc-06-traffic-signals-modelling-guidelines.pdf";
+pub const TTOC_URL: &str =
+    "https://www.qldc.govt.nz/media/lekcx4iu/ttoc-06-traffic-signals-modelling-guidelines.pdf";
 /// The SIDRA API reference link.
 pub const SIDRA_API: &str = "https://api.sidrasolutions.com/latest/llms-full.txt";
 
@@ -267,7 +268,9 @@ impl<'a> Tools<'a> {
     }
     /// Every scenario with its results (`P.scenarios`).
     pub fn scs(&self) -> Vec<Sc<'a>> {
-        (0..self.project.scenarios.len()).map(|i| self.sc(i)).collect()
+        (0..self.project.scenarios.len())
+            .map(|i| self.sc(i))
+            .collect()
     }
     /// `suppText(P)`: the E27 tier 1 marker the compliance feature gives, or an empty text.
     pub fn supp_text(&self) -> String {

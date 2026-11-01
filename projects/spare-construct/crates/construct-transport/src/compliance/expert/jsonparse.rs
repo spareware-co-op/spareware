@@ -43,7 +43,10 @@ const MIN_FOR_CONTEXT: usize = CONTEXT * 2 + 1;
 
 /// `JSON.parse(text)`: the value, or the message V8's error carries.
 pub fn parse(text: &str) -> Result<V, String> {
-    let mut p = Parser { src: text.encode_utf16().collect(), pos: 0 };
+    let mut p = Parser {
+        src: text.encode_utf16().collect(),
+        pos: 0,
+    };
     let v = p.value()?;
     p.skip_ws();
     if p.peek() != Tok::Eos {
@@ -98,7 +101,10 @@ impl Parser {
     }
 
     fn skip_ws(&mut self) {
-        while matches!(self.cur(), Some(0x20) | Some(0x09) | Some(0x0a) | Some(0x0d)) {
+        while matches!(
+            self.cur(),
+            Some(0x20) | Some(0x09) | Some(0x0a) | Some(0x0d)
+        ) {
             self.pos += 1;
         }
     }
@@ -123,13 +129,19 @@ impl Parser {
     /// `<what> in JSON at position P (line L column C)`.
     fn at(&self, what: &str) -> String {
         let (line, col) = self.line_col();
-        format!("{what} in JSON at position {} (line {line} column {col})", self.pos)
+        format!(
+            "{what} in JSON at position {} (line {line} column {col})",
+            self.pos
+        )
     }
 
     /// `Unexpected non-whitespace character after JSON at position P (line L column C)`.
     fn after_json(&self) -> String {
         let (line, col) = self.line_col();
-        format!("Unexpected non-whitespace character after JSON at position {} (line {line} column {col})", self.pos)
+        format!(
+            "Unexpected non-whitespace character after JSON at position {} (line {line} column {col})",
+            self.pos
+        )
     }
 
     /// The message for an unexpected token at the cursor.
@@ -148,11 +160,20 @@ impl Parser {
                 if n < MIN_FOR_CONTEXT {
                     format!("Unexpected token '{ch}', \"{whole}\" is not valid JSON")
                 } else if self.pos < CONTEXT {
-                    format!("Unexpected token '{ch}', \"{}\"... is not valid JSON", text_of(&self.src[..self.pos + CONTEXT]))
+                    format!(
+                        "Unexpected token '{ch}', \"{}\"... is not valid JSON",
+                        text_of(&self.src[..self.pos + CONTEXT])
+                    )
                 } else if self.pos < n - CONTEXT {
-                    format!("Unexpected token '{ch}', ...\"{}\"... is not valid JSON", text_of(&self.src[self.pos - CONTEXT..self.pos + CONTEXT]))
+                    format!(
+                        "Unexpected token '{ch}', ...\"{}\"... is not valid JSON",
+                        text_of(&self.src[self.pos - CONTEXT..self.pos + CONTEXT])
+                    )
                 } else {
-                    format!("Unexpected token '{ch}', ...\"{}\" is not valid JSON", text_of(&self.src[self.pos - CONTEXT..]))
+                    format!(
+                        "Unexpected token '{ch}', ...\"{}\" is not valid JSON",
+                        text_of(&self.src[self.pos - CONTEXT..])
+                    )
                 }
             }
         }
@@ -171,7 +192,11 @@ impl Parser {
 
     /// Skips white space and takes the token, or fails with the message.
     fn expect(&mut self, tok: Tok, what: &str) -> Result<(), String> {
-        if self.check(tok) { Ok(()) } else { Err(self.at(what)) }
+        if self.check(tok) {
+            Ok(())
+        } else {
+            Err(self.at(what))
+        }
     }
 
     /// A property name and the colon after it.
@@ -190,7 +215,9 @@ impl Parser {
     fn string(&mut self) -> Result<String, String> {
         let mut buf: Vec<u16> = Vec::new();
         loop {
-            let Some(c) = self.cur() else { return Err(self.at("Unterminated string")) };
+            let Some(c) = self.cur() else {
+                return Err(self.at("Unterminated string"));
+            };
             match c {
                 0x22 => {
                     self.pos += 1;
@@ -198,7 +225,9 @@ impl Parser {
                 }
                 0x5c => {
                     self.pos += 1;
-                    let Some(e) = self.cur() else { return Err(self.unexpected(Tok::Eos)) };
+                    let Some(e) = self.cur() else {
+                        return Err(self.unexpected(Tok::Eos));
+                    };
                     if e > 0xff {
                         return Err(self.unexpected(Tok::Illegal));
                     }
@@ -213,7 +242,9 @@ impl Parser {
                             let mut v: u16 = 0;
                             for _ in 0..4 {
                                 self.pos += 1;
-                                let Some(h) = hex_value(self.cur()) else { return Err(self.at("Bad Unicode escape")) };
+                                let Some(h) = hex_value(self.cur()) else {
+                                    return Err(self.at("Bad Unicode escape"));
+                                };
                                 v = v * 16 + h;
                             }
                             buf.push(v);
@@ -312,7 +343,10 @@ impl Parser {
                         V::object()
                     } else {
                         let key = self.key("Expected property name or '}'")?;
-                        stack.push(Frame::Obj { map: V::object(), key });
+                        stack.push(Frame::Obj {
+                            map: V::object(),
+                            key,
+                        });
                         continue;
                     }
                 }
@@ -337,11 +371,15 @@ impl Parser {
                     self.literal("null")?;
                     V::Null
                 }
-                Tok::Colon | Tok::Comma | Tok::Illegal | Tok::RBrace | Tok::RBrack | Tok::Eos => return Err(self.unexpected(tok)),
+                Tok::Colon | Tok::Comma | Tok::Illegal | Tok::RBrace | Tok::RBrack | Tok::Eos => {
+                    return Err(self.unexpected(tok));
+                }
             };
             // the value is done: add it to what holds it, and read the next member or close
             loop {
-                let Some(frame) = stack.pop() else { return Ok(value) };
+                let Some(frame) = stack.pop() else {
+                    return Ok(value);
+                };
                 match frame {
                     Frame::Obj { mut map, key } => {
                         map.set(key, value);
@@ -380,11 +418,29 @@ mod tests {
 
     #[test]
     fn refuses_with_the_message_v8_gives() {
-        assert_eq!(parse("{").unwrap_err(), "Expected property name or '}' in JSON at position 1 (line 1 column 2)");
-        assert_eq!(parse("[1,]").unwrap_err(), "Unexpected token ']', \"[1,]\" is not valid JSON");
-        assert_eq!(parse("{\"a\":1}\n\n x").unwrap_err(), "Unexpected non-whitespace character after JSON at position 10 (line 3 column 2)");
-        assert_eq!(parse("{\"settings\":{\"growth\":1.5,\"hvPct\":}}").unwrap_err(), "Unexpected token '}', ...\"5,\"hvPct\":}}\" is not valid JSON");
-        assert_eq!(parse("[1").unwrap_err(), "Expected ',' or ']' after array element in JSON at position 2 (line 1 column 3)");
-        assert_eq!(parse("[\"abc\\").unwrap_err(), "Unexpected end of JSON input");
+        assert_eq!(
+            parse("{").unwrap_err(),
+            "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+        );
+        assert_eq!(
+            parse("[1,]").unwrap_err(),
+            "Unexpected token ']', \"[1,]\" is not valid JSON"
+        );
+        assert_eq!(
+            parse("{\"a\":1}\n\n x").unwrap_err(),
+            "Unexpected non-whitespace character after JSON at position 10 (line 3 column 2)"
+        );
+        assert_eq!(
+            parse("{\"settings\":{\"growth\":1.5,\"hvPct\":}}").unwrap_err(),
+            "Unexpected token '}', ...\"5,\"hvPct\":}}\" is not valid JSON"
+        );
+        assert_eq!(
+            parse("[1").unwrap_err(),
+            "Expected ',' or ']' after array element in JSON at position 2 (line 1 column 3)"
+        );
+        assert_eq!(
+            parse("[\"abc\\").unwrap_err(),
+            "Unexpected end of JSON input"
+        );
     }
 }

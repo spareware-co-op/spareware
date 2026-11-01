@@ -26,13 +26,20 @@ fn assign_matches_every_recorded_result() {
                 };
                 let res = assign(&p, sc, &p.settings, &opts, None);
                 let want = &expected["scenarios"][&sc.id]["periods"][period]["res"];
-                assert!(want.is_object(), "{name}.{}.{period}: no recorded result", sc.id);
+                assert!(
+                    want.is_object(),
+                    "{name}.{}.{period}: no recorded result",
+                    sc.id
+                );
                 let path = format!("{name}.{}.{period}.res", sc.id);
                 let (diffs, total) = diff_json(&json(&res), want, &path);
                 if total > 0 {
                     let mut msg = format!("{total} difference(s) under {path}:");
                     for d in diffs.iter().take(8) {
-                        msg.push_str(&format!("\n  {}\n      expected {}\n      actual   {}", d.path, d.expected, d.actual));
+                        msg.push_str(&format!(
+                            "\n  {}\n      expected {}\n      actual   {}",
+                            d.path, d.expected, d.actual
+                        ));
                     }
                     failures.push(msg);
                 }

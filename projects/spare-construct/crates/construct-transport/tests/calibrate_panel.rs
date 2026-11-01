@@ -50,7 +50,12 @@ fn sort_audits(v: &mut Value) {
 }
 
 fn sort_entries(a: &mut [Value]) {
-    a.sort_by_key(|e| (e["siteId"].as_str().unwrap_or("").to_string(), e["movement"].as_str().unwrap_or("").to_string()));
+    a.sort_by_key(|e| {
+        (
+            e["siteId"].as_str().unwrap_or("").to_string(),
+            e["movement"].as_str().unwrap_or("").to_string(),
+        )
+    });
 }
 
 fn replay(file: &str, expect_states: usize) {
@@ -69,10 +74,13 @@ fn replay(file: &str, expect_states: usize) {
         if total > 0 {
             let mut m = format!("{total} difference(s) under {path}");
             for d in diffs.iter().take(6) {
-                m.push_str(&format!("
+                m.push_str(&format!(
+                    "
     {}
         expected {}
-        actual   {}", d.path, d.expected, d.actual));
+        actual   {}",
+                    d.path, d.expected, d.actual
+                ));
             }
             failures.push(m);
         }
@@ -84,7 +92,12 @@ fn replay(file: &str, expect_states: usize) {
         }
         let mut p = Project::from_json(text).expect("the project text reads");
         run_both(&mut p, &sc_id);
-        let out = replay_state(&mut p, name, all["fixture"].as_str().unwrap_or(""), &all["coreArea"]);
+        let out = replay_state(
+            &mut p,
+            name,
+            all["fixture"].as_str().unwrap_or(""),
+            &all["coreArea"],
+        );
         // what the steps recorded
         for (k, want) in st.as_object().expect("state") {
             if SKIPPED.contains(&k.as_str()) {
@@ -92,7 +105,11 @@ fn replay(file: &str, expect_states: usize) {
             }
             match out.get(k) {
                 Some(got) => check(got, want, format!("{name}: {k}")),
-                None => check(&Value::Null, want, format!("{name}: the replay did not record {k}")),
+                None => check(
+                    &Value::Null,
+                    want,
+                    format!("{name}: the replay did not record {k}"),
+                ),
             }
         }
         // everything the panel shows afterwards
@@ -101,9 +118,16 @@ fn replay(file: &str, expect_states: usize) {
         let got = snapshot(&p, &sc, name, level, true);
         check(&got, &st["snapshot"], format!("{name}: snapshot"));
     }
-    assert!(failures.is_empty(), "{file}: {} part(s) differ from the JavaScript
-{}", failures.len(), failures.join("
-"));
+    assert!(
+        failures.is_empty(),
+        "{file}: {} part(s) differ from the JavaScript
+{}",
+        failures.len(),
+        failures.join(
+            "
+"
+        )
+    );
 }
 
 #[test]
@@ -136,16 +160,26 @@ impl IdSource for Queue {
 }
 
 fn ids_of(v: &Value) -> Queue {
-    Queue(v.as_array().expect("ids").iter().map(|x| x.as_str().expect("id").to_string()).collect())
+    Queue(
+        v.as_array()
+            .expect("ids")
+            .iter()
+            .map(|x| x.as_str().expect("id").to_string())
+            .collect(),
+    )
 }
 
 /// The panel's own importer (files read, peak hours found, sites matched to junctions) makes the stored sites.
 #[test]
 fn imported_turning_counts() {
-    for f in ["expected/calibrate-panel-corridor.json", "expected/calibrate-panel-grid.json"] {
+    for f in [
+        "expected/calibrate-panel-corridor.json",
+        "expected/calibrate-panel-grid.json",
+    ] {
         let all = load_json(f);
         let sc_id = all["scenario"].as_str().expect("scenario").to_string();
-        let mut p = Project::from_json(all["projectText"].as_str().expect("text")).expect("project");
+        let mut p =
+            Project::from_json(all["projectText"].as_str().expect("text")).expect("project");
         let want = CalibStore::read(&p).turn_sites;
         assert!(want.len() >= 5, "{f}: {} stored sites", want.len());
         let mut st = CalibStore::read(&p);
@@ -156,11 +190,27 @@ fn imported_turning_counts() {
         assert_eq!(imported.len(), texts.len());
         for (t, rec) in texts.iter().zip(imported) {
             let file = t["file"].as_str().expect("file");
-            let r = import_turn_csv(&mut p, t["text"].as_str().expect("text"), file, &mut ids_of(&rec["sites"])).expect("imports");
-            assert_close(&json!({ "skipped": r.skipped, "reasons": r.reasons }), &json!({ "skipped": rec["skipped"], "reasons": rec["reasons"] }), file);
+            let r = import_turn_csv(
+                &mut p,
+                t["text"].as_str().expect("text"),
+                file,
+                &mut ids_of(&rec["sites"]),
+            )
+            .expect("imports");
+            assert_close(
+                &json!({ "skipped": r.skipped, "reasons": r.reasons }),
+                &json!({ "skipped": rec["skipped"], "reasons": rec["reasons"] }),
+                file,
+            );
         }
         match_sites(&mut p, &sc_id);
-        import_turn_csv(&mut p, all["far"].as_str().expect("far"), "far.csv", &mut ids_of(&all["farIds"])).expect("imports");
+        import_turn_csv(
+            &mut p,
+            all["far"].as_str().expect("far"),
+            "far.csv",
+            &mut ids_of(&all["farIds"]),
+        )
+        .expect("imports");
         match_sites(&mut p, &sc_id);
         let got = serde_json::to_value(&CalibStore::read(&p).turn_sites).expect("sites");
         assert_close(&got, &serde_json::to_value(&want).expect("sites"), f);

@@ -7,7 +7,10 @@
 use super::mapbox::{nz_date, nz_month_year, utc_date};
 use crate::census::{Bx, Failure, Net, host_of, query_string};
 use crate::edit::IdSource;
-use crate::jsnum::{Maybe, json_number, math_max, math_round, number_to_js_string, to_fixed, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{
+    Maybe, json_number, math_max, math_round, number_to_js_string, to_fixed, value_to_js_string,
+    value_to_number, value_truthy,
+};
 use crate::project::{OrderedMap, Project, ProjectData};
 use crate::util::{fmt, r7};
 use serde_json::{Map, Value, json};
@@ -18,7 +21,16 @@ const AT_COUNTS: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/re
 /// The time limit of one ArcGIS request (ms).
 pub const ARCGIS_TIMEOUT_MS: f64 = 30000.0;
 /// The crash fields at fixed positions in a crash tuple (from position 7).
-pub const CAS_FIELDS: [&str; 8] = ["fatalCount", "seriousInjuryCount", "minorInjuryCount", "light", "weatherA", "OBJECTID", "trafficControl", "urban"];
+pub const CAS_FIELDS: [&str; 8] = [
+    "fatalCount",
+    "seriousInjuryCount",
+    "minorInjuryCount",
+    "light",
+    "weatherA",
+    "OBJECTID",
+    "trafficControl",
+    "urban",
+];
 const CAS_OUT: &str = "OBJECTID,crashSeverity,crashYear,crashLocation1,crashLocation2,speedLimit,pedestrian,bicycle,motorcycle,fatalCount,seriousInjuryCount,minorInjuryCount,light,weatherA,trafficControl,urban";
 /// Full years of crashes in the main tables.
 pub const CAS_YEARS: f64 = 5.0;
@@ -47,7 +59,12 @@ pub struct LoadOpts {
 /// `DataHub.D()`: the project's data store with its defaults filled in: `counts`, `crashes`, `loaded`, `jt` and the source switches in `use`.
 pub fn data_d(p: &mut Project) -> &mut ProjectData {
     if p.data.get().is_none() {
-        p.data = Maybe::Set(ProjectData { loaded: Maybe::Missing, msm: Maybe::Missing, controlled: Maybe::Missing, extra: Map::new() });
+        p.data = Maybe::Set(ProjectData {
+            loaded: Maybe::Missing,
+            msm: Maybe::Missing,
+            controlled: Maybe::Missing,
+            extra: Map::new(),
+        });
     }
     let d = p.data.get_mut().expect("data");
     for k in ["counts", "crashes", "jt"] {
@@ -59,7 +76,13 @@ pub fn data_d(p: &mut Project) -> &mut ProjectData {
         d.loaded = Maybe::Set(OrderedMap::new());
     }
     let mut use_ = Map::new();
-    for (k, v) in [("nzta", true), ("at", true), ("user", true), ("virtual", false), ("ramm", true)] {
+    for (k, v) in [
+        ("nzta", true),
+        ("at", true),
+        ("user", true),
+        ("virtual", false),
+        ("ramm", true),
+    ] {
         use_.insert(k.to_string(), json!(v));
     }
     if let Some(Value::Object(own)) = d.extra.get("use") {
@@ -141,17 +164,32 @@ fn has_ramp(s: &str) -> bool {
     let low: Vec<char> = s.to_lowercase().chars().collect();
     let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let pat: Vec<char> = "ramp".chars().collect();
-    (0..low.len().saturating_sub(3)).any(|i| low[i..i + 4] == pat[..] && (i == 0 || !word(low[i - 1])) && (i + 4 >= low.len() || !word(low[i + 4])))
+    (0..low.len().saturating_sub(3)).any(|i| {
+        low[i..i + 4] == pat[..]
+            && (i == 0 || !word(low[i - 1]))
+            && (i + 4 >= low.len() || !word(low[i + 4]))
+    })
 }
 
 /// `arcgis(url, b, where, fields, timeout)`: every feature of a layer inside the box, a page at a time (at most 25 pages). Each request has its own time limit.
-pub fn arcgis(net: &mut dyn Net, url: &str, b: &Bx, where_: &str, fields: &str, timeout_ms: f64) -> Result<Vec<Value>, DataError> {
+pub fn arcgis(
+    net: &mut dyn Net,
+    url: &str,
+    b: &Bx,
+    where_: &str,
+    fields: &str,
+    timeout_ms: f64,
+) -> Result<Vec<Value>, DataError> {
     let host = host_of(url);
     let secs = number_to_js_string(math_round(timeout_ms / 1000.0));
     let mut out: Vec<Value> = Vec::new();
     let mut offset = 0usize;
     for _ in 0..25 {
-        let geom = [b.w, b.s, b.e, b.n].iter().map(|v| to_fixed(*v, 6)).collect::<Vec<_>>().join(",");
+        let geom = [b.w, b.s, b.e, b.n]
+            .iter()
+            .map(|v| to_fixed(*v, 6))
+            .collect::<Vec<_>>()
+            .join(",");
         let q = query_string(&[
             ("where", where_.to_string()),
             ("geometry", geom),
@@ -167,19 +205,43 @@ pub fn arcgis(net: &mut dyn Net, url: &str, b: &Bx, where_: &str, fields: &str, 
         let j = match net.get_json(&format!("{url}/query?{q}")) {
             Ok(j) => j,
             Err(Failure::Cancelled(m)) => return Err(DataError::Cancelled(m)),
-            Err(Failure::Timeout) | Err(Failure::ReadTimeout) => return Err(DataError::Failed(format!("{host} did not answer within {secs} s. Try again later"))),
-            Err(Failure::Unreachable(m)) => return Err(DataError::Failed(format!("{host} could not be reached ({m})"))),
-            Err(Failure::Http(s)) => return Err(DataError::Failed(format!("{host} answered HTTP {s}"))),
-            Err(Failure::Unreadable(_)) => return Err(DataError::Failed(format!("{host} sent an answer Spare Construct could not read"))),
+            Err(Failure::Timeout) | Err(Failure::ReadTimeout) => {
+                return Err(DataError::Failed(format!(
+                    "{host} did not answer within {secs} s. Try again later"
+                )));
+            }
+            Err(Failure::Unreachable(m)) => {
+                return Err(DataError::Failed(format!(
+                    "{host} could not be reached ({m})"
+                )));
+            }
+            Err(Failure::Http(s)) => {
+                return Err(DataError::Failed(format!("{host} answered HTTP {s}")));
+            }
+            Err(Failure::Unreadable(_)) => {
+                return Err(DataError::Failed(format!(
+                    "{host} sent an answer Spare Construct could not read"
+                )));
+            }
         };
         if !j.is_object() {
-            return Err(DataError::Failed(format!("{host} sent an answer Spare Construct could not read")));
+            return Err(DataError::Failed(format!(
+                "{host} sent an answer Spare Construct could not read"
+            )));
         }
         if let Some(e) = j.get("error").filter(|e| value_truthy(e)) {
-            let msg = e.get("message").filter(|m| value_truthy(m)).map_or_else(|| "query failed".to_string(), value_to_js_string);
+            let msg = e
+                .get("message")
+                .filter(|m| value_truthy(m))
+                .map_or_else(|| "query failed".to_string(), value_to_js_string);
             return Err(DataError::Failed(msg));
         }
-        let f = j.get("features").filter(|x| value_truthy(x)).and_then(Value::as_array).cloned().unwrap_or_default();
+        let f = j
+            .get("features")
+            .filter(|x| value_truthy(x))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         let n = f.len();
         out.extend(f);
         if !j.get("exceededTransferLimit").is_some_and(value_truthy) || n == 0 {
@@ -198,7 +260,10 @@ fn put(o: &mut Map<String, Value>, k: &str, v: Option<&Value>) {
 
 fn geo_xy(x: &Value) -> Option<(f64, f64)> {
     let g = x.get("geometry").filter(|g| value_truthy(g))?;
-    Some((g.get("y").map_or(f64::NAN, value_to_number), g.get("x").map_or(f64::NAN, value_to_number)))
+    Some((
+        g.get("y").map_or(f64::NAN, value_to_number),
+        g.get("x").map_or(f64::NAN, value_to_number),
+    ))
 }
 
 fn or_chain(a: Option<&Value>, b: Option<&Value>) -> Value {
@@ -222,27 +287,59 @@ pub fn load_nzta(net: &mut dyn Net, b: &Bx, timeout_ms: f64) -> Result<Vec<Value
         timeout_ms,
     )?;
     let mut out = Vec::new();
-    for x in f.iter().filter(|x| x.get("geometry").is_some_and(value_truthy)) {
+    for x in f
+        .iter()
+        .filter(|x| x.get("geometry").is_some_and(value_truthy))
+    {
         let empty = json!({});
-        let a = x.get("attributes").filter(|a| value_truthy(a)).unwrap_or(&empty);
+        let a = x
+            .get("attributes")
+            .filter(|a| value_truthy(a))
+            .unwrap_or(&empty);
         let (y, xx) = geo_xy(x).expect("geometry");
         let siteref = a.get("siteref");
         let desc = a.get("description");
-        let hist: Vec<Value> = ["aadt5yearsago", "aadt4yearsago", "aadt3yearsago", "aadt2yearsago", "aadt1yearago"].iter().map(|k| a.get(*k).cloned().unwrap_or(Value::Null)).collect();
+        let hist: Vec<Value> = [
+            "aadt5yearsago",
+            "aadt4yearsago",
+            "aadt3yearsago",
+            "aadt2yearsago",
+            "aadt1yearago",
+        ]
+        .iter()
+        .map(|k| a.get(*k).cloned().unwrap_or(Value::Null))
+        .collect();
         let adt = or_chain(a.get("aadt1yearago"), a.get("aadt2yearsago"));
         // 'SH' + (a.sh || '').replace(/[NS]$/, '')
         let sh = plain_str(a.get("sh"));
-        let sh_road = if sh.ends_with('N') || sh.ends_with('S') { sh[..sh.len() - 1].to_string() } else { sh.clone() };
-        let sh_raw = a.get("sh").map_or("undefined".to_string(), value_to_js_string);
+        let sh_road = if sh.ends_with('N') || sh.ends_with('S') {
+            sh[..sh.len() - 1].to_string()
+        } else {
+            sh.clone()
+        };
+        let sh_raw = a
+            .get("sh")
+            .map_or("undefined".to_string(), value_to_js_string);
         let sitetype = a.get("sitetype");
-        let virtual_ = sitetype.and_then(Value::as_str) == Some("Virtual") || a.get("type").and_then(Value::as_str) == Some("Virtual");
+        let virtual_ = sitetype.and_then(Value::as_str) == Some("Virtual")
+            || a.get("type").and_then(Value::as_str) == Some("Virtual");
         let mut c = Map::new();
-        c.insert("id".into(), json!(format!("nzta:{}", siteref.map_or("undefined".to_string(), value_to_js_string))));
+        c.insert(
+            "id".into(),
+            json!(format!(
+                "nzta:{}",
+                siteref.map_or("undefined".to_string(), value_to_js_string)
+            )),
+        );
         c.insert("src".into(), json!("nzta"));
         put(&mut c, "ref", siteref);
         let name = match desc {
             Some(d) if value_truthy(d) => value_to_js_string(d),
-            _ => format!("SH{} site {}", sh_raw, siteref.map_or("undefined".to_string(), value_to_js_string)),
+            _ => format!(
+                "SH{} site {}",
+                sh_raw,
+                siteref.map_or("undefined".to_string(), value_to_js_string)
+            ),
         };
         c.insert("name".into(), json!(name));
         c.insert("road".into(), json!(format!("SH{sh_road}")));
@@ -250,7 +347,10 @@ pub fn load_nzta(net: &mut dyn Net, b: &Bx, timeout_ms: f64) -> Result<Vec<Value
         c.insert("lng".into(), json_number(r7(xx)));
         c.insert("adt".into(), adt.clone());
         put(&mut c, "hv", a.get("percentheavy"));
-        c.insert("dir".into(), dir_of(&plain_str(desc)).map_or(Value::Null, |d| json!(d)));
+        c.insert(
+            "dir".into(),
+            dir_of(&plain_str(desc)).map_or(Value::Null, |d| json!(d)),
+        );
         c.insert("directional".into(), json!(true));
         c.insert("virtual".into(), json!(virtual_));
         c.insert("ramp".into(), json!(has_ramp(&plain_str(desc))));
@@ -258,7 +358,10 @@ pub fn load_nzta(net: &mut dyn Net, b: &Bx, timeout_ms: f64) -> Result<Vec<Value
         let note = if sitetype.and_then(Value::as_str) == Some("Virtual") {
             "NZTA estimate (virtual site), not a physical count".to_string()
         } else {
-            let days = a.get("accepteddays").filter(|d| value_truthy(d)).map(value_to_js_string);
+            let days = a
+                .get("accepteddays")
+                .filter(|d| value_truthy(d))
+                .map(value_to_js_string);
             format!(
                 "{} site{}",
                 match sitetype {
@@ -292,48 +395,96 @@ fn is_state_highway(name: &str) -> bool {
 
 /// `loadAT(b)`: Auckland Transport's latest counts in the box (state highway sections are left to NZTA's own counts) that have a daily count.
 pub fn load_at(net: &mut dyn Net, b: &Bx, timeout_ms: f64) -> Result<Vec<Value>, DataError> {
-    let f = arcgis(net, AT_COUNTS, b, "latest='Yes'", "OBJECTID,road_name,start_name,end_name,count_date,peak_hour,count_duration,adt,peaktraffic,pcheavy,carr_way_no", timeout_ms)?;
+    let f = arcgis(
+        net,
+        AT_COUNTS,
+        b,
+        "latest='Yes'",
+        "OBJECTID,road_name,start_name,end_name,count_date,peak_hour,count_duration,adt,peaktraffic,pcheavy,carr_way_no",
+        timeout_ms,
+    )?;
     let mut out = Vec::new();
-    for x in f.iter().filter(|x| x.get("geometry").is_some_and(value_truthy)) {
+    for x in f
+        .iter()
+        .filter(|x| x.get("geometry").is_some_and(value_truthy))
+    {
         let empty = json!({});
-        let a = x.get("attributes").filter(|a| value_truthy(a)).unwrap_or(&empty);
+        let a = x
+            .get("attributes")
+            .filter(|a| value_truthy(a))
+            .unwrap_or(&empty);
         if is_state_highway(&plain_str(a.get("road_name"))) {
             continue;
         }
         let (y, xx) = geo_xy(x).expect("geometry");
         let ph = {
             let s = plain_str(a.get("peak_hour"));
-            format!("{}{}", "0".repeat(4usize.saturating_sub(s.chars().count())), s)
+            format!(
+                "{}{}",
+                "0".repeat(4usize.saturating_sub(s.chars().count())),
+                s
+            )
         };
-        let date_ms = a.get("count_date").filter(|d| value_truthy(d)).map(value_to_number);
+        let date_ms = a
+            .get("count_date")
+            .filter(|d| value_truthy(d))
+            .map(value_to_number);
         if date_ms.is_some_and(|ms| !ms.is_finite()) {
             // new Date(x).toISOString() throws for a date that is not a date
             return Err(DataError::Failed("Invalid time value".to_string()));
         }
         let oid = a.get("OBJECTID");
         let mut c = Map::new();
-        c.insert("id".into(), json!(format!("at:{}", oid.map_or("undefined".to_string(), value_to_js_string))));
+        c.insert(
+            "id".into(),
+            json!(format!(
+                "at:{}",
+                oid.map_or("undefined".to_string(), value_to_js_string)
+            )),
+        );
         c.insert("src".into(), json!("at"));
         let rf = match a.get("carr_way_no") {
             Some(v) if value_truthy(v) => value_to_js_string(v),
             _ => oid.map_or("undefined".to_string(), value_to_js_string),
         };
         c.insert("ref".into(), json!(rf));
-        c.insert("name".into(), json!(format!("{} \u{b7} {} to {}", title(a.get("road_name")), title(a.get("start_name")), title(a.get("end_name")))));
+        c.insert(
+            "name".into(),
+            json!(format!(
+                "{} \u{b7} {} to {}",
+                title(a.get("road_name")),
+                title(a.get("start_name")),
+                title(a.get("end_name"))
+            )),
+        );
         put(&mut c, "road", a.get("road_name"));
         c.insert("lat".into(), json_number(r7(y)));
         c.insert("lng".into(), json_number(r7(xx)));
         put(&mut c, "adt", a.get("adt"));
         put(&mut c, "peak", a.get("peaktraffic"));
         let chars: Vec<char> = ph.chars().collect();
-        c.insert("peakTime".into(), json!(format!("{}:{}", chars.iter().take(2).collect::<String>(), chars.iter().skip(2).collect::<String>())));
+        c.insert(
+            "peakTime".into(),
+            json!(format!(
+                "{}:{}",
+                chars.iter().take(2).collect::<String>(),
+                chars.iter().skip(2).collect::<String>()
+            )),
+        );
         put(&mut c, "hv", a.get("pcheavy"));
-        c.insert("date".into(), date_ms.map_or(Value::Null, |ms| json!(utc_date(ms))));
+        c.insert(
+            "date".into(),
+            date_ms.map_or(Value::Null, |ms| json!(utc_date(ms))),
+        );
         put(&mut c, "dur", a.get("count_duration"));
         c.insert("directional".into(), json!(false));
         c.insert(
             "note".into(),
-            json!(format!("{} count{}", plain_str(a.get("count_duration")), date_ms.map_or(String::new(), |ms| format!(", {}", nz_month_year(ms))))),
+            json!(format!(
+                "{} count{}",
+                plain_str(a.get("count_duration")),
+                date_ms.map_or(String::new(), |ms| format!(", {}", nz_month_year(ms)))
+            )),
         );
         let adt = a.get("adt").map_or(f64::NAN, value_to_number);
         if adt > 0.0 {
@@ -366,40 +517,92 @@ pub struct CasWindow {
 pub fn cas_window(now_ms: f64, years: Option<f64>) -> CasWindow {
     let t = nz_date(now_ms);
     let y = t.y;
-    let n = math_max(1.0, math_round(crate::jsnum::or_default(years.unwrap_or(CAS_YEARS), CAS_YEARS))) as i64;
+    let n = math_max(
+        1.0,
+        math_round(crate::jsnum::or_default(
+            years.unwrap_or(CAS_YEARS),
+            CAS_YEARS,
+        )),
+    ) as i64;
     let (from, to) = (y - n, y - 1);
     let lag_year = if t.m < 4 { Some(to) } else { None };
-    CasWindow { from, to, ytd: y, years: n, lag_year, label: format!("{from}\u{2013}{to} ({n} full years), plus {y} to date ({YTD_LABEL})"), where_: format!("crashYear>={from}") }
+    CasWindow {
+        from,
+        to,
+        ytd: y,
+        years: n,
+        lag_year,
+        label: format!("{from}\u{2013}{to} ({n} full years), plus {y} to date ({YTD_LABEL})"),
+        where_: format!("crashYear>={from}"),
+    }
 }
 
 // A crash as a tuple: [lat, lng, severity, year, location, flags, speed limit, then the fixed extra fields with trailing nulls left off]
 fn cas_tuple(x: &Value) -> Value {
     let empty = json!({});
-    let a = x.get("attributes").filter(|a| value_truthy(a)).unwrap_or(&empty);
+    let a = x
+        .get("attributes")
+        .filter(|a| value_truthy(a))
+        .unwrap_or(&empty);
     let (y, xx) = geo_xy(x).expect("geometry");
     let sev = {
         let s = match a.get("crashSeverity") {
             Some(v) if value_truthy(v) => value_to_js_string(v),
             _ => "N".to_string(),
         };
-        s.chars().next().map(|c| c.to_uppercase().collect::<String>()).unwrap_or_default()
+        s.chars()
+            .next()
+            .map(|c| c.to_uppercase().collect::<String>())
+            .unwrap_or_default()
     };
-    let sev = if "FSMN".contains(&sev) { sev } else { "N".to_string() };
-    let loc: Vec<String> = ["crashLocation1", "crashLocation2"].iter().filter_map(|k| a.get(*k).filter(|v| value_truthy(v))).map(|v| title(Some(v))).collect();
+    let sev = if "FSMN".contains(&sev) {
+        sev
+    } else {
+        "N".to_string()
+    };
+    let loc: Vec<String> = ["crashLocation1", "crashLocation2"]
+        .iter()
+        .filter_map(|k| a.get(*k).filter(|v| value_truthy(v)))
+        .map(|v| title(Some(v)))
+        .collect();
     let flags = format!(
         "{}{}{}",
-        if a.get("pedestrian").is_some_and(value_truthy) { "p" } else { "" },
-        if a.get("bicycle").is_some_and(value_truthy) { "c" } else { "" },
-        if a.get("motorcycle").is_some_and(value_truthy) { "m" } else { "" }
+        if a.get("pedestrian").is_some_and(value_truthy) {
+            "p"
+        } else {
+            ""
+        },
+        if a.get("bicycle").is_some_and(value_truthy) {
+            "c"
+        } else {
+            ""
+        },
+        if a.get("motorcycle").is_some_and(value_truthy) {
+            "m"
+        } else {
+            ""
+        }
     );
-    let mut t: Vec<Value> = vec![json_number(r7(y)), json_number(r7(xx)), json!(sev), a.get("crashYear").cloned().unwrap_or(Value::Null), json!(loc.join(" / ")), json!(flags), a.get("speedLimit").cloned().unwrap_or(Value::Null)];
+    let mut t: Vec<Value> = vec![
+        json_number(r7(y)),
+        json_number(r7(xx)),
+        json!(sev),
+        a.get("crashYear").cloned().unwrap_or(Value::Null),
+        json!(loc.join(" / ")),
+        json!(flags),
+        a.get("speedLimit").cloned().unwrap_or(Value::Null),
+    ];
     let num = |v: Option<&Value>| -> Value {
         match v {
             None => Value::Null,
             Some(x) if x.is_null() || x.as_str() == Some("") => Value::Null,
             Some(x) => {
                 let n = value_to_number(x);
-                if n.is_finite() { json_number(n) } else { Value::Null }
+                if n.is_finite() {
+                    json_number(n)
+                } else {
+                    Value::Null
+                }
             }
         }
     };
@@ -410,7 +613,16 @@ fn cas_tuple(x: &Value) -> Value {
             Some(x) => json!(value_to_js_string(x)),
         }
     };
-    let mut extra: Vec<Value> = CAS_FIELDS.iter().map(|k| if k.ends_with("Count") || *k == "OBJECTID" { num(a.get(*k)) } else { txt(a.get(*k)) }).collect();
+    let mut extra: Vec<Value> = CAS_FIELDS
+        .iter()
+        .map(|k| {
+            if k.ends_with("Count") || *k == "OBJECTID" {
+                num(a.get(*k))
+            } else {
+                txt(a.get(*k))
+            }
+        })
+        .collect();
     while extra.last().is_some_and(Value::is_null) {
         extra.pop();
     }
@@ -419,10 +631,19 @@ fn cas_tuple(x: &Value) -> Value {
 }
 
 /// `loadCAS(b, years, now)`: the crash records of the window in the box, as tuples.
-pub fn load_cas(net: &mut dyn Net, b: &Bx, years: f64, now_ms: f64, timeout_ms: f64) -> Result<Vec<Value>, DataError> {
+pub fn load_cas(
+    net: &mut dyn Net,
+    b: &Bx,
+    years: f64,
+    now_ms: f64,
+    timeout_ms: f64,
+) -> Result<Vec<Value>, DataError> {
     let w = cas_window(now_ms, Some(years));
     let f = arcgis(net, NZTA_CAS, b, &w.where_, CAS_OUT, timeout_ms)?;
-    Ok(f.iter().filter(|x| x.get("geometry").is_some_and(value_truthy)).map(cas_tuple).collect())
+    Ok(f.iter()
+        .filter(|x| x.get("geometry").is_some_and(value_truthy))
+        .map(cas_tuple)
+        .collect())
 }
 
 fn timeout_of(o: &LoadOpts) -> f64 {
@@ -435,7 +656,15 @@ fn timeout_of(o: &LoadOpts) -> f64 {
 /// `DataHub.loadAll(b, which, status, opts)`: downloads the listed sources ("nzta", "at", "cas", "cas10") for a box into the project's data store. A source
 /// that fails is a message in the answer ("NZTA failed (...)") and the others carry on. Gives the messages ("12 NZTA count sites", "340 crashes"), or the
 /// host's message when the user cancelled.
-pub fn load_all(p: &mut Project, ids: &dyn IdSource, net: &mut dyn Net, b: &Bx, which: &[&str], status: &mut dyn FnMut(&str), opts: &LoadOpts) -> Result<Vec<String>, String> {
+pub fn load_all(
+    p: &mut Project,
+    ids: &dyn IdSource,
+    net: &mut dyn Net,
+    b: &Bx,
+    which: &[&str],
+    status: &mut dyn FnMut(&str),
+    opts: &LoadOpts,
+) -> Result<Vec<String>, String> {
     data_d(p);
     let mut msgs: Vec<String> = Vec::new();
     let timeout = timeout_of(opts);
@@ -447,7 +676,14 @@ pub fn load_all(p: &mut Project, ids: &dyn IdSource, net: &mut dyn Net, b: &Bx, 
                     status("Downloading crash records (NZTA CAS)\u{2026}");
                     let cw = cas_window(now, opts.cas_years);
                     let list = load_cas(net, b, cw.years as f64, now, timeout)?;
-                    let n_ytd = list.iter().filter(|c| c.get(3).is_some_and(|y| value_to_number(y) == cw.ytd as f64 && y.is_number())).count();
+                    let n_ytd = list
+                        .iter()
+                        .filter(|c| {
+                            c.get(3).is_some_and(|y| {
+                                value_to_number(y) == cw.ytd as f64 && y.is_number()
+                            })
+                        })
+                        .count();
                     let d = data_d(p);
                     msgs.push(format!("{} crashes", fmt::int(list.len() as f64)));
                     loaded_mut(d).insert(
@@ -457,27 +693,59 @@ pub fn load_all(p: &mut Project, ids: &dyn IdSource, net: &mut dyn Net, b: &Bx, 
                     d.extra.insert("crashes".to_string(), Value::Array(list));
                 }
                 "cas10" => {
-                    status("Downloading 10 years of crash records for state highway accesses (NZTA CAS)\u{2026}");
+                    status(
+                        "Downloading 10 years of crash records for state highway accesses (NZTA CAS)\u{2026}",
+                    );
                     let cw = cas_window(now, Some(CAS_LONG_YEARS));
                     let list = load_cas(net, b, cw.years as f64, now, timeout)?;
                     let d = data_d(p);
-                    msgs.push(format!("{} crashes over {} years (state highway accesses)", fmt::int(list.len() as f64), cw.years));
+                    msgs.push(format!(
+                        "{} crashes over {} years (state highway accesses)",
+                        fmt::int(list.len() as f64),
+                        cw.years
+                    ));
                     loaded_mut(d).insert(
                         "casLong".to_string(),
                         json!({ "at": json_number(now), "n": list.len(), "from": cw.from, "to": cw.to, "ytd": cw.ytd, "years": cw.years, "lagYear": cw.lag_year, "label": cw.label,
                             "purpose": "state highway accesses", "bounds": [[json_number(r7(b.s)), json_number(r7(b.w))], [json_number(r7(b.n)), json_number(r7(b.e))]], "fields": CAS_FIELDS }),
                     );
-                    d.extra.insert("crashesLong".to_string(), Value::Array(list));
+                    d.extra
+                        .insert("crashesLong".to_string(), Value::Array(list));
                 }
                 "nzta" | "at" => {
-                    let (label, short) = if *w == "nzta" { ("NZTA state highway counts", "NZTA") } else { ("Auckland Transport counts", "AT") };
+                    let (label, short) = if *w == "nzta" {
+                        ("NZTA state highway counts", "NZTA")
+                    } else {
+                        ("Auckland Transport counts", "AT")
+                    };
                     status(&format!("Downloading {label}\u{2026}"));
-                    let list = if *w == "nzta" { load_nzta(net, b, timeout)? } else { load_at(net, b, timeout)? };
+                    let list = if *w == "nzta" {
+                        load_nzta(net, b, timeout)?
+                    } else {
+                        load_at(net, b, timeout)?
+                    };
                     let d = data_d(p);
-                    let old: Vec<Value> = d.extra.get("counts").and_then(Value::as_array).cloned().unwrap_or_default();
+                    let old: Vec<Value> = d
+                        .extra
+                        .get("counts")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
                     // the switches of counts already loaded are kept
-                    let keep: Vec<(String, Option<Value>)> = old.iter().filter(|c| c.get("src").and_then(Value::as_str) == Some(w)).map(|c| (value_to_js_string(c.get("id").unwrap_or(&Value::Null)), c.get("off").cloned())).collect();
-                    let mut counts: Vec<Value> = old.into_iter().filter(|c| c.get("src").and_then(Value::as_str) != Some(w)).collect();
+                    let keep: Vec<(String, Option<Value>)> = old
+                        .iter()
+                        .filter(|c| c.get("src").and_then(Value::as_str) == Some(w))
+                        .map(|c| {
+                            (
+                                value_to_js_string(c.get("id").unwrap_or(&Value::Null)),
+                                c.get("off").cloned(),
+                            )
+                        })
+                        .collect();
+                    let mut counts: Vec<Value> = old
+                        .into_iter()
+                        .filter(|c| c.get("src").and_then(Value::as_str) != Some(w))
+                        .collect();
                     for mut c in list.clone() {
                         let id = value_to_js_string(c.get("id").unwrap_or(&Value::Null));
                         let off = match keep.iter().find(|(k, _)| *k == id) {
@@ -490,10 +758,16 @@ pub fn load_all(p: &mut Project, ids: &dyn IdSource, net: &mut dyn Net, b: &Bx, 
                         counts.push(c);
                     }
                     d.extra.insert("counts".to_string(), Value::Array(counts));
-                    loaded_mut(d).insert(w.to_string(), json!({ "at": json_number(now), "n": list.len() }));
+                    loaded_mut(d).insert(
+                        w.to_string(),
+                        json!({ "at": json_number(now), "n": list.len() }),
+                    );
                     msgs.push(format!("{} {short} count sites", list.len()));
                 }
-                other => msgs.push(format!("{} is not a source Spare Construct downloads here", other.to_uppercase())),
+                other => msgs.push(format!(
+                    "{} is not a source Spare Construct downloads here",
+                    other.to_uppercase()
+                )),
             }
             Ok(())
         })();

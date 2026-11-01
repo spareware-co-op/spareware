@@ -5,7 +5,7 @@ use super::common::{dir_of, hhmm, is_mw, point_in_poly};
 use super::criteria::tag;
 use super::roles::Ctx;
 use super::store::Screenline;
-use crate::datahub::{Count, period_vol, geh};
+use crate::datahub::{Count, geh, period_vol};
 use crate::jsnum::{math_max, math_min, math_round};
 use crate::project::Scenario;
 use crate::results::{Res, plain};
@@ -53,9 +53,16 @@ pub fn sl_crossings(sc: &Scenario, sl: &Screenline) -> Vec<Crossing> {
     let xy = |ll: &LatLng| [f.x(ll), f.y(ll)];
     let s: Vec<[f64; 2]> = pts.iter().map(xy).collect();
     let fold = |idx: usize, lo: bool| -> f64 {
-        s.iter().fold(if lo { f64::INFINITY } else { f64::NEG_INFINITY }, |m, p| {
-            if lo { math_min(m, p[idx]) } else { math_max(m, p[idx]) }
-        })
+        s.iter().fold(
+            if lo { f64::INFINITY } else { f64::NEG_INFINITY },
+            |m, p| {
+                if lo {
+                    math_min(m, p[idx])
+                } else {
+                    math_max(m, p[idx])
+                }
+            },
+        )
     };
     let bx = [fold(0, true), fold(0, false), fold(1, true), fold(1, false)];
     let mut out = Vec::new();
@@ -65,11 +72,22 @@ pub fn sl_crossings(sc: &Scenario, sl: &Screenline) -> Vec<Crossing> {
         }
         let g: Vec<[f64; 2]> = sc.geom(l).iter().map(xy).collect();
         let gf = |idx: usize, lo: bool| -> f64 {
-            g.iter().fold(if lo { f64::INFINITY } else { f64::NEG_INFINITY }, |m, p| {
-                if lo { math_min(m, p[idx]) } else { math_max(m, p[idx]) }
-            })
+            g.iter().fold(
+                if lo { f64::INFINITY } else { f64::NEG_INFINITY },
+                |m, p| {
+                    if lo {
+                        math_min(m, p[idx])
+                    } else {
+                        math_max(m, p[idx])
+                    }
+                },
+            )
         };
-        if gf(0, false) < bx[0] || gf(0, true) > bx[1] || gf(1, false) < bx[2] || gf(1, true) > bx[3] {
+        if gf(0, false) < bx[0]
+            || gf(0, true) > bx[1]
+            || gf(1, false) < bx[2]
+            || gf(1, true) > bx[3]
+        {
             continue;
         }
         for i in 0..g.len().saturating_sub(1) {
@@ -88,7 +106,11 @@ pub fn sl_crossings(sc: &Scenario, sl: &Screenline) -> Vec<Crossing> {
                     continue;
                 }
                 // + when A to B crosses from the right of the screenline segment to its left
-                let side = if sv[0] * r[1] - sv[1] * r[0] > 0.0 { 1 } else { -1 };
+                let side = if sv[0] * r[1] - sv[1] * r[0] > 0.0 {
+                    1
+                } else {
+                    -1
+                };
                 let ll = [(p[1] + t * r[1]) / f.ky, (p[0] + t * r[0]) / f.kx];
                 out.push(Crossing {
                     link: l.id.clone(),
@@ -186,9 +208,19 @@ struct Ent2 {
 ///
 /// A two-way count covers both directions only, so it feeds the "Both directions" row. `motorways` false leaves
 /// motorway and ramp crossings out. Empty when there is no result.
-pub fn sl_rows(ctx: &Ctx, sc: &Scenario, sl: &Screenline, period: &str, res: Option<&Res>, motorways: bool) -> Vec<SlRow> {
+pub fn sl_rows(
+    ctx: &Ctx,
+    sc: &Scenario,
+    sl: &Screenline,
+    period: &str,
+    res: Option<&Res>,
+    motorways: bool,
+) -> Vec<SlRow> {
     let Some(res) = res else { return Vec::new() };
-    let xs: Vec<Crossing> = sl_crossings(sc, sl).into_iter().filter(|x| motorways || !x.mw).collect();
+    let xs: Vec<Crossing> = sl_crossings(sc, sl)
+        .into_iter()
+        .filter(|x| motorways || !x.mw)
+        .collect();
     let m = ctx.matches(sc);
     let mut by_arc: HashMap<String, Ent> = HashMap::new();
     let mut by_link: HashMap<String, Ent> = HashMap::new();
@@ -197,7 +229,9 @@ pub fn sl_rows(ctx: &Ctx, sc: &Scenario, sl: &Screenline, period: &str, res: Opt
             continue;
         }
         let Some(mt) = m.get(&c.id) else { continue };
-        let Some(pv) = period_vol(c, period, ctx.s()) else { continue };
+        let Some(pv) = period_vol(c, period, ctx.s()) else {
+            continue;
+        };
         let role = ctx.role_of(c, period, false);
         if role == "off" {
             continue;
@@ -289,7 +323,9 @@ pub fn sl_rows(ctx: &Ctx, sc: &Scenario, sl: &Screenline, period: &str, res: Opt
         let mut items = Vec::new();
         for x in &xs {
             let key = format!("{}{}", x.link, if x.side == sgn { ":ab" } else { ":ba" });
-            let Some(r) = res.arcs.get(&key) else { continue };
+            let Some(r) = res.arcs.get(&key) else {
+                continue;
+            };
             if seen.contains(&key) {
                 continue;
             }
@@ -306,7 +342,11 @@ pub fn sl_rows(ctx: &Ctx, sc: &Scenario, sl: &Screenline, period: &str, res: Opt
         let items = dir_items(sgn);
         if !items.is_empty() {
             let label = if closed {
-                if sgn == 1 { "Inbound".to_string() } else { "Outbound".to_string() }
+                if sgn == 1 {
+                    "Inbound".to_string()
+                } else {
+                    "Outbound".to_string()
+                }
             } else {
                 dir_of(if sgn == 1 { left } else { left + 180.0 }).to_string()
             };
@@ -330,15 +370,25 @@ pub fn sl_rows(ctx: &Ctx, sc: &Scenario, sl: &Screenline, period: &str, res: Opt
         let mut cnt: Option<Ent2> = by_link.get(id).map(ent2);
         let ca = by_arc.get(&format!("{id}:ab"));
         let cb = by_arc.get(&format!("{id}:ba"));
-        if cnt.is_none() && (ca.is_some() || ab.is_none()) && (cb.is_some() || ba.is_none()) && (ca.is_some() || cb.is_some()) {
-            let any_not_valid = [ca, cb].iter().any(|x| x.is_some_and(|x| x.role != "valid"));
+        if cnt.is_none()
+            && (ca.is_some() || ab.is_none())
+            && (cb.is_some() || ba.is_none())
+            && (ca.is_some() || cb.is_some())
+        {
+            let any_not_valid = [ca, cb]
+                .iter()
+                .any(|x| x.is_some_and(|x| x.role != "valid"));
             cnt = Some(Ent2 {
                 v: ca.map_or(0.0, |x| x.v) + cb.map_or(0.0, |x| x.v),
                 role: if any_not_valid { "me" } else { "valid" },
                 id: ca.or(cb).expect("one of them").count.id.clone(),
             });
         }
-        both.push(Item { key: id.clone(), m: mm, cnt });
+        both.push(Item {
+            key: id.clone(),
+            m: mm,
+            cnt,
+        });
     }
     if !both.is_empty() {
         let r = mk("Both directions".to_string(), &both);
@@ -367,7 +417,11 @@ impl SlSummary {
     /// `s[key]`: the share of observations meeting a criterion (None without observations).
     pub fn share(&self, key: &str) -> Option<f64> {
         let i = SL_KEYS.iter().position(|k| *k == key)?;
-        if self.n > 0 { Some(self.cnt[i] as f64 / self.n as f64) } else { None }
+        if self.n > 0 {
+            Some(self.cnt[i] as f64 / self.n as f64)
+        } else {
+            None
+        }
     }
     /// `s.cnt[key]`.
     pub fn cnt_of(&self, key: &str) -> Option<usize> {
@@ -378,7 +432,13 @@ impl SlSummary {
 /// `slObservations(sc, period, set)`: each complete directional total; a screenline with neither direction complete but a complete two-way total gives that one observation.
 ///
 /// Validation statistics use validation counts only: a total that adds in calibration or gateway counts is left out (and listed).
-pub fn sl_observations(ctx: &Ctx, sc: &Scenario, period: &str, set: &str, res: Option<&Res>) -> SlSummary {
+pub fn sl_observations(
+    ctx: &Ctx,
+    sc: &Scenario,
+    period: &str,
+    set: &str,
+    res: Option<&Res>,
+) -> SlSummary {
     let mut out: Vec<(usize, SlRow)> = Vec::new();
     let mut dropped: Vec<String> = Vec::new();
     for (i, sl) in ctx.store.screenlines.iter().enumerate() {
@@ -398,7 +458,10 @@ pub fn sl_observations(ctx: &Ctx, sc: &Scenario, period: &str, set: &str, res: O
                 dropped.push(format!("{} {}", sl.name.js_string(), r.label));
             }
         }
-        let dirs: Vec<&SlRow> = rows.iter().filter(|r| r.dir != 0 && r.ok && indep(r)).collect();
+        let dirs: Vec<&SlRow> = rows
+            .iter()
+            .filter(|r| r.dir != 0 && r.ok && indep(r))
+            .collect();
         let both = rows.iter().find(|r| r.dir == 0 && r.ok && indep(r));
         if !dirs.is_empty() {
             for r in dirs {
@@ -446,24 +509,45 @@ pub struct CordonOd {
 }
 
 /// `cordonOD(sc, res, sl)`: trips between the zones inside a cordon, the zones outside it and the points where traffic crosses its boundary, traced along the result's stored paths. Err with the prototype's message when the cordon or the paths are missing.
-pub fn cordon_od(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, sl: Option<&Screenline>) -> Result<CordonOd, String> {
+pub fn cordon_od(
+    ctx: &Ctx,
+    sc: &Scenario,
+    res: Option<&Res>,
+    sl: Option<&Screenline>,
+) -> Result<CordonOd, String> {
     let Some(sl) = sl.filter(|s| s.is_type("cordon") && s.pts.len() >= 3) else {
         return Err("Draw a cordon (a closed area) first.".to_string());
     };
     let (Some(res), true) = (res, true) else {
-        return Err("Run the model again in this session: the cordon export traces the stored paths.".to_string());
+        return Err(
+            "Run the model again in this session: the cordon export traces the stored paths."
+                .to_string(),
+        );
     };
     let (Some(paths), Some(arc_keys)) = (res.paths.get(), res.arc_keys.as_ref()) else {
-        return Err("Run the model again in this session: the cordon export traces the stored paths.".to_string());
+        return Err(
+            "Run the model again in this session: the cordon export traces the stored paths."
+                .to_string(),
+        );
     };
     let xs = sl_crossings(sc, sl);
     let mut dir_of_arc: HashMap<String, &'static str> = HashMap::new();
     for x in &xs {
-        dir_of_arc.insert(format!("{}:ab", x.link), if x.side == 1 { "in" } else { "out" });
-        dir_of_arc.insert(format!("{}:ba", x.link), if x.side == 1 { "out" } else { "in" });
+        dir_of_arc.insert(
+            format!("{}:ab", x.link),
+            if x.side == 1 { "in" } else { "out" },
+        );
+        dir_of_arc.insert(
+            format!("{}:ba", x.link),
+            if x.side == 1 { "out" } else { "in" },
+        );
     }
     let poly: Vec<LatLng> = sl.pts.iter().map(|p| p.0).collect();
-    let inside = |id: &str| -> bool { sc.zones.get(id).is_some_and(|z| point_in_poly(&z.ll(), &poly)) };
+    let inside = |id: &str| -> bool {
+        sc.zones
+            .get(id)
+            .is_some_and(|z| point_in_poly(&z.ll(), &poly))
+    };
     let pf = pcu_f(ctx.s());
     // T keyed by "o\0d" in the order first met
     let mut t_order: Vec<(String, f64)> = Vec::new();
@@ -495,7 +579,12 @@ pub fn cordon_od(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, sl: Option<&Screen
             bz_idx.insert(id.clone(), bz.len());
             bz.push(Bz {
                 id: id.clone(),
-                name: format!("{} {} ({})", road, if kind == "in" { "in" } else { "out" }, dir),
+                name: format!(
+                    "{} {} ({})",
+                    road,
+                    if kind == "in" { "in" } else { "out" },
+                    dir
+                ),
                 ll: x.map(|x| x.ll),
                 kind,
             });
@@ -512,7 +601,9 @@ pub fn cordon_od(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, sl: Option<&Screen
             let mut seen = ii;
             for &a in &p.arcs {
                 let k = &arc_keys[a];
-                let Some(dir) = dir_of_arc.get(k).copied() else { continue };
+                let Some(dir) = dir_of_arc.get(k).copied() else {
+                    continue;
+                };
                 if dir == "in" && o.is_none() {
                     o = Some(bz_of(k, "in", &mut bz));
                     seen = true;
@@ -549,11 +640,7 @@ pub fn cordon_od(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, sl: Option<&Screen
         let ab = a.starts_with("b:") as i32 as f64;
         let bb = b.starts_with("b:") as i32 as f64;
         let d = ab - bb;
-        if d != 0.0 {
-            d
-        } else {
-            js_locale_compare(a, b)
-        }
+        if d != 0.0 { d } else { js_locale_compare(a, b) }
     });
     let mut num0: HashMap<String, usize> = HashMap::new();
     let (mut ni, mut nb) = (1usize, 1001usize);
@@ -571,35 +658,60 @@ pub fn cordon_od(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, sl: Option<&Screen
             bz[bz_idx[z]].name.clone()
         } else {
             match sc.zones.get(z) {
-                Some(zz) if zz.name.as_str().is_some_and(|n| !n.is_empty()) => zz.name.str_or("").to_string(),
+                Some(zz) if zz.name.as_str().is_some_and(|n| !n.is_empty()) => {
+                    zz.name.str_or("").to_string()
+                }
                 _ => z.to_string(),
             }
         }
     };
     let per = res.period.as_str();
-    let hours = if per == "PM" { "16.00 17.00" } else { "7.00 8.00" };
+    let hours = if per == "PM" {
+        "16.00 17.00"
+    } else {
+        "7.00 8.00"
+    };
     let mut lines: Vec<String> = vec![
         "$O;D2".to_string(),
         "* From  To".to_string(),
         hours.to_string(),
         "* Factor".to_string(),
         "1.00".to_string(),
-        format!("* Spare Construct {per} peak hour, veh/h, cordon \u{201c}{}\u{201d} (peak-hour times indicative)", sl.name.js_string()),
+        format!(
+            "* Spare Construct {per} peak hour, veh/h, cordon \u{201c}{}\u{201d} (peak-hour times indicative)",
+            sl.name.js_string()
+        ),
     ];
     let mut sorted: Vec<(String, f64)> = t_order.clone();
-    crate::graph::js_sort_by(&mut sorted, |a, b| default_sort_cmp(&entry_text(a), &entry_text(b)));
+    crate::graph::js_sort_by(&mut sorted, |a, b| {
+        default_sort_cmp(&entry_text(a), &entry_text(b))
+    });
     for (k, v) in &sorted {
         let mut it = k.split('\u{0}');
         let (o, d) = (it.next().unwrap_or(""), it.next().unwrap_or(""));
         if *v >= 0.005 {
-            lines.push(format!("{} {} {}", num0[o], num0[d], crate::jsnum::to_fixed(*v, 2)));
+            lines.push(format!(
+                "{} {} {}",
+                num0[o],
+                num0[d],
+                crate::jsnum::to_fixed(*v, 2)
+            ));
         }
     }
     lines.push("$NAMES".to_string());
     for z in &zones {
-        lines.push(format!("{} \"{}\"", num0[z.as_str()], name_of(z).replace('"', "'")));
+        lines.push(format!(
+            "{} \"{}\"",
+            num0[z.as_str()],
+            name_of(z).replace('"', "'")
+        ));
     }
-    let mut csv_rows: Vec<Vec<Value>> = vec![["from_id", "from_name", "to_id", "to_name", "veh_h"].iter().map(|s| Value::from(*s)).collect()];
+    let mut csv_rows: Vec<Vec<Value>> = vec![
+        ["from_id", "from_name", "to_id", "to_name", "veh_h"]
+            .iter()
+            .map(|s| Value::from(*s))
+            .collect(),
+    ];
     for (k, v) in &sorted {
         let mut it = k.split('\u{0}');
         let (o, d) = (it.next().unwrap_or(""), it.next().unwrap_or(""));
@@ -621,7 +733,10 @@ pub fn cordon_od(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, sl: Option<&Screen
                 "properties": { "zone": num0[&b.id], "name": b.name, "kind": b.kind } })
         })
         .collect();
-    let geojson = serde_json::to_string(&serde_json::json!({ "type": "FeatureCollection", "features": features })).expect("geojson");
+    let geojson = serde_json::to_string(
+        &serde_json::json!({ "type": "FeatureCollection", "features": features }),
+    )
+    .expect("geojson");
     Ok(CordonOd {
         o: format!("{}\r\n", lines.join("\r\n")),
         csv,
@@ -647,7 +762,11 @@ fn default_sort_cmp(a: &str, b: &str) -> f64 {
 
 // `a.localeCompare(b)` for the ASCII ids and names used here: letters compare without regard to case first, then lower case before upper
 fn js_locale_compare(a: &str, b: &str) -> f64 {
-    let key = |s: &str| s.chars().map(|c| c.to_lowercase().next().unwrap_or(c)).collect::<String>();
+    let key = |s: &str| {
+        s.chars()
+            .map(|c| c.to_lowercase().next().unwrap_or(c))
+            .collect::<String>()
+    };
     match key(a).cmp(&key(b)) {
         std::cmp::Ordering::Less => -1.0,
         std::cmp::Ordering::Greater => 1.0,

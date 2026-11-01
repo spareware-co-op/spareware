@@ -1302,6 +1302,40 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
             fold(pairs.into_iter().map(|(u, v)| s.point(u, v, sides)))
         }
+        ("format", "cache_key") => {
+            let path = inputs::format::path();
+            fold(
+                inputs::format::cache_key(class)
+                    .into_iter()
+                    .map(|(edition, seed)| {
+                        geom_format::cache::CacheKey::new(
+                            edition,
+                            &inputs::format::SCHEMA,
+                            &path,
+                            geom_op::Precision::Final,
+                            &[inputs::format::input(seed)],
+                        )
+                        .ok()
+                    }),
+            )
+        }
+        ("format", "memo_get") => {
+            let mut store = inputs::format::store();
+            fold(inputs::format::memo_get(class).into_iter().map(|key| {
+                match store.get(&key, geom_run::Budget::UNLIMITED) {
+                    Some(Ok(answer)) => Some(answer.result),
+                    _ => None,
+                }
+            }))
+        }
+        ("format", "next_version") => fold(inputs::format::next_version(class).into_iter().map(
+            |(_, body)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_format::body::write_body(&body, &mut meter)
+                    .ok()
+                    .map(|stored| stored.content_id())
+            },
+        )),
         ("surface", "torus_second_bound") => {
             use geom_surface::ParamSurface;
             let s = inputs::surface::torus().unwrap();

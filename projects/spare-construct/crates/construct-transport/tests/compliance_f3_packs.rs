@@ -16,10 +16,23 @@ fn sections_of(v: &V) -> Vec<Section> {
         .iter()
         .map(|s| Section {
             title: s.g("title").s(),
-            note: if s.g("note").t() { Some(s.g("note").s()) } else { None },
+            note: if s.g("note").t() {
+                Some(s.g("note").s())
+            } else {
+                None
+            },
             head: s.g("head").items().iter().map(|h| h.s()).collect(),
-            rows: s.g("rows").items().iter().map(|r| r.items().to_vec()).collect(),
-            empty: if s.g("empty").t() { Some(s.g("empty").s()) } else { None },
+            rows: s
+                .g("rows")
+                .items()
+                .iter()
+                .map(|r| r.items().to_vec())
+                .collect(),
+            empty: if s.g("empty").t() {
+                Some(s.g("empty").s())
+            } else {
+                None
+            },
         })
         .collect()
 }
@@ -36,7 +49,11 @@ fn climate_and_packs_match_the_prototype() {
         match case.g("call").s().as_str() {
             "climate" => {
                 let p = project(case);
-                let got = if args.has("sci") { climate::climate(&p, Some(p.g("scenarios").ix(args.g("sci").n() as usize))) } else { climate::climate(&p, None) };
+                let got = if args.has("sci") {
+                    climate::climate(&p, Some(p.g("scenarios").ix(args.g("sci").n() as usize)))
+                } else {
+                    climate::climate(&p, None)
+                };
                 check_ok(case, &got);
             }
             "climateCSV" => check_text(case, &climate::climate_csv(&project(case))),
@@ -49,14 +66,25 @@ fn climate_and_packs_match_the_prototype() {
             }
             "packCSV" => {
                 let p = project(case);
-                check_text(case, &packs::pack_csv(&p, "A title", &args.g("tool").s(), &sections_of(args.g("sections"))));
+                check_text(
+                    case,
+                    &packs::pack_csv(
+                        &p,
+                        "A title",
+                        &args.g("tool").s(),
+                        &sections_of(args.g("sections")),
+                    ),
+                );
             }
             "runDesignLife" => {
                 let mut p = project(case);
                 let res = packs::run_design_life(&mut p, case.g("opts"));
                 let mut o = V::object();
                 o.set("res", res);
-                o.set("saved", p.g("complianceExtra").g("tsdg").g("result").clone());
+                o.set(
+                    "saved",
+                    p.g("complianceExtra").g("tsdg").g("result").clone(),
+                );
                 check_ok(case, &o);
             }
             "tsdgPack" => check_text(case, &packs::tsdg_pack(&project(case))),
@@ -70,15 +98,31 @@ fn climate_and_packs_match_the_prototype() {
             "report" => {
                 let p = project(case);
                 let rid = case.g("report").s();
-                let got = if case.g("ctx").t() { extra::report(&rid, &p, Some(&Mock)) } else { extra::report(&rid, &p, None) };
-                check_text(case, &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")));
+                let got = if case.g("ctx").t() {
+                    extra::report(&rid, &p, Some(&Mock))
+                } else {
+                    extra::report(&rid, &p, None)
+                };
+                check_text(
+                    case,
+                    &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")),
+                );
             }
             "export" => {
                 let p = project(case);
                 let eid = case.g("export").s();
                 let mut got = V::object();
-                got.set("build", V::String(extra::export_build(&eid, &p).unwrap_or_else(|| panic!("{id}: no export {eid}"))));
-                got.set("enabled", V::Bool(extra::export_enabled(&eid, &p).expect("export")));
+                got.set(
+                    "build",
+                    V::String(
+                        extra::export_build(&eid, &p)
+                            .unwrap_or_else(|| panic!("{id}: no export {eid}")),
+                    ),
+                );
+                got.set(
+                    "enabled",
+                    V::Bool(extra::export_enabled(&eid, &p).expect("export")),
+                );
                 got.set("label", case.g("ok").g("label").clone());
                 check_ok(case, &got);
             }

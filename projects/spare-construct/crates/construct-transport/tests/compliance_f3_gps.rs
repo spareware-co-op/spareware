@@ -22,11 +22,19 @@ fn gps_and_funding_match_the_prototype() {
         let args = case.g("args");
         let done: Option<()> = match case.g("call").s().as_str() {
             "gtRating" => {
-                check_ok(case, &V::String(gps::gt_rating(args.g("s").n()).to_string()));
+                check_ok(
+                    case,
+                    &V::String(gps::gt_rating(args.g("s").n()).to_string()),
+                );
                 Some(())
             }
             "freightRating" => {
-                check_ok(case, &V::String(gps::freight_rating(args.g("s").n(), &args.g("sig").s()).to_string()));
+                check_ok(
+                    case,
+                    &V::String(
+                        gps::freight_rating(args.g("s").n(), &args.g("sig").s()).to_string(),
+                    ),
+                );
                 Some(())
             }
             "roadsToLinks" => {
@@ -51,13 +59,20 @@ fn gps_and_funding_match_the_prototype() {
             }
             "growthShare" => {
                 let p = project(case);
-                let sc = if args.has("sci") { p.g("scenarios").ix(args.g("sci").n() as usize) } else { construct_transport::compliance::extra::ctx::pair(&p).opt };
+                let sc = if args.has("sci") {
+                    p.g("scenarios").ix(args.g("sci").n() as usize)
+                } else {
+                    construct_transport::compliance::extra::ctx::pair(&p).opt
+                };
                 check_ok(case, &gps::growth_share(&p, sc));
                 Some(())
             }
             "fundingAssets" => {
                 let p = project(case);
-                let fa = gps::funding_assets(&p, construct_transport::compliance::extra::ctx::pair(&p).opt);
+                let fa = gps::funding_assets(
+                    &p,
+                    construct_transport::compliance::extra::ctx::pair(&p).opt,
+                );
                 let mut o = V::object();
                 o.set("ids", V::Array(fa.ids.into_iter().map(V::String).collect()));
                 o.set("basis", V::String(fa.basis.to_string()));
@@ -73,7 +88,10 @@ fn gps_and_funding_match_the_prototype() {
                 let res = gps::funding_shares(&mut p, case.g("opts"));
                 let mut o = V::object();
                 o.set("res", res);
-                o.set("saved", p.g("complianceExtra").g("funding").g("shares").clone());
+                o.set(
+                    "saved",
+                    p.g("complianceExtra").g("funding").g("shares").clone(),
+                );
                 check_ok(case, &o);
                 Some(())
             }
@@ -81,8 +99,15 @@ fn gps_and_funding_match_the_prototype() {
             "report" => {
                 let p = project(case);
                 let rid = case.g("report").s();
-                let got = if case.g("ctx").t() { gps::report(&rid, &p, Some(&Mock)) } else { gps::report(&rid, &p, None) };
-                check_text(case, &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")));
+                let got = if case.g("ctx").t() {
+                    gps::report(&rid, &p, Some(&Mock))
+                } else {
+                    gps::report(&rid, &p, None)
+                };
+                check_text(
+                    case,
+                    &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")),
+                );
                 Some(())
             }
             other => panic!("{id}: unknown call {other}"),
@@ -93,7 +118,9 @@ fn gps_and_funding_match_the_prototype() {
             skipped += 1;
         }
     }
-    println!("gps: {checked} cases checked, {skipped} skipped (a part this one calls is still a stub)");
+    println!(
+        "gps: {checked} cases checked, {skipped} skipped (a part this one calls is still a stub)"
+    );
     assert_eq!(checked + skipped, cases.len());
     assert!(checked > 650);
 }

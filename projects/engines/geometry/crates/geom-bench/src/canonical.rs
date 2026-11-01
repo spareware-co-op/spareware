@@ -892,6 +892,37 @@ impl<const D: usize> Canonical for geom_nurbs::Bounds<D> {
     }
 }
 
+impl Canonical for geom_format::cache::CacheKey {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&self.to_bytes());
+    }
+}
+
+impl Canonical for geom_format::content::ContentId {
+    fn encode(&self, h: &mut Sha256) {
+        self.alg().encode(h);
+        h.update(self.digest());
+    }
+}
+
+impl Canonical for geom_format::body::BodyVersion {
+    // A version is what it names.
+    fn encode(&self, h: &mut Sha256) {
+        self.content_id().encode(h);
+    }
+}
+
+impl Canonical for geom_topo::Body {
+    // A body is the bytes it stores: its content ID, or a mark for one that has no stored form.
+    fn encode(&self, h: &mut Sha256) {
+        let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+        geom_format::body::write_body(self, &mut meter)
+            .ok()
+            .map(|stored| stored.content_id())
+            .encode(h);
+    }
+}
+
 impl<const D: usize> Canonical for geom_curve::DerivativeBound<D> {
     fn encode(&self, h: &mut Sha256) {
         match self {

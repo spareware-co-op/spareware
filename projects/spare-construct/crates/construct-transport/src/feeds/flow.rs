@@ -4,7 +4,9 @@
 //! session (`layerMeta`) and pages ArcGIS queries (`arcQuery`). Here each of those is a small state machine: ask for
 //! the next request, give back the answer. Every download of the feeds is a [`Flow`] of these.
 
-use super::arcgis::{form_encode, host_of_url, query_string, Bounds, Expect, FetchFailure, HttpRequest};
+use super::arcgis::{
+    Bounds, Expect, FetchFailure, HttpRequest, form_encode, host_of_url, query_string,
+};
 use crate::edit::json::JsonValue;
 use crate::jsnum::math_round;
 use crate::project::Project;
@@ -46,7 +48,10 @@ pub trait Flow {
 }
 
 /// Runs a flow to the end with a function that does the fetching (for tests and simple hosts).
-pub fn run_flow<F: Flow>(flow: &mut F, mut fetch: impl FnMut(&HttpRequest) -> Result<Answer, FetchFailure>) -> Result<(), String> {
+pub fn run_flow<F: Flow>(
+    flow: &mut F,
+    mut fetch: impl FnMut(&HttpRequest) -> Result<Answer, FetchFailure>,
+) -> Result<(), String> {
     while let Some(req) = flow.next_request() {
         let a = fetch(&req);
         flow.answer(a)?;
@@ -62,7 +67,11 @@ pub fn host_text(url: &str) -> String {
     // an address with a scheme is an address (an empty host gives the text back); anything else, such as a path on this site, is not
     let t = url.trim();
     let mut cs = t.chars();
-    let scheme = cs.next().is_some_and(|c| c.is_ascii_alphabetic()) && t.split_once(':').is_some_and(|(s, _)| s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')));
+    let scheme = cs.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && t.split_once(':').is_some_and(|(s, _)| {
+            s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+        });
     if !scheme {
         return "this site".to_string();
     }
@@ -78,11 +87,26 @@ pub fn get_error(url: &str, ms: f64, f: &FetchFailure) -> String {
     let secs = crate::jsnum::number_to_js_string(math_round(ms / 1000.0));
     match f {
         FetchFailure::Cancelled => "Cancelled".to_string(),
-        FetchFailure::TimedOut => format!("{host} did not answer within {secs} s. Try again later, or raise the time limit in Settings \u{203a} Official data feeds"),
-        FetchFailure::Unreachable(m) => format!("{host} could not be reached ({m}). Check your connection and try again"),
-        FetchFailure::Http(s) => format!("{host} answered HTTP {s}{}", if *s == 404 { " (not found: the service may have moved)" } else { "" }),
-        FetchFailure::TimedOutReading => format!("{host} stopped sending data after {secs} s. Try again later"),
-        FetchFailure::Unreadable(m) => format!("{host} sent something Spare Construct could not read ({m})"),
+        FetchFailure::TimedOut => format!(
+            "{host} did not answer within {secs} s. Try again later, or raise the time limit in Settings \u{203a} Official data feeds"
+        ),
+        FetchFailure::Unreachable(m) => {
+            format!("{host} could not be reached ({m}). Check your connection and try again")
+        }
+        FetchFailure::Http(s) => format!(
+            "{host} answered HTTP {s}{}",
+            if *s == 404 {
+                " (not found: the service may have moved)"
+            } else {
+                ""
+            }
+        ),
+        FetchFailure::TimedOutReading => {
+            format!("{host} stopped sending data after {secs} s. Try again later")
+        }
+        FetchFailure::Unreadable(m) => {
+            format!("{host} sent something Spare Construct could not read ({m})")
+        }
     }
 }
 
@@ -101,7 +125,12 @@ pub struct FeedsConfig {
 
 impl Default for FeedsConfig {
     fn default() -> Self {
-        FeedsConfig { timeout: Value::from(30), nslr_future: Value::Bool(true), tms_days: Value::from(400), other_scenarios: Value::Bool(false) }
+        FeedsConfig {
+            timeout: Value::from(30),
+            nslr_future: Value::Bool(true),
+            tms_days: Value::from(400),
+            other_scenarios: Value::Bool(false),
+        }
     }
 }
 
@@ -165,7 +194,13 @@ impl LayerMeta {
     /// Reads the description of a layer (its address, no query).
     pub fn new(url: &str, cache: &MetaCache, timeout_ms: f64) -> LayerMeta {
         let meta = cache.get(url);
-        LayerMeta { url: url.to_string(), cache: cache.clone(), timeout_ms, done: meta.is_some(), meta }
+        LayerMeta {
+            url: url.to_string(),
+            cache: cache.clone(),
+            timeout_ms,
+            done: meta.is_some(),
+            meta,
+        }
     }
     /// The description, once read.
     pub fn meta(&self) -> Option<&JsonValue> {
@@ -178,17 +213,29 @@ impl Flow for LayerMeta {
         if self.done {
             return None;
         }
-        Some(HttpRequest::get_json(format!("{}?f=json", self.url), self.timeout_ms))
+        Some(HttpRequest::get_json(
+            format!("{}?f=json", self.url),
+            self.timeout_ms,
+        ))
     }
     fn answer(&mut self, a: Result<Answer, FetchFailure>) -> Result<(), String> {
         self.done = true;
         let j = match a {
             Ok(Answer::Json(j)) => j,
-            Ok(_) => return Err(get_error(&self.url, self.timeout_ms, &FetchFailure::Unreadable("not JSON".to_string()))),
+            Ok(_) => {
+                return Err(get_error(
+                    &self.url,
+                    self.timeout_ms,
+                    &FetchFailure::Unreadable("not JSON".to_string()),
+                ));
+            }
             Err(f) => return Err(get_error(&self.url, self.timeout_ms, &f)),
         };
         if let Some(e) = j.get("error").filter(|e| e.truthy()) {
-            let m = e.get("message").filter(|m| m.truthy()).map_or_else(|| "layer description failed".to_string(), JsonValue::js_string);
+            let m = e.get("message").filter(|m| m.truthy()).map_or_else(
+                || "layer description failed".to_string(),
+                JsonValue::js_string,
+            );
             return Err(format!("{}: {}", host_text(&self.url), m));
         }
         self.cache.put(&self.url, j.clone());
@@ -203,7 +250,13 @@ impl Flow for LayerMeta {
 /// `fieldNames(meta)`: the names of the layer's fields.
 pub fn field_names(meta: Option<&JsonValue>) -> Vec<String> {
     match meta.and_then(|m| m.get("fields")) {
-        Some(JsonValue::Array(a)) => a.iter().map(|f| f.get("name").map_or_else(|| "undefined".to_string(), JsonValue::js_string)).collect(),
+        Some(JsonValue::Array(a)) => a
+            .iter()
+            .map(|f| {
+                f.get("name")
+                    .map_or_else(|| "undefined".to_string(), JsonValue::js_string)
+            })
+            .collect(),
         _ => Vec::new(),
     }
 }
@@ -214,7 +267,13 @@ pub fn resolve_fields(meta: Option<&JsonValue>, want: &[&str]) -> Vec<String> {
     if have.is_empty() {
         return want.iter().map(|w| w.to_string()).collect();
     }
-    want.iter().filter_map(|w| have.iter().find(|h| h.to_lowercase() == w.to_lowercase()).cloned()).collect()
+    want.iter()
+        .filter_map(|w| {
+            have.iter()
+                .find(|h| h.to_lowercase() == w.to_lowercase())
+                .cloned()
+        })
+        .collect()
 }
 
 /// `env(b)`: the query parameters that restrict a layer to an envelope.
@@ -248,8 +307,23 @@ pub struct ArcQuery {
 
 impl ArcQuery {
     /// A query of a layer with these parameters (`f=json` is put in front and `resultOffset` after, as the prototype does).
-    pub fn new(url: &str, params: Vec<(String, String)>, max_pages: usize, timeout_ms: f64) -> ArcQuery {
-        ArcQuery { url: url.to_string(), params, max_pages, timeout_ms, page: 0, offset: 0, features: Vec::new(), complete: false, done: false }
+    pub fn new(
+        url: &str,
+        params: Vec<(String, String)>,
+        max_pages: usize,
+        timeout_ms: f64,
+    ) -> ArcQuery {
+        ArcQuery {
+            url: url.to_string(),
+            params,
+            max_pages,
+            timeout_ms,
+            page: 0,
+            offset: 0,
+            features: Vec::new(),
+            complete: false,
+            done: false,
+        }
     }
     /// The features collected so far.
     pub fn features(&self) -> &[JsonValue] {
@@ -273,12 +347,21 @@ impl Flow for ArcQuery {
         let mut q = vec![("f".to_string(), "json".to_string())];
         q.extend(self.params.iter().cloned());
         q.push(("resultOffset".to_string(), self.offset.to_string()));
-        Some(HttpRequest::get_json(format!("{}/query?{}", self.url, query_string(&q)), self.timeout_ms))
+        Some(HttpRequest::get_json(
+            format!("{}/query?{}", self.url, query_string(&q)),
+            self.timeout_ms,
+        ))
     }
     fn answer(&mut self, a: Result<Answer, FetchFailure>) -> Result<(), String> {
         let j = match a {
             Ok(Answer::Json(j)) => j,
-            Ok(_) => return Err(get_error(&self.url, self.timeout_ms, &FetchFailure::Unreadable("not JSON".to_string()))),
+            Ok(_) => {
+                return Err(get_error(
+                    &self.url,
+                    self.timeout_ms,
+                    &FetchFailure::Unreadable("not JSON".to_string()),
+                ));
+            }
             Err(f) => {
                 self.done = true;
                 return Err(get_error(&self.url, self.timeout_ms, &f));
@@ -290,9 +373,18 @@ impl Flow for ArcQuery {
         }
         if let Some(e) = j.get("error").filter(|e| e.truthy()) {
             self.done = true;
-            let msg = e.get("message").filter(|m| m.truthy()).map_or_else(|| "query failed".to_string(), JsonValue::js_string);
+            let msg = e
+                .get("message")
+                .filter(|m| m.truthy())
+                .map_or_else(|| "query failed".to_string(), JsonValue::js_string);
             let details = match e.get("details") {
-                Some(JsonValue::Array(d)) if !d.is_empty() => format!(" ({})", d.iter().map(JsonValue::js_string).collect::<Vec<_>>().join("; ")),
+                Some(JsonValue::Array(d)) if !d.is_empty() => format!(
+                    " ({})",
+                    d.iter()
+                        .map(JsonValue::js_string)
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                ),
                 _ => String::new(),
             };
             return Err(format!("{}: {}{}", host_text(&self.url), msg, details));
@@ -303,7 +395,11 @@ impl Flow for ArcQuery {
         };
         let n = f.len();
         self.features.extend(f);
-        if !j.get("exceededTransferLimit").is_some_and(JsonValue::truthy) || n == 0 {
+        if !j
+            .get("exceededTransferLimit")
+            .is_some_and(JsonValue::truthy)
+            || n == 0
+        {
             self.complete = true;
             self.done = true;
             return Ok(());
@@ -333,7 +429,12 @@ impl GetOnce {
     /// A request whose single answer is kept (use [`GetOnce::answer_value`] to read it).
     pub fn new(req: HttpRequest) -> GetOnce {
         let expect = req.expect;
-        GetOnce { req, expect, answer: None, done: false }
+        GetOnce {
+            req,
+            expect,
+            answer: None,
+            done: false,
+        }
     }
     /// The answer, once given.
     pub fn answer_value(&self) -> Option<&Answer> {
@@ -347,7 +448,11 @@ impl GetOnce {
 
 impl Flow for GetOnce {
     fn next_request(&mut self) -> Option<HttpRequest> {
-        if self.done { None } else { Some(self.req.clone()) }
+        if self.done {
+            None
+        } else {
+            Some(self.req.clone())
+        }
     }
     fn answer(&mut self, a: Result<Answer, FetchFailure>) -> Result<(), String> {
         self.done = true;
@@ -367,5 +472,9 @@ impl Flow for GetOnce {
 
 /// `encodeURIComponent` used inside a form body: `data=` plus the text.
 pub fn form_body(key: &str, value: &str) -> String {
-    format!("{}={}", form_encode(key), super::arcgis::encode_uri_component(value))
+    format!(
+        "{}={}",
+        form_encode(key),
+        super::arcgis::encode_uri_component(value)
+    )
 }

@@ -16,7 +16,9 @@
 mod csv;
 mod diagram;
 
-pub use csv::{CODE_HEAD, SIDRA_HEAD, SidraExport, SidraOpts, sidra_csv, sidra_export, turn_count_csv};
+pub use csv::{
+    CODE_HEAD, SIDRA_HEAD, SidraExport, SidraOpts, sidra_csv, sidra_export, turn_count_csv,
+};
 pub use diagram::{DiagramOpts, diagram};
 
 use crate::edit::collate::locale_compare_f64;

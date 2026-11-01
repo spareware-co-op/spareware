@@ -6,11 +6,11 @@ use super::criteria::{
     CATS, Test, need, preset_tests, standard_name, tag, target_text, tmdg_tests,
 };
 use super::m1::{MeStats, PairVal, me_stats};
-use super::rows::{
-    CalStats, Core, CountRow, JourneyRow, JtStats, core_area, count_rows, in_area, in_set, journeys, jt_stats, set_label,
-    stats_of_count_rows, stats_of_rows,
-};
 use super::roles::Ctx;
+use super::rows::{
+    CalStats, Core, CountRow, JourneyRow, JtStats, core_area, count_rows, in_area, in_set,
+    journeys, jt_stats, set_label, stats_of_count_rows, stats_of_rows,
+};
 use super::screen::{SlSummary, sl_observations};
 use super::stats::MIN_SITES;
 use super::turnrows::{TurnCheckRow, turn_rows};
@@ -69,7 +69,8 @@ pub fn conv_stats(res: Option<&Res>) -> ConvStats {
         converged: res.converged,
         gap_tol: res.gap_tol,
         note: res.conv_note.clone(),
-        p4: last.len() == tag::P_CONSEC && last.iter().all(|e| e.p.is_some_and(|p| p > tag::P_SHARE)),
+        p4: last.len() == tag::P_CONSEC
+            && last.iter().all(|e| e.p.is_some_and(|p| p > tag::P_SHARE)),
         last_p: last.last().and_then(|e| e.p),
     }
 }
@@ -142,22 +143,35 @@ pub struct EvOpts {
 
 // `a === b` for the result's year and the settings' base year
 fn base_year_of(res: &Res, base: &Num) -> bool {
-    !(res.year > 0.0) || matches!(base, Maybe::Set(crate::jsnum::JsNum::Number(b)) if *b == res.year)
+    !(res.year > 0.0)
+        || matches!(base, Maybe::Set(crate::jsnum::JsNum::Number(b)) if *b == res.year)
 }
 
 /// `evidence(sc, period, o)`: counts, screenlines, turning movements and journey times against a result.
 pub fn evidence(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, o: &EvOpts) -> Evidence {
-    let set = o.set.clone().unwrap_or_else(|| crate::jsnum::value_to_js_string(&ctx.cfg.set));
+    let set = o
+        .set
+        .clone()
+        .unwrap_or_else(|| crate::jsnum::value_to_js_string(&ctx.cfg.set));
     let core = core_area(ctx, sc);
     let gate = if core.kind == "none" { "all" } else { "inside" };
     let req = o
         .area
         .clone()
         .unwrap_or_else(|| crate::jsnum::value_to_js_string(&ctx.cfg.area));
-    let area = if req == "auto" || req == "inside" || req.is_empty() { gate.to_string() } else { req };
+    let area = if req == "auto" || req == "inside" || req.is_empty() {
+        gate.to_string()
+    } else {
+        req
+    };
     let info_only = area != gate;
     let all = count_rows(ctx, sc, period, res, o.raw);
-    let pick = |s: &str| -> Vec<CountRow> { all.iter().filter(|r| in_set(r, s) && in_area(r, &area)).cloned().collect() };
+    let pick = |s: &str| -> Vec<CountRow> {
+        all.iter()
+            .filter(|r| in_set(r, s) && in_area(r, &area))
+            .cloned()
+            .collect()
+    };
     let valid_n = pick("valid").len();
     let (mut used, mut fallback, mut rows) = (set.clone(), false, pick(&set));
     if set == "valid" && valid_n < MIN_SITES && !o.strict {
@@ -167,9 +181,21 @@ pub fn evidence(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, o: &E
     }
     let tr = turn_rows(ctx, sc, period, &used, &area, res);
     let jr = journeys(ctx, sc, period, res);
-    let measured: Vec<&CountRow> = rows.iter().filter(|r| r.method == "measured_hour").collect();
+    let measured: Vec<&CountRow> = rows
+        .iter()
+        .filter(|r| r.method == "measured_hour")
+        .collect();
     let link = stats_of_count_rows(&rows.iter().collect::<Vec<_>>());
-    let turn_triples: Vec<(f64, f64, f64)> = tr.iter().map(|r| (r.obs, r.model.unwrap_or(f64::NAN), r.geh.unwrap_or(f64::NAN))).collect();
+    let turn_triples: Vec<(f64, f64, f64)> = tr
+        .iter()
+        .map(|r| {
+            (
+                r.obs,
+                r.model.unwrap_or(f64::NAN),
+                r.geh.unwrap_or(f64::NAN),
+            )
+        })
+        .collect();
     Evidence {
         period: period.to_string(),
         requested: set,
@@ -274,7 +300,9 @@ impl Ev<'_> {
 
 struct Ev<'a>(&'a Evidence);
 
-const COUNT_GROUPS: [&str; 8] = ["link", "turn", "band", "tag", "scatter", "rmse", "screen", "jt"];
+const COUNT_GROUPS: [&str; 8] = [
+    "link", "turn", "band", "tag", "scatter", "rmse", "screen", "jt",
+];
 
 fn pct(x: Option<f64>, d: usize) -> String {
     match x {
@@ -284,7 +312,11 @@ fn pct(x: Option<f64>, d: usize) -> String {
 }
 
 fn numf(x: f64, d: usize) -> String {
-    if x.is_finite() { fmt::num(x, d) } else { "\u{2013}".to_string() }
+    if x.is_finite() {
+        fmt::num(x, d)
+    } else {
+        "\u{2013}".to_string()
+    }
 }
 
 /// One test judged (`evaluate`'s result): the value, how many sites were needed, whether it is met and the words for it.
@@ -321,7 +353,12 @@ fn show(t: &Test, ev: &Ev, v: &Val) -> String {
     let n = ev.n_of(on);
     let vn = if let Val::Num(x) = v { Some(*x) } else { None };
     match t.kind {
-        "share" => format!("{}/{} \u{b7} {}", ev.cnt(on, t.stat).unwrap_or(0), n, pct(vn, 1)),
+        "share" => format!(
+            "{}/{} \u{b7} {}",
+            ev.cnt(on, t.stat).unwrap_or(0),
+            n,
+            pct(vn, 1)
+        ),
         "pair" => match v {
             Val::Pair(p) => p.text.clone(),
             _ => "\u{2013}".to_string(),
@@ -332,15 +369,28 @@ fn show(t: &Test, ev: &Ev, v: &Val) -> String {
                 Val::Num(x) => *x != 0.0 && !x.is_nan(),
                 Val::Pair(_) => true,
             };
-            if yes { "yes".to_string() } else { "no".to_string() }
+            if yes {
+                "yes".to_string()
+            } else {
+                "no".to_string()
+            }
         }
         _ => {
             if t.stat == "rmse" || t.stat == "gapPct" || t.stat == "totalAbs" {
                 let x = vn.unwrap_or(f64::NAN);
-                return if t.stat == "gapPct" { format!("{}%", numf(x, 3)) } else { format!("{}%", numf(x, 1)) };
+                return if t.stat == "gapPct" {
+                    format!("{}%", numf(x, 3))
+                } else {
+                    format!("{}%", numf(x, 1))
+                };
             }
             if t.kind == "none" && ev.has_cnt(on) && ev.cnt(on, t.stat).is_some() {
-                return format!("{}/{} \u{b7} {}", ev.cnt(on, t.stat).unwrap_or(0), n, pct(vn, 1));
+                return format!(
+                    "{}/{} \u{b7} {}",
+                    ev.cnt(on, t.stat).unwrap_or(0),
+                    n,
+                    pct(vn, 1)
+                );
             }
             numf(vn.unwrap_or(f64::NAN), 3)
         }
@@ -399,7 +449,9 @@ pub fn evaluate(t: &Test, evidence: &Evidence) -> Eval {
             out.ok = Some(got >= nd);
         }
         "min" => out.ok = Some(vnum > t.min.unwrap_or(f64::NAN)),
-        "range" => out.ok = Some(vnum >= t.lo.unwrap_or(f64::NAN) && vnum <= t.hi.unwrap_or(f64::NAN)),
+        "range" => {
+            out.ok = Some(vnum >= t.lo.unwrap_or(f64::NAN) && vnum <= t.hi.unwrap_or(f64::NAN))
+        }
         "max" => out.ok = Some(vnum < t.max.unwrap_or(f64::NAN)),
         "rmse" => {
             let ok = vnum < t.max.unwrap_or(f64::NAN);
@@ -431,7 +483,12 @@ pub fn evaluate(t: &Test, evidence: &Evidence) -> Eval {
     } else if out.clarify == Some(true) {
         "Requires clarification".to_string()
     } else if t.kind == "share" {
-        format!("Fail ({} of {}; {} needed)", out.got.unwrap_or(0), n, out.need.unwrap_or(0))
+        format!(
+            "Fail ({} of {}; {} needed)",
+            out.got.unwrap_or(0),
+            n,
+            out.need.unwrap_or(0)
+        )
     } else {
         "Fail".to_string()
     };
@@ -446,7 +503,11 @@ pub fn evaluate(t: &Test, evidence: &Evidence) -> Eval {
         return out;
     }
     out.status = if t.use_ == "useful" {
-        if out.clarify == Some(true) { "Info (requires clarification)".to_string() } else { "Info".to_string() }
+        if out.clarify == Some(true) {
+            "Info (requires clarification)".to_string()
+        } else {
+            "Info".to_string()
+        }
     } else if evidence.info_only && COUNT_GROUPS.contains(&t.group) {
         "Info".to_string()
     } else {
@@ -525,17 +586,29 @@ pub fn assess(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, o: &EvO
         .clone()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| crate::jsnum::value_to_js_string(&ctx.cfg.standard));
-    let cat = o.category.unwrap_or_else(|| super::common::category(Some(ctx.s())));
-    let rows: Vec<Eval> = tests_for(ctx, &std, cat).iter().map(|t| evaluate(t, &ev)).collect();
+    let cat = o
+        .category
+        .unwrap_or_else(|| super::common::category(Some(ctx.s())));
+    let rows: Vec<Eval> = tests_for(ctx, &std, cat)
+        .iter()
+        .map(|t| evaluate(t, &ev))
+        .collect();
     let status = if !ev.has_res || ev.link.n == 0 {
         "none"
     } else if ev.info_only {
         "info"
-    } else if rows.iter().any(|r| expected(r) && r.indicative && r.t.group == "link") {
+    } else if rows
+        .iter()
+        .any(|r| expected(r) && r.indicative && r.t.group == "link")
+    {
         "indicative"
     } else if !ev.base_year {
         "not base year"
-    } else if rows.iter().filter(|r| gating(r)).all(|r| r.ok == Some(true)) {
+    } else if rows
+        .iter()
+        .filter(|r| gating(r))
+        .all(|r| r.ok == Some(true))
+    {
         "pass"
     } else {
         "fail"
@@ -594,7 +667,9 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
     let lab = if a.standard == "tmdg" {
         format!("TMDG Category {}", a.category)
     } else {
-        standard_name(&a.standard).unwrap_or("undefined").to_string()
+        standard_name(&a.standard)
+            .unwrap_or("undefined")
+            .to_string()
     };
     let where_ = match ev.area.as_str() {
         "inside" => " inside the area of influence",
@@ -605,38 +680,65 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
     match a.status.as_str() {
         "none" => {
             return if !ev.has_res {
-                format!("Run the model for the {} peak to compare it with the counts.", a.period)
+                format!(
+                    "Run the model for the {} peak to compare it with the counts.",
+                    a.period
+                )
             } else {
-                format!("No {}{} match the network for the {} peak.", set_label(&ev.set), where_, a.period)
-            }
+                format!(
+                    "No {}{} match the network for the {} peak.",
+                    set_label(&ev.set),
+                    where_,
+                    a.period
+                )
+            };
         }
         "info" => {
             return format!(
                 "For information only ({}): pass or fail is decided on the counts inside the area of influence, {}. Choose Area: Area of influence to see the status.",
                 who, ev.core.label
-            )
+            );
         }
         "indicative" => {
-            return format!("Indicative only: {} (fewer than {}), so no pass or fail is given.", who, MIN_SITES)
+            return format!(
+                "Indicative only: {} (fewer than {}), so no pass or fail is given.",
+                who, MIN_SITES
+            );
         }
         "not base year" => {
             return format!(
                 "Not assessed: the {} results are compared with base-year ({}) counts. Validate a base-year scenario; these figures are for information.",
                 ev.year.map_or("null".to_string(), number_to_js_string),
                 ctx.s().base_year.js_string()
-            )
+            );
         }
         _ => {}
     }
-    let failed: Vec<&str> = a.rows.iter().filter(|r| gating(r) && r.ok != Some(true)).map(|r| r.t.label.as_str()).collect();
+    let failed: Vec<&str> = a
+        .rows
+        .iter()
+        .filter(|r| gating(r) && r.ok != Some(true))
+        .map(|r| r.t.label.as_str())
+        .collect();
     let mut s = format!(
         "Assessed against {}: {} ({}).",
         lab,
-        if a.pass == Some(true) { "all expected tests pass".to_string() } else { format!("fails {}", failed.join(", ")) },
+        if a.pass == Some(true) {
+            "all expected tests pass".to_string()
+        } else {
+            format!("fails {}", failed.join(", "))
+        },
         who
     );
     if !a.also.is_empty() {
-        s.push_str(&format!(" Also meets Category {}.", a.also.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(", ")));
+        s.push_str(&format!(
+            " Also meets Category {}.",
+            a.also
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     if !a.fails.is_empty() && a.standard == "tmdg" {
         s.push_str(&format!(
@@ -679,7 +781,9 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
             if dr.len() == 1 { "it adds" } else { "they add" }
         ));
     }
-    s.push_str(" Meeting criteria does not by itself show the model is fit for purpose (TAG M3.1 3.2.2).");
+    s.push_str(
+        " Meeting criteria does not by itself show the model is fit for purpose (TAG M3.1 3.2.2).",
+    );
     s
 }
 
@@ -689,19 +793,31 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
 pub fn report_scenario(p: &Project) -> Option<&Scenario> {
     let runs = |s: &Scenario, f: &dyn Fn(f64) -> bool| -> bool {
         ["AM", "PM"].iter().any(|pd| match s.res.get() {
-            Some(Value::Object(m)) => m.get(*pd).filter(|v| value_truthy(v)).is_some_and(|r| f(r.get("year").map_or(f64::NAN, crate::jsnum::value_to_number))),
+            Some(Value::Object(m)) => m.get(*pd).filter(|v| value_truthy(v)).is_some_and(|r| {
+                f(r.get("year")
+                    .map_or(f64::NAN, crate::jsnum::value_to_number))
+            }),
             _ => false,
         })
     };
     let base_year = p.settings.base_year.clone();
-    let is_base_yr = |s: &Scenario| runs(s, &|y| matches!(&base_year, Maybe::Set(crate::jsnum::JsNum::Number(b)) if *b == y));
+    let is_base_yr = |s: &Scenario| {
+        runs(
+            s,
+            &|y| matches!(&base_year, Maybe::Set(crate::jsnum::JsNum::Number(b)) if *b == y),
+        )
+    };
     let b = p.scenarios.iter().find(|s| p.base.is(&s.id));
     if let Some(b) = b
         && is_base_yr(b)
     {
         return Some(b);
     }
-    p.scenarios.iter().find(|s| is_base_yr(s)).or(b).or(p.scenarios.first())
+    p.scenarios
+        .iter()
+        .find(|s| is_base_yr(s))
+        .or(b)
+        .or(p.scenarios.first())
 }
 
 /// What `recordValidation` did to the project's record for the period.
@@ -734,9 +850,20 @@ pub fn record_validation(p: &mut Project, sc_id: &str, period: &str, now: &str) 
             Some(s) => s,
             None => return Recorded::Nothing,
         };
-        let old = p.validation.get().and_then(|v| v.get(period)).and_then(|v| v.get());
+        let old = p
+            .validation
+            .get()
+            .and_then(|v| v.get(period))
+            .and_then(|v| v.get());
         let res = super::fit::stored_res(sc, period);
-        (old.is_some_and(|o| o.extra.get("scenario").is_some_and(|s| s.as_str() == Some(sc_id))), res)
+        (
+            old.is_some_and(|o| {
+                o.extra
+                    .get("scenario")
+                    .is_some_and(|s| s.as_str() == Some(sc_id))
+            }),
+            res,
+        )
     };
     let drop_if_mine = |p: &mut Project| -> Recorded {
         if old_scenario_is_this {
@@ -746,7 +873,9 @@ pub fn record_validation(p: &mut Project, sc_id: &str, period: &str, now: &str) 
             Recorded::Nothing
         }
     };
-    let Some(res) = res else { return drop_if_mine(p) };
+    let Some(res) = res else {
+        return drop_if_mine(p);
+    };
     let base = base_year_of(&res, &p.settings.base_year);
     if res.stale || !base {
         return drop_if_mine(p);
@@ -756,7 +885,11 @@ pub fn record_validation(p: &mut Project, sc_id: &str, period: &str, now: &str) 
         let sc = p.scenario(sc_id).expect("scenario");
         let std = {
             let s = crate::jsnum::value_to_js_string(&ctx.cfg.standard);
-            if value_truthy(&ctx.cfg.standard) { s } else { "tmdg".to_string() }
+            if value_truthy(&ctx.cfg.standard) {
+                s
+            } else {
+                "tmdg".to_string()
+            }
         };
         let a = assess(
             &ctx,
@@ -781,7 +914,11 @@ pub fn record_validation(p: &mut Project, sc_id: &str, period: &str, now: &str) 
             pass: Maybe::Set(crate::jsnum::JsNum::Bool(a.pass == Some(true))),
             independent: Maybe::Set(crate::jsnum::JsNum::Bool(independent)),
             category: Maybe::Set(crate::jsnum::JsNum::Text(a.category.to_string())),
-            standard: Maybe::Set(crate::jsnum::JsNum::Text(if a.standard.is_empty() { std } else { a.standard.clone() })),
+            standard: Maybe::Set(crate::jsnum::JsNum::Text(if a.standard.is_empty() {
+                std
+            } else {
+                a.standard.clone()
+            })),
             date: Maybe::Set(Value::String(now.to_string())),
             extra,
         };
@@ -830,9 +967,16 @@ pub fn refresh_validation(p: &mut Project, now: &str) -> bool {
             .get()
             .and_then(|v| v.get(pd))
             .and_then(|v| v.get())
-            .map(|v| v.extra.get("scenario").and_then(|s| s.as_str()).map(String::from));
+            .map(|v| {
+                v.extra
+                    .get("scenario")
+                    .and_then(|s| s.as_str())
+                    .map(String::from)
+            });
         if let Some(scenario) = mine
-            && sc_id.as_deref().is_none_or(|id| scenario.as_deref() != Some(id))
+            && sc_id
+                .as_deref()
+                .is_none_or(|id| scenario.as_deref() != Some(id))
         {
             drop_validation(p, pd);
         }

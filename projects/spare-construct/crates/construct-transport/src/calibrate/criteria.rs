@@ -135,23 +135,192 @@ pub struct TmdgRow {
 
 /// `TMDG`: TMDG 2019 values by category (docs/spec/_validation-rules, read from tmd.pdf).
 pub const TMDG_TABLE: [TmdgRow; 17] = [
-    TmdgRow { key: "geh5", v: &[('A', One(0.65)), ('B', One(0.75)), ('C', One(0.80)), ('D', One(0.825)), ('E', One(0.85)), ('F', One(0.95)), ('G', One(0.85))], vf: "AB", table: "Individual turning movements and directional link counts (GEH < 5)" },
-    TmdgRow { key: "geh75", v: &[('A', One(0.75)), ('B', One(0.80)), ('C', One(0.85)), ('D', One(0.875)), ('E', One(0.90)), ('F', One(1.0)), ('G', One(0.90))], vf: "AB", table: "Individual turning movements and directional link counts (GEH < 7.5)" },
-    TmdgRow { key: "geh10", v: &[('A', One(0.85)), ('B', One(0.85)), ('C', One(0.90)), ('D', One(0.925)), ('E', One(0.95)), ('F', One(1.0)), ('G', One(0.95))], vf: "AB", table: "Individual turning movements and directional link counts (GEH < 10)" },
-    TmdgRow { key: "geh12", v: &[('A', One(0.95))], vf: "A", table: "Individual counts (GEH < 12, Category A only)" },
-    TmdgRow { key: "band", v: &[('B', One(0.70)), ('C', One(0.775)), ('D', One(0.85)), ('E', One(0.90)), ('F', One(0.95)), ('G', One(0.80))], vf: "", table: "Count band criteria (< 400 within 50 veh/h; 400\u{2013}2,000 within 12.5%; > 2,000 within 250 veh/h)" },
-    TmdgRow { key: "sgeh5", v: &[('A', One(0.60)), ('B', One(0.75)), ('C', One(0.85)), ('D', One(0.90))], vf: "", table: "Screenline totals (GEH < 5)" },
-    TmdgRow { key: "sgeh75", v: &[('A', One(0.75)), ('B', One(0.85)), ('C', One(0.90)), ('D', One(0.95))], vf: "ABCD", table: "Screenline totals (GEH < 7.5)" },
-    TmdgRow { key: "sgeh10", v: &[('A', One(0.90)), ('B', One(0.95)), ('C', One(0.95)), ('D', One(1.0))], vf: "ABCD", table: "Screenline totals (GEH < 10)" },
-    TmdgRow { key: "sw10", v: &[('A', One(0.70))], vf: "", table: "Screenline totals within 10% (Category A)" },
-    TmdgRow { key: "sw15", v: &[('A', One(0.80))], vf: "", table: "Screenline totals within 15% (Category A)" },
-    TmdgRow { key: "r2", v: &[('A', One(0.85)), ('B', One(0.90)), ('C', One(0.95)), ('D', One(0.95)), ('E', One(0.95)), ('F', One(0.95)), ('G', One(0.95))], vf: "", table: "Scatter plot, trendline through the origin (R\u{b2})" },
-    TmdgRow { key: "slope", v: &[('A', Pair(0.90, 1.10)), ('B', Pair(0.90, 1.10)), ('C', Pair(0.90, 1.10)), ('D', Pair(0.925, 1.075)), ('E', Pair(0.95, 1.05)), ('F', Pair(0.97, 1.03)), ('G', Pair(0.97, 1.03))], vf: "", table: "Scatter plot, trendline through the origin (slope)" },
-    TmdgRow { key: "rmse", v: &[('A', Pair(30.0, 40.0)), ('B', Pair(25.0, 35.0)), ('C', Pair(20.0, 30.0)), ('D', Pair(17.5, 27.5)), ('E', Pair(15.0, 25.0))], vf: "", table: "%RMSE (acceptable; requires clarification)" },
-    TmdgRow { key: "jt1", v: &[('A', One(0.80)), ('B', One(0.85)), ('C', One(0.85)), ('D', One(0.875)), ('E', One(0.90)), ('F', One(0.90)), ('G', One(0.90))], vf: "", table: "Journey times, tier 1 (within 15% or 1 minute)" },
-    TmdgRow { key: "jt2", v: &[('A', One(0.85)), ('B', One(0.90)), ('C', One(0.90)), ('D', One(0.925)), ('E', One(0.95)), ('F', One(1.0)), ('G', One(1.0))], vf: "", table: "Journey times, tier 2 (within 25% or 1.5 minutes)" },
-    TmdgRow { key: "meTotal", v: &[('E', Pair(5.0, 10.0)), ('F', Pair(7.0, 15.0))], vf: "", table: "Section 8, total matrix change (high-quality prior; low-quality prior)" },
-    TmdgRow { key: "meCR", v: &[('C', One(0.70)), ('D', One(0.75)), ('E', One(0.80))], vf: "", table: "Section 8, trip-length coincidence ratio" },
+    TmdgRow {
+        key: "geh5",
+        v: &[
+            ('A', One(0.65)),
+            ('B', One(0.75)),
+            ('C', One(0.80)),
+            ('D', One(0.825)),
+            ('E', One(0.85)),
+            ('F', One(0.95)),
+            ('G', One(0.85)),
+        ],
+        vf: "AB",
+        table: "Individual turning movements and directional link counts (GEH < 5)",
+    },
+    TmdgRow {
+        key: "geh75",
+        v: &[
+            ('A', One(0.75)),
+            ('B', One(0.80)),
+            ('C', One(0.85)),
+            ('D', One(0.875)),
+            ('E', One(0.90)),
+            ('F', One(1.0)),
+            ('G', One(0.90)),
+        ],
+        vf: "AB",
+        table: "Individual turning movements and directional link counts (GEH < 7.5)",
+    },
+    TmdgRow {
+        key: "geh10",
+        v: &[
+            ('A', One(0.85)),
+            ('B', One(0.85)),
+            ('C', One(0.90)),
+            ('D', One(0.925)),
+            ('E', One(0.95)),
+            ('F', One(1.0)),
+            ('G', One(0.95)),
+        ],
+        vf: "AB",
+        table: "Individual turning movements and directional link counts (GEH < 10)",
+    },
+    TmdgRow {
+        key: "geh12",
+        v: &[('A', One(0.95))],
+        vf: "A",
+        table: "Individual counts (GEH < 12, Category A only)",
+    },
+    TmdgRow {
+        key: "band",
+        v: &[
+            ('B', One(0.70)),
+            ('C', One(0.775)),
+            ('D', One(0.85)),
+            ('E', One(0.90)),
+            ('F', One(0.95)),
+            ('G', One(0.80)),
+        ],
+        vf: "",
+        table: "Count band criteria (< 400 within 50 veh/h; 400\u{2013}2,000 within 12.5%; > 2,000 within 250 veh/h)",
+    },
+    TmdgRow {
+        key: "sgeh5",
+        v: &[
+            ('A', One(0.60)),
+            ('B', One(0.75)),
+            ('C', One(0.85)),
+            ('D', One(0.90)),
+        ],
+        vf: "",
+        table: "Screenline totals (GEH < 5)",
+    },
+    TmdgRow {
+        key: "sgeh75",
+        v: &[
+            ('A', One(0.75)),
+            ('B', One(0.85)),
+            ('C', One(0.90)),
+            ('D', One(0.95)),
+        ],
+        vf: "ABCD",
+        table: "Screenline totals (GEH < 7.5)",
+    },
+    TmdgRow {
+        key: "sgeh10",
+        v: &[
+            ('A', One(0.90)),
+            ('B', One(0.95)),
+            ('C', One(0.95)),
+            ('D', One(1.0)),
+        ],
+        vf: "ABCD",
+        table: "Screenline totals (GEH < 10)",
+    },
+    TmdgRow {
+        key: "sw10",
+        v: &[('A', One(0.70))],
+        vf: "",
+        table: "Screenline totals within 10% (Category A)",
+    },
+    TmdgRow {
+        key: "sw15",
+        v: &[('A', One(0.80))],
+        vf: "",
+        table: "Screenline totals within 15% (Category A)",
+    },
+    TmdgRow {
+        key: "r2",
+        v: &[
+            ('A', One(0.85)),
+            ('B', One(0.90)),
+            ('C', One(0.95)),
+            ('D', One(0.95)),
+            ('E', One(0.95)),
+            ('F', One(0.95)),
+            ('G', One(0.95)),
+        ],
+        vf: "",
+        table: "Scatter plot, trendline through the origin (R\u{b2})",
+    },
+    TmdgRow {
+        key: "slope",
+        v: &[
+            ('A', Pair(0.90, 1.10)),
+            ('B', Pair(0.90, 1.10)),
+            ('C', Pair(0.90, 1.10)),
+            ('D', Pair(0.925, 1.075)),
+            ('E', Pair(0.95, 1.05)),
+            ('F', Pair(0.97, 1.03)),
+            ('G', Pair(0.97, 1.03)),
+        ],
+        vf: "",
+        table: "Scatter plot, trendline through the origin (slope)",
+    },
+    TmdgRow {
+        key: "rmse",
+        v: &[
+            ('A', Pair(30.0, 40.0)),
+            ('B', Pair(25.0, 35.0)),
+            ('C', Pair(20.0, 30.0)),
+            ('D', Pair(17.5, 27.5)),
+            ('E', Pair(15.0, 25.0)),
+        ],
+        vf: "",
+        table: "%RMSE (acceptable; requires clarification)",
+    },
+    TmdgRow {
+        key: "jt1",
+        v: &[
+            ('A', One(0.80)),
+            ('B', One(0.85)),
+            ('C', One(0.85)),
+            ('D', One(0.875)),
+            ('E', One(0.90)),
+            ('F', One(0.90)),
+            ('G', One(0.90)),
+        ],
+        vf: "",
+        table: "Journey times, tier 1 (within 15% or 1 minute)",
+    },
+    TmdgRow {
+        key: "jt2",
+        v: &[
+            ('A', One(0.85)),
+            ('B', One(0.90)),
+            ('C', One(0.90)),
+            ('D', One(0.925)),
+            ('E', One(0.95)),
+            ('F', One(1.0)),
+            ('G', One(1.0)),
+        ],
+        vf: "",
+        table: "Journey times, tier 2 (within 25% or 1.5 minutes)",
+    },
+    TmdgRow {
+        key: "meTotal",
+        v: &[('E', Pair(5.0, 10.0)), ('F', Pair(7.0, 15.0))],
+        vf: "",
+        table: "Section 8, total matrix change (high-quality prior; low-quality prior)",
+    },
+    TmdgRow {
+        key: "meCR",
+        v: &[('C', One(0.70)), ('D', One(0.75)), ('E', One(0.80))],
+        vf: "",
+        table: "Section 8, trip-length coincidence ratio",
+    },
 ];
 
 /// `TMDG[key]`.
@@ -220,13 +389,38 @@ pub struct Band {
 }
 
 /// `BANDS.tmdg`: the TMDG count band.
-pub const BAND_TMDG: Band = Band { lo: 400.0, hi: 2000.0, abs_lo: 50.0, rel: 0.125, abs_hi: 250.0, src: "tmdg", table: "Count band criteria", verified: true };
+pub const BAND_TMDG: Band = Band {
+    lo: 400.0,
+    hi: 2000.0,
+    abs_lo: 50.0,
+    rel: 0.125,
+    abs_hi: 250.0,
+    src: "tmdg",
+    table: "Count band criteria",
+    verified: true,
+};
 /// `BANDS.tag`: the TAG M3.1 Table 2 flow band.
-pub const BAND_TAG: Band = Band { lo: 700.0, hi: 2700.0, abs_lo: 100.0, rel: 0.15, abs_hi: 400.0, src: "tag", table: "Table 2", verified: true };
+pub const BAND_TAG: Band = Band {
+    lo: 700.0,
+    hi: 2700.0,
+    abs_lo: 100.0,
+    rel: 0.15,
+    abs_hi: 400.0,
+    src: "tag",
+    table: "Table 2",
+    verified: true,
+};
 
 /// `inBand(B, m, c)`: the modelled flow m is within the band of the counted flow c.
 pub fn in_band(b: &Band, m: f64, c: f64) -> bool {
-    (m - c).abs() <= (if c < b.lo { b.abs_lo } else if c <= b.hi { b.rel * c } else { b.abs_hi })
+    (m - c).abs()
+        <= (if c < b.lo {
+            b.abs_lo
+        } else if c <= b.hi {
+            b.rel * c
+        } else {
+            b.abs_hi
+        })
 }
 
 /// `tmdgBand(m, c)`.
@@ -360,10 +554,30 @@ pub struct PanelMethod {
 
 /// `METHODS`.
 pub const METHODS: [PanelMethod; 4] = [
-    PanelMethod { key: "measured_hour", label: "Measured hour", short: "measured", weight: 1.0 },
-    PanelMethod { key: "weekday_factored", label: "Weekday mean \u{d7} peak share", short: "weekday", weight: 0.7 },
-    PanelMethod { key: "adt_factored", label: "Daily \u{d7} peak share", short: "factored", weight: 0.4 },
-    PanelMethod { key: "virtual", label: "NZTA estimate (virtual site)", short: "virtual", weight: 0.0 },
+    PanelMethod {
+        key: "measured_hour",
+        label: "Measured hour",
+        short: "measured",
+        weight: 1.0,
+    },
+    PanelMethod {
+        key: "weekday_factored",
+        label: "Weekday mean \u{d7} peak share",
+        short: "weekday",
+        weight: 0.7,
+    },
+    PanelMethod {
+        key: "adt_factored",
+        label: "Daily \u{d7} peak share",
+        short: "factored",
+        weight: 0.4,
+    },
+    PanelMethod {
+        key: "virtual",
+        label: "NZTA estimate (virtual site)",
+        short: "virtual",
+        weight: 0.0,
+    },
 ];
 
 /// `METHODS[key]`.
@@ -426,7 +640,13 @@ pub struct Test {
     pub use_verified: Option<bool>,
 }
 
-fn t0(id: &str, group: &'static str, on: &'static str, stat: &'static str, kind: &'static str) -> Test {
+fn t0(
+    id: &str,
+    group: &'static str,
+    on: &'static str,
+    stat: &'static str,
+    kind: &'static str,
+) -> Test {
     Test {
         id: id.to_string(),
         group,
@@ -448,7 +668,13 @@ fn t0(id: &str, group: &'static str, on: &'static str, stat: &'static str, kind:
     }
 }
 
-fn tag_t(id: &str, group: &'static str, on: &'static str, stat: &'static str, kind: &'static str) -> Test {
+fn tag_t(
+    id: &str,
+    group: &'static str,
+    on: &'static str,
+    stat: &'static str,
+    kind: &'static str,
+) -> Test {
     Test {
         src: "tag",
         use_: "check",
@@ -462,7 +688,10 @@ pub fn band_crit(b: &Band) -> String {
         "within {} veh/h (< {}), {}% ({}\u{2013}{}), {} veh/h (> {})",
         n(b.abs_lo),
         fmt::int(b.lo),
-        fmt::num(b.rel * 100.0, if (b.rel * 100.0) % 1.0 != 0.0 { 1 } else { 0 }),
+        fmt::num(
+            b.rel * 100.0,
+            if (b.rel * 100.0) % 1.0 != 0.0 { 1 } else { 0 }
+        ),
         fmt::int(b.lo),
         fmt::int(b.hi),
         n(b.abs_hi),
@@ -474,11 +703,22 @@ pub fn band_crit(b: &Band) -> String {
 pub fn tag_band_test(on: &'static str) -> Test {
     let turn = on == "turn";
     Test {
-        label: if turn { "Turn TAG flow band" } else { "TAG flow band" }.to_string(),
+        label: if turn {
+            "Turn TAG flow band"
+        } else {
+            "TAG flow band"
+        }
+        .to_string(),
         crit: band_crit(&BAND_TAG),
         table: BAND_TAG.table.to_string(),
         use_: "useful",
-        ..tag_t(if turn { "tTagBand" } else { "tagBand" }, "tag", on, "tag", "none")
+        ..tag_t(
+            if turn { "tTagBand" } else { "tagBand" },
+            "tag",
+            on,
+            "tag",
+            "none",
+        )
     }
 }
 
@@ -487,10 +727,25 @@ pub fn tag_either_test(on: &'static str) -> Test {
     let turn = on == "turn";
     Test {
         min: Some(tag::EITHER_V),
-        label: if turn { "Turn TAG either (GEH < 5 or flow band)" } else { "TAG either (GEH < 5 or flow band)" }.to_string(),
-        crit: format!("{} of {}", tag::EITHER_CRIT, if turn { "turning movements" } else { "counts" }),
+        label: if turn {
+            "Turn TAG either (GEH < 5 or flow band)"
+        } else {
+            "TAG either (GEH < 5 or flow band)"
+        }
+        .to_string(),
+        crit: format!(
+            "{} of {}",
+            tag::EITHER_CRIT,
+            if turn { "turning movements" } else { "counts" }
+        ),
         table: "Table 2".to_string(),
-        ..tag_t(if turn { "tTagEither" } else { "tagEither" }, "tag", on, "either", "share")
+        ..tag_t(
+            if turn { "tTagEither" } else { "tagEither" },
+            "tag",
+            on,
+            "either",
+            "share",
+        )
     }
 }
 
@@ -547,10 +802,19 @@ pub fn common_tests(cat: char, prior_high: bool) -> Vec<Test> {
         Test {
             max: me_max,
             label: "Matrix total change".to_string(),
-            crit: format!("{}-quality prior, %", if prior_high { "high" } else { "low" }),
+            crit: format!(
+                "{}-quality prior, %",
+                if prior_high { "high" } else { "low" }
+            ),
             table: tmdg_row("meTotal").table.to_string(),
             use_: "check",
-            ..t0("meTotal", "me", "me", "totalAbs", if me.is_some() { "max" } else { "none" })
+            ..t0(
+                "meTotal",
+                "me",
+                "me",
+                "totalAbs",
+                if me.is_some() { "max" } else { "none" },
+            )
         },
         Test {
             label: "Matrix cells, slope and R\u{b2}".to_string(),
@@ -576,20 +840,36 @@ pub fn common_tests(cat: char, prior_high: bool) -> Vec<Test> {
             crit: "\u{3a3}min / \u{3a3}max over distance bands".to_string(),
             table: tmdg_row("meCR").table.to_string(),
             use_: "check",
-            ..t0("meCR", "me", "me", "cr", if cr.is_some() { "min" } else { "none" })
+            ..t0(
+                "meCR",
+                "me",
+                "me",
+                "cr",
+                if cr.is_some() { "min" } else { "none" },
+            )
         },
     ]
 }
 
 /// `tmdgTests(cat)`: every test of TMDG 2019 for a purpose category, then the TAG, RMS and convergence rows beside them.
 pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
-    let i = CATS.iter().position(|&c| c == cat).expect("a category A to G");
+    let i = CATS
+        .iter()
+        .position(|&c| c == cat)
+        .expect("a category A to G");
     let use_of = |g: &str| use_of_letter(fig5(g).as_bytes()[i] as char);
     let fig5ok = |g: &str| fig5_ok(cat, g);
     let v = |key: &str| tmdg_row(key).at(cat);
     let vf = |key: &str| !tmdg_row(key).vf.contains(cat);
     let tb = |key: &str| tmdg_row(key).table.to_string();
-    let share = |id: &str, group: &'static str, on: &'static str, key: &str, stat: &'static str, label: &str, crit: &str| -> Test {
+    let share = |id: &str,
+                 group: &'static str,
+                 on: &'static str,
+                 key: &str,
+                 stat: &'static str,
+                 label: &str,
+                 crit: &str|
+     -> Test {
         Test {
             min: v(key).map(|x| x.one()),
             label: label.to_string(),
@@ -598,34 +878,161 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
             verified: vf(key),
             use_: use_of(group),
             use_verified: Some(fig5ok(group)),
-            ..t0(id, group, on, stat, if v(key).is_none() { "none" } else { "share" })
+            ..t0(
+                id,
+                group,
+                on,
+                stat,
+                if v(key).is_none() { "none" } else { "share" },
+            )
         }
     };
     let sl = use_of("screen");
     let band = band_crit(&BAND_TMDG);
     let mut out = vec![
-        share("geh5", "link", "link", "geh5", "geh5", "Link GEH < 5", "GEH < 5, % of directional counts"),
-        share("geh75", "link", "link", "geh75", "geh75", "Link GEH < 7.5", "GEH < 7.5"),
-        share("geh10", "link", "link", "geh10", "geh10", "Link GEH < 10", "GEH < 10"),
+        share(
+            "geh5",
+            "link",
+            "link",
+            "geh5",
+            "geh5",
+            "Link GEH < 5",
+            "GEH < 5, % of directional counts",
+        ),
+        share(
+            "geh75",
+            "link",
+            "link",
+            "geh75",
+            "geh75",
+            "Link GEH < 7.5",
+            "GEH < 7.5",
+        ),
+        share(
+            "geh10",
+            "link",
+            "link",
+            "geh10",
+            "geh10",
+            "Link GEH < 10",
+            "GEH < 10",
+        ),
     ];
     if cat == 'A' {
-        out.push(share("geh12", "link", "link", "geh12", "geh12", "Link GEH < 12", "GEH < 12"));
+        out.push(share(
+            "geh12",
+            "link",
+            "link",
+            "geh12",
+            "geh12",
+            "Link GEH < 12",
+            "GEH < 12",
+        ));
     }
-    out.push(share("band", "band", "link", "band", "band", "TMDG count band", &band));
+    out.push(share(
+        "band",
+        "band",
+        "link",
+        "band",
+        "band",
+        "TMDG count band",
+        &band,
+    ));
     out.push(tag_band_test("link"));
     out.push(tag_either_test("link"));
-    out.push(share("tgeh5", "turn", "turn", "geh5", "geh5", "Turn GEH < 5", "GEH < 5, % of turning movements"));
-    out.push(share("tgeh75", "turn", "turn", "geh75", "geh75", "Turn GEH < 7.5", "GEH < 7.5"));
-    out.push(share("tgeh10", "turn", "turn", "geh10", "geh10", "Turn GEH < 10", "GEH < 10"));
-    out.push(share("tband", "band", "turn", "band", "band", "Turn TMDG count band", &format!("turning movements {band}")));
+    out.push(share(
+        "tgeh5",
+        "turn",
+        "turn",
+        "geh5",
+        "geh5",
+        "Turn GEH < 5",
+        "GEH < 5, % of turning movements",
+    ));
+    out.push(share(
+        "tgeh75",
+        "turn",
+        "turn",
+        "geh75",
+        "geh75",
+        "Turn GEH < 7.5",
+        "GEH < 7.5",
+    ));
+    out.push(share(
+        "tgeh10",
+        "turn",
+        "turn",
+        "geh10",
+        "geh10",
+        "Turn GEH < 10",
+        "GEH < 10",
+    ));
+    out.push(share(
+        "tband",
+        "band",
+        "turn",
+        "band",
+        "band",
+        "Turn TMDG count band",
+        &format!("turning movements {band}"),
+    ));
     out.push(tag_band_test("turn"));
     out.push(tag_either_test("turn"));
-    out.push(Test { use_: sl, ..share("sgeh5", "screen", "screen", "sgeh5", "sgeh5", "Screenline GEH < 5", "GEH < 5 on directional totals") });
-    out.push(Test { use_: sl, ..share("sgeh75", "screen", "screen", "sgeh75", "sgeh75", "Screenline GEH < 7.5", "GEH < 7.5 on directional totals") });
-    out.push(Test { use_: sl, ..share("sgeh10", "screen", "screen", "sgeh10", "sgeh10", "Screenline GEH < 10", "GEH < 10 on directional totals") });
+    out.push(Test {
+        use_: sl,
+        ..share(
+            "sgeh5",
+            "screen",
+            "screen",
+            "sgeh5",
+            "sgeh5",
+            "Screenline GEH < 5",
+            "GEH < 5 on directional totals",
+        )
+    });
+    out.push(Test {
+        use_: sl,
+        ..share(
+            "sgeh75",
+            "screen",
+            "screen",
+            "sgeh75",
+            "sgeh75",
+            "Screenline GEH < 7.5",
+            "GEH < 7.5 on directional totals",
+        )
+    });
+    out.push(Test {
+        use_: sl,
+        ..share(
+            "sgeh10",
+            "screen",
+            "screen",
+            "sgeh10",
+            "sgeh10",
+            "Screenline GEH < 10",
+            "GEH < 10 on directional totals",
+        )
+    });
     if cat == 'A' {
-        out.push(share("sw10", "screen", "screen", "sw10", "sw10", "Screenline within 10%", "directional totals within 10%"));
-        out.push(share("sw15", "screen", "screen", "sw15", "sw15", "Screenline within 15%", "directional totals within 15%"));
+        out.push(share(
+            "sw10",
+            "screen",
+            "screen",
+            "sw10",
+            "sw10",
+            "Screenline within 10%",
+            "directional totals within 10%",
+        ));
+        out.push(share(
+            "sw15",
+            "screen",
+            "screen",
+            "sw15",
+            "sw15",
+            "Screenline within 15%",
+            "directional totals within 15%",
+        ));
     }
     out.push(tag_screen_test());
     out.push(Test {
@@ -685,12 +1092,19 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         max: rm.map(|r| r.0),
         clarify: rm.map(|r| r.1),
         label: "%RMSE".to_string(),
-        crit: "100\u{b7}\u{221a}(\u{3a3}(M\u{2212}C)\u{b2}/(N\u{2212}1)) / (\u{3a3}C/N)".to_string(),
+        crit: "100\u{b7}\u{221a}(\u{3a3}(M\u{2212}C)\u{b2}/(N\u{2212}1)) / (\u{3a3}C/N)"
+            .to_string(),
         table: tb("rmse"),
         verified: vf("rmse"),
         use_: use_of("rmse"),
         use_verified: Some(fig5ok("rmse")),
-        ..t0("rmse", "rmse", "link", "rmse", if rm.is_some() { "rmse" } else { "none" })
+        ..t0(
+            "rmse",
+            "rmse",
+            "link",
+            "rmse",
+            if rm.is_some() { "rmse" } else { "none" },
+        )
     });
     out.push(Test {
         min: v("jt1").map(|x| x.one()),
@@ -722,14 +1136,54 @@ pub fn preset_tests(std: &str, prior_high: bool) -> Vec<Test> {
             ..t
         };
         let mut v = vec![
-            r(Test { min: Some(rms::GEH5), label: "Link GEH \u{2264} 5".into(), crit: "95% of links".into(), ..t0("geh5", "link", "link", "geh5le", "share") }),
-            r(Test { min: Some(rms::GEH10), label: "Link GEH \u{2264} 10".into(), crit: "all links".into(), ..t0("geh10", "link", "link", "geh10le", "share") }),
-            r(Test { min: Some(rms::TGEH5), label: "Turn GEH \u{2264} 5".into(), crit: "85% of turns".into(), ..t0("tgeh5", "turn", "turn", "geh5le", "share") }),
-            r(Test { min: Some(rms::TGEH10), label: "Turn GEH \u{2264} 10".into(), crit: "all turns".into(), ..t0("tgeh10", "turn", "turn", "geh10le", "share") }),
-            r(Test { min: Some(rms::SGEH4), label: "Screenline GEH < 4".into(), crit: "every directional total".into(), ..t0("rmsSl", "screen", "screen", "sgeh4", "share") }),
-            r(Test { min: Some(rms::R2), label: "R\u{b2} through the origin".into(), crit: format!("more than {}", n(rms::R2)), ..t0("r2", "scatter", "link", "r2", "min") }),
-            r(Test { max: Some(rms::RMSE), label: "%RMSE".into(), crit: format!("{}% or less", n(rms::RMSE)), ..t0("rmse", "rmse", "link", "rmse", "max") }),
-            r(Test { min: Some(rms::JT), label: "Journey times".into(), crit: "95% of routes within 15% or 1 minute".into(), ..t0("jt1", "jt", "jt", "jt1", "share") }),
+            r(Test {
+                min: Some(rms::GEH5),
+                label: "Link GEH \u{2264} 5".into(),
+                crit: "95% of links".into(),
+                ..t0("geh5", "link", "link", "geh5le", "share")
+            }),
+            r(Test {
+                min: Some(rms::GEH10),
+                label: "Link GEH \u{2264} 10".into(),
+                crit: "all links".into(),
+                ..t0("geh10", "link", "link", "geh10le", "share")
+            }),
+            r(Test {
+                min: Some(rms::TGEH5),
+                label: "Turn GEH \u{2264} 5".into(),
+                crit: "85% of turns".into(),
+                ..t0("tgeh5", "turn", "turn", "geh5le", "share")
+            }),
+            r(Test {
+                min: Some(rms::TGEH10),
+                label: "Turn GEH \u{2264} 10".into(),
+                crit: "all turns".into(),
+                ..t0("tgeh10", "turn", "turn", "geh10le", "share")
+            }),
+            r(Test {
+                min: Some(rms::SGEH4),
+                label: "Screenline GEH < 4".into(),
+                crit: "every directional total".into(),
+                ..t0("rmsSl", "screen", "screen", "sgeh4", "share")
+            }),
+            r(Test {
+                min: Some(rms::R2),
+                label: "R\u{b2} through the origin".into(),
+                crit: format!("more than {}", n(rms::R2)),
+                ..t0("r2", "scatter", "link", "r2", "min")
+            }),
+            r(Test {
+                max: Some(rms::RMSE),
+                label: "%RMSE".into(),
+                crit: format!("{}% or less", n(rms::RMSE)),
+                ..t0("rmse", "rmse", "link", "rmse", "max")
+            }),
+            r(Test {
+                min: Some(rms::JT),
+                label: "Journey times".into(),
+                crit: "95% of routes within 15% or 1 minute".into(),
+                ..t0("jt1", "jt", "jt", "jt1", "share")
+            }),
             tag_either_test("link"),
         ];
         v.extend(common_tests('E', prior_high));
@@ -742,11 +1196,37 @@ pub fn preset_tests(std: &str, prior_high: bool) -> Vec<Test> {
         ..t
     };
     let mut v = vec![
-        a(Test { min: Some(atap::WITHIN20), label: "Hourly links within \u{b1}20%".into(), crit: "85% of links (share is a Spare Construct assumption)".into(), ..t0("within20", "link", "link", "within20", "share") }),
-        a(Test { min: Some(atap::SW10), label: "Screenlines within \u{b1}10%".into(), crit: "every directional total".into(), ..t0("sw10", "screen", "screen", "sw10", "share") }),
-        a(Test { min: Some(atap::R2), label: "R\u{b2} through the origin".into(), crit: format!("more than {}", n(atap::R2)), ..t0("r2", "scatter", "link", "r2", "min") }),
-        a(Test { lo: Some(atap::SLOPE[0]), hi: Some(atap::SLOPE[1]), label: "Slope b0".into(), crit: format!("{} to {}", n(atap::SLOPE[0]), n(atap::SLOPE[1])), ..t0("slope", "scatter", "link", "b0", "range") }),
-        a(Test { max: Some(atap::RMSE), label: "%RMSE".into(), crit: format!("under {}%", n(atap::RMSE)), ..t0("rmse", "rmse", "link", "rmse", "max") }),
+        a(Test {
+            min: Some(atap::WITHIN20),
+            label: "Hourly links within \u{b1}20%".into(),
+            crit: "85% of links (share is a Spare Construct assumption)".into(),
+            ..t0("within20", "link", "link", "within20", "share")
+        }),
+        a(Test {
+            min: Some(atap::SW10),
+            label: "Screenlines within \u{b1}10%".into(),
+            crit: "every directional total".into(),
+            ..t0("sw10", "screen", "screen", "sw10", "share")
+        }),
+        a(Test {
+            min: Some(atap::R2),
+            label: "R\u{b2} through the origin".into(),
+            crit: format!("more than {}", n(atap::R2)),
+            ..t0("r2", "scatter", "link", "r2", "min")
+        }),
+        a(Test {
+            lo: Some(atap::SLOPE[0]),
+            hi: Some(atap::SLOPE[1]),
+            label: "Slope b0".into(),
+            crit: format!("{} to {}", n(atap::SLOPE[0]), n(atap::SLOPE[1])),
+            ..t0("slope", "scatter", "link", "b0", "range")
+        }),
+        a(Test {
+            max: Some(atap::RMSE),
+            label: "%RMSE".into(),
+            crit: format!("under {}%", n(atap::RMSE)),
+            ..t0("rmse", "rmse", "link", "rmse", "max")
+        }),
         tag_either_test("link"),
     ];
     v.extend(common_tests('E', prior_high));
@@ -778,11 +1258,18 @@ pub fn target_text(t: &Test) -> String {
             if m >= 1.0 {
                 "100%".to_string()
             } else {
-                format!("> {}%", fmt::num(m * 100.0, if (m * 100.0) % 1.0 != 0.0 { 1 } else { 0 }))
+                format!(
+                    "> {}%",
+                    fmt::num(m * 100.0, if (m * 100.0) % 1.0 != 0.0 { 1 } else { 0 })
+                )
             }
         }
         "min" => format!("> {}", n(t.min.unwrap_or(f64::NAN))),
-        "range" => format!("{} to {}", n(t.lo.unwrap_or(f64::NAN)), n(t.hi.unwrap_or(f64::NAN))),
+        "range" => format!(
+            "{} to {}",
+            n(t.lo.unwrap_or(f64::NAN)),
+            n(t.hi.unwrap_or(f64::NAN))
+        ),
         "rmse" => format!(
             "< {}% ({}\u{2013}{}% explain)",
             n(t.max.unwrap_or(f64::NAN)),
@@ -792,7 +1279,11 @@ pub fn target_text(t: &Test) -> String {
         "max" => format!(
             "< {}{}",
             n(t.max.unwrap_or(f64::NAN)),
-            if t.id == "gap" || t.group == "me" { "%" } else { "" }
+            if t.id == "gap" || t.group == "me" {
+                "%"
+            } else {
+                ""
+            }
         ),
         "bool" => "yes".to_string(),
         "pair" => "see criterion".to_string(),
@@ -839,10 +1330,30 @@ pub fn need(target: f64, n: usize) -> usize {
 /// `SCHOOL_TERMS.years[year]`: New Zealand school terms (Ministry of Education), each as (first day, last day) in ISO; a count inside the holidays is flagged. Term 1 uses the latest permitted start. To be checked against education.govt.nz each year (the prototype marks them unverified).
 pub fn school_terms(year: i64) -> Option<[(&'static str, &'static str); 4]> {
     Some(match year {
-        2023 => [("2023-02-07", "2023-04-06"), ("2023-04-24", "2023-06-30"), ("2023-07-17", "2023-09-22"), ("2023-10-09", "2023-12-20")],
-        2024 => [("2024-02-07", "2024-04-12"), ("2024-04-29", "2024-07-05"), ("2024-07-22", "2024-09-27"), ("2024-10-14", "2024-12-20")],
-        2025 => [("2025-02-07", "2025-04-11"), ("2025-04-28", "2025-07-04"), ("2025-07-21", "2025-09-26"), ("2025-10-13", "2025-12-19")],
-        2026 => [("2026-02-06", "2026-04-02"), ("2026-04-20", "2026-07-03"), ("2026-07-20", "2026-09-25"), ("2026-10-12", "2026-12-18")],
+        2023 => [
+            ("2023-02-07", "2023-04-06"),
+            ("2023-04-24", "2023-06-30"),
+            ("2023-07-17", "2023-09-22"),
+            ("2023-10-09", "2023-12-20"),
+        ],
+        2024 => [
+            ("2024-02-07", "2024-04-12"),
+            ("2024-04-29", "2024-07-05"),
+            ("2024-07-22", "2024-09-27"),
+            ("2024-10-14", "2024-12-20"),
+        ],
+        2025 => [
+            ("2025-02-07", "2025-04-11"),
+            ("2025-04-28", "2025-07-04"),
+            ("2025-07-21", "2025-09-26"),
+            ("2025-10-13", "2025-12-19"),
+        ],
+        2026 => [
+            ("2026-02-06", "2026-04-02"),
+            ("2026-04-20", "2026-07-03"),
+            ("2026-07-20", "2026-09-25"),
+            ("2026-10-12", "2026-12-18"),
+        ],
         _ => return None,
     })
 }
@@ -851,4 +1362,10 @@ pub fn school_terms(year: i64) -> Option<[(&'static str, &'static str); 4]> {
 pub const DOS_SOURCE: &str = "ttoc";
 
 /// `GEH_BANDS` of the panel: the bands of the criteria library, lower limit included, upper excluded.
-pub const GEH_BANDS_PANEL: [(f64, f64); 5] = [(0.0, 5.0), (5.0, 7.5), (7.5, 10.0), (10.0, 12.0), (12.0, f64::INFINITY)];
+pub const GEH_BANDS_PANEL: [(f64, f64); 5] = [
+    (0.0, 5.0),
+    (5.0, 7.5),
+    (7.5, 10.0),
+    (10.0, 12.0),
+    (12.0, f64::INFINITY),
+];

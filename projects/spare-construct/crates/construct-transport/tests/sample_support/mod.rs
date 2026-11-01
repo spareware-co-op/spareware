@@ -16,7 +16,9 @@ pub fn exchanges() -> Value {
 }
 
 fn obj<'a>(m: &'a mut Map<String, Value>, key: &str) -> &'a mut Map<String, Value> {
-    let v = m.entry(key.to_string()).or_insert_with(|| Value::Object(Map::new()));
+    let v = m
+        .entry(key.to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
     if !v.is_object() {
         *v = Value::Object(Map::new());
     }
@@ -37,7 +39,12 @@ pub struct Fakes {
 impl Fakes {
     /// Stand-ins for a case.
     pub fn new(case: &Value) -> Fakes {
-        Fakes { fake: case["fake"].clone(), calls: Vec::new(), approaches: case["approaches"].as_array().cloned().unwrap_or_default(), at: 0 }
+        Fakes {
+            fake: case["fake"].clone(),
+            calls: Vec::new(),
+            approaches: case["approaches"].as_array().cloned().unwrap_or_default(),
+            at: 0,
+        }
     }
     /// True when every recorded answer of `approaches` was asked for.
     pub fn approaches_done(&self) -> bool {
@@ -52,7 +59,10 @@ impl Fakes {
     fn cx<'a>(p: &'a mut Project) -> &'a mut Map<String, Value> {
         let cx = obj(&mut p.extra, "cx");
         if !cx.contains_key("precinct") {
-            cx.insert("precinct".into(), json!({ "id": null, "register": [], "proposal": null }));
+            cx.insert(
+                "precinct".into(),
+                json!({ "id": null, "register": [], "proposal": null }),
+            );
             cx.insert("mitigation".into(), json!([]));
             cx.insert("conditions".into(), Value::Null);
         }
@@ -64,7 +74,13 @@ impl Fakes {
 }
 
 impl SampleHooks for Fakes {
-    fn nslr_all(&mut self, p: &mut Project, _near: &Bx, scenario: usize, status: &mut dyn FnMut(&str)) -> Result<(), SampleError> {
+    fn nslr_all(
+        &mut self,
+        p: &mut Project,
+        _near: &Bx,
+        scenario: usize,
+        status: &mut dyn FnMut(&str),
+    ) -> Result<(), SampleError> {
         self.log(json!(["nslr", 1]));
         if let Some(m) = self.setting("nslr") {
             return Err(SampleError::msg(m));
@@ -77,7 +93,11 @@ impl SampleHooks for Fakes {
         }
         Ok(())
     }
-    fn tms_load(&mut self, p: &mut Project, status: &mut dyn FnMut(&str)) -> Result<(), SampleError> {
+    fn tms_load(
+        &mut self,
+        p: &mut Project,
+        status: &mut dyn FnMut(&str),
+    ) -> Result<(), SampleError> {
         self.log(json!(["tms", 2]));
         if let Some(m) = self.setting("tms") {
             return Err(SampleError::msg(m));
@@ -90,20 +110,43 @@ impl SampleHooks for Fakes {
         }
         Ok(())
     }
-    fn hazards_load(&mut self, _p: &mut Project, _near: &Bx, status: &mut dyn FnMut(&str)) -> Result<Hazards, SampleError> {
+    fn hazards_load(
+        &mut self,
+        _p: &mut Project,
+        _near: &Bx,
+        status: &mut dyn FnMut(&str),
+    ) -> Result<Hazards, SampleError> {
         self.log(json!(["hazards"]));
         match self.setting("hazards").as_deref() {
-            Some("none") => return Ok(Hazards { layers: vec![], errors: vec!["flood service said no".to_string()] }),
+            Some("none") => {
+                return Ok(Hazards {
+                    layers: vec![],
+                    errors: vec!["flood service said no".to_string()],
+                });
+            }
             Some("none-silent") => return Ok(Hazards::default()),
             Some(m) => return Err(SampleError::msg(m)),
             None => {}
         }
         status("Reading flood layers");
-        Ok(Hazards { layers: vec![json!({ "id": "flood", "name": "Flood plains" }), json!({ "id": "coast", "name": "Coastal inundation" })], errors: vec![] })
+        Ok(Hazards {
+            layers: vec![
+                json!({ "id": "flood", "name": "Flood plains" }),
+                json!({ "id": "coast", "name": "Coastal inundation" }),
+            ],
+            errors: vec![],
+        })
     }
     fn hazard_rows(&mut self, p: &Project, scenario: usize) -> Value {
         self.log(json!(["hazard-links"]));
-        Value::Array(p.scenarios[scenario].links.values().take(3).map(|l| json!({ "link": l.id, "flood": 120, "coast": 0 })).collect())
+        Value::Array(
+            p.scenarios[scenario]
+                .links
+                .values()
+                .take(3)
+                .map(|l| json!({ "link": l.id, "flood": 120, "coast": 0 }))
+                .collect(),
+        )
     }
     fn gtfs_first_feed(&mut self, _near: &Bx) -> Result<Option<Value>, SampleError> {
         self.log(json!(["gtfs-catalogue"]));
@@ -113,23 +156,54 @@ impl SampleHooks for Fakes {
             _ => Ok(Some(json!({ "id": "at-gtfs" }))),
         }
     }
-    fn gtfs_apply(&mut self, p: &mut Project, feed: &Value, _near: &Bx, scenario: usize, status: &mut dyn FnMut(&str)) -> Result<usize, SampleError> {
+    fn gtfs_apply(
+        &mut self,
+        p: &mut Project,
+        feed: &Value,
+        _near: &Bx,
+        scenario: usize,
+        status: &mut dyn FnMut(&str),
+    ) -> Result<usize, SampleError> {
         self.log(json!(["gtfs-load", feed["id"]]));
         status("Reading timetable");
         self.log(json!(["gtfs-routes"]));
         self.log(json!(["gtfs-apply", 3]));
-        let r: Route = serde_json::from_value(json!({ "id": "rGtfs", "name": "Bus 3", "color": "#7048e8", "freq": 4, "wp": [] })).expect("a route");
+        let r: Route = serde_json::from_value(
+            json!({ "id": "rGtfs", "name": "Bus 3", "color": "#7048e8", "freq": 4, "wp": [] }),
+        )
+        .expect("a route");
         p.scenarios[scenario].routes.insert("rGtfs", r);
         self.log(json!(["gtfs-keep", 3]));
         Ok(3)
     }
     fn approaches(&mut self, _sc: &Scenario, node_id: &str) -> Vec<LaneApproach> {
-        let rec = self.approaches.get(self.at).unwrap_or_else(|| panic!("approaches({node_id}) was not asked for by the prototype"));
-        assert_eq!(rec["node"].as_str(), Some(node_id), "approaches call {}", self.at);
+        let rec = self
+            .approaches
+            .get(self.at)
+            .unwrap_or_else(|| panic!("approaches({node_id}) was not asked for by the prototype"));
+        assert_eq!(
+            rec["node"].as_str(),
+            Some(node_id),
+            "approaches call {}",
+            self.at
+        );
         self.at += 1;
-        rec["out"].as_array().expect("a list").iter().map(|a| LaneApproach { link: a["link"].as_str().expect("link").to_string(), gl: a["gl"].as_f64().expect("gl") }).collect()
+        rec["out"]
+            .as_array()
+            .expect("a list")
+            .iter()
+            .map(|a| LaneApproach {
+                link: a["link"].as_str().expect("link").to_string(),
+                gl: a["gl"].as_f64().expect("gl"),
+            })
+            .collect()
     }
-    fn compliance_context(&mut self, p: &mut Project, ctx: &Map<String, Value>, site: Option<&Map<String, Value>>) {
+    fn compliance_context(
+        &mut self,
+        p: &mut Project,
+        ctx: &Map<String, Value>,
+        site: Option<&Map<String, Value>>,
+    ) {
         let c = obj(&mut p.extra, "compliance");
         obj(c, "ctx");
         obj(c, "site");
@@ -185,7 +259,11 @@ impl SampleHooks for Fakes {
             return Err(SampleError::msg("no effects yet"));
         }
         let n = self.fake.get("cxN").and_then(Value::as_u64).unwrap_or(14);
-        let mut list = vec![json!({ "id": "m1", "seed": "diff:1", "effect": "e0" }), json!({ "id": "m2", "seed": "diff:2" }), json!({ "id": "m3", "seed": "hand" })];
+        let mut list = vec![
+            json!({ "id": "m1", "seed": "diff:1", "effect": "e0" }),
+            json!({ "id": "m2", "seed": "diff:2" }),
+            json!({ "id": "m3", "seed": "hand" }),
+        ];
         for k in 0..n {
             list.push(json!({ "id": format!("x{k}"), "seed": format!("eff:{k}"), "effect": format!("e{}", k % 12) }));
         }
@@ -193,7 +271,11 @@ impl SampleHooks for Fakes {
         Ok(())
     }
     fn mitigation(&mut self, p: &mut Project) -> Vec<Value> {
-        Self::cx(p).get("mitigation").and_then(Value::as_array).cloned().unwrap_or_default()
+        Self::cx(p)
+            .get("mitigation")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
     }
     fn set_mitigation(&mut self, p: &mut Project, list: Vec<Value>) {
         Self::cx(p).insert("mitigation".into(), Value::Array(list));
@@ -201,12 +283,10 @@ impl SampleHooks for Fakes {
     fn effects(&mut self, _p: &mut Project) -> Result<Vec<Value>, SampleError> {
         self.log(json!(["effects"]));
         Ok((0..12u32)
-            .map(|k| {
-                match k % 3 {
-                    0 => json!({ "id": format!("e{k}"), "dos": 0.4 + f64::from(k % 5) * 0.15 }),
-                    1 => json!({ "id": format!("e{k}"), "vc": 0.6 + f64::from(k % 4) * 0.1 }),
-                    _ => json!({ "id": format!("e{k}"), "dos": 0, "vc": 0 }),
-                }
+            .map(|k| match k % 3 {
+                0 => json!({ "id": format!("e{k}"), "dos": 0.4 + f64::from(k % 5) * 0.15 }),
+                1 => json!({ "id": format!("e{k}"), "vc": 0.6 + f64::from(k % 4) * 0.1 }),
+                _ => json!({ "id": format!("e{k}"), "dos": 0, "vc": 0 }),
             })
             .collect())
     }
@@ -216,12 +296,23 @@ impl SampleHooks for Fakes {
             return Err(SampleError::msg("conditions table missing"));
         }
         let cx = Self::cx(p);
-        let n = cx.get("mitigation").and_then(Value::as_array).map_or(0, Vec::len);
+        let n = cx
+            .get("mitigation")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
         cx.insert("conditions".into(), json!({ "n": n }));
         Ok(())
     }
-    fn staging(&mut self, p: &mut Project, steps: &[f64], progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>) -> Result<(), SampleError> {
-        let list = steps.iter().map(|s| construct_transport::jsnum::number_to_js_string(*s)).collect::<Vec<_>>();
+    fn staging(
+        &mut self,
+        p: &mut Project,
+        steps: &[f64],
+        progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>,
+    ) -> Result<(), SampleError> {
+        let list = steps
+            .iter()
+            .map(|s| construct_transport::jsnum::number_to_js_string(*s))
+            .collect::<Vec<_>>();
         self.log(json!(["staging", list.join(",")]));
         if self.setting("rp").as_deref() == Some("staging") {
             return Err(SampleError::msg("staging failed"));
@@ -232,7 +323,12 @@ impl SampleHooks for Fakes {
         obj(&mut p.extra, "report").insert("staging".into(), json!(steps));
         Ok(())
     }
-    fn sensitivity(&mut self, p: &mut Project, tests: &[&str], progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>) -> Result<(), SampleError> {
+    fn sensitivity(
+        &mut self,
+        p: &mut Project,
+        tests: &[&str],
+        progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>,
+    ) -> Result<(), SampleError> {
         self.log(json!(["sensitivity", tests.join(",")]));
         if self.setting("rp").as_deref() == Some("sens") {
             return Err(SampleError::msg("sensitivity failed"));

@@ -9,7 +9,9 @@
 use super::lanes::{ApproachCap, Lane, LaneRow, Lmv, alloc_lanes, approach_cap, lane_rows_value};
 use crate::graph::js_sort_by;
 use crate::jsmath;
-use crate::jsnum::{math_max, math_max_of, math_min, or_default, plain_number, value_to_number, value_truthy};
+use crate::jsnum::{
+    math_max, math_max_of, math_min, or_default, plain_number, value_to_number, value_truthy,
+};
 use crate::standards::{Gap, STANDARDS};
 use crate::util::ang_diff;
 use serde_json::{Map, Value, json};
@@ -25,14 +27,21 @@ pub fn cpot(vc: f64, tc: f64, tf: f64) -> f64 {
 
 /// `p0of(v, c)`: probability of a queue-free state, max(0, 1 - v / c) (0 when c is not positive).
 pub fn p0of(v: f64, c: f64) -> f64 {
-    if c > 0.0 { math_max(0.0, 1.0 - v / c) } else { 0.0 }
+    if c > 0.0 {
+        math_max(0.0, 1.0 - v / c)
+    } else {
+        0.0
+    }
 }
 
 /// `pPrime(p)`: HCM's rank-4 impedance adjustment p' = 0.65 p - p / (p + 3) + 0.6 sqrt(p), within 0 to 1.
 pub fn p_prime(p: f64) -> f64 {
     math_min(
         1.0,
-        math_max(0.0, 0.65 * p - p / (p + 3.0) + 0.6 * math_max(0.0, p).sqrt()),
+        math_max(
+            0.0,
+            0.65 * p - p / (p + 3.0) + 0.6 * math_max(0.0, p).sqrt(),
+        ),
     )
 }
 
@@ -53,7 +62,8 @@ pub fn two_stage(c_i: f64, c_ii: f64, cm: f64, v_l: f64, k: f64) -> f64 {
     }
     math_max(
         0.0,
-        a / (jsmath::pow(y, k + 1.0) - 1.0) * (y * (jsmath::pow(y, k) - 1.0) * (c_ii - v_l) + (y - 1.0) * cm),
+        a / (jsmath::pow(y, k + 1.0) - 1.0)
+            * (y * (jsmath::pow(y, k) - 1.0) * (c_ii - v_l) + (y - 1.0) * cm),
     )
 }
 
@@ -65,7 +75,10 @@ pub fn q95v(v: f64, c: f64, t: f64) -> f64 {
     let x = v / c;
     math_max(
         0.0,
-        900.0 * t * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + (3600.0 / c) * x / (150.0 * t)).sqrt()) * c
+        900.0
+            * t
+            * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + (3600.0 / c) * x / (150.0 * t)).sqrt())
+            * c
             / 3600.0,
     )
 }
@@ -479,7 +492,8 @@ pub fn priority_caps(ent: &mut [MoveEntry], o: &CapOpts) {
     }
     let vv = |m: Option<usize>, k: char| m.map_or(0.0, |m| ent[m].v.get(k));
     let lin = |m: Option<usize>, leg: &str| m.map_or(0.0, |m| ent[m].l_to(leg));
-    let p0r = |mov: &[Movs], m: Option<usize>| m.and_then(|m| mov[m].r.as_ref()).map_or(1.0, |r| r.p0);
+    let p0r =
+        |mov: &[Movs], m: Option<usize>| m.and_then(|m| mov[m].r.as_ref()).map_or(1.0, |r| r.p0);
     // rank 2: minor L
     for &a in &minors {
         let n = ent[a].near;
@@ -677,7 +691,11 @@ pub fn priority_caps(ent: &mut [MoveEntry], o: &CapOpts) {
         let res = EntryRes {
             mov: mov[m],
             x,
-            cap: if tot > 0.0 && x > 0.0 { tot / x } else { cap_t + rr.cm },
+            cap: if tot > 0.0 && x > 0.0 {
+                tot / x
+            } else {
+                cap_t + rr.cm
+            },
             r: None,
             q95short: None,
             lanes,

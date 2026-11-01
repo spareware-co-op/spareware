@@ -3,7 +3,9 @@
 use super::sites::site_entries;
 use super::sort::{js_sort_by, js_str_lt};
 use super::{Ctl, CtlSrc, Ctrl, Graph, Leg, SignalTiming, SiteCtl};
-use crate::jsnum::{Maybe, Num, math_max, math_max_of, math_min, math_round, or_default, value_to_number};
+use crate::jsnum::{
+    Maybe, Num, math_max, math_max_of, math_min, math_round, or_default, value_to_number,
+};
 use crate::junction::prep_moves;
 use crate::project::{OrderedMap, Scenario, Settings, Site};
 use crate::standards::CapMethod;
@@ -42,7 +44,10 @@ pub fn site_control(sc: &Scenario, s: &Site) -> &'static str {
     }
     let mut best = 0;
     for id in &s.nodes {
-        let c = sc.nodes.get(id).map_or("none", |n| n.control.str_or("none"));
+        let c = sc
+            .nodes
+            .get(id)
+            .map_or("none", |n| n.control.str_or("none"));
         let r = ctl_rank(c).unwrap_or(0);
         if r > best {
             best = r;
@@ -74,10 +79,14 @@ fn name_key(s: &str) -> String {
 
 // A canonical array index ("0", "17"): JavaScript lists such keys first, in ascending order
 fn array_index(s: &str) -> Option<u32> {
-    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) || (s.len() > 1 && s.starts_with('0')) {
+    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) || (s.len() > 1 && s.starts_with('0'))
+    {
         return None;
     }
-    s.parse::<u64>().ok().filter(|&v| v < 4294967295).map(|v| v as u32)
+    s.parse::<u64>()
+        .ok()
+        .filter(|&v| v < 4294967295)
+        .map(|v| v as u32)
 }
 
 /// `siteLegs(G, inc, exits)`: the legs of a site, its entering and leaving arcs grouped by road name (within 90 degrees) or bearing (35 degrees).
@@ -157,20 +166,33 @@ pub fn site_legs(g: &Graph, inc: &[usize], exits: &[usize]) -> Vec<Leg> {
                     None => cnt.push((n.clone(), 1.0)),
                 }
             }
-            let mut keys: Vec<(String, f64)> = cnt.iter().filter(|c| array_index(&c.0).is_some()).cloned().collect();
+            let mut keys: Vec<(String, f64)> = cnt
+                .iter()
+                .filter(|c| array_index(&c.0).is_some())
+                .cloned()
+                .collect();
             keys.sort_by_key(|c| array_index(&c.0));
             keys.extend(cnt.iter().filter(|c| array_index(&c.0).is_none()).cloned());
             js_sort_by(&mut keys, |a, b| b.1 - a.1);
-            let ranks: Vec<f64> = gr.iter().map(|&x| or_default(g.arcs[it[x].i].rank, 0.0)).collect();
+            let ranks: Vec<f64> = gr
+                .iter()
+                .map(|&x| or_default(g.arcs[it[x].i].rank, 0.0))
+                .collect();
             Leg {
                 k,
-                b: math_round(
-                    ((sx.atan2(sy) * 180.0 / std::f64::consts::PI) + 360.0) % 360.0,
-                ),
+                b: math_round(((sx.atan2(sy) * 180.0 / std::f64::consts::PI) + 360.0) % 360.0),
                 name: keys.first().map_or(String::new(), |c| c.0.clone()),
                 rank: math_max_of(&ranks),
-                ins: gr.iter().filter(|&&x| it[x].inn).map(|&x| it[x].i).collect(),
-                outs: gr.iter().filter(|&&x| !it[x].inn).map(|&x| it[x].i).collect(),
+                ins: gr
+                    .iter()
+                    .filter(|&&x| it[x].inn)
+                    .map(|&x| it[x].i)
+                    .collect(),
+                outs: gr
+                    .iter()
+                    .filter(|&&x| !it[x].inn)
+                    .map(|&x| it[x].i)
+                    .collect(),
             }
         })
         .collect()
@@ -229,7 +251,10 @@ pub(crate) fn setup_controls(sc: &Scenario, g: &mut Graph, s: &Settings) {
         }
         // Motorway merges and diverges run free; the downstream link's capacity governs them
         if kind != "signals"
-            && inc.iter().chain(g.out_r[n].iter()).all(|&i| g.arcs[i].rank >= 5.0)
+            && inc
+                .iter()
+                .chain(g.out_r[n].iter())
+                .all(|&i| g.arcs[i].rank >= 5.0)
         {
             continue;
         }
@@ -346,7 +371,9 @@ fn make_ctl(
             vec![0.75, 0.25]
         } else {
             match split {
-                Maybe::Set(Value::Array(a)) if a.len() == 2 => a.iter().map(value_to_number).collect(),
+                Maybe::Set(Value::Array(a)) if a.len() == 2 => {
+                    a.iter().map(value_to_number).collect()
+                }
                 _ => vec![0.5, 0.5],
             }
         };
@@ -380,7 +407,11 @@ fn make_ctl(
         set_ctl(g, ctl);
     } else if kind == "roundabout" {
         let ring_in: Vec<usize> = inc.iter().copied().filter(|&i| g.arcs[i].ring).collect();
-        let ring_out: Vec<usize> = g.out_r[n].iter().copied().filter(|&i| g.arcs[i].ring).collect();
+        let ring_out: Vec<usize> = g.out_r[n]
+            .iter()
+            .copied()
+            .filter(|&i| g.arcs[i].ring)
+            .collect();
         for &i in &inc {
             let a = &mut g.arcs[i];
             a.node = Some(n);
@@ -395,7 +426,13 @@ fn make_ctl(
                 a.ring_in = Some(ring_in.clone());
                 a.conf = Some(ring_in.iter().map(|&j| (j, 1.0)).collect());
             } else {
-                a.conf = Some(inc.iter().copied().filter(|&j| j != i).map(|j| (j, 0.5)).collect());
+                a.conf = Some(
+                    inc.iter()
+                        .copied()
+                        .filter(|&j| j != i)
+                        .map(|j| (j, 0.5))
+                        .collect(),
+                );
             }
         }
         set_ctl(
@@ -421,10 +458,19 @@ fn make_ctl(
         };
         let major: Vec<usize> = if let Some(st) = &site {
             // A give-way or stop site: the major road is the top-ranked pair of legs (both carriageways of each)
-            let prl = |l: &Leg| math_max(math_max_of(&l.ins.iter().map(|&i| pr(i)).collect::<Vec<_>>()), -1.0);
+            let prl = |l: &Leg| {
+                math_max(
+                    math_max_of(&l.ins.iter().map(|&i| pr(i)).collect::<Vec<_>>()),
+                    -1.0,
+                )
+            };
             let with_in: Vec<&Leg> = st.legs.iter().filter(|l| !l.ins.is_empty()).collect();
             let max_rank = math_max_of(&with_in.iter().map(|l| prl(l)).collect::<Vec<_>>());
-            let top: Vec<&Leg> = with_in.iter().copied().filter(|l| prl(l) == max_rank).collect();
+            let top: Vec<&Leg> = with_in
+                .iter()
+                .copied()
+                .filter(|l| prl(l) == max_rank)
+                .collect();
             let ml: Vec<&Leg> = if top.len() <= 2 && top.len() < with_in.len() {
                 top
             } else {

@@ -32,12 +32,20 @@ fn norm(v: &V) -> V {
 /// A fixture, read from disk once.
 fn cached_fixture(name: &str) -> V {
     thread_local! { static CACHE: std::cell::RefCell<std::collections::HashMap<String, V>> = std::cell::RefCell::new(std::collections::HashMap::new()); }
-    CACHE.with(|c| c.borrow_mut().entry(name.to_string()).or_insert_with(|| fixture(name)).clone())
+    CACHE.with(|c| {
+        c.borrow_mut()
+            .entry(name.to_string())
+            .or_insert_with(|| fixture(name))
+            .clone()
+    })
 }
 
 /// The recorded cases with their sets and args in the order the generator wrote them (`Object.entries` order matters to some checks).
 fn ordered(name: &str) -> V {
-    V::parse(&support::read_truth(&format!("expected/compliance-{name}.json"))).expect("expected file")
+    V::parse(&support::read_truth(&format!(
+        "expected/compliance-{name}.json"
+    )))
+    .expect("expected file")
 }
 
 #[test]
@@ -56,7 +64,10 @@ fn options_plan_change_and_exports() {
             set_path(&mut p, k, v.clone());
         }
         if case_error(case).is_some() {
-            panic!("{id}: the prototype refused this case: {}", case_error(case).unwrap());
+            panic!(
+                "{id}: the prototype refused this case: {}",
+                case_error(case).unwrap()
+            );
         }
         let want = case_ok(case);
         let args = oc.g("args").clone();
@@ -95,8 +106,17 @@ fn options_plan_change_and_exports() {
                 } else {
                     options::create_full_buildout(&mut p, None)
                 };
-                let names: Vec<V> = p.g("scenarios").items().iter().map(|s| s.g("name").clone()).collect();
-                let last = if ns.t() { V::Bool(p.g("scenarios").items().last() == Some(&ns)) } else { V::Null };
+                let names: Vec<V> = p
+                    .g("scenarios")
+                    .items()
+                    .iter()
+                    .map(|s| s.g("name").clone())
+                    .collect();
+                let last = if ns.t() {
+                    V::Bool(p.g("scenarios").items().last() == Some(&ns))
+                } else {
+                    V::Null
+                };
                 let mut r = V::object();
                 r.set("ns", norm(&ns));
                 r.set("n", V::Number((p.g("scenarios").jlen() - before) as f64));
@@ -109,16 +129,37 @@ fn options_plan_change_and_exports() {
             "optionsCSV" => V::String(options::options_csv(&p)),
             "planChangeCSV" => V::String(options::plan_change_csv(&p)),
             "export-options" | "export-planchange" => {
-                let eid = if call == "export-options" { "compliance-extra-options" } else { "compliance-extra-planchange" };
+                let eid = if call == "export-options" {
+                    "compliance-extra-options"
+                } else {
+                    "compliance-extra-planchange"
+                };
                 let mut r = V::object();
-                r.set("text", V::String(extra::export_build(eid, &p).expect("export")));
-                r.set("enabled", V::Bool(extra::export_enabled(eid, &p).expect("enabled")));
+                r.set(
+                    "text",
+                    V::String(extra::export_build(eid, &p).expect("export")),
+                );
+                r.set(
+                    "enabled",
+                    V::Bool(extra::export_enabled(eid, &p).expect("enabled")),
+                );
                 r
             }
-            "report-alternatives" | "report-alternatives-ctx" | "report-planchange" | "report-planchange-ctx" => {
-                let rid = if call.starts_with("report-alternatives") { "compliance-extra-alternatives" } else { "compliance-extra-planchange" };
+            "report-alternatives"
+            | "report-alternatives-ctx"
+            | "report-planchange"
+            | "report-planchange-ctx" => {
+                let rid = if call.starts_with("report-alternatives") {
+                    "compliance-extra-alternatives"
+                } else {
+                    "compliance-extra-planchange"
+                };
                 let ctx = TestCtx;
-                let c: Option<&dyn ReportCtx> = if call.ends_with("-ctx") { Some(&ctx) } else { None };
+                let c: Option<&dyn ReportCtx> = if call.ends_with("-ctx") {
+                    Some(&ctx)
+                } else {
+                    None
+                };
                 V::String(extra::report(rid, &p, c).expect("report section"))
             }
             other => panic!("{id}: unknown call {other}"),

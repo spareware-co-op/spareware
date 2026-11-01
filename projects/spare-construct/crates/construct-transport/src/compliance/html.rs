@@ -14,7 +14,14 @@ pub trait ReportCtx {
 pub fn rt(ctx: Option<&dyn ReportCtx>, title: &str, tbl: &str, note_text: &str) -> String {
     match ctx {
         Some(c) => c.table(title, tbl, note_text),
-        None => format!("<figure class=\"tbl\"><figcaption>{title}</figcaption>{tbl}{}</figure>", if note_text.is_empty() { String::new() } else { format!("<p class=\"src\">{note_text}</p>") }),
+        None => format!(
+            "<figure class=\"tbl\"><figcaption>{title}</figcaption>{tbl}{}</figure>",
+            if note_text.is_empty() {
+                String::new()
+            } else {
+                format!("<p class=\"src\">{note_text}</p>")
+            }
+        ),
     }
 }
 
@@ -29,12 +36,18 @@ pub struct Th {
 
 /// A text heading.
 pub fn th(label: &str) -> Th {
-    Th { label: label.to_string(), n: false }
+    Th {
+        label: label.to_string(),
+        n: false,
+    }
 }
 
 /// A numeric column heading.
 pub fn thn(label: &str) -> Th {
-    Th { label: label.to_string(), n: true }
+    Th {
+        label: label.to_string(),
+        n: true,
+    }
 }
 
 /// A row of [`kit_table`]: the cells (markup), an optional fly-to target, a class and the cell the fly-to link wraps.
@@ -52,7 +65,10 @@ pub struct Tr {
 
 /// A plain row.
 pub fn tr<S: Into<String>>(cells: impl IntoIterator<Item = S>) -> Tr {
-    Tr { cells: cells.into_iter().map(Into::into).collect(), ..Default::default() }
+    Tr {
+        cells: cells.into_iter().map(Into::into).collect(),
+        ..Default::default()
+    }
 }
 
 /// `Kit.table({ head, rows, compact, cls, empty })`: a table wrapped for scrolling; with no rows, the `empty` text in one cell (or nothing).
@@ -63,7 +79,13 @@ pub fn kit_table(head: &[Th], rows: &[Tr], compact: bool, cls: &str, empty: &str
     } else {
         format!(
             "<tr>{}</tr>",
-            head.iter().map(|h| if thc(h).is_empty() { format!("<th>{}</th>", h.label) } else { format!("<th class=\"{}\">{}</th>", thc(h), h.label) }).collect::<String>()
+            head.iter()
+                .map(|h| if thc(h).is_empty() {
+                    format!("<th>{}</th>", h.label)
+                } else {
+                    format!("<th class=\"{}\">{}</th>", thc(h), h.label)
+                })
+                .collect::<String>()
         )
     };
     let body: String = rows
@@ -71,26 +93,55 @@ pub fn kit_table(head: &[Th], rows: &[Tr], compact: bool, cls: &str, empty: &str
         .map(|o| {
             let attrs = format!(
                 "{}{}",
-                if o.fly.is_some() || !o.cls.is_empty() { format!(" class=\"{}{}\"", if o.fly.is_some() { "click " } else { "" }, esc_text(&o.cls)) } else { String::new() },
-                o.fly.as_ref().map_or(String::new(), |f| format!(" data-fly=\"{}\"", esc_text(f)))
+                if o.fly.is_some() || !o.cls.is_empty() {
+                    format!(
+                        " class=\"{}{}\"",
+                        if o.fly.is_some() { "click " } else { "" },
+                        esc_text(&o.cls)
+                    )
+                } else {
+                    String::new()
+                },
+                o.fly
+                    .as_ref()
+                    .map_or(String::new(), |f| format!(" data-fly=\"{}\"", esc_text(f)))
             );
             let cells: String = o
                 .cells
                 .iter()
                 .enumerate()
                 .map(|(i, c)| {
-                    let td = if head.get(i).is_some_and(|h| h.n) { "<td class=\"n\">" } else { "<td>" };
-                    if o.fly.is_some() && i == o.fly_col { format!("{td}<button type=\"button\" class=\"rowlink\">{c}</button></td>") } else { format!("{td}{c}</td>") }
+                    let td = if head.get(i).is_some_and(|h| h.n) {
+                        "<td class=\"n\">"
+                    } else {
+                        "<td>"
+                    };
+                    if o.fly.is_some() && i == o.fly_col {
+                        format!("{td}<button type=\"button\" class=\"rowlink\">{c}</button></td>")
+                    } else {
+                        format!("{td}{c}</td>")
+                    }
                 })
                 .collect();
             format!("<tr{attrs}>{cells}</tr>")
         })
         .collect();
-    let body = if body.is_empty() && !empty.is_empty() { format!("<tr><td class=\"note\" colspan=\"{}\">{empty}</td></tr>", head.len().max(1)) } else { body };
+    let body = if body.is_empty() && !empty.is_empty() {
+        format!(
+            "<tr><td class=\"note\" colspan=\"{}\">{empty}</td></tr>",
+            head.len().max(1)
+        )
+    } else {
+        body
+    };
     format!(
         "<div class=\"tbl-wrap\"><table class=\"t{}{}\">{th_row}{body}</table></div>",
         if compact { " compact" } else { "" },
-        if cls.is_empty() { String::new() } else { format!(" {}", esc_text(cls)) }
+        if cls.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", esc_text(cls))
+        }
     )
 }
 
@@ -98,8 +149,17 @@ pub fn kit_table(head: &[Th], rows: &[Tr], compact: bool, cls: &str, empty: &str
 pub fn report_table(head: &[&str], rows: &[Vec<String>]) -> String {
     format!(
         "<table class=\"rt\"><thead><tr>{}</tr></thead><tbody>{}</tbody></table>",
-        head.iter().map(|h| format!("<th>{}</th>", esc_text(h))).collect::<String>(),
-        rows.iter().map(|r| format!("<tr>{}</tr>", r.iter().map(|c| format!("<td>{c}</td>")).collect::<String>())).collect::<String>()
+        head.iter()
+            .map(|h| format!("<th>{}</th>", esc_text(h)))
+            .collect::<String>(),
+        rows.iter()
+            .map(|r| format!(
+                "<tr>{}</tr>",
+                r.iter()
+                    .map(|c| format!("<td>{c}</td>"))
+                    .collect::<String>()
+            ))
+            .collect::<String>()
     )
 }
 
@@ -117,7 +177,11 @@ pub fn pill(text: &str, tone: &str) -> String {
             "bad" => " closed",
             _ => "",
         },
-        if tone == "ok" { " style=\"color:var(--ok)\"" } else { "" }
+        if tone == "ok" {
+            " style=\"color:var(--ok)\""
+        } else {
+            ""
+        }
     )
 }
 
@@ -136,5 +200,8 @@ pub fn pill_x(text: &str, tone: &str) -> String {
 
 /// `note(t, warn)` of Compliance+: a note paragraph (the text is markup).
 pub fn note(t: &str, warn: bool) -> String {
-    format!("<p class=\"note{}\">{t}</p>", if warn { " warn" } else { "" })
+    format!(
+        "<p class=\"note{}\">{t}</p>",
+        if warn { " warn" } else { "" }
+    )
 }

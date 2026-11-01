@@ -12,8 +12,19 @@ use edit_support::{Checker, load_json, read_truth};
 use serde_json::{Value, json};
 
 fn opts_of(o: &Value) -> (ApplyOpts, Option<Bx>) {
-    let b = o.get("bounds").map(|b| Bx::new(b["s"].as_f64().unwrap(), b["w"].as_f64().unwrap(), b["n"].as_f64().unwrap(), b["e"].as_f64().unwrap()));
-    let rolls = o.get("rolls").and_then(Value::as_object).map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default();
+    let b = o.get("bounds").map(|b| {
+        Bx::new(
+            b["s"].as_f64().unwrap(),
+            b["w"].as_f64().unwrap(),
+            b["n"].as_f64().unwrap(),
+            b["e"].as_f64().unwrap(),
+        )
+    });
+    let rolls = o
+        .get("rolls")
+        .and_then(Value::as_object)
+        .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+        .unwrap_or_default();
     (
         ApplyOpts {
             newer: o.get("newer").and_then(Value::as_str).map(str::to_string),
@@ -32,7 +43,10 @@ fn filling_zones_from_the_downloaded_data_matches_the_prototype() {
     let mut ck = Checker::default();
     for case in ex.as_array().expect("cases") {
         let cname = case["name"].as_str().expect("name");
-        let text = read_truth(&format!("fixtures/data/{}.json", case["project"].as_str().expect("project")));
+        let text = read_truth(&format!(
+            "fixtures/data/{}.json",
+            case["project"].as_str().expect("project")
+        ));
         let mut p = Project::from_json(&text).expect("the project reads");
         let mut ids = ids_for(case);
         for st in case["steps"].as_array().expect("steps") {
@@ -49,7 +63,11 @@ fn filling_zones_from_the_downloaded_data_matches_the_prototype() {
                     ck.same(&format!("{label}: error"), &json!(e), &st["error"]);
                 }
             }
-            ck.check(&format!("{label}: zones"), &serde_json::to_value(&p.scenarios[0].zones).unwrap(), &st["zones"]);
+            ck.check(
+                &format!("{label}: zones"),
+                &serde_json::to_value(&p.scenarios[0].zones).unwrap(),
+                &st["zones"],
+            );
         }
     }
     ck.finish("filling zones");

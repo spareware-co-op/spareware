@@ -76,13 +76,25 @@ pub fn personal_band(pr: Option<f64>, injury5: f64) -> PersonalBand {
 /// `severityIndex(flags, control, where)`: the CEC severity index of one crash at a site: vulnerable users first, then the vehicle index by control.
 pub fn severity_index(flags: &str, control: &str, midblock: bool) -> f64 {
     if flags.contains('p') {
-        return if midblock { cec::SI_PED_MID } else { cec::SI_PED_INT };
+        return if midblock {
+            cec::SI_PED_MID
+        } else {
+            cec::SI_PED_INT
+        };
     }
     if flags.contains('c') {
-        return if midblock { cec::SI_CYC_MID } else { cec::SI_CYC_INT };
+        return if midblock {
+            cec::SI_CYC_MID
+        } else {
+            cec::SI_CYC_INT
+        };
     }
     if flags.contains('m') {
-        return if midblock { cec::SI_MC_MID } else { cec::SI_MC_INT };
+        return if midblock {
+            cec::SI_MC_MID
+        } else {
+            cec::SI_MC_INT
+        };
     }
     if midblock {
         return cec::SI_MIDBLOCK;
@@ -122,10 +134,20 @@ pub fn cec_predict(model_id: &str, qmaj: f64, qmin: f64) -> Option<CecPrediction
     if let Some((maj, min)) = m.range {
         let mut out: Vec<String> = Vec::new();
         if qmaj < maj[0] || qmaj > maj[1] {
-            out.push(format!("Qmaj {} outside {}\u{2013}{}", fmt::int(qmaj), fmt::int(maj[0]), fmt::int(maj[1])));
+            out.push(format!(
+                "Qmaj {} outside {}\u{2013}{}",
+                fmt::int(qmaj),
+                fmt::int(maj[0]),
+                fmt::int(maj[1])
+            ));
         }
         if qmin < min[0] || qmin > min[1] {
-            out.push(format!("Qmin {} outside {}\u{2013}{}", fmt::int(qmin), fmt::int(min[0]), fmt::int(min[1])));
+            out.push(format!(
+                "Qmin {} outside {}\u{2013}{}",
+                fmt::int(qmin),
+                fmt::int(min[0]),
+                fmt::int(min[1])
+            ));
         }
         if !out.is_empty() {
             flag = format!("outside model range: {}", out.join("; "));
@@ -256,7 +278,10 @@ pub struct Trigger {
 
 fn crit_of(r: &JsonValue, id: &str) -> Vec<String> {
     if let Some(c) = js::get(js::get(Some(r), "crit"), id).filter(|c| c.truthy()) {
-        return js::items(Some(c)).iter().map(JsonValue::js_string).collect();
+        return js::items(Some(c))
+            .iter()
+            .map(JsonValue::js_string)
+            .collect();
     }
     let fails = js::items(js::get(Some(r), "fails"));
     if fails.iter().any(|f| f.as_str() == Some(id)) {
@@ -272,11 +297,20 @@ fn crit_of(r: &JsonValue, id: &str) -> Vec<String> {
 /// criterion it already failed at 0% gets materially worse (DoS up by 0.05 or more).
 pub fn staging_trigger(rows: &[JsonValue]) -> Trigger {
     let mut order: Vec<usize> = (0..rows.len()).collect();
-    js_sort_by(&mut order, |a, b| js::num(js::get(Some(&rows[*a]), "pct")) - js::num(js::get(Some(&rows[*b]), "pct")));
-    let r0i = order.iter().copied().find(|i| js::num(js::get(Some(&rows[*i]), "pct")) == 0.0);
+    js_sort_by(&mut order, |a, b| {
+        js::num(js::get(Some(&rows[*a]), "pct")) - js::num(js::get(Some(&rows[*b]), "pct"))
+    });
+    let r0i = order
+        .iter()
+        .copied()
+        .find(|i| js::num(js::get(Some(&rows[*i]), "pct")) == 0.0);
     let empty = JsonValue::object();
     let r0 = r0i.map_or(&empty, |i| &rows[i]);
-    let base: Vec<String> = unique(js::items(js::get(Some(r0), "fails")).iter().map(JsonValue::js_string));
+    let base: Vec<String> = unique(
+        js::items(js::get(Some(r0), "fails"))
+            .iter()
+            .map(JsonValue::js_string),
+    );
     let dos0 = js::get(Some(r0), "dos").filter(|d| d.truthy());
     let mut last_pass: Option<usize> = None;
     for &ri in &order {
@@ -303,12 +337,22 @@ pub fn staging_trigger(rows: &[JsonValue]) -> Trigger {
                 nf.push(id.clone());
                 let text = if !fresh.is_empty() {
                     if !was.is_empty() {
-                        format!("new criterion failed: {}", fresh.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
+                        format!(
+                            "new criterion failed: {}",
+                            fresh
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
                     } else {
                         "new failure".to_string()
                     }
                 } else {
-                    format!("existing deficiency worse by DoS {}", fmt::num(js::num(d_now) - js::num(d_was), 2))
+                    format!(
+                        "existing deficiency worse by DoS {}",
+                        fmt::num(js::num(d_now) - js::num(d_was), 2)
+                    )
                 };
                 match how.iter().position(|(k, _)| *k == id) {
                     Some(p) => how[p].1 = text,
@@ -368,12 +412,18 @@ pub fn trigger_text(rows: &[JsonValue], trig: &Trigger, measure: Option<&str>) -
         return String::new();
     };
     let row = &rows[ri];
-    let m = measure.filter(|m| !m.is_empty()).unwrap_or("<the mitigation measure>");
+    let m = measure
+        .filter(|m| !m.is_empty())
+        .unwrap_or("<the mitigation measure>");
     let lp = trig.last_pass.map(|i| &rows[i]);
     let n = |v: Option<&JsonValue>, k: &str| js::num(js::get(v, k));
     if js::num(js::get(Some(row), "dwellings")) > 0.0 {
         let d = lp.map_or(0.0, |l| n(Some(l), "dwellings")).floor();
-        return format!("Prior to occupation of the {} dwelling, {}.", ordinal(d + 1.0), m);
+        return format!(
+            "Prior to occupation of the {} dwelling, {}.",
+            ordinal(d + 1.0),
+            m
+        );
     }
     if js::num(js::get(Some(row), "gfa")) > 0.0 {
         return format!(
@@ -384,7 +434,10 @@ pub fn trigger_text(rows: &[JsonValue], trig: &Trigger, measure: Option<&str>) -
     }
     format!(
         "Before the development passes {}% build-out, {}.",
-        lp.map_or("0".to_string(), |l| crate::jsnum::number_to_js_string(n(Some(l), "pct"))),
+        lp.map_or("0".to_string(), |l| crate::jsnum::number_to_js_string(n(
+            Some(l),
+            "pct"
+        ))),
         m
     )
 }
@@ -394,7 +447,11 @@ pub fn tsv(rows: &[Vec<String>]) -> String {
     rows.iter()
         .map(|r| {
             r.iter()
-                .map(|c| collapse_breaks(c).trim_matches(crate::jsnum::is_js_space).to_string())
+                .map(|c| {
+                    collapse_breaks(c)
+                        .trim_matches(crate::jsnum::is_js_space)
+                        .to_string()
+                })
                 .collect::<Vec<_>>()
                 .join("\t")
         })

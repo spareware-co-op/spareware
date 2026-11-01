@@ -80,7 +80,10 @@ impl Rs {
         let staging = g("staging").filter(|s| s.truthy()).and_then(|s| {
             let mut x = arrs(s, &["rows", "periods", "existing", "existingWhy", "steps"])?;
             if let Some(t) = x.get("trigger").filter(|t| t.truthy()).cloned() {
-                x.set("trigger", arrs(&t, &["sites", "names", "why", "how"]).unwrap_or(JsonValue::Null));
+                x.set(
+                    "trigger",
+                    arrs(&t, &["sites", "names", "why", "how"]).unwrap_or(JsonValue::Null),
+                );
             }
             Some(x)
         });
@@ -132,7 +135,9 @@ impl Rs {
 
     /// `signedOff(P)`: a named reviewer has ticked the report off.
     pub fn signed_off(&self) -> bool {
-        self.signoff.get("reviewed").is_some_and(|v| matches!(v, JsonValue::Bool(true)))
+        self.signoff
+            .get("reviewed")
+            .is_some_and(|v| matches!(v, JsonValue::Bool(true)))
             && !crate::jsnum::js_trim(&js::text_or_empty(self.signoff.get("reviewer"))).is_empty()
     }
 }

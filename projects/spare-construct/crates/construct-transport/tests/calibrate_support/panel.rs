@@ -82,8 +82,10 @@ fn pair_out(p: &PairVal) -> Value {
 pub fn me_out(m: &Option<MeStats>) -> Value {
     match m {
         None => json!({ "n": 0 }),
-        Some(m) => json!({ "n": m.n, "totalAbs": pn(m.total_abs), "totalPct": pn(m.total_pct), "cells": pair_out(&m.cells), "ends": pair_out(&m.ends),
-            "tld": m.tld.as_ref().map_or(Value::Null, pair_out), "cr": po(m.cr) }),
+        Some(m) => {
+            json!({ "n": m.n, "totalAbs": pn(m.total_abs), "totalPct": pn(m.total_pct), "cells": pair_out(&m.cells), "ends": pair_out(&m.ends),
+            "tld": m.tld.as_ref().map_or(Value::Null, pair_out), "cr": po(m.cr) })
+        }
     }
 }
 

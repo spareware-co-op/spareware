@@ -34,13 +34,21 @@ fn query_windows_match() {
     assert!(list.len() > 200);
     for (i, rec) in list.iter().enumerate() {
         let got = cas_window(rec["now"].as_f64().unwrap(), years_arg(&rec["years"]));
-        assert_close(&serde_json::to_value(&got).unwrap(), &rec["result"], &format!("$.window[{i}] now {} years {}", rec["now"], rec["years"]));
+        assert_close(
+            &serde_json::to_value(&got).unwrap(),
+            &rec["result"],
+            &format!("$.window[{i}] now {} years {}", rec["now"], rec["years"]),
+        );
     }
     // the constants
     let f = &j["fields"];
     assert_eq!(json!(CAS_FIELDS), f["fields"]);
     for (k, p) in f["pos"].as_object().unwrap() {
-        assert_eq!(cas_pos(k), p.as_u64().map(|p| p as usize), "position of {k}");
+        assert_eq!(
+            cas_pos(k),
+            p.as_u64().map(|p| p as usize),
+            "position of {k}"
+        );
     }
     assert_eq!(f["window"]["years"].as_f64(), Some(CAS_YEARS_DEFAULT));
     assert_eq!(f["window"]["longYears"].as_f64(), Some(CAS_LONG_YEARS));
@@ -56,11 +64,18 @@ fn crash_tuples_match() {
     for set in j["tuples"].as_array().unwrap() {
         let label = set["label"].as_str().unwrap();
         let file = format!("cas-{label}.json");
-        let feats: Vec<JsonValue> = features_of(&file).into_iter().filter(|f| f.get("geometry").is_some_and(JsonValue::truthy)).collect();
+        let feats: Vec<JsonValue> = features_of(&file)
+            .into_iter()
+            .filter(|f| f.get("geometry").is_some_and(JsonValue::truthy))
+            .collect();
         let exp = set["tuples"].as_array().unwrap();
         assert_eq!(feats.len(), exp.len(), "{label}: features with a position");
         for (i, f) in feats.iter().enumerate() {
-            assert_close(&Value::Array(cas_tuple(f)), &exp[i], &format!("$.tuples[{label}][{i}]"));
+            assert_close(
+                &Value::Array(cas_tuple(f)),
+                &exp[i],
+                &format!("$.tuples[{label}][{i}]"),
+            );
             n += 1;
         }
     }
@@ -96,18 +111,29 @@ fn loads_match() {
                 got.insert(k.to_string(), v.clone());
             }
         }
-        got.insert("loaded".to_string(), serde_json::to_value(d.loaded.get().expect("loaded")).unwrap());
+        got.insert(
+            "loaded".to_string(),
+            serde_json::to_value(d.loaded.get().expect("loaded")).unwrap(),
+        );
         assert_close(&Value::Object(got), &rec["data"], &format!("{at} data"));
         // Future Connect on the links of every scenario
         let fcs: serde_json::Map<String, Value> = p
             .scenarios
             .iter()
             .map(|s| {
-                let m: serde_json::Map<String, Value> = s.links.values().filter_map(|l| l.fc.get().map(|f| (l.id.clone(), f.clone()))).collect();
+                let m: serde_json::Map<String, Value> = s
+                    .links
+                    .values()
+                    .filter_map(|l| l.fc.get().map(|f| (l.id.clone(), f.clone())))
+                    .collect();
                 (s.id.clone(), Value::Object(m))
             })
             .collect();
-        assert_close(&Value::Object(fcs), &rec["fcLinks"], &format!("{at} fcLinks"));
+        assert_close(
+            &Value::Object(fcs),
+            &rec["fcLinks"],
+            &format!("{at} fcLinks"),
+        );
     }
 }
 
@@ -124,8 +150,19 @@ fn bands_match() {
         };
         let kind = rec["kind"].as_str().unwrap();
         // an undefined kind reads as collective
-        let got = risk_band(v, if kind == "undefined" { "collective" } else { kind });
-        assert_close(&serde_json::to_value(&got).unwrap(), &rec["result"], &format!("$.risk[{i}] {} {kind}", rec["value"]));
+        let got = risk_band(
+            v,
+            if kind == "undefined" {
+                "collective"
+            } else {
+                kind
+            },
+        );
+        assert_close(
+            &serde_json::to_value(&got).unwrap(),
+            &rec["result"],
+            &format!("$.risk[{i}] {} {kind}", rec["value"]),
+        );
     }
     for (i, rec) in j["link"].as_array().unwrap().iter().enumerate() {
         let kind = rec["kind"].as_str().unwrap();
@@ -144,8 +181,19 @@ fn bands_match() {
             short: r["short"].as_bool().unwrap(),
             low_volume: r["lowVolume"].as_bool().unwrap(),
         });
-        let got = link_band(risk.as_ref(), if kind == "undefined" { "collective" } else { kind });
-        assert_close(&serde_json::to_value(&got).unwrap(), &rec["result"], &format!("$.link[{i}] {kind}"));
+        let got = link_band(
+            risk.as_ref(),
+            if kind == "undefined" {
+                "collective"
+            } else {
+                kind
+            },
+        );
+        assert_close(
+            &serde_json::to_value(&got).unwrap(),
+            &rec["result"],
+            &format!("$.link[{i}] {kind}"),
+        );
     }
 }
 
@@ -163,20 +211,37 @@ fn conflation_matches() {
         assert_eq!(sc.id, rec["scenario"].as_str().unwrap());
         // the links as the recorded run had them: their saved fc and status
         for (id, fc) in rec["input"]["links"].as_object().unwrap() {
-            sc.links.get_mut(id).expect("link").fc = if fc.is_null() { Maybe::Missing } else { Maybe::Set(fc.clone()) };
+            sc.links.get_mut(id).expect("link").fc = if fc.is_null() {
+                Maybe::Missing
+            } else {
+                Maybe::Set(fc.clone())
+            };
         }
         for (id, st) in rec["input"]["statuses"].as_object().unwrap() {
-            sc.links.get_mut(id).expect("link").status = st.as_str().map_or(Maybe::Missing, |s| Maybe::Set(s.to_string()));
+            sc.links.get_mut(id).expect("link").status = st
+                .as_str()
+                .map_or(Maybe::Missing, |s| Maybe::Set(s.to_string()));
         }
-        let (radius, bearing) = (rec["opts"]["radius"].as_f64(), rec["opts"]["bearing"].as_f64());
+        let (radius, bearing) = (
+            rec["opts"]["radius"].as_f64(),
+            rec["opts"]["bearing"].as_f64(),
+        );
         let now = 1_792_540_800_000.0; // 2026-10-21T00:00:00Z, the recorded run's clock
         let mut got = conflate_fc(sc, &feats, radius, bearing, now);
         if rec["setup"].as_str() == Some("twice") {
             got = conflate_fc(sc, &feats, radius, bearing, now);
         }
         let at = format!("$.cases[{i}] {name} {}", rec["label"].as_str().unwrap());
-        assert_close(&serde_json::to_value(&got).unwrap(), &rec["result"], &format!("{at} result"));
-        let fcs: serde_json::Map<String, Value> = sc.links.values().map(|l| (l.id.clone(), l.fc.get().cloned().unwrap_or(Value::Null))).collect();
+        assert_close(
+            &serde_json::to_value(&got).unwrap(),
+            &rec["result"],
+            &format!("{at} result"),
+        );
+        let fcs: serde_json::Map<String, Value> = sc
+            .links
+            .values()
+            .map(|l| (l.id.clone(), l.fc.get().cloned().unwrap_or(Value::Null)))
+            .collect();
         assert_close(&Value::Object(fcs), &rec["fcs"], &format!("{at} fcs"));
     }
 }
@@ -188,7 +253,9 @@ fn risk_file(name: &str, expect_variants: usize) {
     let mut checks = 0;
     for v in variants {
         let label = v["label"].as_str().unwrap();
-        let p = construct_transport::project::Project::from_json(v["projectText"].as_str().unwrap()).expect("project reads");
+        let p =
+            construct_transport::project::Project::from_json(v["projectText"].as_str().unwrap())
+                .expect("project reads");
         for (si, rec) in v["scenarios"].as_array().unwrap().iter().enumerate() {
             let sc = &p.scenarios[si];
             assert_eq!(sc.id, rec["id"].as_str().unwrap());
@@ -196,22 +263,68 @@ fn risk_file(name: &str, expect_variants: usize) {
             let model = SafetyModel::new(&p, sc);
             let Some(m) = model else {
                 // no crashes loaded: the prototype answers null for all of them
-                assert!(rec["linkRisk"].is_null() && rec["nodeRisk"].is_null() && rec["summary"].is_null(), "{at}: null answers");
-                assert!(crashes_near(&p, sc, Near::Link(sc.links.keys().next().unwrap()), 25.0, false).is_none());
+                assert!(
+                    rec["linkRisk"].is_null()
+                        && rec["nodeRisk"].is_null()
+                        && rec["summary"].is_null(),
+                    "{at}: null answers"
+                );
+                assert!(
+                    crashes_near(
+                        &p,
+                        sc,
+                        Near::Link(sc.links.keys().next().unwrap()),
+                        25.0,
+                        false
+                    )
+                    .is_none()
+                );
                 checks += 1;
                 continue;
             };
-            assert_close(&serde_json::to_value(m.link_risk(None)).unwrap(), &rec["linkRisk"], &format!("{at}.linkRisk"));
-            assert_close(&serde_json::to_value(m.node_risk()).unwrap(), &rec["nodeRisk"], &format!("{at}.nodeRisk"));
-            assert_close(&serde_json::to_value(m.summary(None)).unwrap(), &rec["summary"], &format!("{at}.summary"));
-            let junctions: serde_json::Map<String, Value> =
-                sc.nodes.keys().map(|id| (id.to_string(), m.junction_of(id).map_or(Value::Null, |j| json!(j)))).collect();
-            assert_close(&Value::Object(junctions), &rec["junctionOf"], &format!("{at}.junctionOf"));
+            assert_close(
+                &serde_json::to_value(m.link_risk(None)).unwrap(),
+                &rec["linkRisk"],
+                &format!("{at}.linkRisk"),
+            );
+            assert_close(
+                &serde_json::to_value(m.node_risk()).unwrap(),
+                &rec["nodeRisk"],
+                &format!("{at}.nodeRisk"),
+            );
+            assert_close(
+                &serde_json::to_value(m.summary(None)).unwrap(),
+                &rec["summary"],
+                &format!("{at}.summary"),
+            );
+            let junctions: serde_json::Map<String, Value> = sc
+                .nodes
+                .keys()
+                .map(|id| {
+                    (
+                        id.to_string(),
+                        m.junction_of(id).map_or(Value::Null, |j| json!(j)),
+                    )
+                })
+                .collect();
+            assert_close(
+                &Value::Object(junctions),
+                &rec["junctionOf"],
+                &format!("{at}.junctionOf"),
+            );
             if !rec["linkRiskAM"].is_null() {
                 let am = stored_res(sc, "AM").expect("AM result");
                 let pm = stored_res(sc, "PM").expect("PM result");
-                assert_close(&serde_json::to_value(m.link_risk(Some(&am))).unwrap(), &rec["linkRiskAM"], &format!("{at}.linkRiskAM"));
-                assert_close(&serde_json::to_value(m.summary(Some(&pm))).unwrap(), &rec["summaryPM"], &format!("{at}.summaryPM"));
+                assert_close(
+                    &serde_json::to_value(m.link_risk(Some(&am))).unwrap(),
+                    &rec["linkRiskAM"],
+                    &format!("{at}.linkRiskAM"),
+                );
+                assert_close(
+                    &serde_json::to_value(m.summary(Some(&pm))).unwrap(),
+                    &rec["summaryPM"],
+                    &format!("{at}.summaryPM"),
+                );
                 checks += 2;
             }
             if let Some(near) = rec["near"].as_array() {
@@ -223,17 +336,30 @@ fn risk_file(name: &str, expect_variants: usize) {
                         _ => Near::Other,
                     };
                     let got = crashes_near(&p, sc, sel, n["R"].as_f64().unwrap(), false);
-                    assert_close(&got.map_or(Value::Null, |g| serde_json::to_value(g).unwrap()), &n["result"], &format!("{at}.near[{k}]"));
+                    assert_close(
+                        &got.map_or(Value::Null, |g| serde_json::to_value(g).unwrap()),
+                        &n["result"],
+                        &format!("{at}.near[{k}]"),
+                    );
                     checks += 1;
                 }
                 let link = sc.links.keys().nth(3).unwrap();
                 let got = crashes_near(&p, sc, Near::Link(link), 25.0, false).unwrap();
-                assert_close(&serde_json::to_value(got).unwrap(), &rec["nearDefault"], &format!("{at}.nearDefault"));
+                assert_close(
+                    &serde_json::to_value(got).unwrap(),
+                    &rec["nearDefault"],
+                    &format!("{at}.nearDefault"),
+                );
             }
             if let Some(long) = rec["nearLong"].as_array() {
                 for (k, n) in long.iter().enumerate() {
-                    let got = crashes_near(&p, sc, Near::Link(n["id"].as_str().unwrap()), 25.0, true);
-                    assert_close(&got.map_or(Value::Null, |g| serde_json::to_value(g).unwrap()), &n["result"], &format!("{at}.nearLong[{k}]"));
+                    let got =
+                        crashes_near(&p, sc, Near::Link(n["id"].as_str().unwrap()), 25.0, true);
+                    assert_close(
+                        &got.map_or(Value::Null, |g| serde_json::to_value(g).unwrap()),
+                        &n["result"],
+                        &format!("{at}.nearLong[{k}]"),
+                    );
                     checks += 1;
                 }
             }

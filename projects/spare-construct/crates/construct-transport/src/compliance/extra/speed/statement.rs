@@ -1,9 +1,12 @@
 //! The crash history of a road section and the cost benefit disclosure statement (CBDS, clause 3.3 of the Setting of Speed Limits Rule 2024).
 
 use super::{limit_of, road_len};
-use crate::compliance::extra::ctx::{active_sc, assumption, assumptions, authority_of, data, disclaimer, link_name, nn, pair, posted, res_of};
-use crate::compliance::extra::options::util::{Put, fld_s, label, n0, or_s, xs};
 use crate::compliance::data::x as xdata;
+use crate::compliance::extra::ctx::{
+    active_sc, assumption, assumptions, authority_of, data, disclaimer, link_name, nn, pair,
+    posted, res_of,
+};
+use crate::compliance::extra::options::util::{Put, fld_s, label, n0, or_s, xs};
 use crate::compliance::jv::{Jx, V, jarr, jobj};
 use crate::compliance::{engine, net};
 use crate::graph::js_sort_by;
@@ -28,10 +31,24 @@ pub fn section_crashes(p: &V, sc: &V, ls: &[&V]) -> Option<V> {
     let pad = r / 90000.0;
     let ids: Vec<String> = ls.iter().map(|l| l.g("id").s()).collect();
     let mut by = V::object();
-    let links: Vec<&V> = sc.g("links").vals().into_iter().filter(|l| !l.g("status").eq_s("proposed") && sc.g("nodes").g(&l.g("a").s()).t() && sc.g("nodes").g(&l.g("b").s()).t()).collect();
+    let links: Vec<&V> = sc
+        .g("links")
+        .vals()
+        .into_iter()
+        .filter(|l| {
+            !l.g("status").eq_s("proposed")
+                && sc.g("nodes").g(&l.g("a").s()).t()
+                && sc.g("nodes").g(&l.g("b").s()).t()
+        })
+        .collect();
     let mut boxes: HashMap<String, [f64; 4]> = HashMap::new();
     for l in &links {
-        let (mut a, mut b, mut c, mut d) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+        let (mut a, mut b, mut c, mut d) = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
         for pt in net::geom(sc, l).unwrap_or_default() {
             a = math_min(a, pt[0]);
             b = math_max(b, pt[0]);
@@ -44,7 +61,10 @@ pub fn section_crashes(p: &V, sc: &V, ls: &[&V]) -> Option<V> {
         match boxes.get(&l.g("id").s()) {
             Some(b) => {
                 let (la, ln) = (c.ix(0).n(), c.ix(1).n());
-                !(la < b[0] - pad || la > b[1] + pad || ln < b[2] - pad * 1.3 || ln > b[3] + pad * 1.3)
+                !(la < b[0] - pad
+                    || la > b[1] + pad
+                    || ln < b[2] - pad * 1.3
+                    || ln > b[3] + pad * 1.3)
             }
             None => false,
         }
@@ -69,12 +89,18 @@ pub fn section_crashes(p: &V, sc: &V, ls: &[&V]) -> Option<V> {
         js_sort_by(&mut ds, |x, y| x.1 - y.1);
         let first = ds[0];
         let mut best = first;
-        let loc_text = if c.ix(4).t() { c.ix(4).s() } else { String::new() };
+        let loc_text = if c.ix(4).t() {
+            c.ix(4).s()
+        } else {
+            String::new()
+        };
         let loc = engine::norm(loc_text.split(" / ").next().unwrap_or(""));
         if !loc.is_empty() && norm(best.0.g("name")) != loc {
             let alt = ds.iter().find(|(l, d)| {
                 let nm = norm(l.g("name"));
-                *d <= first.1 + 5.0 && !nm.is_empty() && (nm == loc || nm.contains(&loc) || loc.contains(&nm))
+                *d <= first.1 + 5.0
+                    && !nm.is_empty()
+                    && (nm == loc || nm.contains(&loc) || loc.contains(&nm))
             });
             if let Some(a) = alt {
                 best = *a;
@@ -89,7 +115,11 @@ pub fn section_crashes(p: &V, sc: &V, ls: &[&V]) -> Option<V> {
             by.put(&yk, jobj! { "F" => 0, "S" => 0, "M" => 0, "N" => 0 });
         }
         let sev = c.ix(2).s();
-        let key = if "FSMN".contains(sev.as_str()) { sev } else { "N".to_string() };
+        let key = if "FSMN".contains(sev.as_str()) {
+            sev
+        } else {
+            "N".to_string()
+        };
         if let Some(t) = by.get_mut(&yk) {
             let cur = if t.has(&key) { t.g(&key).n() } else { f64::NAN };
             t.put(&key, cur + 1.0);
@@ -102,14 +132,43 @@ pub fn section_crashes(p: &V, sc: &V, ls: &[&V]) -> Option<V> {
 /// `since`, when later), with the year to date reported but not counted (incomplete): `{ hist, years, from, to, since, ytdYear, ytd, lagYear, period }`.
 /// Null when no crashes are loaded.
 pub fn crash_history(p: &V, sc: &V, ls: &[&V], since: Option<f64>) -> V {
-    let Some(by) = section_crashes(p, sc, ls) else { return V::Null };
-    let cas = if p.g("data").g("loaded").g("cas").t() { p.g("data").g("loaded").g("cas").clone() } else { V::object() };
-    let ys: Vec<f64> = by.keys().iter().map(|k| crate::jsnum::string_to_number(k)).filter(|y| *y > 0.0).collect();
+    let Some(by) = section_crashes(p, sc, ls) else {
+        return V::Null;
+    };
+    let cas = if p.g("data").g("loaded").g("cas").t() {
+        p.g("data").g("loaded").g("cas").clone()
+    } else {
+        V::object()
+    };
+    let ys: Vec<f64> = by
+        .keys()
+        .iter()
+        .map(|k| crate::jsnum::string_to_number(k))
+        .filter(|y| *y > 0.0)
+        .collect();
     let ymin = ys.iter().fold(f64::INFINITY, |m, y| math_min(m, *y));
     let ymax = ys.iter().fold(f64::NEG_INFINITY, |m, y| math_max(m, *y));
-    let from: Option<f64> = if cas.g("from").n() > 0.0 { Some(cas.g("from").n()) } else if !ys.is_empty() { Some(ymin) } else { None };
-    let full_to: Option<f64> = if cas.g("to").n() > 0.0 { Some(cas.g("to").n()) } else if !ys.is_empty() { Some(ymax) } else { None };
-    let ytd_y: Option<f64> = if cas.g("ytd").n() > 0.0 { Some(cas.g("ytd").n()) } else if cas.g("to").n() > 0.0 { Some(cas.g("to").n() + 1.0) } else { None };
+    let from: Option<f64> = if cas.g("from").n() > 0.0 {
+        Some(cas.g("from").n())
+    } else if !ys.is_empty() {
+        Some(ymin)
+    } else {
+        None
+    };
+    let full_to: Option<f64> = if cas.g("to").n() > 0.0 {
+        Some(cas.g("to").n())
+    } else if !ys.is_empty() {
+        Some(ymax)
+    } else {
+        None
+    };
+    let ytd_y: Option<f64> = if cas.g("ytd").n() > 0.0 {
+        Some(cas.g("ytd").n())
+    } else if cas.g("to").n() > 0.0 {
+        Some(cas.g("to").n() + 1.0)
+    } else {
+        None
+    };
     let since_t: Option<f64> = since.filter(|s| *s != 0.0 && !s.is_nan());
     let y0 = from.map(|f| match since_t {
         Some(s) => math_max(f, s),
@@ -131,9 +190,13 @@ pub fn crash_history(p: &V, sc: &V, ls: &[&V], since: Option<f64>) -> V {
         }
     }
     let ytd = match ytd_y {
-        Some(yy) if yy != 0.0 && yy > full_to.unwrap_or(0.0) && by.g(&number_to_js_string(yy)).t() => {
+        Some(yy)
+            if yy != 0.0 && yy > full_to.unwrap_or(0.0) && by.g(&number_to_js_string(yy)).t() =>
+        {
             let row = by.g(&number_to_js_string(yy));
-            ["F", "S", "M", "N"].iter().fold(0.0, |s, k| s + row.g(k).n())
+            ["F", "S", "M", "N"]
+                .iter()
+                .fold(0.0, |s, k| s + row.g(k).n())
         }
         _ => 0.0,
     };
@@ -146,12 +209,21 @@ pub fn crash_history(p: &V, sc: &V, ls: &[&V], since: Option<f64>) -> V {
             number_to_js_string(n),
             if n == 1.0 { "" } else { "s" },
             match since_t {
-                Some(s) if s > from.unwrap_or(0.0) => format!(", from {0}, when the limit or road began; part of {0} may be under the earlier limit", number_to_js_string(s)),
+                Some(s) if s > from.unwrap_or(0.0) => format!(
+                    ", from {0}, when the limit or road began; part of {0} may be under the earlier limit",
+                    number_to_js_string(s)
+                ),
                 _ => String::new(),
             }
         )
     } else {
-        format!("No full year of CAS data{}", match since_t { Some(s) => format!(" since {}", number_to_js_string(s)), None => String::new() })
+        format!(
+            "No full year of CAS data{}",
+            match since_t {
+                Some(s) => format!(" since {}", number_to_js_string(s)),
+                None => String::new(),
+            }
+        )
     };
     jobj! {
         "hist" => jobj! { "F" => hist[0], "S" => hist[1], "M" => hist[2], "N" => hist[3] },
@@ -186,7 +258,11 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
     let ls: Vec<&V> = ids
         .iter()
         .filter_map(|id| {
-            let l = if sc.g("links").g(id).t() { sc.g("links").g(id) } else { base.g("links").g(id) };
+            let l = if sc.g("links").g(id).t() {
+                sc.g("links").g(id)
+            } else {
+                base.g("links").g(id)
+            };
             if l.t() { Some(l) } else { None }
         })
         .collect();
@@ -195,33 +271,65 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
     }
     let base_of = |l: &V| base.g("links").g(&l.g("id").s());
     let skip = xs("STD.speed.cbdsSkip");
-    if let Some(n) = ls.iter().find(|l| l.g("status").eq_s("proposed") || (l.g("cx").t() && l.g("cx").g("newRoad").t()) || !base_of(l).t() || base_of(l).g("status").eq_s("proposed")) {
+    if let Some(n) = ls.iter().find(|l| {
+        l.g("status").eq_s("proposed")
+            || (l.g("cx").t() && l.g("cx").g("newRoad").t())
+            || !base_of(l).t()
+            || base_of(l).g("status").eq_s("proposed")
+    }) {
         return jobj! { "ok" => false, "why" => format!("{} is a new road: {skip}.", link_name(n)), "newRoad" => true };
     }
-    if let Some(s) = ls.iter().find(|l| (l.g("cx").t() && l.g("cx").g("school").t()) || (base_of(l).g("cx").t() && base_of(l).g("cx").g("school").t())) {
+    if let Some(s) = ls.iter().find(|l| {
+        (l.g("cx").t() && l.g("cx").g("school").t())
+            || (base_of(l).g("cx").t() && base_of(l).g("cx").g("school").t())
+    }) {
         return jobj! { "ok" => false, "why" => format!("{} is a school-gate limit: {skip}.", link_name(s)) };
     }
     let bs: Vec<&V> = ls.iter().map(|l| base_of(l)).collect();
     // nn((L.cx || {})[k]) ?? nn((base.links[L.id].cx || {})[k])
-    let cx_of = |l: &V, k: &str| -> Option<f64> { nn(l.g("cx").g(k)).or_else(|| nn(base_of(l).g("cx").g(k))) };
+    let cx_of = |l: &V, k: &str| -> Option<f64> {
+        nn(l.g("cx").g(k)).or_else(|| nn(base_of(l).g("cx").g(k)))
+    };
     let len = road_len(base, &bs);
     let v0 = posted(bs[0]);
     let v1 = limit_of(ls[0]);
     let risk = engine::link_risk(p, base);
     let since: Option<f64> = {
-        let mut v: Vec<f64> = ls.iter().filter_map(|l| cx_of(l, "since")).filter(|x| *x != 0.0).collect();
+        let mut v: Vec<f64> = ls
+            .iter()
+            .filter_map(|l| cx_of(l, "since"))
+            .filter(|x| *x != 0.0)
+            .collect();
         js_sort_by(&mut v, |x, y| y - x);
         v.first().copied().filter(|x| *x != 0.0)
     };
     let ch = crash_history(p, base, &bs, since);
     let hist = if ch.t() { hist_of(&ch) } else { [0.0; 4] };
-    let yrs: Option<f64> = if ch.t() && ch.g("years").n() > 0.0 { Some(ch.g("years").n()) } else { None };
+    let yrs: Option<f64> = if ch.t() && ch.g("years").n() > 0.0 {
+        Some(ch.g("years").n())
+    } else {
+        None
+    };
     let dsi_yr = yrs.map(|y| (hist[0] + hist[1]) / y);
     let inj_yr = yrs.map(|y| (hist[0] + hist[1] + hist[2]) / y);
     let non_yr = yrs.map(|y| hist[3] / y);
     // mean operating speed: measured (author or MegaMaps), otherwise the modelled speed as a placeholder
-    let meas: Vec<f64> = ls.iter().filter_map(|l| cx_of(l, "meanSpeed")).filter(|x| *x != 0.0).collect();
-    let mm: Vec<f64> = bs.iter().filter_map(|l| if l.g("megamaps").t() { nn(l.g("megamaps").g("mean")) } else { None }).filter(|x| *x != 0.0).collect();
+    let meas: Vec<f64> = ls
+        .iter()
+        .filter_map(|l| cx_of(l, "meanSpeed"))
+        .filter(|x| *x != 0.0)
+        .collect();
+    let mm: Vec<f64> = bs
+        .iter()
+        .filter_map(|l| {
+            if l.g("megamaps").t() {
+                nn(l.g("megamaps").g("mean"))
+            } else {
+                None
+            }
+        })
+        .filter(|x| *x != 0.0)
+        .collect();
     let r0 = res_of(base, "AM").or_else(|| res_of(base, "PM"));
     let modelled: Option<f64> = r0.and_then(|r0| {
         let (mut d, mut t) = (0.0, 0.0);
@@ -237,13 +345,28 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
         if t > 0.0 { Some(d / t * 3.6) } else { None }
     });
     let mean = |v: &[f64]| v.iter().fold(0.0, |s, x| s + x) / v.len() as f64;
-    let m0: Option<f64> = if !meas.is_empty() { Some(mean(&meas)) } else if !mm.is_empty() { Some(mean(&mm)) } else { modelled };
+    let m0: Option<f64> = if !meas.is_empty() {
+        Some(mean(&meas))
+    } else if !mm.is_empty() {
+        Some(mean(&mm))
+    } else {
+        modelled
+    };
     let src_txt: Option<V> = ls
         .iter()
-        .map(|l| if l.g("cx").t() && l.g("cx").g("meanSpeedSrc").t() { l.g("cx").g("meanSpeedSrc").clone() } else { base_of(l).g("cx").g("meanSpeedSrc").clone() })
+        .map(|l| {
+            if l.g("cx").t() && l.g("cx").g("meanSpeedSrc").t() {
+                l.g("cx").g("meanSpeedSrc").clone()
+            } else {
+                base_of(l).g("cx").g("meanSpeedSrc").clone()
+            }
+        })
         .find(|v| v.t());
     let m_src = if !meas.is_empty() {
-        format!("measured ({})", src_txt.map_or("entered by the author".to_string(), |s| s.s()))
+        format!(
+            "measured ({})",
+            src_txt.map_or("entered by the author".to_string(), |s| s.s())
+        )
     } else if !mm.is_empty() {
         "MegaMaps".to_string()
     } else if modelled.is_some() {
@@ -255,7 +378,11 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
     let m1: Option<f64> = m0.map(|m| math_max(5.0, m + mean_share * (v1 - v0)));
     // Nilsson power model: fatal and serious crashes vary with v^dsiExponent, injury crashes with v^injuryExponent; non-injury held
     let truthy = |x: Option<f64>| x.is_some_and(|v| v != 0.0 && !v.is_nan());
-    let k = if truthy(m0) && truthy(m1) { m1.unwrap_or(0.0) / m0.unwrap_or(1.0) } else { 1.0 };
+    let k = if truthy(m0) && truthy(m1) {
+        m1.unwrap_or(0.0) / m0.unwrap_or(1.0)
+    } else {
+        1.0
+    };
     let dsi1 = dsi_yr.map(|d| d * jsmath::pow(k, a.g("dsiExponent").n()));
     let inj1 = inj_yr.map(|i| i * jsmath::pow(k, a.g("injuryExponent").n()));
     let all0 = inj_yr.map(|i| i + non_yr.unwrap_or(f64::NAN));
@@ -264,30 +391,67 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
         let l0 = bs[0];
         let rk = risk.as_ref().map(|r| r.g(&l0.g("id").s()).clone());
         match rk {
-            Some(r) if r.t() && r.g("aadt").n() > 0.0 => Some((r.g("aadt").n(), if r.g("aadtSrc").t() { r.g("aadtSrc").s() } else { "count".to_string() })),
+            Some(r) if r.t() && r.g("aadt").n() > 0.0 => Some((
+                r.g("aadt").n(),
+                if r.g("aadtSrc").t() {
+                    r.g("aadtSrc").s()
+                } else {
+                    "count".to_string()
+                },
+            )),
             _ => {
-                let x: Option<f64> = r0.map(|r0| ["ab", "ba"].iter().fold(0.0, |s, d| s + n0(r0.g("arcs").g(&format!("{}:{d}", l0.g("id").s())).g("v"))));
-                if truthy(x) { Some((x.unwrap_or(0.0) * 10.0, format!("modelled peak hour \u{d7} 10 ({})", assumption()))) } else { None }
+                let x: Option<f64> = r0.map(|r0| {
+                    ["ab", "ba"].iter().fold(0.0, |s, d| {
+                        s + n0(r0.g("arcs").g(&format!("{}:{d}", l0.g("id").s())).g("v"))
+                    })
+                });
+                if truthy(x) {
+                    Some((
+                        x.unwrap_or(0.0) * 10.0,
+                        format!("modelled peak hour \u{d7} 10 ({})", assumption()),
+                    ))
+                } else {
+                    None
+                }
             }
         }
     };
-    let dt_veh: Option<f64> = if truthy(m0) && truthy(m1) { Some(len / (m1.unwrap_or(0.0) / 3.6) - len / (m0.unwrap_or(0.0) / 3.6)) } else { None };
+    let dt_veh: Option<f64> = if truthy(m0) && truthy(m1) {
+        Some(len / (m1.unwrap_or(0.0) / 3.6) - len / (m0.unwrap_or(0.0) / 3.6))
+    } else {
+        None
+    };
     let hist_rows: Vec<V> = if ch.t() {
         let mut rows = vec![
-            jarr!["Fatal", hist[0]], jarr!["Serious", hist[1]], jarr!["Minor", hist[2]], jarr!["Non-injury", hist[3]], jarr!["Period", ch.g("period")],
+            jarr!["Fatal", hist[0]],
+            jarr!["Serious", hist[1]],
+            jarr!["Minor", hist[2]],
+            jarr!["Non-injury", hist[3]],
+            jarr!["Period", ch.g("period")],
         ];
         if ch.g("ytd").t() {
             rows.push(jarr![
                 "Not counted",
-                format!("{} crash{} in {} to date (YTD, incomplete)", ch.g("ytd").s(), if ch.g("ytd").n() == 1.0 { "" } else { "es" }, ch.g("ytdYear").s())
+                format!(
+                    "{} crash{} in {} to date (YTD, incomplete)",
+                    ch.g("ytd").s(),
+                    if ch.g("ytd").n() == 1.0 { "" } else { "es" },
+                    ch.g("ytdYear").s()
+                )
             ]);
         }
         if ch.g("lagYear").t() {
-            rows.push(jarr!["Note", format!("{} may be incomplete (CAS entry lag)", ch.g("lagYear").s())]);
+            rows.push(jarr![
+                "Note",
+                format!("{} may be incomplete (CAS entry lag)", ch.g("lagYear").s())
+            ]);
         }
         rows
     } else {
-        vec![jarr!["CAS", "Not loaded: load NZTA CAS crashes (Traffic data tab)"]]
+        vec![jarr![
+            "CAS",
+            "Not loaded: load NZTA CAS crashes (Traffic data tab)"
+        ]]
     };
     let dsi_ex = a.g("dsiExponent").s();
     let inj_ex = a.g("injuryExponent").s();
@@ -296,7 +460,9 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
         "Nilsson power model on mean speed ({}): fatal and serious crashes \u{221d} v^{dsi_ex}, injury crashes \u{221d} v^{inj_ex}; non-injury crashes held at the current rate (the model covers injury crashes only); {asm} exponents (D13). Not an MBCM crash procedure: MBCM v1.7.5 crash trend factors for speed-limit categories (NZTA GC 26/01) are not applied",
         nl.g("edition").s()
     );
-    let nv = |x: Option<f64>, d: usize| -> String { x.map_or_else(|| fmt::DASH.to_string(), |v| fmt_num(v, d)) };
+    let nv = |x: Option<f64>, d: usize| -> String {
+        x.map_or_else(|| fmt::DASH.to_string(), |v| fmt_num(v, d))
+    };
     let forecast_rows: Vec<V> = if yrs.is_some() {
         vec![
             jarr!["Without the change: DSI per year", nv(dsi_yr, 2)],
@@ -305,11 +471,27 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
             jarr!["With: injury crashes per year", nv(inj1, 2)],
             jarr!["Without: all crashes per year", nv(all0, 2)],
             jarr!["With: all crashes per year", nv(all1, 2)],
-            jarr!["Over 5 years: DSI saved", nv(Some((dsi_yr.unwrap_or(f64::NAN) - dsi1.unwrap_or(f64::NAN)) * 5.0), 1)],
+            jarr![
+                "Over 5 years: DSI saved",
+                nv(
+                    Some((dsi_yr.unwrap_or(f64::NAN) - dsi1.unwrap_or(f64::NAN)) * 5.0),
+                    1
+                )
+            ],
             jarr!["Method", method.as_str()],
         ]
     } else {
-        vec![jarr!["Forecast", if ch.t() { "No full year of crash history to forecast from" } else { "Load NZTA CAS crashes to forecast" }], jarr!["Method", method.as_str()]]
+        vec![
+            jarr![
+                "Forecast",
+                if ch.t() {
+                    "No full year of crash history to forecast from"
+                } else {
+                    "Load NZTA CAS crashes to forecast"
+                }
+            ],
+            jarr!["Method", method.as_str()],
+        ]
     };
     let cost = cx.g("cost").n();
     let headings = vec![
@@ -371,7 +553,10 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
         warn.push("No measured mean operating speed: a modelled speed is not a mean operating speed. Enter a measured speed (road inspector \u{203a} Speed limit) or load MegaMaps.".to_string());
     }
     if cx.g("consultationChanged").t() {
-        warn.push("The proposed limit changed after consultation: re-run this CBDS (cl 3.3(7)).".to_string());
+        warn.push(
+            "The proposed limit changed after consultation: re-run this CBDS (cl 3.3(7))."
+                .to_string(),
+        );
     }
     jobj! {
         "ok" => true, "ids" => V::Array(ls.iter().map(|l| l.g("id").clone()).collect()), "name" => link_name(ls[0]), "current" => v0, "proposed" => v1, "history" => ch,
@@ -382,5 +567,9 @@ pub fn cbds(p: &V, ids: &[String], sc: Option<&V>) -> V {
 
 /// `num(x, d)` for a number (an en dash when not finite).
 fn fmt_num(x: f64, d: usize) -> String {
-    if x.is_finite() { fmt::num(x, d) } else { fmt::DASH.to_string() }
+    if x.is_finite() {
+        fmt::num(x, d)
+    } else {
+        fmt::DASH.to_string()
+    }
 }

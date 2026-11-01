@@ -158,14 +158,7 @@ impl EdgeGraph {
     /// ends once node target (when >= 0) is reached. Results are left in the workspace: per arc the
     /// best cost `dist`, the arc before it `pred` and the turn used `pt`; per node the best arrival
     /// cost `nd` and the arc it arrives on `na`.
-    pub fn spt(
-        &self,
-        cost: &[f64],
-        src: usize,
-        w: &mut Workspace,
-        target: i32,
-        from_arc: i32,
-    ) {
+    pub fn spt(&self, cost: &[f64], src: usize, w: &mut Workspace, target: i32, from_arc: i32) {
         let net = &self.net;
         let (head, out, to) = (&net.head, &net.out, &net.to);
         let (t_off, tpen) = (&self.turns.off, &self.turns.pen);

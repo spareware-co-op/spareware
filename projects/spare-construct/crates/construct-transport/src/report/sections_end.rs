@@ -1,6 +1,6 @@
 //! Chapters 5 and 6: the mitigation register, staging triggers, conditions and monitoring, and the conclusion.
 
-use super::ctx::{Ctx, Head, Row, Tbl, TableOpts, day_of, h, hn, note, para};
+use super::ctx::{Ctx, Head, Row, TableOpts, Tbl, day_of, h, hn, note, para};
 use super::js;
 use super::rfmt;
 use super::sections_env::control_label;
@@ -42,8 +42,16 @@ pub fn network_diff(a: Option<&Scenario>, b: Option<&Scenario>) -> Vec<Change> {
     for l in b.links.values() {
         match a.links.get(&l.id) {
             None => {
-                let cls = l.cls.as_str().and_then(road_class_exact).map_or("road".to_string(), |c| c.label.to_lowercase());
-                let name = l.name.as_str().filter(|n| !n.is_empty()).unwrap_or("unnamed road");
+                let cls = l
+                    .cls
+                    .as_str()
+                    .and_then(road_class_exact)
+                    .map_or("road".to_string(), |c| c.label.to_lowercase());
+                let name = l
+                    .name
+                    .as_str()
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or("unnamed road");
                 out.push(Change {
                     kind: "link",
                     id: l.id.clone(),
@@ -70,7 +78,11 @@ pub fn network_diff(a: Option<&Scenario>, b: Option<&Scenario>) -> Vec<Change> {
                     ));
                 }
                 if o.speed != l.speed {
-                    ch.push(format!("speed {} \u{2192} {} km/h", o.speed.js_string(), l.speed.js_string()));
+                    ch.push(format!(
+                        "speed {} \u{2192} {} km/h",
+                        o.speed.js_string(),
+                        l.speed.js_string()
+                    ));
                 }
                 if o.status != l.status {
                     ch.push(format!("{} \u{2192} {}", mstr(&o.status), mstr(&l.status)));
@@ -79,17 +91,35 @@ pub fn network_diff(a: Option<&Scenario>, b: Option<&Scenario>) -> Vec<Change> {
                     ch.push(format!("class {} \u{2192} {}", mstr(&o.cls), mstr(&l.cls)));
                 }
                 if o.bus_lane != l.bus_lane {
-                    ch.push(if l.bus_lane.truthy() { "bus lane added" } else { "bus lane removed" }.to_string());
+                    ch.push(
+                        if l.bus_lane.truthy() {
+                            "bus lane added"
+                        } else {
+                            "bus lane removed"
+                        }
+                        .to_string(),
+                    );
                 }
                 if o.cycle != l.cycle {
-                    ch.push(format!("cycle facility {} \u{2192} {}", mstr(&o.cycle), mstr(&l.cycle)));
+                    ch.push(format!(
+                        "cycle facility {} \u{2192} {}",
+                        mstr(&o.cycle),
+                        mstr(&l.cycle)
+                    ));
                 }
                 if !ch.is_empty() {
                     out.push(Change {
                         kind: "link",
                         id: l.id.clone(),
                         control: None,
-                        text: format!("{}: {}", l.name.as_str().filter(|n| !n.is_empty()).unwrap_or("Unnamed road"), ch.join(", ")),
+                        text: format!(
+                            "{}: {}",
+                            l.name
+                                .as_str()
+                                .filter(|n| !n.is_empty())
+                                .unwrap_or("Unnamed road"),
+                            ch.join(", ")
+                        ),
                     });
                 }
             }
@@ -101,7 +131,13 @@ pub fn network_diff(a: Option<&Scenario>, b: Option<&Scenario>) -> Vec<Change> {
                 kind: "link",
                 id: l.id.clone(),
                 control: None,
-                text: format!("Removed: {}", l.name.as_str().filter(|n| !n.is_empty()).unwrap_or("unnamed road")),
+                text: format!(
+                    "Removed: {}",
+                    l.name
+                        .as_str()
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or("unnamed road")
+                ),
             });
         }
     }
@@ -109,7 +145,10 @@ pub fn network_diff(a: Option<&Scenario>, b: Option<&Scenario>) -> Vec<Change> {
         let Some(o) = a.nodes.get(&n.id) else {
             continue;
         };
-        if o.control != n.control || (n.upgrade.truthy() && !o.upgrade.truthy()) || (n.cycle != o.cycle && n.control.is("signals")) {
+        if o.control != n.control
+            || (n.upgrade.truthy() && !o.upgrade.truthy())
+            || (n.cycle != o.cycle && n.control.is("signals"))
+        {
             let ctl = n.control.as_str().unwrap_or("");
             let octl = o.control.as_str().unwrap_or("");
             out.push(Change {
@@ -120,8 +159,16 @@ pub fn network_diff(a: Option<&Scenario>, b: Option<&Scenario>) -> Vec<Change> {
                     "{} at {}{}{}",
                     control_label(ctl),
                     kit_junction_name(b, &n.id),
-                    if o.control != n.control { format!(" (was {})", control_label(octl).to_lowercase()) } else { String::new() },
-                    if n.cycle.truthy() && n.control.is("signals") { format!(", cycle {} s", n.cycle.js_string()) } else { String::new() }
+                    if o.control != n.control {
+                        format!(" (was {})", control_label(octl).to_lowercase())
+                    } else {
+                        String::new()
+                    },
+                    if n.cycle.truthy() && n.control.is("signals") {
+                        format!(", cycle {} s", n.cycle.js_string())
+                    } else {
+                        String::new()
+                    }
                 ),
             });
         }
@@ -145,14 +192,23 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
         _ => Vec::new(),
     };
     let prop_id = prop.map(|p| r.scenario(p).id.clone()).unwrap_or_default();
-    let refs: Vec<(String, String)> = c.refs.iter().find(|(k, _)| *k == prop_id).map(|(_, v)| v.clone()).unwrap_or_default();
+    let refs: Vec<(String, String)> = c
+        .refs
+        .iter()
+        .find(|(k, _)| *k == prop_id)
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
     let blank = JsonValue::object();
     let rows: Vec<Row> = diff
         .iter()
         .enumerate()
         .map(|(i, d)| {
             let rf = format!("M{}", i + 1);
-            let a = r.rs.mitigation.get(&rf).filter(|v| v.truthy()).unwrap_or(&blank);
+            let a =
+                r.rs.mitigation
+                    .get(&rf)
+                    .filter(|v| v.truthy())
+                    .unwrap_or(&blank);
             let mut eff = fmt::DASH.to_string();
             if d.kind == "node"
                 && let Some(p) = prop
@@ -160,11 +216,21 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
                 let mut hits: Vec<(&str, &crate::results::NodeRes)> = r
                     .rep_periods(p)
                     .into_iter()
-                    .filter_map(|per| r.results[p].get(per).and_then(|res| res.nodes.get(&d.id)).map(|nr| (per, nr)))
+                    .filter_map(|per| {
+                        r.results[p]
+                            .get(per)
+                            .and_then(|res| res.nodes.get(&d.id))
+                            .map(|nr| (per, nr))
+                    })
                     .collect();
                 js_sort_by(&mut hits, |x, y| y.1.dos - x.1.dos);
                 if let Some((per, nr)) = hits.first() {
-                    let jr = refs.iter().find(|(k, _)| *k == d.id).map(|(_, v)| v.as_str()).filter(|v| !v.is_empty()).unwrap_or("J");
+                    let jr = refs
+                        .iter()
+                        .find(|(k, _)| *k == d.id)
+                        .map(|(_, v)| v.as_str())
+                        .filter(|v| !v.is_empty())
+                        .unwrap_or("J");
                     eff = format!(
                         "<a href=\"#j-{}-{}\">{} {} DoS {}, LoS {}</a>",
                         esc(&prop_id),
@@ -172,15 +238,21 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
                         esc(jr),
                         per,
                         rfmt::dos(nr.dos),
-                        esc(if nr.los_text.is_empty() { &nr.los } else { &nr.los_text })
+                        esc(if nr.los_text.is_empty() {
+                            &nr.los
+                        } else {
+                            &nr.los_text
+                        })
                     );
                 }
             }
             let cost: Option<f64> = if d.kind == "node" {
-                econ.and_then(|e| e.node.get()).and_then(|m| m.get(d.control.as_deref().unwrap_or(""))).and_then(|v| match v {
-                    Maybe::Set(x) => Some(x.to_number()),
-                    _ => None,
-                })
+                econ.and_then(|e| e.node.get())
+                    .and_then(|m| m.get(d.control.as_deref().unwrap_or("")))
+                    .and_then(|v| match v {
+                        Maybe::Set(x) => Some(x.to_number()),
+                        _ => None,
+                    })
             } else {
                 let m = r.scenario(mit.expect("a mitigation scenario"));
                 let pr = r.scenario(prop.expect("a proposal scenario"));
@@ -194,7 +266,12 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
                                 _ => None,
                             })
                             .unwrap_or(3.0);
-                        Some(m.link_len(l) / 1000.0 * ((l.lanes_ab.int32() | 0) as f64 + (l.lanes_ba.int32() | 0) as f64) * per_km)
+                        Some(
+                            m.link_len(l) / 1000.0
+                                * ((l.lanes_ab.int32() | 0) as f64
+                                    + (l.lanes_ba.int32() | 0) as f64)
+                                * per_km,
+                        )
                     }
                     _ => None,
                 }
@@ -205,7 +282,11 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
                     t
                 } else {
                     let st = js::text_or_empty(r.rs.staging.as_ref().and_then(|s| s.get("text")));
-                    if st.is_empty() { fmt::DASH.to_string() } else { st }
+                    if st.is_empty() {
+                        fmt::DASH.to_string()
+                    } else {
+                        st
+                    }
                 }
             };
             Row::new(vec![
@@ -236,8 +317,16 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
                 } else {
                     format!(
                         "{}{}",
-                        d.iter().take(12).map(|x| esc(&x.text)).collect::<Vec<_>>().join("; "),
-                        if d.len() > 12 { format!("; and {} more", d.len() - 12) } else { String::new() }
+                        d.iter()
+                            .take(12)
+                            .map(|x| esc(&x.text))
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                        if d.len() > 12 {
+                            format!("; and {} more", d.len() - 12)
+                        } else {
+                            String::new()
+                        }
                     )
                 }
             )
@@ -276,10 +365,14 @@ pub(crate) fn mitigation(c: &mut Ctx) -> String {
 pub(crate) fn staging(c: &mut Ctx) -> String {
     let r = c.r;
     let Some(st) = r.rs.staging.as_ref() else {
-        return note("Run the staging test in the Report tab: it runs the proposal at 10% build-out steps and finds the first increment where an assessed junction fails.", true);
+        return note(
+            "Run the staging test in the Report tab: it runs the proposal at 10% build-out steps and finds the first increment where an assessed junction fails.",
+            true,
+        );
     };
     let tr = st.get("trigger").filter(|t| t.truthy());
-    let is_t = |row: &JsonValue| tr.is_some_and(|t| js::num(t.get("pct")) == js::num(row.get("pct")));
+    let is_t =
+        |row: &JsonValue| tr.is_some_and(|t| js::num(t.get("pct")) == js::num(row.get("pct")));
     let rows: Vec<Row> = js::items(st.get("rows"))
         .iter()
         .map(|rw| {
@@ -296,10 +389,17 @@ pub(crate) fn staging(c: &mut Ctx) -> String {
                     worst.map_or(fmt::DASH.to_string(), |w| esc(&js::text(w.get("los")))),
                     if js::truthy(g("queue")) { "Yes" } else { "No" }.to_string(),
                     if t {
-                        format!("<b>{}</b>", esc(&{
-                            let m = js::text_or_empty(st.get("measure"));
-                            if m.is_empty() { "Mitigation".to_string() } else { m }
-                        }))
+                        format!(
+                            "<b>{}</b>",
+                            esc(&{
+                                let m = js::text_or_empty(st.get("measure"));
+                                if m.is_empty() {
+                                    "Mitigation".to_string()
+                                } else {
+                                    m
+                                }
+                            })
+                        )
                     } else {
                         fmt::DASH.to_string()
                     },
@@ -328,7 +428,11 @@ pub(crate) fn staging(c: &mut Ctx) -> String {
                     let how = js::idx(t.get("how"), i).filter(|v| v.truthy());
                     format!(
                         "<li>{}: {}{}</li>",
-                        esc(&if name.is_empty() { js::text(Some(id)) } else { name }),
+                        esc(&if name.is_empty() {
+                            js::text(Some(id))
+                        } else {
+                            name
+                        }),
                         esc(&why),
                         how.map_or(String::new(), |hw| format!(" ({})", esc(&hw.js_string())))
                     )
@@ -361,7 +465,10 @@ pub(crate) fn staging(c: &mut Ctx) -> String {
             },
         )
     };
-    let periods: Vec<String> = js::items(st.get("periods")).iter().map(|p| js::text(Some(p))).collect();
+    let periods: Vec<String> = js::items(st.get("periods"))
+        .iter()
+        .map(|p| js::text(Some(p)))
+        .collect();
     let text = js::text_or_empty(st.get("text"));
     format!(
         "{}\n      {}{}{}",
@@ -391,7 +498,11 @@ pub(crate) fn staging(c: &mut Ctx) -> String {
 /// `report-conditions`.
 pub(crate) fn conditions(c: &mut Ctx) -> String {
     let r = c.r;
-    let text = r.rs.staging.as_ref().map(|s| js::text_or_empty(s.get("text"))).unwrap_or_default();
+    let text =
+        r.rs.staging
+            .as_ref()
+            .map(|s| js::text_or_empty(s.get("text")))
+            .unwrap_or_default();
     format!(
         "{}\n      {}\n      {}",
         if text.is_empty() {
@@ -413,7 +524,10 @@ pub fn conclusion_text(c: &Ctx) -> String {
     if r.rep_periods(s).is_empty() {
         return "The assessed scenario has not been run, so no conclusion can be drawn from the model.".to_string();
     }
-    let rows: Vec<_> = junction_rows(r, &c.sel, s, None).into_iter().filter(|x| x.s.is_some()).collect();
+    let rows: Vec<_> = junction_rows(r, &c.sel, s, None)
+        .into_iter()
+        .filter(|x| x.s.is_some())
+        .collect();
     let mut ids: Vec<String> = Vec::new();
     for x in &rows {
         if !ids.contains(&x.id) {
@@ -424,23 +538,43 @@ pub fn conclusion_text(c: &Ctx) -> String {
         return format!("{} has no assessed junctions.", r.sc(s).name());
     }
     let mut sorted: Vec<&super::shared::JRow> = rows.iter().collect();
-    js_sort_by(&mut sorted, |a, b| b.s.as_ref().map_or(f64::NAN, |x| x.dos) - a.s.as_ref().map_or(f64::NAN, |x| x.dos));
+    js_sort_by(&mut sorted, |a, b| {
+        b.s.as_ref().map_or(f64::NAN, |x| x.dos) - a.s.as_ref().map_or(f64::NAN, |x| x.dos)
+    });
     let worst = sorted[0];
     let ws = worst.s.as_ref().expect("a summary");
     let over: Vec<&str> = rows
         .iter()
         .filter(|x| {
             let sm = x.s.as_ref().expect("a summary");
-            sm.dos > (if sm.xp == 0.0 || sm.xp.is_nan() { 1.0 } else { sm.xp })
+            sm.dos
+                > (if sm.xp == 0.0 || sm.xp.is_nan() {
+                    1.0
+                } else {
+                    sm.xp
+                })
         })
         .map(|x| x.id.as_str())
         .collect();
-    let who = if c.sel.mitigation.is_some() { "With the proposed mitigation" } else { "With the proposal" };
+    let who = if c.sel.mitigation.is_some() {
+        "With the proposed mitigation"
+    } else {
+        "With the proposal"
+    };
     let pers = r.rep_periods(s).join(" and ");
-    let tail = format!("the worst is {} (DoS {}, LoS {}, {} peak)", worst.name, rfmt::dos(ws.dos), ws.los_text, worst.p);
+    let tail = format!(
+        "the worst is {} (DoS {}, LoS {}, {} peak)",
+        worst.name,
+        rfmt::dos(ws.dos),
+        ws.los_text,
+        worst.p
+    );
     let base = c.sel.existing.or(c.sel.base).unwrap_or(0);
     let gs = junction_groups(r, base, s, &ids);
-    let n_over = gs.iter().filter(|g| g.ids.iter().any(|id| over.contains(&id.as_str()))).count();
+    let n_over = gs
+        .iter()
+        .filter(|g| g.ids.iter().any(|id| over.contains(&id.as_str())))
+        .count();
     let year = r.year_of(s).map_or("null".to_string(), number_to_js_string);
     if !over.is_empty() {
         format!(
@@ -448,7 +582,10 @@ pub fn conclusion_text(c: &Ctx) -> String {
             gs.len()
         )
     } else {
-        format!("{who}, all {} assessed junctions operate within practical DoS in the {year} {pers} peaks; {tail}.", gs.len())
+        format!(
+            "{who}, all {} assessed junctions operate within practical DoS in the {year} {pers} peaks; {tail}.",
+            gs.len()
+        )
     }
 }
 
