@@ -269,36 +269,42 @@
             },
             {
               "sha256": "9fa3a5cb5a890b07c73fb90432b035c17901a9dc19d0318a45830de510df1a3b",
+              "kind": "bug",
+              "piece": "G164",
+              "why": "intersect/surface_torus's result digest moved from 76a47ad1... to 764d5d58..., inputs unchanged (3c7d9153...): a line along a torus's equator crosses it four times, and the three crossings on a seam of the closed torus were BoundaryTouch; a join is no boundary (12.6), so they are Crossing now, at the same 256 points of the 64 inputs; no other digest moved"
+            },
+            {
+              "sha256": "d4e034c4c1b1a3cf8e3334bb49b626025e358895882b5c6abf024bd2e8638839",
               "kind": "corpus",
               "piece": "G170",
               "why": "1 new count benchmark on geom-intersect's marching (decision 32.44): the branches of a sphere through a plane patch; no existing digest moved"
             },
             {
-              "sha256": "9c0f3d471e31b39dc2a038e37205a513ea11aa4fc0d57eecd0a05282ca194d9e",
+              "sha256": "9b05d1f92fc7c31e7fdcb969965ce415da2905a76a69b53b69e6ea2022bdb7bd",
               "kind": "corpus",
               "piece": "G171",
               "why": "1 new count benchmark on geom-intersect's contact analysis (decision 32.44): a sphere resting on a plane patch. march_plate's digest moves with it: the march now pads each parameter's box at that parameter's speed, without which it could not walk a NURBS surface against a plane at grid scale."
             },
             {
-              "sha256": "b59060fccfa0cc11a8c2e21c0ef9e3a30750f66e442147425073903464bf184b",
+              "sha256": "a39643deef4fb7e171b3b6162517f9e46f940f605f037d6a17403875e776f7a9",
               "kind": "corpus",
               "piece": "G173",
               "why": "1 new count benchmark on geom-intersect's poles and seams (decision 32.44): a whole sphere through a plane holding both its poles, one loop joined through each. trace_patch's, march_plate's and trace_silhouette's digests move with it: their results' branches now say where they pass a seam, a knot line or a pole (Branch::passes, 12.10), which their Debug text writes, empty here."
             },
             {
-              "sha256": "804f58fd795cdf67fc7109e9327c600b94abc97902aae1b9e5a063b0b616f6e1",
+              "sha256": "60d4d161c7d9e90819b775275dc5dd71da8245c62a8941036bca5f516294e09d",
               "kind": "corpus",
               "piece": "G174",
               "why": "1 new count benchmark on geom-intersect's known curves (decision 32.44): sheets tangent to a plane along a known line, the tube about it proven and taken out of the search; no existing digest moved"
             },
             {
-              "sha256": "74f4b0821f7623cd24e3982a083eccbaddc428179fb74b0afa6ab03dfb56c8ec",
+              "sha256": "b2e51b5ead94579078afedb5f158f0fcf2f81c789d8b85222803caaec634d009",
               "kind": "corpus",
               "piece": "G175",
               "why": "1 new count benchmark on geom-intersect's intersection curve (decision 32.44): marched crossings fitted, every span certified; no existing digest moved"
             }
           ],
-          "sha256": "eab36255cde3250b2d2f76318cc94a9c94075e6c3b84e179672b0cb39ff4ecb4"
+          "sha256": "4f00e11786f21e0dcddb4d2384ff3375e67bf4066d661a50865ba355fa991da8"
         },
         {
           "id": "geom-nurbs/operations",
