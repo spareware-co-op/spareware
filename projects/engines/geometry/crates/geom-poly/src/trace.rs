@@ -260,6 +260,25 @@ impl Segment {
     }
 }
 
+/// What `face`, unmoved, reads at the end of a segment where `p`, `q` and `r` meet, as [`read`]
+/// gives it: from the end's meeting where that settles it, with a sign not zero, else by the moved
+/// determinant, which a reading of zero needs.
+fn end_reading(
+    (p, q, r): (&Moved, &Moved, &Moved),
+    end: &End,
+    face: &Plane,
+) -> Result<Sign, NumError> {
+    let quick = end
+        .at
+        .and_then(|point| point.reading(face))
+        .filter(|sign| *sign != Sign::Zero);
+    let base = match quick {
+        Some(sign) => sign,
+        None => moved_determinant((p, q, r), &Moved::fixed(*face), end.at.as_ref())?,
+    };
+    Ok(base.mul(end.weight))
+}
+
 /// Counts `polygon`'s crossing by `segment`, if it has one, into `winding`: walking back along a
 /// path, a crossing toward the front of a face leaves its material.
 fn count_crossing(
@@ -277,10 +296,9 @@ fn count_crossing(
         to,
         ends: (at_from, at_to),
     } = segment;
-    let face = Moved::fixed(polygon.piece.face);
-    let start = moved_determinant((p, q, from), &face, at_from.at.as_ref())?.mul(at_from.weight);
-    let end = moved_determinant((p, q, to), &face, at_to.at.as_ref())?.mul(at_to.weight);
-    if start == end || !covers(polygon, p, q, &face)? {
+    let start = end_reading((p, q, from), at_from, &polygon.piece.face)?;
+    let end = end_reading((p, q, to), at_to, &polygon.piece.face)?;
+    if start == end || !covers(polygon, p, q, &Moved::fixed(polygon.piece.face))? {
         return Ok(());
     }
     let by = if end == Sign::Positive { 1 } else { -1 };
