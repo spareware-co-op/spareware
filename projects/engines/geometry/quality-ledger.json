@@ -5449,6 +5449,22 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The mutant never pairs twins, so each half-edge makes its own plane, the same one; and it pairs two half-edges running one way, which make the same plane from the same ends and which the build refuses as UnevenEdge either way. The mesh or the error is the same; only more planes are made."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace next_group -> Option<&'a[Use]> with Some(Vec::leak(Vec::new()))",
+      "line_text": "let head = rest.first()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every call then gives an empty group and leaves the rest as it was, so the loops that take groups until none is left never end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace == with != in next_group",
+      "line_text": "let same = rest.iter().take_while(|u| u.high == head.high).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The first use always has its own end, so nothing is taken: an empty group, the rest unchanged, and the loops that take groups never end."
     }
   ],
   "coverage_off": [
