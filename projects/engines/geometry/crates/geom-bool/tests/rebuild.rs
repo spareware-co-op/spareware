@@ -465,6 +465,44 @@ fn tilted_solids_meet_where_three_planes_do() {
     }
 }
 
+/// Six times the signed volume of `a`, `b`, `c`, `d`.
+fn orient(a: [i64; 3], b: [i64; 3], c: [i64; 3], d: [i64; 3]) -> i128 {
+    let to = |p: [i64; 3]| [0, 1, 2].map(|k| i128::from(p[k] - d[k]));
+    let ([ax, ay, az], [bx, by, bz], [cx, cy, cz]) = (to(a), to(b), to(c));
+    ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)
+}
+
+/// Whether a corner of `one` lies on a face's plane of `other`, or an edge of `one` meets a face of
+/// `other` on that face's boundary: the contacts a point can make. Such a point is no vertex of
+/// the merge, so the checker's group 3 reports the two faces (chapter 11.3, as built).
+fn may_touch_at_a_point(one: &[[i64; 3]; 4], other: &[[i64; 3]; 4]) -> bool {
+    for i in 0..4 {
+        let [a, b, c] = [(i + 1) % 4, (i + 2) % 4, (i + 3) % 4].map(|k| other[k]);
+        for p in 0..4 {
+            for q in p + 1..4 {
+                let (d, e) = (orient(a, b, c, one[p]), orient(a, b, c, one[q]));
+                if d == 0 || e == 0 {
+                    return true;
+                }
+                if (d > 0) == (e > 0) {
+                    continue;
+                }
+                let round = [
+                    orient(one[p], one[q], a, b),
+                    orient(one[p], one[q], b, c),
+                    orient(one[p], one[q], c, a),
+                ];
+                if round.contains(&0)
+                    && !(round.iter().any(|v| *v > 0) && round.iter().any(|v| *v < 0))
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 fn any_block() -> impl Strategy<Value = Block> {
     ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
         low,
@@ -488,6 +526,10 @@ proptest! {
         let test = WindingTest::unite();
         let once = tilted(&solids, &test, leaf);
         prop_assume!(once.is_some());
+        let touching = solids.iter().enumerate().any(|(at, one)| {
+            solids.iter().enumerate().any(|(k, other)| at != k && may_touch_at_a_point(one, other))
+        });
+        prop_assume!(!touching);
         let once = once.unwrap();
         prop_assert_eq!(&once, &tilted(&solids, &test, 1000).unwrap());
         checked(&once);
