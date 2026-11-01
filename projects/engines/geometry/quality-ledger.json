@@ -6009,6 +6009,14 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "A mesh that was built has rows that fit and corners inside the frame, so drawing it cannot end here, and the arm left in its place refuses as well."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace != with == in radial",
+      "line_text": "reversed: facing.flipped != against,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant turns every flap over at once, which moves each by half a circle about the edge and leaves their order round it, and so the pairs, as they were."
     }
   ],
   "coverage_off": [
