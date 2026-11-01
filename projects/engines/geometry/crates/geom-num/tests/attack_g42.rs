@@ -42,8 +42,9 @@
 )]
 
 use geom_num::generated::{
-    incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
-    ssi_side, ssi_weight, tpi_side, tpi_weight,
+    axis_gap, cross_norm, incircle, insphere, limbs, line_cone, line_cone_lead, line_cylinder,
+    line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, ssi_side, ssi_weight,
+    tpi_side, tpi_weight,
 };
 use geom_num::grid::{COORD_MAX, P2, P3};
 use geom_num::{I512, Sign, Wide, Wide32};
@@ -231,6 +232,42 @@ fn explicit_point_predicates_agree_at_every_extreme() {
         let [a, b, e, f, g] = p3s(&c);
         agree!(insphere, insphere_value; a, b, e, f, g);
     }
+}
+
+#[test]
+fn quadric_predicates_agree_on_random_inputs() {
+    let mut g = Draw::new("attack_g42::quadric_predicates_agree_on_random_inputs");
+    for _ in 0..CASES {
+        let (a, b, c, f) = (g.p3(), g.p3(), g.p3(), g.p3());
+        let (r, s, t, h) = (g.value(41), g.value(40), g.value(40), g.value(42));
+        agree!(line_sphere, line_sphere_value; a, b, c, r);
+        agree!(line_cylinder, line_cylinder_value; a, b, c, f, r);
+        agree!(line_cone, line_cone_value; a, b, c, f, s, t);
+        agree!(line_cone_lead, line_cone_lead_value; a, b, c, f, s, t);
+        agree!(cross_norm, cross_norm_value; a, b, c, f);
+        agree!(axis_gap, axis_gap_value; a, b, c, h);
+    }
+}
+
+#[test]
+fn a_quadric_size_past_its_range_is_refused_by_every_variant() {
+    let p = P3::new(1, 2, 3).unwrap();
+    let (r, s) = (1i128 << 41, 1i128 << 40);
+    assert_eq!(line_sphere::value(p, p, p, r), None);
+    assert_eq!(plain::line_sphere_value(p, p, p, r), None);
+    assert_eq!(limbs::line_sphere_value(p, p, p, r), None);
+    assert_eq!(line_cylinder::value(p, p, p, p, r), None);
+    assert_eq!(plain::line_cylinder_value(p, p, p, p, r), None);
+    assert_eq!(limbs::line_cylinder_value(p, p, p, p, r), None);
+    assert_eq!(line_cone::value(p, p, p, p, s, 1), None);
+    assert_eq!(plain::line_cone_value(p, p, p, p, 1, s), None);
+    assert_eq!(limbs::line_cone_value(p, p, p, p, s, 1), None);
+    assert_eq!(line_cone_lead::value(p, p, p, p, 1, s), None);
+    assert_eq!(plain::line_cone_lead_value(p, p, p, p, s, 1), None);
+    assert_eq!(limbs::line_cone_lead_value(p, p, p, p, 1, s), None);
+    assert_eq!(axis_gap::value(p, p, p, 1i128 << 42), None);
+    assert_eq!(plain::axis_gap_value(p, p, p, 1i128 << 42), None);
+    assert_eq!(limbs::axis_gap_value(p, p, p, 1i128 << 42), None);
 }
 
 #[test]
