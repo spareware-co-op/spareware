@@ -33,6 +33,7 @@
 //! - [`level`]: the implicit-parametric tracer and level curves (G168).
 //! - [`general`]: general surface with surface, subdivision and start points (G169).
 //! - [`march`]: certified marching between start points (G170).
+//! - [`fit`]: the procedural intersection curve's certified caches, and its true points (G175).
 //! - [`known`]: intersections known by construction, taken out only where a tube is proven (G174).
 //! - [`seam`]: seams, poles and knot lines, read exactly from each kind, and where a branch passes
 //!   them (G173).
@@ -57,6 +58,7 @@ pub mod contact;
 pub mod curve;
 pub mod curve_surface;
 pub mod error;
+pub mod fit;
 pub mod general;
 pub mod known;
 pub mod level;

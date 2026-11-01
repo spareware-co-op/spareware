@@ -268,10 +268,11 @@ fn grid_transforms_are_exact<const D: usize>(label: &str) {
                     &IBig::ZERO,
                 );
             }
-            // A curve on a surface scales its error bound by the transform's stretch bound (√3
-            // for a signed permutation, by its stated rule), so a round trip keeps its curve
-            // exactly but not that bound; every other kind comes back unchanged.
-            if matches!(kind, CurveKind::OnSurface(_)) {
+            // A curve on a surface, or an intersection curve, scales its error bounds by the
+            // transform's stretch bound (√3 for a signed permutation, by its stated rule), so a
+            // round trip keeps its curve exactly but not those bounds; every other kind comes back
+            // unchanged.
+            if matches!(kind, CurveKind::OnSurface(_) | CurveKind::Intersection(_)) {
                 continue;
             }
             let (turn, mirror) = if D == 2 {
