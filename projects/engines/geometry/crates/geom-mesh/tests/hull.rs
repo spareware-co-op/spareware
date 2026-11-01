@@ -214,6 +214,13 @@ fn flat_sets_are_answers_too() {
     }
     let flat = hull(&square);
     assert_eq!(flat.points().len(), 4);
+    // A flat hull's ring runs the way of the plane's first non-zero component, up.
+    let ring: Vec<P3> = flat.faces()[0]
+        .iter()
+        .map(|c| flat.points()[*c as usize])
+        .collect();
+    let (a, b, c) = (ring[0], ring[1], ring[2]);
+    assert_eq!(orient3d(a, b, c, p(0, 0, 8)).unwrap(), Sign::Positive);
     assert_eq!(flat.faces().len(), 1);
     assert_eq!(flat.faces()[0].len(), 4);
     assert!(!flat.is_solid());

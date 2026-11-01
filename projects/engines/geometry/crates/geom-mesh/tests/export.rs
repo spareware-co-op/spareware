@@ -241,6 +241,81 @@ fn f32s_are_within_the_bound_stated() {
     }
 }
 
+/// The twelve floats of a binary STL's first triangle corners, by vertex.
+fn floats(e: &Export) -> Vec<[f32; 3]> {
+    let count = u32::from_le_bytes(e.bytes[80..84].try_into().unwrap()) as usize;
+    let mut out = Vec::new();
+    for t in 0..count {
+        for v in 0..3 {
+            let at = 84 + t * 50 + 12 + v * 12;
+            let float = |k: usize| {
+                let start = at + k * 4;
+                f32::from_le_bytes(e.bytes[start..start + 4].try_into().unwrap())
+            };
+            out.push([float(0), float(1), float(2)]);
+        }
+    }
+    out
+}
+
+/// A tetrahedron, in millimetres at 6,400 steps each, centred on the origin by its first two
+/// corners.
+fn tetrahedron(corners: [[i64; 3]; 4]) -> ExactMesh {
+    let [a, b, c, d] = corners.map(|[x, y, z]| g(x, y, z));
+    mesh(&soup(
+        vec![a, b, c, d],
+        &[&[0, 2, 1], &[0, 1, 3], &[1, 2, 3], &[2, 0, 3]],
+    ))
+}
+
+#[test]
+fn values_on_the_lattice_round_to_even_with_their_signs() {
+    // The reach is 2^24 mm, so one unit is 1 mm and each half-way value rounds to even.
+    let s = 6400 << 24;
+    let half = |twice: i64| twice * 3200;
+    let m = tetrahedron([
+        [-s, -s, -s],
+        [s, s, -s],
+        [half(1), half(3), s],
+        [half(-1), half(-3), half(5)],
+    ]);
+    let e = written(&m, Format::BinaryStl);
+    assert_eq!(e.bound, 2_000_000);
+    let seen = floats(&e);
+    let big = 16_777_216.0_f32;
+    // 0.5 goes to 0 and 1.5 to 2, 2.5 to 2, and the negatives likewise.
+    assert!(seen.contains(&[0.0, 2.0, big]), "{seen:?}");
+    assert!(seen.contains(&[0.0, -2.0, 2.0]), "{seen:?}");
+    assert!(seen.contains(&[-big, -big, -big]), "{seen:?}");
+}
+
+#[test]
+fn a_long_chunk_has_a_unit_of_many_millimetres() {
+    // The reach is 2^27 mm, so one unit is 8 mm.
+    let s = 6400 << 27;
+    let m = tetrahedron([
+        [-s, -s, -s],
+        [s, s, -s],
+        [6400 * 13, 6400 * 3, s],
+        [6400 * 20, 6400 * 4, 6400 * 12],
+    ]);
+    let e = written(&m, Format::BinaryStl);
+    assert_eq!(e.bound, 16_000_000);
+    let seen = floats(&e);
+    let big = 134_217_728.0_f32;
+    assert!(seen.contains(&[16.0, 0.0, big]), "{seen:?}");
+    assert!(seen.contains(&[16.0, 0.0, 16.0]), "{seen:?}");
+}
+
+#[test]
+fn a_small_chunk_has_a_fine_unit() {
+    let m = tetrahedron([[0, 0, 0], [4, 0, 0], [0, 4, 0], [0, 0, 4]]);
+    let e = written(&m, Format::BinaryStl);
+    // Two steps from the middle are 2 / 6400 mm, under 2^−11 mm, so a unit is 2^−35 mm, whose half
+    // is less than a quarter-nanometre: the bound rounds up to one.
+    assert_eq!(e.bound, 1);
+}
+
 #[test]
 fn glb_is_a_well_formed_file() {
     let m = mesh(&cuboid(64_000, 64_000, 32_000));

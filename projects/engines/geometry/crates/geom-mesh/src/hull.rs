@@ -374,11 +374,12 @@ impl Quick<'_> {
             let [a, b, c] = other.corners;
             let [x, y, z] = &mut other.across;
             let back = (edge.to, edge.from);
-            let slot = match back {
-                pair if pair == (a, b) => x,
-                pair if pair == (b, c) => y,
-                pair if pair == (c, a) => z,
-                _ => return Err(HullError::Defect),
+            let slot = if back == (a, b) {
+                x
+            } else if back == (b, c) {
+                y
+            } else {
+                z
             };
             *slot = made;
         }
@@ -431,7 +432,7 @@ impl Quick<'_> {
 
 /// The two axes a normal leans on least, in the order that makes them a right-handed turn about
 /// the third, and whether the normal runs up that third axis.
-fn plan_axes(n: [i128; 3]) -> ([usize; 2], bool) {
+pub(crate) fn plan_axes(n: [i128; 3]) -> ([usize; 2], bool) {
     let [x, y, z] = n;
     let (a, b, c) = (x.unsigned_abs(), y.unsigned_abs(), z.unsigned_abs());
     if a >= b && a >= c {

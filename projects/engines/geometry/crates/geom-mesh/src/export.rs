@@ -55,6 +55,7 @@ use crate::cdt::{CdtError, Site, triangulate};
 use crate::contact::{Contact, triangles as contact};
 use crate::exact::build::span;
 use crate::exact::{ExactMesh, MeshFault, Parts, Vertex, at};
+use crate::hull::plan_axes;
 
 /// A format to write.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,19 +195,6 @@ fn half_step(step: GridStep) -> u64 {
 /// Quarter-nanometres in a millimetre.
 const QUARTER_NM_PER_MM: u128 = 4_000_000;
 
-/// Which two axes a face's plan uses, and whether the normal runs up the third.
-fn plan_axes(n: [i128; 3]) -> ([usize; 2], bool) {
-    let [x, y, z] = n;
-    let (a, b, c) = (x.unsigned_abs(), y.unsigned_abs(), z.unsigned_abs());
-    if a >= b && a >= c {
-        ([1, 2], x > 0)
-    } else if b >= c {
-        ([2, 0], y > 0)
-    } else {
-        ([0, 1], z > 0)
-    }
-}
-
 /// `p` in the plan of axes `i` and `j`.
 fn planned(p: P3, [i, j]: [usize; 2]) -> Result<P2, ExportError> {
     let parts = [p.x.get(), p.y.get(), p.z.get()];
@@ -246,7 +234,7 @@ fn inside(triangles: &[[u32; 3]], constraints: &[[u32; 2]]) -> Result<Vec<usize>
     for (edge, holders) in &edges {
         if let [t] = holders.as_slice() {
             let slot = depth.get_mut(*t).ok_or(MeshFault::Shape)?;
-            if slot.is_none() || walled(*edge) {
+            if slot.is_none() {
                 *slot = Some(walled(*edge));
                 work.push(*t);
             }
@@ -260,7 +248,7 @@ fn inside(triangles: &[[u32; 3]], constraints: &[[u32; 2]]) -> Result<Vec<usize>
             let beyond = here != walled(edge);
             for &other in edges.get(&edge).ok_or(MeshFault::Shape)? {
                 let slot = depth.get_mut(other).ok_or(MeshFault::Shape)?;
-                if other != t && slot.is_none() {
+                if slot.is_none() {
                     *slot = Some(beyond);
                     work.push(other);
                 }

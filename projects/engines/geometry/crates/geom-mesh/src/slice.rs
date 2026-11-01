@@ -267,11 +267,12 @@ fn in_line(
         return Ok(order);
     }
     // One vertex on the plane, the edges leaving it downward: just under the plane, the one further
-    // clockwise is further along the line. A half-edge runs against its plane's ray.
+    // clockwise is further along the line. A half-edge runs against its plane's ray, so a ray going
+    // down is reversed when its half-edge goes down; `turn` reads only whether two rays differ.
     let ray = |c: &Crossing| -> Result<Ray, MeshError> {
         Ok(Ray {
             with: edge(c)?,
-            reversed: !c.up,
+            reversed: c.up,
         })
     };
     Ok(match turn(outward, &ray(x)?, &ray(y)?)? {

@@ -316,6 +316,10 @@ fn an_open_mesh_and_bad_planes_are_refused() {
         slice(&m, &[at_z(2), at_z(1)], &Exec::serial(), &mut meter()).unwrap_err(),
         MeshError::SlicesOutOfOrder
     );
+    assert_eq!(
+        slice(&m, &[at_z(1), at_z(1)], &Exec::serial(), &mut meter()).unwrap_err(),
+        MeshError::SlicesOutOfOrder
+    );
     let leaning = Plane::new([0, 1, 1], -1).unwrap();
     assert_eq!(
         slice(&m, &[at_z(1), leaning], &Exec::serial(), &mut meter()).unwrap_err(),
