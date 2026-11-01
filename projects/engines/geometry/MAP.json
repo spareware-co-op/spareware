@@ -4449,7 +4449,7 @@
             "**Exact.** Every test is on integers or exact predicates: a vertex is on a plane only when the plane's exact side of it is `Zero`.",
             "**Nothing read past its array.** The shape of the arrays is tested first, and every later test reads through checked lookups.",
             "**The first fault is named.** The tests run in a fixed order over the arrays in order, so one mesh gives one [`MeshFault`] on every target.",
-            "**What is only partly tested off the grid.** A face with a corner off the grid has its turn and area tested through its planes alone: the sum of its corners' cross products would need rationals. An edge with an end off the grid is tested only for lying on both planes."
+            "**Off the grid too.** A face with a corner off the grid has its turn tested through its planes: the sum of its corners' cross products would need rationals, so each edge's two ends are ordered along the line of its two planes, and each loop's lowest corner, which a loop can only pass one way, says which way the loop goes round."
           ],
           "job": "The mesh checker group: what every [`ExactMesh`](super::ExactMesh) has passed (19.2).",
           "method": {
