@@ -1,5 +1,5 @@
 //! Fuzz target: `geom-intersect`'s subdivision leaves no crossing outside its settled or flagged
-//! pairs, on any bytes.
+//! pairs, and its marching stays on both surfaces, on any bytes.
 //!
 //! What it does: [`decode`] turns a fuzzer's bytes into a [`Case`]: one of four surfaces on small
 //! lattice sizes, and a sphere or a plane through it. [`check`] subdivides the pair and holds the
@@ -13,15 +13,16 @@
 //! - **A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds
 //!   the input that reaches it.
 //! - **A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing
-//!   no pair covers, a start point off a surface, a settled pair with an odd count, an internal
-//!   error, or a budget that changes an answer instead of stopping it.
+//!   no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd
+//!   count, a chord past its ceiling, an internal error, or a budget that changes an answer instead
+//!   of stopping it.
 //!
 //! Method: chapter 12.8's subdivision
 //! (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack
 //! (`projects/engines/geometry/architecture/28-testing.md`). The grid proves a crossing, so the law
 //! cannot be broken by a true answer.
 //!
-//! Cost: one subdivision and one budgeted rerun, and [`CELLS`] squared evaluations.
+//! Cost: one subdivision, one budgeted rerun and one march, and [`CELLS`] squared evaluations.
 
 #![allow(
     clippy::many_single_char_names,
@@ -31,6 +32,7 @@
 use geom_curve::Frame;
 use geom_intersect::IntersectError;
 use geom_intersect::general::{Subdivided, subdivide};
+use geom_intersect::march::{Traced, march};
 use geom_num::interval::Interval;
 use geom_nurbs::Limit;
 use geom_run::{Budget, WorkMeter};
@@ -49,6 +51,9 @@ pub const CELLS: u32 = 24;
 
 /// The floor of every subdivision.
 const FLOOR: f64 = 1e-2;
+
+/// The ceiling of every march.
+const CEILING: f64 = 1e-1;
 
 /// The work a subdivision may take. It is far above what most cases need, and bounds a broken one.
 const WORK: u64 = 1 << 21;
@@ -282,6 +287,41 @@ pub fn judge(
     Ok(())
 }
 
+/// The laws of a march: every vertex is on both surfaces, and every branch keeps within its ceiling.
+///
+/// # Errors
+///
+/// The first law `traced` breaks.
+pub fn judge_march(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    traced: &Traced,
+) -> Result<(), Finding> {
+    for branch in &traced.branches {
+        if branch.deviation > CEILING {
+            return Err(Finding::new("a branch keeps within its ceiling", || {
+                format!("{}: {branch:?}", branch.deviation)
+            }));
+        }
+        for [a, b, c, d] in &branch.vertices {
+            let mid = |x: &Interval| x.lo() / 2.0 + x.hi() / 2.0;
+            let p = on(first, mid(a), mid(b))?;
+            let q = on(second, mid(c), mid(d))?;
+            let gap = p
+                .iter()
+                .zip(&q)
+                .fold(0.0, |sum, (x, y)| sum + (x - y) * (x - y))
+                .sqrt();
+            if gap > REACH {
+                return Err(Finding::new("a vertex is on both surfaces", || {
+                    format!("{gap}: {branch:?}")
+                }));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Whether a point near the second surface's equation stands over its trimmed patch: a sphere
 /// band's latitude, or a plane patch's whole reach.
 fn reaches(second: &SurfaceKind, p: [f64; 3]) -> bool {
@@ -315,6 +355,17 @@ pub fn check(case: Case) -> Result<Outcome, Finding> {
     match run(WORK) {
         Ok(found) => {
             judge(&first, &other, implicit.as_ref(), &found)?;
+            let mut meter = WorkMeter::new(Budget::of_work(WORK));
+            match march(&first, &other, &found, FLOOR, CEILING, &mut meter) {
+                Ok(traced) => judge_march(&first, &other, &traced)?,
+                Err(IntersectError::BudgetExceeded | IntersectError::UnprovenMaths) => {}
+                Err(e) => {
+                    return Err(Finding::new(
+                        "a march accounts for every start point",
+                        || format!("{e:?}"),
+                    ));
+                }
+            }
             match run(u64::from(case.work) * 256) {
                 Ok(again) if again == found => {}
                 Err(IntersectError::BudgetExceeded) => {}

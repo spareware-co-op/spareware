@@ -2565,16 +2565,16 @@
           "target": "lib"
         },
         {
-          "cost": "one subdivision and one budgeted rerun, and [`CELLS`] squared evaluations.",
+          "cost": "one subdivision, one budgeted rerun and one march, and [`CELLS`] squared evaluations.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of four surfaces on small lattice sizes, and a sphere or a plane through it. [`check`] subdivides the pair and holds the answer to the laws below, with a dense grid of the implicit form of the second surface on the first as the oracle: a sign change between neighbours proves the surfaces cross there, and [`crate::general`]'s pairs must cover it. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/general.rs",
           "guarantees": [
             "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
             "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
-            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing no pair covers, a start point off a surface, a settled pair with an odd count, an internal error, or a budget that changes an answer instead of stopping it."
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd count, a chord past its ceiling, an internal error, or a budget that changes an answer instead of stopping it."
           ],
-          "job": "Fuzz target: `geom-intersect`'s subdivision leaves no crossing outside its settled or flagged pairs, on any bytes.",
+          "job": "Fuzz target: `geom-intersect`'s subdivision leaves no crossing outside its settled or flagged pairs, and its marching stays on both surfaces, on any bytes.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/12-intersections.md",
@@ -3691,6 +3691,31 @@
           "target": "lib"
         },
         {
+          "cost": "each step is two reads of both surfaces and one 4 × 4 inverse. Steps along a branch of length L number about L·√(κ/ceiling), and stitching is quadratic in the start points of a line of pairs. All of it is charged to the meter. Recursion: none.",
+          "does": "[`march`] traces each branch through each settled pair, from one start point to another, then joins the pieces across the pairs' shared boundaries into whole branches. In a settled pair one coordinate of space, c, moves one way along every branch, so c parameterises it: the unknowns are the four surface parameters, and the equations are S₁ − S₂ = 0 and S₁[k] − c = 0.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/march.rs",
+          "guarantees": [
+            "**A step cannot jump to another branch.** Each step is one Krawczyk test over a box and a whole interval of c at once: passing proves that for every c in it the box holds exactly one point, so the branch through the step's start is the only one in the box.",
+            "**Each branch ends for a reason.** It ends at a start point the box proves it reaches, or, at a domain's edge, where no box can stand across the point, within the floor of one, and a march leaves such a point a floor along: nothing there can be told apart on the grid. That point lies on the domain's boundary, or joins the next pair, or sits beside a flagged pair.",
+            "**Everything is accounted for.** Every start point of a traced pair is used exactly once. A start that reaches no other, in either direction, leaves its whole pair in [`Traced::unproven`], with none of its pieces kept: never a branch quietly ended.",
+            "**Each branch has a bound.** [`Branch::deviation`] bounds, in space, how far the exact branch is from the chords through its vertices. A step is kept only within the ceiling.",
+            "**Deterministic.** Pairs in the order subdivision left them, starts in the order found, and a step size that follows only from what the tests said."
+          ],
+          "job": "General surface with surface, second part: certified marching between the start points of [`crate::general::subdivide`] (12.8, steps 6 to 8).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0167-8396(90",
+              "https://doi.org/10.1137/0731048"
+            ],
+            "text": "the predictor along the tangent n₁ × n₂ and the corrector's four-unknown system are Barnhill and Kersey's (<https://doi.org/10.1016/0167-8396(90)90035-P>), with the proof of each step after Kearfott and Xing (<https://doi.org/10.1137/0731048>): Krawczyk's operator, chapter 12.3, with the parameter an interval. An arc over a span w of c whose slopes dx/dc lie in an interval of width m leaves its chord by at most m·w/4. That slope comes from the tangent's own enclosure over the step's box, which is a bound of the same strength as 12.8's h²κ/8 and needs no curvature formula."
+          },
+          "path": "geom_intersect::march",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a key is one conversion to NURBS, charged to the meter; ordering a pair compares two keys, linear in their lengths. Recursion: none.",
           "does": "a [`CanonicalKey`] orders operands by kind, then by a kernel-internal encoding of their defining data: each kind's NURBS form, which is a function of that data alone, or, for a line or plane that has no such form because it may be unbounded, the data itself. [`pair`] puts two [`Operand`]s in that order, runs a method on them and gives its answer back in the caller's roles. [`pairs`] does so for many pairs on the kernel's parallel helper, each under an equal share of the budget, in canonical pair order.",
           "family": [],
@@ -3792,7 +3817,7 @@
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {
