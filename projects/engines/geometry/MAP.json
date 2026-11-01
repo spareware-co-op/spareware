@@ -7613,6 +7613,16 @@
               "doc": "An allocation could not be made.",
               "name": "OutOfMemory",
               "shape": "unit"
+            },
+            {
+              "doc": "The work meter stopped: over budget, or cancelled.",
+              "name": "Stopped",
+              "shape": "unit"
+            },
+            {
+              "doc": "A step its own bounds rule out failed: a defect, reported, never answered.",
+              "name": "Internal",
+              "shape": "unit"
             }
           ],
           "module": "geom_sketch::model",
@@ -7750,6 +7760,34 @@
           "target": "lib"
         },
         {
+          "cost": "O(z√n) for the matching and O(z + n log n) for the rest, z the graph's edges and n its nodes; O(z + n) memory. No recursion.",
+          "does": "[`Graph`] is the bipartite graph of equations and variables. [`substitute`] builds it from a sketch, merging the two variables of every equality between single variables, such as coincident points or a horizontal line. [`analyse`] splits the graph into connected [`Component`]s, finds a largest matching of equations to variables by Hopcroft and Karp's method, and from it the Dulmage–Mendelsohn decomposition of each component: an over-determined part, an under-determined part, and square [`Part`]s in the order to solve them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+          "guarantees": [
+            "**From structure alone, in exact integers.** No value is read, so the plan is the same on every machine. Every tie goes to the lower index, and indices are authoring order.",
+            "**Parts are exact.** The over-determined and under-determined parts do not depend on which largest matching was found, and neither do the square blocks as sets. The order of the blocks is the one that takes, of those ready, the block with the lowest equation.",
+            "**Iterative.** Every graph walk has an explicit stack charged to the meter, so a chain of any length cannot overflow the machine's stack (principle 13).",
+            "**A solve order.** Each square block's equations touch only variables of its own block, of earlier blocks, and of the under-determined part.",
+            "**Exact counts.** A component's `freedoms` is its under-determined variables less equations, and its `excess` its over-determined equations less variables."
+          ],
+          "job": "Structural analysis of a sketch: which equations and variables belong together, and what can be told about them from the pattern alone.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "doi:10.1137/0202019",
+              "doi:10.4153/CJM-1958-052-0",
+              "doi:10.1145/98267.98287",
+              "doi:10.1137/0201010"
+            ],
+            "text": "section 15.5 (`projects/engines/geometry/architecture/15-sketches.md`): J. E. Hopcroft and R. M. Karp, \"An n^(5/2) algorithm for maximum matchings in bipartite graphs\", SIAM J. Comput. 2(4) (1973), doi:10.1137/0202019; A. L. Dulmage and N. S. Mendelsohn, \"Coverings of bipartite graphs\", Canad. J. Math. 10 (1958), doi:10.4153/CJM-1958-052-0; A. Pothen and C.-J. Fan, \"Computing the block triangular form of a sparse matrix\", ACM TOMS 16(4) (1990), doi:10.1145/98267.98287; and strongly connected components by R. E. Tarjan, \"Depth-first search and linear graph algorithms\", SIAM J. Comput. 1(2) (1972), doi:10.1137/0201010, with its recursion on an explicit stack."
+          },
+          "path": "geom_sketch::structure",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the text, and O(log n) a line for the sorted insert. No recursion.",
           "does": "[`write`] prints a sketch: its plane, then each entity and constraint in authoring order, one to a line. [`parse`] reads that back. An id is written `sequence.key`; a number as the shortest decimal that reads back to the same double, so a grid value is a whole number of steps.",
           "family": [],
@@ -7788,7 +7826,7 @@
       "provenance": [],
       "sections": "15, and 22 for its errors, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216 and G217 are done.",
+      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216, G217 and G221 are done.",
       "summary": "Spare Kit geometry kernel: the constraint solver."
     },
     {

@@ -27,6 +27,11 @@ geom-test = { path = "../geom-test" }
 name = "assemble"
 harness = false
 
+# The 100,000-equation benchmark (piece G221), the same way.
+[[bench]]
+name = "structure"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

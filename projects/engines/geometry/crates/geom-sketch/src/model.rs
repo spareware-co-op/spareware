@@ -35,6 +35,7 @@ use geom_num::NumError;
 use geom_num::P2;
 use geom_num::Sign;
 use geom_num::predicate::orient2d;
+use geom_run::Stopped;
 
 use crate::plane::{PlaneError, SketchPlane};
 
@@ -90,6 +91,16 @@ pub enum SketchError {
     Linear(LinalgError),
     /// An allocation could not be made.
     OutOfMemory,
+    /// The work meter stopped: over budget, or cancelled.
+    Stopped,
+    /// A step its own bounds rule out failed: a defect, reported, never answered.
+    Internal,
+}
+
+impl From<Stopped> for SketchError {
+    fn from(_: Stopped) -> SketchError {
+        SketchError::Stopped
+    }
 }
 
 impl From<NumError> for SketchError {
@@ -126,6 +137,8 @@ impl core::fmt::Display for SketchError {
             SketchError::Numeric(_) => "the arithmetic refused",
             SketchError::Linear(_) => "the linear algebra refused",
             SketchError::OutOfMemory => "an allocation could not be made",
+            SketchError::Stopped => "the work meter stopped",
+            SketchError::Internal => "a step its own bounds rule out failed (a defect)",
         })
     }
 }
