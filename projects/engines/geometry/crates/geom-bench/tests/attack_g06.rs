@@ -1013,6 +1013,16 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|(u, v)| quadric::axis_gap(u.a, u.b, v.a, geom_num::grid::Steps(1024))),
         ),
+        ("quadric", "pencil_simple") => fold(
+            inputs::quadric::simple_pencils(class)
+                .iter()
+                .map(|(a, b)| geom_num::pencil::classify(a, b).map(|found| found.topology)),
+        ),
+        ("quadric", "pencil_node") => fold(
+            inputs::quadric::nodal_pencils(class)
+                .iter()
+                .map(|(a, b)| geom_num::pencil::classify(a, b).map(|found| found.topology)),
+        ),
         ("quadric", "tangent") => fold(
             iv::tangents(class)
                 .iter()
@@ -1368,6 +1378,14 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
                 geom_intersect::quadrics::natural(a, b, &mut meter)
                     .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+            }))
+        }
+        ("intersect", "quartic_walk") => {
+            fold(inputs::intersect::walks(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::quartic::meet(a, b, &mut meter)
+                    .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+                    .map(|found| found.topology)
             }))
         }
         ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {

@@ -2405,6 +2405,7 @@ fn intersect_typical_batches_all_succeed() {
     );
     all_ok("natural_tee", k::closed_forms, &m::tees(Typical));
     all_ok("natural_apex", k::closed_forms, &m::apexes(Typical));
+    all_ok("quartic_walk", k::walked, &m::walks(Typical));
     all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
     all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
 }
@@ -2421,4 +2422,6 @@ fn quadric_typical_batches_all_succeed() {
     all_ok("parallel", k::directions, &m::directions(Typical));
     all_ok("axis_gap", k::gaps, &m::gaps(Typical));
     all_ok("tangent", k::tangents, &m::tangents(Typical));
+    all_ok("pencil_simple", k::pencils, &m::simple_pencils(Typical));
+    all_ok("pencil_node", k::pencils, &m::nodal_pencils(Typical));
 }
