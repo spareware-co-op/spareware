@@ -5913,6 +5913,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "One cut left is under three either way, and the contour is dropped on the next line."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace < with <= in on_lattice",
+      "line_text": "Ok(if top < 0 { units.wrapping_neg() } else { units })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At a top of 0 there are 0 units, and the negative of 0 is 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace > with >= in half_unit",
+      "line_text": "let half = if halves > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At 0 halves the shift is 0, so dividing by one and shifting by none agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace == with != in Classifier<'m>::plane_edge",
+      "line_text": "crossed: run.mul(rise) == Sign::Positive,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Either sign of the ε² move is a valid perturbation: both faces of an edge flip together, and the ray counts one of them."
     }
   ],
   "coverage_off": [
