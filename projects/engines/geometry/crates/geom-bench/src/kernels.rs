@@ -2025,3 +2025,203 @@ pub mod roots {
         });
     }
 }
+
+/// `geom-format`'s hot paths (piece G105; decision 32.44): a cache key, a lookup in a memo store,
+/// and a new version of a body, which hashes the one chunk that changed. The keys and versions a
+/// batch holds are built before the measured run; the store each lookup reads is built inside it,
+/// once, since a lookup changes it.
+pub mod format {
+    use geom_format::body::BodyVersion;
+    use geom_format::cache::CacheKey;
+    use geom_format::content::ContentId;
+    use geom_op::Precision;
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::Body;
+
+    use super::run;
+    use crate::inputs::format as inputs;
+
+    /// `CacheKey::new` on each call: one operation, one input.
+    #[inline(never)]
+    pub fn cache_key(batch: &[(u64, u64)], out: &mut Vec<Option<CacheKey>>) {
+        let path = inputs::path();
+        run(batch, out, |&(edition, seed)| {
+            let input = inputs::input(seed);
+            CacheKey::new(
+                edition,
+                &inputs::SCHEMA,
+                &path,
+                Precision::Final,
+                core::slice::from_ref(&input),
+            )
+            .ok()
+        });
+    }
+
+    /// `MemoStore::get` on each key, a hit under an unlimited budget.
+    #[inline(never)]
+    pub fn memo_get(batch: &[CacheKey], out: &mut Vec<Option<u64>>) {
+        let mut store = inputs::store();
+        run(batch, out, |key| match store.get(key, Budget::UNLIMITED) {
+            Some(Ok(answer)) => Some(answer.result),
+            _ => None,
+        });
+    }
+
+    /// `BodyVersion::next` on each pair: the IDs of a body one chunk from its first version.
+    #[inline(never)]
+    pub fn next_version(batch: &[(BodyVersion, Body)], out: &mut Vec<Option<ContentId>>) {
+        run(batch, out, |(first, body)| {
+            first
+                .next(body, &mut WorkMeter::new(Budget::UNLIMITED))
+                .ok()
+                .map(|version| version.content_id())
+        });
+    }
+}
+
+/// `geom-intersect`'s hot paths (piece G158, decision 32.44): items put in canonical order, a key
+/// read, and a pair put in order, under an unlimited budget.
+pub mod intersect {
+    use geom_curve::CurveKind;
+    use geom_intersect::{
+        CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, pair,
+    };
+    use geom_num::Steps;
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+
+    /// A meter of its own, under no limit.
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// `Intersection::new` on each list.
+    #[inline(never)]
+    pub fn sorted(batch: &[Vec<Item>], out: &mut Vec<Result<Intersection, IntersectError>>) {
+        run(batch, out, |items| {
+            Intersection::new(
+                items.clone(),
+                Coverage::CompleteOutsideFlagged,
+                Vec::new(),
+                &mut meter(),
+            )
+        });
+    }
+
+    /// `CanonicalKey::of_curve` on each curve.
+    #[inline(never)]
+    pub fn keys(batch: &[CurveKind<3>], out: &mut Vec<Result<CanonicalKey, IntersectError>>) {
+        run(batch, out, |curve| {
+            CanonicalKey::of_curve(curve, &mut meter())
+        });
+    }
+
+    /// An operand of `curve`.
+    fn operand(curve: &CurveKind<3>) -> Result<Operand<'_>, IntersectError> {
+        Ok(Operand {
+            geom: Geom::Curve(curve),
+            domain: None,
+            bound: Steps(0),
+            key: CanonicalKey::of_curve(curve, &mut meter())?,
+        })
+    }
+
+    /// The empty answer of a method that finds nothing.
+    fn nothing(_: &Operand<'_>, _: &Operand<'_>) -> Result<Intersection, IntersectError> {
+        Intersection::new(
+            Vec::new(),
+            Coverage::TopologyCertified,
+            Vec::new(),
+            &mut meter(),
+        )
+    }
+
+    /// `pair` on each pair of curves, their keys read first.
+    #[inline(never)]
+    pub fn paired(
+        batch: &[(CurveKind<3>, CurveKind<3>)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| {
+            pair(&operand(a)?, &operand(b)?, nothing)
+        });
+    }
+}
+
+/// `geom-make`'s hot paths (piece G101, decision 32.44): a primitive built and a body moved, named,
+/// published and checked as the operation does it, under an unlimited budget.
+pub mod make {
+    use geom_make::{BoxInput, Made, Moved, RoundInput, cylinder, make_box, move_by, rotate};
+    use geom_math::{Axis, Rotation};
+    use geom_num::grid::P3;
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_run::Budget;
+    use geom_topo::Arena;
+
+    use super::run;
+
+    /// A context of one operation, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
+    }
+
+    /// What a result is read by: its faces, edges and vertices, and its class's rank.
+    fn counts(made: Result<OpOutput<Made>, OpError>) -> Result<[u32; 4], OpError> {
+        made.map(|out| {
+            let a = out.result.body.arenas();
+            [
+                a.rows(Arena::Face),
+                a.rows(Arena::Edge),
+                a.rows(Arena::Vertex),
+                u32::from(out.exactness.rank()),
+            ]
+        })
+    }
+
+    /// A body to move, recorded as it was built, accepting no less.
+    fn moved(out: &OpOutput<Made>) -> Moved<'_> {
+        Moved {
+            body: &out.result.body,
+            exactness: out.exactness,
+            accept: None,
+        }
+    }
+
+    /// `make_box` on each input.
+    #[inline(never)]
+    pub fn boxes(batch: &[BoxInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(make_box(&ctx, input)));
+    }
+
+    /// `cylinder` on each input.
+    #[inline(never)]
+    pub fn cylinders(batch: &[RoundInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(cylinder(&ctx, input)));
+    }
+
+    /// `move_by` on each body.
+    #[inline(never)]
+    pub fn moved_boxes(
+        batch: &[(OpOutput<Made>, [i64; 3])],
+        out: &mut Vec<Result<[u32; 4], OpError>>,
+    ) {
+        let ctx = context();
+        run(batch, out, |(body, offset)| {
+            counts(move_by(&ctx, moved(body), *offset))
+        });
+    }
+
+    /// A quarter turn about z by `rotate` on each body.
+    #[inline(never)]
+    pub fn turned_boxes(batch: &[(OpOutput<Made>, P3)], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        let turn = Rotation::quarter_turns(1);
+        run(batch, out, |(body, center)| {
+            counts(rotate(&ctx, moved(body), Axis::Z, turn, *center))
+        });
+    }
+}

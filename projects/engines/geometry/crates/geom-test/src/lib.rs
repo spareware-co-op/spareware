@@ -42,6 +42,24 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
+//!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
+//!   proptest generators of valid histories and chains.
+//! - [`canonical`]: the canonical output of one case and its SHA-256, a fixture's golden hash
+//!   (28.13; G96): bodies, names, history, exactness and diagnostics, or an error's kind, entities
+//!   and evidence.
+//! - [`fixture`]: the stored test cases every failure ends as (28.16; G97): [`fixture::Fixture`],
+//!   its [`fixture::Expect`] per edition and operation versions and its [`fixture::Status`]; the
+//!   operation log in the native format; the runner's Pass, Fail and Improved; the operation-log
+//!   minimiser; what a pull request may do to a stored fixture; the fails-on-base list. The binary
+//!   `fixture` lists, checks and runs them.
+//! - [`oracle`]: differential testing against outside oracles (28.10; G113): the catalogue, the
+//!   exact-input writer, exact and bounded comparisons, signatures and the four-outcome triage, and
+//!   the first oracle, geomdl, on NURBS. The binary `oracle` writes the jobs and judges the answers;
+//!   every harness lives in the oracle repository.
+//! - [`corpus`]: the corpus register of 28.12 (G114): every outside corpus with its source, version,
+//!   SHA-256, licence and whether we may store it, the licence rules of 29.15 and 32.11, and the
+//!   hash-checked fetcher. The binary `corpus` lists, checks and fetches.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -177,10 +195,14 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
-//! - `geom-nurbs` and `geom-run` (MPL-2.0, ours), development dependencies (G57): the curves
-//!   `tests/nurbs_reference.rs` compares with the reference, and the work meter they take.
-//! - `geom-curve`, `geom-surface` and `geom-math` (MPL-2.0, ours), development dependencies (G69):
-//!   the kinds and transforms the law catalogue checks.
+//! - `geom-nurbs` (MPL-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
+//!   reference, and `oracle::geomdl` (G113) with the first outside oracle.
+//! - `geom-format` and `geom-run` (MPL-2.0, ours), dependencies (G97): a fixture's operation log is
+//!   a standalone native file, and the meter its readers take.
+//! - `geom-curve` and `geom-surface` (MPL-2.0, ours), dependencies: the kinds and transforms the
+//!   law catalogue checks (G69), and what [`ssi`] builds a corpus case from (G160).
+//! - `geom-intersect` (MPL-2.0, ours), a dependency (G160): the result type [`ssi`] reads an answer
+//!   from.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -192,7 +214,7 @@
 //!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `toml`, `toml_datetime`, `toml_parser`,
 //!   `toml_writer`, `serde_spanned`, `camino`, `cargo-platform`, `semver`, `thiserror`,
 //!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
-//!   `yaml-rust2`, `hashlink`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
+//!   `yaml-rust2`, `hashlink`, `hex`, `wait-timeout`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
 //!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
 //!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
 //!   `static_assertions`.
@@ -207,19 +229,24 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod canonical;
+pub mod corpus;
 pub mod coverage;
 pub mod deps;
 pub mod fixed;
+pub mod fixture;
 pub mod foundation;
 pub mod golden;
 pub mod grid;
 pub mod guard;
+pub mod history;
 pub mod ledger;
 pub mod licence;
 pub mod map;
 pub mod miri;
 pub mod mutants;
 pub mod nurbs_reference;
+pub mod oracle;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;
@@ -227,6 +254,7 @@ pub mod rng;
 pub mod rust_source;
 pub mod scan;
 pub mod seed;
+pub mod ssi;
 pub mod trip;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};

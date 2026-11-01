@@ -268,7 +268,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-run",       1, Amended27, Elsewhere("G04"), ""),
     kernel("geom-num",       1, Accepted,   Elsewhere("G02"), "run"),
     kernel("geom-linalg",    1, Amended27, Elsewhere("G49"), "num"),
-    kernel("geom-op",        1, Amended27, Here, "run num"),
+    kernel("geom-op",        1, Amended27, Elsewhere("G82"), "run num"),
     // 2. Geometry.
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
     kernel("geom-bvh",       2, Amended27, Elsewhere("G54"), "run num math"),
@@ -276,12 +276,12 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-curve",     2, Accepted,   Elsewhere("G60"), "base math nurbs"),
     kernel("geom-surface",   2, Accepted,   Elsewhere("G60"), "base math nurbs curve"),
     // 3. Topology.
-    kernel("geom-topo",      3, Accepted,   Here, "base math curve surface"),
-    kernel("geom-name",      3, Accepted,   Here, "base topo"),
+    kernel("geom-topo",      3, Accepted,   Elsewhere("G80"), "base math curve surface"),
+    kernel("geom-name",      3, Accepted,   Elsewhere("G87"), "base topo"),
     // 4. Intersections.
-    kernel("geom-intersect", 4, Accepted,   Here, "base math nurbs curve surface bvh"),
+    kernel("geom-intersect", 4, Accepted,   Elsewhere("G158"), "base math nurbs curve surface bvh"),
     // 5. Checker.
-    kernel("geom-check",     5, Accepted,   Here, "base topo intersect"),
+    kernel("geom-check",     5, Accepted,   Elsewhere("G84"), "base curve topo intersect"),
     // 6. Arrangements.
     kernel("geom-poly",      6, Accepted,   Here, "base math topo"),
     kernel("geom-bool",      6, Accepted,   Here, "base poly intersect topo name check bvh"),
@@ -298,7 +298,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-skeleton",  9, Accepted,   Here, "base math 2d topo poly"),
     kernel("geom-sweep",     9, Accepted,   Here,
         "base topo surface name check poly intersect bool skeleton"),
-    kernel("geom-make",      9, Amended30, Here, "base math curve surface topo check"),
+    kernel("geom-make",      9, Amended30, Elsewhere("G101"), "base math curve surface topo check"),
     // 10. Operations.
     kernel("geom-blend",    10, Accepted,   Here, "base bool intersect surface topo check"),
     kernel("geom-offset",   10, Accepted,   Here, "base bool intersect surface skeleton topo"),
@@ -328,7 +328,7 @@ const ROWS: &[Row<'static>] = &[
     // 12. Format and exchange. geom-format's "everything stored" is section 24.4's list; the
     // format crates' "kinds they map" are section 24.11's; p21, exchange and heal carry chapter
     // 30.5's amendments.
-    kernel("geom-format",   12, Accepted,   Here,
+    kernel("geom-format",   12, Accepted,   Elsewhere("G91"),
         "base math curve surface topo poly name mesh subd field 2d cloud draw sketch"),
     kernel("geom-exchange", 12, Amended27, Here,
         "base math curve surface topo format p21 intersect check"),
@@ -348,11 +348,14 @@ const ROWS: &[Row<'static>] = &[
     // Board exchange follows the two-program rule too (24.11), so it waits with the toolkits.
     kernel("geom-gerber",   12, Amended27, Deferred("G474"), "base format exchange 2d"),
     kernel("geom-ipc2581",  12, Amended27, Deferred("G475"), "base format exchange 2d"),
-    // 13. Facade. engine-geometry's row: every kernel crate it re-exports (none yet: G100 adds
-    // them), and geom-pool behind its `threads` feature. geom-pool was scaffolded here: G04 built
-    // only geom-run; G33 wrote its native pool (rayon), and G456 adds Web Workers.
+    // 13. Facade. engine-geometry's row: every kernel crate it re-exports (G100: the value types
+    // and the schema vocabulary; G101: the first operations and the transforms they take), and
+    // geom-pool behind its `threads` feature. geom-pool was
+    // scaffolded here: G04 built only geom-run; G33 wrote its native pool (rayon), and G456 adds
+    // Web Workers.
     Row { name: "engine-geometry", layer: Layer::N(13), kind: Kind::Facade, origin: Accepted,
-          state: Here, deps: Deps::Exact("pool"), external: "kit-core" },
+          state: Elsewhere("G100"), deps: Deps::Exact("pool num math curve surface topo run op make"),
+          external: "kit-core" },
     Row { name: "geom-pool", layer: Layer::N(13), kind: Kind::KernelStd, origin: Amended27,
           state: Elsewhere("G33"), deps: Deps::Exact("run"), external: "" },
     binding("engine-geometry-c",    "G453"),
@@ -413,11 +416,19 @@ const FEATURE_GATES: &[FeatureGate<'static>] = &[FeatureGate {
 /// Layer line, the last gap.
 const HEADER_GAPS: &[HeaderGap<'static>] = &[];
 
-/// Inside kernel crates the only published crate used as it is, is `libm` (29.1), and every maths
-/// function reaches the kernel through `geom_num::math` (21), so only `geom-num` names it. The
-/// `std` crates (`geom-pool`, with rayon, and the facade) and the development crates are left to
-/// the merge gate's dependency rules (G12).
-const REGISTRY: &[(&str, &str)] = &[("num", "libm")];
+/// Inside kernel crates the published crates used as they are, are `libm` (29.1) and `sha2`
+/// (owner action G79, 32.20). Every maths function reaches the kernel through `geom_num::math`
+/// (21), so only `geom-num` names `libm`; SHA-256 hashes names in `geom-op` and content in
+/// `geom-format`, so those two name `sha2` (32.20); records' CRC-32C is `geom-format`'s, so it
+/// alone names `crc` (24.2, piece G92). The `std` crates (`geom-pool`, with rayon, and
+/// the facade) and the development crates are left to the merge gate's dependency rules (G12).
+const REGISTRY: &[(&str, &str)] = &[
+    ("num", "libm"),
+    ("op", "sha2"),
+    ("op", "unicode-normalization"),
+    ("format", "sha2"),
+    ("format", "crc"),
+];
 
 /// The kernel's one lint posture is `geom-num`'s: the numbers layer set it first, with chapter 21's
 /// disallowed methods and types and chapter 27's denials, and every crate that ships is built with

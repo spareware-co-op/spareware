@@ -2647,6 +2647,37 @@ pub mod curve {
     );
 }
 
+/// geom-format's hot paths (piece G105; decision 32.44).
+pub mod format {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/cache_key/typical"))]
+    fn cache_key(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/memo_get/typical"))]
+    fn memo_get(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/next_version/typical"))]
+    fn next_version(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = format;
+        benchmarks = cache_key, memo_get, next_version
+    );
+}
+
 /// geom-surface's hot paths (pieces G65 to G68; decision 32.44).
 pub mod surface {
     use super::*;
@@ -2723,5 +2754,74 @@ pub mod quadrature {
     library_benchmark_group!(
         name = quadrature;
         benchmarks = gauss_legendre
+    );
+}
+
+/// geom-make's hot paths (piece G101; decision 32.44).
+pub mod make {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/build_box/typical"))]
+    fn build_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/cylinder/typical"))]
+    fn cylinder(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/move_box/typical"))]
+    fn move_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/turn_box/typical"))]
+    fn turn_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = make;
+        benchmarks = build_box, cylinder, move_box, turn_box
+    );
+}
+
+/// geom-intersect's hot paths (piece G158; decision 32.44).
+pub mod intersect {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/sort_items/typical"))]
+    fn sort_items(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/key_circle/typical"))]
+    fn key_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/pair_lines/typical"))]
+    fn pair_lines(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = intersect;
+        benchmarks = sort_items, key_circle, pair_lines
     );
 }

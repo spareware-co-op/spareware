@@ -1,0 +1,349 @@
+{
+  "format": 1,
+  "about": "The oracle catalogue (chapter 28.10): every outside oracle, how it runs and what it checks. Harnesses for out-of-process oracles live in the oracle repository; our repository holds only the jobs and the comparison code. geom_test::oracle holds the rules.",
+  "repository": "https://github.com/spareware-co-op/oracles",
+  "oracles": [
+    {
+      "id": "geomdl",
+      "what": "geomdl (NURBS-Python)",
+      "licence": "MIT",
+      "run": "out-of-process",
+      "state": "live",
+      "checks": "NURBS basis, evaluation, knot operations",
+      "source": "https://github.com/orbingol/NURBS-Python",
+      "pin": "5.4.0",
+      "never_linked": [],
+      "piece": "G113"
+    },
+    {
+      "id": "clothoids",
+      "what": "Bertolazzi and Frego's Clothoids",
+      "licence": "BSD-2-Clause",
+      "run": "kernel-nightly",
+      "state": "live",
+      "checks": "Clothoid evaluation against certified enclosures",
+      "source": "https://github.com/ebertolazzi/Clothoids",
+      "pin": "dafdc29acee5c4f25e777c6cffe56ecb39b0ec11",
+      "never_linked": [],
+      "piece": "G63"
+    },
+    {
+      "id": "cbor2",
+      "what": "Python's cbor2",
+      "licence": "MIT",
+      "run": "kernel-nightly",
+      "state": "live",
+      "checks": "SKG's canonical CBOR, encoded and read back",
+      "source": "https://github.com/agronholm/cbor2",
+      "pin": "6.1.5",
+      "never_linked": [],
+      "piece": "G86"
+    },
+    {
+      "id": "cgal",
+      "what": "CGAL: Nef polyhedra on an exact kernel; 2D arrangements with circle-segment traits",
+      "licence": "GPL-3.0-or-later OR LGPL-3.0-or-later",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Flat booleans and line-and-arc arrangements, compared exactly",
+      "source": "https://github.com/CGAL/cgal",
+      "pin": null,
+      "never_linked": [
+        "cgal",
+        "cgal-sys"
+      ],
+      "piece": "G154"
+    },
+    {
+      "id": "opencascade",
+      "what": "OpenCascade, through its DRAW harness",
+      "licence": "LGPL-2.1-only WITH OCCT-exception-1.0",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "B-rep booleans, fillets, offsets, hidden lines, STEP reading; checkshape and bopargcheck on our STEP output",
+      "source": "https://github.com/Open-Cascade-SAS/OCCT",
+      "pin": null,
+      "never_linked": [
+        "opencascade",
+        "opencascade-sys",
+        "occt-sys"
+      ],
+      "piece": "G442"
+    },
+    {
+      "id": "smlib-nlib",
+      "what": "SMLib's NLib layer, its own NL_ files alone, the routines 32.6 bars stubbed out, never compiled",
+      "licence": "Apache-2.0",
+      "run": "out-of-process",
+      "state": "live",
+      "checks": "NURBS evaluation, knot insertion and removal, degree elevation; never fitting, booleans or validity",
+      "source": "https://github.com/NVIDIA-Omniverse/usd-brep",
+      "pin": "c9c5979f04cea8c38213004d4f04df0dcfb40d05",
+      "never_linked": [
+        "smlib",
+        "smlib-sys"
+      ],
+      "piece": "G161"
+    },
+    {
+      "id": "ifcconvert",
+      "what": "IfcConvert, with its OpenCascade, CGAL and Manifold backends",
+      "licence": "LGPL-3.0-or-later",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "IFC geometry",
+      "source": "https://github.com/IfcOpenShell/IfcOpenShell",
+      "pin": null,
+      "never_linked": [
+        "ifcopenshell"
+      ],
+      "piece": "G441"
+    },
+    {
+      "id": "web-ifc",
+      "what": "web-ifc",
+      "licence": "MPL-2.0",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "IFC geometry",
+      "source": "https://github.com/ThatOpen/engine_web-ifc",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G441"
+    },
+    {
+      "id": "manifold",
+      "what": "Manifold",
+      "licence": "Apache-2.0",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Mesh booleans",
+      "source": "https://github.com/elalish/manifold",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G154"
+    },
+    {
+      "id": "manifold-rust",
+      "what": "manifold-rust's rational engine",
+      "licence": "Apache-2.0",
+      "run": "dev-dependency",
+      "state": "planned",
+      "checks": "Mesh booleans",
+      "source": "crates.io: manifold-rust",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G154"
+    },
+    {
+      "id": "opensubdiv",
+      "what": "OpenSubdiv",
+      "licence": "LicenseRef-Modified-Apache-2.0",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Catmull-Clark limit points and derivatives",
+      "source": "https://github.com/PixarAnimationStudios/OpenSubdiv",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G314"
+    },
+    {
+      "id": "libfive",
+      "what": "libfive's core",
+      "licence": "MPL-2.0",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Field evaluation, meshing",
+      "source": "https://github.com/libfive/libfive",
+      "pin": null,
+      "never_linked": [],
+      "piece": "see 30-build-order.md"
+    },
+    {
+      "id": "fidget",
+      "what": "Fidget",
+      "licence": "MPL-2.0",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Field evaluation, enclosures (f32, not rigorous)",
+      "source": "https://github.com/mkeeter/fidget",
+      "pin": null,
+      "never_linked": [],
+      "piece": "see 30-build-order.md"
+    },
+    {
+      "id": "jts",
+      "what": "JTS's XML conformance suite",
+      "licence": "EDL-1.0",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "2D regions and offsets",
+      "source": "https://github.com/locationtech/jts",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G214"
+    },
+    {
+      "id": "clipper2-rust",
+      "what": "Clipper2, through clipper2-rust",
+      "licence": "BSL-1.0",
+      "run": "dev-dependency",
+      "state": "planned",
+      "checks": "2D regions and offsets",
+      "source": "crates.io: clipper2-rust",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G214"
+    },
+    {
+      "id": "i-overlay",
+      "what": "i_overlay",
+      "licence": "MIT",
+      "run": "dev-dependency",
+      "state": "planned",
+      "checks": "2D regions",
+      "source": "crates.io: i_overlay",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G214"
+    },
+    {
+      "id": "cavalier-contours",
+      "what": "cavalier_contours",
+      "licence": "MIT OR Apache-2.0",
+      "run": "dev-dependency",
+      "state": "planned",
+      "checks": "2D offsets",
+      "source": "crates.io: cavalier_contours",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G214"
+    },
+    {
+      "id": "ezpz",
+      "what": "ezpz",
+      "licence": "MIT",
+      "run": "dev-dependency",
+      "state": "planned",
+      "checks": "Sketch solutions, degrees of freedom, redundant and conflicting constraints",
+      "source": "crates.io: ezpz",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G231"
+    },
+    {
+      "id": "solvespace",
+      "what": "SolveSpace",
+      "licence": "GPL-3.0-only",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Sketch solutions",
+      "source": "https://github.com/solvespace/solvespace",
+      "pin": null,
+      "never_linked": [
+        "solvespace"
+      ],
+      "piece": "G231"
+    },
+    {
+      "id": "planegcs",
+      "what": "FreeCAD's planegcs",
+      "licence": "LGPL-2.1-or-later",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Sketch solutions",
+      "source": "https://github.com/FreeCAD/FreeCAD",
+      "pin": null,
+      "never_linked": [
+        "planegcs"
+      ],
+      "piece": "G231"
+    },
+    {
+      "id": "ezdxf",
+      "what": "ezdxf",
+      "licence": "MIT",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "DXF meaning",
+      "source": "https://github.com/mozman/ezdxf",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G443"
+    },
+    {
+      "id": "librecad",
+      "what": "LibreCAD",
+      "licence": "GPL-2.0-only",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Drafting edits",
+      "source": "https://github.com/LibreCAD/LibreCAD",
+      "pin": null,
+      "never_linked": [
+        "librecad"
+      ],
+      "piece": "G443"
+    },
+    {
+      "id": "spade",
+      "what": "spade",
+      "licence": "MIT OR Apache-2.0",
+      "run": "dev-dependency",
+      "state": "planned",
+      "checks": "Terrain triangulation",
+      "source": "crates.io: spade",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G381"
+    },
+    {
+      "id": "startin",
+      "what": "startin",
+      "licence": "MIT",
+      "run": "dev-dependency",
+      "state": "planned",
+      "checks": "Terrain triangulation",
+      "source": "crates.io: startin",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G381"
+    },
+    {
+      "id": "proj",
+      "what": "PROJ",
+      "licence": "MIT",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Map projections and frame conversion",
+      "source": "https://github.com/OSGeo/PROJ",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G381"
+    },
+    {
+      "id": "geographiclib",
+      "what": "GeographicLib",
+      "licence": "MIT",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Map projections and frame conversion",
+      "source": "https://github.com/geographiclib/geographiclib",
+      "pin": null,
+      "never_linked": [],
+      "piece": "G381"
+    },
+    {
+      "id": "krbn",
+      "what": "Krbn",
+      "licence": "MIT",
+      "run": "out-of-process",
+      "state": "planned",
+      "checks": "Hidden lines of quadric scenes",
+      "source": "chapter 28.10",
+      "pin": null,
+      "never_linked": [],
+      "piece": "see 30-build-order.md"
+    }
+  ]
+}
