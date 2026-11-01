@@ -54,10 +54,10 @@ use crate::subdivide::around as box_around;
 use crate::trace::{Classified, Polygon, TraceError, classify};
 use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
 
-/// Making corners, a few dozen pieces a task.
+/// Making corners or sides, a few dozen pieces a task.
 const PIECES: ChunkPlan = ChunkPlan::fixed::<64>();
 
-/// The sort of corners, in runs of this many.
+/// The sorts of corners and sides, in runs of this many.
 const SORT_PLAN: ChunkPlan = ChunkPlan::fixed::<4096>();
 
 /// Making each piece's corners.
@@ -65,6 +65,12 @@ const CORNERS: Phase = Phase::new("merge: corners");
 
 /// Sorting the corners.
 const SORT_CORNERS: Phase = Phase::new("merge: sort corners");
+
+/// Making each piece's sides.
+const SIDES: Phase = Phase::new("merge: sides");
+
+/// Sorting the sides by line.
+const SORT_SIDES: Phase = Phase::new("merge: sort sides");
 
 /// What merges (11.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -423,28 +429,30 @@ fn wide_of(corner: &Corner) -> Option<([I320; 3], I256)> {
     ))
 }
 
-/// A corner's place in [`point_order`] where it has [`Cell`]s, for a sort on the pool: comparing
-/// cells cannot fail, as each product they need is of two `i128`s, below 2^254 in [`I256`].
+/// A corner's place in [`point_order`], or a line's after its `first` in [`line_order`], where it
+/// has [`Cell`]s, for a sort on the pool: comparing cells cannot fail, as each product they need
+/// is of two `i128`s, below 2^254 in [`I256`]. It borrows the cells, as the sort makes a key for
+/// every comparison.
 #[derive(Clone, Copy, Debug)]
-struct CellKey([Cell; 3]);
+struct CellKey<'a, const N: usize>(&'a [Cell; N]);
 
-impl PartialEq for CellKey {
+impl<const N: usize> PartialEq for CellKey<'_, N> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal
     }
 }
 
-impl Eq for CellKey {}
+impl<const N: usize> Eq for CellKey<'_, N> {}
 
-impl PartialOrd for CellKey {
+impl<const N: usize> PartialOrd for CellKey<'_, N> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for CellKey {
+impl<const N: usize> Ord for CellKey<'_, N> {
     fn cmp(&self, other: &Self) -> Ordering {
-        for (p, q) in self.0.iter().zip(&other.0) {
+        for (p, q) in self.0.iter().zip(other.0) {
             // `None` needs a product past 2^255, which two `i128`s cannot make.
             let order = p.order(q).unwrap_or(Ordering::Equal);
             if order != Ordering::Equal {
@@ -836,13 +844,13 @@ fn numbered(
     });
     let made = made.map_err(|e| phase_error(e, meter))?;
     let mut corners: Vec<Option<Corner>> = made.into_iter().flatten().map(Some).collect();
-    let keys: Option<Vec<CellKey>> = corners
+    let keys: Option<Vec<&[Cell; 3]>> = corners
         .iter()
-        .map(|c| c.as_ref().and_then(|c| c.cells).map(CellKey))
+        .map(|c| c.as_ref().and_then(|c| c.cells.as_ref()))
         .collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| *k);
+        let sorted = exec.sort_stable(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| CellKey(k));
         sorted.map_err(|e| phase_error(e, meter))?
     } else {
         let mut order: Vec<usize> = (0..corners.len()).collect();
@@ -909,23 +917,32 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
     Ok(corner.point)
 }
 
-/// Every side of `held`, sorted by line.
+/// Every side of `held`, sorted by line: made on `exec`'s pool, and sorted there where every side
+/// has its [`Cell`]s.
 fn sides_of(
     held: &[Held<'_>],
     number: &[usize],
+    exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Side>, MergeError> {
-    let mut sides: Vec<Side> = Vec::new();
+    // Each piece's first corner's place in `number`.
+    let mut bases = Vec::with_capacity(held.len());
     let mut base = 0usize;
-    for (at, entry) in held.iter().enumerate() {
+    for entry in held {
+        bases.push(base);
+        base = base.saturating_add(entry.piece.bounds.len());
+    }
+    let made = exec.try_map(meter, SIDES, PIECES, held, |at, entry, m| {
         let k = entry.piece.bounds.len();
+        let base = bases.get(at).copied().ok_or(MergeError::Open)?;
+        let mut out = Vec::with_capacity(k);
         for (i, bound) in entry.piece.bounds.iter().enumerate() {
-            meter.charge(1)?;
+            m.charge(1)?;
             // Bound i runs from corner i − 1 to corner i.
             let before = base.saturating_add(i.checked_sub(1).unwrap_or(k.saturating_sub(1)));
             let from = number.get(before).copied().unwrap_or(0);
             let to = number.get(base.saturating_add(i)).copied().unwrap_or(0);
-            sides.push(Side {
+            out.push(Side {
                 key: line_key(&entry.piece.face, bound)?,
                 low: from.min(to),
                 high: from.max(to),
@@ -935,7 +952,25 @@ fn sides_of(
                 bound: *bound,
             });
         }
-        base = base.saturating_add(k);
+        Ok::<_, MergeError>(out)
+    });
+    let made = made.map_err(|e| phase_error(e, meter))?;
+    let mut sides: Vec<Side> = made.into_iter().flatten().collect();
+    let keys: Option<Vec<(usize, &[Cell; 6])>> = sides
+        .iter()
+        .map(|s| s.key.cells.as_ref().map(|cells| (s.key.first, cells)))
+        .collect();
+    if let Some(keys) = keys {
+        // Sides on one line keep their order, as the serial stable sort keeps it.
+        let sorted = exec.sort_stable(meter, SORT_SIDES, SORT_PLAN, &keys, |(first, cells)| {
+            (*first, CellKey(cells))
+        });
+        let order = sorted.map_err(|e| phase_error(e, meter))?;
+        let mut slots: Vec<Option<Side>> = sides.into_iter().map(Some).collect();
+        let taken = order
+            .iter()
+            .map(|i| slots.get_mut(*i).and_then(Option::take));
+        return taken.map(|side| side.ok_or(MergeError::Open)).collect();
     }
     let mut failed = false;
     sides.sort_by(|a, b| noted(line_order(&a.key, &b.key), &mut failed));
@@ -1283,7 +1318,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
         })
         .collect();
     let (number, points) = numbered(&held, &Exec::serial(), meter)?;
-    let sides = sides_of(&held, &number, meter)?;
+    let sides = sides_of(&held, &number, &Exec::serial(), meter)?;
     let mut runs: Vec<Run> = Vec::new();
     let mut start = 0usize;
     for end in 1..=sides.len() {
@@ -1338,10 +1373,6 @@ pub fn merge(
 /// # Errors
 ///
 /// As [`merge`]; open pieces need not close.
-#[allow(
-    clippy::too_many_lines,
-    reason = "the steps of one merge in their order, each short, sharing the numbers they fill"
-)]
 pub fn merge_with(
     pieces: &[Outward],
     mode: Merge,
@@ -1375,7 +1406,7 @@ pub fn merge_on(
         given: CUT,
     }));
     let (number, points) = numbered(&held, exec, meter)?;
-    let sides = sides_of(&held, &number, meter)?;
+    let sides = sides_of(&held, &number, exec, meter)?;
     held.truncate(kept);
 
     // Each line's runs, and which pieces join across them.
