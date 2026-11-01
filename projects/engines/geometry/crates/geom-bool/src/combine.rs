@@ -32,7 +32,7 @@ use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Sign};
 use geom_op::{
     Charge, Class, CombineDetail, Diagnostic, DiagnosticSpec, ErrorKind, ErrorSpec, Family, Field,
-    History, OpContext, OpError, OpOutput, OpPath, OpSchema, RoleSpec, RunDetail, Unit,
+    History, OpContext, OpError, OpOutput, OpPath, OpSchema, RoleSpec, RunDetail, TopoName, Unit,
 };
 use geom_poly::convex::Piece;
 use geom_poly::merge::{
@@ -144,6 +144,10 @@ pub struct Combined {
     pub body: Body,
     /// How its entities relate to the operands' (11.9).
     pub history: Option<History>,
+    /// The names the call made that the body holds or refers to, in the order made, each after
+    /// those it refers to: with the operands' own, what a name graph (`geom_name`) needs to
+    /// resolve a reference to the body (20.4). Empty when it has no history.
+    pub names: Vec<TopoName>,
     /// For a cell, what it holds and what lies around it (11.7).
     pub cell: Option<CellReport>,
 }
@@ -423,6 +427,7 @@ impl<'a> Scene<'a> {
                 Combined {
                     body,
                     history: None,
+                    names: Vec::new(),
                     cell: None,
                 },
                 false,
@@ -438,6 +443,7 @@ impl<'a> Scene<'a> {
         };
         let Naming {
             names,
+            made,
             history,
             qualified,
         } = name(self.op, merged, pieces, &sources)?;
@@ -447,6 +453,7 @@ impl<'a> Scene<'a> {
             Combined {
                 body,
                 history,
+                names: made,
                 cell: None,
             },
             qualified,
@@ -883,10 +890,13 @@ impl<'a> Scene<'a> {
         };
         let names = naming.as_ref().map(|held| &held.names);
         let body = wire(&curves, names, meter)?;
+        let (history, made) =
+            naming.map_or((None, Vec::new()), |held| (Some(held.history), held.made));
         Ok(Picked {
             results: alloc::vec![Combined {
                 body,
-                history: naming.map(|held| held.history),
+                history,
+                names: made,
                 cell: None,
             }],
             separated: true,
