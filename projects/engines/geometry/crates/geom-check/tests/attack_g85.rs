@@ -370,6 +370,18 @@ fn carriers_without_a_certified_check_are_reported_never_passed() {
         let faults = at(rows, 64);
         assert_eq!(faults, [fault], "{faults:?}");
     };
+    // A surface no closed form covers has its vertices placed by its nearest points and its edges
+    // on it by their pcurves (G177); with no pcurves, each edge on it is reported unchecked, once.
+    let edges_on = |rows: &Rows, edges: &[u32]| {
+        let faults = at(rows, 64);
+        let want: Vec<Fault> = edges
+            .iter()
+            .map(|&e| {
+                Fault::at(FaultKind::Unchecked, Entity::Surface(ix(0))).with(Entity::Edge(ix(e)))
+            })
+            .collect();
+        assert_eq!(faults, want, "{faults:?}");
+    };
     // A spindle torus, its minor radius above its major one.
     let mut r = ring_torus();
     r.surfaces[0] = SurfaceKind::Torus(
@@ -382,10 +394,7 @@ fn carriers_without_a_certified_check_are_reported_never_passed() {
         )
         .unwrap(),
     );
-    only(
-        &r,
-        Fault::at(FaultKind::Unchecked, Entity::Surface(ix(0))).with(Entity::Face(ix(0))),
-    );
+    edges_on(&r, &[0, 1]);
     // A horn torus, its two radii equal.
     let mut r = ring_torus();
     r.surfaces[0] = SurfaceKind::Torus(
@@ -398,10 +407,7 @@ fn carriers_without_a_certified_check_are_reported_never_passed() {
         )
         .unwrap(),
     );
-    only(
-        &r,
-        Fault::at(FaultKind::Unchecked, Entity::Surface(ix(0))).with(Entity::Face(ix(0))),
-    );
+    edges_on(&r, &[0, 1]);
     // A swept surface.
     let mut r = cube();
     let profile = Trimmed::new(
@@ -411,10 +417,7 @@ fn carriers_without_a_certified_check_are_reported_never_passed() {
     .unwrap();
     r.surfaces[0] =
         SurfaceKind::Extrusion(Extrusion::new(profile, [0.0, 1.0, 0.0], (0.0, 10.0)).unwrap());
-    only(
-        &r,
-        Fault::at(FaultKind::Unchecked, Entity::Surface(ix(0))).with(Entity::Face(ix(0))),
-    );
+    edges_on(&r, &[0, 1, 2, 3]);
     // An ellipse: its ends and its place on its faces are both unchecked, reported once.
     let mut r = cube();
     r.curves[0] = CurveKind::Ellipse(

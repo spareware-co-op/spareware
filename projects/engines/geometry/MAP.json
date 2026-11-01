@@ -1653,6 +1653,29 @@
           "target": "lib"
         },
         {
+          "cost": "one nearest-point search per vertex and face; per pcurve up to 2^[`PIECES`] pieces, each a few reads of the kinds. Recursion: none.",
+          "does": "[`vertex_on_surface`] reads the surface's nearest points to the vertex, [`vertex_at`] encloses the curve at its end, and [`pcurve_on`] bounds f(t) = S(p(t)) − C(t) between a fin's pcurve p, mapped through its face's surface S, and its edge's curve C, piece by piece (`geom_intersect::gap`). Each returns a [`Verdict`]: holds, fails, or cannot be decided here, which the caller reports as unchecked.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/general.rs",
+          "guarantees": [
+            "**A vertex on a surface** is the nearest-point search of 12.4 (`geom_intersect::project_surface`): it holds when a proven nearest point lies within the bound, fails when every nearest point is proven farther, and is undecided otherwise.",
+            "**A vertex at a curve's end** is the curve's enclosure at that parameter: it holds when the enclosure's farthest point is within the bound, and fails when its nearest is beyond it.",
+            "**A pcurve on its edge** holds when every piece of the edge's span is within the bound by the mean-value form, halving a piece up to [`PIECES`] times; it fails when one piece's middle is proven beyond the bound. When it holds, every point of C lies within the bound of the point S(p(t)) of the surface, so the edge lies on the face too.",
+            "**Fails closed.** A kind's error, a parameter outside a domain, or a pcurve on another span than its edge leave the check undecided, never passed; only the meter's stop ends it."
+          ],
+          "job": "Group 2 of chapter 8.3 on every curve and surface kind no closed form covers: a vertex on any surface, a vertex at any curve's end, and a pcurve against its edge's 3D curve, certified with bounds, never sampled (G177).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 8.3's group 2 (`projects/engines/geometry/architecture/08-topology.md`), with the nearest points of chapter 12.4 and the bounds of `geom_intersect::gap`."
+          },
+          "path": "geom_check::general",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in faces, fins and edges, one meter unit each; constant work per row; nothing allocated. Recursion: none.",
           "does": "[`check`] walks the faces, fins and edges in row order. A face's surface is a plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is reported as [`FaultKind::Unchecked`], never passed (8.3: \"certified with bounds, not sampled\"). For each fin, the vertex it starts at must lie on its face's surface, and its edge's line or circle on that surface; for each edge, its vertices must lie at its line's or circle's ends. An edge on another kind of curve, and a fin's pcurve, are reported unchecked. A vertex where three planes meet must have three that do meet ([`FaultKind::MeetSingular`]).",
           "family": [],
@@ -4150,6 +4173,29 @@
             "text": "chapter 12.16's error kinds, with `geom-run`'s stops (`projects/engines/geometry/architecture/12-intersections.md`)."
           },
           "path": "geom_intersect::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few reads of each kind per call, to first order. Recursion: none.",
+          "does": "[`at_point`] encloses |C(t) − p| for a curve C and a point p. [`mapped`] reads one piece [a, b] of a span for f(t) = S(p(t)) − C(t), a pcurve p mapped through its surface S against a 3D curve C: an enclosure of |f(m)| at the middle m, and an upper bound on |f| over the whole piece by the mean-value form.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/gap.rs",
+          "guarantees": [
+            "**Certified.** Every value is an enclosure from the kinds' own bounds, never a sample.",
+            "**The mean-value form.** Every value of f on the piece lies within h·sup|f′| of f(m), h the half-width, with f′ = `S_u`·p′ᵤ + `S_v`·p′ᵥ − C′ enclosed over the pcurve's box on the piece; so the bound shrinks with the square of the piece's width where the three agree to first order.",
+            "**Refuses what it cannot bound.** A pcurve whose box leaves the surface's domain, or a kind whose derivative is not bounded there, gives `None`, never a bound."
+          ],
+          "job": "How far a curve is from a point, and a pcurve mapped through its surface from a 3D curve, certified: what the checker's group 2 (8.3) and the intersection curve's fit (12.12) bound.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the mean-value form of interval analysis (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM, 2009, chapter 6, <https://doi.org/10.1137/1.9780898717716>), as chapter 12.12 bounds a pcurve against its 3D curve (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::gap",
           "provenance": [],
           "spdx": null,
           "target": "lib"

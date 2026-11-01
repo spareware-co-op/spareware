@@ -47,19 +47,22 @@
 //! Cost: linear in faces, fins and edges, one meter unit each; constant work per row; nothing
 //! allocated. Recursion: none.
 
+use alloc::vec::Vec;
+
 use geom_curve::tight;
 use geom_curve::{Circle, Line, ParamCurve};
 use geom_num::interval::Interval;
 use geom_num::plane::{Plane as GridPlane, Tpi};
 use geom_num::wide::I320;
 use geom_num::{Coord, Exactness, P3, Sign};
-use geom_run::Stopped;
+use geom_op::run::reserve;
+use geom_run::{LogicalSize, Stopped};
 use geom_topo::entity::{Edge, Face, Fin, PcurveIx, PointKind, Vertex};
 use geom_topo::ix::Arena;
 use geom_topo::mass::Corner;
 use geom_topo::{Arenas, Body, CurveKind, Ix, SurfaceKind};
 
-use crate::combinatorial::{fin_edge, fin_ends, fin_face, rows};
+use crate::combinatorial::{edge_fins, fin_edge, fin_ends, fin_face, rows};
 use crate::curved::{self, Carrier, Pair};
 use crate::general::{self, Verdict};
 use crate::report::{Entity, Fault, FaultKind};
@@ -100,6 +103,9 @@ pub(crate) fn check(
             sink.push(Fault::at(FaultKind::Unchecked, at).with(Entity::Face(f)));
         }
     }
+    // Whether each fin's pcurve proved its edge on its face, in row order, for the edges on curves
+    // no closed form covers (G177).
+    let mut held: Vec<Held> = reserve(sink.meter(), u64::from(a.rows(Arena::Fin)))?;
     for n in rows::<Fin>(a.rows(Arena::Fin)) {
         sink.charge()?;
         // A fin's pcurve against its edge's curve, through its face's surface, on any kind (G177).
@@ -120,6 +126,7 @@ pub(crate) fn check(
             }
             None => Verdict::Unknown,
         };
+        held.push(Held(mapped == Verdict::Holds));
         let Some(face) = fin_face(a, n) else {
             continue;
         };
@@ -152,7 +159,7 @@ pub(crate) fn check(
             a.edges.end.get(e).copied().flatten(),
         ];
         let Some(curve) = Ends::of(c.and_then(|c| a.curves.get(c))) else {
-            general_edge(a, e, limit, sink)?;
+            general_edge(a, e, (limit, &held), sink)?;
             continue;
         };
         let (lo, hi) = curve.domain();
@@ -167,6 +174,15 @@ pub(crate) fn check(
         }
     }
     Ok(())
+}
+
+/// Whether a fin's pcurve proved its edge on its face (G177).
+#[derive(Clone, Copy)]
+struct Held(bool);
+
+impl LogicalSize for Held {
+    /// One byte.
+    const LOGICAL_BYTES: u64 = 1;
 }
 
 /// Face `f`'s surface when no closed form covers it, for the general checks (G177): any kind but a
@@ -238,8 +254,10 @@ fn general_fin(
             Verdict::Holds => {}
         }
     }
+    // Once per edge and face: an edge a face uses twice, as a seam, is one edge on it.
     if mapped != Verdict::Holds
         && let Some(edge) = fin_edge(a, n)
+        && !edge_fins(a, edge).any(|m| m.to_usize() < n.to_usize() && fin_face(a, m) == Some(face))
     {
         let at = a
             .faces
@@ -253,11 +271,12 @@ fn general_fin(
 }
 
 /// Group 2 for an edge on a curve no closed form covers (G177): each vertex at its end of the
-/// curve, by the curve's enclosure there.
+/// curve, by the curve's enclosure there, and the curve on its faces, which every fin's pcurve
+/// proves when each held (`held`, by fin row) and which is reported unchecked, once, otherwise.
 fn general_edge(
     a: &Arenas,
     e: Ix<Edge>,
-    limit: f64,
+    (limit, held): (f64, &[Held]),
     sink: &mut Sink<'_, '_>,
 ) -> Result<(), Stopped> {
     let ix = a.edges.curve.get(e).copied();
@@ -270,6 +289,7 @@ fn general_edge(
         a.edges.start.get(e).copied().flatten(),
         a.edges.end.get(e).copied().flatten(),
     ];
+    let mut unchecked = edge_fins(a, e).any(|n| !held.get(n.to_usize()).is_some_and(|h| h.0));
     for (vertex, t) in ends.into_iter().zip([lo, hi]) {
         let Some(v) = vertex else {
             continue;
@@ -284,12 +304,13 @@ fn general_edge(
             Verdict::Fails => sink.push(
                 Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(v)).with(Entity::Edge(e)),
             ),
-            Verdict::Unknown => {
-                let at = ix.map_or(Entity::Edge(e), Entity::Curve);
-                sink.push(Fault::at(FaultKind::Unchecked, at).with(Entity::Edge(e)));
-            }
+            Verdict::Unknown => unchecked = true,
             Verdict::Holds => {}
         }
+    }
+    if unchecked {
+        let at = ix.map_or(Entity::Edge(e), Entity::Curve);
+        sink.push(Fault::at(FaultKind::Unchecked, at).with(Entity::Edge(e)));
     }
     Ok(())
 }

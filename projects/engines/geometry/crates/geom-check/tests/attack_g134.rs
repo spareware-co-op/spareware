@@ -984,11 +984,12 @@ const TETRA: Spec<'_> = Spec {
     regions: &[&[&TETRA_SHELL]],
 };
 
-/// What a check of [`ring_on_the_grid`] reserves.
-const RING_BYTES: u128 = 3_960;
+/// What a check of [`ring_on_the_grid`] reserves: with a byte for each of its eight fins, group
+/// 2's record of whether its pcurve proved its edge on its face (G177).
+const RING_BYTES: u128 = 3_968;
 
-/// What a check of [`ring_of_meetings`] reserves.
-const MEETINGS_BYTES: u128 = 9_208;
+/// What a check of [`ring_of_meetings`] reserves, with the same byte for each of its eight fins.
+const MEETINGS_BYTES: u128 = 9_216;
 
 /// Every budget short of what checking `body` costs stops it, cleanly, and that much does not.
 fn stops_wherever_its_budget_ends(body: &Body) {

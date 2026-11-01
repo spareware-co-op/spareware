@@ -864,6 +864,7 @@ dependencies = [
  "geom-intersect",
  "geom-math",
  "geom-num",
+ "geom-nurbs",
  "geom-op",
  "geom-run",
  "geom-surface",
