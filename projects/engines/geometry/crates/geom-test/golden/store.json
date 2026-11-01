@@ -284,9 +284,15 @@
               "kind": "corpus",
               "piece": "G180",
               "why": "Piece G180 joined with G159 to G165: G101's 4 count benchmarks on geom-make and G105's 3 on geom-format join the file beside theirs; no existing line changed"
+            },
+            {
+              "sha256": "0fb50d65638ed5bcc91817dbdf67547646198e4acf248c6c0c0073eac1ecef56",
+              "kind": "bug",
+              "piece": "G164",
+              "why": "intersect/surface_torus's result digest moved from 76a47ad1... to 764d5d58..., inputs unchanged (3c7d9153...): a line along a torus's equator crosses it four times, and the three crossings on a seam of the closed torus were BoundaryTouch; a join is no boundary (12.6), so they are Crossing now, at the same 256 points of the 64 inputs; merged from signed/G164, no other digest moved"
             }
           ],
-          "sha256": "0fb50d65638ed5bcc91817dbdf67547646198e4acf248c6c0c0073eac1ecef56"
+          "sha256": "0bcd9a5648707245e8adea2de0fd896985a2c6310d054ffc080fe7f19bc56a3f"
         },
         {
           "id": "geom-nurbs/operations",

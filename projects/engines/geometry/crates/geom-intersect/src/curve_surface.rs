@@ -21,6 +21,10 @@
 //!   [`Unresolved::NearCoincident`] for a long run, a curve lying near the surface.
 //! - **Overlap by identity.** A line in a plane or along a ruling, and a helix on a coaxial cylinder of
 //!   its radius, are [`Item::Overlap`]s with [`Coincidence::Identical`].
+//! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
+//!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
+//!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
+//!   exactly on an end holds a value past it, and misses.
 //!
 //! Method: chapter 12.6 (`projects/engines/geometry/architecture/12-intersections.md`): the Interval
 //! Projected Polyhedron solver ([Sherbrooke and Patrikalakis
@@ -140,6 +144,12 @@ fn at_an_end(x: Interval, (lo, hi): (f64, f64)) -> bool {
     x.contains(lo) || x.contains(hi)
 }
 
+/// Where `(u, v)` touches a true end of a surface's domain: a closed kind's join is none (12.6).
+fn surface_ends(seams: [Seam; 2], u: Interval, v: Interval) -> [bool; 2] {
+    let [seam_u, seam_v] = seams;
+    [seam_u.ends_at(u), seam_v.ends_at(v)]
+}
+
 /// How a root stands: a double root touches, one on a domain's end touches, and others cross.
 fn standing(double: bool, ends: [bool; 3]) -> PointContact {
     if double {
@@ -151,9 +161,10 @@ fn standing(double: bool, ends: [bool; 3]) -> PointContact {
     }
 }
 
-/// `x` on `domain`, if any of it lands there.
+/// `x` on `domain`, if any of it can land there. Every `x` here is an outward-rounded result, each
+/// bound strictly past the exact value, so a bound on an end of the domain puts the value past it.
 fn within(x: Interval, domain: (f64, f64)) -> Result<Option<Interval>, IntersectError> {
-    if x.hi() < domain.0 || x.lo() > domain.1 {
+    if x.hi() <= domain.0 || x.lo() >= domain.1 {
         return Ok(None);
     }
     held(x, domain).map(Some)
@@ -173,14 +184,10 @@ fn line_plane(
     let step = dot(normal, lift(d)?)?;
     let offset = dot(normal, minus(lift(c)?, lift(o)?)?)?;
     let domain = ParamSurface::domain(plane);
-    let parallel = exact.map_or(step.lo() == 0.0 && step.hi() == 0.0, |(along, _)| {
-        along == Sign::Zero
-    });
-    if parallel {
-        let inside = exact.map_or(offset.lo() == 0.0 && offset.hi() == 0.0, |(_, side)| {
-            side == Sign::Zero
-        });
-        if !inside {
+    // Parallel, and lying in it, only from the exact signs: every operation rounds outward, so an
+    // enclosure of the step or the offset is never the one point zero.
+    if let Some((Sign::Zero, side)) = exact {
+        if side != Sign::Zero {
             return proven(Vec::new(), meter).map(Some);
         }
         return in_plane(line, plane, meter).map(Some);
@@ -267,12 +274,8 @@ fn in_plane(
     let (start, end) = (Interval::point(span_t.0)?, Interval::point(span_t.1)?);
     let (u0, v0) = plane_parameters(line, plane, start)?;
     let (u1, v1) = plane_parameters(line, plane, end)?;
-    let hull = |a: Interval, b: Interval| {
-        Interval::new(
-            if a.lo() < b.lo() { a.lo() } else { b.lo() },
-            if a.hi() > b.hi() { a.hi() } else { b.hi() },
-        )
-    };
+    let hull =
+        |a: Interval, b: Interval| Interval::new(smaller(a.lo(), b.lo()), larger(a.hi(), b.hi()));
     let domain = ParamSurface::domain(plane);
     let (Some(u), Some(v)) = (
         within(hull(u0, u1)?, domain.0)?,
@@ -321,7 +324,7 @@ fn on_domains(
     line: &Line<3>,
     t: Interval,
     double: bool,
-    domain: ((f64, f64), (f64, f64)),
+    seams: [Seam; 2],
     place: impl Fn(Interval) -> Result<Option<(Interval, Interval)>, IntersectError>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Item>, IntersectError> {
@@ -331,11 +334,8 @@ fn on_domains(
     let Some((u, v)) = place(t)? else {
         return Ok(None);
     };
-    let ends = [
-        at_an_end(t, ParamCurve::domain(line)),
-        at_an_end(u, domain.0),
-        at_an_end(v, domain.1),
-    ];
+    let [on_u, on_v] = surface_ends(seams, u, v);
+    let ends = [at_an_end(t, ParamCurve::domain(line)), on_u, on_v];
     root(line, t, (u, v), standing(double, ends), meter).map(Some)
 }
 
@@ -344,7 +344,7 @@ fn quadric_roots(
     line: &Line<3>,
     terms: [Interval; 3],
     exact: Option<Meeting>,
-    domain: ((f64, f64), (f64, f64)),
+    seams: [Seam; 2],
     place: impl Fn(Interval) -> Result<Option<(Interval, Interval)>, IntersectError> + Copy,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
@@ -354,7 +354,7 @@ fn quadric_roots(
     let double = exact == Some(Meeting::Tangent) || exact == Some(Meeting::Apex);
     let mut items = Vec::new();
     for t in roots {
-        if let Some(item) = on_domains(line, t, double, domain, place, meter)? {
+        if let Some(item) = on_domains(line, t, double, seams, place, meter)? {
             items.push(item);
         }
     }
@@ -370,6 +370,7 @@ fn along(o: Interval, d: Interval, t: Interval) -> Result<Interval, IntersectErr
 fn line_sphere(
     line: &Line<3>,
     sphere: &Sphere,
+    seams: [Seam; 2],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
     let (o, d) = local(line, sphere.center(), &sphere.frame())?;
@@ -400,7 +401,7 @@ fn line_sphere(
         line,
         [dot(d, d)?, dot(o, d)?, c],
         exact,
-        domain,
+        seams,
         place,
         meter,
     )
@@ -427,6 +428,7 @@ fn on_axis(center: &[f64; 3], frame: &Frame<3>) -> Option<(P3, P3)> {
 fn line_cylinder(
     line: &Line<3>,
     cylinder: &Cylinder,
+    seams: [Seam; 2],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [dx, dy, dz]) = local(line, cylinder.center(), &cylinder.frame())?;
@@ -450,7 +452,7 @@ fn line_cylinder(
         };
         Ok(Some((u, v)))
     };
-    quadric_roots(line, terms, exact, domain, place, meter)
+    quadric_roots(line, terms, exact, seams, place, meter)
 }
 
 /// How a line meets a cylinder, exactly, where their data are whole.
@@ -481,11 +483,10 @@ fn along_ruling(
         Ok(along(oz, dz, Interval::point(t)?)?.mul(sign)?)
     };
     let (first, last) = (v_of(start)?, v_of(end)?);
-    let (lo, hi) = if first.lo() < last.lo() {
-        (first.lo(), last.hi())
-    } else {
-        (last.lo(), first.hi())
-    };
+    let (lo, hi) = (
+        smaller(first.lo(), last.lo()),
+        larger(first.hi(), last.hi()),
+    );
     let Some(v) = within(Interval::new(lo, hi)?, domain.1)? else {
         return proven(Vec::new(), meter);
     };
@@ -504,6 +505,7 @@ fn along_ruling(
 fn line_cone(
     line: &Line<3>,
     cone: &Cone,
+    seams: [Seam; 2],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [dx, dy, dz]) = local(line, cone.center(), &cone.frame())?;
@@ -532,7 +534,7 @@ fn line_cone(
         let flip = Interval::point(flip)?;
         Ok(around(x.mul(flip)?, y.mul(flip)?, domain.0)?.map(|u| (u, v)))
     };
-    quadric_roots(line, terms, None, domain, place, meter)
+    quadric_roots(line, terms, None, seams, place, meter)
 }
 
 /// What an exact chain says of a line and a torus, on whole-number data.
@@ -653,6 +655,7 @@ fn near_origin(
 fn line_torus(
     line: &Line<3>,
     torus: &Torus,
+    seams: [Seam; 2],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Intersection, IntersectError> {
     let exact = exact_torus(line, torus);
@@ -717,7 +720,7 @@ fn line_torus(
     let mut items = Vec::new();
     for z in &solved.zeros {
         let [t] = z.enclosure;
-        if let Some(item) = on_domains(line, t, false, domain, place, meter)? {
+        if let Some(item) = on_domains(line, t, false, seams, place, meter)? {
             items.push(item);
         }
     }
@@ -728,7 +731,7 @@ fn line_torus(
     });
     for ([t], _) in regions {
         if settled {
-            if let Some(item) = on_domains(line, t, true, domain, place, meter)? {
+            if let Some(item) = on_domains(line, t, true, seams, place, meter)? {
                 items.push(item);
             }
             continue;
@@ -1039,16 +1042,17 @@ fn second_order(
     let (su, sv) = (partial(1, 0)?, partial(0, 1)?);
     let (suu, suv, svv) = (partial(2, 0)?, partial(1, 1)?, partial(0, 2)?);
     let n = cross(su, sv)?;
+    // |Su × Sv|² is the first fundamental form's determinant E·G − F² (Lagrange's identity),
+    // enclosed without the cancellation that subtracting F² would round.
     let (nn, e, f, g) = (dot(n, n)?, dot(su, su)?, dot(su, sv)?, dot(sv, sv)?);
-    let det = e.mul(g)?.sub(f.square()?)?;
     let speed = dot(d1, d1)?;
-    if nn.lo() <= 0.0 || det.lo() <= 0.0 || speed.lo() <= 0.0 {
+    if nn.lo() <= 0.0 || speed.lo() <= 0.0 {
         return Ok(Unresolved::HigherOrderContact);
     }
     // The tangent in (u, v): the projection of C' on the tangent plane.
     let (a, b) = (dot(d1, su)?, dot(d1, sv)?);
-    let du = a.mul(g)?.sub(b.mul(f)?)?.div(det)?;
-    let dv = b.mul(e)?.sub(a.mul(f)?)?.div(det)?;
+    let du = a.mul(g)?.sub(b.mul(f)?)?.div(nn)?;
+    let dv = b.mul(e)?.sub(a.mul(f)?)?.div(nn)?;
     let second = dot(n, suu)?
         .mul(du.square()?)?
         .add(dot(n, suv)?.mul(du.mul(dv)?)?.mul(Interval::point(2.0)?)?)?
@@ -1141,13 +1145,9 @@ fn finished(
 
 /// How a proven root stands against the two domains.
 fn boundary(field: &Contact<'_>, [t, u, v]: [Interval; 3]) -> PointContact {
-    let (s, w) = ParamSurface::domain(field.surface);
-    let ends = [
-        at_an_end(t, field.curve.domain()),
-        at_an_end(u, s),
-        at_an_end(v, w),
-    ];
-    standing(false, ends)
+    let [seam_t, seam_u, seam_v] = field.seams;
+    let [on_u, on_v] = surface_ends([seam_u, seam_v], u, v);
+    standing(false, [seam_t.ends_at(t), on_u, on_v])
 }
 
 /// A helix on a coaxial cylinder of its radius, by exact signs on its stored data: the same axis, the
@@ -1198,11 +1198,10 @@ fn helix_on_cylinder(
         Ok(along(start, rise, Interval::point(t)?)?.mul(sign)?)
     };
     let (first, last) = (v_at(t0)?, v_at(t1)?);
-    let (lo, hi) = if first.lo() < last.lo() {
-        (first.lo(), last.hi())
-    } else {
-        (last.lo(), first.hi())
-    };
+    let (lo, hi) = (
+        smaller(first.lo(), last.lo()),
+        larger(first.hi(), last.hi()),
+    );
     let (u, w) = ParamSurface::domain(cylinder);
     let Some(v) = within(Interval::new(lo, hi)?, w)? else {
         return proven(Vec::new(), meter).map(Some);
@@ -1224,12 +1223,13 @@ fn closed_form(
     surface: &SurfaceKind,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
+    let seams = seams_of(surface);
     match (curve, surface) {
         (CurveKind::Line(l), SurfaceKind::Plane(p)) => line_plane(l, p, meter),
-        (CurveKind::Line(l), SurfaceKind::Sphere(s)) => line_sphere(l, s, meter),
-        (CurveKind::Line(l), SurfaceKind::Cylinder(c)) => line_cylinder(l, c, meter),
-        (CurveKind::Line(l), SurfaceKind::Cone(c)) => line_cone(l, c, meter),
-        (CurveKind::Line(l), SurfaceKind::Torus(t)) => line_torus(l, t, meter).map(Some),
+        (CurveKind::Line(l), SurfaceKind::Sphere(s)) => line_sphere(l, s, seams, meter),
+        (CurveKind::Line(l), SurfaceKind::Cylinder(c)) => line_cylinder(l, c, seams, meter),
+        (CurveKind::Line(l), SurfaceKind::Cone(c)) => line_cone(l, c, seams, meter),
+        (CurveKind::Line(l), SurfaceKind::Torus(t)) => line_torus(l, t, seams, meter).map(Some),
         (_, SurfaceKind::Cylinder(c)) => helix_on_cylinder(curve, c, meter),
         _ => Ok(None),
     }
