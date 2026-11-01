@@ -5105,6 +5105,46 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/generated/circle_gap.rs",
+      "mutant": "replace * with + in filter",
+      "line_text": "let scale = larger(larger(m_t * m_t, m_y * m_y), m_x * m_x);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "With t below x the value is at least 2x - 1, above E times x squared as E times x is below 2, so the filter answers either way, and with x at most t the largest term is unchanged; a sum differs only for x at most 2, where the bound is below 1 and the value whole, and a quotient is 1 or NaN, which larger ignores."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/generated/circle_gap.rs",
+      "mutant": "replace * with / in filter",
+      "line_text": "let scale = larger(larger(m_t * m_t, m_y * m_y), m_x * m_x);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "With t below x the value is at least 2x - 1, above E times x squared as E times x is below 2, so the filter answers either way, and with x at most t the largest term is unchanged; a sum differs only for x at most 2, where the bound is below 1 and the value whole, and a quotient is 1 or NaN, which larger ignores."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/generated/circle_line.rs",
+      "mutant": "replace * with / in filter",
+      "line_text": "let scale = larger(scale, m_x * m_y * m_n * m_n);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "A mean term of two others, so never the largest while each of its groups is at least 1; the mutant only makes it smaller, the group n of a carrier being at least 1. With n at 0 the quotient is NaN, in the place where larger ignores it, and the true term is 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/generated/round_line.rs",
+      "mutant": "replace * with / in filter",
+      "line_text": "let scale = larger(scale, m_y * m_n * m_n * m_c * m_w);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "A mean term of two others, so never the largest while each of its groups is at least 1; the mutant only makes it smaller, the group n of a carrier being at least 1. With n at 0 the quotient is NaN, in the place where larger ignores it, and the true term is 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/generated/round_line.rs",
+      "mutant": "replace * with / in filter",
+      "line_text": "let scale = larger(scale, m_x * m_n * m_n * m_c * m_w);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "A mean term of two others, so never the largest while each of its groups is at least 1; the mutant only makes it smaller, the group n of a carrier being at least 1. With n at 0 the quotient is NaN, in the place where larger ignores it, and the true term is 0."
     }
   ],
   "coverage_off": [
