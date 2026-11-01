@@ -2,6 +2,10 @@
 //! scatter of survey points with breaklines across it; and a small height field, every face on its
 //! own plane, for the exact mesh's build and check.
 //!
+//! For the distance comparisons of piece G151, grid points in a room a million steps across, each
+//! with a clearance of up to as much; for triangle contact, pairs of triangles in that room whose
+//! planes mostly cut each other.
+//!
 //! Class `typical` only: each input is a [`Terrain`] of [`POINTS`] distinct grid points and
 //! [`BREAKLINE`] constraints spread across them, or polygons of [`FACES`] triangles. The refusals
 //! are tested in `geom-mesh` itself.
@@ -25,7 +29,7 @@ use geom_num::Exactness;
 use geom_num::grid::{P2, P3};
 use geom_op::NameId;
 
-use super::{Class, batch_of, rng};
+use super::{Class, batch_of, p3, rng, within};
 use crate::rng::SplitMix64;
 
 /// The points of one terrain.
@@ -137,4 +141,72 @@ pub fn exact_build(class: Class) -> Vec<Polygons> {
     }
     let mut g = rng("mesh::exact_build", class);
     batch_of(|_| field(&mut g))
+}
+
+/// The reach of the distance benchmarks' coordinates, in grid steps.
+const ROOM: i64 = 1 << 20;
+
+/// A point in the room.
+fn point(g: &mut SplitMix64) -> P3 {
+    p3(within(g, ROOM), within(g, ROOM), within(g, ROOM))
+}
+
+/// `N` points and a clearance.
+fn points_and_clearance<const N: usize>(name: &str, class: Class) -> Vec<([P3; N], u64)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng(name, class);
+    batch_of(|_| {
+        let c = u64::try_from(within(&mut g, ROOM).abs()).ok()?;
+        Some((core::array::from_fn(|_| point(&mut g)), c))
+    })
+}
+
+/// Pairs of points and clearances for `geom_num::distance::point_point`.
+#[must_use]
+pub fn point_point(class: Class) -> Vec<([P3; 2], u64)> {
+    points_and_clearance("mesh::point_point", class)
+}
+
+/// Lines, points and clearances for `geom_num::distance::point_line`.
+#[must_use]
+pub fn point_line(class: Class) -> Vec<([P3; 3], u64)> {
+    points_and_clearance("mesh::point_line", class)
+}
+
+/// Planes, points and clearances for `geom_num::distance::point_plane`.
+#[must_use]
+pub fn point_plane(class: Class) -> Vec<([P3; 4], u64)> {
+    points_and_clearance("mesh::point_plane", class)
+}
+
+/// Two lines and a clearance for `geom_num::distance::line_line`.
+#[must_use]
+pub fn line_line(class: Class) -> Vec<([P3; 4], u64)> {
+    points_and_clearance("mesh::line_line", class)
+}
+
+/// Four points, for the products of dots a closest-feature test compares.
+#[must_use]
+pub fn closest_dots(class: Class) -> Vec<[P3; 4]> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::closest_dots", class);
+    batch_of(|_| Some(core::array::from_fn(|_| point(&mut g))))
+}
+
+/// Pairs of triangles for `geom_mesh::contact::triangles`.
+#[must_use]
+pub fn triangles(class: Class) -> Vec<[[P3; 3]; 2]> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::triangles", class);
+    batch_of(|_| {
+        Some(core::array::from_fn(|_| {
+            core::array::from_fn(|_| point(&mut g))
+        }))
+    })
 }

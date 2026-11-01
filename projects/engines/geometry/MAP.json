@@ -4307,6 +4307,30 @@
           "target": "lib"
         },
         {
+          "cost": "constant: at most 8 orientations and, for coplanar triangles, 15 more in the plane. No allocation.",
+          "does": "[`triangles`] says whether two triangles are apart, touch or cross, by the test of Devillers and Guigue, which asks only orientation questions. [`closest_feature`] says which vertex, edge or the face of a triangle is nearest a point, and [`point_triangle`] compares that distance with a clearance.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/contact.rs",
+          "guarantees": [
+            "**Exact.** Every decision is an exact predicate on grid points; nothing is rounded.",
+            "**`Cross` is proven.** It is returned only when every orientation asked was strict, so the triangles' interiors truly cross (19.10, \"Overlap, proven\"). A contact with a zero sign is `Touch`, which the arrangement settles; `Apart` is proven by a strict separation.",
+            "**Symmetric.** Swapping the triangles, or turning either's vertices, gives the same answer.",
+            "**Refused, never guessed.** A triangle with no area is [`NumError::Degenerate`]."
+          ],
+          "job": "Exact contact and closest features of grid triangles (19.10).",
+          "method": {
+            "links": [
+              "https://hal.inria.fr/inria-00072100",
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "Devillers and Guigue, \"Faster Triangle-Triangle Intersection Tests\", INRIA RR-4488, 2002 (<https://hal.inria.fr/inria-00072100>), from the paper. If each triangle straddles the other's plane, both cut the planes' common line in an interval, and they meet exactly when the intervals do. With each triangle turned so that its first vertex lies alone on the positive side, each end of an interval comes from one pair of edges, and comparing two ends is one orientation of four points. Coplanar triangles are compared in the plane of their normal's largest axis. Closest features are Ericson's Voronoi regions (Real-Time Collision Detection, 2005, section 5.1.5), in products of dots, as 19.10 sets out (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`)."
+          },
+          "path": "geom_mesh::contact",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(n log n) in the half-edges for the sorts of the planes and faces, with a few allocations per array and none per face but for faces with holes. A face's plane takes up to three greatest common divisors, an edge plane's one or two.",
           "does": "[`build`] takes [`Polygons`], whose vertices are grid points or three planes and whose faces are loops of vertices, and works out what the mesh stores. A face made from grid points gets its plane from its area vector; each edge between grid points gets the plane through it that holds the face's dominant axis. Faces and edges off the grid bring their planes with them. The planes go into one sorted pool, the vertices and faces into canonical order, and each half-edge finds its opposite, in exact radial order where more than two meet.",
           "family": [],
@@ -5003,6 +5027,28 @@
             "text": "the algorithms are those whose bounds are proven and machine-checked (Joldes, Muller and Popescu 2017, <https://doi.org/10.1145/3121432>, and the other references below): addition, `AccurateDWPlusDW` (JMP Algorithm 6, the QD library's \"IEEE addition\" of Li et al.) and `DWPlusFP` (JMP Algorithm 4, QD's); multiplication by a double, `DWTimesFP3` (JMP Algorithm 9), and of two `DD`s, `DWTimesDW3` (JMP Algorithm 12), the ones JMP recommend when a fused multiply-add is available; division by a double, `DWDivFP3` (JMP Algorithm 15), and of two `DD`s, `DWDivDW3` (JMP Algorithm 18, the more accurate of their two divisions); the square root, `SQRTDWtoDW` (LLMPR Algorithm 8); `TwoProduct` as Kahan's `Fast2Mult` with a fused multiply-add ([`two_prod_fma`], JMP Algorithm 3), and `TwoSum` as Knuth's ([`crate::eft::two_sum`])."
           },
           "path": "geom_num::dd",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant; at most a few multiplications in 256 bits. No allocation.",
+          "does": "each function answers with the sign of an exactly computed squared gap less c²: [`point_point`], [`point_line`], [`point_plane`] and [`line_line`]. [`product_difference`] gives the sign of a · b − c · d of dot products, which is how the closest feature of a triangle is told. No square root is ever taken: both sides are squared, so the comparison stays on integers.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/distance.rs",
+          "guarantees": [
+            "**Exact, and within 256 bits** (19.10). Every coordinate difference has |x| ≤ D = 2^41 − 2 and a clearance is at most [`MAX_CLEARANCE`] = 2^42, and each function's budget is below. No step rounds, and a step that did not fit would be reported, not answered.",
+            "**Never a guess.** `Zero` means the gap is exactly c; a line or plane that does not exist is [`NumError::Degenerate`], decided exactly.",
+            "**Unmoved by order.** Swapping the two points of [`point_point`] or the two lines of [`line_line`] changes nothing, and neither does moving every input by one grid vector."
+          ],
+          "job": "Exact distance comparisons on grid points: whether a gap is within a clearance (19.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "chapter 19.10's table (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`): |ap|²·|ab|² − (ap·ab)² is Lagrange's identity for |ap × ab|², so a point's distance from a line is compared by squares without a square root, and likewise (n · w)²/|n|² for a plane and for two lines."
+          },
+          "path": "geom_num::distance",
           "provenance": [],
           "spdx": null,
           "target": "lib"
