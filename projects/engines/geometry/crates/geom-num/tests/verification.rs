@@ -1749,6 +1749,10 @@ fn perturbed(
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one row per public predicate, a table written out"
+)]
 fn matrix() -> Vec<Row> {
     use Class::*;
     use Where::{NotApplicable, Test};
@@ -1867,28 +1871,19 @@ fn matrix() -> Vec<Row> {
             "one_root::Crossing2::cmp_x",
             ".cmp_x",
             "random_crossings_match_the_oracle",
-            Where::Test(
-                "attack_g189.rs",
-                "filters_cross_their_boundary_both_ways",
-            ),
+            Where::Test("attack_g189.rs", "filters_cross_their_boundary_both_ways"),
         ),
         on_root(
             "one_root::Crossing2::cmp_y",
             ".cmp_y",
             "random_crossings_match_the_oracle",
-            Where::Test(
-                "attack_g189.rs",
-                "filters_cross_their_boundary_both_ways",
-            ),
+            Where::Test("attack_g189.rs", "filters_cross_their_boundary_both_ways"),
         ),
         on_root(
             "one_root::Crossing2::side",
             ".side",
             "random_crossings_match_the_oracle",
-            Where::Test(
-                "attack_g189.rs",
-                "filters_cross_their_boundary_both_ways",
-            ),
+            Where::Test("attack_g189.rs", "filters_cross_their_boundary_both_ways"),
         ),
         on_root(
             "one_root::Crossing2::against_round",
@@ -1942,7 +1937,10 @@ fn matrix() -> Vec<Row> {
                 ),
                 (
                     OneStep,
-                    Test("attack_g188.rs", "order_along_an_arc_agrees_with_walking_it"),
+                    Test(
+                        "attack_g188.rs",
+                        "order_along_an_arc_agrees_with_walking_it",
+                    ),
                 ),
                 (
                     Boundary,
@@ -1959,7 +1957,10 @@ fn matrix() -> Vec<Row> {
                 ),
                 (
                     Laws,
-                    Test("attack_g188.rs", "order_along_an_arc_agrees_with_walking_it"),
+                    Test(
+                        "attack_g188.rs",
+                        "order_along_an_arc_agrees_with_walking_it",
+                    ),
                 ),
             ],
         },

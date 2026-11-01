@@ -438,7 +438,10 @@ pub mod one_root {
 
     /// `Arc2::order_crossings` on each pair.
     #[inline(never)]
-    pub fn order_crossings(batch: &[(Arc2, Crossing2, Crossing2)], out: &mut Vec<Result<Sign, NumError>>) {
+    pub fn order_crossings(
+        batch: &[(Arc2, Crossing2, Crossing2)],
+        out: &mut Vec<Result<Sign, NumError>>,
+    ) {
         run(batch, out, |(arc, a, b)| arc.order_crossings(a, b));
     }
 }
@@ -1367,7 +1370,10 @@ pub mod generated {
 
     /// `generated::carrier_order::filter` on each (normal, p, q).
     #[inline(never)]
-    pub fn carrier_order_filter(batch: &[([i128; 2], [i128; 3], [i128; 3])], out: &mut Vec<Option<Sign>>) {
+    pub fn carrier_order_filter(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<Sign>>,
+    ) {
         run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
             carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq)
         });
@@ -1375,7 +1381,10 @@ pub mod generated {
 
     /// `generated::carrier_order::value` on each (normal, p, q).
     #[inline(never)]
-    pub fn carrier_order_value(batch: &[([i128; 2], [i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
         run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
             carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
         });
@@ -1463,7 +1472,10 @@ pub mod generated {
 
     /// `generated::round_rational::filter` on each (point, q, centre).
     #[inline(never)]
-    pub fn round_rational_filter(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<Sign>>) {
+    pub fn round_rational_filter(
+        batch: &[([i128; 3], P2, [i128; 3])],
+        out: &mut Vec<Option<Sign>>,
+    ) {
         run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
             round_rational::filter(x, y, v, q, cx, cy, w)
         });
@@ -1528,17 +1540,13 @@ pub mod generated {
     /// `generated::circle_gap::filter` on each (a, b, length).
     #[inline(never)]
     pub fn circle_gap_filter(batch: &[(P2, P2, i128)], out: &mut Vec<Option<Sign>>) {
-        run(batch, out, |&(a, b, t)| {
-            circle_gap::filter(a, b, t)
-        });
+        run(batch, out, |&(a, b, t)| circle_gap::filter(a, b, t));
     }
 
     /// `generated::circle_gap::value` on each (a, b, length).
     #[inline(never)]
     pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
-        run(batch, out, |&(a, b, t)| {
-            circle_gap::value(a, b, t)
-        });
+        run(batch, out, |&(a, b, t)| circle_gap::value(a, b, t));
     }
 }
 
@@ -1668,7 +1676,10 @@ pub mod plain {
 
     /// `generated::plain::carrier_order_value` on each (normal, p, q).
     #[inline(never)]
-    pub fn carrier_order_value(batch: &[([i128; 2], [i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
         run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
             plain::carrier_order_value(a, b, xp, yp, xq, yq, wp, wq)
         });
@@ -1749,9 +1760,7 @@ pub mod plain {
     /// `generated::plain::circle_gap_value` on each (a, b, length).
     #[inline(never)]
     pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
-        run(batch, out, |&(a, b, t)| {
-            plain::circle_gap_value(a, b, t)
-        });
+        run(batch, out, |&(a, b, t)| plain::circle_gap_value(a, b, t));
     }
 }
 
@@ -1881,7 +1890,10 @@ pub mod limbs {
 
     /// `generated::limbs::carrier_order_value` on each (normal, p, q).
     #[inline(never)]
-    pub fn carrier_order_value(batch: &[([i128; 2], [i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
         run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
             limbs::carrier_order_value(a, b, xp, yp, xq, yq, wp, wq)
         });
@@ -1962,9 +1974,7 @@ pub mod limbs {
     /// `generated::limbs::circle_gap_value` on each (a, b, length).
     #[inline(never)]
     pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
-        run(batch, out, |&(a, b, t)| {
-            limbs::circle_gap_value(a, b, t)
-        });
+        run(batch, out, |&(a, b, t)| limbs::circle_gap_value(a, b, t));
     }
 }
 

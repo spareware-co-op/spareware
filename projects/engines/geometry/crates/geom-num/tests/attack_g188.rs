@@ -555,7 +555,7 @@ fn round_filters_cross_their_boundary_both_ways() {
         let l = Carrier::new(1, 0, i128::from(on.x.get()) + (1 << step)).unwrap();
         let ([a, b], c) = l.coefficients();
         (
-            round_line::filter(a, b, c, on, cx, cy, w).map(|s| s),
+            round_line::filter(a, b, c, on, cx, cy, w),
             match round.meets(&l).unwrap() {
                 Contact::Apart => Sign::Positive,
                 Contact::Tangent => Sign::Zero,

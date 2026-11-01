@@ -250,7 +250,7 @@
               "why": "17 new benchmarks: one-root numbers, their crossings and comparisons; no existing digest moved"
             }
           ],
-          "sha256": "ee7b5d9f691596fbe5b365486cd4fa48f828e5278324c8b297b7314d3ed3e7ed"
+          "sha256": "a7a706906538d34a7684389ebfd4ab02cdbdeaedf6597054fbe7b3da4a595949"
         },
         {
           "id": "geom-nurbs/operations",
@@ -481,7 +481,7 @@
             "test": "one_root_determinism",
             "function": "one_root_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "7bd7f25198665d0e072fbe8e0f77d9321c1017ab743dd6da71330f9e9524b85a"
+          "sha256": "bdfcc773c361382a95057a0ea8a8401b9052e9642959d4da271d1475ac9a648a"
         },
         {
           "id": "geom-num/arc",

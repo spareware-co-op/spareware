@@ -5081,6 +5081,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
+      "mutant": "replace below -> i128 with 0",
+      "line_text": "(1_i128 << bits).saturating_sub(1)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
+      "mutant": "replace fits -> bool with false",
+      "line_text": "v.unsigned_abs() <= below(bits).unsigned_abs()",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
+      "mutant": "replace <= with > in fits",
+      "line_text": "v.unsigned_abs() <= below(bits).unsigned_abs()",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
     }
   ],
   "coverage_off": [
