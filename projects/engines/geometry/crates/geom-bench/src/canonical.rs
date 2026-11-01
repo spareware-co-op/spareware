@@ -863,11 +863,49 @@ impl Canonical for geom_num::brent::Zero {
     }
 }
 
+// The exact decisions on lines and quadrics (decision 32.44's count benchmarks for piece G159).
+
+impl Canonical for geom_num::quadric::Line {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::quadric::Sphere {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::quadric::Cylinder {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::quadric::Cone {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::quadric::Torus {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::sturm::Roots {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 // `geom-intersect`'s results (decision 32.44's count benchmarks for piece G158), each through its
 // debug text: their fields are public only as far as the kernel needs, and a double's debug text
 // is the same on every target.
 
-impl Canonical for geom_curve::CurveKind<3> {
+impl<const D: usize> Canonical for geom_curve::CurveKind<D> {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
     }
@@ -880,6 +918,12 @@ impl Canonical for geom_surface::SurfaceKind {
 }
 
 impl<const N: usize, const D: usize> Canonical for geom_intersect::Projection<N, D> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::general::Subdivided {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
     }

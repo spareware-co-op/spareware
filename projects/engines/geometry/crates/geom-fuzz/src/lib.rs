@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has fifteen targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has nineteen targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -12,8 +12,13 @@
 //! operation at every width; and [`variants`] (G42), every variant of every generated exact path
 //! returns the exact value of its description, evaluated in big integers; [`intersect`]
 //! (G158), an intersection's items keep their invariants against an all-pairs oracle and a pair
-//! asked either way round makes one call; [`project`] (G162), a nearest point is never beaten by a
-//! sample of the kind; and [`level`] (G168), a level curve misses nothing a dense grid can see. Gate 2 (32.44) adds
+//! asked either way round makes one call; [`quadric`] (G159), every exact decision on a line and a
+//! quadric agrees with big integers, and a Sturm chain counts the roots a polynomial was built
+//! from; [`project`] (G162), a nearest point is never beaten by a sample of the kind; [`crossings`]
+//! (G163), every point of any two curves lies on both, and two cubic graphs that change sides have
+//! an item between them; [`piercing`] (G164), every point of a curve and a surface lies on both;
+//! [`level`] (G168), a level curve misses nothing a dense grid can see; and [`general`] (G169),
+//! subdivision leaves no crossing outside its settled or flagged pairs. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
@@ -173,15 +178,19 @@
 use core::fmt;
 
 pub mod boxtree;
+pub mod crossings;
 pub mod curves;
+pub mod general;
 pub mod intersect;
 pub mod level;
 pub mod linalg;
 pub mod maths;
 pub mod nurbs;
 pub mod orient2d;
+pub mod piercing;
 pub mod predicates;
 pub mod project;
+pub mod quadric;
 pub mod roots;
 pub mod seeded;
 pub mod surfaces;

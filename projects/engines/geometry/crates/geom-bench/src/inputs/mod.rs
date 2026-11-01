@@ -53,6 +53,7 @@ pub mod nurbs;
 pub mod perturb;
 pub mod plane;
 pub mod predicate;
+pub mod quadric;
 pub mod real;
 pub mod rng;
 pub mod roots;

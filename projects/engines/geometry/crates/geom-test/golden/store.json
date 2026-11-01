@@ -240,17 +240,35 @@
             {
               "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63",
               "kind": "corpus",
-              "piece": "G162",
-              "why": "2 new count benchmarks on geom-intersect's projection (decision 32.44): the search on an arc and on a band of a sphere; no existing digest moved"
+              "piece": "G159",
+              "why": "7 new count benchmarks on the exact decisions on lines and quadrics (decision 32.44): a line with a sphere, cylinder, cone and torus, parallel directions, an axis's gap and a tangent sphere; no existing digest moved"
             },
             {
-              "sha256": "c6ad6ae11db193fbb5f9ca80bf84189b6ef77a320dc0a152592e208d889d487d",
+              "sha256": "d0f5a6b3d51104d1b56c8c8bb6801b4e0b66025a74a9d0670020e1ddc53d2ff4",
+              "kind": "corpus",
+              "piece": "G163",
+              "why": "5 new count benchmarks on where curves meet (decision 32.44): two segments, two circles, a line with a circle, two cubics and a loop; merged with G159's quadric and G162's projection lines; no existing digest moved"
+            },
+            {
+              "sha256": "ad9c15a7d6201c5b6d42ec0316a502e33dbd22a68046da6b5b30336df585d071",
+              "kind": "corpus",
+              "piece": "G164",
+              "why": "3 new count benchmarks on where curves meet surfaces (decision 32.44): a line through a plane, a line along a torus's equator and a cubic through a graph; no existing digest moved"
+            },
+            {
+              "sha256": "0addf11ef9e85ac52b1858fff68014e4dbe595ceb2a811ae5ef5823f7fef51b9",
               "kind": "corpus",
               "piece": "G168",
               "why": "2 new count benchmarks on geom-intersect's tracer (decision 32.44): a sphere through a plane patch and a torus's silhouette; no existing digest moved"
+            },
+            {
+              "sha256": "04d28353bb06b8f4ac478afc9379ac8904b01735a08a01b4770f1214c4f798db",
+              "kind": "corpus",
+              "piece": "G169",
+              "why": "1 new count benchmark on geom-intersect's subdivision (decision 32.44): a sphere through a plane patch; no existing digest moved"
             }
           ],
-          "sha256": "b30b5a738b930b272752097bc44c67634cf3181d585ca879bc769e685c11538d"
+          "sha256": "9fa3a5cb5a890b07c73fb90432b035c17901a9dc19d0318a45830de510df1a3b"
         },
         {
           "id": "geom-nurbs/operations",
