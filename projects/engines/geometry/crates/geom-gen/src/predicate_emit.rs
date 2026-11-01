@@ -333,8 +333,9 @@ fn value_call(out: &mut String, arguments: &str, sign: &str) -> Result<(), EmitE
 /// that fits [`WIDTH`] columns and the expression is not a `larger` whose arguments pass
 /// [`CALL_ARGS_WIDTH`]. Otherwise the scale is the largest of several terms, times their common
 /// factor if they have one ([`crate::predicate_derive`]'s scale expression), and it is computed one
-/// term per line: the larger of the first two terms, then the larger of the scale so far and each
-/// further term, then the common factor times the scale. Those are the operations the one-line
+/// term per line: the larger of the first two terms (or the first term, then the larger of it and
+/// the second, when two would pass [`CALL_ARGS_WIDTH`]), then the larger of the scale so far and
+/// each further term, then the common factor times the scale. Those are the operations the one-line
 /// expression performs, on the same values, so they give the same `f64` and the same roundings;
 /// the header shows the one-line expression they compute. A scale of another form, or a line that
 /// would still be too long, is refused.
@@ -373,16 +374,20 @@ fn scale_lines(e: &ScaleExpr, groups: &[String]) -> Result<Vec<String>, EmitErro
     let mut lines = Vec::new();
     let mut previous: Option<String> = None;
     for term in terms {
-        lines.push(match previous {
-            None => {
-                previous = Some(term);
-                continue;
+        let Some(p) = previous.take() else {
+            previous = Some(term);
+            continue;
+        };
+        if format!("{p}, {term}").chars().count() > CALL_ARGS_WIDTH {
+            // Two long terms take a line each: the same values, in the same order.
+            if p != "scale" {
+                lines.push(format!("    let scale = {p};"));
             }
-            Some(p) => {
-                previous = Some("scale".to_owned());
-                format!("    let scale = larger({p}, {term});")
-            }
-        });
+            lines.push(format!("    let scale = larger(scale, {term});"));
+        } else {
+            lines.push(format!("    let scale = larger({p}, {term});"));
+        }
+        previous = Some("scale".to_owned());
     }
     if let Some(c) = common {
         lines.push(format!(

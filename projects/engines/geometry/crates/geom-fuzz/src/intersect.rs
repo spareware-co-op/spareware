@@ -249,8 +249,12 @@ fn operand(kind: &Kind) -> Result<Operand<'_>, Finding> {
     })
 }
 
-/// The oracle: whether two items of one kind share a point, by comparing every unknown.
+/// The oracle: whether two items of one kind share a point, by comparing every unknown. Curves may:
+/// a box holds all of a curve, and two curves of one pair may cross.
 fn collide(a: &Item, b: &Item) -> bool {
+    if matches!(a, Item::Curve { .. }) {
+        return false;
+    }
     core::mem::discriminant(a) == core::mem::discriminant(b)
         && a.at()
             .spans()

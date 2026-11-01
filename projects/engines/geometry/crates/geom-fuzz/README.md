@@ -15,14 +15,20 @@ every operation at every width, `I128` to the reserved 768 bits; `cbor` (`src/cb
 convert both ways bit for bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to
 its bound, forgets the entry used longest ago first and answers only where the caller's budget
 covers the stored run; `arenas` (`src/arenas.rs`, G80), `geom-topo` publishes exactly the arenas its
-rules allow, and a body's versions never see each other's edits; and `make` (`src/make.rs`, G101),
-the primitives and transforms return only what the full checker passes, keep their laws, and refuse
+rules allow, and a body's versions never see each other's edits; `make` (`src/make.rs`, G101), the
+primitives and transforms return only what the full checker passes, keep their laws, and refuse
 with a typed error; `sequence` (`src/sequence.rs`, G116), whole operation logs replay to the same
-hash and keep every law at every step; and `intersect` (`src/intersect.rs`, G158), an intersection's
+hash and keep every law at every step; `intersect` (`src/intersect.rs`, G158), an intersection's
 items keep their invariants against an all-pairs oracle, and a pair asked either way round makes one
-call. `src/adversarial.rs` holds the generators aimed at the hard
-cases, and `src/robustness.rs` counts how many plain designs succeed per family: `src/robustness.txt`
-records it, and a count may not fall.
+call; `quadric` (`src/quadric.rs`, G159), every exact decision on a line and a quadric agrees with
+big integers, and a Sturm chain counts the roots a polynomial was built from; `project`
+(`src/project.rs`, G162), a nearest point is never beaten by a sample of the kind; `crossings`
+(`src/crossings.rs`, G163), every point of any two curves lies on both, and two cubic graphs that
+change sides have an item between them; `piercing` (`src/piercing.rs`, G164), every point of a curve
+and a surface lies on both; and `natural` (`src/natural.rs`, G165), every curve two natural quadrics
+are said to share lies on each by its own equation. `src/adversarial.rs` holds the generators aimed
+at the hard cases, and `src/robustness.rs` counts how many plain designs succeed per family:
+`src/robustness.txt` records it, and a count may not fall.
 
 ## One law, four engines
 

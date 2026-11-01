@@ -2429,4 +2429,40 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("sort_items", k::sorted, &m::items(Typical));
     all_ok("key_circle", k::keys, &m::circles(Typical));
     all_ok("pair_lines", k::paired, &m::lines(Typical));
+    all_ok("curve_segments", k::met, &m::segment_pairs(Typical));
+    all_ok("curve_circles", k::met, &m::circle_pairs(Typical));
+    all_ok("curve_line_circle", k::met, &m::line_circles(Typical));
+    all_ok("curve_cubics", k::met, &m::cubic_pairs(Typical));
+    all_ok("curve_loop", k::crossed, &m::loops(Typical));
+    all_ok("surface_plane", k::pierced, &m::line_planes(Typical));
+    all_ok("surface_torus", k::pierced, &m::line_tori(Typical));
+    all_ok("surface_patch", k::pierced, &m::cubic_patches(Typical));
+    all_ok(
+        "natural_plane",
+        k::closed_forms,
+        &m::plane_cylinders(Typical),
+    );
+    all_ok(
+        "natural_spheres",
+        k::closed_forms,
+        &m::sphere_pairs(Typical),
+    );
+    all_ok("natural_tee", k::closed_forms, &m::tees(Typical));
+    all_ok("natural_apex", k::closed_forms, &m::apexes(Typical));
+    all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
+    all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
+}
+
+/// Every typical batch of the decisions on lines and quadrics (decision 32.44) is decided.
+#[test]
+fn quadric_typical_batches_all_succeed() {
+    use geom_bench::inputs::quadric as m;
+    use geom_bench::kernels::quadric as k;
+    all_ok("line_sphere", k::spheres, &m::spheres(Typical));
+    all_ok("line_cylinder", k::cylinders, &m::cylinders(Typical));
+    all_ok("line_cone", k::cones, &m::cones(Typical));
+    all_ok("line_torus", k::tori, &m::tori(Typical));
+    all_ok("parallel", k::directions, &m::directions(Typical));
+    all_ok("axis_gap", k::gaps, &m::gaps(Typical));
+    all_ok("tangent", k::tangents, &m::tangents(Typical));
 }

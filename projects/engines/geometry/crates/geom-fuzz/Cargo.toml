@@ -13,6 +13,9 @@ geom-test = { path = "../geom-test" }
 # The intersect target (G158): the code under test. The shapes and boxes its cases are made of come
 # from the kernel crates listed below for the make and arenas targets (ours, MPL-2.0).
 geom-intersect = { path = "../geom-intersect" }
+# The quadric, project, crossings, piercing and natural targets (G159, G162 to G165) draw NURBS
+# kinds among their cases (ours, MPL-2.0).
+geom-nurbs = { path = "../geom-nurbs" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
 geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,

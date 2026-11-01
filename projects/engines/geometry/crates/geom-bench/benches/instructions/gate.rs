@@ -2795,7 +2795,7 @@ pub mod make {
     );
 }
 
-/// geom-intersect's hot paths (piece G158; decision 32.44).
+/// geom-intersect's hot paths (pieces G158 and G162; decision 32.44).
 pub mod intersect {
     use super::*;
 
@@ -2820,8 +2820,165 @@ pub mod intersect {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/project_arc/typical"))]
+    fn project_arc(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/project_sphere/typical"))]
+    fn project_sphere(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_segments/typical"))]
+    fn curve_segments(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_circles/typical"))]
+    fn curve_circles(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_line_circle/typical"))]
+    fn curve_line_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_cubics/typical"))]
+    fn curve_cubics(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_loop/typical"))]
+    fn curve_loop(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/surface_plane/typical"))]
+    fn surface_plane(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/surface_torus/typical"))]
+    fn surface_torus(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/natural_plane/typical"))]
+    fn natural_plane(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/natural_spheres/typical"))]
+    fn natural_spheres(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/natural_tee/typical"))]
+    fn natural_tee(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/natural_apex/typical"))]
+    fn natural_apex(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/surface_patch/typical"))]
+    fn surface_patch(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex
+    );
+}
+
+/// The exact decisions on lines and quadrics (piece G159; decision 32.44).
+pub mod quadric {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/line_sphere/typical"))]
+    fn line_sphere(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/line_cylinder/typical"))]
+    fn line_cylinder(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/line_cone/typical"))]
+    fn line_cone(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/line_torus/typical"))]
+    fn line_torus(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/parallel/typical"))]
+    fn parallel(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/axis_gap/typical"))]
+    fn axis_gap(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/tangent/typical"))]
+    fn tangent(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = quadric;
+        benchmarks = line_sphere, line_cylinder, line_cone, line_torus, parallel, axis_gap, tangent
     );
 }

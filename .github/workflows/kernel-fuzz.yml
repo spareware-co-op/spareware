@@ -168,7 +168,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, cache_fuzz, cbor_fuzz, intersect_fuzz, make_fuzz, orient2d_fuzz, predicates_fuzz, sequence_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, cache_fuzz, cbor_fuzz, crossings_fuzz, intersect_fuzz, make_fuzz, natural_fuzz, orient2d_fuzz, piercing_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, sequence_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

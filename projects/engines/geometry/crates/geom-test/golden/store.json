@@ -248,9 +248,45 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63",
+              "kind": "corpus",
+              "piece": "G159",
+              "why": "7 new count benchmarks on the exact decisions on lines and quadrics (decision 32.44): a line with a sphere, cylinder, cone and torus, parallel directions, an axis's gap and a tangent sphere; no existing digest moved"
+            },
+            {
+              "sha256": "d0f5a6b3d51104d1b56c8c8bb6801b4e0b66025a74a9d0670020e1ddc53d2ff4",
+              "kind": "corpus",
+              "piece": "G163",
+              "why": "5 new count benchmarks on where curves meet (decision 32.44): two segments, two circles, a line with a circle, two cubics and a loop; merged with G159's quadric and G162's projection lines; no existing digest moved"
+            },
+            {
+              "sha256": "ad9c15a7d6201c5b6d42ec0316a502e33dbd22a68046da6b5b30336df585d071",
+              "kind": "corpus",
+              "piece": "G164",
+              "why": "3 new count benchmarks on where curves meet surfaces (decision 32.44): a line through a plane, a line along a torus's equator and a cubic through a graph; no existing digest moved"
+            },
+            {
+              "sha256": "0addf11ef9e85ac52b1858fff68014e4dbe595ceb2a811ae5ef5823f7fef51b9",
+              "kind": "corpus",
+              "piece": "G165",
+              "why": "4 new count benchmarks on natural quadrics in closed form (decision 32.44): a plane across a cylinder, two spheres, a pipe tee and two cones through one apex; no existing digest moved"
+            },
+            {
+              "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1",
+              "kind": "corpus",
+              "piece": "G180",
+              "why": "Piece G180 joined with G159 to G165, whose 21 count benchmarks on lines and quadrics, curve and surface crossings, natural quadrics and projection join the file beside G101's; no existing line changed"
+            },
+            {
+              "sha256": "6b02bbbbb0e7b356fd0b3a7b80c4bd4073dbd8e121996e9fa282dcf5b843844b",
+              "kind": "corpus",
+              "piece": "G180",
+              "why": "Piece G180 joined with G159 to G165: G101's 4 count benchmarks on geom-make and G105's 3 on geom-format join the file beside theirs; no existing line changed"
             }
           ],
-          "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1"
+          "sha256": "0fb50d65638ed5bcc91817dbdf67547646198e4acf248c6c0c0073eac1ecef56"
         },
         {
           "id": "geom-nurbs/operations",

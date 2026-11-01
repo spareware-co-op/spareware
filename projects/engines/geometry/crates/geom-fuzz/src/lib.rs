@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has ten targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has fifteen targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -15,11 +15,17 @@
 //! and convert both ways bit for bit; [`cache`] (G105), `geom-format`'s memo store keeps to its
 //! bound, forgets the entry used longest ago first and answers only where the caller's budget
 //! covers the stored run; [`arenas`] (G80), `geom-topo` publishes exactly the arenas its rules
-//! allow, and a body's versions never see each other's edits; and [`make`] (G101), the primitives
+//! allow, and a body's versions never see each other's edits; [`make`] (G101), the primitives
 //! and transforms return only what the full checker passes, keep their laws, and refuse with a
 //! typed error; [`sequence`] (G116), whole operation logs replay to the same hash and keep
-//! every law at every step; and [`intersect`] (G158), an intersection's items keep their
-//! invariants against an all-pairs oracle and a pair asked either way round makes one call.
+//! every law at every step; [`intersect`] (G158), an intersection's items keep their invariants
+//! against an all-pairs oracle and a pair asked either way round makes one call; [`quadric`]
+//! (G159), every exact decision on a line and a quadric agrees with big integers, and a Sturm
+//! chain counts the roots a polynomial was built from; [`project`] (G162), a nearest point is
+//! never beaten by a sample of the kind; [`crossings`] (G163), every point of any two curves lies
+//! on both, and two cubic graphs that change sides have an item between them; [`piercing`] (G164),
+//! every point of a curve and a surface lies on both; and [`natural`] (G165), every curve two
+//! natural quadrics are said to share lies on each by its own equation.
 //! [`adversarial`] holds the generators aimed at chapter 28.5's hard
 //! cases, and [`robustness`] counts how many plain designs succeed. The layout every target
 //! follows, and how each engine runs it locally and in CI,
@@ -178,10 +184,15 @@ pub mod adversarial;
 pub mod arenas;
 pub mod cache;
 pub mod cbor;
+pub mod crossings;
 pub mod intersect;
 pub mod make;
+pub mod natural;
 pub mod orient2d;
+pub mod piercing;
 pub mod predicates;
+pub mod project;
+pub mod quadric;
 pub mod robustness;
 pub mod seeded;
 pub mod sequence;
