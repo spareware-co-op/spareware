@@ -3,6 +3,14 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
+      "mutant": "replace == with != in pairs_up",
+      "line_text": "if at == first {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The radial walk stops when it comes back to the edge's first fin. The mutant stops at the second fin and otherwise walks the ring for ever, on any edge with more than two fins, so the tests stop it by their timeout. It hangs; it never passes a body."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
       "mutant": "delete match arm RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) in rebuilt",
       "line_text": "RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) => numbers(ctx, e),",
@@ -25,6 +33,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "axis holds the normal's largest component, and a plane's normal is not zero, so the component is never 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace == with != in told_apart",
+      "line_text": "if rows.len() == out.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The loop ends when no two rows share a name. The mutant goes on while they all differ, and there is then nothing to change, so it never ends and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace > with == in told_apart",
+      "line_text": "for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The pass renames only rows that hold a name alone, so names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace > with < in told_apart",
+      "line_text": "for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A list of rows holds at least one, so the pass renames nothing, names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
@@ -611,30 +643,6 @@
       "reason": "from and to are equal only for a side shrunk to a point, whose low equals its high. A stretch runs between two different marks, so such a side is along no stretch and its direction is never read."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with > in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "rising is only compared with rising of another fin of the same edge, and a fin's ends differ, so turning every answer over leaves every comparison as it was."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with <= in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace == with != in radial",
-      "line_text": "reversed: rising(&fin) == rising(&start),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant turns every flap about the line by half a turn, the reference with the rest. about orders flaps by their angle from the reference, and that does not change when all of them turn together."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(0)); 3]",
       "line_text": "let at = |axis: usize| {",
@@ -673,6 +681,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step -1 on axis 0 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step -1 on axis 1 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
