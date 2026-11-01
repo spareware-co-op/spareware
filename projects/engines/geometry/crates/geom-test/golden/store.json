@@ -248,9 +248,15 @@
               "kind": "corpus",
               "piece": "G189",
               "why": "17 new benchmarks: one-root numbers, their crossings and comparisons; no existing digest moved"
+            },
+            {
+              "sha256": "a7a706906538d34a7684389ebfd4ab02cdbdeaedf6597054fbe7b3da4a595949",
+              "kind": "corpus",
+              "piece": "G190",
+              "why": "53 new benchmarks: ellipses, their generated predicates, their crossings and the roots of their quartics; no existing digest moved"
             }
           ],
-          "sha256": "a7a706906538d34a7684389ebfd4ab02cdbdeaedf6597054fbe7b3da4a595949"
+          "sha256": "761e00e8fb8501231bdaf94d17ef5dc7818c56bc86be4beae74d14048964e5bd"
         },
         {
           "id": "geom-nurbs/operations",
