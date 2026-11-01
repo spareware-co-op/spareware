@@ -4668,11 +4668,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
-      "mutant": "replace > with >= in BernsteinCurve<D>::clip",
+      "mutant": "replace > with >= in clipped_span",
       "line_text": "if t0 > t1 {",
       "occurrences": 1,
       "kind": "harmless",
-      "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
+      "reason": "The two differ only at t0 == t1. The curve's clip and the patch's (on the largest coefficient of each row and column) both come here with ranges from nonnegative_range, whose every end is an outward-rounded interval end strictly beyond the exact one (each i/p is a widened quotient), or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one, nor do attack_g164's slabs touching a patch's edge or a curve's end, which keep a range ending exactly there."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
