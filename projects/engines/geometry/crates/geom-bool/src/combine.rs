@@ -422,7 +422,7 @@ impl Scene<'_> {
         // so a second pass has nothing more to find.
         let base = outer.len();
         let shell_of = |merged: &Merged, at: usize| {
-            let face = merged.piece_faces.get(at)?;
+            let face = merged.piece_face.get(at)?;
             merged.faces.get(*face).map(|f| f.shell)
         };
         let mut standing = Vec::with_capacity(walls.len());
@@ -563,7 +563,7 @@ impl Scene<'_> {
         let mut chosen: Vec<usize> = Vec::with_capacity(seeds.len());
         for seed in seeds {
             let mut faces: Vec<usize> = Vec::new();
-            for (piece, face) in pieces.iter().zip(&merged.piece_faces) {
+            for (piece, face) in pieces.iter().zip(&merged.piece_face) {
                 if holds(&piece.piece, *seed)? {
                     faces.push(*face);
                 }
@@ -578,7 +578,7 @@ impl Scene<'_> {
         }
         let kept: Vec<Outward> = pieces
             .iter()
-            .zip(&merged.piece_faces)
+            .zip(&merged.piece_face)
             .filter(|(_, face)| chosen.contains(face))
             .map(|(piece, _)| piece.clone())
             .collect();

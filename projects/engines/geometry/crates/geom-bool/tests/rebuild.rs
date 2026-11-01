@@ -18,7 +18,7 @@ use geom_check::{Level, check};
 use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
-use geom_poly::merge::{Merge, MergeError, Outward, select};
+use geom_poly::merge::{Merge, MergeError, Outward, merge, select};
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon};
 use geom_poly::winding::{Winding, WindingTest};
@@ -153,6 +153,14 @@ fn one_block_is_a_block_again() {
     assert_eq!(counts(&b), [1, 6, 6, 12, 8]);
     assert_eq!(b.kind(), BodyKind::Solid);
     checked(&b);
+    // Each face's box is the face's own.
+    for row in 0..b.arenas().faces.len() {
+        let face = b.arenas().faces.get(Ix::new(row).unwrap()).unwrap();
+        let (low, high) = (face.bound.min(), face.bound.max());
+        for (l, h) in [low.x, low.y, low.z].iter().zip([high.x, high.y, high.z]) {
+            assert!(l.get() >= 0 && h.get() <= 4);
+        }
+    }
 }
 
 #[test]
@@ -392,6 +400,47 @@ fn tilted(solids: &[[[i64; 3]; 4]], test: &WindingTest, leaf: usize) -> Option<B
     }
     let kept = select(test, &classified(&polygons, leaf)).unwrap();
     Some(rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()).unwrap())
+}
+
+#[test]
+fn a_meeting_holds_the_lowest_planes_around_it() {
+    let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
+    let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];
+    let (mut polygons, mut carriers) = (Vec::new(), Vec::new());
+    tetrahedron(a, 0, &mut polygons, &mut carriers).unwrap();
+    tetrahedron(b, 1, &mut polygons, &mut carriers).unwrap();
+    let test = WindingTest::unite();
+    let kept = select(&test, &classified(&polygons, LEAF_POLYGONS)).unwrap();
+    let merged = merge(&kept, Merge::RemoveRedundant, &mut meter()).unwrap();
+    let body = rebuild(&kept, &carriers, Merge::RemoveRedundant, &mut meter()).unwrap();
+    let arenas = body.arenas();
+    let mut meetings = 0;
+    for at in 0..merged.vertices.len() {
+        let point = arenas.points.get(Ix::new(at as u32).unwrap());
+        let Some(PointKind::Meet(rows)) = point else {
+            continue;
+        };
+        let mut around: Vec<usize> = merged
+            .fins
+            .iter()
+            .filter(|fin| fin.from == at || fin.to == at)
+            .map(|fin| fin.face)
+            .collect();
+        around.sort_unstable();
+        around.dedup();
+        let held: Vec<Plane> = rows
+            .iter()
+            .map(|r| *arenas.planes.get(*r).unwrap())
+            .collect();
+        let lowest: Vec<Plane> = around
+            .iter()
+            .take(3)
+            .map(|face| merged.sheets[merged.faces[*face].sheet].face)
+            .collect();
+        assert_eq!(held, lowest);
+        meetings += 1;
+    }
+    assert!(meetings > 0);
 }
 
 #[test]
