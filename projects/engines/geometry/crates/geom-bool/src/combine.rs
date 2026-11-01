@@ -32,7 +32,7 @@ use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Sign};
 use geom_op::{
     Charge, Class, CombineDetail, Diagnostic, DiagnosticSpec, ErrorKind, ErrorSpec, Family, Field,
-    History, OpContext, OpError, OpOutput, OpPath, OpSchema, RoleSpec, RunDetail, Unit,
+    History, OpContext, OpError, OpOutput, OpPath, OpSchema, RoleSpec, RunDetail, TopoName, Unit,
 };
 use geom_poly::convex::Piece;
 use geom_poly::merge::{
@@ -140,6 +140,11 @@ pub struct Combined {
     pub body: Body,
     /// How its entities relate to the operands' (11.9).
     pub history: Option<History>,
+    /// The names the call made that the body holds or refers to, in the order made, each after
+    /// those it refers to: with the operands' own, what a name graph (`geom_name`) needs to
+    /// resolve a reference to the body (20.4), the cache's `NamedBody` holds (23.8) and a names
+    /// record stores (24.4). Empty when it has no history.
+    pub names: Vec<TopoName>,
 }
 
 /// One arrangement, for the selections to read.
@@ -358,6 +363,7 @@ impl<'a> Scene<'a> {
                 Combined {
                     body,
                     history: None,
+                    names: Vec::new(),
                 },
                 false,
             ));
@@ -371,12 +377,20 @@ impl<'a> Scene<'a> {
         };
         let Naming {
             names,
+            made,
             history,
             qualified,
         } = name(self.op, merged, pieces, &sources)?;
         let body = publish(merged, carriers, job.open, Some(&names), meter)?;
         let history = Some(history);
-        Ok((Combined { body, history }, qualified))
+        Ok((
+            Combined {
+                body,
+                history,
+                names: made,
+            },
+            qualified,
+        ))
     }
 
     /// What `test` keeps, its seams held where `cuts` lie.
@@ -598,6 +612,7 @@ impl<'a> Scene<'a> {
             results: alloc::vec![Combined {
                 body: wire(&curves, meter)?,
                 history: None,
+                names: Vec::new(),
             }],
             separated: true,
             qualified: false,

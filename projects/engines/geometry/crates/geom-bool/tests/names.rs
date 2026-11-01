@@ -336,3 +336,60 @@ fn an_operand_without_names_gives_a_body_without_history() {
     let out = unite(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &b)]).unwrap();
     assert!(out.result.history.is_none());
 }
+
+/// A box made by operation `op`, with the names its making reported.
+fn cuboid_named(op: u8, low: [i64; 3], size: [u64; 3]) -> (Body, Vec<TopoName>) {
+    let input = BoxInput {
+        min: P3::new(low[0], low[1], low[2]).unwrap(),
+        size: size.map(Steps),
+    };
+    let made = make_box(&ctx_of(op), &input).unwrap().result;
+    (made.body, made.names)
+}
+
+#[test]
+fn a_boolean_reports_every_name_it_made_after_those_it_refers_to() {
+    let (wall, wall_names) = cuboid_named(1, [0, 0, 0], [300, 10, 60]);
+    let door = |x: i64| cuboid_named(2, [x, -5, 0], [20, 20, 40]);
+    let ((one, one_names), (two, two_names), (three, _)) = (door(20), door(120), door(220));
+    for operands in [
+        vec![solid(1, &wall), solid(2, &one), solid(3, &two)],
+        vec![
+            solid(1, &wall),
+            solid(2, &one),
+            solid(3, &two),
+            solid(4, &three),
+        ],
+    ] {
+        let result = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
+        // The operands' names first (a door's twice over is one), then the boolean's, in order.
+        let mut graph = geom_name::NameGraph::new();
+        for name in wall_names.iter().chain(&one_names).chain(&two_names) {
+            graph.intern(name.clone()).unwrap();
+        }
+        for name in &result.names {
+            for parent in geom_name::graph::parents(name) {
+                assert!(graph.name(parent).is_some(), "{name:?} before {parent:?}");
+            }
+            graph.intern(name.clone()).unwrap();
+        }
+        // Every name the result holds is known, so a reference to it can resolve (20.4).
+        for name in all_names(&result.body) {
+            assert!(graph.is_weak(name).is_ok(), "{name:?}");
+        }
+        // And nothing is reported that no name of the result reaches.
+        let held = all_names(&result.body);
+        let mut reached = BTreeSet::new();
+        let mut stack: Vec<NameId> = held.iter().copied().collect();
+        while let Some(id) = stack.pop() {
+            if reached.insert(id)
+                && let Some(name) = graph.name(id)
+            {
+                stack.extend(geom_name::graph::parents(name));
+            }
+        }
+        for name in &result.names {
+            assert!(reached.contains(&name.id().unwrap()), "{name:?}");
+        }
+    }
+}
