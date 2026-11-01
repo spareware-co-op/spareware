@@ -64,6 +64,9 @@ const CHUNK: ChunkPlan = ChunkPlan::fixed::<256>();
 /// The work of a corner, in units of [`fillet_all`]'s meter.
 const CORNER_WORK: u64 = 1;
 
+/// How near, in steps, the first pass of a solve gets: enough to know the grid point to work about.
+const ROUGH: f64 = 1.0 / 1_048_576.0;
+
 /// The most bits of a centre's fraction: a weight below a rational point's budget.
 const MOST_BITS: i32 = 82;
 
@@ -730,7 +733,7 @@ fn fillet_plan(
     let mut aims = aims_about(targets, [seed, other], origin)?;
     let ([sx, sy], [ox, oy]) = (seed, other);
     let start = over([sx.add(ox)?, sy.add(oy)?], DD::from_i64(2))?;
-    let rough = ideal::with_radius(&mut aims, start, radius)?;
+    let rough = ideal::with_radius(&mut aims, start, radius, Some(ROUGH))?;
     let centred = shifted(origin, rough.centre)?;
     let moved = from_origin(centred, origin)?;
     let [one, two] = rough.feet;
@@ -739,7 +742,7 @@ fn fillet_plan(
         [minus(one.at, moved)?, minus(two.at, moved)?],
         centred,
     )?;
-    let solved = ideal::with_radius(&mut aims, minus(rough.centre, moved)?, radius)?;
+    let solved = ideal::with_radius(&mut aims, minus(rough.centre, moved)?, radius, None)?;
     planned(targets, &solved, centred, step, accept)
 }
 
@@ -883,7 +886,7 @@ pub fn tangent_circle(
     )?;
     let radius = larger_norm(&seeds, start)?;
     let mut aims = aims_about(&targets, seeds, origin)?;
-    let rough = ideal::of_three(&mut aims, start, radius)?;
+    let rough = ideal::of_three(&mut aims, start, radius, Some(ROUGH))?;
     let centred = shifted(origin, rough.centre)?;
     let moved = from_origin(centred, origin)?;
     let [one, two, three] = rough.feet;
@@ -896,7 +899,7 @@ pub fn tangent_circle(
         ],
         centred,
     )?;
-    let solved = ideal::of_three(&mut aims, minus(rough.centre, moved)?, rough.radius)?;
+    let solved = ideal::of_three(&mut aims, minus(rough.centre, moved)?, rough.radius, None)?;
     let plan = planned(&targets, &solved, centred, step, accept)?;
     let circle = carriers.push(Curve2::Circle(plan.circle))?;
     let join = |k: usize, curve: CurveIx| -> Result<Join, NumError> {

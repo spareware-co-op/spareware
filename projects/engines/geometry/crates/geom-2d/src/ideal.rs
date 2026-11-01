@@ -271,6 +271,16 @@ fn depth(foot: &Foot, aim: &Aim, c: Pair, r: DD) -> Result<Depth, NumError> {
     Ok(Depth { reach, depth })
 }
 
+/// Whether each curve is as far from the circle as it is aimed to be: within a 256th of its depth,
+/// or within `rough` steps on a pass that only finds where to work. By the distances, not the steps
+/// of the centre: two lines nearly parallel leave the centre ill-determined along them, and their
+/// distances not.
+fn settled<const N: usize>(miss: &[DD; N], depths: &[Depth; N], rough: Option<f64>) -> bool {
+    miss.iter().zip(depths).all(|(off, deep)| {
+        off.abs().hi() <= rough.map_or(deep.depth.hi() / 256.0, |steps| steps)
+    })
+}
+
 /// The depth of a circle of radius `r` past a line, as [`Depth`] says.
 pub(crate) fn plain_depth(r: DD) -> Result<DD, NumError> {
     let angle = AIM * ANGULAR.get();
@@ -352,10 +362,20 @@ pub(crate) fn with_radius(
     aims: &mut [Aim; 2],
     start: Pair,
     r: DD,
+    rough: Option<f64>,
 ) -> Result<Solved<2>, NumError> {
     let mut c = start;
     for _ in 0..STEPS {
-        let (feet, depths, [p, q]) = residual(aims, c, r)?;
+        let (feet, depths, miss) = residual(aims, c, r)?;
+        if settled(&miss, &depths, rough) {
+            return Ok(Solved {
+                centre: c,
+                radius: r,
+                feet,
+                depths,
+            });
+        }
+        let [p, q] = miss;
         let [first, second] = &*aims;
         let [one, other] = &feet;
         let rows = [
@@ -366,14 +386,6 @@ pub(crate) fn with_radius(
         let [cx, cy] = c;
         let [sx, sy] = step;
         c = [cx.add(sx)?, cy.add(sy)?];
-        if size(step) <= SMALL * larger(1.0, larger(size(c), r.abs().hi())) {
-            return Ok(Solved {
-                centre: c,
-                radius: r,
-                feet,
-                depths,
-            });
-        }
     }
     Err(NumError::Degenerate)
 }
@@ -387,10 +399,20 @@ pub(crate) fn of_three(
     aims: &mut [Aim; 3],
     start: Pair,
     radius: DD,
+    rough: Option<f64>,
 ) -> Result<Solved<3>, NumError> {
     let (mut c, mut r) = (start, radius);
     for _ in 0..STEPS {
-        let (feet, depths, [p, q, s]) = residual(aims, c, r)?;
+        let (feet, depths, miss) = residual(aims, c, r)?;
+        if settled(&miss, &depths, rough) {
+            return Ok(Solved {
+                centre: c,
+                radius: r,
+                feet,
+                depths,
+            });
+        }
+        let [p, q, s] = miss;
         let [one, two, three] = &*aims;
         let [first, second, third] = &feet;
         let row = |foot: &Foot, side: f64| scaled(foot.normal, DD::from_f64(side)?);
@@ -405,15 +427,6 @@ pub(crate) fn of_three(
         let [sx, sy] = step;
         c = [cx.add(sx)?, cy.add(sy)?];
         r = r.add(grown)?;
-        if larger(size(step), grown.abs().hi()) <= SMALL * larger(1.0, larger(size(c), r.abs().hi()))
-        {
-            return Ok(Solved {
-                centre: c,
-                radius: r,
-                feet,
-                depths,
-            });
-        }
     }
     Err(NumError::Degenerate)
 }
@@ -473,7 +486,7 @@ mod tests {
             aim(&Conic::of_carrier(&y).unwrap(), 1.0),
         ];
         let r = DD::from_i64(1_000);
-        let done = with_radius(&mut aims, zero(), r).unwrap();
+        let done = with_radius(&mut aims, zero(), r, None).unwrap();
         let [first, _] = done.depths;
         assert!(first.depth.hi() > 0.0);
         let to_axis = done.centre[1].hi();
@@ -492,7 +505,8 @@ mod tests {
             aim(&Conic::of_carrier(&lines[1]).unwrap(), -1.0),
             aim(&Conic::of_carrier(&lines[2]).unwrap(), -1.0),
         ];
-        let done = of_three(&mut aims, [DD::from_i64(30), DD::from_i64(10)], DD::from_i64(5)).unwrap();
+        let start = [DD::from_i64(30), DD::from_i64(10)];
+        let done = of_three(&mut aims, start, DD::from_i64(5), None).unwrap();
         assert!((done.radius.hi() - 15.0).abs() < 1e-9);
         assert!((done.centre[0].hi() - 30.0).abs() < 1e-9);
     }
