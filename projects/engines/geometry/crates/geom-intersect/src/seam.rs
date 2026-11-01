@@ -49,10 +49,10 @@
 //!
 //! What it leaves: the facts of a swept or extruded profile (closed profiles, a profile meeting
 //! its axis) and the poles of an affine image or an offset are not read here, so their seams and
-//! poles stay ordinary edges until a kind says them. A tangent contact at a pole (a plane touching
-//! a sphere's pole) stays undecided: 12.9's analysis reads forms in the pole's own chart, where
-//! they vanish, and needs a regular chart there. A spindle torus's axis points fall at no double,
-//! so its cut is not made. Extraordinary vertices are G320's.
+//! poles stay ordinary edges until a kind says them. A tangent contact at a sphere's pole is read in
+//! a turned chart ([`crate::contact::analyse`]); at a NURBS pole, which has no such chart, it stays
+//! undecided. A spindle torus's axis points fall at no double, so its cut is not made.
+//! Extraordinary vertices are G320's.
 //!
 //! Cost: constant for the analytic kinds; one pass over the control net and the knots for a NURBS.
 //! Each pole line costs one projection to an eighth of the floor and one run of the engine along

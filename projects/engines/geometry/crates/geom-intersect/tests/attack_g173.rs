@@ -661,3 +661,35 @@ fn a_plane_touching_only_a_cones_apex_is_one_point() {
     let t = march(&cone, &shallow, &found, FLOOR, CEILING, &mut meter()).unwrap();
     assert!(t.branches.is_empty(), "{t:?}");
 }
+
+#[test]
+fn a_sphere_resting_on_a_plane_at_its_pole_touches_it_at_one_point() {
+    // The standard frame's south pole rests on z = 0: the plane touches the sphere there and
+    // nowhere else. In the sphere's own chart the pole has no tangent plane to read 12.9's forms
+    // in, so the analysis reads it in a chart turned to put the pole on the equator.
+    let ball = SurfaceKind::Sphere(
+        Sphere::new(
+            [0.0625, 0.03125, 5.0],
+            5.0,
+            frame(),
+            ((0.0, TURN), (-0.5, 0.5)),
+        )
+        .unwrap(),
+    );
+    let ground = flat(0.0);
+    // A floor of 1e-2, as a tangency flags every pair its normals agree on down to the floor.
+    let (touch, room) = (1e-2, || WorkMeter::new(Budget::of_work(1 << 24)));
+    for (one, two, swapped) in [(&ball, &ground, false), (&ground, &ball, true)] {
+        let found = subdivide(one, two, touch, &mut room()).unwrap();
+        assert!(found.settled.is_empty(), "{found:?}");
+        let read = analyse(one, two, &found, touch, CEILING, &mut room()).unwrap();
+        assert_eq!(read.len(), 1, "{read:?}");
+        let Reading::Point { at, gap, contact } = read[0] else {
+            panic!("{read:?}");
+        };
+        assert_eq!(contact, PointContact::IsolatedTangent, "{read:?}");
+        assert!(gap.contains(0.0), "{gap:?}");
+        let v = if swapped { at[3] } else { at[1] };
+        assert_eq!((v.lo(), v.hi()), (-0.5, -0.5));
+    }
+}

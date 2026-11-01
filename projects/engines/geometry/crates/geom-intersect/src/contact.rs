@@ -21,6 +21,13 @@
 //!    an even number, on two analytic surfaces, it is a singular contact of that many half-branches.
 //!    Anything else is a contact of higher order.
 //!
+//! At a pole (G173, [`crate::seam`]): a cluster that subdivision flagged as a lone pole, a pole of
+//! one surface on the other that no branch leaves, is one singular point there. A cluster at a
+//! sphere's pole whose normals may agree is read in a chart turned to put the pole on the equator:
+//! the same sphere, its centre and radius, with its frame turned, where the forms do not vanish
+//! (12.10's local re-chart). Its reading counts only if it is one point and no branch crosses the
+//! cap, and the point is put back at the pole.
+//!
 //! Guarantees:
 //!
 //! - **Every flagged pair is accounted for.** Each one is in a cluster with at least one [`Reading`],
@@ -49,7 +56,7 @@
 //! form is as likely a pair of near crossings, so it stays flagged.
 //!
 //! What this piece leaves: a tangent curve is reported as a band over its cluster, and its curve is
-//! G175's. A contact at a pole stays undecided (G173's `seam` says why). The half-branches at a crossing are what
+//! G175's. A contact at a NURBS pole stays undecided (G173's `seam` says why). The half-branches at a crossing are what
 //! [`crate::march`] traces to the cluster's edge.
 //!
 //! Cost: each cluster is one run of [`crate::solve`] on the collinear-normal system, boxes in four
@@ -63,18 +70,19 @@
 
 use alloc::vec::Vec;
 
+use geom_curve::Frame;
 use geom_curve::tight::{larger, smaller};
 use geom_num::NumError;
 use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_run::WorkMeter;
-use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
+use geom_surface::{ParamBox as Region, ParamSurface, Sphere, SurfaceKind};
 
 use crate::IntersectError;
 use crate::curve::exact_steps;
 use crate::general::{
     FlaggedPair, Settled, Starts, Subdivided, around, cross, ends, may_be_parallel, minus_box,
-    normals, partials, point, same, span, speeds, starts_of,
+    normals, partials, point, same, span, speeds, starts_of, subdivide,
 };
 use crate::project::{Projection, dot, image, negative, positive, project_surface};
 use crate::result::{
@@ -238,6 +246,31 @@ struct Collinear<'a> {
     seams: (Charts, Charts),
     /// Each pole line read against the other surface.
     poles: Poles,
+}
+
+impl<'a> Collinear<'a> {
+    /// The system for `first` and `second` at `floor`, with their charts and poles read.
+    fn of(
+        first: &'a SurfaceKind,
+        second: &'a SurfaceKind,
+        floor: f64,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Collinear<'a>, IntersectError> {
+        let ([a, b], [c, d]) = (
+            speeds(first, first.domain(), meter)?,
+            speeds(second, second.domain(), meter)?,
+        );
+        let seams = (charts(first), charts(second));
+        let poles = Poles::of(first, second, [&seams.0, &seams.1], floor, meter)?;
+        Ok(Collinear {
+            first,
+            second,
+            floor,
+            weights: [a, b, c, d],
+            seams,
+            poles,
+        })
+    }
 }
 
 /// Both surfaces read to the second order.
@@ -924,34 +957,37 @@ pub fn analyse(
             coincidence: Coincidence::Identical,
         }]);
     }
-    let ([a, b], [c, d]) = (
-        speeds(first, first.domain(), meter)?,
-        speeds(second, second.domain(), meter)?,
-    );
-    let system = Collinear {
-        first,
-        second,
-        floor,
-        weights: [a, b, c, d],
-        seams: (charts(first), charts(second)),
-        poles: Poles::default(),
-    };
-    let system = Collinear {
-        poles: Poles::of(
-            first,
-            second,
-            [&system.seams.0, &system.seams.1],
-            floor,
-            meter,
-        )?,
-        ..system
-    };
-    let mut out = Vec::new();
-    let mut settled = found.settled.clone();
-    let mut contacts = Vec::new();
+    let system = Collinear::of(first, second, floor, meter)?;
+    let mut rest = Vec::new();
+    let mut turned = Vec::new();
     for cluster in clusters(&found.flagged, meter)? {
+        if cluster.iter().any(|p| p.why == NO_ROOM)
+            && let Some(reading) = turned_at_pole(&system, &cluster, ceiling, meter)?
+        {
+            turned.push(reading);
+        } else {
+            rest.push(cluster);
+        }
+    }
+    let mut out = read_clusters(&system, &found.settled, rest, ceiling, meter)?;
+    out.extend(turned);
+    Ok(out)
+}
+
+/// What each of `clusters` is, around the `settled` pairs of the same subdivision.
+fn read_clusters(
+    system: &Collinear<'_>,
+    settled: &[Settled],
+    clusters: Vec<Vec<FlaggedPair>>,
+    ceiling: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Reading>, IntersectError> {
+    let mut out = Vec::new();
+    let mut settled = settled.to_vec();
+    let mut contacts = Vec::new();
+    for cluster in clusters {
         if cluster.iter().all(|p| p.why == LONE)
-            && let Some(reading) = at_pole(&system, &cluster, &settled, meter)?
+            && let Some(reading) = at_pole(system, &cluster, &settled, meter)?
         {
             out.push(reading);
             continue;
@@ -964,7 +1000,7 @@ pub fn analyse(
             }));
             continue;
         }
-        match look(&system, &cluster, ceiling, meter)? {
+        match look(system, &cluster, ceiling, meter)? {
             Look::Read(reading) => out.push(reading),
             Look::Settled(pieces) => {
                 out.extend(pieces.iter().cloned().map(Reading::Crossing));
@@ -976,7 +1012,7 @@ pub fn analyse(
     for (pairs, cluster, solved) in &contacts {
         let ending = branches(&settled, pairs, meter)?;
         out.extend(read_cluster(
-            &system,
+            system,
             (cluster, solved),
             ending,
             ceiling,
@@ -984,4 +1020,99 @@ pub fn analyse(
         )?);
     }
     Ok(out)
+}
+
+/// The farthest, in half-turns, a cap about a sphere's pole may reach for its turned chart (below)
+/// to be a small patch about a regular point: an eighth of a turn.
+const CAP: f64 = 0.25;
+
+/// The same sphere as `sphere`, which is its centre and radius whatever its frame, charted with
+/// the pole at `pole` (v = ±1/2) on its equator at (0, 0), over `reach` half-turns either way of
+/// it, where the chart is regular: 12.10's local re-chart. `None` for a sphere whose normal points
+/// in, since the turned one's points out.
+fn turned(sphere: &Sphere, pole: f64, reach: f64) -> Option<SurfaceKind> {
+    if sphere.axial_sign() < 0.0 {
+        return None;
+    }
+    let frame = sphere.frame();
+    let (x, n) = (frame.x(), frame.normal());
+    // The pole is c + r·sin(π·pole)·n̂: along +n̂ at v = 1/2 and −n̂ at v = −1/2.
+    let toward = if pole > 0.0 { n } else { n.map(|t| -t) };
+    let frame = Frame::new(toward, x).ok()?;
+    let cap = ((-reach, reach), (-reach, reach));
+    Sphere::new(sphere.center(), sphere.radius(), frame, cap)
+        .ok()
+        .map(SurfaceKind::Sphere)
+}
+
+/// A cluster about a sphere's pole whose normals may agree there (a plane touching the pole),
+/// read in the turned chart, where 12.9's forms do not vanish: its one point reading, the sphere's
+/// parameters put back at the pole, or `None` where the turned chart does not decide it alone (a
+/// branch crosses the cap, or it reads anything but one point).
+fn turned_at_pole(
+    system: &Collinear<'_>,
+    pairs: &[FlaggedPair],
+    ceiling: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Reading>, IntersectError> {
+    let sides = [
+        (system.first, system.second, false),
+        (system.second, system.first, true),
+    ];
+    for (own, other, swapped) in sides {
+        let SurfaceKind::Sphere(sphere) = own else {
+            continue;
+        };
+        let ((u0, u1), (v0, v1)) = own.domain();
+        let mut regions = pairs
+            .iter()
+            .map(|p| if swapped { p.second } else { p.first });
+        let Some(first) = regions.next() else {
+            continue;
+        };
+        let ((_, _), (c, d)) = regions.fold(first, hull);
+        let pole = if d == 0.5 && v1 == 0.5 {
+            0.5
+        } else if c == -0.5 && v0 == -0.5 {
+            -0.5
+        } else {
+            continue;
+        };
+        // Twice the cluster's reach from the pole: the turned box holds every point that near it.
+        let reach = 2.0 * if pole > 0.0 { 0.5 - c } else { d + 0.5 };
+        if !(reach > 0.0 && reach <= CAP) {
+            continue;
+        }
+        let Some(cap) = turned(sphere, pole, reach) else {
+            continue;
+        };
+        let (one, two) = if swapped {
+            (other, &cap)
+        } else {
+            (&cap, other)
+        };
+        let found = subdivide(one, two, system.floor, meter)?;
+        if !found.settled.is_empty() {
+            return Ok(None);
+        }
+        let near = Collinear::of(one, two, system.floor, meter)?;
+        let read = read_clusters(
+            &near,
+            &found.settled,
+            clusters(&found.flagged, meter)?,
+            ceiling,
+            meter,
+        )?;
+        let [Reading::Point { at, gap, contact }] = read.as_slice() else {
+            return Ok(None);
+        };
+        let [a, b, s, r] = *at;
+        let (x, y) = (span((u0, u1))?, point(pole)?);
+        return Ok(Some(Reading::Point {
+            at: if swapped { [a, b, x, y] } else { [x, y, s, r] },
+            gap: *gap,
+            contact: *contact,
+        }));
+    }
+    Ok(None)
 }
