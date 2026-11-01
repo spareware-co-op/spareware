@@ -3547,6 +3547,30 @@
       "layer": "4",
       "modules": [
         {
+          "cost": "constant. Recursion: none.",
+          "does": "[`settle`] gives an item the bound ε_out that [`Terms`] prove for it, and flags it `BoundExceeded` if that passes the ceiling. An operand's bound is zero when the crate intersects exact defining data, and a cache's certified error when it intersects a cache.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/bound.rs",
+          "guarantees": [
+            "**Never a wider Certified item.** An item comes back Certified within the ceiling, or flagged with the bound it needed.",
+            "**Rounds up.** ε_out is an upper bound of an interval sum, rounded up to whole steps.",
+            "**Exact stays exact only on exact operands.** Any operand's bound makes an Exact item Certified.",
+            "**Approximate stays Approximate.** Its deviation grows by the same terms, and proves nothing, so the ceiling does not judge it.",
+            "**No angle, no bound.** Where the angle cannot carry the operands' bounds through, as it cannot near tangency, the item is flagged with a bound of `u64::MAX` steps. 12.9's square root is the tangent case's bound, and that is [`crate::contact`]'s."
+          ],
+          "job": "How an item's bound adds up: the crate's own error, the operands' bounds and the angle at which the shapes meet (12.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.2 (`projects/engines/geometry/architecture/12-intersections.md`). Two shapes moved by ε_A and ε_B, whose sum is e, meeting at an angle whose sine is at least s, move their crossing by at most r = e/s to first order. Over a distance r the normals of shapes of curvature at most κ each turn by at most κ·r, so the angle there is within 2κ·r of θ, and sine being 1-Lipschitz, r ≤ e/(s − 2κ·r). Take r₀ = 2e/s. If s − 2κ·r₀ ≥ s/2, that map takes [0, r₀] into itself, so the crossing lies within e/(s − 2κ·r₀) of where it was. That quotient is both terms of `ε_out` at once: e/s, and the second-order rest. If not, the curvature can undo the angle inside the distance moved, and no bound of this form exists."
+          },
+          "path": "geom_intersect::bound",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few predicates per call, each one filter and at most one exact path. [`line_torus`] and [`between`] add at most one Sturm chain. [`collapsed`] is linear. No allocation. Recursion: none.",
           "does": "on the exact data of 12.7, [`line_sphere`], [`line_cylinder`] and [`line_cone`] say how a line meets a quadric as a [`Meeting`], with no square root anywhere, and [`line_torus`] counts its real points on a torus. [`between`] counts them on a stretch of the line. [`position`] decides which of Goldman and Miller's special positions two natural quadrics stand in. [`collapsed`] decides whether the control points along a patch's edge are one point.",
           "family": [],
