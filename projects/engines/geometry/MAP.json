@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a sphere and seen in silhouette, planes through a whole sphere's poles, and sheets tangent to a plane along a known line (G174).",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a sphere and seen in silhouette, planes through a whole sphere's poles, sheets tangent to a plane along a known line (G174), and marched crossings to fit as intersection curves (G175).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -1943,6 +1943,29 @@
             "text": "the circular helix in its standard parametrisation, with angles in half-turns, stored exactly as chapter 7 asks (`projects/engines/geometry/architecture/07-geometry-types.md`: \"Helix (exact; neither STEP nor IFC has one)\")."
           },
           "path": "geom_curve::helix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the NURBS kind's costs on the caches; a split or reversal is linear in the spans and the chain.",
+          "does": "[`IntersectionCurve`] stores its definition (chapter 12.12): the two surfaces as opaque [`SurfaceRef`]s into the geometry pool that holds it, and the certified chain of marched points in (u₁, v₁, u₂, v₂), each with its parameter on the curve. Beside it are the caches, all on one parameter t: the 3D curve C(t), and the pcurves p₁(t) and p₂(t) in each surface's parameters. [`Span`] records, for each span of the 3D cache, how far C may be from the true curve there, and how far each mapped pcurve Sᵢ(pᵢ(t)) may be from C(t). `geom-curve` sits below `geom-surface` and cannot see surfaces (chapter 27), so it evaluates, bounds, splits and converts the kind through its 3D cache alone, as for [`crate::OnSurface`]; `geom-intersect` builds the caches and their bounds, and reaches the true curve from the definition.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/intersection.rs",
+          "guarantees": [
+            "**The contract on the cache.** Every evaluation, bound, split and transform is the NURBS kind's on the 3D cache, certified for the cache.",
+            "**A bound for every span.** The spans tile the domain, end to end, each with three finite bounds that are not negative; the curve's [`IntersectionCurve::error`] is the largest. A split adds its deviation to every bound of the two halves; a reversal mirrors the spans and adds its deviation; a transform scales every bound by an upper bound on the transform's stretch (its linear part's Frobenius norm) and adds its deviation. The pcurves are never approximated here: a split trims them, a reversal reverses them, a transform leaves them (the surfaces move with the pool, their parameters do not).",
+            "**The definition travels.** A split keeps each chain point on the half whose domain holds its parameter, both halves the one at the cut; a reversal reverses the chain and negates its parameters."
+          ],
+          "job": "The intersection curve kind: a branch where two surfaces meet, held by its definition, with its 3D curve and both pcurves as certified NURBS caches.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "the procedural intersection curve of chapter 12.12 (`projects/engines/geometry/architecture/12-intersections.md`), its cache-only contract that of chapter 7 (`projects/engines/geometry/architecture/07-geometry-types.md`)."
+          },
+          "path": "geom_curve::intersection",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3685,6 +3708,31 @@
             "text": "chapter 12.16's error kinds, with `geom-run`'s stops (`projects/engines/geometry/architecture/12-intersections.md`)."
           },
           "path": "geom_intersect::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each round is one approximation of the branch's points and two least-squares fits, and per span up to 2^[`PIECES`] pieces, each a few reads of the surfaces to second order. Refinement doubles the data in a failing span at most [`ROUNDS`] times. Recursion: none.",
+          "does": "[`fit`] takes a [`Branch`] of [`crate::march`] and its two surfaces. It fits the 3D curve through the surfaces' points at the branch's vertices by The NURBS Book's approximation with knot removal (`geom_nurbs::Curve::approximate`), then both pcurves by least squares on the same parameters and basis, their ends held, so all three share t. For each span of the 3D cache it bounds, by the mean-value form, how far each mapped pcurve Sᵢ(pᵢ(t)) is from the cache C(t), and from those two distances, the angle at which the surfaces cross and their curvature, how far C(t) is from the true curve. A span over the ceiling is refined: a point of the true curve is added between each two data points in it, and the whole fit is made again. [`true_point`] finds the point of the true curve in the plane across the cache at t, proven unique.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+          "guarantees": [
+            "**Every span is certified within the ceiling, or there is no curve.** A span's bound is proven, as below; a fit whose spans do not all come within `ceiling` after [`ROUNDS`] rounds of refinement is [`IntersectError::BudgetExceeded`], never a curve with a wider bound.",
+            "**The pcurve bounds.** Over a piece [a, b] of a span with middle m and half-width h, every value of f(t) = Sᵢ(pᵢ(t)) − C(t) is within h·sup|f′| of f(m), and f′ = `S_u`·p′ᵤ + `S_v`·p′ᵥ − C′ is enclosed from the kinds' own bounds over the pcurve's box. A span is cut into up to 2^[`PIECES`] pieces until its bounds come within the ceiling.",
+            "**The curve bound.** C(t) is within d₁ of S₁ and d₂ of S₂. Within r of C(t), where the surfaces cross at a sine of at least s and turn their normals by at most κ per unit length, the crossing is within e/(s − 2κ·r₀) of C(t), e = d₁ + d₂ and r₀ = 2e/s, whenever s − 2κ·r₀ ≥ s/2: 12.2's bound, as [`crate::bound`] proves it. s and κ are enclosed over the pcurve's box widened by (r₀ + dᵢ)/σᵢ in parameters, σᵢ a lower bound on how fast Sᵢ moves there, so that box holds every point within r₀ of C(t). κ is |dN|/|dS| ≤ √(|`n_u`|² + |`n_v`|²)·√(E + G)/|n|², n = `S_u` × `S_v`, and σ ≥ |n|/√(E + G), from the first fundamental form's least eigenvalue, at least EG−F² over E + G.",
+            "**One true point.** [`true_point`] proves its point the only zero of S₁ − S₂ and the plane condition in its box, by the interval engine (12.3).",
+            "**The definition kept.** The curve's chain is the branch's vertices, each with its parameter on the caches; points added in refinement are fit data only."
+          ],
+          "job": "The procedural intersection curve's caches and their bounds (12.12): a marched branch fitted to a 3D NURBS and two pcurves on one parameter, each span certified, and any point of the true curve recovered from the caches by refinement on the definition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "chapter 12.12 (`projects/engines/geometry/architecture/12-intersections.md`); the fit is The NURBS Book's section 9.4 (Piegl and Tiller, 2nd ed., Springer 1997, <https://doi.org/10.1007/978-3-642-59223-2>) as `geom-nurbs` builds it; the bound is 12.2's."
+          },
+          "path": "geom_intersect::fit",
           "provenance": [],
           "spdx": null,
           "target": "lib"

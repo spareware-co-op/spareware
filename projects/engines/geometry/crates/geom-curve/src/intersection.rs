@@ -28,7 +28,7 @@
 //!
 //! Method: the procedural intersection curve of chapter 12.12
 //! (`projects/engines/geometry/architecture/12-intersections.md`), its cache-only contract that of
-//! chapter 7 (`projects/engines/geometry/architecture/07-geometry.md`).
+//! chapter 7 (`projects/engines/geometry/architecture/07-geometry-types.md`).
 //!
 //! Cost: the NURBS kind's costs on the caches; a split or reversal is linear in the spans and the
 //! chain.
