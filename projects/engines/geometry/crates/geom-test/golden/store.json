@@ -266,9 +266,15 @@
               "kind": "corpus",
               "piece": "G166",
               "why": "3 new count benchmarks on pencils of quadrics (decision 32.44): a sphere and a cylinder in general position and touching inside, and the walk of their curve; no existing digest moved"
+            },
+            {
+              "sha256": "d65403e6452cd1407aca5518178c5661f4546d82c15e8f6551823f9ab3a46af5",
+              "kind": "bug",
+              "piece": "G164",
+              "why": "intersect/surface_torus's result digest moved from 76a47ad1... to 764d5d58..., inputs unchanged (3c7d9153...): a line along a torus's equator crosses it four times, and the three crossings on a seam of the closed torus were BoundaryTouch; a join is no boundary (12.6), so they are Crossing now, at the same 256 points of the 64 inputs; merged from signed/G164, no other digest moved"
             }
           ],
-          "sha256": "d65403e6452cd1407aca5518178c5661f4546d82c15e8f6551823f9ab3a46af5"
+          "sha256": "9cb9ce7bec0d87ad3ec409f226aac4c8163fe426a1000d1c9f2abb462f522989"
         },
         {
           "id": "geom-nurbs/operations",
