@@ -165,6 +165,10 @@ fn coordinate(rng: &mut SplitMix64, n: u64) -> i64 {
 
 /// The box from `low` to `high`.
 #[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a, b and c are the low corner's coordinates and x, y and z the high one's"
+)]
 pub fn cuboid(low: [i64; 3], high: [i64; 3]) -> Solid {
     let [a, b, c] = low;
     let [x, y, z] = high;
@@ -223,6 +227,10 @@ pub fn prism(base: &[[i64; 2]], low: i64, high: i64) -> Solid {
 }
 
 /// `b - a`.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "two points and their coordinates, as in the formula"
+)]
 fn minus(a: [i64; 3], b: [i64; 3]) -> [i64; 3] {
     let [x, y, z] = a;
     let [u, v, w] = b;
@@ -234,6 +242,10 @@ fn minus(a: [i64; 3], b: [i64; 3]) -> [i64; 3] {
 }
 
 /// The determinant of three small rows.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "three rows and their entries, as in the rule of Sarrus"
+)]
 fn determinant(p: [i64; 3], q: [i64; 3], r: [i64; 3]) -> i64 {
     let [a, b, c] = p;
     let [d, e, f] = q;
@@ -434,6 +446,10 @@ pub fn run(job: &Job) -> Result<ExactMesh, String> {
     clippy::arithmetic_side_effects,
     reason = "exact rationals, which cannot overflow"
 )]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "three planes' rows a, b and c and offsets p, q and r, as in Cramer's rule"
+)]
 fn meet(planes: [&Plane; 3]) -> Result<[RBig; 3], String> {
     let rows = planes.map(|p| {
         let [x, y, z] = p.n();
@@ -591,18 +607,41 @@ fn sizes(mesh: &ExactMesh) -> Result<(f64, f64), String> {
 /// One triangle.
 type Triangle = [[f64; 3]; 3];
 
+/// The larger of two doubles neither of which is NaN: `f64::max` is banned, as its sign of zero is
+/// not fixed.
+fn larger(a: f64, b: f64) -> f64 {
+    if a < b { b } else { a }
+}
+
+/// The smaller of two doubles neither of which is NaN.
+fn smaller(a: f64, b: f64) -> f64 {
+    if b < a { b } else { a }
+}
+
+#[allow(
+    clippy::many_single_char_names,
+    reason = "two points and their coordinates, as in the formula"
+)]
 fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     let [x, y, z] = a;
     let [u, v, w] = b;
     [x - u, y - v, z - w]
 }
 
+#[allow(
+    clippy::many_single_char_names,
+    reason = "two vectors and their coordinates, as in the formula"
+)]
 fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     let [x, y, z] = a;
     let [u, v, w] = b;
     x * u + y * v + z * w
 }
 
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a point, a direction and their coordinates, as in the formula"
+)]
 fn along(a: [f64; 3], b: [f64; 3], t: f64) -> [f64; 3] {
     let [x, y, z] = a;
     let [u, v, w] = b;
@@ -661,8 +700,8 @@ fn one_way(from: &[Triangle], to: &[Triangle]) -> f64 {
                 let near = to
                     .iter()
                     .map(|t| distance(p, t))
-                    .fold(f64::INFINITY, f64::min);
-                far = far.max(near);
+                    .fold(f64::INFINITY, smaller);
+                far = larger(far, near);
             }
         }
     }
@@ -676,7 +715,7 @@ pub fn hausdorff(a: &[Triangle], b: &[Triangle]) -> f64 {
     if a.is_empty() && b.is_empty() {
         return 0.0;
     }
-    one_way(a, b).max(one_way(b, a))
+    larger(one_way(a, b), one_way(b, a))
 }
 
 /// What the kernel made of a job, as a comparison reads it: each corner the double nearest its
@@ -802,7 +841,7 @@ fn floating(oracle: &str, job: &Job, ours: &Made, answer: &Answer) -> Result<Com
     let theirs = double(answer.volume.as_ref(), "volume", job.id)?;
     let area = double(answer.area.as_ref(), "area", job.id)?;
     // Manifold states -1 for an empty mesh: nothing to be off by.
-    let stated = double(answer.tolerance.as_ref(), "tolerance", job.id)?.max(0.0);
+    let stated = larger(double(answer.tolerance.as_ref(), "tolerance", job.id)?, 0.0);
     let shape = answered(answer)?;
     let (our_area, edges) = (ours.area, ours.edges);
     let fit = f64::from(u32::try_from(FIT.0).unwrap_or(u32::MAX));
@@ -814,7 +853,7 @@ fn floating(oracle: &str, job: &Job, ours: &Made, answer: &Answer) -> Result<Com
         fit: fit * unit,
     };
     let our_volume = ours.volume.to_f64().value();
-    let by_volume = allowance(our_area.max(area), 0.0, our_volume.abs() * f64::EPSILON);
+    let by_volume = allowance(larger(our_area, area), 0.0, our_volume.abs() * f64::EPSILON);
     let by_area = allowance(edges, 0.0, our_area * f64::EPSILON * 16.0);
     let moved = if ours.rounded { 1.0 } else { 0.0 };
     let by_gap = allowance(1.0, moved, SAMPLED);

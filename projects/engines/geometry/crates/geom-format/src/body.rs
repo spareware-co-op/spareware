@@ -802,7 +802,7 @@ fn write(
         }
     }
 
-    if a.planes.len() > 0 {
+    if !a.planes.is_empty() {
         let planes = chunks_of(&a.planes);
         table_chunks(
             table::PLANES,

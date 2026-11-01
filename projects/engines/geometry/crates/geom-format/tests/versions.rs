@@ -20,7 +20,7 @@ use geom_format::record::Record;
 use geom_math::Box3;
 use geom_num::grid::P3;
 use geom_topo::order::{NameKey, Names};
-use geom_topo::{Arenas, Body, BodyKind, Builder, Ix, RegionKind, Sense, Shell};
+use geom_topo::{Arenas, Body, BodyKind, Builder, Ix, PointKind, RegionKind, Sense, Shell};
 use proptest::prelude::*;
 
 use topo::{ix, line, many_faces, meter, plane, wall, wall_builder, wall_outside, wall_rows};
@@ -210,7 +210,9 @@ const EDITS: [ColumnEdit; 30] = [
         a.vertices.point.set(ix(0), other(now)).unwrap();
     }),
     (table::POINTS, "point", |a| {
-        a.points.set(ix(0), P3::new(5, 6, 7).unwrap()).unwrap();
+        a.points
+            .set(ix(0), PointKind::Grid(P3::new(5, 6, 7).unwrap()))
+            .unwrap();
     }),
     (table::SURFACES, "surface", |a| {
         a.surfaces.set(ix(0), plane([3.0, 4.0, 5.0], 0, 1)).unwrap();
@@ -429,7 +431,10 @@ fn a_bodys_geometry_id_does_not_see_its_names() {
 fn a_bodys_geometry_id_sees_its_geometry() {
     let body = named_wall(1);
     let mut arenas = body.arenas().clone();
-    arenas.points.set(ix(0), P3::new(5, 6, 7).unwrap()).unwrap();
+    arenas
+        .points
+        .set(ix(0), PointKind::Grid(P3::new(5, 6, 7).unwrap()))
+        .unwrap();
     let names = body.names().unwrap().clone();
     let moved = Builder { arenas }
         .publish_named(&names, body.kind(), body.outside(), &mut meter())

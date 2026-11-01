@@ -7,9 +7,10 @@
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::indexing_slicing,
+    clippy::many_single_char_names,
     clippy::unwrap_used,
     clippy::panic,
-    reason = "tests: native arithmetic and indexing, and a failure stops the test"
+    reason = "tests: native arithmetic and indexing, axes named x, y and z, and a failure stops the test"
 )]
 
 #[path = "../../geom-topo/tests/common/mod.rs"]
@@ -520,7 +521,7 @@ fn chunk(code: u64, rows: u64, write: impl Fn(&mut Encoder)) -> Record {
 }
 
 /// `meeting(-5)`'s tables with table `code` in place of its own.
-fn with_chunk(code: u64, rows: u64, record: Record) -> StoredBody {
+fn with_chunk(code: u64, rows: u64, record: &Record) -> StoredBody {
     let stored = store(&meeting(-5));
     let mut tables = tables_of(&stored, &many_with_meetings());
     for t in &mut tables {
@@ -554,7 +555,7 @@ fn a_vertex_on_three_planes_reads_back_as_three_planes() {
 #[test]
 fn a_body_of_grid_points_lists_no_planes() {
     let stored = store(&many_faces(3));
-    assert!(table_of(&stored, table::PLANES).is_empty());
+    assert_eq!(table_of(&stored, table::PLANES), []);
     assert_eq!(forge(1, 2, &tables_of(&stored, &many(3)), 0, false), stored);
 }
 
@@ -579,7 +580,7 @@ fn a_meeting_of_planes_takes_three_planes_that_exist() {
         with_chunk(
             8,
             2,
-            chunk(8, 2, |e| {
+            &chunk(8, 2, |e| {
                 e.i64_column(&[[MEET + 1, MEET + 2, MEET + 3], row].concat())
                     .unwrap();
             }),
@@ -623,7 +624,7 @@ fn planes_are_sixty_four_bytes_within_their_budget() {
         with_chunk(
             table::PLANES,
             rows,
-            chunk(table::PLANES, rows, |e| {
+            &chunk(table::PLANES, rows, |e| {
                 e.bytes(&bytes).unwrap();
             }),
         )

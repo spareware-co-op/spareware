@@ -3,10 +3,11 @@
 //! rule the nightly run holds an out-of-process oracle to.
 
 #![allow(
+    clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::unwrap_used,
     clippy::panic,
-    reason = "tests: small coordinates, and a failure stops the test"
+    reason = "tests: small coordinates and vertex numbers, and a failure stops the test"
 )]
 
 use geom_test::oracle::exact::float;

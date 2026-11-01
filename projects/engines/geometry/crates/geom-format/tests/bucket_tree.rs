@@ -40,8 +40,8 @@ use geom_num::grid::P3;
 use geom_op::hash::sha256;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Body, BodyKind, Builder, Column, Edge, Face, Fin, Loop, Region, RegionKind, Sense, Shell,
-    Vertex,
+    Body, BodyKind, Builder, Column, Edge, Face, Fin, Loop, PointKind, Region, RegionKind, Sense,
+    Shell, Vertex,
 };
 
 use topo::{ix, line, meter, plane};
@@ -170,7 +170,9 @@ fn strip(n: u32, last: Option<NameKey>) -> Body {
     }
     for v in 0..2 * (n + 1) {
         a.points
-            .push(P3::new(i64::from(v / 2), i64::from(v % 2), 0).unwrap())
+            .push(PointKind::Grid(
+                P3::new(i64::from(v / 2), i64::from(v % 2), 0).unwrap(),
+            ))
             .unwrap();
         a.vertices.push(Vertex { point: ix(v) }).unwrap();
     }
