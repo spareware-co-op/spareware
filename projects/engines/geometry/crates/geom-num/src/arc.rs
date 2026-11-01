@@ -11,9 +11,10 @@
 //!
 //! - Every result is exact, or an error. A [`Sign`] is decided by integer arithmetic alone, after a
 //!   generated `f64` filter whose answers are the exact sign or no answer (chapter 6.2).
-//! - Nothing overflows silently. A [`Round`], an [`Arc2`] and a [`Circle2`] can only be made within
-//!   the budget of [`crate::carrier`], and every width below is what the generated certificate
-//!   derives for every input in that budget, tested at the extreme values.
+//! - Nothing overflows silently. A [`Round`], an [`Arc2`], a [`Circle2`] and a [`Disc`] can only be
+//!   made within the budget of [`crate::carrier`], and every width below is what the generated
+//!   certificate derives for every input in that budget, tested at the extreme values; a [`Disc`]'s
+//!   are written out, as its squared radius is wider than the generator's inputs.
 //!
 //!   | Question | As a polynomial | Width with its sign |
 //!   | --- | --- | --- |
@@ -23,6 +24,9 @@
 //!   | Rational point against a [`Circle2`] | (Z − vC)² − r²v² | 253 bits |
 //!   | Carrier against a [`Circle2`] | h² − r²(a² + b²), h = a · C − c | 168 bits |
 //!   | Two [`Circle2`]s | d² − t², t the sum or difference of their radii | 85 bits |
+//!   | Rational point against a [`Disc`] | ‖wZ − vC‖² − rr · v² | 420 bits |
+//!   | Carrier against a [`Disc`] | h² − rr(a² + b²), h = a · C − c · w | 337 bits |
+//!   | [`FineLine`] against a [`Disc`] | the same | 405 bits |
 //!
 //!   Chapter 15.10 writes 170, 337 and 253 bits for the first, second and fourth, and adds the side
 //!   of an arc's chord for its centre, 169 bits, which [`crate::carrier::Carrier::side`] answers.
@@ -43,11 +47,16 @@
 //! Cost: constant time and no allocation: a generated filter, then at worst an exact path of a few
 //! dozen fixed-width operations.
 
-use crate::carrier::{Carrier, Rational2, fits, product_sum};
+use crate::carrier::{Carrier, FineLine, Rational2, fits, product_sum};
 use crate::error::NumError;
 use crate::generated;
 use crate::grid::P2;
 use crate::sign::Sign;
+use crate::wide::{I256, I512};
+
+/// A [`Disc`]'s rr is below 2 to this: a radius below 2^43, the frame's diagonal, over a weight
+/// below 2^83, squared.
+pub const SQUARED_BITS: u32 = 252;
 
 /// A radius is below 2 to this in magnitude, the difference of two grid coordinates.
 pub const RADIUS_BITS: u32 = crate::carrier::NORMAL_BITS;
@@ -171,6 +180,167 @@ impl Round {
             .or_else(|| generated::round_line::exact(a, b, c, p, cx, cy, w))
             .map(Contact::of)
             .ok_or(NumError::BudgetExceeded)
+    }
+}
+
+/// A circle about a rational centre (X / W, Y / W) with an exact squared radius, rr / W²: chapter
+/// 14.3's constructed circle, whose radius no grid point need lie at. A [`Round`] and a [`Circle2`]
+/// are each one of these, and the budget is theirs, so the widths of [`crate::one_root`] hold for it.
+#[derive(Clone, Copy, Debug)]
+pub struct Disc {
+    centre: Rational2,
+    rr: I256,
+}
+
+/// Each integer step of a [`Disc`]'s questions: a checked product.
+fn times(a: &I512, b: &I512) -> Result<I512, NumError> {
+    a.checked_mul(b).ok_or(NumError::BudgetExceeded)
+}
+
+/// A checked difference.
+fn less(a: &I512, b: &I512) -> Result<I512, NumError> {
+    a.checked_sub(b).ok_or(NumError::BudgetExceeded)
+}
+
+impl Disc {
+    /// The circle about `centre` with rr / W² its squared radius, W the centre's weight.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] unless rr is positive; [`NumError::BudgetExceeded`] for one of
+    /// 2^[`SQUARED_BITS`] or more.
+    pub fn new(centre: Rational2, rr: I256) -> Result<Disc, NumError> {
+        if rr.signum() != Sign::Positive {
+            return Err(NumError::Degenerate);
+        }
+        let [.., top] = rr.to_le_limbs();
+        if top.checked_shr(SQUARED_BITS - 192) != Some(0) {
+            return Err(NumError::BudgetExceeded);
+        }
+        Ok(Disc { centre, rr })
+    }
+
+    /// `round`, in this form: rr is ‖on · W − C‖².
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] for a [`Round`] with its grid point at its centre.
+    pub fn of_round(round: &Round) -> Result<Disc, NumError> {
+        let ([cx, cy], w) = round.centre.coordinates();
+        let on = round.on;
+        let wide = I256::from_i128;
+        let part = |at: i64, c: i128| -> Result<I256, NumError> {
+            wide(i128::from(at))
+                .checked_mul(&wide(w))
+                .and_then(|p| p.checked_sub(&wide(c)))
+                .ok_or(NumError::BudgetExceeded)
+        };
+        let (dx, dy) = (part(on.x.get(), cx)?, part(on.y.get(), cy)?);
+        let rr = dx
+            .checked_mul(&dx)
+            .zip(dy.checked_mul(&dy))
+            .and_then(|(p, q)| p.checked_add(&q))
+            .ok_or(NumError::BudgetExceeded)?;
+        Disc::new(round.centre, rr)
+    }
+
+    /// `circle`, in this form, of weight 1: rr is the radius squared.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if a step did not fit, which no circle in the budget can reach.
+    pub fn of_circle(circle: &Circle2) -> Result<Disc, NumError> {
+        let r = I256::from_i128(circle.radius);
+        let rr = r.checked_mul(&r).ok_or(NumError::BudgetExceeded)?;
+        Disc::new(circle.centre.into(), rr)
+    }
+
+    /// Its centre.
+    #[must_use]
+    pub const fn centre(&self) -> Rational2 {
+        self.centre
+    }
+
+    /// rr: its squared radius times the centre's weight squared.
+    #[must_use]
+    pub const fn squared_radius(&self) -> I256 {
+        self.rr
+    }
+
+    /// rr, at the width of these questions.
+    fn level(&self) -> Result<I512, NumError> {
+        self.rr.resize().ok_or(NumError::BudgetExceeded)
+    }
+
+    /// Where the rational point `z` lies, as [`Round::side`] says: the sign of
+    /// ‖wZ − vC‖² − rr · v², v being the point's weight and w the centre's, both positive.
+    ///
+    /// Bit budget: each part of wZ − vC is below 2^208, the sum of their squares below 2^417,
+    /// rr · v² below 2^418, and the value 420 bits with its sign.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Round::side_of_grid`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "x, y and v are the point's, w the centre's weight, as in the formula"
+    )]
+    pub fn side(&self, z: &Rational2) -> Result<Sign, NumError> {
+        let ([x, y], v) = z.coordinates();
+        let ([cx, cy], w) = self.centre.coordinates();
+        let wide = I512::from_i128;
+        let part = |p: i128, c: i128| less(&times(&wide(p), &wide(w))?, &times(&wide(c), &wide(v))?);
+        let (dx, dy) = (part(x, cx)?, part(y, cy)?);
+        let far = times(&dx, &dx)?
+            .checked_add(&times(&dy, &dy)?)
+            .ok_or(NumError::BudgetExceeded)?;
+        let reach = times(&times(&self.level()?, &wide(v))?, &wide(v))?;
+        Ok(less(&far, &reach)?.signum())
+    }
+
+    /// How the line with these coefficients meets the circle, as [`Round::meets`] says: the sign of
+    /// h² − rr · N, h = a · X + b · Y − c · W and N = a² + b².
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b and c are the line's, x, y and w the centre's, h and n the formula's"
+    )]
+    fn meets_coefficients(&self, coefficients: ([i128; 2], i128)) -> Result<Contact, NumError> {
+        let ([a, b], c) = coefficients;
+        let ([x, y], w) = self.centre.coordinates();
+        let wide = I512::from_i128;
+        let sum = |p: I512, q: I512| p.checked_add(&q).ok_or(NumError::BudgetExceeded);
+        let h = less(
+            &sum(times(&wide(a), &wide(x))?, times(&wide(b), &wide(y))?)?,
+            &times(&wide(c), &wide(w))?,
+        )?;
+        let n = sum(times(&wide(a), &wide(a))?, times(&wide(b), &wide(b))?)?;
+        Ok(Contact::of(
+            less(&times(&h, &h)?, &times(&self.level()?, &n)?)?.signum(),
+        ))
+    }
+
+    /// How the carrier `l` meets the circle, as [`Round::meets`] says.
+    ///
+    /// Bit budget: |h| is below 2^167 and h² below 2^334, rr · N below 2^335, and the value 337 bits
+    /// with its sign.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Round::side_of_grid`].
+    pub fn meets(&self, l: &Carrier) -> Result<Contact, NumError> {
+        self.meets_coefficients(l.coefficients())
+    }
+
+    /// How the constructed line `l` meets the circle, as [`Disc::meets`] says.
+    ///
+    /// Bit budget: |h| is below 2^201 and h² below 2^402, rr · N below 2^403, and the value 405 bits
+    /// with its sign.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Round::side_of_grid`].
+    pub fn meets_fine(&self, l: &FineLine) -> Result<Contact, NumError> {
+        self.meets_coefficients(l.coefficients())
     }
 }
 

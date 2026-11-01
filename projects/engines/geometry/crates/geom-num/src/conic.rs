@@ -36,8 +36,8 @@
 //! Cost: constant time and no allocation; [`Ellipse2::meeting`] is a few dozen products and then
 //! [`crate::quartic`]'s costs.
 
-use crate::arc::{Circle2, Contact, RADIUS_BITS, Round};
-use crate::carrier::{Carrier, Rational2, fits};
+use crate::arc::{Circle2, Contact, Disc, RADIUS_BITS, Round};
+use crate::carrier::{Carrier, FineLine, Rational2, fits};
 use crate::error::NumError;
 use crate::generated;
 use crate::grid::P2;
@@ -49,8 +49,14 @@ pub const RATIO_BITS: u32 = 21;
 
 // The largest coefficient of an ellipse's quartic: against an ellipse, a form's coefficient, below
 // 2^125, by a product of two of the point's numerators, each below 2^63 and with three terms, in
-// three sums; against a round, below that, as its w is below 2^84 and its x and y below 2^126.
-const _: () = assert!(125 + 128 + 2 < COEFFICIENT_BITS);
+// three sums; against a round, below that, as its w is below 2^84 and its x and y below 2^126;
+// against a disc about a grid point beside its centre, w² below 2^166 by the same product, with its
+// x and y below 2^168 by a numerator and a q, and its constant below 2^252 by q² twice.
+const _: () = {
+    assert!(125 + 128 + 2 < COEFFICIENT_BITS);
+    assert!(166 + 128 + 2 < COEFFICIENT_BITS);
+    assert!(168 + 63 + 21 + 2 < COEFFICIENT_BITS && 252 + 42 + 2 < COEFFICIENT_BITS);
+};
 
 /// An ellipse: centre, major-axis vector and axis ratio p / q, 0 < p ≤ q, reduced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -379,6 +385,24 @@ impl Conic {
         })
     }
 
+    /// A constructed line's equation, about the origin, as [`Conic::of_carrier`].
+    ///
+    /// # Errors
+    ///
+    /// As for [`Ellipse2::side`].
+    pub fn of_fine(l: &FineLine) -> Result<Conic, NumError> {
+        let ([a, b], c) = l.coefficients();
+        Ok(Conic {
+            origin: P2::new(0, 0)?,
+            xx: big(0),
+            xy: big(0),
+            yy: big(0),
+            x: Big::from_i128(a),
+            y: Big::from_i128(b),
+            constant: sub(&big(0), &Big::from_i128(c))?,
+        })
+    }
+
     /// A circle's equation, about its centre.
     ///
     /// # Errors
@@ -418,6 +442,86 @@ impl Conic {
             x: turned(&dx)?,
             y: turned(&dy)?,
             constant: big(0),
+        })
+    }
+
+    /// The equation of a [`Disc`], about the grid point at or below its centre:
+    /// w²(x² + y²) − 2w d · (x, y) + ‖d‖² − rr = 0, with d the centre's numerators there, so that d
+    /// is below w in each part and every coefficient within the budget.
+    ///
+    /// # Errors
+    ///
+    /// As for [`P2::new`], for a centre off the grid's frame; otherwise as for [`Ellipse2::side`].
+    pub fn of_disc(disc: &Disc) -> Result<Conic, NumError> {
+        let ([cx, cy], w) = disc.centre().coordinates();
+        let whole = |c: i128| budget(i64::try_from(c.div_euclid(w)).ok());
+        let origin = P2::new(whole(cx)?, whole(cy)?)?;
+        let rr = budget(disc.squared_radius().resize())?;
+        let w = Big::from_i128(w);
+        let dx = sub(&Big::from_i128(cx), &mul(&w, &big(origin.x.get()))?)?;
+        let dy = sub(&Big::from_i128(cy), &mul(&w, &big(origin.y.get()))?)?;
+        let turned = |v: &Big| -> Result<Big, NumError> {
+            let across = mul(&w, v)?;
+            sub(&big(0), &add(&across, &across)?)
+        };
+        let far = add(&mul(&dx, &dx)?, &mul(&dy, &dy)?)?;
+        Ok(Conic {
+            origin,
+            xx: mul(&w, &w)?,
+            xy: big(0),
+            yy: mul(&w, &w)?,
+            x: turned(&dx)?,
+            y: turned(&dy)?,
+            constant: sub(&far, &rr)?,
+        })
+    }
+
+    /// The grid point its equation is about.
+    #[must_use]
+    pub const fn origin(&self) -> P2 {
+        self.origin
+    }
+
+    /// Its coefficients: xx, xy, yy, x, y and constant.
+    #[must_use]
+    pub const fn coefficients(&self) -> [Big; 6] {
+        [self.xx, self.xy, self.yy, self.x, self.y, self.constant]
+    }
+
+    /// The same curve's equation, about `at`: the same second-degree terms, and exact whole-number
+    /// arithmetic in the rest, so that near `at` a value is not lost to the size of the coordinates.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Ellipse2::side`].
+    pub fn about(&self, at: P2) -> Result<Conic, NumError> {
+        let dx = sub(&big(at.x.get()), &big(self.origin.x.get()))?;
+        let dy = sub(&big(at.y.get()), &big(self.origin.y.get()))?;
+        let twice = |v: &Big| add(v, v);
+        let x = add(
+            &add(&mul(&twice(&self.xx)?, &dx)?, &mul(&self.xy, &dy)?)?,
+            &self.x,
+        )?;
+        let y = add(
+            &add(&mul(&self.xy, &dx)?, &mul(&twice(&self.yy)?, &dy)?)?,
+            &self.y,
+        )?;
+        let square = add(
+            &add(
+                &mul(&self.xx, &mul(&dx, &dx)?)?,
+                &mul(&self.xy, &mul(&dx, &dy)?)?,
+            )?,
+            &mul(&self.yy, &mul(&dy, &dy)?)?,
+        )?;
+        let line = add(&mul(&self.x, &dx)?, &mul(&self.y, &dy)?)?;
+        Ok(Conic {
+            origin: at,
+            xx: self.xx,
+            xy: self.xy,
+            yy: self.yy,
+            x,
+            y,
+            constant: add(&add(&square, &line)?, &self.constant)?,
         })
     }
 }

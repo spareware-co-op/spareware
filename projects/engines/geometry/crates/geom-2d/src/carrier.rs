@@ -2,16 +2,17 @@
 //!
 //! What it does: a carrier is the whole curve under an entity, the infinite line under a segment
 //! or the full circle under an arc (chapter 14.2). [`Curve2`] is the closed list of the kinds this
-//! layer decides on exactly: a [`Line2`], a [`Circle2`] and an [`Ellipse2`], each the form
-//! `geom-num` holds, so that this crate adds no number type of its own (principle 8). A point made
+//! layer decides on exactly: a [`Line2`], a [`FineLine`], a [`Circle2`] and an [`Ellipse2`], each the
+//! form `geom-num` holds, so that this crate adds no number type of its own (principle 8). A point made
 //! from carriers names them by their [`CurveIx`] in a [`Carriers`] table.
 //!
 //! Guarantees:
 //!
-//! - **Budgets are geom-num's.** A [`Line2`] is a [`Carrier`], within 15.10's budget. A circle is a
-//!   grid centre with a whole radius, or a rational centre through a grid point; an ellipse is
-//!   32.25's. So every predicate on them has the fixed width its module derives, and nothing here
-//!   widens one.
+//! - **Budgets are geom-num's.** A [`Line2`] is a [`Carrier`], within 15.10's budget, and a
+//!   [`FineLine`] is a line a construction made past it. A circle is a grid centre with a whole
+//!   radius, a rational centre through a grid point, or a rational centre with an exact squared
+//!   radius; an ellipse is 32.25's. So every predicate on them has the fixed width its module derives,
+//!   and nothing here widens one.
 //! - **Exact.** [`Curve2::side`] is the sign of a predicate of `geom-num`, zero exactly on the curve.
 //! - **Stable names.** A [`CurveIx`] is a place in the table, which only grows, and never a memory
 //!   address.
@@ -26,8 +27,8 @@
 
 use alloc::vec::Vec;
 
-use geom_num::arc::{Circle2 as GridCircle, Round};
-use geom_num::carrier::{Carrier, Rational2};
+use geom_num::arc::{Circle2 as GridCircle, Disc, Round};
+use geom_num::carrier::{Carrier, FineLine, Rational2};
 use geom_num::conic::{Conic, Ellipse2};
 use geom_num::{NumError, Sign};
 
@@ -41,6 +42,8 @@ pub enum Circle2 {
     Grid(GridCircle),
     /// A constructed one: a rational centre, through a grid point.
     Round(Round),
+    /// A constructed one through no grid point: a rational centre, an exact squared radius.
+    Disc(Disc),
 }
 
 impl Circle2 {
@@ -55,6 +58,20 @@ impl Circle2 {
         match self {
             Circle2::Grid(c) => c.side(z),
             Circle2::Round(c) => c.side(z),
+            Circle2::Disc(c) => c.side(z),
+        }
+    }
+
+    /// The same circle as a [`Disc`], the form every circle has.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Circle2::side`].
+    pub fn disc(&self) -> Result<Disc, NumError> {
+        match self {
+            Circle2::Grid(c) => Disc::of_circle(c),
+            Circle2::Round(c) => Disc::of_round(c),
+            Circle2::Disc(c) => Ok(*c),
         }
     }
 
@@ -67,6 +84,7 @@ impl Circle2 {
         match self {
             Circle2::Grid(c) => Conic::of_circle(c),
             Circle2::Round(c) => Conic::of_round(c),
+            Circle2::Disc(c) => Conic::of_disc(c),
         }
     }
 }
@@ -76,6 +94,8 @@ impl Circle2 {
 pub enum Curve2 {
     /// A line.
     Line(Line2),
+    /// A line a construction made, past a [`Line2`]'s budget.
+    Fine(FineLine),
     /// A circle.
     Circle(Circle2),
     /// An ellipse.
@@ -93,6 +113,7 @@ impl Curve2 {
     pub fn side(&self, z: &Rational2) -> Result<Sign, NumError> {
         match self {
             Curve2::Line(l) => l.side(z),
+            Curve2::Fine(l) => l.side(z),
             Curve2::Circle(c) => c.side(z),
             Curve2::Ellipse(e) => e.side(z),
         }
@@ -106,6 +127,7 @@ impl Curve2 {
     pub fn conic(&self) -> Result<Conic, NumError> {
         match self {
             Curve2::Line(l) => Conic::of_carrier(l),
+            Curve2::Fine(l) => Conic::of_fine(l),
             Curve2::Circle(c) => c.conic(),
             Curve2::Ellipse(e) => Conic::of_ellipse(e),
         }

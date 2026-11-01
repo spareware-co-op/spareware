@@ -30,6 +30,9 @@
 //!   | Order along a carrier | (q − p) · (b, −a) · `W_p` · `W_q` | 251 bits |
 //!   | Comparing one coordinate | X · `W_q` − `X_q` · W | 209 bits |
 //!   | Which way three points turn | their rows' determinant | 335 bits |
+//!   | A [`FineLine`]'s a and b | 2^75 | |
+//!   | A [`FineLine`]'s c | 2^116 | |
+//!   | Side of a [`FineLine`] | a · X + b · Y − c · W | 202 bits |
 //!
 //! - A weight is positive. [`Rational2::new`] turns the three integers' signs so that W > 0, so no
 //!   predicate here multiplies by the sign of a weight.
@@ -52,6 +55,7 @@ use crate::error::NumError;
 use crate::generated;
 use crate::grid::{Coord, P2};
 use crate::sign::Sign;
+use crate::wide::I256;
 
 /// A carrier's a and b are below 2 to this in magnitude: the difference of two grid coordinates.
 pub const NORMAL_BITS: u32 = 41;
@@ -61,6 +65,11 @@ pub const OFFSET_BITS: u32 = 82;
 pub const POINT_BITS: u32 = 124;
 /// A rational point's W is below 2 to this in magnitude: 2 · 2^41 · 2^41.
 pub const WEIGHT_BITS: u32 = 83;
+/// A [`FineLine`]'s a and b are below 2 to this in magnitude: fine enough to place the line within
+/// 2^−71 of a step of where it should be, with room for the sum of two parts.
+pub const FINE_NORMAL_BITS: u32 = 75;
+/// A [`FineLine`]'s c is below 2 to this in magnitude: a and b at a point of the grid.
+pub const FINE_OFFSET_BITS: u32 = 116;
 
 // The budget's arithmetic, in the order the table above gives it: the two sums of a meeting, then
 // the largest term of each predicate, with what its sums add and its sign bit.
@@ -71,6 +80,9 @@ const _: () = {
     assert!(POINT_BITS + WEIGHT_BITS + 1 + NORMAL_BITS + 1 + 1 == 251);
     assert!(POINT_BITS + WEIGHT_BITS + 1 + 1 == 209);
     assert!(2 * POINT_BITS + WEIGHT_BITS + 3 + 1 == 335);
+    assert!(FINE_NORMAL_BITS + crate::grid::COORD_BITS + 1 == FINE_OFFSET_BITS);
+    assert!(FINE_NORMAL_BITS + POINT_BITS == 199 && FINE_OFFSET_BITS + WEIGHT_BITS == 199);
+    assert!(199 + 2 + 1 == 202 && 202 < 256);
 };
 
 /// The largest magnitude below 2 to `bits`.
@@ -227,6 +239,70 @@ impl Carrier {
         Ok(p.parallel(q)?
             && product_difference(p.c, q.b, q.c, p.b)? == 0
             && product_difference(p.a, q.c, q.a, p.c)? == 0)
+    }
+}
+
+/// A line made by a construction: a · x + b · y = c, in integers past a [`Carrier`]'s budget, as
+/// chapter 14.2 says constructed lines are. A tangent to a small circle a long way off must be placed
+/// within about 2^−70 of a step, and a whole line of a [`Carrier`]'s budget moves by 2^−41 at the
+/// finest, so no [`Carrier`] can be one. It runs as a carrier runs, and is not one: every predicate
+/// on a [`Carrier`] is generated for that budget, so what is asked of this line is asked here and in
+/// [`crate::one_root`], in wider integers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FineLine {
+    a: i128,
+    b: i128,
+    c: i128,
+}
+
+impl FineLine {
+    /// The line a · x + b · y = c.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] for a coefficient over its budget, and [`NumError::Degenerate`]
+    /// when a and b are both zero, which is no line.
+    pub const fn new(a: i128, b: i128, c: i128) -> Result<FineLine, NumError> {
+        if !fits(a, FINE_NORMAL_BITS) || !fits(b, FINE_NORMAL_BITS) || !fits(c, FINE_OFFSET_BITS) {
+            return Err(NumError::BudgetExceeded);
+        }
+        if a == 0 && b == 0 {
+            return Err(NumError::Degenerate);
+        }
+        Ok(FineLine { a, b, c })
+    }
+
+    /// The coefficients: `[a, b]` and c.
+    #[must_use]
+    pub const fn coefficients(&self) -> ([i128; 2], i128) {
+        ([self.a, self.b], self.c)
+    }
+
+    /// Which side of the line `p` lies on, as [`Carrier::side`] says.
+    ///
+    /// Bit budget: |a · X| and |b · Y| are below 2^199 and so is |c · W|, so the value is below
+    /// 3 · 2^199, 202 bits with its sign.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Carrier::side`].
+    pub fn side(&self, p: &Rational2) -> Result<Sign, NumError> {
+        let wide = I256::from_i128;
+        let product = |m: i128, n: i128| wide(m).checked_mul(&wide(n));
+        product(self.a, p.x)
+            .zip(product(self.b, p.y))
+            .and_then(|(ax, by)| ax.checked_add(&by))
+            .zip(product(self.c, p.w))
+            .and_then(|(sum, cw)| sum.checked_sub(&cw))
+            .map(|value| value.signum())
+            .ok_or(NumError::BudgetExceeded)
+    }
+}
+
+impl From<Carrier> for FineLine {
+    fn from(l: Carrier) -> FineLine {
+        let Carrier { a, b, c } = l;
+        FineLine { a, b, c }
     }
 }
 

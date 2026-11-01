@@ -32,6 +32,9 @@
 //!   | Two crossings' coordinates | 1,506 | 1,850 | 4,857 | A² − B²k₁, A, B from the first squaring |
 //!   | The turn of a grid point and two | 1,688 | 2,024 | 5,041 | the same, with the fourth term |
 //!
+//!   A [`Disc`] is within the rational column of the two circles, and a [`FineLine`] and a
+//!   [`Disc`] meet within them too: a below 2^277, b below 2^75, k below 2^404, w below 2^234.
+//!
 //!   The last sets [`BIG_LIMBS`]. Rendering these by the description language of `geom-gen` would
 //!   take inputs wider than its `i128`, and a filter of `f64`s past 2^1023, which is why this one
 //!   module's exact paths are written out, each step named by its derivation, as `plane.rs`'s are.
@@ -47,11 +50,12 @@
 //! a crossing, two subtractions for a filtered comparison, and at worst about thirty products of 80
 //! limbs on the exact path.
 
-use crate::arc::{Arc2, Circle2, Round};
-use crate::carrier::{Carrier, Rational2};
+use crate::arc::{Arc2, Circle2, Disc, Round};
+use crate::carrier::{Carrier, FineLine, Rational2};
 use crate::conic::Ellipse2;
 use crate::error::NumError;
 use crate::interval::Interval;
+use crate::real::Real;
 use crate::sign::Sign;
 use crate::wide::Wide;
 
@@ -209,7 +213,11 @@ fn level_of(ellipse: &Ellipse2) -> Result<Big, NumError> {
 }
 
 /// An interval holding `v`: its limbs, the highest first, each step rounded outward.
-fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError> {
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] if `v` is too large for a double, which nothing here reaches.
+pub fn enclose<const L: usize>(v: &Wide<L>) -> Result<Interval, NumError> {
     let negative = v.is_negative();
     let magnitude = if negative {
         v.checked_neg().ok_or(NumError::BudgetExceeded)?
@@ -269,6 +277,69 @@ fn round_parts(c: &Round) -> Result<[Big; 4], NumError> {
     Ok([x, y, w, add(&mul(&dx, &dx)?, &mul(&dy, &dy)?)?])
 }
 
+/// As [`circle_parts`], of a [`Disc`].
+fn disc_parts(c: &Disc) -> Result<[Big; 4], NumError> {
+    let ([x, y], w) = c.centre().coordinates();
+    Ok([
+        Big::from_i128(x),
+        Big::from_i128(y),
+        Big::from_i128(w),
+        big(&c.squared_radius())?,
+    ])
+}
+
+/// What a line and a circle about (cx, cy) / cw of squared radius rr / cw² have in common: N =
+/// a² + b², h = c · cw − a · cx − b · cy and k = rr · N − h², the discriminant of where they meet.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a, b, c, h, k and n are the formula's"
+)]
+fn line_and_circle(
+    line: &([i128; 2], i128),
+    centre: &[Big; 2],
+    cw: &Big,
+    rr: &Big,
+) -> Result<[Big; 3], NumError> {
+    let ([a, b], c) = *line;
+    let (a, b, c) = (Big::from_i128(a), Big::from_i128(b), Big::from_i128(c));
+    let [cx, cy] = centre;
+    let n = add(&mul(&a, &a)?, &mul(&b, &b)?)?;
+    let h = sub(&sub(&mul(&c, cw)?, &mul(&a, cx)?)?, &mul(&b, cy)?)?;
+    let k = sub(&mul(rr, &n)?, &mul(&h, &h)?)?;
+    Ok([n, h, k])
+}
+
+/// What two circles have in common: A, the second centre less the first over w₁ · w₂, D = ‖A‖²,
+/// h = D + ρ₁ · w₂² − ρ₂ · w₁² and k = 4D · ρ₁ · w₂² − h², the discriminant of where they meet.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "d, h and k are the formula's, a its A"
+)]
+fn two_circles(first: &[Big; 4], second: &[Big; 4]) -> Result<[Big; 5], NumError> {
+    let [x1, y1, w1, rho1] = first;
+    let [x2, y2, w2, rho2] = second;
+    let ax = sub(&mul(x2, w1)?, &mul(x1, w2)?)?;
+    let ay = sub(&mul(y2, w1)?, &mul(y1, w2)?)?;
+    let d = add(&mul(&ax, &ax)?, &mul(&ay, &ay)?)?;
+    let near = mul(rho1, &mul(w2, w2)?)?;
+    let h = sub(&add(&d, &near)?, &mul(rho2, &mul(w1, w1)?)?)?;
+    let twice = add(&d, &d)?;
+    let k = sub(&mul(&add(&twice, &twice)?, &near)?, &mul(&h, &h)?)?;
+    Ok([ax, ay, d, h, k])
+}
+
+/// The largest angle whose sine squared lies in `sine_squared`: asin x ≤ x(1 + x²) when x is at most
+/// 2^−10, and asin x ≤ 1.6 x always.
+fn angle_of(sine_squared: Interval) -> Result<Real, NumError> {
+    let sine = Interval::point(sine_squared.hi())?.sqrt()?;
+    let factor = if sine.hi() <= 1.0 / 1_024.0 {
+        Interval::point(1.0 + 1.0 / 1_048_576.0)?
+    } else {
+        Interval::point(1.6)?
+    };
+    Real::new(sine.mul(factor)?.hi())
+}
+
 /// One coordinate of a [`Crossing2`], as the exact paths take it.
 struct Part {
     a: Big,
@@ -302,21 +373,19 @@ impl Crossing2 {
     /// (C · N + n · h ± d√k) / (cw · N), d = (b, −a) the way the carrier runs.
     #[allow(
         clippy::many_single_char_names,
-        reason = "a, b, c, h, k and n are the formula's, l the carrier"
+        reason = "a, b, c, h, k and n are the formula's, l the line"
     )]
     fn on_circle(
-        l: &Carrier,
+        l: &([i128; 2], i128),
         centre: &[Big; 2],
         cw: &Big,
         rr: &Big,
         root: Root,
     ) -> Result<Crossing2, NumError> {
-        let ([a, b], c) = l.coefficients();
-        let (a, b, c) = (Big::from_i128(a), Big::from_i128(b), Big::from_i128(c));
+        let ([a, b], _) = *l;
+        let (a, b) = (Big::from_i128(a), Big::from_i128(b));
         let [cx, cy] = centre;
-        let n = add(&mul(&a, &a)?, &mul(&b, &b)?)?;
-        let h = sub(&sub(&mul(&c, cw)?, &mul(&a, cx)?)?, &mul(&b, cy)?)?;
-        let k = sub(&mul(rr, &n)?, &mul(&h, &h)?)?;
+        let [n, h, k] = line_and_circle(l, centre, cw, rr)?;
         if k.is_negative() {
             return Err(NumError::Degenerate);
         }
@@ -324,7 +393,7 @@ impl Crossing2 {
             |v: Big| -> Result<Stored, NumError> { v.resize().ok_or(NumError::BudgetExceeded) };
         let ax = stored(add(&mul(cx, &n)?, &mul(&a, &h)?)?)?;
         let ay = stored(add(&mul(cy, &n)?, &mul(&b, &h)?)?)?;
-        let ([da, db], _) = l.coefficients();
+        let ([da, db], _) = *l;
         let (ahead, across) = (db, da);
         let turned = |v: i128| v.checked_neg().ok_or(NumError::BudgetExceeded);
         let bs = match root {
@@ -348,7 +417,7 @@ impl Crossing2 {
         let dx = sub(&mul(&Big::from_i64(on.x.get()), &cw)?, &cx)?;
         let dy = sub(&mul(&Big::from_i64(on.y.get()), &cw)?, &cy)?;
         let rr = add(&mul(&dx, &dx)?, &mul(&dy, &dy)?)?;
-        Crossing2::on_circle(l, &[cx, cy], &cw, &rr, root)
+        Crossing2::on_circle(&l.coefficients(), &[cx, cy], &cw, &rr, root)
     }
 
     /// Where the carrier `l` meets the circle `circle`, `root` choosing which.
@@ -360,28 +429,41 @@ impl Crossing2 {
         let c = circle.centre();
         let r = Big::from_i128(circle.radius());
         let centre = [Big::from_i64(c.x.get()), Big::from_i64(c.y.get())];
-        Crossing2::on_circle(l, &centre, &Big::from_i64(1), &mul(&r, &r)?, root)
+        let one = Big::from_i64(1);
+        Crossing2::on_circle(&l.coefficients(), &centre, &one, &mul(&r, &r)?, root)
+    }
+
+    /// Where the carrier `l` meets the circle `disc`, `root` choosing which.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::of_round`].
+    pub fn of_disc(l: &Carrier, disc: &Disc, root: Root) -> Result<Crossing2, NumError> {
+        let [cx, cy, cw, rr] = disc_parts(disc)?;
+        Crossing2::on_circle(&l.coefficients(), &[cx, cy], &cw, &rr, root)
+    }
+
+    /// Where the constructed line `l` meets the circle `disc`, `root` choosing which.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::of_round`].
+    pub fn of_fine(l: &FineLine, disc: &Disc, root: Root) -> Result<Crossing2, NumError> {
+        let [cx, cy, cw, rr] = disc_parts(disc)?;
+        Crossing2::on_circle(&l.coefficients(), &[cx, cy], &cw, &rr, root)
     }
 
     /// Where circles about (x₁, y₁) / w₁ and (x₂, y₂) / w₂, of squared radii ρ₁ / w₁² and ρ₂ / w₂²,
     /// meet. With A the second centre less the first over w₁ · w₂, D = ‖A‖², h = D + ρ₁ · w₂² −
     /// ρ₂ · w₁² and k = 4D · ρ₁ · w₂² − h², the crossing is C₁ + (h · A ± √k · A⊥) / (2D · w₁ · w₂).
     fn between(first: &[Big; 4], second: &[Big; 4], root: Root) -> Result<Crossing2, NumError> {
-        let [x1, y1, w1, rho1] = first;
-        let [x2, y2, w2, rho2] = second;
-        let ax = sub(&mul(x2, w1)?, &mul(x1, w2)?)?;
-        let ay = sub(&mul(y2, w1)?, &mul(y1, w2)?)?;
-        let d = add(&mul(&ax, &ax)?, &mul(&ay, &ay)?)?;
-        if d.is_zero() {
+        let [x1, y1, w1, _] = first;
+        let [_, _, w2, _] = second;
+        let [ax, ay, d, h, k] = two_circles(first, second)?;
+        if d.is_zero() || k.is_negative() {
             return Err(NumError::Degenerate);
         }
-        let near = mul(rho1, &mul(w2, w2)?)?;
-        let h = sub(&add(&d, &near)?, &mul(rho2, &mul(w1, w1)?)?)?;
         let twice = add(&d, &d)?;
-        let k = sub(&mul(&add(&twice, &twice)?, &near)?, &mul(&h, &h)?)?;
-        if k.is_negative() {
-            return Err(NumError::Degenerate);
-        }
         let stored =
             |v: Big| -> Result<Stored, NumError> { v.resize().ok_or(NumError::BudgetExceeded) };
         let lead_x = add(&mul(&mul(&twice, x1)?, w2)?, &mul(&h, &ax)?)?;
@@ -435,6 +517,49 @@ impl Crossing2 {
     /// As for [`Crossing2::of_circles`].
     pub fn of_rounds(first: &Round, second: &Round, root: Root) -> Result<Crossing2, NumError> {
         Crossing2::between(&round_parts(first)?, &round_parts(second)?, root)
+    }
+
+    /// Where the constructed lines `first` and `second` meet, a [`Carrier`] being one of those: a
+    /// rational point past [`Rational2`]'s budget, Cramer's rule without its division.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] when they are parallel; otherwise as for [`Crossing2::of_round`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b and c are the first line's, d, e and f the second's, w the weight"
+    )]
+    pub fn of_lines(first: &FineLine, second: &FineLine) -> Result<Crossing2, NumError> {
+        let ([a, b], c) = first.coefficients();
+        let ([d, e], f) = second.coefficients();
+        let wide = Stored::from_i128;
+        let across = |p: i128, q: i128, r: i128, s: i128| -> Result<Stored, NumError> {
+            wide(p)
+                .checked_mul(&wide(q))
+                .zip(wide(r).checked_mul(&wide(s)))
+                .and_then(|(m, n)| m.checked_sub(&n))
+                .ok_or(NumError::BudgetExceeded)
+        };
+        let w = across(a, e, d, b)?;
+        if w.is_zero() {
+            return Err(NumError::Degenerate);
+        }
+        let (x, y) = (across(c, e, f, b)?, across(a, f, d, c)?);
+        let zero = Stored::from_i64(0);
+        if w.is_negative() {
+            let turned = |v: &Stored| v.checked_neg().ok_or(NumError::BudgetExceeded);
+            return Crossing2::from_parts([turned(&x)?, turned(&y)?], [zero; 2], zero, turned(&w)?);
+        }
+        Crossing2::from_parts([x, y], [zero; 2], zero, w)
+    }
+
+    /// Where the circles `first` and `second` meet, as for [`Crossing2::of_circles`].
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::of_circles`].
+    pub fn of_discs(first: &Disc, second: &Disc, root: Root) -> Result<Crossing2, NumError> {
+        Crossing2::between(&disc_parts(first)?, &disc_parts(second)?, root)
     }
 
     /// A rational point in this form, b and k zero, so that it can be compared with a crossing.
@@ -540,12 +665,26 @@ impl Crossing2 {
     /// # Errors
     ///
     /// As for [`Crossing2::cmp_x`].
+    pub fn side(&self, l: &Carrier) -> Result<Sign, NumError> {
+        self.side_of(l.coefficients())
+    }
+
+    /// Which side of the constructed line `l` it lies on, as [`Crossing2::side`] says.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::cmp_x`].
+    pub fn side_of_fine(&self, l: &FineLine) -> Result<Sign, NumError> {
+        self.side_of(l.coefficients())
+    }
+
+    /// Which side of the line with these coefficients it lies on.
     #[allow(
         clippy::many_single_char_names,
-        reason = "a, b and c are the carrier's, x and y the coordinates, l the carrier"
+        reason = "a, b and c are the line's, x and y the coordinates"
     )]
-    pub fn side(&self, l: &Carrier) -> Result<Sign, NumError> {
-        let ([a, b], c) = l.coefficients();
+    fn side_of(&self, coefficients: ([i128; 2], i128)) -> Result<Sign, NumError> {
+        let ([a, b], c) = coefficients;
         let exact = |v: i128| enclose(&Stored::from_i128(v));
         let [at_x, at_y] = self.at;
         let value = exact(a)?
@@ -631,6 +770,33 @@ impl Crossing2 {
         root_sign(&whole, &add(&half, &half)?, &x.k)
     }
 
+    /// Where it lies against the circle `disc`, as [`Crossing2::against_round`] says: with
+    /// U = cw · A − W · C and V = cw · B, the value ‖Z − C‖² − rr / cw², times W² · cw², is E + F√k
+    /// with E = ‖U‖² + ‖V‖²k − rr · W² and F = 2U · V.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::cmp_x`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "b, c, r, u, v, x and y are the formula's"
+    )]
+    pub fn against_disc(&self, disc: &Disc) -> Result<Sign, NumError> {
+        let (x, y) = (self.part(0)?, self.part(1)?);
+        let [cx, cy, cw, rr] = disc_parts(disc)?;
+        let u = [
+            sub(&mul(&cw, &x.a)?, &mul(&x.w, &cx)?)?,
+            sub(&mul(&cw, &y.a)?, &mul(&x.w, &cy)?)?,
+        ];
+        let v = [mul(&cw, &x.b)?, mul(&cw, &y.b)?];
+        let whole = sub(
+            &add(&dot(&u, &u)?, &mul(&dot(&v, &v)?, &x.k)?)?,
+            &mul(&rr, &mul(&x.w, &x.w)?)?,
+        )?;
+        let half = dot(&u, &v)?;
+        root_sign(&whole, &add(&half, &half)?, &x.k)
+    }
+
     /// Where the carrier `l` meets the ellipse `e`, `root` choosing which. With S the ellipse's form,
     /// M its major axis, L = ‖M‖², n the carrier's normal, d = (b, −a), h = c − n · C, e = S(d) and
     /// k = e − q²h², it is C + (h · adj(S) n ± p · L · d√k) / e, as the discriminant's square factors
@@ -644,7 +810,33 @@ impl Crossing2 {
         reason = "a, b, c, e, h, k, l, p and q are the formula's"
     )]
     pub fn of_ellipse(l: &Carrier, ellipse: &Ellipse2, root: Root) -> Result<Crossing2, NumError> {
-        let ([a, b], c) = l.coefficients();
+        Crossing2::on_ellipse(l.coefficients(), ellipse, root)
+    }
+
+    /// Where the constructed line `l` meets the ellipse `e`, as [`Crossing2::of_ellipse`] says.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Crossing2::of_round`].
+    pub fn of_fine_and_ellipse(
+        l: &FineLine,
+        ellipse: &Ellipse2,
+        root: Root,
+    ) -> Result<Crossing2, NumError> {
+        Crossing2::on_ellipse(l.coefficients(), ellipse, root)
+    }
+
+    /// Where the line with these coefficients meets the ellipse.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, c, e, h, k, l, p and q are the formula's"
+    )]
+    fn on_ellipse(
+        coefficients: ([i128; 2], i128),
+        ellipse: &Ellipse2,
+        root: Root,
+    ) -> Result<Crossing2, NumError> {
+        let ([a, b], c) = coefficients;
         let (a, b, c) = (Big::from_i128(a), Big::from_i128(b), Big::from_i128(c));
         let centre = ellipse.centre();
         let (cx, cy) = (Big::from_i64(centre.x.get()), Big::from_i64(centre.y.get()));
@@ -740,6 +932,66 @@ impl Crossing2 {
             return Ok(if dy > 0 { sy } else { sy.negate() });
         }
         Ok(if dx > 0 { sx } else { sx.negate() })
+    }
+}
+
+impl Disc {
+    /// The largest angle between the circle and the line with these coefficients where they cross:
+    /// its sine squared is k / (rr · N), so that at a tangency it is exactly zero.
+    fn gap_of(&self, line: &([i128; 2], i128)) -> Result<Real, NumError> {
+        let [cx, cy, cw, rr] = disc_parts(self)?;
+        let [n, _, k] = line_and_circle(line, &[cx, cy], &cw, &rr)?;
+        if k.is_negative() {
+            return Err(NumError::Degenerate);
+        }
+        if k.is_zero() {
+            return Real::new(0.0);
+        }
+        angle_of(enclose(&k)?.div(enclose(&rr)?.mul(enclose(&n)?)?)?)
+    }
+
+    /// The largest angle between the circle and the carrier `l` where they cross, in radians, or
+    /// exactly zero at a tangency.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] when they do not meet; otherwise as for [`Crossing2::cmp_x`].
+    pub fn gap_to_carrier(&self, l: &Carrier) -> Result<Real, NumError> {
+        self.gap_of(&l.coefficients())
+    }
+
+    /// The largest angle between the circle and the constructed line `l`, as
+    /// [`Disc::gap_to_carrier`] says.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Disc::gap_to_carrier`].
+    pub fn gap_to_fine(&self, l: &FineLine) -> Result<Real, NumError> {
+        self.gap_of(&l.coefficients())
+    }
+
+    /// The largest angle between this circle and `other` where they cross, as
+    /// [`Disc::gap_to_carrier`] says. By Heron's rule the triangle of the two centres and a crossing
+    /// has its sine at the crossing squared k / (4ρ₁ρ₂(w₁w₂)²).
+    ///
+    /// # Errors
+    ///
+    /// As for [`Disc::gap_to_carrier`].
+    pub fn gap_to_disc(&self, other: &Disc) -> Result<Real, NumError> {
+        let (first, second) = (disc_parts(self)?, disc_parts(other)?);
+        let [_, _, _, _, k] = two_circles(&first, &second)?;
+        if k.is_negative() {
+            return Err(NumError::Degenerate);
+        }
+        if k.is_zero() {
+            return Real::new(0.0);
+        }
+        let [_, _, w1, rho1] = &first;
+        let [_, _, w2, rho2] = &second;
+        let weights = enclose(&mul(w1, w2)?)?;
+        let radii = enclose(rho1)?.mul(enclose(rho2)?)?;
+        let below = Interval::point(4.0)?.mul(radii)?;
+        angle_of(enclose(&k)?.div(below.mul(weights)?.mul(weights)?)?)
     }
 }
 

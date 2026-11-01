@@ -30,10 +30,10 @@
 //!
 //!   | Quantity | Bound | Where |
 //!   | --- | --- | --- |
-//!   | A factor's coefficients | 2^299 | Mignotte's bound, 2^4 · ‖c‖₂ |
-//!   | Two roots of one factor, apart | 2^−909 | Davenport (1985) and Mahler (1964) |
-//!   | Roots of two quartics, apart if not one | 2^−2,410 | their resultant, a whole number |
-//!   | A polynomial bisected s times | 2^(4s + 303) | the terms of 2^(4s) · c((x + a) / 2^s) |
+//!   | A factor's coefficients | 2^303 | Mignotte's bound, 2^4 · ‖c‖₂ |
+//!   | Two roots of one factor, apart | 2^−921 | Davenport (1985) and Mahler (1964) |
+//!   | Roots of two quartics, apart if not one | 2^−2,442 | their resultant, a whole number |
+//!   | A polynomial bisected s times | 2^(4s + 307) | the terms of 2^(4s) · c((x + a) / 2^s) |
 //!
 //! - Bounded work. Live stretches each count at least two, and Descartes' counts of disjoint
 //!   stretches sum to at most four, so at most two are live at once and the frontier is a fixed
@@ -53,6 +53,8 @@
 //! three signs at each level it must narrow them. No allocation; no recursion.
 
 use crate::error::NumError;
+use crate::interval::Interval;
+use crate::one_root::enclose;
 use crate::sign::Sign;
 use crate::wide::Wide;
 
@@ -69,17 +71,17 @@ const WIDE_LIMBS: usize = 160;
 type Wider = Wide<WIDE_LIMBS>;
 
 /// Coefficients within this many bits reach every root inside the budget.
-pub const COEFFICIENT_BITS: u32 = 293;
+pub const COEFFICIENT_BITS: u32 = 297;
 
-/// Levels of bisection past which a stretch is given up: the separation bound's 909, and some.
-pub const MAX_DEPTH: u32 = 920;
+/// Levels of bisection past which a stretch is given up: the separation bound's 921, and some.
+pub const MAX_DEPTH: u32 = 930;
 
 /// Levels of bisection before a stretch is taken to hold a multiple root and the gcd is worked out.
 /// Far below any separation real drawings show, and only a cost: past it the same roots are found.
 pub const FAST_DEPTH: u32 = 64;
 
-/// Levels of narrowing past which two roots are given up: the resultant's 2,410, and some.
-const COMPARE_DEPTH: u32 = 2_440;
+/// Levels of narrowing past which two roots are given up: the resultant's 2,442, and some.
+const COMPARE_DEPTH: u32 = 2_470;
 
 /// The bits of [`Big`].
 const BITS: u32 = 4_096;
@@ -643,6 +645,47 @@ impl RealRoot {
     #[must_use]
     pub const fn multiplicity(&self) -> u8 {
         self.multiplicity
+    }
+
+    /// Where it lies as an angle: cos θ and sin θ for t = tan(θ / 2), certainly. An enclosure as wide
+    /// as the stretch isolation left it.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if a step did not fit, which no root within the module's depth
+    /// can reach.
+    pub fn angle(&self) -> Result<[Interval; 2], NumError> {
+        let (zero, one) = (Interval::point(0.0)?, Interval::point(1.0)?);
+        let exact = match self.piece {
+            Piece::Zero => Some([one, zero]),
+            Piece::One => Some([zero, one]),
+            Piece::MinusOne => Some([zero, one.neg()]),
+            Piece::Infinity => Some([one.neg(), zero]),
+            Piece::FarBelow | Piece::Below | Piece::Above | Piece::FarAbove => None,
+        };
+        if let Some(at) = exact {
+            return Ok(at);
+        }
+        // Two to the s, within the depth, from its exponent field.
+        let exponent = u64::from(self.s.saturating_add(1_023));
+        let scale = Interval::point(f64::from_bits(exponent.wrapping_shl(52)))?;
+        let low = enclose(&self.a)?.div(scale)?;
+        let x = if self.point {
+            low
+        } else {
+            let next = self.a.checked_add(&Big::one()).ok_or(NumError::BudgetExceeded)?;
+            Interval::new(low.lo(), enclose(&next)?.div(scale)?.hi())?
+        };
+        let square = x.mul(x)?;
+        let below = one.add(square)?;
+        let turned = one.sub(square)?.div(below)?;
+        let sine = x.add(x)?.div(below)?;
+        Ok(match self.piece {
+            Piece::Above => [turned, sine],
+            Piece::Below => [turned, sine.neg()],
+            Piece::FarAbove => [turned.neg(), sine],
+            _ => [turned.neg(), sine.neg()],
+        })
     }
 }
 
