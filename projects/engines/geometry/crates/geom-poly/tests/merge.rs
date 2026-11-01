@@ -15,7 +15,10 @@
 use geom_num::plane::Plane;
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
-use geom_poly::merge::{Merge, MergeError, Merged, Outward, merge, select};
+use geom_poly::merge::{
+    Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge, merge_with, section,
+    select,
+};
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon, TraceError};
 use geom_poly::winding::{Term, Winding, WindingTest};
@@ -322,6 +325,248 @@ fn a_ring_stays_in_its_corner_of_the_face_where_two_holes_touch() {
         corners.dedup();
         assert_eq!(corners.len(), 7);
     }
+}
+
+/// A's boundary and a square polygon on the plane x = 2 over `low` to `high` in y and z, which
+/// cuts and counts for nothing, as classified pieces: A's first, the polygon's after.
+fn with_wall(low: [i64; 2], high: [i64; 2]) -> (Vec<Classified>, usize) {
+    let wall = block([0, low[0], low[1]], [4, high[0], high[1]]);
+    let mut polygons = scene(&[A]);
+    let solid = polygons.len();
+    polygons.push(Polygon {
+        piece: side(&wall, 0, 2, true),
+        entry: None,
+    });
+    (classified(&polygons, LEAF_POLYGONS), solid)
+}
+
+/// A's pieces of `found`, kept, and the wall's.
+fn parts(found: &[Classified], solid: usize) -> (Vec<Outward>, Vec<Classified>) {
+    let test = WindingTest::unite();
+    let kept = select(&test, found).unwrap();
+    let inside = |c: &&Classified| test.holds(&c.front) && test.holds(&c.back);
+    let wall = found.iter().filter(|c| c.polygon >= solid).filter(inside);
+    (kept, wall.cloned().collect())
+}
+
+#[test]
+fn a_cut_holds_a_seam_where_it_lies_along_a_face() {
+    let (found, solid) = with_wall([-1, -1], [5, 5]);
+    let (kept, wall) = parts(&found, solid);
+    let plain = merge(&kept, Merge::RemoveRedundant, &mut meter()).unwrap();
+    assert_eq!(counts(&plain), [1, 6, 6, 12, 8]);
+    let cuts: Vec<Piece> = wall.iter().map(|c| c.piece.clone()).collect();
+    let rules = Rules {
+        cuts: &cuts,
+        open: false,
+    };
+    let seamed = merge_with(&kept, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    closed(&seamed, &kept);
+    assert_eq!(counts(&seamed), [1, 10, 10, 20, 12]);
+}
+
+#[test]
+fn a_cut_that_stops_inside_a_face_leaves_it_whole() {
+    let (found, solid) = with_wall([-1, -1], [2, 5]);
+    let (kept, wall) = parts(&found, solid);
+    let cuts: Vec<Piece> = wall.iter().map(|c| c.piece.clone()).collect();
+    let rules = Rules {
+        cuts: &cuts,
+        open: false,
+    };
+    let m = merge_with(&kept, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    closed(&m, &kept);
+    // Only the face at y = 0 is cut right through; the two it stops in stay whole.
+    assert_eq!(counts(&m), [1, 7, 7, 15, 10]);
+}
+
+#[test]
+fn a_cut_nowhere_near_changes_nothing() {
+    let kept_pieces = kept(&scene(&[A]), &WindingTest::unite(), LEAF_POLYGONS);
+    let far = block([20, 20, 20], [24, 24, 24]);
+    let cuts = [side(&far, 0, 24, true)];
+    let rules = Rules {
+        cuts: &cuts,
+        open: false,
+    };
+    let m = merge_with(&kept_pieces, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    assert_eq!(counts(&m), [1, 6, 6, 12, 8]);
+}
+
+#[test]
+fn a_wall_back_to_back_makes_two_cells_whichever_fin_comes_first() {
+    let (found, solid) = with_wall([-1, -1], [5, 5]);
+    let (kept, wall) = parts(&found, solid);
+    let mut pieces = kept.clone();
+    let cuts: Vec<Piece> = wall.iter().map(|c| c.piece.clone()).collect();
+    for c in &wall {
+        pieces.extend(both_ways(c).unwrap());
+    }
+    let rules = Rules {
+        cuts: &cuts,
+        open: false,
+    };
+    let m = merge_with(&pieces, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    assert_eq!(m.shells.len(), 2);
+    assert!(m.shells.iter().all(|s| s.outer && s.faces.len() == 6));
+    closed(&m, &pieces);
+    let four = m.edges.iter().filter(|e| e.fins.len() == 4).count();
+    assert_eq!(four, 4);
+    // The two sides of the wall lie in different shells.
+    let back = kept.len();
+    let shell_of = |at: usize| m.faces[m.piece_face[at]].shell;
+    assert_ne!(shell_of(back), shell_of(back + 1));
+    // Which fin an edge starts from follows the sheets, so turn them all over and go again.
+    let turned: Vec<Outward> = pieces
+        .iter()
+        .map(|p| Outward {
+            piece: Piece {
+                face: mirrored(&p.piece.face),
+                bounds: p.piece.bounds.iter().rev().map(mirrored).collect(),
+            },
+            ..p.clone()
+        })
+        .collect();
+    let cuts: Vec<Piece> = cuts
+        .iter()
+        .map(|p| Piece {
+            face: mirrored(&p.face),
+            bounds: p.bounds.iter().rev().map(mirrored).collect(),
+        })
+        .collect();
+    let rules = Rules {
+        cuts: &cuts,
+        open: false,
+    };
+    let m = merge_with(&turned, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    assert_eq!(m.shells.len(), 2);
+    closed(&m, &turned);
+}
+
+/// `p` mirrored through the plane x = 0.
+fn mirrored(p: &Plane) -> Plane {
+    let [x, y, z] = p.n();
+    Plane::new([-x, y, z], p.d()).unwrap()
+}
+
+#[test]
+fn a_wall_that_stops_short_has_one_cell_on_both_sides() {
+    let (found, solid) = with_wall([-1, -1], [2, 5]);
+    let (kept, wall) = parts(&found, solid);
+    let mut pieces = kept.clone();
+    let cuts: Vec<Piece> = wall.iter().map(|c| c.piece.clone()).collect();
+    for c in &wall {
+        pieces.extend(both_ways(c).unwrap());
+    }
+    let rules = Rules {
+        cuts: &cuts,
+        open: false,
+    };
+    let m = merge_with(&pieces, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    let back = kept.len();
+    let shell_of = |at: usize| m.faces[m.piece_face[at]].shell;
+    assert_eq!(shell_of(back), shell_of(back + 1));
+}
+
+#[test]
+fn an_open_merge_gives_a_sheet() {
+    let square = |low: [i64; 3], high: [i64; 3]| {
+        let polygons = vec![Polygon {
+            piece: side(&block(low, high), 2, low[2], true),
+            entry: None,
+        }];
+        as_kept(&classified(&polygons, LEAF_POLYGONS)[0])
+    };
+    let rules = Rules {
+        cuts: &[],
+        open: true,
+    };
+    let one = [square([0, 0, 0], [4, 4, 1])];
+    let m = merge_with(&one, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    assert_eq!(counts(&m), [1, 1, 1, 4, 4]);
+    assert_eq!(m.shells[0].holder, None);
+    assert!(m.shells[0].outer);
+    assert_eq!(m.edges[0].fins.len(), 1);
+    let two = [square([0, 0, 0], [4, 4, 1]), square([4, 0, 0], [8, 4, 1])];
+    let m = merge_with(&two, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    assert_eq!(counts(&m), [1, 1, 1, 4, 4]);
+    let closed_rules = merge(&one, Merge::RemoveRedundant, &mut meter());
+    assert_eq!(closed_rules, Err(MergeError::Open));
+}
+
+#[test]
+fn faces_of_an_open_merge_that_share_an_edge_are_one_shell() {
+    let pieces = kept(&scene(&[A]), &WindingTest::unite(), LEAF_POLYGONS);
+    let rules = Rules {
+        cuts: &[],
+        open: true,
+    };
+    let opened: Vec<Outward> = pieces.iter().skip(1).cloned().collect();
+    let m = merge_with(&opened, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
+    assert_eq!(counts(&m), [1, 5, 5, 12, 8]);
+    assert_eq!(m.edges.iter().filter(|e| e.fins.len() == 1).count(), 4);
+}
+
+#[test]
+fn a_doubled_piece_beside_its_neighbour_is_refused() {
+    let right = block([4, 0, 0], [8, 4, 4]);
+    let polygons = scene(&[A, right]);
+    let mut pieces = kept(&polygons, &WindingTest::unite(), LEAF_POLYGONS);
+    let top = pieces.iter().find(|p| p.piece.face == up(2, 4)).unwrap();
+    let copy = top.clone();
+    pieces.push(copy);
+    assert_eq!(
+        merge(&pieces, Merge::RemoveRedundant, &mut meter()),
+        Err(MergeError::Overlap)
+    );
+}
+
+#[test]
+fn seams_follow_the_source_a_caller_names() {
+    let right = block([4, 0, 0], [8, 4, 4]);
+    let mut pieces = kept(&scene(&[A, right]), &WindingTest::unite(), LEAF_POLYGONS);
+    for piece in &mut pieces {
+        piece.source = 0;
+        piece.front = Winding::new();
+        piece.back = Winding::new();
+    }
+    let m = merge(&pieces, Merge::KeepSeams, &mut meter()).unwrap();
+    assert_eq!(counts(&m), [1, 6, 6, 12, 8]);
+}
+
+#[test]
+fn a_section_runs_where_two_owners_meet() {
+    let pieces = |blocks: &[Block], leaf: usize| -> Vec<(Piece, usize)> {
+        let polygons = scene(blocks);
+        let owner = |c: &Classified| polygons[c.polygon].entry.unwrap_or(0) as usize;
+        let found = classified(&polygons, leaf);
+        found.iter().map(|c| (c.piece.clone(), owner(c))).collect()
+    };
+    for leaf in [1, LEAF_POLYGONS] {
+        let curves = section(&pieces(&[A, B], leaf), &mut meter()).unwrap();
+        assert_eq!((curves.edges.len(), curves.vertices.len()), (6, 6));
+        assert!(curves.edges.iter().all(|(low, high)| low < high));
+    }
+    // Two bars over one block: two stretches of one line, with a gap between them.
+    let long = block([0, 0, 0], [10, 4, 4]);
+    let bars = [
+        long,
+        block([1, -1, 2], [3, 5, 6]),
+        block([6, -1, 2], [8, 5, 6]),
+    ];
+    let curves = section(&pieces(&bars, LEAF_POLYGONS), &mut meter()).unwrap();
+    assert_eq!((curves.edges.len(), curves.vertices.len()), (16, 16));
+    let flush = block([4, 0, 0], [8, 4, 4]);
+    let curves = section(&pieces(&[A, flush], LEAF_POLYGONS), &mut meter()).unwrap();
+    assert_eq!(curves.edges.len(), 4, "around their contact, not across it");
+    let apart = block([9, 9, 9], [12, 12, 12]);
+    let curves = section(&pieces(&[A, apart], LEAF_POLYGONS), &mut meter()).unwrap();
+    assert_eq!((curves.edges.len(), curves.vertices.len()), (0, 0));
+    let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
+    assert!(matches!(
+        section(&pieces(&[A, B], LEAF_POLYGONS), &mut small),
+        Err(MergeError::Stopped(_))
+    ));
 }
 
 #[test]

@@ -29,7 +29,7 @@ use core::fmt;
 use geom_num::grid::COORD_MAX;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
-use geom_poly::merge::{Merge, MergeError, Merged, Outward, merge};
+use geom_poly::merge::{Curves, Merge, MergeError, Merged, Outward, Rules, merge_with};
 use geom_poly::order::normals_det;
 use geom_run::WorkMeter;
 use geom_topo::Line as Shadow;
@@ -191,13 +191,18 @@ fn planes_around(merged: &Merged) -> Vec<Vec<usize>> {
     clippy::too_many_lines,
     reason = "one pass over the arenas in their order, each short, sharing the rows they fill"
 )]
-fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>), RebuildError> {
+fn arenas(
+    merged: &Merged,
+    carriers: &[Carrier],
+    open: bool,
+) -> Result<(Builder, Ix<Region>), RebuildError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
 
-    // Solid regions, one per outer shell, then the outside.
+    // Solid regions, one per outer shell, then the outside. A sheet bounds nothing, so all its
+    // shells lie in the outside.
     let outers: Vec<usize> = (0..merged.shells.len())
-        .filter(|s| merged.shells.get(*s).is_some_and(|shell| shell.outer))
+        .filter(|s| !open && merged.shells.get(*s).is_some_and(|shell| shell.outer))
         .collect();
     let region_of: Vec<usize> = merged
         .shells
@@ -205,7 +210,10 @@ fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>)
         .enumerate()
         .map(|(s, shell)| {
             let held = shell.holder.unwrap_or(s);
-            outers.iter().position(|o| *o == held).unwrap_or(0)
+            outers
+                .iter()
+                .position(|o| *o == held)
+                .unwrap_or(outers.len())
         })
         .collect();
     for region in 0..outers.len() {
@@ -217,7 +225,9 @@ fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>)
     }
     let outside = a.regions.push(Region {
         kind: RegionKind::Void,
-        first_shell: None,
+        first_shell: (open && !merged.shells.is_empty())
+            .then(|| row(0))
+            .transpose()?,
     })?;
     for (s, region) in region_of.iter().enumerate() {
         let next =
@@ -414,12 +424,79 @@ pub fn rebuild(
     mode: Merge,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, RebuildError> {
-    let merged = merge(pieces, mode, meter)?;
-    let (builder, outside) = arenas(&merged, carriers)?;
-    let kind = if merged.edges.iter().all(|e| e.fins.len() == 2) {
+    rebuild_with(pieces, carriers, mode, Rules::default(), meter)
+}
+
+/// [`rebuild`], under `rules`: an open merge gives a sheet.
+///
+/// # Errors
+///
+/// As [`rebuild`].
+pub fn rebuild_with(
+    pieces: &[Outward],
+    carriers: &[Carrier],
+    mode: Merge,
+    rules: Rules<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, RebuildError> {
+    let merged = merge_with(pieces, mode, rules, meter)?;
+    let (builder, outside) = arenas(&merged, carriers, rules.open)?;
+    let kind = if rules.open {
+        BodyKind::Sheet
+    } else if merged.edges.iter().all(|e| e.fins.len() == 2) {
         BodyKind::Solid
     } else {
         BodyKind::General
     };
     Ok(builder.publish(kind, outside, meter)?)
+}
+
+/// The wire body of `curves`: edges with no fins, each vertex a grid point or its own meeting.
+///
+/// # Errors
+///
+/// A [`RebuildError`]: what the arenas refuse.
+pub fn wire(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Body, RebuildError> {
+    let mut builder = Builder::new();
+    let a = &mut builder.arenas;
+    let outside = a.regions.push(Region {
+        kind: RegionKind::Void,
+        first_shell: None,
+    })?;
+    let mut rounded = Vec::with_capacity(curves.vertices.len());
+    let mut stored: Vec<Plane> = Vec::new();
+    for point in &curves.vertices {
+        let near = point.to_grid()?;
+        rounded.push((near.value(), near.is_exact()));
+        let kind = if near.is_exact() {
+            PointKind::Grid(near.value())
+        } else {
+            let mut rows = [row(0)?, row(0)?, row(0)?];
+            for (slot, plane) in rows.iter_mut().zip(point.planes()) {
+                let at = stored.iter().position(|held| held == plane);
+                let at = at.unwrap_or_else(|| {
+                    stored.push(*plane);
+                    stored.len().saturating_sub(1)
+                });
+                *slot = row(at)?;
+            }
+            PointKind::Meet(rows)
+        };
+        let point = a.points.push(kind)?;
+        a.vertices.push(Vertex { point })?;
+    }
+    for plane in &stored {
+        a.planes.push(*plane)?;
+    }
+    for (low, high) in &curves.edges {
+        let end = |at: usize| rounded.get(at).copied().ok_or(RebuildError::Broken);
+        let curve = a.curves.push(shadow(end(*low)?, end(*high)?)?)?;
+        a.edges.push(Edge {
+            first_fin: None,
+            start: Some(row(*low)?),
+            end: Some(row(*high)?),
+            curve,
+        })?;
+    }
+    Ok(builder.publish(BodyKind::Wire, outside, meter)?)
 }

@@ -96,7 +96,7 @@ pub mod schema;
 
 pub use batch::{Batch, BatchDetail, Key};
 pub use context::{OpContext, Precision};
-pub use detail::{MakeDetail, NumDetail, OpErrorDetail, QueryDetail, RunDetail};
+pub use detail::{CombineDetail, MakeDetail, NumDetail, OpErrorDetail, QueryDetail, RunDetail};
 pub use error::OpError;
 pub use evidence::{Evidence, Value};
 pub use geom_num::Exactness;
