@@ -5113,6 +5113,190 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace + with * in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with + in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace / with % in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace / with * in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace + with * in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with + in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace - with + in strip",
+      "line_text": "let (dx, dy) = (last.get(i)? - first.get(i)?, last.get(j)? - first.get(j)?);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace - with / in strip",
+      "line_text": "let (dx, dy) = (last.get(i)? - first.get(i)?, last.get(j)? - first.get(j)?);",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in strip",
+      "line_text": "if dx == 0.0 && dy == 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace == with != in strip",
+      "line_text": "if dx == 0.0 && dy == 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "delete - in strip",
+      "line_text": "*normal.get_mut(i)? = -dy;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in second_order",
+      "line_text": "let band = Interval::point(2.0 * RESOLUTION_FLOOR.get())?",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate: Real::ONE), so 2.0 * 1.0 and 2.0 / 1.0 are the same double and the band is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_line",
+      "line_text": "if lo.lo() < s_lo { s_lo } else { lo.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if hi.hi() > s_hi { s_hi } else { hi.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_line",
+      "line_text": "if x.lo() < lo { lo } else { x.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if x.hi() > hi { hi } else { x.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "let [low, high] = if sign > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is 1.0 or -1.0, set two lines above, never 0.0, so > and >= choose the same branch for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in one_circle",
+      "line_text": "if lo.lo() < s.0 { s.0 } else { lo.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "if hi.hi() > s.1 { s.1 } else { hi.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in self_crossings",
+      "line_text": "if s.lo() < t.lo() { s.lo() } else { t.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in self_crossings",
+      "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
     }
   ],
   "coverage_off": [

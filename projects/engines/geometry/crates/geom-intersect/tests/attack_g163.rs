@@ -827,3 +827,88 @@ fn no_crossing_is_missed_on_10_000_rational_polynomial_pairs() {
         }
     }
 }
+
+#[test]
+fn a_crossing_past_one_segment_s_end_is_no_meeting() {
+    // The lines cross at (5, 0), inside one segment and past an end of the other: before its start
+    // or after its end, the first's or the second's. Nothing is shared, and nothing fails.
+    let a = segment([0.0, 0.0], [10.0, 0.0]);
+    for b in [
+        segment([5.0, 1.0], [5.0, 3.0]),
+        segment([5.0, -3.0], [5.0, -1.0]),
+    ] {
+        is_empty(&meet(&a, &b));
+        is_empty(&meet(&b, &a));
+    }
+    for b in [
+        segment([-5.0, -1.0], [-5.0, 1.0]),
+        segment([15.0, -1.0], [15.0, 1.0]),
+    ] {
+        is_empty(&meet(&a, &b));
+        is_empty(&meet(&b, &a));
+    }
+}
+
+#[test]
+fn an_end_on_the_other_segment_is_a_boundary_touch_within_both_domains() {
+    // A T: one segment's start or end on the other's inside, each segment first.
+    let bar = segment([0.0, 0.0], [10.0, 0.0]);
+    for stem in [
+        segment([5.0, 0.0], [5.0, 5.0]),
+        segment([5.0, 5.0], [5.0, 0.0]),
+    ] {
+        for r in [meet(&stem, &bar), meet(&bar, &stem)] {
+            assert_eq!(
+                contacts(&r),
+                [PointContact::BoundaryTouch],
+                "{:?}",
+                r.items()
+            );
+            for span in r.items()[0].at().spans() {
+                assert!(0.0 <= span.lo() && span.hi() <= 1.0, "{span:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_collinear_overlap_is_cut_to_both_domains() {
+    // The second runs past the first's start, then past its end: the overlap stops where the first
+    // does.
+    let a = segment([0.0, 0.0], [10.0, 0.0]);
+    for (b, want) in [
+        (segment([-5.0, 0.0], [5.0, 0.0]), (0.0, 0.5)),
+        (segment([5.0, 0.0], [15.0, 0.0]), (0.5, 1.0)),
+    ] {
+        let r = meet(&a, &b);
+        assert!(
+            matches!(r.items(), [Item::Overlap { .. }]),
+            "{:?}",
+            r.items()
+        );
+        let s = r.items()[0].at().spans()[0];
+        near(s.lo(), want.0);
+        near(s.hi(), want.1);
+    }
+}
+
+#[test]
+fn parallel_lines_of_space_one_coordinate_apart_do_not_meet() {
+    // In the plane y = 0, one unit apart in z: projected along z they would be one line.
+    for (a, b) in [
+        (
+            segment([0.0, 0.0, 0.0], [10.0, 0.0, 0.0]),
+            segment([0.0, 0.0, 1.0], [10.0, 0.0, 1.0]),
+        ),
+        (
+            segment([0.0, 0.0, 0.0], [0.0, 10.0, 0.0]),
+            segment([3.0, 0.0, 0.0], [3.0, 10.0, 0.0]),
+        ),
+        (
+            segment([0.0, 0.0, 0.0], [0.0, 0.0, 10.0]),
+            segment([0.0, 2.0, 0.0], [0.0, 2.0, 10.0]),
+        ),
+    ] {
+        is_empty(&meet(&a, &b));
+    }
+}
