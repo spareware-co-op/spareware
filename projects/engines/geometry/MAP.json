@@ -307,6 +307,26 @@
           "target": "bin"
         },
         {
+          "cost": "a few thousand predicate calls per corpus.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-steps.rs",
+          "guarantees": [
+            "the table is a pure function of the build target ([`geom_bench::steps`])."
+          ],
+          "job": "`geom-bench-steps`: prints chapter 23.2's step mix, one row per corpus.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/2660193.2660195"
+            ],
+            "text": "the tally of `geom_bench::steps`, over the `_step` twins of `geom-num`'s predicates (<https://doi.org/10.1145/2660193.2660195> for the generator that draws its corpora)."
+          },
+          "path": "geom-bench-steps",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "that of the command (`geom_bench::timings`), plus reading its files.",
           "does": "",
           "family": [],
@@ -1272,6 +1292,27 @@
             "text": "the Secure Hash Standard, NIST FIPS 180-4 (<https://csrc.nist.gov/pubs/fips/180-4/upd1/final>), as the `sha2` crate implements it (<https://docs.rs/sha2/0.11.0/sha2/>), checked against the standard's example values (<https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values>)."
           },
           "path": "geom_bench::sha256",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few thousand predicate calls per corpus.",
+          "does": "[`mix`] runs the `_step` twins of `geom-num`'s predicates over three corpora and tallies the steps: buildings (a plan grid of bays and storeys, with axis planes and a few at 45 degrees), mechanical parts (tilted planes through points within a metre) and near-degenerate fuzz input (points one step off a line, and vertices on planes that are not their own).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/steps.rs",
+          "guarantees": [
+            "the corpora come from fixed seeds and the twins are pure, so the counts are the same on every target and in every build profile, except that `orient2d` skips its filter on some targets ([`geom_num::predicate::orient2d`]), which moves its calls between the filter and the exact step. Counts are statistics only, not the work units of 23.10."
+          ],
+          "job": "The step mix of chapter 23.2: which step of the predicate ladder settled each call, per corpus.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "https://doi.org/10.1145/2660193.2660195"
+            ],
+            "text": "the counts chapter 23.2 asks for, over `geom-num`'s `_step` twins (`projects/engines/geometry/architecture/23-performance.md`); SplitMix64 draws the corpora ([`crate::rng`]), from Steele, Lea and Flood 2014, <https://doi.org/10.1145/2660193.2660195>."
+          },
+          "path": "geom_bench::steps",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -8294,6 +8335,27 @@
             "text": "the sign of an exactly computed quantity, as chapter 6.2's exact predicates return it (`projects/engines/geometry/architecture/06-numbers.md`): a comparison with zero, and the sign rules of negation and multiplication of the reals."
           },
           "path": "geom_num::sign",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none on a plain call; a twin pays for its call and for each step it asks.",
+          "does": "a predicate takes the cheapest step that can answer it: identity, a narrow path in `i64`, an axis comparison, the generated filter, then the exact path. A predicate with more than a filter and an exact path to choose from, or a count to give, has a twin ending in `_step`, such as [`crate::predicate::orient2d_step`], that gives the same sign and names the [`Step`] that settled it, which is how chapter 23.2's counts and this ladder's tests see the steps. A twin makes the plain call, then asks each step in turn, so counting costs the plain call nothing.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/step.rs",
+          "guarantees": [
+            "**The same sign, whatever the step.** Every step returns the exact path's sign or leaves the call to the next; a step changes speed only. `tests/steps.rs` holds each to a big-integer oracle, at the edge of the range it takes.",
+            "**No shared state.** A count is a tally over what the twins return, kept by whoever asks (`geom-bench`), so the predicates stay pure functions, with nothing to reset and nothing that threads or a build profile could change."
+          ],
+          "job": "Which step of the predicate ladder settled a call (chapter 23.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "the predicate step ladder of chapter 23.2 (`projects/engines/geometry/architecture/23-performance.md`), which decision 32.22 joins to 6.2; its filter is Meyer and Pion's, as in Geogram's PCK."
+          },
+          "path": "geom_num::step",
           "provenance": [],
           "spdx": null,
           "target": "lib"

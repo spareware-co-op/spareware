@@ -20,6 +20,12 @@ name = "geom-bench-guest"
 test = false
 bench = false
 
+# Chapter 23.2's step mix, per corpus.
+[[bin]]
+name = "geom-bench-steps"
+test = false
+bench = false
+
 # The checks the gates run on count files: comparison with the merge base, removals, growth.
 [[bin]]
 name = "geom-bench-counts"
@@ -36,6 +42,8 @@ required-features = ["reference"]
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The step mix (chapter 23.2) counts the plane table's steps too (ours, MPL-2.0).
+geom-poly = { path = "../geom-poly" }
 # The work meter the root-isolation engine runs under (its benchmarks, G53).
 geom-run = { path = "../geom-run" }
 # Cache keys, the memo store and body versions (piece G105), with the crates their inputs need.

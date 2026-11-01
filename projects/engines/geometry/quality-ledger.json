@@ -5848,7 +5848,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
       "line_text": "Some(sign) => Ok(sign),",
-      "occurrences": 1,
+      "occurrences": 2,
       "piece": "G41",
       "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
     },
@@ -5868,7 +5868,14 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "orient2d_exact(a, b, c)",
+      "line_text": "match orient2d_narrow(a, b, c) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "None => orient2d_exact(a, b, c),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."

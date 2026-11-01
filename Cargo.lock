@@ -874,6 +874,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-poly",
  "geom-run",
  "geom-surface",
  "geom-test",
