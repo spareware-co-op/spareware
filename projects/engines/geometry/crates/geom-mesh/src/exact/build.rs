@@ -3,9 +3,11 @@
 //! What it does: [`build`] takes [`Polygons`], whose vertices are grid points or three planes and
 //! whose faces are loops of vertices, and works out what the mesh stores. A face made from grid
 //! points gets its plane from its area vector; each edge between grid points gets the plane through
-//! it that holds the face's dominant axis. Faces and edges off the grid bring their planes with
-//! them. The planes go into one sorted pool, the vertices and faces into canonical order, and each
-//! half-edge finds its opposite, in exact radial order where more than two meet.
+//! it that holds the face's dominant axis; where the faces on both sides share that axis, the
+//! plane is made once for both half-edges, which differ only in facing. Faces and edges off the
+//! grid bring their planes with them. The planes go into one sorted pool, the vertices and faces
+//! into canonical order, and each half-edge finds its opposite, in exact radial order where more
+//! than two meet.
 //!
 //! Guarantees:
 //!
@@ -27,7 +29,8 @@
 //!
 //! Cost: O(n log n) in the half-edges for the sorts of the planes and faces, with a few allocations
 //! per array and none per face but for faces with holes. A face's plane takes up to three greatest
-//! common divisors, an edge plane's one or two.
+//! common divisors, an edge plane's one or two, made once for an edge whose two faces share an
+//! axis; finding those edges is one more counting sort of the half-edges.
 
 #![allow(
     clippy::many_single_char_names,
@@ -123,6 +126,13 @@ struct Turned {
 }
 
 impl Turned {
+    /// A slot an edge's other half-edge fills.
+    const UNSET: Turned = Turned {
+        n: [0; 3],
+        d: 0,
+        flipped: false,
+    };
+
     /// The canonical form of a plane given.
     fn given(plane: &Plane) -> Result<Self, MeshError> {
         let c = canonical(plane)?;
@@ -410,6 +420,154 @@ fn corner_links(input: &Polygons, faces: u32) -> Result<(Vec<u32>, Vec<u32>), Me
         }
     }
     Ok((face_of, after))
+}
+
+/// A face's normal as it faces: its dominant axis, and whether the normal points down that axis.
+fn normal_axis(face: &Turned) -> (usize, bool) {
+    let n = if face.flipped {
+        face.n.map(i128::wrapping_neg)
+    } else {
+        face.n
+    };
+    let k = dominant(n);
+    (k, n.get(k).copied().unwrap_or(0).is_negative())
+}
+
+/// Each corner's leader: itself, or the earlier corner of its edge, the other way round, whose
+/// edge plane it shares. Two corners share when neither is given its plane, both ends are grid
+/// points, the edge has those two corners alone, and both faces have the same dominant axis k: then
+/// both planes are the one through the edge that holds k, and [`edge_plane`] faces them alike
+/// exactly when the faces' normals point opposite ways along k, as each turns its m by its own
+/// normal's sign and the two edges run opposite ways. So one is made, and pooled, per such edge.
+fn edge_leaders(
+    input: &Polygons,
+    verts: &Vertices,
+    faces: &[Turned],
+    (face_of, after): (&[u32], &[u32]),
+    corner_vertex: &[u32],
+) -> Result<Vec<u32>, MeshError> {
+    let mut leader: Vec<u32> = (0..index(corner_vertex.len())?).collect();
+    let mut ends = Vec::with_capacity(corner_vertex.len());
+    for &next in after {
+        ends.push(*at(corner_vertex, next)?);
+    }
+    let count = verts.grid.len().saturating_add(verts.implicit.len());
+    let (first, uses) = grouped(corner_vertex, &ends, count)?;
+    let axis = |c: u32| -> Result<Option<usize>, MeshFault> {
+        let given = input
+            .edge_plane
+            .get(c as usize)
+            .copied()
+            .flatten()
+            .is_some();
+        let grid = |c: u32| -> Result<bool, MeshFault> {
+            Ok(at(&verts.point, *at(&input.corners, c)?)?.is_some())
+        };
+        if given || !grid(c)? || !grid(*at(after, c)?)? {
+            return Ok(None);
+        }
+        Ok(Some(normal_axis(at(faces, *at(face_of, c)?)?).0))
+    };
+    for bucket in first.windows(2) {
+        let &[start, end] = bucket else {
+            return Err(MeshFault::Shape.into());
+        };
+        let mut rest = uses
+            .get(start as usize..end as usize)
+            .ok_or(MeshFault::Shape)?;
+        while let Some(group) = next_group(&mut rest) {
+            let &[p, q] = group else {
+                continue;
+            };
+            let (a, b) = (p.half_edge.min(q.half_edge), p.half_edge.max(q.half_edge));
+            if p.forward != q.forward && axis(a)?.is_some() && axis(a)? == axis(b)? {
+                *leader.get_mut(b as usize).ok_or(MeshFault::Shape)? = a;
+            }
+        }
+    }
+    Ok(leader)
+}
+
+/// Every corner's edge plane, each edge's made once for both of its half-edges where
+/// [`edge_leaders`] lets them share it.
+struct EdgePlanes {
+    /// Each corner's plane, as it faces.
+    all: Vec<Turned>,
+    /// The planes to pool: one for each pair that shares.
+    unique: Vec<Turned>,
+    /// Where each corner's plane is in `unique`.
+    index: Vec<u32>,
+}
+
+impl EdgePlanes {
+    /// Every given plane's row, faces' then corners' then `own`'s, from the rows of a pool given
+    /// the faces' planes, `unique` and `own`'s.
+    fn rows(&self, faces: usize, pooled: &[u32]) -> Result<Vec<u32>, MeshError> {
+        let own = pooled
+            .get(faces.saturating_add(self.unique.len())..)
+            .ok_or(MeshFault::Shape)?;
+        let mut rows = Vec::with_capacity(
+            faces
+                .saturating_add(self.all.len())
+                .saturating_add(own.len()),
+        );
+        rows.extend_from_slice(pooled.get(..faces).ok_or(MeshFault::Shape)?);
+        for &i in &self.index {
+            rows.push(*at(pooled, index(faces)?.saturating_add(i))?);
+        }
+        rows.extend_from_slice(own);
+        Ok(rows)
+    }
+}
+
+/// [`EdgePlanes`] for every corner.
+fn edge_planes(
+    input: &Polygons,
+    (verts, by_face): (&Vertices, &[Turned]),
+    (face_of, after): (&[u32], &[u32]),
+    corner_vertex: &[u32],
+    (exec, meter): (&Exec<'_>, &mut WorkMeter<'_>),
+) -> Result<EdgePlanes, MeshError> {
+    let leaders = edge_leaders(input, verts, by_face, (face_of, after), corner_vertex)?;
+    let corner_ids: Vec<u32> = (0..index(input.corners.len())?).collect();
+    let by_edge: Result<Vec<Turned>, RunError<MeshError>> =
+        exec.try_map(meter, EDGE_PLANES, PLAN, &corner_ids, |_, &corner, m| {
+            m.charge(1)?;
+            if leaders.get(corner as usize) != Some(&corner) {
+                return Ok(Turned::UNSET);
+            }
+            corner_plane(input, verts, by_face, (face_of, after), corner)
+        });
+    let mut by_edge = phase(by_edge)?;
+    let mut edge_index = alloc::vec![0_u32; by_edge.len()];
+    let mut unique = Vec::with_capacity(by_edge.len());
+    // Whether a corner's face's normal points down its dominant axis.
+    let down =
+        |c: u32| -> Result<bool, MeshFault> { Ok(normal_axis(at(by_face, *at(face_of, c)?)?).1) };
+    for (corner, &leader) in (0_u32..).zip(&leaders) {
+        if leader == corner {
+            *edge_index
+                .get_mut(corner as usize)
+                .ok_or(MeshFault::Shape)? = index(unique.len())?;
+            unique.push(*at(&by_edge, corner)?);
+            continue;
+        }
+        let source = *at(&by_edge, leader)?;
+        let shared = Turned {
+            flipped: source.flipped ^ (down(leader)? == down(corner)?),
+            ..source
+        };
+        *by_edge.get_mut(corner as usize).ok_or(MeshFault::Shape)? = shared;
+        let at_leader = *at(&edge_index, leader)?;
+        *edge_index
+            .get_mut(corner as usize)
+            .ok_or(MeshFault::Shape)? = at_leader;
+    }
+    Ok(EdgePlanes {
+        all: by_edge,
+        unique,
+        index: edge_index,
+    })
 }
 
 /// One corner's edge plane: the one given, or the plane through its edge along the face's
@@ -1021,24 +1179,27 @@ pub fn build(
         });
     let by_face = phase(by_face)?;
     let (face_of, after) = corner_links(input, faces)?;
-    let corner_ids: Vec<u32> = (0..index(input.corners.len())?).collect();
-    let by_edge: Result<Vec<Turned>, RunError<MeshError>> =
-        exec.try_map(meter, EDGE_PLANES, PLAN, &corner_ids, |_, &corner, m| {
-            m.charge(1)?;
-            corner_plane(input, &verts, &by_face, (&face_of, &after), corner)
-        });
-    let by_edge = phase(by_edge)?;
-    let mut own = Vec::with_capacity(verts.implicit.len().saturating_mul(3));
-    for plane in verts.implicit.iter().flatten() {
-        own.push(Turned::given(plane)?);
-    }
-    let (pooled, rows) = pool(&[&by_face, &by_edge, &own], exec, meter)?;
-    let own_base = by_face.len().saturating_add(by_edge.len());
-
     let mut corner_vertex: Vec<u32> = Vec::with_capacity(input.corners.len());
     for &v in &input.corners {
         corner_vertex.push(*at(&verts.of_input, v)?);
     }
+    let edges = edge_planes(
+        input,
+        (&verts, &by_face),
+        (&face_of, &after),
+        &corner_vertex,
+        (exec, meter),
+    )?;
+    let mut own = Vec::with_capacity(verts.implicit.len().saturating_mul(3));
+    for plane in verts.implicit.iter().flatten() {
+        own.push(Turned::given(plane)?);
+    }
+    // One plane per edge that shares goes into the pool, and every corner gets its row back.
+    let (pooled, pooled_rows) = pool(&[&by_face, &edges.unique, &own], exec, meter)?;
+    let rows = edges.rows(by_face.len(), &pooled_rows)?;
+    let by_edge = edges.all;
+    let own_base = by_face.len().saturating_add(by_edge.len());
+
     let mut triples = Vec::new();
     if !verts.implicit.is_empty() {
         let row_of = |i: usize| rows.get(i).copied().ok_or(MeshFault::Shape);
