@@ -5107,7 +5107,6 @@
       "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
     },
     {
-<<<<<<< HEAD
       "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
       "mutant": "replace | with ^ in shifted",
       "line_text": "up | below.checked_shr(64_u32.saturating_sub(spare)).unwrap_or(0)",
@@ -5202,7 +5201,8 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The pieces differ here, the equal case having been passed over."
-=======
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/generated/circle_gap.rs",
       "mutant": "replace * with + in filter",
       "line_text": "let scale = larger(larger(m_t * m_t, m_y * m_y), m_x * m_x);",
@@ -5257,7 +5257,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The case dx = 0 has returned above, so 0 never reaches this test."
->>>>>>> piece/G189
     }
   ],
   "coverage_off": [
