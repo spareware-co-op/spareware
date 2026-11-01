@@ -33,6 +33,9 @@ geom-gen = { path = "../geom-gen" }
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
 
+# The sketch_text target (G217): the parser under test (MPL-2.0, ours).
+geom-sketch = { path = "../geom-sketch" }
+
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under
 # libFuzzer, AFL or honggfuzz (cargo-bolero) and under Kani. MIT.

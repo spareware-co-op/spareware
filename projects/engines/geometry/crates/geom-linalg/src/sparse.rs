@@ -193,6 +193,30 @@ impl Sparse {
         ))
     }
 
+    /// Where the entry at (`row`, `col`) is stored, for [`Sparse::set_at`].
+    ///
+    /// # Errors
+    ///
+    /// [`LinalgError::Shape`] if no entry is stored there.
+    pub fn place_of(&self, row: usize, col: usize) -> Result<usize, LinalgError> {
+        let (rows, _) = self.column(col)?;
+        let within = rows.binary_search(&row).map_err(|_| LinalgError::Shape)?;
+        at(&self.starts, col)?
+            .checked_add(within)
+            .ok_or(LinalgError::Defect)
+    }
+
+    /// Sets the entry stored at `place`: the pattern stays, so an analysis of it still serves.
+    ///
+    /// # Errors
+    ///
+    /// [`LinalgError::Shape`] if nothing is stored there; [`LinalgError::NotFinite`].
+    pub fn set_at(&mut self, place: usize, value: f64) -> Result<(), LinalgError> {
+        let held = self.values.get_mut(place).ok_or(LinalgError::Shape)?;
+        *held = finite(value)?;
+        Ok(())
+    }
+
     /// A·x.
     ///
     /// # Errors

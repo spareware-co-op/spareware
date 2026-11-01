@@ -994,6 +994,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-run",
+ "geom-sketch",
  "geom-surface",
  "geom-test",
  "num-bigint",
@@ -1304,6 +1305,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]

@@ -287,6 +287,28 @@ impl Lattice {
         Lattice::new(origin, small(&u)?, small(&v)?)
     }
 
+    /// The grid point at (0, 0).
+    ///
+    /// # Errors
+    ///
+    /// None for a frame this module made; [`PlaneError::OutOfRange`] otherwise.
+    pub fn origin(&self) -> Result<P3, PlaneError> {
+        let [x, y, z] = self.origin;
+        P3::new(x, y, z).map_err(|_| PlaneError::OutOfRange)
+    }
+
+    /// u.
+    #[must_use]
+    pub const fn u(&self) -> [i128; 3] {
+        self.u
+    }
+
+    /// v.
+    #[must_use]
+    pub const fn v(&self) -> [i128; 3] {
+        self.v
+    }
+
     /// u·u, u·v and v·v: the Gram matrix sketch lengths are measured through.
     #[must_use]
     pub const fn gram(&self) -> [i128; 3] {
@@ -421,6 +443,12 @@ impl Rotated {
         })
     }
 
+    /// The origin and the two axes.
+    #[must_use]
+    pub const fn parts(&self) -> ([f64; 3], [f64; 3], [f64; 3]) {
+        (self.origin, self.x_axis, self.y_axis)
+    }
+
     /// The grid point nearest (s, t).
     ///
     /// # Errors
@@ -505,6 +533,12 @@ impl SketchPlane {
     #[must_use]
     pub const fn frame(&self) -> &PlaneFrame {
         &self.frame
+    }
+
+    /// Its grid step.
+    #[must_use]
+    pub const fn step(&self) -> GridStep {
+        self.step
     }
 
     /// The point at (s, t), with its class.

@@ -2691,6 +2691,28 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the input, three parses and two writes at most.",
+          "does": "[`harness`] reads the fuzzer's bytes as text and hands them to `geom_sketch::text::parse`. A text it accepts must write, read back equal, and write the same text again.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/sketch_text.rs",
+          "guarantees": [
+            "**Never a panic.** `parse` returns a sketch or a typed refusal on every input.",
+            "**Round trip.** What parses, writes; what it writes parses to the same sketch; and that writes the same text."
+          ],
+          "job": "The fuzz target of the sketch text form (piece G217): any bytes at all are refused cleanly or read as a sketch that writes back to one fixed text.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "the property-based fuzzing of 28.5 (`projects/engines/geometry/architecture/28-testing.md`), on the grammar of section 15.13 (`projects/engines/geometry/architecture/15-sketches.md`)."
+          },
+          "path": "geom_fuzz::sketch_text",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.44).",
           "family": [],
@@ -7524,6 +7546,80 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a sketch or one of its items could not be made.",
+          "file": "projects/engines/geometry/crates/geom-sketch/src/model.rs",
+          "kinds": [
+            {
+              "doc": "Two items have this id.",
+              "name": "Duplicate",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Nothing has this id.",
+              "name": "Unknown",
+              "shape": "tuple"
+            },
+            {
+              "doc": "This item is not the kind the reference needs.",
+              "name": "WrongKind",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A value is NaN or infinite.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "A radius, a length or a distance that must be positive is not. A distance of zero is authored as a coincidence (section 15.4).",
+              "name": "NotPositive",
+              "shape": "unit"
+            },
+            {
+              "doc": "A reference dimension that is not a dimension.",
+              "name": "NotADimension",
+              "shape": "tuple"
+            },
+            {
+              "doc": "No side can be read from the drawing: the point is exactly on the line, or off the grid. The author must state the choice.",
+              "name": "RootChoiceUndetermined",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The start is on this constraint's singular set.",
+              "name": "Degenerate",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Text that is not `sketch v1`, at this line, from 1.",
+              "name": "Text",
+              "shape": "struct"
+            },
+            {
+              "doc": "A plane's frame.",
+              "name": "Plane",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The arithmetic.",
+              "name": "Numeric",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The linear algebra.",
+              "name": "Linear",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An allocation could not be made.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_sketch::model",
+          "name": "SketchError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a sketch plane or a map could not be made.",
           "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
           "kinds": [
@@ -7580,6 +7676,55 @@
       "layer": "10",
       "modules": [
         {
+          "cost": "[`Assembly::new`] sorts the Jacobian's entries once; [`Assembly::evaluate`] is linear in the constraints, with no allocation. No recursion.",
+          "does": "a kind implements [`Residual`]: its residual function, a length that is zero exactly when the constraint holds, and the part of the variables where it has no derivative. Its derivatives come from running that one function on dual numbers (`geom_num::dual`), never from a second text. [`Assembly`] reads a sketch's pattern once: which variables each driving constraint touches, in authoring order, and the Jacobian's stored entries. [`Assembly::evaluate`] then fills the residuals and the Jacobian, in the variables the solver sees: each divided by its power of two, so each column is multiplied by it. It checks the start against each singular set first.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+          "guarantees": [
+            "**Derivatives are generated.** A Jacobian entry is the dual number's, and tests hold it to central differences of the same residual (chapter 15.4).",
+            "**Every residual is a length, with a gradient of length one.** At the solution each residual equals the distance it measures to first order.",
+            "**Smooth forms.** A distance d uses (|PQ|² − d²) / 2d, a polynomial in the variables.",
+            "**Singular sets are declared.** [`Residual::singular`] is checked before differentiating, and a start on one is [`SketchError::Degenerate`], naming the constraint. The remedy of section 15.4, a perturbation derived from keys, is the solver's (G222).",
+            "**The pattern is structure alone.** [`Assembly::new`] reads no value, so it is built once for a sketch's structure and reused for every evaluation.",
+            "**Deterministic.** Constraints run in authoring order, and a NaN anywhere is [`SketchError::Numeric`] from the operation that made it."
+          ],
+          "job": "Equations: each constraint's residual, written once over [`Scalar`], its singular set, and the assembly of a sketch's residuals and Jacobian.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "section 15.4 (`projects/engines/geometry/architecture/15-sketches.md`), on the forward mode of `geom_num::dual`; the point-line distance as a cross product over a length, the standard form, H. S. M. Coxeter, *Introduction to Geometry*, 2nd ed., Wiley (1969), section 1.4."
+          },
+          "path": "geom_sketch::equation",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "adding an item costs a binary search and a move of the items after it, nothing when items arrive in order; O(n) memory. No recursion.",
+          "does": "a [`Sketch`] holds a plane, its [`Entity`]s and its [`Constraint`]s, each named by an [`ItemId`], the sequence number and key the caller stores with it. Everything is kept sorted by that id, older first, so plan order, factorisation order and every floating-point result that follows depend on stored data alone (chapter 15.2). [`Sketch::variables`] lays the entities' unknowns out in that order, each with the power of two that makes it act as a length (chapter 15.4). A constraint is driving, which the solver must meet, or reference, which is measured and never solved; its priority orders pivots and removal suggestions and nothing else (chapter 15.3).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/model.rs",
+          "guarantees": [
+            "**One order.** The items' order depends only on their ids, never on the order they were added in, so a shuffled authoring gives the same sketch.",
+            "**Finite.** Every value is finite, and a radius, a length or a distance that must be positive is, or the item is refused.",
+            "**References resolve.** An item that names another names one that exists and of the right kind, and an item with the id of another is refused.",
+            "**Exact scales.** A variable's scale is a power of two, so dividing by it rounds nothing.",
+            "**Reference only where it means something.** Only a dimension can be a reference."
+          ],
+          "job": "The sketch model: entities and their variables, constraints and their standing, in authoring order.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "section 15.2's table of entities and variables, and sections 15.3 and 15.4 (`projects/engines/geometry/architecture/15-sketches.md`)."
+          },
+          "path": "geom_sketch::model",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a lattice's construction takes O(log n) divisions and O(log n) reduction steps; every map is constant time. No allocation; no recursion.",
           "does": "a [`SketchPlane`] holds a [`PlaneFrame`]. A [`Lattice`] frame is exact both ways: a sketch point (s, t) is origin + s·u + t·v, whole numbers throughout, and every grid point of the plane is one (s, t). Axis-aligned planes have unit vectors for u and v. A plane with a small whole-number normal, such as a 5-in-12 roof, takes the two shortest vectors of its grid ([`Lattice::of_normal`]), and the sketch measures through their Gram matrix, so a rafter measures its true length ([`Lattice::length_squared`]). A [`Rotated`] frame serves every other plane: its axes are orthonormal doubles, and placing a point in 3D rounds it to the grid.",
           "family": [],
@@ -7603,13 +7748,47 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "linear in the text, and O(log n) a line for the sorted insert. No recursion.",
+          "does": "[`write`] prints a sketch: its plane, then each entity and constraint in authoring order, one to a line. [`parse`] reads that back. An id is written `sequence.key`; a number as the shortest decimal that reads back to the same double, so a grid value is a whole number of steps.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/text.rs",
+          "guarantees": [
+            "**Round trip.** `parse(write(s)) == s`, bit for bit, for every sketch.",
+            "**Canonical.** A sketch has one text: `write(parse(t))` is the same whatever order `t`'s items came in, once they name only what came before them.",
+            "**Never a panic.** Any text at all gives a sketch or [`SketchError::Text`] with its line, or the refusal [`Sketch::add_entity`] gives: the parser's fuzz target holds it to that (`geom-fuzz`'s `sketch_text`). A value the model refuses is refused here too.",
+            "**Versioned.** The first line names the grammar. A later grammar is a new tag, and this one keeps reading its own (chapter 26.2)."
+          ],
+          "job": "The sketch text form, `sketch v1`: a sketch problem as lines of text that round-trip exactly, for tests, bug reports and AI agents.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "a line-oriented text form on the model of ezpz's problem files, section 15.13 (`projects/engines/geometry/architecture/15-sketches.md`). `core`'s float formatting and parsing round-trip every double (the shortest-digits guarantee of the standard library's `Display`)."
+          },
+          "path": "geom_sketch::text",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/README.md",
+              "method_note": null,
+              "name": "ezpz (Zoo)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the idea of a problem file; none of its grammar is taken.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-sketch",
       "provenance": [],
       "sections": "15, and 22 for its errors, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216 is done.",
+      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216 and G217 are done.",
       "summary": "Spare Kit geometry kernel: the constraint solver."
     },
     {
@@ -10055,6 +10234,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-num/src/rng.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/README.md",
+      "method_note": null,
+      "name": "ezpz (Zoo)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-sketch/src/text.rs"
       ]
     },
     {
