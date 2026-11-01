@@ -21,7 +21,7 @@ use geom_mesh::exact::build::{Corner, Polygons, build};
 use geom_mesh::exact::mass::Volume;
 use geom_mesh::exact::{ExactMesh, MeshError, MeshKind};
 use geom_num::wide::I256;
-use geom_op::{NameId, NameSet, OpId, OpPath, Origin};
+use geom_op::{NameId, NameSet, OpId, OpPath, Origin, PieceKey, Side, TopoName};
 use geom_poly::winding::{Term, WindingTest};
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
@@ -377,6 +377,71 @@ fn a_cut_through_splits_a_run_into_named_pieces() {
     assert_eq!(of_box, 2);
     less.history.check(&inputs(&[1, 2])).unwrap();
     assert_eq!(less.mesh.parts().runs.len(), less.history.records().len());
+    // A piece of the box lies before the tool that cut it, and one of the tool behind the box.
+    for record in less.history.records() {
+        if let Origin::Split { of, piece } = &record.origin {
+            let (tools, side) = if *of == name_of(1) {
+                (inputs(&[2]), Side::Front)
+            } else {
+                (inputs(&[1]), Side::Back)
+            };
+            assert_eq!(*piece, PieceKey::ByTools { tools, side });
+        }
+    }
+}
+
+#[test]
+fn pieces_told_apart_by_their_tools_need_no_ordinal() {
+    let a = solid([0, 0, 0], [9, 3, 3], 1);
+    let left = solid([2, -1, -1], [3, 4, 4], 2);
+    let right = solid([6, -1, -1], [7, 4, 4], 3);
+    let less = one(&[&a, &left, &right], WindingTest::subtract(0));
+    assert_eq!(six_volume(&less.mesh), six(7 * 9));
+    let mut pieces = 0;
+    for record in less.history.records() {
+        if let Origin::Split { of, piece } = &record.origin
+            && *of == name_of(1)
+        {
+            let name = TopoName::Split {
+                op: step(),
+                of: *of,
+                piece: piece.clone(),
+            };
+            assert_eq!(record.output, name.id().unwrap());
+            pieces += 1;
+        }
+    }
+    assert_eq!(pieces, 3);
+}
+
+#[test]
+fn a_run_kept_whole_but_turned_over_is_modified() {
+    let a = solid([0, 0, 0], [9, 9, 9], 1);
+    let cavity = solid([3, 3, 3], [6, 6, 6], 2);
+    let less = one(&[&a, &cavity], WindingTest::subtract(0));
+    assert_eq!(*origin_of(&less, name_of(1)), Origin::Unchanged);
+    assert!(matches!(
+        origin_of(&less, name_of(2)),
+        Origin::Modified { .. }
+    ));
+}
+
+#[test]
+fn a_merged_face_does_not_join_the_pieces_of_a_run() {
+    // What is left of the bar's own faces falls in two, joined only by the faces it shares with
+    // the blocks above and below it.
+    let bar = solid([0, 0, 0], [9, 3, 3], 1);
+    let above = solid([3, 0, 3], [6, 3, 6], 2);
+    let below = solid([3, 0, -3], [6, 3, 0], 3);
+    let united = one(&[&bar, &above, &below], WindingTest::unite());
+    assert_eq!(six_volume(&united.mesh), six(81 + 54));
+    let pieces = united
+        .history
+        .records()
+        .iter()
+        .filter(|r| matches!(r.origin, Origin::Split { of, .. } if of == name_of(1)))
+        .count();
+    assert_eq!(pieces, 2);
 }
 
 #[test]
