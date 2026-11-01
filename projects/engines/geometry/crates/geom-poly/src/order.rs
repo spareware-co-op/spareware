@@ -89,6 +89,59 @@ fn cross_in_words(a: [i128; 3], b: [i128; 3]) -> Option<[i128; 3]> {
     ])
 }
 
+/// A plane's coefficients in `i64`, if they fit.
+fn plane_words(p: &Plane) -> Option<([i64; 3], i64)> {
+    let [x, y, z] = p.n();
+    Some((
+        [
+            i64::try_from(x).ok()?,
+            i64::try_from(y).ok()?,
+            i64::try_from(z).ok()?,
+        ],
+        i64::try_from(p.d()).ok()?,
+    ))
+}
+
+/// `a` · `b` for `a` and `b` in `i64`, in `i128`: each product fits, which the compiler sees, so
+/// it is one multiplication; only the sums are checked.
+fn wide_product(a: i64, b: i64) -> Option<i128> {
+    i128::from(a).checked_mul(i128::from(b))
+}
+
+/// `a` × `b` for `a` and `b` in `i64`, in `i128` and then `i64`, if that fits.
+fn cross_of_words(a: [i64; 3], b: [i64; 3]) -> Option<[i64; 3]> {
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    let minor = |s: i64, t: i64, u: i64, v: i64| {
+        i64::try_from(wide_product(s, t)?.checked_sub(wide_product(u, v)?)?).ok()
+    };
+    Some([
+        minor(ay, bz, az, by)?,
+        minor(az, bx, ax, bz)?,
+        minor(ax, by, ay, bx)?,
+    ])
+}
+
+/// `a` · `b` for `a` and `b` in `i64`, in `i128`.
+fn dot_of_words(a: [i64; 3], b: [i64; 3]) -> Option<i128> {
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    wide_product(ax, bx)?
+        .checked_add(wide_product(ay, by)?)?
+        .checked_add(wide_product(az, bz)?)
+}
+
+/// X and w in `i64`, if they fit.
+fn point_words(x: [i128; 3], w: i128) -> Option<([i64; 3], i64)> {
+    let [first, second, third] = x;
+    Some((
+        [
+            i64::try_from(first).ok()?,
+            i64::try_from(second).ok()?,
+            i64::try_from(third).ok()?,
+        ],
+        i64::try_from(w).ok()?,
+    ))
+}
+
 /// `a` · `b` in `i128`, if every step fits.
 fn dot_in_words(a: [i128; 3], b: [i128; 3]) -> Option<i128> {
     let ([ax, ay, az], [bx, by, bz]) = (a, b);
@@ -106,6 +159,9 @@ fn dot_in_words(a: [i128; 3], b: [i128; 3]) -> Option<i128> {
 pub(crate) struct Meeting {
     x: [i128; 3],
     w: i128,
+    /// X and w in `i64`, where they fit: a reading against a plane whose coefficients fit too is
+    /// then four single multiplications.
+    words: Option<([i64; 3], i64)>,
 }
 
 impl Meeting {
@@ -113,6 +169,38 @@ impl Meeting {
     /// `d_r` (`n_p` × `n_q`) and w = det(`n_p`, `n_q`, `n_r`), the cofactors of the offsets' column;
     /// `None` if a step leaves `i128`, as for planes near the budget's edge.
     pub(crate) fn new(p: &Plane, q: &Plane, r: &Plane) -> Option<Self> {
+        let point = Self::from_words(p, q, r).or_else(|| Self::from_wide(p, q, r))?;
+        Some(Meeting {
+            words: point_words(point.x, point.w),
+            ..point
+        })
+    }
+
+    /// [`Meeting::new`] for planes whose coefficients, and whose normals' cross products, fit
+    /// `i64`, as a building's do: every product is of two `i64`s.
+    fn from_words(p: &Plane, q: &Plane, r: &Plane) -> Option<Self> {
+        let ((n_p, d_p), (n_q, d_q), (n_r, d_r)) =
+            (plane_words(p)?, plane_words(q)?, plane_words(r)?);
+        let (qr, pr, pq) = (
+            cross_of_words(n_q, n_r)?,
+            cross_of_words(n_p, n_r)?,
+            cross_of_words(n_p, n_q)?,
+        );
+        let mut x = [0; 3];
+        for (slot, ((a, b), c)) in x.iter_mut().zip(qr.iter().zip(&pr).zip(&pq)) {
+            *slot = wide_product(d_q, *b)?
+                .checked_sub(wide_product(d_p, *a)?)?
+                .checked_sub(wide_product(d_r, *c)?)?;
+        }
+        Some(Meeting {
+            x,
+            w: dot_of_words(n_p, qr)?,
+            words: None,
+        })
+    }
+
+    /// [`Meeting::new`] in `i128` throughout.
+    fn from_wide(p: &Plane, q: &Plane, r: &Plane) -> Option<Self> {
         let (n_p, n_q, n_r) = (p.n(), q.n(), r.n());
         let (qr, pr, pq) = (
             cross_in_words(n_q, n_r)?,
@@ -130,12 +218,17 @@ impl Meeting {
         Some(Meeting {
             x,
             w: dot_in_words(n_p, qr)?,
+            words: None,
         })
     }
 
     /// The sign of the 4 × 4 determinant of the three planes and `s`, rows in that order: `n_s` · X
     /// + `d_s` · w, or `None` if a step leaves `i128`.
     pub(crate) fn reading(&self, s: &Plane) -> Option<Sign> {
+        if let (Some((x, w)), Some((n, d))) = (self.words, plane_words(s)) {
+            let value = dot_of_words(n, x)?.checked_add(wide_product(d, w)?)?;
+            return Some(Sign::of_i128(value));
+        }
         let value = dot_in_words(s.n(), self.x)?.checked_add(s.d().checked_mul(self.w)?)?;
         Some(Sign::of_i128(value))
     }
@@ -419,6 +512,24 @@ mod tests {
         let far = 1i128 << 124;
         let [a, b, c] = [[1, 2, 3], [3, -1, 2], [2, 3, -5]].map(|n| Plane::new(n, far).unwrap());
         assert!(Meeting::new(&a, &b, &c).is_none());
+    }
+
+    #[test]
+    fn normals_whose_cross_product_leaves_i64_take_i128() {
+        let big = 1i128 << 40;
+        let p = Plane::new([big, 0, 0], -3 * big).unwrap();
+        let q = Plane::new([0, big, 0], -4 * big).unwrap();
+        let r = Plane::new([0, 0, 1], -5).unwrap();
+        let at = Meeting::new(&p, &q, &r).unwrap();
+        assert!(at.words.is_none());
+        for s in [[1, 1, 1, -12], [1, 1, 1, -11], [2, -1, 3, 7]] {
+            let s = Plane::new([s[0], s[1], s[2]], s[3]).unwrap();
+            assert_eq!(
+                at.reading(&s),
+                Some(determinant_sign(&p, &q, &r, &s).unwrap())
+            );
+        }
+        assert_eq!(at.weight(), normals_sign(&p, &q, &r).unwrap());
     }
 
     #[test]
