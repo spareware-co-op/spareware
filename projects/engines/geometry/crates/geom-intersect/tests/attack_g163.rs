@@ -1496,3 +1496,62 @@ fn circles_off_the_axes_are_compared_by_the_distance_of_their_centres() {
     is_empty(&meet(&a, &circle([9.0, 12.0], 4.0)));
     assert_eq!(meet(&a, &circle([9.0, 12.0], 6.0)).items().len(), 2);
 }
+
+#[test]
+fn a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts() {
+    // A whole turn of radius 5000 from 0 or from 1 (half-turns), against lines through its
+    // join, through the point half a turn on, and one slanting through the join from 1. Each
+    // crossing is found once, on the domain, either way round.
+    let turn = |from: f64| {
+        let frame = Frame::standard().unwrap();
+        CurveKind::Circle(Circle::new([0.0, 0.0], 5000.0, frame, (from, from + 2.0)).unwrap())
+    };
+    let east = bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]]);
+    let west = bezier(&[[0.0, 0.0], [-5000.0, 0.0], [-10000.0, 0.0]]);
+    let slant = bezier(&[[-6000.0, -1000.0], [-5000.0, 0.0], [-4000.0, 1000.0]]);
+    for (a, b, s, t) in [
+        (turn(0.0), east.clone(), 0.0, 0.5),
+        (turn(0.0), west.clone(), 1.0, 0.5),
+        (turn(1.0), west.clone(), 1.0, 0.5),
+        (turn(1.0), east.clone(), 2.0, 0.5),
+        (turn(1.0), slant.clone(), 1.0, 0.5),
+        (east.clone(), turn(0.0), 0.5, 0.0),
+        (west.clone(), turn(1.0), 0.5, 1.0),
+    ] {
+        let r = meet(&a, &b);
+        assert!(
+            matches!(
+                r.items(),
+                [Item::Point {
+                    contact: PointContact::Crossing,
+                    ..
+                }]
+            ),
+            "{:?}",
+            r.items()
+        );
+        let at = r.items()[0].at().spans();
+        let (ms, mt) = (
+            at[0].lo() * 0.5 + at[0].hi() * 0.5,
+            at[1].lo() * 0.5 + at[1].hi() * 0.5,
+        );
+        assert!((ms - s).abs() < 1e-4 && (mt - t).abs() < 1e-4, "{at:?}");
+    }
+    // An arc from a quarter to three quarters of a turn, whose ends add to 2, is no whole turn:
+    // the y axis touches it at both ends.
+    let r = meet(
+        &infinite([0.0, 0.0], [0.0, 1.0]),
+        &arc([0.0, 0.0], 5.0, (0.5, 1.5)),
+    );
+    assert!(
+        r.items().iter().all(|i| matches!(
+            i,
+            Item::Point {
+                contact: PointContact::BoundaryTouch,
+                ..
+            }
+        )) && r.items().len() == 2,
+        "{:?}",
+        r.items()
+    );
+}
