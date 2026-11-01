@@ -1040,16 +1040,40 @@ fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
     runs
 }
 
-/// `runs`, each cut wherever another run ends on its line.
+/// The whole parts of a corner's coordinates, where it has [`Cell`]s: it lies in the unit cell from
+/// them.
+fn floors(corner: &Corner) -> Option<[i128; 3]> {
+    corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])
+}
+
+/// Whether a corner whose floors are `at` lies outside the cells from `a` to `b`: a point of the
+/// segment between two corners lies within their floors' range and a unit more.
+fn beyond(at: &[i128; 3], (a, b): (&[i128; 3], &[i128; 3])) -> bool {
+    at.iter()
+        .zip(a.iter().zip(b))
+        .any(|(v, (p, q))| v < &(*p).min(*q) || v > &(*p).max(*q))
+}
+
+/// `runs`, each cut wherever another run ends on its line. A run's line holds only points between
+/// its ends' cells, so a point outside them is not read.
 fn cut_at_ends(runs: Vec<Run>, places: &[Corner]) -> Result<Vec<Run>, MergeError> {
     let mut ends: Vec<usize> = runs.iter().flat_map(|r| [r.low, r.high]).collect();
     ends.sort_unstable();
     ends.dedup();
+    let cells: Vec<Option<[i128; 3]>> = places.iter().map(floors).collect();
     let mut edges: Vec<Run> = Vec::with_capacity(runs.len());
     for run in runs {
         let [p, q] = run.on;
         let mut low = run.low;
+        let span = cells.get(run.low).zip(cells.get(run.high));
+        let span = span.and_then(|(a, b)| a.as_ref().zip(b.as_ref()));
         for mark in ends.iter().filter(|e| **e > run.low && **e < run.high) {
+            let outside = span
+                .zip(cells.get(*mark).and_then(Option::as_ref))
+                .is_some_and(|(span, at)| beyond(at, span));
+            if outside {
+                continue;
+            }
             let place = places.get(*mark).ok_or(MergeError::Open)?;
             let side = |plane: &Plane| plane.side_of_tpi(&place.point);
             if side(&p)? == Sign::Zero && side(&q)? == Sign::Zero {
