@@ -318,6 +318,79 @@ fn three_plane_points_are_traced() {
 }
 
 #[test]
+fn a_grid_corner_among_corners_off_the_grid_is_on_the_surface() {
+    let top = p(9, 9, 9);
+    let inside = p(3, 3, 3);
+    let reversed = |plane: Plane| Plane::new(plane.n().map(|c| -c), -plane.d()).unwrap();
+    let side = |a: P3, b: P3| {
+        let plane = Plane::through(top, a, b).unwrap();
+        if plane.side(inside).unwrap() == Sign::Positive {
+            reversed(plane)
+        } else {
+            plane
+        }
+    };
+    let (x, y, z) = (p(3, 0, 0), p(0, 3, 0), p(0, 0, 3));
+    let (a, b, c) = (side(y, z), side(z, x), side(x, y));
+    let base = Plane::new([-1, -1, -1], 2).unwrap();
+    let vertices = vec![
+        Corner::Grid(top),
+        Corner::Planes([base, b, c]),
+        Corner::Planes([base, c, a]),
+        Corner::Planes([base, a, b]),
+    ];
+    let mut input = soup(vertices, &[&[0, 1, 2], &[0, 2, 3], &[0, 3, 1], &[1, 3, 2]]);
+    input.face_plane = vec![Some(c), Some(a), Some(b), Some(base)];
+    input.edge_plane = [[b, base, a], [c, base, b], [a, base, c], [b, a, c]]
+        .concat()
+        .into_iter()
+        .map(|plane| Some(reversed(plane)))
+        .collect();
+    let m = mesh(&input);
+    let c = classifier(&m);
+    assert_eq!(locate(&c, top), Located::OnSurface);
+    assert_eq!(locate(&c, p(5, 5, 5)), Located::Winding(1));
+    assert_eq!(locate(&c, p(10, 10, 10)), Located::Winding(0));
+}
+
+#[test]
+fn a_point_far_from_the_origin_is_traced_where_it_is() {
+    let at = |x: i64, y: i64, z: i64| g(1000 + x, 1000 + y, 1000 + z);
+    let m = mesh(&soup(
+        vec![
+            at(0, 0, 0),
+            at(9, 0, 0),
+            at(9, 9, 0),
+            at(0, 9, 0),
+            at(0, 0, 9),
+            at(9, 0, 9),
+            at(9, 9, 9),
+            at(0, 9, 9),
+        ],
+        &[
+            &[0, 3, 2, 1],
+            &[4, 5, 6, 7],
+            &[0, 1, 5, 4],
+            &[1, 2, 6, 5],
+            &[2, 3, 7, 6],
+            &[3, 0, 4, 7],
+        ],
+    ));
+    let c = classifier(&m);
+    let plane = |n: [i128; 3], d: i128| Plane::new(n, d).unwrap();
+    let thirds = |x: i128, y: i128, z: i128| {
+        Tpi::new(
+            plane([3, 0, 0], -x),
+            plane([0, 3, 0], -y),
+            plane([0, 0, 3], -z),
+        )
+        .unwrap()
+    };
+    assert_eq!(c.beside(&thirds(3010, 3010, 3010), &mut meter()), Ok(1));
+    assert_eq!(c.beside(&thirds(2999, 3010, 3010), &mut meter()), Ok(0));
+}
+
+#[test]
 fn an_open_mesh_is_refused() {
     let m = mesh(&soup(
         vec![g(0, 0, 0), g(4, 0, 0), g(0, 4, 0)],
