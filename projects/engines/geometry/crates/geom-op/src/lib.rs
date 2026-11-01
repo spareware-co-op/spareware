@@ -94,8 +94,8 @@ pub use geom_num::Exactness;
 pub use id::{Label, NameId, OpId, OpPath};
 pub use kind::ErrorKind;
 pub use name::{
-    EdgeOrVertex, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal, PieceKey, Role,
-    RoleArg, Side, TopoName,
+    EdgeOrVertex, KEYED_ROLES, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal,
+    PieceKey, Role, RoleArg, Side, TopoName,
 };
 pub use output::{Diagnostic, OpOutput};
 pub use remedy::{Bound, Remedy};
