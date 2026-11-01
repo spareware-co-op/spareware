@@ -30,6 +30,11 @@
 //!   arithmetic, and a sign that cannot be certified counts as at risk; the smallest pivot of each
 //!   square block is held at or above [`INDEPENDENT`]. After [`MOST_HALVINGS`] halvings at one place
 //!   the answer is [`SketchError::BranchLost`], with the rule and how far along the path it stopped.
+//!   A step is halved after a failure and doubled after a success, and the halvings are those that
+//!   brought the step to its size: a failed step of 2^-10 of the path loses it. Read as halvings
+//!   since the last success, 15.7's rule would let a path creep up on a singular place in ever
+//!   smaller steps that each succeed, and never end. So a path takes at most about 2,000 steps:
+//!   each success moves at least 2^-10 of it, and each failure undoes at most one doubling.
 //! - **Deterministic.** Stages, rows and steps run in an order that depends on stored data alone, and
 //!   the schedule of a path on the stored state and the new values alone (chapter 15.7).
 //!
@@ -68,7 +73,8 @@ pub const TOLERANCE: f64 = 0.015_625;
 /// A pivot at least this large is independent: section 15.8's `σ_ind`, 2^-12.
 pub const INDEPENDENT: f64 = 0.000_244_140_625;
 
-/// How many halvings at one place of a path before it is lost (section 15.7).
+/// How many halvings at one place of a path before it is lost (section 15.7). A step is 2^-k of the
+/// path after k more halvings than doublings, so a step of 2^-10 of the path that fails loses it.
 pub const MOST_HALVINGS: u32 = 10;
 
 /// How many iterations a stage may take. A block that is converging takes a few.
@@ -617,7 +623,10 @@ pub fn continue_to(
         let pivot = stage.smallest_pivot(&mut plan.assembly, &x, &mut r, meter)?;
         push(&mut watched, stage.square && pivot >= INDEPENDENT)?;
     }
-    let (mut done, mut size, mut halvings) = (0.0_f64, 1.0_f64, 0_u32);
+    // The step is 2^-depth of the path: halved after a failure, doubled after a success. Counting
+    // halvings only since the last success would let a path that creeps up on a singular place
+    // take ever smaller steps that each succeed, and never end.
+    let (mut done, mut size, mut depth) = (0.0_f64, 1.0_f64, 0_u32);
     while done < 1.0 {
         let next = if done + size >= 1.0 { 1.0 } else { done + size };
         plan.assembly.move_along(&old, &new, next, &x)?;
@@ -628,20 +637,22 @@ pub fn continue_to(
             Err(e) => return Err(e),
         };
         if let Some(id) = reached {
-            halvings = halvings.checked_add(1).ok_or(SketchError::Internal)?;
-            if halvings > MOST_HALVINGS {
+            if depth >= MOST_HALVINGS {
                 return Err(SketchError::BranchLost {
                     constraint: id,
                     along: done,
                 });
             }
+            depth = depth.checked_add(1).ok_or(SketchError::Internal)?;
             size /= 2.0;
         } else {
             x = y;
             done = next;
             report.steps = report.steps.saturating_add(1);
-            halvings = 0;
-            size *= 2.0;
+            if depth > 0 {
+                depth = depth.saturating_sub(1);
+                size *= 2.0;
+            }
         }
     }
     plan.finish(to, &x, report)
