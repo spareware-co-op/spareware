@@ -495,6 +495,17 @@ fn common_tangents_of_every_kind_at_every_scale() {
             2 => [Sign::Positive, Sign::Negative],
             _ => [Sign::Negative, Sign::Positive],
         };
+        // Two circles that overlap, or one inside the other, have fewer tangents.
+        let apart = |p: P2, q: P2| {
+            let (dx, dy) = (
+                i128::from(p.x.get() - q.x.get()),
+                i128::from(p.y.get() - q.y.get()),
+            );
+            dx * dx + dy * dy
+        };
+        if apart(centre, other) <= (r + s) * (r + s) {
+            continue;
+        }
         let Ok(done) =
             common_tangent(&mut carriers, one, two, sides, GridStep::Q0, &certified())
         else {
@@ -613,7 +624,7 @@ fn every_corner_of_a_hundred_thousand() {
     let corners = zigzag(count, &mut rng);
     let mut carriers = Carriers::new();
     let accept = certified();
-    for corner in corners.iter().take(1_000) {
+    for corner in &corners {
         let run = fillet_all(
             &mut Carriers::new(),
             core::slice::from_ref(corner),
