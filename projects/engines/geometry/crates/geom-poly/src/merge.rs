@@ -273,7 +273,7 @@ pub struct Merged {
     /// The shells.
     pub shells: Vec<Shell>,
     /// Each piece given, its face.
-    pub piece_faces: Vec<usize>,
+    pub piece_face: Vec<usize>,
 }
 
 /// A piece on a sheet.
@@ -1152,11 +1152,11 @@ pub fn merge_with(
             .map_err(|_| MergeError::Open)
     };
     let mut shell_of_piece = Vec::with_capacity(held.len());
-    let mut piece_faces = alloc::vec![0usize; held.len()];
+    let mut piece_face = alloc::vec![0usize; held.len()];
     for (at, entry) in held.iter().enumerate() {
         let face = face_of(at)?;
         shell_of_piece.push(shell_of(face)?);
-        piece_faces
+        piece_face
             .iter_mut()
             .skip(entry.given)
             .take(1)
@@ -1213,6 +1213,6 @@ pub fn merge_with(
         fins,
         faces,
         shells,
-        piece_faces,
+        piece_face,
     })
 }
