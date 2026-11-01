@@ -164,6 +164,45 @@ fn an_open_mesh_is_refused() {
         &mut meter(),
     );
     assert_eq!(refused.unwrap_err(), MeshError::NotClosed);
+    let refused = minkowski(
+        &open,
+        &solid,
+        (source(9), GridStep::Q0),
+        &Exec::serial(),
+        &mut meter(),
+    );
+    assert_eq!(refused.unwrap_err(), MeshError::NotClosed);
+}
+
+#[test]
+fn convex_solids_take_one_hull() {
+    let a = mesh(&cuboid(2, 3, 4));
+    let b = mesh(&moved(cuboid(5, 1, 2), 1, 1, 1));
+    let mut counted = WorkMeter::new(Budget::of_work(1 << 28));
+    let s = minkowski(
+        &a,
+        &b,
+        (source(9), GridStep::Q0),
+        &Exec::serial(),
+        &mut counted,
+    )
+    .unwrap();
+    assert_eq!(six_volume(&s.mesh), six(7 * 4 * 6));
+    // One hull of 64 points: far under the 144 hulls and their union of solids that are not convex.
+    assert!(counted.used().work < 1 << 12);
+}
+
+#[test]
+fn a_meter_that_runs_out_stops_the_sum() {
+    let a = mesh(&cuboid(2, 3, 4));
+    let refused = minkowski(
+        &a,
+        &a,
+        (source(9), GridStep::Q0),
+        &Exec::serial(),
+        &mut WorkMeter::new(Budget::of_work(1)),
+    );
+    assert!(matches!(refused, Err(MeshError::Stopped(_))));
 }
 
 #[test]
