@@ -806,6 +806,75 @@ fn a_face_off_the_grid_turns_the_way_it_faces() {
     ));
 }
 
+/// One flat dart on a leaning plane, counter-clockwise from above, its corners in `grid` on the grid
+/// and the others off it. The fourth corner sits in its notch, so it turns the other way.
+fn dart(outline: [(i128, i128); 4], grid: &[usize]) -> Polygons {
+    let top = Plane::new([-1, 0, 7], -1).unwrap();
+    let wall = |k: usize| {
+        let (px, py) = outline[k];
+        let (qx, qy) = outline[(k + 1) % 4];
+        let n = [py - qy, qx - px, 0];
+        Plane::new(n, -(n[0] * px + n[1] * py)).unwrap()
+    };
+    let vertices = (0..4)
+        .map(|k| {
+            if grid.contains(&k) {
+                let (x, y) = outline[k];
+                g(x as i64, y as i64, ((x + 1) / 7) as i64)
+            } else {
+                Corner::Planes([top, wall((k + 3) % 4), wall(k)])
+            }
+        })
+        .collect();
+    let mut input = soup(vertices, &[&[0, 1, 2, 3]]);
+    input.face_plane = vec![Some(top)];
+    input.edge_plane = (0..4).map(|k| Some(wall(k))).collect();
+    input
+}
+
+/// A dart's face and all its edges turned over together, which only the turn at its lowest corner
+/// tells: the notch would turn the way the face now wants.
+fn turned_over(m: ExactMesh) -> MeshError {
+    let mut parts = m.into_parts();
+    parts.face_plane[0].flipped ^= true;
+    for facing in &mut parts.he_plane {
+        facing.flipped ^= true;
+    }
+    ExactMesh::new(parts, &Exec::serial(), &mut meter()).unwrap_err()
+}
+
+#[test]
+fn a_notch_off_the_grid_is_no_wrong_turn() {
+    let shape: [(i128, i128); 4] = [(0, -7), (14, 0), (0, 7), (5, 0)];
+    // Each turn and mirror puts the notch somewhere else in the loop's stored order.
+    for turns in 0..4 {
+        let turn = |mut p: (i128, i128)| {
+            for _ in 0..turns {
+                p = (-p.1, p.0);
+            }
+            p
+        };
+        let [a, b, c, d] = shape.map(turn);
+        let [e, f, h, i] = shape.map(|(x, y)| turn((x, -y)));
+        for outline in [[a, b, c, d], [i, h, f, e]] {
+            let m = mesh(&dart(outline, &[]));
+            assert!(matches!(
+                turned_over(m),
+                MeshError::Fault(MeshFault::WrongWayRound { face: 0 })
+            ));
+        }
+    }
+}
+
+#[test]
+fn corners_on_and_off_the_grid_sort_together() {
+    let m = mesh(&dart([(-1, -7), (13, 0), (-1, 7), (5, 0)], &[0, 1, 2]));
+    assert!(matches!(
+        turned_over(m),
+        MeshError::Fault(MeshFault::WrongWayRound { face: 0 })
+    ));
+}
+
 #[test]
 fn a_hole_off_the_grid_goes_the_other_way_round() {
     let m = mesh(&holed(false));
