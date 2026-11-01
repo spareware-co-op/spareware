@@ -486,7 +486,11 @@ impl<'m> Classifier<'m> {
         let mut reference = Winding::default();
         let start = i32::try_from(base).map_err(|_| NumError::BudgetExceeded)?;
         reference.add(0, start).map_err(|_| MeshError::Defect)?;
-        let cell = Cell { low, high };
+        // A box is in half steps.
+        let cell = Cell {
+            low: low.map(|v| v.saturating_mul(2)),
+            high: high.map(|v| v.saturating_mul(2)),
+        };
         let traced = classify(&cell, &reference, &polygons, &pieces, meter).map_err(trace_error)?;
         let one = traced.first().ok_or(MeshError::Defect)?;
         Ok(i64::from(one.front.count(0)))
