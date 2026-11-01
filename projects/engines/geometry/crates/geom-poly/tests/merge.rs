@@ -261,6 +261,47 @@ fn a_cavity_is_held_by_the_innermost_shell_around_it() {
 }
 
 #[test]
+fn a_cavity_is_held_by_the_innermost_shell_whatever_their_numbers() {
+    // A tilted solid's first face sorts before a block's, so the inner solid is numbered first.
+    let mut polygons = scene(&[
+        block([0, 0, 0], [100, 100, 100]),
+        block([10, 10, 10], [90, 90, 90]),
+    ]);
+    let solid = [[20, 20, 20], [80, 20, 21], [20, 80, 22], [21, 22, 80]];
+    let cavity = [[30, 30, 30], [50, 30, 31], [30, 50, 32], [31, 32, 50]];
+    for (entry, corners) in [(2, solid), (3, cavity)] {
+        let turned = [corners[1], corners[0], corners[2], corners[3]];
+        tetrahedron(corners, entry, &mut polygons)
+            .or_else(|| tetrahedron(turned, entry, &mut polygons))
+            .unwrap();
+    }
+    let test = WindingTest::new(vec![
+        Term::Inside(0),
+        Term::Inside(1),
+        Term::Not,
+        Term::And,
+        Term::Inside(2),
+        Term::Inside(3),
+        Term::Not,
+        Term::And,
+        Term::Or,
+    ])
+    .unwrap();
+    let pieces = kept(&polygons, &test, LEAF_POLYGONS);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&m, &pieces);
+    assert_eq!(m.shells.len(), 4);
+    let find = |outer: bool, sides: usize| {
+        (0..4)
+            .find(|s| m.shells[*s].outer == outer && m.shells[*s].faces.len() == sides)
+            .unwrap()
+    };
+    assert!(find(true, 4) < find(true, 6));
+    assert_eq!(m.shells[find(false, 4)].holder, Some(find(true, 4)));
+    assert_eq!(m.shells[find(false, 6)].holder, Some(find(true, 6)));
+}
+
+#[test]
 fn blocks_apart_make_two_outer_shells() {
     let far = block([9, 0, 0], [12, 4, 4]);
     let m = merged(&[A, far], &WindingTest::unite(), LEAF_POLYGONS);
@@ -801,6 +842,24 @@ fn tilted_solids_meet_where_three_planes_do() {
     }
     for test in [WindingTest::intersect(2), WindingTest::subtract(0)] {
         tilted(&[a, b], &test, 4).unwrap();
+    }
+}
+
+#[test]
+fn a_point_on_a_split_is_not_named_by_it() {
+    // The edge from (0, 0, -1) to (1, 2, 1) pierces the wide solid's top at (1/2, 1, 0), and the
+    // first split, half way along x, runs through that point.
+    let turned_out = |t: [[i64; 3]; 4]| {
+        let fits = tetrahedron(t, 0, &mut Vec::new()).is_some();
+        if fits { t } else { [t[1], t[0], t[2], t[3]] }
+    };
+    let wide = turned_out([[-20, -15, 0], [21, -15, 0], [0, 15, 0], [0, 0, -30]]);
+    let spike = turned_out([[0, 0, -1], [1, 2, 1], [3, 0, 1], [0, 4, 1]]);
+    let test = WindingTest::unite();
+    let whole = tilted(&[wide, spike], &test, 1000).unwrap();
+    for leaf in [1, 2, 4, 8] {
+        let m = tilted(&[wide, spike], &test, leaf).unwrap();
+        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
     }
 }
 

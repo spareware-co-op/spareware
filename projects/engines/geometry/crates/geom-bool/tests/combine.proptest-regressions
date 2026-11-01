@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 91fa5b407ecbd0e4305129afd3ae80768b66171f59def2095ed2c3f525699341 # shrinks to boxes = [([-5, 1, -2], [1, 4, 1]), ([-5, 0, -1], [1, 2, 1])]
+cc 0902ab465e7f85037466e03e9c66bcd8a4abdb5afc73afbc2046c0ee7af56b04 # shrinks to boxes = [([-1, -1, 1], [1, 1, 1]), ([-1, -1, 0], [1, 1, 2])], turn = 0

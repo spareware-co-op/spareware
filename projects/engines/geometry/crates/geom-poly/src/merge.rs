@@ -42,7 +42,7 @@ use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
 
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{I256, I320, NumError, Sign, Wide};
 use geom_run::{Stopped, WorkMeter};
 
@@ -289,6 +289,8 @@ struct Corner {
     point: Tpi,
     x: [I320; 3],
     w: I256,
+    /// The planes of every corner at this point: its own, until [`numbered`] joins them.
+    through: Vec<Plane>,
 }
 
 /// The sign of a / b − c / d for b and d positive, in `Wide<M>`.
@@ -318,15 +320,17 @@ fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
     reason = "p and q are planes, and x and w the point, as in Tpi::homogeneous"
 )]
 fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
-    let point = Tpi::new(face, p, q)?;
+    let point = Tpi::meeting(face, p, q)?;
     let (x, w) = point.homogeneous()?;
     let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
     let [a, b, c] = &x;
+    let through = alloc::vec![face, p, q];
     Ok(match point.weight() {
         Sign::Negative => Corner {
             point,
             x: [turn(a)?, turn(b)?, turn(c)?],
             w: w.checked_neg().ok_or(NumError::BudgetExceeded)?,
+            through,
         },
         Sign::Positive | Sign::Zero => Corner { point, x, w },
     })
@@ -638,9 +642,11 @@ fn numbered(
     for i in order {
         let held = corners.get_mut(i).and_then(Option::take);
         let held = held.ok_or(MergeError::Open)?;
-        let same = places.last().and_then(|last| point_order(last, &held));
-        if same != Some(Ordering::Equal) {
-            places.push(held);
+        match places.last_mut() {
+            Some(last) if point_order(last, &held) == Some(Ordering::Equal) => {
+                last.through.extend(held.through);
+            }
+            _ => places.push(held),
         }
         number
             .iter_mut()
@@ -649,6 +655,40 @@ fn numbered(
             .for_each(|slot| *slot = places.len().saturating_sub(1));
     }
     Ok((number, places))
+}
+
+/// Whether `plane` is a split of [`crate::subdivide`]'s, on an odd half step.
+fn splits_boxes(plane: &Plane) -> bool {
+    let n = plane.n();
+    n.iter().filter(|v| **v != 0).count() == 1
+        && n.iter().any(|v| v.unsigned_abs() == 2)
+        && plane.d() & 1 != 0
+}
+
+/// `corner`'s point under a name the boxes cannot change: the first three planes through it, in
+/// plane order and leaving out the boxes' own, that meet in one point. Which corners a point has
+/// depends on how the boxes fell, but which faces pass through it does not. A point with no such
+/// three, which only a seam has, keeps its corner's.
+fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
+    let mut list: Vec<Plane> = corner
+        .through
+        .iter()
+        .filter(|plane| !splits_boxes(plane))
+        .copied()
+        .collect();
+    list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    list.dedup();
+    for (i, a) in list.iter().enumerate() {
+        for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
+            for c in list.iter().skip(j.saturating_add(1)) {
+                meter.charge(1)?;
+                if normals_sign(a, b, c)? != Sign::Zero {
+                    return Ok(Tpi::meeting(*a, *b, *c)?);
+                }
+            }
+        }
+    }
+    Ok(corner.point)
 }
 
 /// Every side of `held`, sorted by line.
@@ -1049,7 +1089,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
     }
     let mut vertices = Vec::with_capacity(used.len());
     for id in &used {
-        vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
     }
     Ok(Curves {
         vertices,
@@ -1244,7 +1284,7 @@ pub fn merge_with(
     }
     let mut vertices = Vec::with_capacity(used.len());
     for id in &used {
-        vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
     }
     Ok(Merged {
         sheets,
