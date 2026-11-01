@@ -3,8 +3,8 @@
 //! own plane, for the exact mesh's build and check.
 //!
 //! For point location (piece G147), that field closed into a solid, with points in its box; for
-//! booleans (piece G148), two such solids; for slicing (piece G149), that solid and level planes;
-//! for hulls, points of a lattice. For
+//! booleans (piece G148), two small prisms that cross; for slicing (piece G149), that solid and
+//! level planes; for hulls, points of a lattice. For
 //! the distance comparisons of piece G151, grid points in a room a million steps across, each
 //! with a clearance of up to as much; for triangle contact, pairs of triangles in that room whose
 //! planes mostly cut each other.
@@ -252,7 +252,55 @@ pub fn locate(class: Class) -> Vec<Probe> {
     })
 }
 
-/// Two closed solids that cross, for `geom_mesh::boolean::boolean`.
+/// One prism from `x` along x: a cell of side 4096 over a flat base, its top in two triangles at
+/// random heights.
+fn prism(r: &mut SplitMix64, x: i64) -> Option<ExactMesh> {
+    let mut vertices = Vec::with_capacity(8);
+    for (i, j) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+        let at = |z: i64| P3::new(x + i * 4096, j * 4096, z).ok().map(Corner::Grid);
+        let top = 4096 + i64::try_from(r.next_u64() >> 52).ok()?;
+        vertices.push(at(top)?);
+        vertices.push(at(0)?);
+    }
+    let faces: [&[u32]; 8] = [
+        &[0, 2, 6],
+        &[0, 6, 4],
+        &[1, 7, 3],
+        &[1, 5, 7],
+        &[1, 3, 2, 0],
+        &[3, 7, 6, 2],
+        &[7, 5, 4, 6],
+        &[5, 1, 0, 4],
+    ];
+    let mut corners = Vec::new();
+    let mut loop_start = vec![0];
+    for face in faces {
+        corners.extend_from_slice(face);
+        loop_start.push(u32::try_from(corners.len()).ok()?);
+    }
+    let polygons = Polygons {
+        vertices,
+        corners,
+        loop_start,
+        face_loops: (0..=8).collect(),
+        face_run: alloc_zeros(8),
+        runs: vec![Source {
+            name: NameId::from_bytes([u8::from(x != 0); 16]),
+            role: Role::Face,
+            flags: 0,
+        }],
+        face_plane: Vec::new(),
+        edge_plane: Vec::new(),
+        corner_prop: Vec::new(),
+        props: PropTable::default(),
+        face_dev: Vec::new(),
+        class: Exactness::Exact,
+    };
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    build(&polygons, &Exec::serial(), &mut meter).ok()
+}
+
+/// Two small closed solids that cross, for `geom_mesh::boolean::boolean`.
 #[must_use]
 pub fn boolean(class: Class) -> Vec<Pair> {
     if class != Class::Typical {
@@ -261,8 +309,8 @@ pub fn boolean(class: Class) -> Vec<Pair> {
     let mut g = rng("mesh::boolean", class);
     batch_of(|_| {
         Some(Pair {
-            first: solid(&mut g)?,
-            second: solid(&mut g)?,
+            first: prism(&mut g, 0)?,
+            second: prism(&mut g, 2048)?,
         })
     })
 }
