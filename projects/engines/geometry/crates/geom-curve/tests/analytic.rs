@@ -391,6 +391,17 @@ fn an_involute_starts_on_its_circle_with_a_cusp() {
     assert!(n.deviation < 1e-11, "{}", n.deviation);
 }
 
+/// A domain too long to cut is stopped by the budget before its cuts are allocated: this one's
+/// 4·10^9 cuts would take 32 GB (the `curves` fuzz target found it, as an abort).
+#[test]
+fn a_domain_too_long_to_cut_is_stopped_before_it_is_allocated() {
+    let frame = Frame::standard().unwrap();
+    let long = (0.0, 5e8);
+    let inv = Involute::new([0.0, 0.0], 4.0, frame, long).unwrap();
+    let mut m = WorkMeter::new(Budget::of_work(1_000));
+    assert!(matches!(inv.to_nurbs(&mut m), Err(CurveError::Stopped(_))));
+}
+
 #[test]
 fn conversions_report_their_error() {
     let m = &mut meter();

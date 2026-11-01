@@ -240,7 +240,17 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
 ",
         "      - name: Every golden in debug
         if: ${{ !cancelled() && matrix.mode == 'debug' }}
-        run: cargo run --locked -p geom-test --bin golden -- run
+        # The runner calls `cargo test -p geom-test`, and cargo builds a package's binaries for its
+        # integration tests: in this same debug folder that can mean replacing the running golden
+        # binary, which Windows refuses (\"failed to remove file ... golden.exe: Access is denied\",
+        # so the goldens never ran). The release steps build their tests in another profile's
+        # folder. So the debug runner runs from a copy outside the build folder.
+        run: |
+          cargo build --locked -p geom-test --bin golden
+          exe=\"\"
+          if [ \"$RUNNER_OS\" = \"Windows\" ]; then exe=\".exe\"; fi
+          cp \"target/debug/golden$exe\" \"$RUNNER_TEMP/golden$exe\"
+          \"$RUNNER_TEMP/golden$exe\" run
 ",
         "      - name: Test suite in release, with overflow checks on
         if: ${{ !cancelled() && matrix.mode == 'release' }}

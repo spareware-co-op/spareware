@@ -78,13 +78,11 @@
 //!   runs every benchmark under Valgrind's Callgrind
 //!   (<https://valgrind.org/docs/manual/cl-manual.html>), which executes the program on a
 //!   simulated processor and counts what it does. The gate fails if any benchmark's instructions
-//!   or estimated cycles rise by more than [`GATE_PERCENT`] on either processor, or one of its L1
-//!   or last-level cache misses (instruction reads, data reads, data writes: [`GATED_METRICS`])
-//!   does on a miss count large enough to show it: from 20 up, where one event is within 5%. A
-//!   smaller miss count cannot show a 5% change smaller than one event, and code layout alone
-//!   moves it by an event or two, so its changes are listed and judged through estimated cycles,
-//!   which weight every miss ([`callgrind`] derives the rule and applies it to Gungraun's
-//!   machine-readable summaries). The two processors run different instructions, so each compares
+//!   or estimated cycles rise by more than [`GATE_PERCENT`] on either processor. Its L1 and
+//!   last-level cache misses (instruction reads, data reads, data writes: [`GATED_METRICS`]) are
+//!   listed when they change and judged through estimated cycles, which price every miss: code
+//!   layout alone moves miss counts, at every size ([`callgrind`] states the rule and its evidence
+//!   and applies it to Gungraun's machine-readable summaries). The two processors run different instructions, so each compares
 //!   only its own two runs, under the same rule. With the fuel gate below,
 //!   every benchmark is measured on the three targets chapter 23.3 names, x86-64 and aarch64
 //!   natively and wasm32, so each predicate's filtered and exact cost is known on all three
@@ -218,7 +216,7 @@
 //! instructions, estimated cycles or heap ends the run with `Gungraun result: Regressed`, the list
 //! of rises, and a failed bench (the harness exits with code 3); every Callgrind count is then
 //! judged from the summaries, and `geom-bench-counts` exits with 1 on a rise over 5% in
-//! instructions, in estimated cycles, or in a miss count of 20 or more:
+//! instructions or in estimated cycles, listing every miss count that changed:
 //!
 //! ```text
 //! export RUSTFLAGS="-C llvm-args=-align-all-functions=6"
@@ -330,8 +328,8 @@ pub const GATED_HEAP_METRICS: [&str; 4] =
 /// The measures of [`GATED_METRICS`] that Gungraun gates itself, instructions and estimated cycles,
 /// at [`GATE_PERCENT`], as the workflow passes them to Gungraun (`--callgrind-limits`, which
 /// replaces the limits `benches/instructions/gate.rs` sets); a test checks the two agree. The miss
-/// counts are left out: a percentage limit cannot leave alone the counts too small to resolve it,
-/// so [`callgrind::judge`] gates them from Gungraun's summaries.
+/// counts are left out: [`callgrind::judge`] lists them from Gungraun's summaries and judges them
+/// through estimated cycles.
 pub const CALLGRIND_LIMITS: &str = "ir=5%,estimatedcycles=5%";
 
 /// [`GATED_HEAP_METRICS`] at [`GATE_PERCENT`], as the workflow passes them to Gungraun
