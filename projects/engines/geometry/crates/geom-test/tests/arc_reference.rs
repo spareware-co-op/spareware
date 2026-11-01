@@ -502,11 +502,7 @@ fn blocks_that_share_one_point_keep_their_faces_apart() {
                     "{case}"
                 );
                 // The disc's three arcs, the triangle's three sides, and the outside's six.
-                assert_eq!(
-                    closed_cycle_sizes(&arrangement, &case),
-                    [3, 3, 6],
-                    "{case}"
-                );
+                assert_eq!(closed_cycle_sizes(&arrangement, &case), [3, 3, 6], "{case}");
                 count += 1;
             }
         }
