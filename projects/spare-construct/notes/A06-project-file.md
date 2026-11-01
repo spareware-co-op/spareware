@@ -1,5 +1,7 @@
 # A06: Project file: SQLite container or a custom chunk file
 
+**Status, 2026-10-31:** SQLite is ruled out and there is no project file. [note K08](../../kit/notes/K08-cloud-foundation.md) decides on TiKV and file storage in one co-op cloud, because SQLite has one writer at a time. This note's record layout and rules still hold: one record per shape, every index rebuildable, large meshes apart. Its comparison of containers is kept as the record of how that was weighed, and applies only to a file built on export.
+
 ## The question
 
 On the desktop, one portable project file holds the stored model, the operation log and the index ([ARCHITECTURE.md](../ARCHITECTURE.md), Storage and scale). Should that file be a SQLite database with our own published schema, or a container format we write ourselves? The piece asks for a recommendation covering crash safety, size and streaming. Spare Studio's project file follows the same decision ([STU-A2-F5-P1](../../spare-studio/FEATURES.md)).
