@@ -101,7 +101,11 @@ fn boxes_that_overlap_touch_and_stand_apart_hold() {
     }));
     holds(check(&Case {
         scale: 6,
-        boxes: vec![([0, 0, 0], [2, 2, 2]), ([2, 0, 0], [4, 2, 2]), ([0, 2, 0], [2, 4, 2])],
+        boxes: vec![
+            ([0, 0, 0], [2, 2, 2]),
+            ([2, 0, 0], [4, 2, 2]),
+            ([0, 2, 0], [2, 4, 2]),
+        ],
     }));
     holds(check(&Case {
         scale: 1 << 36,

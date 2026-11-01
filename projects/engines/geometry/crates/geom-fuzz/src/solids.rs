@@ -197,7 +197,11 @@ fn result(operands: &[ExactMesh], test: WindingTest, case: &Case) -> Result<Outc
     let refs: Vec<&ExactMesh> = operands.iter().collect();
     let step = OpPath::new(OpId::from_bytes([7; 16]));
     boolean(&refs, &[test], &step, &Exec::serial(), &mut meter())
-        .map_err(|e| Finding::new("a boolean of closed boxes holds", || format!("{case:?}: {e:?}")))?
+        .map_err(|e| {
+            Finding::new("a boolean of closed boxes holds", || {
+                format!("{case:?}: {e:?}")
+            })
+        })?
         .pop()
         .ok_or_else(|| Finding::new("one test gives one result", || format!("{case:?}")))
 }
@@ -217,17 +221,18 @@ fn check_union(case: &Case, operands: &[ExactMesh]) -> Result<ExactMesh, Finding
     let less = result(operands, WindingTest::subtract(0), case)?;
     holds_cells("a difference has its cells", &less.mesh, only, case)?;
     let classifier = Classifier::new(&union.mesh, &Exec::serial(), &mut meter());
-    let classifier =
-        classifier.map_err(|e| Finding::new("a union classifies", || format!("{case:?}: {e:?}")))?;
+    let classifier = classifier
+        .map_err(|e| Finding::new("a union classifies", || format!("{case:?}: {e:?}")))?;
     let half = case.scale / 2;
     for (c, n) in &counted {
         let [x, y, z] = c.map(|v| v * case.scale + half);
         let found = classifier.locate(at(x, y, z)?, &mut meter());
         let inside = matches!(found, Ok(Located::Winding(w)) if w > 0);
         if inside != (*n > 0) {
-            return Err(Finding::new("a cell's middle is where its boxes are", || {
-                format!("{case:?}: {c:?} is {found:?}")
-            }));
+            return Err(Finding::new(
+                "a cell's middle is where its boxes are",
+                || format!("{case:?}: {c:?} is {found:?}"),
+            ));
         }
     }
     Ok(union.mesh)
@@ -253,7 +258,9 @@ fn check_slices(case: &Case, union: &ExactMesh) -> Result<(), Finding> {
             for cut in contour.cuts() {
                 let place = point(union, plane, *cut)
                     .and_then(|p| Ok(p.to_grid()?))
-                    .map_err(|e| Finding::new("a cut has a point", || format!("{case:?}: {e:?}")))?;
+                    .map_err(|e| {
+                        Finding::new("a cut has a point", || format!("{case:?}: {e:?}"))
+                    })?;
                 ring.push((i128::from(place.x.get()), i128::from(place.y.get())));
             }
             let after = ring.iter().cycle().skip(1);
@@ -293,9 +300,10 @@ fn check_hull(case: &Case) -> Result<(), Finding> {
         for q in &points {
             let side = orient3d(corner(0), corner(1), corner(2), *q);
             if side.is_err() || side == Ok(Sign::Positive) {
-                return Err(Finding::new("every point is on or under every face", || {
-                    format!("{case:?}: {q:?}")
-                }));
+                return Err(Finding::new(
+                    "every point is on or under every face",
+                    || format!("{case:?}: {q:?}"),
+                ));
             }
         }
     }

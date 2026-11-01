@@ -115,14 +115,14 @@ fn an_l_and_a_box_against_counted_cells() {
         .collect();
     let mut reached = std::collections::BTreeSet::new();
     for (x, y) in cells {
-        for dx in 0..2 {
-            for dy in 0..2 {
+        for dx in 0..=2 {
+            for dy in 0..=2 {
                 reached.insert((x + dx, y + dy));
             }
         }
     }
     assert_eq!(six_volume(&s.mesh), six(reached.len() as i128 * 3));
-    assert_eq!(reached.len(), 16);
+    assert_eq!(reached.len(), 27);
 }
 
 #[test]
@@ -150,7 +150,10 @@ fn a_solid_off_the_grid_commits_first() {
 
 #[test]
 fn an_open_mesh_is_refused() {
-    let open = mesh(&soup(vec![g(0, 0, 0), g(4, 0, 0), g(0, 4, 0)], &[&[0, 1, 2]]));
+    let open = mesh(&soup(
+        vec![g(0, 0, 0), g(4, 0, 0), g(0, 4, 0)],
+        &[&[0, 1, 2]],
+    ));
     let ell = [(0, 0), (4, 0), (4, 1), (1, 1), (1, 4), (0, 4)];
     let solid = mesh(&prism(&ell, 2));
     let refused = minkowski(

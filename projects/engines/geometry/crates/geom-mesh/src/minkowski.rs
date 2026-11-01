@@ -52,8 +52,8 @@ pub struct Sum {
 }
 
 /// An export's errors as the mesh's: only committing to the grid can reach here.
-fn from_export(e: ExportError) -> MeshError {
-    match e {
+fn from_export(e: &ExportError) -> MeshError {
+    match *e {
         ExportError::Num(e) => MeshError::Num(e),
         ExportError::Stopped(s) => s.into(),
         ExportError::Fault(f) => MeshError::Fault(f),
@@ -84,7 +84,11 @@ fn plus(a: P3, b: P3) -> Result<P3, NumError> {
 /// The corners of a triangle.
 fn corners_of(t: &Triangles, corner: [u32; 3]) -> Result<[P3; 3], MeshFault> {
     let [p, q, r] = corner;
-    Ok([*at(&t.vertices, p)?, *at(&t.vertices, q)?, *at(&t.vertices, r)?])
+    Ok([
+        *at(&t.vertices, p)?,
+        *at(&t.vertices, q)?,
+        *at(&t.vertices, r)?,
+    ])
 }
 
 /// Whether the mesh is its own convex hull: no corner of the hull is above any of its triangles.
@@ -158,8 +162,8 @@ pub fn minkowski(
         return Err(MeshError::NotClosed);
     }
     let (ta, tb) = (
-        triangles(a, meter).map_err(from_export)?,
-        triangles(b, meter).map_err(from_export)?,
+        triangles(a, meter).map_err(|e| from_export(&e))?,
+        triangles(b, meter).map_err(|e| from_export(&e))?,
     );
     let rounded = u64::from(ta.rounded).saturating_add(u64::from(tb.rounded));
     let class = if rounded == 0 {
