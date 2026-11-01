@@ -113,11 +113,13 @@ pub fn faceted(mesh: &ExactMesh, meter: &mut WorkMeter<'_>) -> Result<Body, Mesh
     let mut carriers = Vec::new();
     for face in 0..index(mesh.faces())? {
         let surface = carrier(parts, face)?;
+        let source = usize::try_from(face).map_err(|_| MeshFault::Shape)?;
         for piece in pieces_of(parts, face, meter)? {
             pieces.push(Outward {
                 piece,
                 polygon: carriers.len(),
                 turned: false,
+                source,
                 front: Winding::new(),
                 back: Winding::new(),
             });

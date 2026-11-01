@@ -3,6 +3,7 @@
 
 #![allow(
     clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     reason = "test checks; the rules are for kernel code"
 )]
@@ -172,6 +173,45 @@ fn an_open_mesh_is_refused() {
         &mut meter(),
     );
     assert_eq!(refused.unwrap_err(), MeshError::NotClosed);
+}
+
+/// A box with its lid off lies on its own hull, so it passes for convex: only its open edges say it
+/// holds no volume, and the sum is refused before the one hull a convex pair takes.
+#[test]
+fn an_open_box_is_refused_though_it_is_its_own_hull() {
+    // The floor and four walls of `cuboid(2, 3, 4)`.
+    let lidless = soup(
+        vec![
+            g(0, 0, 0),
+            g(2, 0, 0),
+            g(2, 3, 0),
+            g(0, 3, 0),
+            g(0, 0, 4),
+            g(2, 0, 4),
+            g(2, 3, 4),
+            g(0, 3, 4),
+        ],
+        &[
+            &[0, 3, 2, 1],
+            &[0, 1, 5, 4],
+            &[1, 2, 6, 5],
+            &[2, 3, 7, 6],
+            &[3, 0, 4, 7],
+        ],
+    );
+    let open = mesh(&lidless);
+    assert_eq!(open.kind(), MeshKind::Open);
+    let solid = mesh(&cuboid(1, 1, 1));
+    for (a, b) in [(&open, &solid), (&solid, &open)] {
+        let refused = minkowski(
+            a,
+            b,
+            (source(9), GridStep::Q0),
+            &Exec::serial(),
+            &mut meter(),
+        );
+        assert_eq!(refused.unwrap_err(), MeshError::NotClosed);
+    }
 }
 
 #[test]

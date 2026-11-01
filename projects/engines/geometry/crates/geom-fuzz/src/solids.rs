@@ -74,6 +74,11 @@ pub struct Case {
 
 /// The case `data` holds, and how many bytes it read.
 #[must_use]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "a byte modulo the table's length indexes [`SCALES`], and cells below [`SIDE`] + 1 add nothing near the range of `i64`"
+)]
 pub fn decode(data: &[u8]) -> (Case, usize) {
     let mut src = ByteSource::new(data);
     let scale = SCALES[usize::from(src.byte()) % SCALES.len()];
@@ -103,6 +108,11 @@ fn at(x: i64, y: i64, z: i64) -> Result<P3, Finding> {
 }
 
 /// The box from `low` to `high` cells, run `name`, as a mesh.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "cells are at most [`SIDE`] and the scale at most 2^36, so a corner is below 2^40; a box has six faces of four corners"
+)]
 fn solid(b: &([i64; 3], [i64; 3]), scale: i64, name: u8) -> Result<ExactMesh, Finding> {
     let (low, high) = b;
     let [ax, ay, az] = low.map(|c| c * scale);
@@ -207,6 +217,11 @@ fn result(operands: &[ExactMesh], test: WindingTest, case: &Case) -> Result<Outc
 }
 
 /// Booleans against counted cells, and point location and slices on the union.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "a cell's middle is below 2^40"
+)]
 fn check_union(case: &Case, operands: &[ExactMesh]) -> Result<ExactMesh, Finding> {
     let counted = cells(case);
     let at_least = |k: usize| counted.iter().filter(|(_, n)| *n >= k).count();
@@ -239,6 +254,11 @@ fn check_union(case: &Case, operands: &[ExactMesh]) -> Result<ExactMesh, Finding
 }
 
 /// The area of each level of the union, against its cells.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "coordinates are below 2^40, so twice a section's area is below 2^82 and fits `i128`"
+)]
 fn check_slices(case: &Case, union: &ExactMesh) -> Result<(), Finding> {
     let counted = cells(case);
     let scale = i128::from(case.scale);
@@ -282,6 +302,12 @@ fn check_slices(case: &Case, union: &ExactMesh) -> Result<(), Finding> {
 }
 
 /// Every corner on or under every face of the hull of the boxes.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::many_single_char_names,
+    reason = "corners are below 2^40, and a hull's rings index its own points; a and d are a box's low and high x, b and e its y, c and f its z"
+)]
 fn check_hull(case: &Case) -> Result<(), Finding> {
     let mut points = Vec::new();
     for (low, high) in &case.boxes {
@@ -312,6 +338,11 @@ fn check_hull(case: &Case) -> Result<(), Finding> {
 
 /// A box's corner is inside its envelope; boxes a cell apart do not touch; text carries the union
 /// with nothing rounded; and two boxes sum to the box of their sides.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "triangles index their own vertices, and a box's sides are below twice [`SIDE`] cells"
+)]
 fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<(), Finding> {
     let written = export(
         union,

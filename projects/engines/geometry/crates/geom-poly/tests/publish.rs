@@ -191,7 +191,7 @@ impl<K> From<geom_topo::Ix<K>> for RowOf {
 
 impl<K> From<Option<geom_topo::Ix<K>>> for RowOf {
     fn from(i: Option<geom_topo::Ix<K>>) -> Self {
-        RowOf(i.map_or(u32::MAX, |i| i.row()))
+        RowOf(i.map_or(u32::MAX, geom_topo::Ix::row))
     }
 }
 
@@ -379,8 +379,7 @@ fn fins_run_their_rings() {
         row_of[*fin] = row as u32;
     }
     let mut at = 0;
-    let mut looped = 0;
-    for ring in m.faces.iter().flat_map(|f| &f.rings) {
+    for (looped, ring) in m.faces.iter().flat_map(|f| &f.rings).enumerate() {
         assert_eq!(first_fin[looped], at as u32);
         for (k, fin) in ring.iter().enumerate() {
             let here = at + k;
@@ -396,7 +395,6 @@ fn fins_run_their_rings() {
             assert_eq!(sense[here] == Sense::Forward, forward);
         }
         at += ring.len();
-        looped += 1;
     }
     for held in &m.edges {
         for (k, fin) in held.fins.iter().enumerate() {
@@ -437,6 +435,40 @@ fn an_edge_runs_low_to_high_on_a_line_between_its_ends() {
             assert_eq!(*curves[e], CurveKind::Line(line));
         }
     }
+}
+
+/// A box's corner at the origin, cut by the face 3x + y + z + 1 = 0 of a leaning tetrahedron a
+/// third of a step along its edge in −x: that edge's ends round to one point, and its lower end is
+/// the meeting, off the grid. A sub-grid edge stands a step long from whichever end is on the grid.
+#[test]
+fn an_edge_shorter_than_the_grid_stands_a_step_from_its_grid_end() {
+    let mut polygons = scene(&[([-6, 0, 0], [0, 6, 6])]);
+    tetrahedron(
+        [[0, -1, 0], [0, 0, -1], [-1, 1, 1], [5, 5, 5]],
+        1,
+        &mut polygons,
+    );
+    let m = joined(&polygons, &WindingTest::intersect(2));
+    let near = rounded(&m);
+    let b = body(&m, Sense::Forward);
+    let curves: Vec<&CurveKind<3>> = b.arenas().curves.iter().collect();
+    let mut from_the_meeting = 0;
+    for (e, held) in m.edges.iter().enumerate() {
+        let ((p, low_exact), (q, _)) = (near[held.low], near[held.high]);
+        if p != q {
+            continue;
+        }
+        let o = [p.x.get() as f64, p.y.get() as f64, p.z.get() as f64];
+        let span = if low_exact {
+            (0.0, 1.0)
+        } else {
+            from_the_meeting += 1;
+            (-1.0, 0.0)
+        };
+        let line = Line::new(o, [1.0, 0.0, 0.0], span).unwrap();
+        assert_eq!(*curves[e], CurveKind::Line(line));
+    }
+    assert!(from_the_meeting > 0);
 }
 
 #[test]
