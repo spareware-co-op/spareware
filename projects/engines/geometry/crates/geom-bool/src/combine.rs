@@ -286,12 +286,12 @@ fn numbers(ctx: &OpContext<'_>, e: NumError) -> OpError {
 }
 
 /// The operation's error for `detail`.
-fn fail(ctx: &OpContext<'_>, detail: CombineDetail) -> OpError {
+pub(crate) fn fail(ctx: &OpContext<'_>, detail: CombineDetail) -> OpError {
     OpError::new(ctx.path().clone(), detail)
 }
 
 /// `error` as the operation's.
-fn prepared(ctx: &OpContext<'_>, error: PrepareError, meter: &WorkMeter<'_>) -> OpError {
+pub(crate) fn prepared(ctx: &OpContext<'_>, error: PrepareError, meter: &WorkMeter<'_>) -> OpError {
     match error {
         PrepareError::Stopped(stopped) => ctx.stopped(meter, stopped, ARRANGEMENT),
         PrepareError::Num(e) => numbers(ctx, e),
@@ -928,6 +928,18 @@ pub fn combine(
 ) -> Result<OpOutput<Vec<Vec<Combined>>>, OpError> {
     let mut meter = ctx.meter();
     let ready = prepare(input, &mut meter).map_err(|e| prepared(ctx, e, &meter))?;
+    let (classified, exactness) = arranged_input(ctx, exec, input, &ready, &mut meter)?;
+    selected(ctx, input, &ready, &classified, exactness, &mut meter)
+}
+
+/// The arrangement of `ready`, and how exact it is.
+pub(crate) fn arranged_input(
+    ctx: &OpContext<'_>,
+    exec: &Exec<'_>,
+    input: &BooleanInput<'_>,
+    ready: &Prepared,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Vec<Classified>, Exactness), OpError> {
     let mut exactness = Exactness::Exact;
     for operand in &input.operands {
         exactness = exactness
@@ -945,17 +957,29 @@ pub fn combine(
         &ready.polygons,
         LEAF_POLYGONS,
         &ready.tests,
-        &mut meter,
+        meter,
     )
-    .map_err(|e| arranged(ctx, e, &meter))?;
+    .map_err(|e| arranged(ctx, e, meter))?;
+    Ok((classified, exactness))
+}
+
+/// `input`'s selections, read from one arrangement.
+pub(crate) fn selected(
+    ctx: &OpContext<'_>,
+    input: &BooleanInput<'_>,
+    ready: &Prepared,
+    classified: &[Classified],
+    exactness: Exactness,
+    meter: &mut WorkMeter<'_>,
+) -> Result<OpOutput<Vec<Vec<Combined>>>, OpError> {
     let mut operands: Vec<&Operand<'_>> = input.operands.iter().collect();
     operands.sort_by_key(|operand| operand.key);
     let scene = Scene {
         op: ctx.path(),
         operands,
         planes: ready.polygons.iter().map(|p| p.piece.face).collect(),
-        ready: &ready,
-        classified: &classified,
+        ready,
+        classified,
         merge: input.merge,
     };
     let mut lists = Vec::with_capacity(ready.tests.len());
@@ -963,21 +987,19 @@ pub fn combine(
     let jobs = input.select.iter().zip(&ready.tests).zip(&ready.targets);
     for ((selection, test), target) in jobs {
         let found = match selection {
-            Selection::Imprint { .. } => {
-                scene.kept(test, &scene.others(*target), *target, &mut meter)
-            }
-            Selection::Split { .. } => scene.split(test, *target, &mut meter),
-            Selection::GeneralFuse => scene.fused(test, &mut meter),
-            Selection::Cells { seeds, .. } => scene.cells(test, seeds, &mut meter),
-            Selection::Keep { .. } => scene.keep(test, *target, &mut meter),
-            Selection::Trim { seeds, .. } => scene.trim(*target, seeds, &mut meter),
-            Selection::Section => scene.section(&mut meter),
+            Selection::Imprint { .. } => scene.kept(test, &scene.others(*target), *target, meter),
+            Selection::Split { .. } => scene.split(test, *target, meter),
+            Selection::GeneralFuse => scene.fused(test, meter),
+            Selection::Cells { seeds, .. } => scene.cells(test, seeds, meter),
+            Selection::Keep { .. } => scene.keep(test, *target, meter),
+            Selection::Trim { seeds, .. } => scene.trim(*target, seeds, meter),
+            Selection::Section => scene.section(meter),
             Selection::Unite
             | Selection::Subtract { .. }
             | Selection::Intersect
-            | Selection::Where(_) => scene.kept(test, &[], *target, &mut meter),
+            | Selection::Where(_) => scene.kept(test, &[], *target, meter),
         };
-        let picked = found.map_err(|e| refused(ctx, e, &mut meter))?;
+        let picked = found.map_err(|e| refused(ctx, e, meter))?;
         if !picked.separated {
             notes.extend(Diagnostic::new(
                 "bool.cutter_does_not_separate",
@@ -1005,12 +1027,12 @@ pub fn combine(
         }
         let results = picked.results;
         for body in results.iter().map(|result| &result.body) {
-            let report = check(body, exactness, Level::Cheap, &mut meter)
-                .map_err(|stopped: Stopped| ctx.stopped(&meter, stopped, REBUILD))?;
+            let report = check(body, exactness, Level::Cheap, meter)
+                .map_err(|stopped: Stopped| ctx.stopped(meter, stopped, REBUILD))?;
             if !report.passed() {
                 return Err(fail(ctx, CombineDetail::ResultInvalid));
             }
-            certify(body, &mut meter).map_err(|e| refused(ctx, e.into(), &mut meter))?;
+            certify(body, meter).map_err(|e| refused(ctx, e.into(), meter))?;
         }
         if results
             .iter()

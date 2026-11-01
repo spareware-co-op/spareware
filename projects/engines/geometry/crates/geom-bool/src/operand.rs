@@ -580,6 +580,16 @@ pub fn prepare(
     input: &BooleanInput<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Prepared, PrepareError> {
+    prepare_with(input, false, meter)
+}
+
+/// [`prepare`], and if `summed` every solid but a subtraction's target on one entry (11.6): a winding
+/// vector stays two entries long however many tools there are.
+pub(crate) fn prepare_with(
+    input: &BooleanInput<'_>,
+    summed: bool,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Prepared, PrepareError> {
     let mut order: Vec<&Operand<'_>> = input.operands.iter().collect();
     order.sort_by_key(|o| o.key);
     for pair in order.windows(2) {
@@ -591,8 +601,17 @@ pub fn prepare(
     }
     let mut keys = Vec::with_capacity(order.len());
     let mut solids = 0u32;
+    let host = input.select.iter().find_map(|selection| match selection {
+        Selection::Subtract { target } => Some(*target),
+        _ => None,
+    });
     for operand in &order {
-        let entry = (operand.kind == OperandKind::Solid).then_some(solids);
+        let number = if summed {
+            u32::from(host != Some(operand.key))
+        } else {
+            solids
+        };
+        let entry = (operand.kind == OperandKind::Solid).then_some(number);
         solids = solids.saturating_add(u32::from(entry.is_some()));
         keys.push((operand.key, entry));
     }
