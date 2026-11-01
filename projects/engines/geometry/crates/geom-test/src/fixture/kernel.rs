@@ -31,10 +31,11 @@ use geom_format::recipe::RecipeInput;
 use geom_format::record::Record;
 use geom_make::Made;
 use geom_num::Steps;
+use geom_num::plane::Tpi;
 use geom_op::history::Record as HistoryRecord;
 use geom_op::{Exactness, History, NameId, NameSet, OpContext, Tally};
 use geom_run::{Budget, BudgetKind, Usage, WorkMeter};
-use geom_topo::Body;
+use geom_topo::{Body, PointKind};
 
 use super::calls::Call;
 use super::run::{Engine, Ran, Step};
@@ -223,6 +224,20 @@ impl Engine for Kernel {
             counts.edges = counts.edges.saturating_add(u64::from(a.edges.len()));
             counts.vertices = counts.vertices.saturating_add(u64::from(a.vertices.len()));
             for point in a.points.iter() {
+                // A meeting of three planes counts at its nearest grid point.
+                let grid = match *point {
+                    PointKind::Grid(p) => Some(p),
+                    PointKind::Meet([p, q, r]) => {
+                        let plane = |ix| a.planes.get(ix).copied();
+                        plane(p)
+                            .zip(plane(q))
+                            .zip(plane(r))
+                            .and_then(|((p, q), r)| Tpi::new(p, q, r).ok())
+                            .and_then(|t| t.to_grid().ok())
+                            .map(|g| g.value())
+                    }
+                };
+                let Some(point) = grid else { continue };
                 let p = [point.x.get(), point.y.get(), point.z.get()];
                 let [low, high] = bounds.get_or_insert([p, p]);
                 for ((l, h), v) in low.iter_mut().zip(high.iter_mut()).zip(p) {

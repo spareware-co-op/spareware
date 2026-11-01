@@ -279,7 +279,7 @@ fn a_body_the_checker_fails_is_a_finding() {
     let mut arenas = body.arenas().clone();
     arenas
         .points
-        .set(geom_topo::Ix::new(0).unwrap(), p(5, 5, 5))
+        .set(geom_topo::Ix::new(0).unwrap(), p(5, 5, 5).into())
         .unwrap();
     let names = body.names().unwrap().clone();
     let broken = Builder { arenas }

@@ -840,7 +840,11 @@ fn write(
         |i| old.is_some_and(|o| a.planes.shares_chunk(&o.planes, i)),
         |e, i| {
             let rows = planes.get(i).copied().unwrap_or_default();
-            e.array(u64::try_from(rows.len()).unwrap_or(u64::MAX).saturating_mul(4))?;
+            e.array(
+                u64::try_from(rows.len())
+                    .unwrap_or(u64::MAX)
+                    .saturating_mul(4),
+            )?;
             for plane in rows {
                 let [x, y, z] = plane.n();
                 for v in [x, y, z, plane.d()] {
@@ -852,7 +856,9 @@ fn write(
         &mut tables,
     )?;
     // An empty pool is not listed, so a body without meetings is stored as before there were any.
-    tables.done.retain(|t| t.code != table::PLANES || t.rows > 0);
+    tables
+        .done
+        .retain(|t| t.code != table::PLANES || t.rows > 0);
 
     index(body, tables.done, tables.written)
 }
@@ -985,9 +991,13 @@ fn integer(d: &mut Decoder<'_>, meter: &mut WorkMeter<'_>) -> Result<i128, BodyE
         Some(Item::Tag(tag @ (2 | 3))) => {
             let be = bytes(d, meter, "a bignum's bytes")?;
             let mut wide = [0_u8; 16];
-            wide.get_mut(16_usize.checked_sub(be.len()).ok_or_else(|| shape.clone())?..)
-                .ok_or_else(|| shape.clone())?
-                .copy_from_slice(be);
+            wide.get_mut(
+                16_usize
+                    .checked_sub(be.len())
+                    .ok_or_else(|| shape.clone())?..,
+            )
+            .ok_or_else(|| shape.clone())?
+            .copy_from_slice(be);
             (tag == 3, u128::from_be_bytes(wide))
         }
         _ => return Err(shape),
@@ -1213,8 +1223,10 @@ pub fn read_body(stored: &StoredBody, meter: &mut WorkMeter<'_>) -> Result<Body,
     // The plane pool, listed after the names only when it has rows.
     if codes.last() == Some(&table::PLANES) {
         codes.pop();
-        if arenas.planes.len() == 0 {
-            return Err(BodyError::Shape("an empty plane table, which is not listed"));
+        if arenas.planes.is_empty() {
+            return Err(BodyError::Shape(
+                "an empty plane table, which is not listed",
+            ));
         }
     }
     if !codes.iter().copied().eq(table::REGIONS..=last) {
