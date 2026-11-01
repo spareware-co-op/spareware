@@ -81,16 +81,24 @@ pub const FAST_DEPTH: u32 = 64;
 /// Levels of narrowing past which two roots are given up: the resultant's 2,410, and some.
 const COMPARE_DEPTH: u32 = 2_440;
 
+/// The bits of [`Big`].
+const BITS: u32 = 4_096;
+
+/// The bits of [`Wider`].
+const WIDE_BITS: u32 = 10_240;
+
 const _: () = {
     // A factor's coefficients, and a bisected polynomial's, each with its Taylor shift.
-    assert!(4 * MAX_DEPTH + COEFFICIENT_BITS + 6 + 8 + 8 < 64 * LIMBS as u32);
+    assert!(4 * MAX_DEPTH + COEFFICIENT_BITS + 6 + 8 + 8 < BITS);
+    assert!(BITS as usize == 64 * LIMBS);
     // Davenport and Mahler: degree 4, with a factor's coefficients.
     assert!(3 * (COEFFICIENT_BITS + 8) + 6 < MAX_DEPTH);
     // Res(f, g) ≥ 1 by |lc f|⁴ |lc g|⁴ ∏ |αᵢ − βⱼ|, each difference but one below the sum of two
     // Mahler measures, each measure at most ‖c‖₂ < 2^(COEFFICIENT_BITS + 5).
     assert!(8 * (COEFFICIENT_BITS + 5) + 26 < COMPARE_DEPTH);
     // A polynomial's value at a dyadic point, at that depth.
-    assert!(4 * COMPARE_DEPTH + COEFFICIENT_BITS + 6 + 8 < 64 * WIDE_LIMBS as u32);
+    assert!(4 * COMPARE_DEPTH + COEFFICIENT_BITS + 6 + 8 < WIDE_BITS);
+    assert!(WIDE_BITS as usize == 64 * WIDE_LIMBS);
 };
 
 /// One polynomial of degree at most four, lowest term first.
@@ -418,6 +426,10 @@ fn one<const L: usize>() -> Terms<L> {
 }
 
 /// A gcd of `a` and `b` by the subresultant remainder sequence, degree a ≥ degree b, b nonzero.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a, b, g, h, p, q and r are the sequence's, as Brown and Traub write them"
+)]
 fn subresultant_gcd<const L: usize>(a: &Terms<L>, b: &Terms<L>) -> Result<Terms<L>, NumError> {
     let (mut p, mut q) = (*a, *b);
     let (mut g, mut h) = (Wide::from_i64(1), Wide::from_i64(1));
@@ -652,11 +664,11 @@ impl Roots {
         self.iter().count()
     }
 
-    fn push(&mut self, root: RealRoot) -> Result<(), NumError> {
+    fn push(&mut self, root: &RealRoot) -> Result<(), NumError> {
         let Some(slot) = self.list.iter_mut().find(|s| s.is_none()) else {
             return Err(NumError::BudgetExceeded);
         };
-        *slot = Some(root);
+        *slot = Some(*root);
         Ok(())
     }
 }
@@ -816,11 +828,11 @@ struct Isolated {
 }
 
 impl Isolated {
-    fn push(&mut self, found: Found) -> Result<(), NumError> {
+    fn push(&mut self, found: &Found) -> Result<(), NumError> {
         let Some(slot) = self.list.iter_mut().find(|s| s.is_none()) else {
             return Err(NumError::BudgetExceeded);
         };
-        *slot = Some(found);
+        *slot = Some(*found);
         Ok(())
     }
 }
@@ -835,11 +847,11 @@ struct Job {
 
 impl Job {
     /// `a` and `s` as a root of this job, `times` a root of its polynomial.
-    fn root(&self, a: Big, s: u32, point: bool, times: u8) -> Result<Found, NumError> {
+    fn root(&self, a: &Big, s: u32, point: bool, times: u8) -> Result<Found, NumError> {
         Ok(Found {
             root: RealRoot {
                 piece: self.piece,
-                a,
+                a: *a,
                 s,
                 point,
                 multiplicity: budget(self.multiplicity.checked_mul(times))?,
@@ -851,18 +863,18 @@ impl Job {
     /// `node` decided: nothing, a root, or a place on the list.
     fn place(
         &self,
-        node: Node,
+        node: &Node,
         found: &mut Isolated,
         live: &mut [Option<Node>; 3],
     ) -> Result<(), NumError> {
         match descartes(&node.terms)? {
             0 => Ok(()),
-            1 => found.push(self.root(node.a, node.s, false, 1)?),
+            1 => found.push(&self.root(&node.a, node.s, false, 1)?),
             _ => {
                 let Some(slot) = live.iter_mut().find(|n| n.is_none()) else {
                     return Err(NumError::BudgetExceeded);
                 };
-                *slot = Some(node);
+                *slot = Some(*node);
                 Ok(())
             }
         }
@@ -877,7 +889,7 @@ impl Job {
             a: Big::from_i64(0),
             s: 0,
         };
-        self.place(start, found, &mut live)?;
+        self.place(&start, found, &mut live)?;
         while let Some(node) = live.iter_mut().find_map(Option::take) {
             if node.s >= self.limit {
                 return Ok(false);
@@ -890,11 +902,11 @@ impl Job {
             // The lowest terms of the polynomial from the middle say how multiple a root it is.
             let times = right.iter().position(|v| !v.is_zero()).unwrap_or(0);
             if times > 0 {
-                found.push(self.root(middle, s, true, budget(u8::try_from(times).ok())?)?)?;
+                found.push(&self.root(&middle, s, true, budget(u8::try_from(times).ok())?)?)?;
             }
             let halves = [(left, doubled), (right, middle)];
             for (terms, a) in halves {
-                self.place(Node { terms, a, s }, found, &mut live)?;
+                self.place(&Node { terms, a, s }, found, &mut live)?;
             }
         }
         Ok(true)
@@ -1081,13 +1093,13 @@ impl Quartic {
                     *slot = Some(*found);
                 }
                 sort_open(&mut here, list, piece)?;
-                for found in here.into_iter().flatten() {
-                    out.push(found.root)?;
+                for found in here.iter().flatten() {
+                    out.push(&found.root)?;
                 }
             } else {
                 let multiplicity = self.at_exact(piece)?;
                 if multiplicity > 0 {
-                    out.push(RealRoot {
+                    out.push(&RealRoot {
                         piece,
                         a: Big::from_i64(0),
                         s: 0,

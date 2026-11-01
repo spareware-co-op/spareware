@@ -109,10 +109,10 @@ fn product(a: &Quadratic, b: &Quadratic) -> Result<[Big; 5], NumError> {
 }
 
 /// `sum` with `factor` times `terms` added.
-fn gather(sum: [Big; 5], factor: &Big, terms: &[Big; 5]) -> Result<[Big; 5], NumError> {
+fn gather(sum: &[Big; 5], factor: &Big, terms: &[Big; 5]) -> Result<[Big; 5], NumError> {
     let [s0, s1, s2, s3, s4] = sum;
     let [t0, t1, t2, t3, t4] = terms;
-    let plus = |s: Big, t: &Big| add(&s, &mul(factor, t)?);
+    let plus = |s: &Big, t: &Big| add(s, &mul(factor, t)?);
     Ok([
         plus(s0, t0)?,
         plus(s1, t1)?,
@@ -181,6 +181,10 @@ impl Ellipse2 {
     ///
     /// [`NumError::BudgetExceeded`] if a step of the exact path did not fit, which no input in the
     /// budget can reach.
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "k, p, q, w, x, y and z are the formula's"
+    )]
     pub fn side(&self, z: &Rational2) -> Result<Sign, NumError> {
         let ([x, y], w) = z.coordinates();
         let k = self.centre;
@@ -197,6 +201,10 @@ impl Ellipse2 {
     /// # Errors
     ///
     /// As for [`Ellipse2::side`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, d, k, l, p and q are the formula's"
+    )]
     pub fn meets(&self, l: &Carrier) -> Result<Contact, NumError> {
         let ([a, b], d) = l.coefficients();
         let k = self.centre;
@@ -275,12 +283,12 @@ impl Ellipse2 {
         } = other;
         let zero = big(0);
         let mut sum = [zero; 5];
-        sum = gather(sum, xx, &product(&x, &x)?)?;
-        sum = gather(sum, xy, &product(&x, &y)?)?;
-        sum = gather(sum, yy, &product(&y, &y)?)?;
-        sum = gather(sum, lx, &product(&x, &d)?)?;
-        sum = gather(sum, ly, &product(&y, &d)?)?;
-        sum = gather(sum, constant, &product(&d, &d)?)?;
+        sum = gather(&sum, xx, &product(&x, &x)?)?;
+        sum = gather(&sum, xy, &product(&x, &y)?)?;
+        sum = gather(&sum, yy, &product(&y, &y)?)?;
+        sum = gather(&sum, lx, &product(&x, &d)?)?;
+        sum = gather(&sum, ly, &product(&y, &d)?)?;
+        sum = gather(&sum, constant, &product(&d, &d)?)?;
         Ok(Quartic::new(sum))
     }
 
@@ -303,6 +311,10 @@ impl Ellipse2 {
 
 /// How a conic meets an ellipse.
 #[derive(Clone, Copy, Debug)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "this crate does not allocate, and the common case is the large one"
+)]
 pub enum Meeting {
     /// One curve.
     Same,
