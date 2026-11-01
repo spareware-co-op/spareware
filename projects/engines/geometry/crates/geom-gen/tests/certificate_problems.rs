@@ -346,7 +346,20 @@ const FILTERS: [Filter; 23] = [
     Filter {
         name: "circle_gap",
         module: include_str!("../../geom-num/src/generated/circle_gap.rs"),
-        gappa: &[],
+        gappa: &[
+            (
+                "gappa-circle-gap-x-x.g",
+                include_str!("../generated/gappa-circle-gap-x-x.g"),
+            ),
+            (
+                "gappa-circle-gap-y-y.g",
+                include_str!("../generated/gappa-circle-gap-y-y.g"),
+            ),
+            (
+                "gappa-circle-gap-t-t.g",
+                include_str!("../generated/gappa-circle-gap-t-t.g"),
+            ),
+        ],
         fptaylor: (
             "fptaylor-circle-gap.fpt",
             include_str!("../generated/fptaylor-circle-gap.fpt"),
