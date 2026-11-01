@@ -120,7 +120,7 @@ fn side_of(cut: &Plane, face: &Plane, a: &Plane, b: &Plane) -> Result<Sign, NumE
 }
 
 /// `plane`, facing the other way.
-fn opposite(plane: &Plane) -> Result<Plane, NumError> {
+pub(crate) fn opposite(plane: &Plane) -> Result<Plane, NumError> {
     let [x, y, z] = plane.n();
     let negate = |v: i128| v.checked_neg().ok_or(NumError::BudgetExceeded);
     let n = [negate(x)?, negate(y)?, negate(z)?];
