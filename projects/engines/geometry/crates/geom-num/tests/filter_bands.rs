@@ -166,18 +166,13 @@ fn terms_of(module: &str) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
-/// The larger of two finite doubles.
-fn larger(a: f64, b: f64) -> f64 {
-    if a < b { b } else { a }
-}
-
 /// The largest |v| of each group.
 fn maxima(spec: &Spec, inputs: &Inputs) -> BTreeMap<&'static str, f64> {
     let mut out: BTreeMap<&'static str, f64> = BTreeMap::new();
     for (name, group, _) in spec.inputs {
         let v = (inputs[name] as f64).abs();
         let m = out.entry(group).or_insert(0.0);
-        *m = larger(*m, v);
+        *m = m.max(v);
     }
     (spec.variables)(inputs, &mut out);
     out
@@ -187,7 +182,7 @@ fn maxima(spec: &Spec, inputs: &Inputs) -> BTreeMap<&'static str, f64> {
 fn evaluated(terms: &[(String, Vec<String>)], m: &BTreeMap<&'static str, f64>) -> Vec<f64> {
     terms
         .iter()
-        .map(|(_, groups)| groups.iter().fold(1.0, |p, g| p * m[g.as_str()]))
+        .map(|(_, groups)| groups.iter().map(|g| m[g.as_str()]).product())
         .collect()
 }
 
@@ -241,21 +236,26 @@ fn with_small_groups(
             .iter()
             .map(|(g, bits)| {
                 let small = rng.next() % 2 == 0;
-                (*g, (!small).then(|| 1 + (rng.next() % u64::from(*bits)) as u32))
+                (
+                    *g,
+                    (!small).then(|| 1 + (rng.next() % u64::from(*bits)) as u32),
+                )
             })
             .collect();
         let mut inputs = Inputs::new();
         for (name, group, bits) in spec.inputs {
             let v = match sizes[group] {
                 Some(size) => rng.with_bits(size.min(*bits)),
-                None => i128::from((rng.next() % 3) as u8) * if rng.next() & 1 == 0 { 1 } else { -1 },
+                None => {
+                    i128::from((rng.next() % 3) as u8) * if rng.next() & 1 == 0 { 1 } else { -1 }
+                }
             };
             inputs.insert(name, v);
         }
         let top = |at: &Inputs| {
             evaluated(terms, &maxima(spec, at))
                 .into_iter()
-                .fold(0.0, larger)
+                .fold(0.0, f64::max)
         };
         let bound = error * top(&inputs);
         if bound == 0.0 {
@@ -271,8 +271,13 @@ fn with_small_groups(
         }
         let which = (rng.next() % spec.moved.len() as u64) as usize;
         let sign = if rng.next() & 1 == 0 { 1.0 } else { -1.0 };
-        let Some(at) = placed(spec, &inputs, spec.moved[which], sign * 1.5 * bound, 0.1 * bound)
-        else {
+        let Some(at) = placed(
+            spec,
+            &inputs,
+            spec.moved[which],
+            sign * 1.5 * bound,
+            0.1 * bound,
+        ) else {
             continue;
         };
         if ((top(&at) * error) / bound - 1.0).abs() < 0.01 {
@@ -321,7 +326,7 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
         let name = spec.moved[which];
         let at = maxima(spec, &inputs);
         let values = evaluated(&terms, &at);
-        let top = values.iter().copied().fold(0.0, larger);
+        let top = values.iter().copied().fold(0.0, f64::max);
         if top == 0.0 {
             continue;
         }
@@ -332,14 +337,14 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             continue;
         };
         let values = evaluated(&terms, &maxima(spec, &first));
-        let top = values.iter().copied().fold(0.0, larger);
+        let top = values.iter().copied().fold(0.0, f64::max);
         let leader = values.iter().position(|v| *v == top).unwrap();
         let next = values
             .iter()
             .enumerate()
             .filter(|(k, _)| *k != leader)
             .map(|(_, v)| *v)
-            .fold(0.0, larger);
+            .fold(0.0, f64::max);
         if top < MARGIN * next {
             continue;
         }
@@ -349,7 +354,7 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             continue;
         };
         let values = evaluated(&terms, &maxima(spec, &inside));
-        let held = values.iter().copied().fold(0.0, larger);
+        let held = values.iter().copied().fold(0.0, f64::max);
         if values[leader] != held || held < MARGIN * next {
             continue;
         }
@@ -378,7 +383,10 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
     }
     let (missed, past_bound) = with_small_groups(spec, rng, cases, error, &terms, &groups);
     let mut problems = Vec::new();
-    println!("{}: {missed} of {past_bound} past the bound not answered", spec.name);
+    println!(
+        "{}: {missed} of {past_bound} past the bound not answered",
+        spec.name
+    );
     if past_bound == 0 || missed * 50 > past_bound {
         problems.push(format!(
             "{}: {missed} of {past_bound} past the bound not answered",
@@ -423,7 +431,7 @@ fn grid(inputs: &Inputs, x: &str, y: &str) -> P2 {
 /// `v`, added to what `group` holds.
 fn widen(m: &mut BTreeMap<&'static str, f64>, group: &'static str, v: i128) {
     let held = m.entry(group).or_insert(0.0);
-    *held = larger(*held, (v as f64).abs());
+    *held = held.max((v as f64).abs());
 }
 
 const SPECS: &[Spec] = &[
@@ -580,10 +588,7 @@ const SPECS: &[Spec] = &[
             round_rational::filter(x, y, v, q, cx, cy, w)
         },
         variables: |_, _| {},
-        idle: &[
-            ("y·p·v·w", MEAN),
-            ("x·p·v·w", MEAN),
-        ],
+        idle: &[("y·p·v·w", MEAN), ("x·p·v·w", MEAN)],
     },
     Spec {
         name: "round_line",
@@ -610,11 +615,7 @@ const SPECS: &[Spec] = &[
             round_line::filter(a, b, d, p, cx, cy, w)
         },
         variables: |_, _| {},
-        idle: &[
-            ("n·d·c·w", MEAN),
-            ("y·n^2·c·w", MEAN),
-            ("x·n^2·c·w", MEAN),
-        ],
+        idle: &[("n·d·c·w", MEAN), ("y·n^2·c·w", MEAN), ("x·n^2·c·w", MEAN)],
     },
     Spec {
         name: "circle_side",
@@ -637,10 +638,7 @@ const SPECS: &[Spec] = &[
             circle_side::filter(x, y, v, grid(i, "k_x", "k_y"), r)
         },
         variables: |_, _| {},
-        idle: &[
-            ("y·p·v", MEAN),
-            ("x·p·v", MEAN),
-        ],
+        idle: &[("y·p·v", MEAN), ("x·p·v", MEAN)],
     },
     Spec {
         name: "circle_line",
@@ -663,11 +661,7 @@ const SPECS: &[Spec] = &[
             circle_line::filter(a, b, d, grid(i, "k_x", "k_y"), r)
         },
         variables: |_, _| {},
-        idle: &[
-            ("y·n·d", MEAN),
-            ("x·n·d", MEAN),
-            ("x·y·n^2", MEAN),
-        ],
+        idle: &[("y·n·d", MEAN), ("x·n·d", MEAN), ("x·y·n^2", MEAN)],
     },
     Spec {
         name: "circle_gap",
@@ -692,7 +686,11 @@ const SPECS: &[Spec] = &[
             widen(m, "x", i["a_x"] - i["b_x"]);
             widen(m, "y", i["a_y"] - i["b_y"]);
         },
-        idle: &[("t^2", "circle_gap_answers_only_past_t_squared"), ("y^2", SQUARE), ("x^2", SQUARE)],
+        idle: &[
+            ("t^2", "circle_gap_answers_only_past_t_squared"),
+            ("y^2", SQUARE),
+            ("x^2", SQUARE),
+        ],
     },
 ];
 
@@ -726,7 +724,11 @@ fn circle_gap_answers_only_past_t_squared() {
     let mut rng = Rng(DEFAULT_SEED);
     let (mut refused, mut leaked, mut answered) = (0, 0, 0);
     let origin = P2::new(0, 0).unwrap();
-    for _ in 0..if cfg!(debug_assertions) { 2_000_000 } else { 20_000_000 } {
+    for _ in 0..if cfg!(debug_assertions) {
+        2_000_000
+    } else {
+        20_000_000
+    } {
         let d = (1 << 39) + (rng.next() >> 26) as i64 % (1 << 38);
         let t = (d as f64 * core::f64::consts::SQRT_2).round() as i128;
         let square = t * t;
@@ -745,11 +747,18 @@ fn circle_gap_answers_only_past_t_squared() {
                 leaked += 1;
             }
         } else if share > 2.1 {
-            let sign = if v > 0 { Sign::Positive } else { Sign::Negative };
+            let sign = if v > 0 {
+                Sign::Positive
+            } else {
+                Sign::Negative
+            };
             assert_eq!(answer, Some(sign), "{d} {t}");
             answered += 1;
         }
     }
     println!("circle_gap: refused {refused}, leaked {leaked}, answered {answered}");
-    assert!(refused > leaked && answered > 0, "{refused} {leaked} {answered}");
+    assert!(
+        refused > leaked && answered > 0,
+        "{refused} {leaked} {answered}"
+    );
 }
