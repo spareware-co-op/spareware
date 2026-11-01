@@ -757,6 +757,7 @@ dependencies = [
  "divan",
  "geom-bvh",
  "geom-curve",
+ "geom-intersect",
  "geom-linalg",
  "geom-math",
  "geom-num",
@@ -989,6 +990,7 @@ dependencies = [
  "geom-bvh",
  "geom-curve",
  "geom-gen",
+ "geom-intersect",
  "geom-linalg",
  "geom-math",
  "geom-num",
@@ -1060,6 +1062,7 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
 ]
 
 [[package]]
