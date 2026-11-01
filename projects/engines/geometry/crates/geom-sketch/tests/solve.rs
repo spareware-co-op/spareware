@@ -488,7 +488,7 @@ fn cases() -> Vec<(String, Sketch)> {
 #[test]
 fn every_ezpz_problem_runs() {
     let list = cases();
-    assert_eq!(list.len(), 27);
+    assert_eq!(list.len(), 28);
     for (name, s) in &list {
         let result = solve(s, &mut meter());
         if name == "inconsistent.sketch" {
@@ -530,6 +530,12 @@ fn ezpz_problems_reach_the_answers_worked_by_hand() {
     near(&s, id(1, 3), 0.4 * u, 0.5 * u);
     let s = answer("coincident");
     near(&s, id(1, 1), 3.0 * u, 3.0 * u);
+    // 600 vertical lines, the nth from (n, 0) up to (n, 4), each from guesses on the diagonal.
+    let s = answer("massive_parallel_system");
+    near(&s, id(1, 0), 0.0, 0.0);
+    near(&s, id(1, 1), 0.0, 4.0 * u);
+    near(&s, id(1, 1198), 599.0 * u, 0.0);
+    near(&s, id(1, 1199), 599.0 * u, 4.0 * u);
 }
 
 #[test]

@@ -487,13 +487,13 @@
         },
         {
           "id": "geom-sketch/solve",
-          "what": "The block solver of geom-sketch (piece G222): ezpz's 27 test problems in sketch v1, each solved from its own start, every solved variable's bits and the iterations taken; the inconsistent one, which is refused, by its name alone.",
+          "what": "The block solver of geom-sketch (piece G222): ezpz's 28 test problems in sketch v1, each solved from its own start, every solved variable's bits and the iterations taken; the inconsistent one, which is refused, by its name alone.",
           "check": {
             "crate": "geom-sketch",
             "test": "solve",
             "function": "solved_values_are_the_same_on_every_target"
           },
-          "sha256": "e9a7d5969dc7417ed268755bb794feb8bdf823cd7965d063641713eb058d2149"
+          "sha256": "b835783ee649429b7f0a426e22bf0c28b9a42ae8d9da57aff43efe9acbd3def1"
         },
         {
           "id": "geom-sketch/catalogue",
