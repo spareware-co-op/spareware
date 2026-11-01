@@ -448,6 +448,96 @@ fn a_face_is_walked_with_it_on_the_left() {
     assert_eq!(sizes, [2, 4, 4]);
 }
 
+/// The sizes of `a`'s cycles in order, after checking that each closes up.
+fn closed_cycle_sizes(a: &Arrangement, case: &str) -> Vec<usize> {
+    let cycles = a.cycles();
+    for cycle in &cycles {
+        for (here, next) in cycle.iter().zip(cycle.iter().cycle().skip(1)) {
+            assert_eq!(here.end(), next.start(), "{case}");
+        }
+    }
+    let mut sizes: Vec<usize> = cycles.iter().map(Vec::len).collect();
+    sizes.sort_unstable();
+    sizes
+}
+
+/// `pieces`, each turned round if `reverse`.
+fn turned(pieces: &[Piece], reverse: bool) -> Vec<Piece> {
+    pieces
+        .iter()
+        .map(|p| if reverse { p.reversed() } else { p.clone() })
+        .collect()
+}
+
+#[test]
+fn blocks_that_share_one_point_keep_their_faces_apart() {
+    // A disc of radius 5 with a right triangle hung outside it at (3, 4), mirrored into each
+    // quadrant: the triangle's legs leave that point along the axes, at 0° and 90° in the first
+    // quadrant, and the circle's two arcs at about 143° and 323°. The disc and the triangle meet
+    // only there, so round it the triangle's two half-edges come together and the circle's two
+    // together. An order that interleaves them walks one cycle instead of three. Each leg's line
+    // also crosses the circle where the leg is not, which must cut nothing.
+    let mut count = 0;
+    for (sx, sy) in [(1, 1), (-1, 1), (-1, -1), (1, -1)] {
+        let (p, a, b) = (pt(3 * sx, 4 * sy), pt(8 * sx, 4 * sy), pt(3 * sx, 9 * sy));
+        let side = |s: &(Q, Q), e: &(Q, Q)| Piece::segment(s.clone(), e.clone()).unwrap();
+        let triangle = vec![side(&p, &a), side(&a, &b), side(&b, &p)];
+        for reverse in [false, true] {
+            for clockwise in [false, true] {
+                let case = format!("({sx}, {sy}), reversed {reverse}, clockwise {clockwise}");
+                let pieces = [
+                    turned(disc(0, 0, 5).pieces(), clockwise),
+                    turned(&triangle, reverse),
+                ]
+                .concat();
+                let arrangement = Arrangement::of(&pieces);
+                assert_eq!(
+                    [
+                        arrangement.vertices(),
+                        arrangement.edges(),
+                        arrangement.components(),
+                        arrangement.faces()
+                    ],
+                    [5, 6, 1, 3],
+                    "{case}"
+                );
+                // The disc's three arcs, the triangle's three sides, and the outside's six.
+                assert_eq!(
+                    closed_cycle_sizes(&arrangement, &case),
+                    [3, 3, 6],
+                    "{case}"
+                );
+                count += 1;
+            }
+        }
+    }
+    assert_eq!(count, 16);
+}
+
+#[test]
+fn arcs_leaving_together_clockwise_are_ordered_by_their_bend() {
+    // The tangent pair of the test above, mirrored in the x axis: the line now runs down from
+    // (5, 0), where the two circles' clockwise halves leave with it, so their order is the one
+    // among right turns. Every way round of every piece walks the same faces.
+    for (big, small, line) in [
+        (false, false, false),
+        (true, false, false),
+        (false, true, true),
+        (true, true, true),
+    ] {
+        let case = format!("turned: {big}, {small}, {line}");
+        let pieces = [
+            turned(disc(0, 0, 5).pieces(), big),
+            turned(disc(2, 0, 3).pieces(), small),
+            turned(&[Piece::segment(pt(5, 0), pt(5, -4)).unwrap()], line),
+        ]
+        .concat();
+        let a = Arrangement::of(&pieces);
+        assert_eq!((a.vertices(), a.edges(), a.faces()), (4, 5, 3), "{case}");
+        assert_eq!(closed_cycle_sizes(&a, &case), [2, 4, 4], "{case}");
+    }
+}
+
 #[test]
 fn boxes_overlap_in_boxes() {
     let mut count = 0;
