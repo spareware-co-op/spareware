@@ -238,15 +238,21 @@ struct Funnel {
 fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
     let line = axis(cone.center(), &cone.frame(), cone.axial_sign())?;
     let (r0, k) = cone.radius_and_slope();
-    // Exact where the data are: a grid apex is what makes the exact decisions possible.
-    let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;
-    let [a, b, c] = line.at;
-    let [x, y, z] = line.along;
-    let apex = [
-        tight::add(a, tight::mul(x, v)?)?,
-        tight::add(b, tight::mul(y, v)?)?,
-        tight::add(c, tight::mul(z, v)?)?,
-    ];
+    // Exact where the data are: a grid apex is what makes the exact decisions possible. A cone
+    // stored by its apex has it as its centre, exactly, whatever its axis; any other is reached
+    // along the unit axis, exact only where that is.
+    let apex = if r0 == 0.0 {
+        line.at
+    } else {
+        let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;
+        let [a, b, c] = line.at;
+        let [x, y, z] = line.along;
+        [
+            tight::add(a, tight::mul(x, v)?)?,
+            tight::add(b, tight::mul(y, v)?)?,
+            tight::add(c, tight::mul(z, v)?)?,
+        ]
+    };
     let slope = point(k.abs())?;
     let exact = (|| {
         if wide(apex) > 0.0 {
@@ -1262,10 +1268,13 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
             let ((u0, u1), (v0, v1)) = ParamSurface::domain(c);
             let on = axis(c.center(), &c.frame(), c.axial_sign())?;
             for v in [v0, v1] {
-                let radius = (r0 + k * v).abs();
+                let signed = r0 + k * v;
+                let radius = signed.abs();
                 if radius > 0.0 {
+                    // Past the apex the radius is negative: the point at u is half a turn round.
+                    let turn = if signed < 0.0 { 1.0 } else { 0.0 };
                     let at = plus(on.at, scale(on.along, point(v)?)?)?;
-                    let curve = Circle::new(middle(at), radius, c.frame(), (u0, u1))?;
+                    let curve = Circle::new(middle(at), radius, c.frame(), (u0 + turn, u1 + turn))?;
                     out.push(CurveKind::Circle(curve));
                 }
             }
@@ -1431,6 +1440,56 @@ fn on_both(
     Ok(on_surface(a, at)?.is_some() && on_surface(b, at)?.is_some())
 }
 
+/// Where `curve` passes through `at`, a point of an edge: its parameter there, or `None` if `at`
+/// lies off it.
+fn cut_at(
+    curve: &CurveKind<3>,
+    at: Vector,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<f64>, IntersectError> {
+    // A point of another piece of this pair projects onto this curve too: only one that lies on
+    // the curve cuts it.
+    let Some(s) = along_curve(curve, at)? else {
+        return Ok(None);
+    };
+    let (lo, hi) = crate::curve::finite(curve)?;
+    let mut t = tight::middle(s);
+    // On a loop the turns wrap.
+    if closed(curve) {
+        let period = hi - lo;
+        while t < lo {
+            t += period;
+        }
+        while t >= hi {
+            t -= period;
+        }
+    }
+    if t < lo || t > hi {
+        return Ok(None);
+    }
+    let gap = minus(at_parameter(curve, t, meter)?, at)?;
+    Ok(gap
+        .iter()
+        .all(|c| c.lo() <= STEP && c.hi() >= -STEP)
+        .then_some(t))
+}
+
+/// The apex of a cone whose domain ends there: an edge of one point, where the edge circles of
+/// [`edges`] have no radius.
+fn apex_ends(surface: &SurfaceKind) -> Result<Vec<Vector>, IntersectError> {
+    let SurfaceKind::Cone(c) = surface else {
+        return Ok(Vec::new());
+    };
+    let (r0, k) = c.radius_and_slope();
+    let (_, (v0, v1)) = ParamSurface::domain(c);
+    let ends = [v0, v1].iter().filter(|v| r0 + k * **v == 0.0).count();
+    Ok(if ends > 0 {
+        alloc::vec![funnel(c)?.apex]
+    } else {
+        Vec::new()
+    })
+}
+
 /// Where the curve's stretches on both domains end: the parameters at which an edge of either surface
 /// meets the other, sorted.
 fn cuts(
@@ -1448,31 +1507,15 @@ fn cuts(
                     continue;
                 };
                 let box_of = edge.bound((t.lo(), t.hi()), meter)?;
-                let at = sides(&box_of)?;
-                // A point of another piece of this pair projects onto this curve too: only one
-                // that lies on the curve cuts it.
-                let Some(s) = along_curve(curve, at)? else {
-                    continue;
-                };
-                let (lo, hi) = crate::curve::finite(curve)?;
-                let mut t = tight::middle(s);
-                // On a loop the turns wrap.
-                if closed(curve) {
-                    let period = hi - lo;
-                    while t < lo {
-                        t += period;
-                    }
-                    while t >= hi {
-                        t -= period;
-                    }
-                }
-                if t < lo || t > hi {
-                    continue;
-                }
-                let gap = minus(at_parameter(curve, t, meter)?, at)?;
-                if gap.iter().all(|c| c.lo() <= STEP && c.hi() >= -STEP) {
+                if let Some(t) = cut_at(curve, sides(&box_of)?, meter)? {
                     out.push(t);
                 }
+            }
+        }
+        // A curve through an apex the domain ends at leaves the domain there.
+        for at in apex_ends(surface)? {
+            if let Some(t) = cut_at(curve, at, meter)? {
+                out.push(t);
             }
         }
     }
@@ -1510,16 +1553,17 @@ fn trimmed(
     let mut ends: Vec<f64> = Vec::new();
     let (mut start, stop) = if loops {
         let base = *cut.first().ok_or(IntersectError::Internal)?;
-        let stop = base + period;
-        // A whole turn stays one, however the sum rounds.
-        (
-            base,
-            if stop - base > period {
-                stop.next_down()
-            } else {
-                stop
-            },
-        )
+        // A whole turn stays one, however the sum rounds: its length is decided exactly, as a loop's
+        // kind checks it, and the sum is off by at most a step, so a step or two back is enough.
+        let mut stop = base + period;
+        for _ in 0..4 {
+            let (length, error) = geom_num::eft::two_sum(stop, -base);
+            if length < period || (length == period && error <= 0.0) {
+                break;
+            }
+            stop = stop.next_down();
+        }
+        (base, stop)
     } else {
         (lo, hi)
     };
