@@ -24,6 +24,9 @@
 //!   side of the partition being a half-plane of the cut (tested against exact areas).
 //! - **The same pieces every time.** Pieces depend only on the planes and the order of the sides;
 //!   nothing is hashed, and every decision is an exact predicate.
+//! - **A convex face is itself.** A lone ring of three or four sides that turns left at every
+//!   corner, inside on the left, is one piece with the ring's bounds in the ring's order, as the
+//!   partition gives it, found without cuts (tested against the partition).
 //! - **No recursion.** The tree is an explicit stack, so its depth never threatens a WebAssembly
 //!   stack (principle 13).
 //! - **Refused, never guessed.** A side parallel to the face is `Degenerate`; so are two adjacent
@@ -39,8 +42,9 @@
 //! <https://doi.org/10.1145/37402.37430>.
 //!
 //! Cost: for n edges, at most n cuts, each classifying the edges left in its cell: O(n²) exact
-//! predicates at worst, and a piece of k bounds takes O(k²) more to put in order. Charges the meter
-//! one unit per edge classified and per bound ordered.
+//! predicates at worst, and a piece of k bounds takes O(k²) more to put in order. A lone convex
+//! triangle or quadrilateral, the common face, takes one predicate per corner and one more. Charges
+//! the meter one unit per edge classified, per bound ordered and per corner checked.
 
 use alloc::vec::Vec;
 use core::cmp::Ordering;
@@ -278,14 +282,63 @@ fn ring_runs(ring: &[Side], runs: &mut Vec<Run>) {
     }
 }
 
+/// `ring` as it stands, if it is a triangle or a quadrilateral that turns left at every corner
+/// with its inside on the positive side: what the partition gives such a ring (one cell, its
+/// bounds in the ring's order), without its cuts. Three or four directions that each turn left by
+/// less than a half turn turn once in all, so the ring is convex and simple; one corner on the
+/// positive side of the next side but one tells an inside on the left from one on the right. A
+/// ring of five or more could turn twice, as a star does, so it is partitioned. Charges one unit
+/// per corner.
+fn whole(
+    face: &Plane,
+    ring: &[Side],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Piece>, ConvexError> {
+    if !(3..=4).contains(&ring.len()) {
+        return Ok(None);
+    }
+    let after = ring.iter().cycle().skip(1);
+    for (a, b) in ring.iter().zip(after) {
+        meter.charge(1)?;
+        if normals_det(face, a, b)? != Sign::Positive {
+            return Ok(None);
+        }
+    }
+    let (Some(a), Some(b), Some(c)) = (ring.first(), ring.get(1), ring.get(2)) else {
+        return Ok(None);
+    };
+    if side_of(c, face, a, b)? != Sign::Positive {
+        return Ok(None);
+    }
+    Ok(Some(Piece {
+        face: *face,
+        bounds: ring.to_vec(),
+    }))
+}
+
 /// `face`, bounded by `rings`, as convex pieces: each ring runs with the inside on its sides'
-/// positive side, and the sides are taken as cuts in the order given.
+/// positive side, and the sides are taken as cuts in the order given. A lone convex triangle or
+/// quadrilateral is its own piece, with no cuts.
 ///
 /// # Errors
 ///
 /// A [`ConvexError`]: a side parallel to the face, adjacent sides on one line, rings that leave a
 /// piece without an end, or a stopped meter.
 pub fn convex_pieces(
+    face: &Plane,
+    rings: &[Vec<Side>],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Piece>, ConvexError> {
+    if let [ring] = rings
+        && let Some(piece) = whole(face, ring, meter)?
+    {
+        return Ok(alloc::vec![piece]);
+    }
+    partition(face, rings, meter)
+}
+
+/// [`convex_pieces`] by the partition alone.
+fn partition(
     face: &Plane,
     rings: &[Vec<Side>],
     meter: &mut WorkMeter<'_>,
@@ -314,4 +367,92 @@ pub fn convex_pieces(
         work.push(front);
     }
     Ok(pieces)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::arithmetic_side_effects,
+        clippy::unwrap_used,
+        reason = "tests: native arithmetic, and a failure stops the test"
+    )]
+
+    use alloc::vec::Vec;
+
+    use geom_num::P3;
+    use geom_num::plane::Plane;
+    use geom_run::{Budget, WorkMeter};
+    use proptest::prelude::*;
+
+    use super::{convex_pieces, opposite, partition};
+
+    /// z = 0, facing +z.
+    fn floor() -> Plane {
+        let p = |x, y| P3::new(x, y, 0).unwrap();
+        Plane::through(p(0, 0), p(1, 0), p(0, 1)).unwrap()
+    }
+
+    /// The ring through `corners` at z = 0, each side's plane upright and positive on its left.
+    fn ring(corners: &[(i64, i64)]) -> Vec<Plane> {
+        let k = corners.len();
+        (0..k)
+            .map(|i| {
+                let ((ax, ay), (bx, by)) = (corners[i], corners[(i + 1) % k]);
+                let at = |x, y, z| P3::new(x, y, z).unwrap();
+                let right = Plane::through(at(ax, ay, 0), at(bx, by, 0), at(ax, ay, 1)).unwrap();
+                opposite(&right).unwrap()
+            })
+            .collect()
+    }
+
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// The pieces as given and as the partition alone gives them agree, a failure included.
+    fn agrees(rings: &[Vec<Plane>]) {
+        let quick = convex_pieces(&floor(), rings, &mut meter());
+        let cut = partition(&floor(), rings, &mut meter());
+        assert_eq!(quick, cut);
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        #[test]
+        fn a_triangle_or_quadrilateral_is_what_the_partition_gives(
+            corners in prop::collection::vec((-30i64..30, -30i64..30), 3..=5),
+        ) {
+            let cross = |o: (i64, i64), a: (i64, i64), b: (i64, i64)| {
+                (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
+            };
+            let k = corners.len();
+            let distinct = (0..k).all(|i| corners[i] != corners[(i + 1) % k]);
+            prop_assume!(distinct);
+            let turns: Vec<i64> = (0..k)
+                .map(|i| cross(corners[i], corners[(i + 1) % k], corners[(i + 2) % k]))
+                .collect();
+            prop_assume!(turns.iter().all(|t| *t != 0));
+            // Either way round, convex or not, stars and bow ties among them.
+            for list in [corners.clone(), corners.iter().rev().copied().collect()] {
+                let rings = [ring(&list)];
+                agrees(&rings);
+                let outward: Vec<Plane> = rings[0].iter().map(|s| opposite(s).unwrap()).collect();
+                agrees(&[outward]);
+            }
+        }
+    }
+
+    #[test]
+    fn a_convex_ring_is_one_piece_without_a_cut() {
+        let rings = [ring(&[(0, 0), (4, 0), (4, 4), (0, 4)])];
+        let pieces = convex_pieces(&floor(), &rings, &mut meter()).unwrap();
+        assert_eq!(pieces.len(), 1);
+        assert_eq!(pieces[0].bounds, rings[0]);
+        // Four corners and a check: the partition would charge for its cuts too.
+        let mut tight = WorkMeter::new(Budget::new(4, u64::MAX));
+        assert!(convex_pieces(&floor(), &rings, &mut tight).is_ok());
+        let mut tight = WorkMeter::new(Budget::new(4, u64::MAX));
+        assert!(partition(&floor(), &rings, &mut tight).is_err());
+    }
 }
