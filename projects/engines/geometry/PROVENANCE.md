@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 35 | 33 |
+| PORT METHOD | 36 | 34 |
 | DEPEND | 2 | 2 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -77,6 +77,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | S. Vigna, `splitmix.c` | public domain | readable | <https://prng.di.unimi.it/splitmix.c> | none | `projects/engines/geometry/crates/geom-test/src/rng.rs`: for the generator's constants and the 50 reference outputs the unit tests check. No code copied. |
 | Shewchuk's `predicates.c` | public domain | readable | <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs`: for its error constants (`exactinit`), a cross-check of the analysis here. No code copied.<br>`projects/engines/geometry/crates/geom-num/src/predicate.rs`: for the determinant forms and the sign conventions of `orient2d` and `incircle` that the Method and Conventions above follow; chapter 29.3 asks for this credit line. |
 | shuffling-allocator | MPL-2.0 | allowed | <https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs> | none | `projects/engines/geometry/crates/geom-test/src/golden/perturb.rs`: for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied. |
+| solvi (Linebender) | Apache-2.0 OR MIT | allowed | <https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/solvi/src/decomposition/sparse/qr.rs> | none | `projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs`: for its left-looking structure and the handing of rows up the tree. |
 | SPDX License List 3.29.0 | CC-BY-3.0 | readable | <https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json> | none | `projects/engines/geometry/crates/geom-test/src/map/classes.rs`: to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences. |
 | Vigna's SplitMix64 reference code | public domain | readable | <https://prng.di.unimi.it/splitmix64.c> | none | `projects/engines/geometry/crates/geom-bench/src/rng.rs`: for the constants and steps of SplitMix64, which the tests check against its published outputs. No code copied. |
 | Wasmtime | Apache-2.0 WITH LLVM-exception | allowed | <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs> | none | `projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs`: for what fuel counts and how `Config::consume_fuel` meters it. No code copied.<br>`projects/engines/geometry/crates/geom-bench/src/guest.rs`: for what fuel counts and how `Config::consume_fuel` meters it. No code copied. |

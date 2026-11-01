@@ -665,6 +665,13 @@ shuffling-allocator
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
 
+solvi (Linebender)
+  Licence:      Apache-2.0 OR MIT
+  Link:         https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/solvi/src/decomposition/sparse/qr.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs
+      for its left-looking structure and the handing of rows up the tree.
+
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0
   Link:         https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json
