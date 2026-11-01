@@ -5369,6 +5369,70 @@
       "occurrences": 2,
       "kind": "harmless",
       "reason": "Either mutant differs from the original only when a bound of difference is exactly 0.0. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in quadratic",
+      "line_text": "None if d.hi() < 0.0 => Meeting::Nowhere,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's upper bound is exactly 0.0, where the mutant counts no meeting and the original leaves the pair to the engine. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in quadratic",
+      "line_text": "None if d.lo() > 0.0 => Meeting::Twice,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the discriminant's lower bound is exactly 0.0. On a discriminant that may be zero the mutant counts two roots, the root of max(d.lo, 0) is an enclosure reaching 0, and the two roots (-b - root) / a and (-b + root) / a both hold -b / a (each rounded outward), so low.hi() >= high.lo() and the function returns None, as the original's fall-through to None does; a, not holding 0, keeps the division defined."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace match guard d.lo() > 0.0 with true in quadratic",
+      "line_text": "None if d.lo() > 0.0 => Meeting::Twice,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard is reached only when d.hi() >= 0.0, the arm before having taken d.hi() < 0.0, so the mutant differs only on a discriminant whose enclosure holds 0. On a discriminant that may be zero the mutant counts two roots, the root of max(d.lo, 0) is an enclosure reaching 0, and the two roots (-b - root) / a and (-b + root) / a both hold -b / a (each rounded outward), so low.hi() >= high.lo() and the function returns None, as the original's fall-through to None does; a, not holding 0, keeps the division defined."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in quadratic",
+      "line_text": "let root = Interval::new(if d.lo() < 0.0 { 0.0 } else { d.lo() }, d.hi())?.sqrt()?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where d.lo() equals 0.0 both branches give 0.0, so the root is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in halves",
+      "line_text": "let share = if whole > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole is the width of the solver's domain on this coordinate: a curve's parameter domain, whose ends geom-curve's check_domain and geom-nurbs' Basis::new (EmptyDomain) require ordered and apart and which an infinite line is cut to at the grid's reach, widened by a seam's pad. Its ends differ, and the difference of two different doubles is never 0.0 (gradual underflow), so whole > 0.0 always and the two agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in solve",
+      "line_text": "if range.is_some_and(|r| r.iter().any(|v| v.lo() > 0.0 || v.hi() < 0.0)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a residual's enclosure over the box has a lower bound of exactly 0.0, where the mutant drops a box whose residual may be zero on its edge. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in solve",
+      "line_text": "if range.is_some_and(|r| r.iter().any(|v| v.lo() > 0.0 || v.hi() < 0.0)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a residual's enclosure over the box has an upper bound of exactly 0.0, where the mutant drops a box whose residual may be zero on its edge. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in solve",
+      "line_text": ".any(|(a, b)| (a.hi() - a.lo()) * 2.0 <= b.hi() - b.lo() && b.hi() > b.lo());",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "b is a side of a box the solver holds or of its widened copy, and no such side is a single point: the domain's sides have ordered, different ends; halves cuts a side only strictly inside it; grown and widened add width; and BernsteinCurve::clip rounds its range's ends outward and clamps them to a domain of positive width. So b.hi() > b.lo() always, and > and >= agree."
     }
   ],
   "coverage_off": [

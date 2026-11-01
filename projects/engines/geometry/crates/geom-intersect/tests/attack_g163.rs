@@ -24,8 +24,10 @@ use geom_nurbs::{Basis, Curve};
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_test::{Seed, SplitMix64};
 
+/// A meter with a budget every test here fits in, so a change that sends the engine round for ever
+/// fails on the budget instead of hanging.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(16_000_000))
 }
 
 fn meet<const D: usize>(a: &CurveKind<D>, b: &CurveKind<D>) -> Intersection {
@@ -1213,4 +1215,82 @@ fn an_overlap_far_along_its_parameter_is_flagged_within_budget() {
         (s[0].lo(), s[0].hi(), s[1].lo(), s[1].hi()),
         (t, t + 1.0, 0.0, 1.0)
     );
+}
+
+/// Each point item's contact and the middle of its first parameter, sorted by it.
+fn touches(r: &Intersection) -> Vec<(PointContact, f64)> {
+    let mut out: Vec<(PointContact, f64)> = r
+        .items()
+        .iter()
+        .map(|i| match i {
+            Item::Point { contact, at, .. } => {
+                let s = at.spans()[0];
+                (*contact, s.lo() * 0.5 + s.hi() * 0.5)
+            }
+            other => panic!("not a point: {other:?}"),
+        })
+        .collect();
+    out.sort_by(|a, b| a.1.total_cmp(&b.1));
+    out
+}
+
+/// `got`'s contacts are `want`'s, each parameter within 2^-30.
+fn touches_are(got: &[(PointContact, f64)], want: &[(PointContact, f64)]) {
+    assert_eq!(got.len(), want.len(), "{got:?}");
+    for ((c, s), (d, t)) in got.iter().zip(want) {
+        assert!(c == d && (s - t).abs() < 2.0_f64.powi(-30), "{got:?}");
+    }
+}
+
+#[test]
+fn a_closed_curve_s_join_is_no_boundary_and_an_open_end_is() {
+    use PointContact::{BoundaryTouch, Crossing};
+    let x_axis = infinite([0.0, 0.0], [1.0, 0.0]);
+    // A whole circle or ellipse is joined at its start: the x axis crosses it there.
+    touches_are(
+        &touches(&meet(&x_axis, &circle([0.0, 0.0], 5.0))),
+        &[(Crossing, -5.0), (Crossing, 5.0)],
+    );
+    touches_are(
+        &touches(&meet(&x_axis, &ellipse([0.0, 0.0], 4.0, 2.0))),
+        &[(Crossing, -4.0), (Crossing, 4.0)],
+    );
+    // An arc ends there, and a segment ends where it meets the circle.
+    touches_are(
+        &touches(&meet(&x_axis, &arc([0.0, 0.0], 5.0, (0.0, 1.0)))),
+        &[(BoundaryTouch, -5.0), (BoundaryTouch, 5.0)],
+    );
+    touches_are(
+        &touches(&meet(
+            &segment([0.0, 0.0], [0.0, 5.0]),
+            &circle([0.0, 0.0], 5.0),
+        )),
+        &[(BoundaryTouch, 1.0)],
+    );
+    // Two circles: the one about (5, 5) crosses the one about the origin at (5, 0), its join or an
+    // arc's end, and at (0, 5).
+    let other = circle([5.0, 5.0], 5.0);
+    touches_are(
+        &touches(&meet(&circle([0.0, 0.0], 5.0), &other)),
+        &[(Crossing, 0.0), (Crossing, 0.5)],
+    );
+    touches_are(
+        &touches(&meet(&arc([0.0, 0.0], 5.0, (0.0, 1.0)), &other)),
+        &[(BoundaryTouch, 0.0), (Crossing, 0.5)],
+    );
+}
+
+#[test]
+fn a_line_meets_a_hyperbola_only_on_its_arc() {
+    // The branch (cosh t, sinh t) for t in [-1, 1] reaches y = ±1.18: y = ±3 meets the branch only
+    // at t = ±1.82, outside the arc, and y = 1 meets it inside.
+    let axes = Axes::Vectors {
+        u: [1.0, 0.0],
+        v: [0.0, 1.0],
+    };
+    let h = CurveKind::Hyperbola(Hyperbola::new([0.0, 0.0], axes, (-1.0, 1.0)).unwrap());
+    is_empty(&meet(&infinite([0.0, 3.0], [1.0, 0.0]), &h));
+    is_empty(&meet(&infinite([0.0, -3.0], [1.0, 0.0]), &h));
+    let r = meet(&infinite([0.0, 1.0], [1.0, 0.0]), &h);
+    touches_are(&touches(&r), &[(PointContact::Crossing, 2.0_f64.sqrt())]);
 }

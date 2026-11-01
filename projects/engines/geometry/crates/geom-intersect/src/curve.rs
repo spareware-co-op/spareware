@@ -235,6 +235,13 @@ impl Seam {
         Ok(Interval::new(lo - pad, hi + pad)?)
     }
 
+    /// Whether `x` holds an end of the domain, where a meeting is a boundary touch (12.2: the
+    /// natural boundaries). A closed curve's join is no boundary, and an infinite end holds nothing.
+    pub(crate) fn ends(self, x: Interval) -> bool {
+        let (lo, hi) = self.domain;
+        !self.closed && (x.contains(lo) || x.contains(hi))
+    }
+
     /// `t` on the domain.
     pub(crate) fn wrapped(self, t: f64) -> f64 {
         let (lo, hi) = self.domain;
@@ -849,6 +856,10 @@ fn circle_circle<const D: usize>(
                 xyz,
                 contact: if tangent {
                     PointContact::IsolatedTangent
+                } else if Seam::turns(ParamCurve::domain(a)).ends(s)
+                    || Seam::turns(ParamCurve::domain(b)).ends(t)
+                {
+                    PointContact::BoundaryTouch
                 } else {
                     PointContact::Crossing
                 },
@@ -1238,6 +1249,11 @@ fn line_conic<const D: usize>(
     };
     let tangent = exact == Some(Meeting::Tangent);
     let domain = ParamCurve::domain(line);
+    let conic_seam = if conic.shape == Shape::Turn {
+        Seam::turns(conic.domain)
+    } else {
+        Seam::open(conic.domain)
+    };
     let mut items = Vec::new();
     for s in roots {
         if s.hi() < domain.0 || s.lo() > domain.1 {
@@ -1260,10 +1276,9 @@ fn line_conic<const D: usize>(
         let Some(t) = t else {
             continue;
         };
-        let end = |x: Interval, (lo, hi): (f64, f64)| x.contains(lo) || x.contains(hi);
         let contact = if tangent {
             PointContact::IsolatedTangent
-        } else if end(s, domain) || end(t, conic.domain) {
+        } else if Seam::open(domain).ends(s) || conic_seam.ends(t) {
             PointContact::BoundaryTouch
         } else {
             PointContact::Crossing
