@@ -69,7 +69,7 @@ use geom_run::WorkMeter;
 
 use crate::equation::{Assembly, Sense};
 use crate::model::{ItemId, Sketch, SketchError};
-use crate::structure::{Part, analyse, substitute};
+use crate::structure::{Part, analyse, substitute_read};
 
 /// A residual this small is met: a 64th of a grid step, in steps (section 15.6).
 pub const TOLERANCE: f64 = 0.015_625;
@@ -136,18 +136,60 @@ struct Stage {
     columns: Vec<usize>,
     /// Each column's scale.
     scales: Vec<f64>,
-    /// For each stored entry: its place in the assembly's Jacobian, in `plain` and in `stacked`.
-    map: Vec<(usize, usize, usize)>,
+    /// For each stored entry: its place in the assembly's Jacobian and in `plain`.
+    map: Vec<(usize, usize)>,
     /// J on these rows and columns.
     plain: Sparse,
-    /// J over a diagonal.
-    stacked: Sparse,
-    /// The diagonal's places in `stacked`.
-    diagonal: Vec<usize>,
     plain_order: SymbolicQr,
-    stacked_order: SymbolicQr,
+    /// What a damped step needs, made the first time a step is damped: most stages never are.
+    damped: Option<Damped>,
     /// Whether it is a square block, whose pivots a path watches.
     square: bool,
+}
+
+/// J stacked on a diagonal, for a damped step.
+struct Damped {
+    stacked: Sparse,
+    /// The place in `stacked` of each of `plain`'s entries, in `plain`'s order.
+    places: Vec<usize>,
+    /// The diagonal's places in `stacked`.
+    diagonal: Vec<usize>,
+    order: SymbolicQr,
+}
+
+impl Damped {
+    /// The stacked pattern of `plain`, analysed.
+    fn new(plain: &Sparse, work: &mut Work) -> Result<Damped, SketchError> {
+        let (m, n) = (plain.rows(), plain.cols());
+        let mut triplets = Vec::new();
+        for k in 0..n {
+            let (rows, _) = plain.column(k)?;
+            for &i in rows {
+                push(&mut triplets, (i, k, 0.0))?;
+            }
+        }
+        for k in 0..n {
+            let row = m.checked_add(k).ok_or(SketchError::Internal)?;
+            push(&mut triplets, (row, k, 0.0))?;
+        }
+        let tall = m.checked_add(n).ok_or(SketchError::Internal)?;
+        let stacked = Sparse::from_triplets(tall, n, &triplets)?;
+        let (mut places, mut diagonal) = (Vec::new(), Vec::new());
+        for k in 0..n {
+            let (rows, _) = plain.column(k)?;
+            for &i in rows {
+                push(&mut places, stacked.place_of(i, k)?)?;
+            }
+            let row = m.checked_add(k).ok_or(SketchError::Internal)?;
+            push(&mut diagonal, stacked.place_of(row, k)?)?;
+        }
+        Ok(Damped {
+            order: analysed(&stacked, work)?,
+            stacked,
+            places,
+            diagonal,
+        })
+    }
 }
 
 /// What depends on a sketch's structure alone: computed once, and reused along a path.
@@ -157,6 +199,18 @@ struct Plan {
     /// Each sketch variable's column.
     merged: Vec<usize>,
     freedoms: usize,
+}
+
+/// Columns at most this many keep their own order: no column order lessens the fill of so few.
+const NATURAL: usize = 4;
+
+/// The analysis of `a`'s pattern, by COLAMD's order above [`NATURAL`] columns.
+fn analysed(a: &Sparse, work: &mut Work) -> Result<SymbolicQr, LinalgError> {
+    if a.cols() <= NATURAL {
+        SymbolicQr::natural(a, work)
+    } else {
+        SymbolicQr::new(a, work)
+    }
 }
 
 fn at(list: &[usize], i: usize) -> Result<usize, SketchError> {
@@ -242,35 +296,19 @@ impl Stage {
             push(&mut triplets, (i, k, 0.0))?;
         }
         let plain = Sparse::from_triplets(m, n, &triplets)?;
-        for k in 0..n {
-            let row = m.checked_add(k).ok_or(SketchError::Internal)?;
-            push(&mut triplets, (row, k, 0.0))?;
-        }
-        let tall = m.checked_add(n).ok_or(SketchError::Internal)?;
-        let stacked = Sparse::from_triplets(tall, n, &triplets)?;
         let mut map = Vec::new();
         for &(i, k, place) in &entries {
-            push(
-                &mut map,
-                (place, plain.place_of(i, k)?, stacked.place_of(i, k)?),
-            )?;
-        }
-        let mut diagonal = Vec::new();
-        for k in 0..n {
-            let row = m.checked_add(k).ok_or(SketchError::Internal)?;
-            push(&mut diagonal, stacked.place_of(row, k)?)?;
+            push(&mut map, (place, plain.place_of(i, k)?))?;
         }
         Ok(Stage {
-            plain_order: SymbolicQr::new(&plain, work)?,
-            stacked_order: SymbolicQr::new(&stacked, work)?,
+            plain_order: analysed(&plain, work)?,
+            damped: None,
             rules,
             rows,
             columns,
             scales,
             map,
             plain,
-            stacked,
-            diagonal,
             square,
         })
     }
@@ -295,10 +333,8 @@ impl Stage {
     /// Copies the Jacobian's entries in.
     fn load(&mut self, assembly: &Assembly) -> Result<(), SketchError> {
         let jacobian = assembly.jacobian();
-        for &(place, plain, stacked) in &self.map {
-            let value = jacobian.at_place(place)?;
-            self.plain.set_at(plain, value)?;
-            self.stacked.set_at(stacked, value)?;
+        for &(place, plain) in &self.map {
+            self.plain.set_at(plain, jacobian.at_place(place)?)?;
         }
         Ok(())
     }
@@ -324,10 +360,22 @@ impl Stage {
             return Ok(Some(qr.least_squares(&b, work)?));
         }
         let root = Real::new(lambda)?.sqrt()?.get();
-        for &place in &self.diagonal {
-            self.stacked.set_at(place, root)?;
+        if self.damped.is_none() {
+            self.damped = Some(Damped::new(&self.plain, work)?);
         }
-        let qr = SparseQr::factor(&self.stacked_order, &self.stacked, Real::ZERO, work)?;
+        let damped = self.damped.as_mut().ok_or(SketchError::Internal)?;
+        let mut places = damped.places.iter();
+        for k in 0..self.plain.cols() {
+            let (_, values) = self.plain.column(k)?;
+            for &value in values {
+                let place = *places.next().ok_or(SketchError::Internal)?;
+                damped.stacked.set_at(place, value)?;
+            }
+        }
+        for &place in &damped.diagonal {
+            damped.stacked.set_at(place, root)?;
+        }
+        let qr = SparseQr::factor(&damped.order, &damped.stacked, Real::ZERO, work)?;
         let tall = r
             .len()
             .checked_add(self.columns.len())
@@ -518,9 +566,9 @@ impl Plan {
     ///
     /// [`SketchError::Stopped`]; what its analysis and pattern refuse.
     fn new(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Plan, SketchError> {
-        let substituted = substitute(sketch)?;
+        let (substituted, read) = substitute_read(sketch)?;
         let analysis = analyse(&substituted.graph, meter)?;
-        let assembly = Assembly::merged(sketch, &substituted)?;
+        let assembly = Assembly::merged_read(sketch, &substituted, &read)?;
         let mut stages = Vec::new();
         let mut freedoms = 0_usize;
         let mut work = Work::new(u64::MAX);
@@ -666,7 +714,8 @@ pub fn continue_to(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Solved, SketchError> {
     let mut plan = Plan::new(from, meter)?;
-    let target = Assembly::merged(to, &substitute(to)?)?;
+    let (substituted, read) = substitute_read(to)?;
+    let target = Assembly::merged_read(to, &substituted, &read)?;
     if !plan.assembly.same_structure(&target) {
         return Err(SketchError::NotTheSameSketch);
     }

@@ -63,7 +63,7 @@ use crate::model::{
     Amount, Constraint, ConstraintKind, Entity, EntityKind, ItemId, Side, Sketch, SketchError,
     Standing, Variable, power_of_two,
 };
-use crate::structure::{Substituted, merges};
+use crate::structure::{Read, Substituted, merges};
 
 /// What a residual cannot be differentiated at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -924,7 +924,7 @@ impl Assembly {
     ///
     /// [`SketchError::OutOfMemory`]; [`SketchError::Linear`]; what the sketch's lookups refuse.
     pub fn new(sketch: &Sketch) -> Result<Assembly, SketchError> {
-        Assembly::built(sketch, None)
+        Assembly::built(sketch, None, None)
     }
 
     /// The rows of `sketch`'s rules on `substituted`'s merged variables: each column is a set of
@@ -935,10 +935,23 @@ impl Assembly {
     ///
     /// As [`Assembly::new`].
     pub fn merged(sketch: &Sketch, substituted: &Substituted) -> Result<Assembly, SketchError> {
-        Assembly::built(sketch, Some(substituted))
+        Assembly::built(sketch, Some(substituted), None)
     }
 
-    fn built(sketch: &Sketch, merging: Option<&Substituted>) -> Result<Assembly, SketchError> {
+    /// [`Assembly::merged`] on the rules and inputs `substitute_read` read.
+    pub(crate) fn merged_read(
+        sketch: &Sketch,
+        substituted: &Substituted,
+        read: &Read,
+    ) -> Result<Assembly, SketchError> {
+        Assembly::built(sketch, Some(substituted), Some(read))
+    }
+
+    fn built(
+        sketch: &Sketch,
+        merging: Option<&Substituted>,
+        read: Option<&Read>,
+    ) -> Result<Assembly, SketchError> {
         let all = sketch.variables()?;
         let mut variables = Vec::new();
         variables
@@ -957,10 +970,29 @@ impl Assembly {
         }
         let (mut rows, mut slots, mut triplets) = (Vec::new(), Vec::new(), Vec::new());
         let mut equations = 0_usize;
-        for (id, kind) in rules_of(sketch)? {
+        let listed;
+        let rules: &[(ItemId, ConstraintKind)] = if let Some(read) = read {
+            &read.rules
+        } else {
+            listed = rules_of(sketch)?;
+            &listed
+        };
+        for (place, &(id, kind)) in rules.iter().enumerate() {
             let at = slots.len();
             let from = triplets.len();
-            let here = inputs_of(sketch, &kind, &all, &mut slots)?;
+            let here = match read {
+                Some(read) => {
+                    let &(start, end, equations) =
+                        read.spans.get(place).ok_or(SketchError::Internal)?;
+                    let list = read.slots.get(start..end).ok_or(SketchError::Internal)?;
+                    slots
+                        .try_reserve(list.len())
+                        .map_err(|_| SketchError::OutOfMemory)?;
+                    slots.extend_from_slice(list);
+                    equations
+                }
+                None => inputs_of(sketch, &kind, &all, &mut slots)?,
+            };
             if let Some(substituted) = merging {
                 let list = slots.get_mut(at..).ok_or(SketchError::Internal)?;
                 if merges(&kind, list).is_some() {

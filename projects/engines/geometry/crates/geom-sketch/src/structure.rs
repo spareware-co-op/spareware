@@ -192,6 +192,17 @@ pub struct Substituted {
     pub owners: Vec<ItemId>,
 }
 
+/// Every rule of a sketch with its inputs, read once by [`substitute_read`] and read again by
+/// `Assembly::merged_read` instead of looking each input up a second and third time.
+pub(crate) struct Read {
+    /// The sketch's rules, in id order.
+    pub(crate) rules: Vec<(ItemId, ConstraintKind)>,
+    /// Every rule's inputs, one after another.
+    pub(crate) slots: Vec<Slot>,
+    /// Each rule's inputs, `slots[start..end]`, and its count of equations.
+    pub(crate) spans: Vec<(usize, usize, usize)>,
+}
+
 /// The root of `v`, halving the path as it goes. A root is its set's lowest variable.
 fn root(parent: &mut [usize], mut v: usize) -> Result<usize, SketchError> {
     loop {
@@ -249,6 +260,11 @@ fn column(slots: &[Slot], i: usize) -> Result<usize, SketchError> {
 ///
 /// [`SketchError::OutOfMemory`]; what the sketch's lookups refuse.
 pub fn substitute(sketch: &Sketch) -> Result<Substituted, SketchError> {
+    substitute_read(sketch).map(|(substituted, _)| substituted)
+}
+
+/// [`substitute`], and the rules and inputs it read.
+pub(crate) fn substitute_read(sketch: &Sketch) -> Result<(Substituted, Read), SketchError> {
     let variables = sketch.variables()?;
     let count = variables.len();
     let mut parent = filled(count, 0_usize)?;
@@ -257,12 +273,18 @@ pub fn substitute(sketch: &Sketch) -> Result<Substituted, SketchError> {
     }
     let rules = rules_of(sketch)?;
     let mut slots = Vec::new();
+    let mut spans = Vec::new();
+    spans
+        .try_reserve_exact(rules.len())
+        .map_err(|_| SketchError::OutOfMemory)?;
     for (_, kind) in &rules {
-        slots.clear();
-        inputs_of(sketch, kind, &variables, &mut slots)?;
-        for &(a, b) in merges(kind, &slots).unwrap_or(&[]) {
-            join(&mut parent, column(&slots, a)?, column(&slots, b)?)?;
+        let start = slots.len();
+        let equations = inputs_of(sketch, kind, &variables, &mut slots)?;
+        let list = slots.get(start..).ok_or(SketchError::Internal)?;
+        for &(a, b) in merges(kind, list).unwrap_or(&[]) {
+            join(&mut parent, column(list, a)?, column(list, b)?)?;
         }
+        spans.push((start, slots.len(), equations));
     }
     let mut merged = filled(count, NONE)?;
     let mut next_id = 0_usize;
@@ -275,31 +297,40 @@ pub fn substitute(sketch: &Sketch) -> Result<Substituted, SketchError> {
             *slot(&mut merged, v)? = get(&merged, top)?;
         }
     }
-    let mut rows: Vec<Vec<usize>> = Vec::new();
-    let mut owners = Vec::new();
-    for (id, kind) in &rules {
-        slots.clear();
-        let equations = inputs_of(sketch, kind, &variables, &mut slots)?;
-        if merges(kind, &slots).is_some() {
+    // Every equation's merged variables, one after another: an equation is `cells[begin..end]`.
+    let (mut cells, mut bounds, mut owners) = (Vec::new(), Vec::new(), Vec::new());
+    for ((id, kind), &(start, end, equations)) in rules.iter().zip(&spans) {
+        let list = slots.get(start..end).ok_or(SketchError::Internal)?;
+        if merges(kind, list).is_some() {
             continue;
         }
-        let mut row = Vec::new();
-        for slot in &slots {
+        let begin = cells.len();
+        for slot in list {
             if let Slot::Variable(v) = slot {
-                push(&mut row, get(&merged, *v)?)?;
+                push(&mut cells, get(&merged, *v)?)?;
             }
         }
         for _ in 0..equations {
-            push(&mut rows, row.clone())?;
+            push(&mut bounds, (begin, cells.len()))?;
             push(&mut owners, *id)?;
         }
     }
-    let graph = Graph::new(next_id, rows.iter().map(Vec::as_slice))?;
-    Ok(Substituted {
-        graph,
-        merged,
-        owners,
-    })
+    let rows = bounds
+        .iter()
+        .map(|&(begin, end)| cells.get(begin..end).unwrap_or(&[]));
+    let graph = Graph::new(next_id, rows)?;
+    Ok((
+        Substituted {
+            graph,
+            merged,
+            owners,
+        },
+        Read {
+            rules,
+            slots,
+            spans,
+        },
+    ))
 }
 
 /// A largest matching: each equation's variable and each variable's equation, or [`NONE`].
