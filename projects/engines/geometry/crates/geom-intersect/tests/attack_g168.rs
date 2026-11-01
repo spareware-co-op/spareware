@@ -21,7 +21,7 @@ use geom_intersect::{
     trace,
 };
 use geom_num::interval::Interval;
-use geom_nurbs::Limit;
+use geom_nurbs::{Basis, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{
     Cone, Cylinder, ImplicitBound, ImplicitEnclosure, ParamSurface, Plane, Sphere, SurfaceKind,
@@ -35,8 +35,9 @@ const CEILING: f64 = 1e-3;
 const TURN: f64 = 2.0;
 const PI: f64 = core::f64::consts::PI;
 
+/// A meter above what any case here takes, so a trace that loses its way fails, not hangs.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(1 << 20))
 }
 
 fn frame() -> Frame<3> {
@@ -569,7 +570,7 @@ fn reach(branch: &Branch, u: f64, v: f64) -> f64 {
 fn nothing_a_dense_grid_sees_is_missed() {
     const CELLS: u32 = 96;
     let mut r = rng("g168 grid", 0x4731_3638);
-    let rounds = if cfg!(debug_assertions) { 24 } else { 240 };
+    let rounds = if cfg!(debug_assertions) { 8 } else { 240 };
     for round in 0..rounds {
         let radius = 2.0 + unit(&mut r) * 6.0;
         let sphere = [
@@ -668,12 +669,11 @@ fn each_kinds_equation_vanishes_on_it_with_its_gradient_along_its_normal() {
             let e = implicit
                 .enclose_box(s.map(|x| Interval::point(x).unwrap()))
                 .unwrap();
-            let scale = 1.0 + e.value.lo().abs().max(e.value.hi().abs());
             let gradient = e.gradient.map(mid);
             assert!(e.smooth);
             let length = gradient.iter().map(|x| x * x).sum::<f64>().sqrt();
-            assert!(e.value.lo() < 1e-9 * length.max(scale), "{u} {v}: {e:?}");
-            assert!(e.value.hi() > -1e-9 * length.max(scale), "{u} {v}: {e:?}");
+            assert!(e.value.lo() < 1e-9 * (1.0 + length), "{u} {v}: {e:?}");
+            assert!(e.value.hi() > -1e-9 * (1.0 + length), "{u} {v}: {e:?}");
             for t in [su, sv] {
                 let along: f64 = t.iter().zip(&gradient).map(|(x, y)| x * y).sum();
                 let size = t.iter().map(|x| x * x).sum::<f64>().sqrt();
@@ -713,5 +713,245 @@ fn each_kinds_gradient_is_the_rate_of_its_equation() {
                 );
             }
         }
+    }
+}
+
+/// A function that jumps across a knot line: each side's branch ends there, at a seam, and each side
+/// is read from its own side. z = xy left of x = 0 and x(y − 1) right of it, a crease along x = 0,
+/// has `z_x` = 0 along y = 0 on the left and y = 1 on the right.
+#[test]
+fn a_branch_ends_at_a_seam_where_the_function_jumps() {
+    let across = Basis::new(1, vec![0.0, 0.0, 0.5, 1.0, 1.0]).unwrap();
+    let along = Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    let net = [
+        [-1.0, -2.0, 2.0],
+        [-1.0, 2.0, -2.0],
+        [0.0, -2.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [1.0, -2.0, -3.0],
+        [1.0, 2.0, 1.0],
+    ];
+    let roof = SurfaceKind::Nurbs(Surface::new(across, along, &net).unwrap());
+    let level = Silhouette {
+        direction: [1.0, 0.0, 0.0],
+    };
+    let found = trace(&roof, &level, FLOOR, CEILING, &mut meter()).unwrap();
+    assert_eq!(found.branches.len(), 2, "{found:?}");
+    assert!(found.flagged.is_empty(), "{:?}", found.flagged);
+    let (left, right) = (&found.branches[0], &found.branches[1]);
+    assert!(left.ends.contains(&CurveEnd::Seam), "{:?}", left.ends);
+    assert!(left.ends.contains(&CurveEnd::Boundary), "{:?}", left.ends);
+    assert!(right.ends.contains(&CurveEnd::Seam), "{:?}", right.ends);
+    for [u, v] in &left.vertices {
+        assert!(mid(*u) <= 0.5 + 1e-9, "{u:?}");
+        assert!(holds(*v, 0.5, 1e-5), "{v:?}");
+    }
+    for [u, v] in &right.vertices {
+        assert!(mid(*u) >= 0.5 - 1e-9, "{u:?}");
+        assert!(holds(*v, 0.75, 1e-5), "{v:?}");
+    }
+}
+
+/// A root exactly on a bisection's middle still narrows, from both sides.
+#[test]
+fn a_root_on_a_middle_is_narrowed_from_both_sides() {
+    fn bound(r: &[Interval; 3]) -> Result<[Interval; 3], CurveError> {
+        Ok([
+            r[1].sub(Interval::point(0.5)?)?,
+            Interval::point(0.0)?,
+            Interval::point(1.0)?,
+        ])
+    }
+    // The line y = 1/2 on a patch whose left edge runs from −1 to 2: the root is 1/2, the middle.
+    let wide = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-1.0, 1.0), (-1.0, 2.0)),
+        )
+        .unwrap(),
+    );
+    let curve = Curve {
+        f: nothing,
+        smooth: always,
+        bound,
+    };
+    let found = trace(&wide, &OnImplicit(&curve), 1e-4, 1e-2, &mut meter()).unwrap();
+    assert_eq!(found.branches.len(), 1, "{found:?}");
+    for [_, v] in [
+        found.branches[0].vertices[0],
+        *found.branches[0].vertices.last().unwrap(),
+    ] {
+        assert!(v.contains(0.5), "{v:?}");
+        assert!(v.hi() - v.lo() <= 1e-4, "{v:?}");
+    }
+}
+
+/// Three arcs in one box pair up by their order along the box.
+#[test]
+fn three_arcs_in_one_box_pair_up_in_order() {
+    // y = x³ − x, through a strip it crosses three times.
+    fn bound(r: &[Interval; 3]) -> Result<[Interval; 3], CurveError> {
+        let x2 = r[0].square()?;
+        let cubic = x2.mul(r[0])?.sub(r[0])?;
+        let three = Interval::point(3.0)?;
+        Ok([
+            r[1].sub(cubic)?,
+            three.mul(x2)?.sub(Interval::point(1.0)?)?.neg(),
+            Interval::point(1.0)?,
+        ])
+    }
+    let curve = Curve {
+        f: nothing,
+        smooth: always,
+        bound,
+    };
+    let strip = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-1.3, 1.4), (-0.1, 0.15)),
+        )
+        .unwrap(),
+    );
+    let found = trace(&strip, &OnImplicit(&curve), 1e-3, 1e3, &mut meter()).unwrap();
+    assert_eq!(found.branches.len(), 3, "{found:?}");
+    for (branch, root) in found.branches.iter().zip([-1.0, 0.0, 1.0]) {
+        assert_eq!(branch.ends, [CurveEnd::Boundary, CurveEnd::Boundary]);
+        for [u, _] in &branch.vertices {
+            assert!((mid(*u) - root).abs() < 0.2, "{u:?} against {root}");
+        }
+    }
+}
+
+/// A curve that only touches the domain's edge cannot be told from one that misses it: flagged
+/// there, and nowhere else.
+#[test]
+fn a_curve_touching_the_edge_is_flagged_there() {
+    // The circle of radius 1 about (0, 0) in a patch whose top edge is y = 1.
+    let sphere = Sphere::new([0.0; 3], 1.0, frame(), ((0.0, TURN), (-0.5, 0.5))).unwrap();
+    let cut = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-3.0, 3.0), (-3.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let found = trace(&cut, &OnImplicit(&sphere), 1e-4, 1e-2, &mut meter()).unwrap();
+    assert_ne!(found.flagged.len(), 0, "{found:?}");
+    for flagged in &found.flagged {
+        assert!(holds(flagged.at[0], 0.0, 1e-1), "{flagged:?}");
+        assert!(holds(flagged.at[1], 1.0, 1e-3), "{flagged:?}");
+    }
+}
+
+/// A cut whose ends g cannot sign moves off: a line through one end of the first cut, on either
+/// parameter, stays one branch.
+#[test]
+fn a_cut_moves_off_a_curve_through_one_of_its_ends() {
+    fn across(r: &[Interval; 3]) -> Result<[Interval; 3], CurveError> {
+        // Through (−1/8, 1), the top end of the first cut in u.
+        let x = r[0].add(Interval::point(0.125)?)?;
+        Ok([
+            r[1].sub(Interval::point(1.0)?)?
+                .sub(Interval::point(3.0)?.mul(x)?)?,
+            Interval::point(-3.0)?,
+            Interval::point(1.0)?,
+        ])
+    }
+    fn up(r: &[Interval; 3]) -> Result<[Interval; 3], CurveError> {
+        // Through (1, −1/8), the right end of the first cut in v.
+        let y = r[1].add(Interval::point(0.125)?)?;
+        Ok([
+            r[0].sub(Interval::point(1.0)?)?
+                .sub(Interval::point(3.0)?.mul(y)?)?,
+            Interval::point(1.0)?,
+            Interval::point(-3.0)?,
+        ])
+    }
+    for bound in [
+        across as fn(&[Interval; 3]) -> Result<[Interval; 3], CurveError>,
+        up,
+    ] {
+        let curve = Curve {
+            f: nothing,
+            smooth: always,
+            bound,
+        };
+        let found = trace(&patch(1.0), &OnImplicit(&curve), 1e-5, 1e-3, &mut meter()).unwrap();
+        assert_eq!(found.branches.len(), 1, "{found:?}");
+        assert!(found.flagged.is_empty(), "{:?}", found.flagged);
+    }
+}
+
+/// A floor no double can reach: boxes run out of doubles, and what is left is flagged.
+#[test]
+fn a_floor_below_the_doubles_still_ends() {
+    fn bound(r: &[Interval; 3]) -> Result<[Interval; 3], CurveError> {
+        let (x, y) = (
+            r[0].sub(Interval::point(0.3)?)?,
+            r[1].sub(Interval::point(0.7)?)?,
+        );
+        let two = Interval::point(2.0)?;
+        Ok([x.square()?.add(y.square()?)?, two.mul(x)?, two.mul(y)?])
+    }
+    let curve = Curve {
+        f: nothing,
+        smooth: always,
+        bound,
+    };
+    let mut free = WorkMeter::new(Budget::of_work(1 << 22));
+    let found = trace(&patch(1.0), &OnImplicit(&curve), 1e-300, 1e-2, &mut free).unwrap();
+    assert!(found.branches.is_empty(), "{found:?}");
+    assert_ne!(found.flagged.len(), 0);
+}
+
+/// A trace's work and the shape of its answer, to the unit: a trace is a pure function, so a change
+/// here is a change to what is pruned or to how far a chord is said to reach, which a test of where
+/// the curve lies cannot see.
+#[test]
+fn each_trace_takes_the_work_it_always_took() {
+    let sphere = Sphere::new([1.0, 2.0, 3.0], 5.0, frame(), ((0.0, TURN), (-0.5, 0.5))).unwrap();
+    let cylinder = SurfaceKind::Cylinder(
+        Cylinder::new([0.0; 3], 3.0, frame(), ((0.0, TURN), (-20.0, 20.0))).unwrap(),
+    );
+    let tilted = Plane::new(
+        [0.0; 3],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 1.0],
+        ((-9.0, 9.0), (-9.0, 9.0)),
+    )
+    .unwrap();
+    let torus = SurfaceKind::Torus(
+        Torus::new([0.0; 3], 6.0, 2.0, frame(), ((0.1, 1.9), (0.1, 1.9))).unwrap(),
+    );
+    let flat = patch(10.0);
+    let circle = OnImplicit(&sphere);
+    let ellipse = OnImplicit(&tilted);
+    let outline = Silhouette {
+        direction: [1.0, 2.0, 3.0],
+    };
+    let cases: [(&SurfaceKind, &dyn geom_intersect::Level, u64, usize, u64); 3] = [
+        (&flat, &circle, 27_162, 131, 4_576_741_634_584_209_240),
+        (&cylinder, &ellipse, 34_293, 166, 4_576_905_993_249_919_340),
+        (&torus, &outline, 244_468, 292, 4_576_913_829_044_423_827),
+    ];
+    for (surface, level, work, vertices, reach) in cases {
+        let run = |budget: u64| {
+            let mut m = WorkMeter::new(Budget::of_work(budget));
+            trace(surface, level, 1e-4, 1e-2, &mut m)
+        };
+        assert_eq!(run(work - 1), Err(IntersectError::BudgetExceeded));
+        let found = run(work).unwrap();
+        let total: usize = found.branches.iter().map(|b| b.vertices.len()).sum();
+        let most = found
+            .branches
+            .iter()
+            .fold(0.0f64, |m, b| m.max(b.deviation));
+        assert_eq!((total, most.to_bits()), (vertices, reach));
     }
 }

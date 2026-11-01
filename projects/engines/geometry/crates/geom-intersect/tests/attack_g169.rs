@@ -23,10 +23,10 @@ use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 
 const FLOOR: f64 = 1e-3;
-const TURN: f64 = 2.0;
 
+/// A meter above what any case here takes, so a search that loses its way fails, not hangs.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::of_work(1 << 24))
+    WorkMeter::new(Budget::of_work(1 << 21))
 }
 
 fn frame() -> Frame<3> {
@@ -192,6 +192,37 @@ fn the_search_is_deterministic() {
     let once = subdivide(&low, &high, FLOOR, &mut meter()).unwrap();
     let twice = subdivide(&low, &high, FLOOR, &mut meter()).unwrap();
     assert_eq!(once, twice);
-    let domain = ((0.0, TURN), (-0.5, 0.5));
-    assert_eq!(domain.0.1, TURN);
+}
+
+/// A subdivision's work and the shape of its answer, to the unit: it is a pure function, so a
+/// change here is a change to what is culled or settled, which where the start points lie cannot
+/// show. A pin holds at its own work and fails one unit under it.
+#[test]
+fn each_subdivision_takes_the_work_it_always_took() {
+    let plane = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-9.0, 9.0), (-9.0, 9.0)),
+        )
+        .unwrap(),
+    );
+    let sphere = SurfaceKind::Sphere(
+        Sphere::new([1.0, 2.0, 3.0], 5.0, frame(), ((0.1, 1.9), (-0.45, 0.45))).unwrap(),
+    );
+    let low = bowl(2.0, -1.0, 1.0);
+    let high = bowl(2.0, 1.0, -1.0);
+    let cases: [(&SurfaceKind, &SurfaceKind, u64, usize, usize); 2] = [
+        (&plane, &sphere, 96_699, 11, 22),
+        (&low, &high, 92_793, 12, 24),
+    ];
+    for (a, b, work, settled, starts) in cases {
+        let run =
+            |budget: u64| subdivide(a, b, FLOOR, &mut WorkMeter::new(Budget::of_work(budget)));
+        assert_eq!(run(work - 1), Err(IntersectError::BudgetExceeded));
+        let found = run(work).unwrap();
+        let total: usize = found.settled.iter().map(|p| p.starts.len()).sum();
+        assert_eq!((found.settled.len(), total), (settled, starts));
+    }
 }
