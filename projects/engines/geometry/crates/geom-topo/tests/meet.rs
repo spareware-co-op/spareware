@@ -5,7 +5,10 @@
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
     clippy::indexing_slicing,
+    clippy::many_single_char_names,
+    clippy::too_many_lines,
     clippy::unwrap_used,
     reason = "test fixtures; the rules are for kernel code"
 )]

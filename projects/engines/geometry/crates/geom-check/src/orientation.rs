@@ -35,6 +35,7 @@
 //! scratch). Recursion: none.
 
 use geom_num::Sign;
+use geom_num::interval::Interval;
 use geom_run::Stopped;
 use geom_topo::entity::{Region, RegionIx, RegionKind, Shell, ShellIx};
 use geom_topo::ix::Arena;
@@ -76,15 +77,19 @@ fn word_of(sign: Sign) -> u32 {
 fn certified_word(body: &Body, s: ShellIx, sink: &mut Sink<'_, '_>) -> Result<u32, Stopped> {
     let sign = match certified_shell_volume(body, s, sink.meter()) {
         Err(QueryError::Stopped(stop)) => return Err(stop),
-        found => found.ok().and_then(|v| v.certain_sign()),
+        found => found.ok().and_then(Interval::certain_sign),
     };
-    Ok(sign.map_or_else(
-        || {
-            sink.push(Fault::at(FaultKind::Unchecked, Entity::Shell(s)));
-            UNJUDGED
-        },
-        word_of,
-    ))
+    Ok(judged(sign, s, sink))
+}
+
+/// The word for shell `s` with the certified sign `sign`. An enclosure of the volume leaves a sign
+/// open only when its fan's terms cancel past their last place, and each is exact to 1024 bits, so
+/// no fixture reaches this: a folded sheet thinner than a step would. It is a fault, never a pass.
+fn judged(sign: Option<Sign>, s: ShellIx, sink: &mut Sink<'_, '_>) -> u32 {
+    if sign.is_none() {
+        sink.push(Fault::at(FaultKind::Unchecked, Entity::Shell(s)));
+    }
+    sign.map_or(UNJUDGED, word_of)
 }
 
 /// Each shell's sign into `roles`, with its faults.
@@ -233,4 +238,36 @@ pub(crate) fn check(
         nesting(body, scratch, sink)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        reason = "test code: a failure should stop loudly"
+    )]
+
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::Ix;
+
+    use super::*;
+
+    #[test]
+    fn a_volume_no_enclosure_can_sign_is_a_fault_never_a_pass() {
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let mut sink = Sink::new(&mut meter).unwrap();
+        let s = Ix::new(0).unwrap();
+        assert_eq!(judged(None, s, &mut sink), UNJUDGED);
+        assert_eq!(sink.faults.len(), 1);
+        assert_eq!(sink.faults[0].kind, FaultKind::Unchecked);
+        assert_eq!(
+            judged(Some(Sign::Positive), s, &mut sink),
+            word_of(Sign::Positive)
+        );
+        assert_eq!(
+            judged(Some(Sign::Negative), s, &mut sink),
+            word_of(Sign::Negative)
+        );
+        assert_eq!(sink.faults.len(), 1);
+    }
 }

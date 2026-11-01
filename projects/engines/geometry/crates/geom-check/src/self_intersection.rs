@@ -167,6 +167,17 @@ pub(crate) enum Meet {
     Unknown,
 }
 
+impl Meet {
+    /// What two tests together found: a crossing over anything, an unknown over apart.
+    pub(crate) const fn or(self, other: Meet) -> Meet {
+        match (self, other) {
+            (Meet::Cross, _) | (_, Meet::Cross) => Meet::Cross,
+            (Meet::Unknown, _) | (_, Meet::Unknown) => Meet::Unknown,
+            (Meet::Apart, Meet::Apart) => Meet::Apart,
+        }
+    }
+}
+
 /// Reports what a test of `at` and `with` found: nothing if they are apart.
 fn report(sink: &mut Sink<'_, '_>, found: Meet, at: Entity, with: Entity) {
     let kind = match (found, at) {
