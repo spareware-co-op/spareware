@@ -47,6 +47,7 @@
 
 extern crate alloc;
 
+pub mod bound;
 pub mod closed;
 pub mod contact;
 pub mod curve;
