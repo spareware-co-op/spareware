@@ -25,6 +25,13 @@
 //!   wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused,
 //!   never guessed; a bound on the points still holds there, from the basis's bound widened by
 //!   the offset's largest size.
+//! - **Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero
+//!   even over the narrowest piece the conversion cuts (the domain's width times 2^−52), the
+//!   offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction),
+//!   and the NURBS form is refused as `Degenerate`, never as `Unbounded`, which names an infinite
+//!   domain. A normal that only comes near zero, as on a nearly flat helix offset along its axis,
+//!   is cut finer there until its pieces are bounded (issue #526); only a remainder that
+//!   overflows the doubles even on the narrowest pieces is refused, as `NotFinite`.
 //! - **Exact split and reversal.** A split trims the basis; a reversal reverses the basis and
 //!   negates the distances (the left normal of the reversed curve is the right normal).
 //! - **Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves
@@ -39,7 +46,10 @@
 //!
 //! Cost: an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations;
 //! the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval
-//! of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives.
+//! of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives;
+//! where even 128 cannot, only the pieces that need it are halved, each at most about 52 times
+//! (to 2^−52 of the domain), depth first on an explicit stack of at most one piece per halving,
+//! every piece examined charged to the meter.
 
 #![allow(
     clippy::many_single_char_names,
@@ -417,6 +427,113 @@ impl<const D: usize> Offset<D> {
         Ok(out)
     }
 
+    /// Whether the offset's normal is certainly apart from zero over `span`, so the offset is
+    /// defined there and its derivatives can be bounded: the jets of order 0 over each of the
+    /// span's pieces, whose square root of |N|² refuses where it may be zero (`crate::jet`).
+    fn defined_over(
+        &self,
+        span: (f64, f64),
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<bool, CurveError> {
+        for (lo, hi) in self.pieces(span)? {
+            match self.derivative_enclosures(At::Span(lo, hi), 0, meter) {
+                Ok(_) => {}
+                Err(CurveError::Unbounded) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(true)
+    }
+
+    /// The cuts `coarse` (strictly increasing, the domain's ends included) with pieces halved
+    /// where the cache needs it, only near where the normal comes close to zero and turns fast, so
+    /// the cuts stay few (issue #526). First each piece is halved until its normal is certainly
+    /// apart from zero ([`Offset::defined_over`]); then until the Taylor remainder over it
+    /// (`taylor::remainder`) is bounded and at most `target`. Halving stops at the narrowest piece
+    /// the domain resolves, its width times 2^−52, the spacing of doubles relative to their size;
+    /// a piece there whose remainder is bounded but above `target` is kept, its deviation stated.
+    /// The first pass runs over the whole domain before the second, so a normal that vanishes is
+    /// found as such, not as a remainder that overflows near it.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Degenerate`] where the normal cannot be told from zero even over the narrowest
+    /// piece, so the offset is not defined there (a cusp of the basis, or its tangent parallel to
+    /// the reference direction); [`CurveError::NotFinite`] where the remainder overflows even
+    /// there; [`CurveError::Stopped`]; the basis's errors.
+    fn refined(
+        &self,
+        coarse: &[f64],
+        target: f64,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Vec<f64>, CurveError> {
+        let defined = self.halved(coarse, meter, |o, piece, halves, m| {
+            if o.defined_over(piece, m)? {
+                Ok(false)
+            } else if halves {
+                Ok(true)
+            } else {
+                Err(CurveError::Degenerate)
+            }
+        })?;
+        self.halved(
+            &defined,
+            meter,
+            |o, piece, halves, m| match taylor::remainder(o, piece, CACHE_DEGREE, m) {
+                Ok(r) => Ok(halves && r.is_some_and(|r| r.hi() > target)),
+                Err(CurveError::Unbounded | CurveError::NotFinite) if halves => Ok(true),
+                Err(CurveError::Unbounded) => Err(CurveError::Degenerate),
+                Err(e) => Err(e),
+            },
+        )
+    }
+
+    /// The cuts `cuts` (strictly increasing) with each piece halved, depth first, while `halve`
+    /// asks: it is given the piece and whether it can still be halved (wider than the domain's
+    /// width times 2^−52, its middle a double strictly inside), and answers whether to halve it,
+    /// or refuses.
+    ///
+    /// Depth first with the left half on top, so the cuts come out in order. Each halving pushes
+    /// two pieces and pops one, so the stack holds at most one piece per halving, and a piece no
+    /// wider than the domain is as narrow as the domain resolves after about 52 halvings. Every
+    /// piece examined is charged to the meter.
+    ///
+    /// # Errors
+    ///
+    /// `halve`'s; [`CurveError::Stopped`].
+    fn halved(
+        &self,
+        cuts: &[f64],
+        meter: &mut WorkMeter<'_>,
+        mut halve: impl FnMut(&Self, (f64, f64), bool, &mut WorkMeter<'_>) -> Result<bool, CurveError>,
+    ) -> Result<Vec<f64>, CurveError> {
+        let (a, b) = self.domain();
+        let narrowest = (b - a) * f64::EPSILON;
+        let mut out: Vec<f64> = Vec::with_capacity(cuts.len());
+        let mut stack: Vec<(f64, f64)> = Vec::new();
+        for w in cuts.windows(2) {
+            let (Some(&x), Some(&y)) = (w.first(), w.get(1)) else {
+                return Err(CurveError::Defect);
+            };
+            if out.is_empty() {
+                out.push(x);
+            }
+            stack.push((x, y));
+            while let Some((lo, hi)) = stack.pop() {
+                meter.charge(1)?;
+                let mid = f64::midpoint(lo, hi);
+                let halves = hi - lo > narrowest && lo < mid && mid < hi;
+                if halve(self, (lo, hi), halves, meter)? && halves {
+                    stack.push((mid, hi));
+                    stack.push((lo, mid));
+                } else {
+                    out.push(hi);
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// The largest size of the offset itself (|d|, or the largest lateral offset and the range of
     /// the vertical one), for the fallback point bound.
     fn reach(&self) -> Result<(f64, Interval), CurveError> {
@@ -556,14 +673,26 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
             b.lo.iter()
                 .chain(&b.hi)
                 .fold(1.0_f64, |s, x| tight::larger(s, x.abs()));
+        let target = scale * 1e-10;
         for per in [8, 16, 32, 64, 128] {
             let cuts = taylor::cuts_between(self.domain(), &breaks, per)?;
             match taylor::from_cuts(self, CACHE_DEGREE, &cuts, meter) {
-                Ok(n) if n.deviation <= scale * 1e-10 || per == 128 => return Ok(n),
+                Ok(n) if n.deviation <= target || per == 128 => return Ok(n),
                 Ok(_) => {}
                 // Pieces so wide that the offset's derivatives cannot be bounded on them (its
                 // normal not separated from zero): narrower ones may be (piece G69).
                 Err(CurveError::Unbounded) if per < 128 => {}
+                // Still so at the finest even cut, where the normal comes near zero and turns
+                // fast: only the pieces that need it are cut finer (issue #526). Where even the
+                // narrowest cannot bound it, or a point's normal cannot be told from zero, the
+                // offset is undefined there: degenerate, never unbounded, as its domain is finite.
+                Err(CurveError::Unbounded) => {
+                    let fine = self.refined(&cuts, target, meter)?;
+                    return match taylor::from_cuts(self, CACHE_DEGREE, &fine, meter) {
+                        Err(CurveError::Unbounded) => Err(CurveError::Degenerate),
+                        other => other,
+                    };
+                }
                 Err(e) => return Err(e),
             }
         }
