@@ -390,6 +390,20 @@ struct Run {
     fins: Vec<RunFin>,
     /// Two planes through the line.
     on: [Plane; 2],
+    /// Where other pieces hold the same sheets further along, with their fins. Two faces of one
+    /// sheet can meet at a point of a line, and the run must not give the one's edge to the other.
+    later: Vec<(usize, Vec<RunFin>)>,
+}
+
+impl Run {
+    /// The fins of the stretch that starts at vertex `at`.
+    fn fins_from(&self, at: usize) -> &[RunFin] {
+        self.later
+            .iter()
+            .rev()
+            .find(|(from, _)| *from <= at)
+            .map_or(self.fins.as_slice(), |(_, fins)| fins.as_slice())
+    }
 }
 
 /// The root of `at` in a disjoint-set forest.
@@ -474,12 +488,17 @@ fn sweep(
         match runs.get_mut(opening..).and_then(<[Run]>::last_mut) {
             Some(run) if run.high == low && run.fins.iter().map(key).eq(fins.iter().map(key)) => {
                 run.high = high;
+                let held = |f: &[RunFin]| f.iter().map(|x| x.held).eq(fins.iter().map(|x| x.held));
+                if !held(run.fins_from(low)) {
+                    run.later.push((low, fins));
+                }
             }
             _ => runs.push(Run {
                 low,
                 high,
                 fins,
                 on,
+                later: Vec::new(),
             }),
         }
     }
@@ -631,12 +650,20 @@ fn cut_at_ends(runs: Vec<Run>, places: &[Corner]) -> Result<Vec<Run>, MergeError
                 edges.push(Run {
                     low,
                     high: *mark,
-                    ..run.clone()
+                    fins: run.fins_from(low).to_vec(),
+                    on: run.on,
+                    later: Vec::new(),
                 });
                 low = *mark;
             }
         }
-        edges.push(Run { low, ..run });
+        edges.push(Run {
+            low,
+            high: run.high,
+            fins: run.fins_from(low).to_vec(),
+            on: run.on,
+            later: Vec::new(),
+        });
     }
     Ok(edges)
 }

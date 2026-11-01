@@ -6,6 +6,7 @@
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::many_single_char_names,
     reason = "test checks and generators; the rules are for kernel code"
@@ -158,6 +159,95 @@ fn volumes_agree_with_counted_cells() {
         for (result, cell) in got.iter().zip(cells) {
             assert_eq!(six_volume(&result.mesh), six(cell));
         }
+    }
+}
+
+/// A prism from z = 0 under a cell of side 16 from x = `x`, y = 0, its corners at `heights`, in
+/// order along y, then x: every side is coplanar with its neighbour's.
+fn wedge(x: i64, heights: [i64; 4], name: u8) -> ExactMesh {
+    let [a, b, c, d] = heights;
+    let (p, q) = (x, x + 16);
+    let mut input = soup(
+        vec![
+            g(p, 0, a),
+            g(q, 0, b),
+            g(p, 16, c),
+            g(q, 16, d),
+            g(p, 0, 0),
+            g(q, 0, 0),
+            g(p, 16, 0),
+            g(q, 16, 0),
+        ],
+        &[
+            &[0, 1, 3],
+            &[0, 3, 2],
+            &[4, 7, 5],
+            &[4, 6, 7],
+            &[4, 5, 1, 0],
+            &[5, 7, 3, 1],
+            &[7, 6, 2, 3],
+            &[6, 4, 0, 2],
+        ],
+    );
+    input.runs = vec![source(name)];
+    build(&input, &Exec::serial(), &mut meter()).unwrap()
+}
+
+/// Every test of two solids gives a closed mesh, and the volumes add up within their intervals.
+fn holds_up(a: &ExactMesh, b: &ExactMesh) {
+    let tests = [
+        WindingTest::unite(),
+        WindingTest::intersect(2),
+        WindingTest::subtract(0),
+        WindingTest::subtract(1),
+    ];
+    let done = boolean(&[a, b], &tests, &step(), &Exec::serial(), &mut meter()).unwrap();
+    for outcome in &done {
+        assert_ne!(outcome.mesh.kind(), MeshKind::Open);
+    }
+    let bounds = |m: &ExactMesh| match m.volume(&mut meter()).unwrap() {
+        Volume::Exact(six) => {
+            let v = six.to_i128().unwrap() as f64;
+            (v, v)
+        }
+        Volume::Certified(i) => (i.lo(), i.hi()),
+    };
+    let add = |x: (f64, f64), y: (f64, f64)| (x.0 + y.0, x.1 + y.1);
+    let (low, high) = add(bounds(&done[0].mesh), bounds(&done[1].mesh));
+    let (under, over) = add(bounds(a), bounds(b));
+    assert!(
+        low <= over + 1e-6 && under <= high + 1e-6,
+        "{low} {high} {under} {over}"
+    );
+    let (low, high) = add(bounds(&done[2].mesh), bounds(&done[3].mesh));
+    let (under, over) = bounds(&done[0].mesh);
+    let (met, _) = bounds(&done[1].mesh);
+    assert!(
+        low <= over + 1e-6 && under - met <= high + 1e-6,
+        "{low} {high} {under} {over}"
+    );
+}
+
+#[test]
+fn two_faces_of_one_sheet_meet_at_a_point_on_an_edge() {
+    // The corner of the second lies on an edge of the first, at (8, 16, 28), and the first's top
+    // falls in two there, each with its own part of that edge.
+    let a = wedge(0, [20, 31, 27, 29], 1);
+    let b = wedge(8, [25, 25, 28, 26], 2);
+    holds_up(&a, &b);
+}
+
+#[test]
+fn ties_on_a_small_lattice_hold_up() {
+    let seed = resolve("geom-mesh boolean lattice", Seed(0x1480)).unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let height = NonZeroU64::new(16).unwrap();
+    let shift = [8, 4, 3, 16];
+    for round in 0..120 {
+        let mut pick = || core::array::from_fn(|_| 16 + rng.below(height) as i64);
+        let a = wedge(0, pick(), 1);
+        let b = wedge(shift[round % 4], pick(), 2);
+        holds_up(&a, &b);
     }
 }
 
