@@ -775,26 +775,24 @@ fn a_face_folded_flat_along_one_line_is_found() {
 }
 
 #[test]
-fn a_bent_face_with_a_hole_has_no_fan() {
-    // A fan runs round one ring: with a hole there is none to stand for it, and a face beside it
-    // cannot be told apart from it.
+fn a_bent_face_with_a_second_loop_has_no_fan() {
+    // A fan runs round one ring. This second loop turns on from the first as seen from its first
+    // corner, so that a fan through both would pass every test of a fan: it must still have none,
+    // and the face beside it cannot be told apart from it.
     let mut r = Rows::empty();
     let shell = r.shell(0);
     let numbers = |r: &mut Rows, ring: &[[i64; 3]]| -> Vec<u32> {
         ring.iter().map(|p| r.vertex(*p)).collect()
     };
     let outer = numbers(&mut r, &[[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]]);
-    let inner = numbers(&mut r, &[[3, 3, 0], [3, 6, 0], [6, 6, 0], [6, 3, 0]]);
+    let inner = numbers(&mut r, &[[-1, 10, 0], [-2, 9, 0], [-3, 8, 0], [-4, 6, 0]]);
     let (outer, inner) = (fins(&mut r, &outer), fins(&mut r, &inner));
     r.face(shell, &[&outer, &inner]);
     let shell = r.shell(0);
-    let beside = numbers(
-        &mut r,
-        &[[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]],
-    );
+    let beside = numbers(&mut r, &[[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]]);
     let beside = fins(&mut r, &beside);
     r.face(shell, &[&beside]);
-    r.surfaces[0] = level(0.0);
+    r.surfaces[0] = off_grid();
     let found = report(&r, BodyKind::General, certified());
     assert_eq!(kinds(found.faults()), [FaultKind::PairUnchecked]);
 }

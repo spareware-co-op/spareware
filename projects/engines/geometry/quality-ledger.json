@@ -5276,14 +5276,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "It moves the ray infinitely little to the other side of y, in every face at once. That is another ray from a point infinitely near the first, which orientation's precondition keeps off the shell, so it lies on the same side of it, and the parity of a ray that meets no edge is that side."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
-      "mutant": "delete match arm Pair::Crossing in faces_meet",
-      "line_text": "Pair::Crossing => crossing(f, g, sink),",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Faces on crossing planes go to coplanar, which walks every side of each against the other and charges far more; a_check_stops_cleanly_wherever_its_budget_ends runs the whole check once per unit of work, so that test never ends within the timeout, and the timeout is what catches the mutant."
     }
   ],
   "coverage_off": [],
