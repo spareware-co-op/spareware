@@ -397,7 +397,8 @@ fn remainder<const L: usize>(dividend: &Poly<L>, divisor: &Poly<L>) -> Option<[W
             let scaled = slot.checked_mul(&size)?;
             let below = i.checked_sub(shift).and_then(|k| divisor.terms.get(k));
             *slot = match below {
-                Some(term) if i <= top => {
+                // Past `top` the divisor's terms are zero, so the product takes nothing away.
+                Some(term) => {
                     let product = head.checked_mul(term)?;
                     if flip {
                         scaled.checked_add(&product)?
@@ -405,7 +406,7 @@ fn remainder<const L: usize>(dividend: &Poly<L>, divisor: &Poly<L>) -> Option<[W
                         scaled.checked_sub(&product)?
                     }
                 }
-                _ => scaled,
+                None => scaled,
             };
         }
         // The divisor is of degree at least one: a chain stops at a constant.
@@ -467,10 +468,9 @@ impl<const L: usize> Chain<L> {
         let mut len: usize = 2;
         // Cohen's lead and step, as magnitudes.
         let (mut lead, mut step) = (Wide::<L>::one(), Wide::<L>::one());
-        while let (Some(above), Some(below)) = (
-            len.checked_sub(2).and_then(|i| polys.get(i)).copied(),
-            len.checked_sub(1).and_then(|i| polys.get(i)).copied(),
-        ) {
+        loop {
+            let above = *polys.get(len.checked_sub(2)?)?;
+            let below = *polys.get(len.checked_sub(1)?)?;
             if below.degree == 0 {
                 break;
             }
