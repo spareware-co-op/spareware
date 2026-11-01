@@ -503,7 +503,15 @@
             "test": "sketch_determinism",
             "function": "sketch_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "c06cdc5c309b31d8f1e30bd702b179362f9f35e285e5f8a812b4e67af689ced2"
+          "sha256": "226999eece58b368d864b2c8bc5c915e27a0bd5b8edde14d31d3f43ee39d6a0a",
+          "history": [
+            {
+              "sha256": "c06cdc5c309b31d8f1e30bd702b179362f9f35e285e5f8a812b4e67af689ced2",
+              "kind": "bug",
+              "piece": "G218",
+              "why": "G217's assembly wrote a variable's partial derivative once per row, so where a variable appears twice in one row the second partial replaced the first instead of adding to it. The corpus has such rows: a point-line distance whose point is one of its own line's ends, where the true partials sum to exactly zero (the point stays on the line). G218 adds them. The sketch text, the residuals and every other entry are unchanged: 128 Jacobian entries moved (1,022 of the corpus's 212,671 bytes), each now exactly 0. The same new digest native on Linux and Windows."
+            }
+          ]
         },
         {
           "id": "geom-linalg/dense",
