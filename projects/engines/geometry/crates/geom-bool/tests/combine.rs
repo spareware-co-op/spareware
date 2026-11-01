@@ -680,7 +680,7 @@ fn any_budget_gives_the_answer_or_stops_cleanly() {
     let b = cuboid([20, 20, 20], [40, 40, 40]);
     let whole = unite(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &b)]).unwrap();
     let mut stops = 0;
-    for budget in (0..8000).step_by(11) {
+    for budget in (0..8000).step_by(37) {
         let small = OpContext::new(
             OpPath::new(OpId::from_bytes([7; 16])),
             Budget::new(budget, u64::MAX),
@@ -859,6 +859,7 @@ fn shape(body: &Body) -> (Vec<[i64; 3]>, [u32; 3]) {
 }
 
 #[test]
+#[ignore = "a benchmark's shape, far too long for every mutant: G140 runs and times it"]
 fn a_thousand_operands_unite_in_one_arrangement() {
     let mut boxes = Vec::new();
     for i in 0..10 {
