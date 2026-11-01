@@ -48,7 +48,7 @@ use geom_num::{I256, I320, NumError, Sign, Wide};
 use geom_run::{Stopped, WorkMeter};
 
 use crate::convex::{Piece, opposite};
-use crate::order::{Flap, Line, Ray, about, around};
+use crate::order::{Flap, Line, Meeting, Ray, about, around};
 use crate::plane::canonical;
 use crate::subdivide::around as box_around;
 use crate::trace::{Classified, Polygon, TraceError, classify};
@@ -285,12 +285,11 @@ struct Held<'p> {
     given: usize,
 }
 
-/// A corner of a piece, its coordinates X / w with w positive.
+/// A corner of a piece.
 struct Corner {
     point: Tpi,
-    x: [I320; 3],
-    w: I256,
-    /// Each coordinate `X_i` / w as a [`Cell`], where X and w fit machine words.
+    /// Each coordinate `X_i` / w, w made positive, as a [`Cell`], where X and w fit machine
+    /// words; the wide coordinates are made only to compare a corner that has none.
     cells: Option<[Cell; 3]>,
     /// The planes of every corner at this point: its own, until [`numbered`] joins them.
     through: Vec<Plane>,
@@ -372,26 +371,56 @@ impl Cell {
     }
 }
 
-/// Each `X_i` / w as a [`Cell`], if X and w fit machine words.
-fn cells_of(x: &[I320; 3], w: &I256) -> Option<[Cell; 3]> {
-    let over = w.to_i128()?;
+/// Each `X_i` / w as a [`Cell`], w made positive, if every step fits.
+fn cells_of(x: [i128; 3], w: i128) -> Option<[Cell; 3]> {
+    let turn = |v: i128| {
+        if w.is_negative() {
+            v.checked_neg()
+        } else {
+            Some(v)
+        }
+    };
+    let over = turn(w)?;
     let [first, second, third] = x;
     Some([
-        Cell::new(first.to_i128()?, over)?,
-        Cell::new(second.to_i128()?, over)?,
-        Cell::new(third.to_i128()?, over)?,
+        Cell::new(turn(first)?, over)?,
+        Cell::new(turn(second)?, over)?,
+        Cell::new(turn(third)?, over)?,
     ])
+}
+
+/// A corner's X and w with w positive, in wide integers: at most 2^294 and 2^252.
+fn wide_of(corner: &Corner) -> Option<([I320; 3], I256)> {
+    let (coordinates, weight) = corner.point.homogeneous().ok()?;
+    if !weight.is_negative() {
+        return Some((coordinates, weight));
+    }
+    let [first, second, third] = coordinates;
+    Some((
+        [
+            first.checked_neg()?,
+            second.checked_neg()?,
+            third.checked_neg()?,
+        ],
+        weight.checked_neg()?,
+    ))
 }
 
 /// Points lexicographically: by [`Cell`]s where both have them, else at most 2^294 · 2^252 in
 /// 576 bits. The first coordinate that differs decides, and the rest are not compared.
 fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
-    for i in 0..3 {
-        let order = if let (Some(own), Some(other)) = (&a.cells, &b.cells) {
-            own.get(i)?.order(other.get(i)?)?
-        } else {
-            ratio_order::<5, 4, 9>(a.x.get(i)?, &a.w, b.x.get(i)?, &b.w)?
-        };
+    if let (Some(own), Some(other)) = (&a.cells, &b.cells) {
+        for (p, q) in own.iter().zip(other) {
+            let order = p.order(q)?;
+            if order != Ordering::Equal {
+                return Some(order);
+            }
+        }
+        return Some(Ordering::Equal);
+    }
+    let ((own, under), (other, beneath)) = (wide_of(a)?, wide_of(b)?);
+    for (p, q) in own.iter().zip(&other) {
+        let order = ratio_order::<5, 4, 9>(p, &under, q, &beneath)?;
         if order != Ordering::Equal {
             return Some(order);
         }
@@ -406,23 +435,14 @@ fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
 )]
 fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
     let point = Tpi::meeting(face, p, q)?;
-    let (x, w) = point.homogeneous()?;
-    let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
-    let [a, b, c] = &x;
-    let through = alloc::vec![face, p, q];
-    let (x, w) = match point.weight() {
-        Sign::Negative => (
-            [turn(a)?, turn(b)?, turn(c)?],
-            w.checked_neg().ok_or(NumError::BudgetExceeded)?,
-        ),
-        Sign::Positive | Sign::Zero => (x, w),
-    };
+    let cells = Meeting::new(&face, &p, &q).and_then(|at| {
+        let (x, w) = at.coordinates();
+        cells_of(x, w)
+    });
     Ok(Corner {
         point,
-        cells: cells_of(&x, &w),
-        x,
-        w,
-        through,
+        cells,
+        through: alloc::vec![face, p, q],
     })
 }
 

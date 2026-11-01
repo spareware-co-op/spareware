@@ -233,6 +233,12 @@ impl Meeting {
         Some(Sign::of_i128(value))
     }
 
+    /// X and w, as [`Tpi::homogeneous`](geom_num::plane::Tpi::homogeneous) gives them: the same
+    /// cofactors, so the same values.
+    pub(crate) const fn coordinates(&self) -> ([i128; 3], i128) {
+        (self.x, self.w)
+    }
+
     /// The sign of w, det(`n_p`, `n_q`, `n_r`): zero when the three planes do not meet in a point.
     pub(crate) const fn weight(&self) -> Sign {
         Sign::of_i128(self.w)
