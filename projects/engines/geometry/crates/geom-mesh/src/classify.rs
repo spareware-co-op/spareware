@@ -186,8 +186,6 @@ pub struct Classifier<'m> {
     implicit: Vec<Tpi>,
     /// The first three-plane vertex.
     first_implicit: usize,
-    /// Each face's low and high z.
-    heights: Vec<(i64, i64)>,
 }
 
 impl<'m> Classifier<'m> {
@@ -231,7 +229,6 @@ impl<'m> Classifier<'m> {
             reach.push(([c.x.get(), c.y.get(), c.z.get()], pad));
         }
         let mut entries = Vec::with_capacity(mesh.faces());
-        let mut heights = Vec::with_capacity(mesh.faces());
         for (face, key) in (0..crate::exact::index(mesh.faces())?).zip(0_u64..) {
             meter.charge(1)?;
             let (first, last) = span(&p.face_loops, face)?;
@@ -245,13 +242,12 @@ impl<'m> Classifier<'m> {
                     *u = (*u).max(x.saturating_add(pad));
                 }
             }
-            let [lx, ly, lz] = low;
-            let [ux, uy, uz] = high;
+            let [lx, ly, _] = low;
+            let [ux, uy, _] = high;
             entries.push(Entry {
                 key,
                 bbox: Aabb::new([lx, ly], [ux, uy])?,
             });
-            heights.push((lz, uz));
         }
         let tree = BoxTree::build(&entries, exec, meter)?;
         Ok(Self {
@@ -259,7 +255,6 @@ impl<'m> Classifier<'m> {
             tree,
             implicit,
             first_implicit,
-            heights,
         })
     }
 
@@ -298,10 +293,7 @@ impl<'m> Classifier<'m> {
         if (above_u == Sign::Positive) == (above_v == Sign::Positive) {
             // No crossing. The point is on the edge only if an end is at its level.
             let (au, av) = (self.side(&across, u)?, self.side(&across, v)?);
-            let level_edge = above_u == Sign::Zero
-                && above_v == Sign::Zero
-                && au != av
-                && (au != Sign::Negative || av != Sign::Negative);
+            let level_edge = above_u == Sign::Zero && above_v == Sign::Zero && au != av;
             let at_end = (above_u == Sign::Zero && au == Sign::Zero)
                 || (above_v == Sign::Zero && av == Sign::Zero);
             return Ok(Step {
@@ -451,18 +443,14 @@ impl<'m> Classifier<'m> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<Polygon>, MeshError> {
         let parts = self.mesh.parts();
-        let [lx, ly, lz] = low;
-        let [ux, uy, uz] = high;
+        let [lx, ly, _] = low;
+        let [ux, uy, _] = high;
         let mut out = Vec::new();
         for key in self
             .tree
             .overlapping(&Aabb::new([lx, ly], [ux, uy])?, meter)?
         {
             let face = u32::try_from(key).map_err(|_| MeshError::Full)?;
-            let &(bottom, top) = at(&self.heights, face)?;
-            if top < lz || bottom > uz {
-                continue;
-            }
             let facing = *at(&parts.face_plane, face)?;
             let surface = turned(at(&parts.planes, facing.row)?, facing)?;
             let (first, last) = span(&parts.face_loops, face)?;
@@ -478,7 +466,7 @@ impl<'m> Classifier<'m> {
                         ring.push(side);
                     }
                 }
-                if ring.len() > 1 && ring.first() == ring.last() {
+                if ring.first() == ring.last() {
                     ring.pop();
                 }
                 rings.push(ring);

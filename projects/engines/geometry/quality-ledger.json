@@ -5457,6 +5457,38 @@
       "occurrences": 2,
       "kind": "equivalent",
       "reason": "Spread coordinates hold every third bit, and the shifts by 1 and 2 keep them apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace < with <= in grid_edge",
+      "line_text": "let (ai, aj, bi, bj) = if uj < vj {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This branch is reached only by an edge whose two ends differ in j, so they are never equal here."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace > with < in grid_edge",
+      "line_text": "crossed: run > 0,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Either sign of the ε² move is a valid perturbation: both faces of an edge flip together, and the ray counts one of them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace > with >= in grid_edge",
+      "line_text": "crossed: run > 0,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "An edge straight along j is then counted as if the start moved by −ε², which is as valid as +ε²: both its faces flip together."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "delete match arm (Some(a), Some(b)) in Classifier<'m>::in_face",
+      "line_text": "(Some(a), Some(b)) => grid_edge(",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "plane_edge gives the same step from the edge's planes; this arm only saves the determinants for an edge on the grid."
     }
   ],
   "coverage_off": [
