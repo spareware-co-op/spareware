@@ -15,7 +15,7 @@
 use geom_num::NumError;
 use geom_num::plane::{Plane, Tpi};
 use geom_poly::convex::Piece;
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange, arrange_with};
+use geom_poly::subdivide::{LEAF_POLYGONS, around, around_on, arrange, arrange_with};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError};
 use geom_poly::winding::{Kept, Winding, WindingTest, kept};
 #[cfg(not(target_family = "wasm"))]
@@ -609,6 +609,16 @@ proptest! {
         ] {
             prop_assert_eq!(volume(&test, &quick), volume(&test, &traced));
         }
+    }
+
+    /// The box around, made on a pool, is the box made one polygon at a time.
+    #[test]
+    fn the_box_around_is_the_same_on_a_pool(blocks in prop::collection::vec(any_block(), 0..5)) {
+        let list = polygons(&blocks);
+        let one = around(&list).unwrap();
+        prop_assert_eq!(around_on(&Exec::serial(), &list, &mut meter()).unwrap(), one);
+        #[cfg(not(target_family = "wasm"))]
+        prop_assert_eq!(around_on(&Exec::with_pool(&Threads), &list, &mut meter()).unwrap(), one);
     }
 
     /// One block alone, a solid, is one leaf whatever the leaf size: its six faces whole.
