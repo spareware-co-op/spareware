@@ -60,14 +60,19 @@ pub enum Clipped {
     Split(Piece, Piece),
 }
 
-/// The sign of `plane` at each corner of `piece`, corner i being where bounds i and i + 1 meet.
+/// The sign of `plane` at each corner of `piece`, corner i being where bounds i and i + 1 meet:
+/// each corner a [`Meeting`] in machine words where it fits, which costs less to make and read
+/// once than the predicate does, and the predicate where it does not.
 fn corners(piece: &Piece, plane: &Plane) -> Result<Vec<Sign>, NumError> {
     let after = piece.bounds.iter().cycle().skip(1);
     piece
         .bounds
         .iter()
         .zip(after)
-        .map(|(bound, next)| plane.side_of_tpi(&Tpi::meeting(piece.face, *bound, *next)?))
+        .map(|(bound, next)| {
+            let point = Meeting::new(&piece.face, bound, next);
+            corner_sign(piece, (bound, next), point.as_ref(), plane)
+        })
         .collect()
 }
 
