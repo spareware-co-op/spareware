@@ -5145,6 +5145,22 @@
       "occurrences": 2,
       "kind": "equivalent",
       "reason": "A mean term of two others, so never the largest while each of its groups is at least 1; the mutant only makes it smaller, the group n of a carrier being at least 1. With n at 0 the quotient is NaN, in the place where larger ignores it, and the true term is 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/one_root.rs",
+      "mutant": "replace > with >= in Crossing2::order",
+      "line_text": "return Ok(if dy > 0 { sy } else { sy.negate() });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Here dx is 0, so dy is not: a carrier has a direction, and 0 never reaches this test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/one_root.rs",
+      "mutant": "replace > with >= in Crossing2::order",
+      "line_text": "Ok(if dx > 0 { sx } else { sx.negate() })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The case dx = 0 has returned above, so 0 never reaches this test."
     }
   ],
   "coverage_off": [
