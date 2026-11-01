@@ -378,7 +378,7 @@ fn chunks_are_whole_runs_in_their_places() {
     t[2] = (
         3,
         u64::from(CHUNK_ROWS) + 1,
-        vec![table(&one, 3)[0].clone(), table_of(&big, 3)[1].clone()],
+        vec![table_of(&one, 3)[0].clone(), table_of(&big, 3)[1].clone()],
     );
     assert!(matches!(
         read_body(&forge(1, 2, &t, 0, false), &mut meter()),
@@ -561,9 +561,10 @@ fn a_body_of_grid_points_lists_no_planes() {
 #[test]
 fn a_plane_is_part_of_a_bodys_geometry() {
     let id = |d| {
-        *BodyVersion::first(&meeting(d), &mut meter())
+        BodyVersion::first(&meeting(d), &mut meter())
             .unwrap()
             .geometry_id()
+            .clone()
     };
     assert_ne!(id(-5), id(-6));
     assert_eq!(id(-5), id(-5));
@@ -579,7 +580,7 @@ fn a_meeting_of_planes_takes_three_planes_that_exist() {
             8,
             2,
             chunk(8, 2, |e| {
-                e.i64_column(&[row, [MEET + 1, MEET + 2, MEET + 3]].concat())
+                e.i64_column(&[[MEET + 1, MEET + 2, MEET + 3], row].concat())
                     .unwrap();
             }),
         )

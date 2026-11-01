@@ -236,7 +236,7 @@ The starting set is below. The maintained list, with pinned commits, lives in th
 | geomdl (NURBS-Python) | MIT; out of process | NURBS basis, evaluation, knot operations |
 | IfcConvert (OpenCascade, CGAL and Manifold backends); web-ifc | LGPL-3.0; MPL-2.0; out of process | IFC geometry |
 | Manifold; manifold-rust's rational engine | Apache-2.0; C++ out of process, the Rust port as a development dependency | Mesh booleans |
-| Cherchi et al.'s exact booleans | MIT, with Attene's LGPL predicates; out of process | Mesh booleans, compared exactly |
+| Cherchi et al.'s exact booleans | MIT, with Attene's LGPL predicates; out of process | Mesh booleans |
 | OpenSubdiv | Apache-2.0 with a changed trademark clause; out of process | Catmull-Clark limit points and derivatives |
 | libfive's core; Fidget | MPL-2.0; out of process | Field evaluation, enclosures (Fidget's are f32 and not rigorous, [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md) section 2), meshing |
 | JTS's XML conformance suite; Clipper2 (through clipper2-rust); i_overlay; cavalier_contours | EDL-1.0, run out of process; BSL-1.0 and MIT or Apache-2.0, development dependencies | 2D regions and offsets |

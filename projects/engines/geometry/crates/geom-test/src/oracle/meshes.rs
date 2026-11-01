@@ -1,6 +1,6 @@
-//! Mesh booleans against outside oracles (chapter 28.10; piece G154): CGAL's Nef polyhedra and
-//! Cherchi's exact booleans compared exactly, Manifold and manifold-rust's rational engine by
-//! volume, area and two-sided Hausdorff distance.
+//! Mesh booleans against outside oracles (chapter 28.10; piece G154): CGAL's Nef polyhedra compared
+//! exactly; Manifold, manifold-rust's rational engine and Cherchi's exact booleans, whose results
+//! leave them as decimals, by volume, area and two-sided Hausdorff distance.
 //!
 //! What it does: [`jobs`] draws a night's seeded pairs of closed solids with integer corners and a
 //! boolean to apply: boxes on a coarse lattice, boxes that touch or nest, prisms and tetrahedra.
@@ -74,7 +74,7 @@ pub fn holds(oracle: &str) -> bool {
 
 /// Whether `oracle` answers in exact rationals.
 fn is_exact(oracle: &str) -> bool {
-    [CGAL, CHERCHI].contains(&oracle)
+    oracle == CGAL
 }
 
 /// The boolean of a job.
@@ -486,6 +486,45 @@ fn corner(mesh: &ExactMesh, vertex: Vertex) -> Result<[RBig; 3], String> {
     }
 }
 
+/// Each face of `mesh` as its loops, each loop its corners' rows in the vertex table.
+fn faces_of(mesh: &ExactMesh) -> Result<Vec<Vec<&[u32]>>, String> {
+    let parts = mesh.parts();
+    let wrong = || "a loop past the half-edges".to_owned();
+    let mut faces = Vec::new();
+    for pair in parts.face_loops.windows(2) {
+        let [first, last] = pair else {
+            continue;
+        };
+        let mut rings = Vec::new();
+        for looped in *first..*last {
+            let at = looped as usize;
+            let start = parts.loop_start.get(at).ok_or_else(wrong)?;
+            let end = parts
+                .loop_start
+                .get(at.saturating_add(1))
+                .ok_or_else(wrong)?;
+            let ring = parts.he_vert.get(*start as usize..*end as usize);
+            rings.push(ring.ok_or_else(wrong)?);
+        }
+        faces.push(rings);
+    }
+    Ok(faces)
+}
+
+/// Every vertex of `mesh`, exactly.
+fn corners_of(mesh: &ExactMesh) -> Result<Vec<[RBig; 3]>, String> {
+    mesh.parts()
+        .verts
+        .iter()
+        .map(|v| corner(mesh, *v))
+        .collect()
+}
+
+fn row<'c>(corners: &'c [[RBig; 3]], at: Option<&u32>) -> Result<&'c [RBig; 3], String> {
+    at.and_then(|v| corners.get(*v as usize))
+        .ok_or_else(|| "a vertex past the table".to_owned())
+}
+
 /// The volume of closed `mesh`, exactly: six times the volume is the sum, over a fan of each loop,
 /// of the determinants of its triangles.
 ///
@@ -497,35 +536,56 @@ fn corner(mesh: &ExactMesh, vertex: Vertex) -> Result<[RBig; 3], String> {
     reason = "exact rationals, which cannot overflow"
 )]
 pub fn volume(mesh: &ExactMesh) -> Result<RBig, String> {
-    let parts = mesh.parts();
-    let corners = parts
-        .verts
-        .iter()
-        .map(|v| corner(mesh, *v))
-        .collect::<Result<Vec<[RBig; 3]>, String>>()?;
+    let corners = corners_of(mesh)?;
     let mut six = RBig::ZERO;
-    for pair in parts.loop_start.windows(2) {
-        let [start, end] = pair else {
-            continue;
-        };
-        let ring = parts
-            .he_vert
-            .get(*start as usize..*end as usize)
-            .ok_or_else(|| "a loop past the half-edges".to_owned())?;
-        let of = |at: Option<&u32>| {
-            at.and_then(|v| corners.get(*v as usize))
-                .ok_or_else(|| "a vertex past the table".to_owned())
-        };
-        let [a0, a1, a2] = of(ring.first())?;
+    for ring in faces_of(mesh)?.into_iter().flatten() {
+        let [a0, a1, a2] = row(&corners, ring.first())?;
         for fan in ring.get(1..).unwrap_or_default().windows(2) {
-            let [b0, b1, b2] = of(fan.first())?;
-            let [c0, c1, c2] = of(fan.get(1))?;
+            let [b0, b1, b2] = row(&corners, fan.first())?;
+            let [c0, c1, c2] = row(&corners, fan.get(1))?;
             six += a0.clone() * (b1.clone() * c2.clone() - b2.clone() * c1.clone())
                 - a1.clone() * (b0.clone() * c2.clone() - b2.clone() * c0.clone())
                 + a2.clone() * (b0.clone() * c1.clone() - b1.clone() * c0.clone());
         }
     }
     Ok(six / RBig::from(6))
+}
+
+/// The area of `mesh` and the length of its loops: a face's area is the size of its vector area,
+/// summed exactly over its loops, so a hole takes itself off and no rounding of a corner shows.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "exact rationals, and doubles, which cannot overflow here"
+)]
+fn sizes(mesh: &ExactMesh) -> Result<(f64, f64), String> {
+    let corners = corners_of(mesh)?;
+    let (mut area, mut edges) = (0.0, 0.0);
+    for rings in faces_of(mesh)? {
+        let mut twice = [RBig::ZERO, RBig::ZERO, RBig::ZERO];
+        for ring in rings {
+            let [a0, a1, a2] = row(&corners, ring.first())?;
+            for fan in ring.get(1..).unwrap_or_default().windows(2) {
+                let [b0, b1, b2] = row(&corners, fan.first())?;
+                let [c0, c1, c2] = row(&corners, fan.get(1))?;
+                let (u0, u1, u2) = (b0 - a0, b1 - a1, b2 - a2);
+                let (v0, v1, v2) = (c0 - a0, c1 - a1, c2 - a2);
+                let [x, y, z] = &mut twice;
+                *x += u1.clone() * v2.clone() - u2.clone() * v1.clone();
+                *y += u2 * v0.clone() - u0.clone() * v2;
+                *z += u0 * v1 - u1 * v0;
+            }
+            for (k, at) in ring.iter().enumerate() {
+                let next = ring.get(k.saturating_add(1)).or(ring.first());
+                let [p0, p1, p2] = row(&corners, Some(at))?;
+                let [q0, q1, q2] = row(&corners, next)?;
+                let gap = [q0 - p0, q1 - p1, q2 - p2].map(|g| g.to_f64().value());
+                edges += dot(gap, gap).sqrt();
+            }
+        }
+        let vector = twice.map(|x| x.to_f64().value());
+        area += dot(vector, vector).sqrt() / 2.0;
+    }
+    Ok((area, edges))
 }
 
 /// One triangle.
@@ -553,19 +613,6 @@ fn along(a: [f64; 3], b: [f64; 3], t: f64) -> [f64; 3] {
     let [x, y, z] = a;
     let [u, v, w] = b;
     [x + t * u, y + t * v, z + t * w]
-}
-
-/// The total area of `triangles`, and the total length of their edges.
-#[must_use]
-pub fn measure(triangles: &[Triangle]) -> (f64, f64) {
-    let (mut area, mut edges) = (0.0, 0.0);
-    for &[a, b, c] in triangles {
-        let (u, v, w) = (sub(b, a), sub(c, a), sub(c, b));
-        let turned = cross(u, v);
-        area += dot(turned, turned).sqrt() / 2.0;
-        edges += dot(u, u).sqrt() + dot(v, v).sqrt() + dot(w, w).sqrt();
-    }
-    (area, edges)
 }
 
 /// How far `p` is from triangle `[a, b, c]`: Ericson's regions of the triangle, in order.
@@ -599,6 +646,10 @@ fn distance(p: [f64; 3], triangle: &Triangle) -> f64 {
 
 /// Samples along each side of a triangle.
 const DENSITY: u32 = 8;
+
+/// The gap, in grid steps, sampling cannot see: on a sliver of a triangle a point's distance from
+/// the triangle it came from rounds to about this, and it is far under anything that matters.
+const SAMPLED: f64 = 1e-6;
 
 /// The largest distance from a sample of `from` to the nearest of `to`.
 fn one_way(from: &[Triangle], to: &[Triangle]) -> f64 {
@@ -634,38 +685,38 @@ pub fn hausdorff(a: &[Triangle], b: &[Triangle]) -> f64 {
     one_way(a, b).max(one_way(b, a))
 }
 
-/// What the kernel made of a job, as a comparison reads it.
+/// What the kernel made of a job, as a comparison reads it: each corner the double nearest its
+/// exact place, not the grid point it would be written at.
 struct Made {
     volume: RBig,
+    area: f64,
+    edges: f64,
     triangles: Vec<Triangle>,
+    /// Whether a corner was off the grid: triangles are drawn between rounded corners, so one may
+    /// stray from its face by up to a step.
     rounded: bool,
-}
-
-fn point_of(p: P3) -> Result<[f64; 3], String> {
-    let double = |v: i64| {
-        let x = i32::try_from(v).map_err(|e| e.to_string())?;
-        Ok::<f64, String>(f64::from(x))
-    };
-    Ok([double(p.x.get())?, double(p.y.get())?, double(p.z.get())?])
 }
 
 fn made(mesh: &ExactMesh) -> Result<Made, String> {
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     let drawn = triangles(mesh, &mut meter).map_err(|e| format!("{e:?}"))?;
     let vertex = |v: u32| {
-        drawn
-            .vertices
+        let at = mesh
+            .parts()
+            .verts
             .get(v as usize)
-            .copied()
-            .ok_or_else(|| "a corner past the table".to_owned())
-            .and_then(point_of)
+            .ok_or_else(|| "a corner past the table".to_owned())?;
+        Ok::<[f64; 3], String>(corner(mesh, *at)?.map(|x| x.to_f64().value()))
     };
     let mut all = Vec::with_capacity(drawn.corners.len());
     for &[a, b, c] in &drawn.corners {
         all.push([vertex(a)?, vertex(b)?, vertex(c)?]);
     }
+    let (area, edges) = sizes(mesh)?;
     Ok(Made {
         volume: volume(mesh)?,
+        area,
+        edges,
         triangles: all,
         rounded: drawn.rounded,
     })
@@ -756,22 +807,23 @@ fn answered(answer: &Answer) -> Result<Vec<Triangle>, String> {
 fn floating(oracle: &str, job: &Job, ours: &Made, answer: &Answer) -> Result<Compared, String> {
     let theirs = double(answer.volume.as_ref(), "volume", job.id)?;
     let area = double(answer.area.as_ref(), "area", job.id)?;
-    let stated = double(answer.tolerance.as_ref(), "tolerance", job.id)?;
+    // Manifold states -1 for an empty mesh: nothing to be off by.
+    let stated = double(answer.tolerance.as_ref(), "tolerance", job.id)?.max(0.0);
     let shape = answered(answer)?;
-    let (our_area, edges) = measure(&ours.triangles);
-    // Off the grid a corner moved by less than one step to be drawn; its exact volume did not.
-    let moved = if ours.rounded { 1.0 } else { 0.0 };
+    let (our_area, edges) = (ours.area, ours.edges);
     let fit = f64::from(u32::try_from(FIT.0).unwrap_or(u32::MAX));
-    let allowance = |ours: f64, unit: f64, rounding: f64| Allowance {
-        ours: ours * unit,
+    // Ours are exact, and doubles only here: what that rounds is `rounding`.
+    let allowance = |unit: f64, moved: f64, rounding: f64| Allowance {
+        ours: moved * unit,
         theirs: stated * unit,
         rounding,
         fit: fit * unit,
     };
     let our_volume = ours.volume.to_f64().value();
-    let by_volume = allowance(0.0, our_area, our_volume.abs() * f64::EPSILON);
-    let by_area = allowance(moved, edges, our_area * f64::EPSILON * 16.0);
-    let by_gap = allowance(moved, 1.0, 0.0);
+    let by_volume = allowance(our_area.max(area), 0.0, our_volume.abs() * f64::EPSILON);
+    let by_area = allowance(edges, 0.0, our_area * f64::EPSILON * 16.0);
+    let moved = if ours.rounded { 1.0 } else { 0.0 };
+    let by_gap = allowance(1.0, moved, SAMPLED);
     let kind = if !within(our_volume, theirs, &by_volume) {
         "volume"
     } else if !within(our_area, area, &by_area) {
@@ -891,12 +943,11 @@ fn replayed(operation: &Operation) -> Result<Ran, String> {
 /// A job the kernel refuses.
 pub fn own_answer(job: &Job) -> Result<Answer, String> {
     let ours = made(&run(job)?)?;
-    let (area, _) = measure(&ours.triangles);
     let text = |x: f64| float(x).unwrap_or_default();
     Ok(Answer {
         id: job.id,
         volume: Some(text(ours.volume.to_f64().value())),
-        area: Some(text(area)),
+        area: Some(text(ours.area)),
         tolerance: Some(text(0.0)),
         triangles: Some(
             ours.triangles
