@@ -5,6 +5,7 @@
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
 //! changed input. It has fourteen targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has five targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -32,6 +33,11 @@
 //! description, evaluated in big integers. [`adversarial`] holds the generators aimed at chapter
 //! 28.5's hard cases, and [`robustness`] counts how many plain designs succeed. The layout every
 //! target follows, and how each engine runs it locally and in CI, is in this crate's `README.md`.
+//! operation at every width; and [`variants`] (G42), every variant of every generated exact path
+//! returns the exact value of its description, evaluated in big integers; and [`planes`] (G123),
+//! `geom-poly`'s canonical planes and arrangement predicates give one entry to one plane and one
+//! order to any points or rays. The layout every target follows, and how each engine runs it locally and in CI,
+//! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -209,6 +215,7 @@ pub mod make;
 pub mod maths;
 pub mod nurbs;
 pub mod orient2d;
+pub mod planes;
 pub mod predicates;
 pub mod robustness;
 pub mod roots;

@@ -33,6 +33,8 @@ name: Kernel fuzzing and proofs
 # geom-topo today;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
 # its job kani-op, geom-format for kani-format, the workspace
+# every crate of the workspace it depends on (geom-gen, geom-num, geom-poly, geom-run, geom-test and what they build on today;
+# geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
 # ClusterFuzzLite files and this workflow.
 #
@@ -157,7 +159,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash

@@ -15,8 +15,9 @@
 //!   the nearest grid point (ties to even) and says whether it rounded, moving each coordinate by
 //!   at most [`COMMIT_PER_AXIS`](crate::ladder::COMMIT_PER_AXIS), half a step.
 //! - Nothing overflows, and nothing could wrap silently if it did. A [`Plane`] can only be made by
-//!   [`Plane::through`] from grid points (within 2^40 − 1 steps of the origin), which checks the
-//!   plane's budget below at construction (chapter 6.2); a [`Tpi`] can only be made by
+//!   [`Plane::through`] from grid points (within 2^40 − 1 steps of the origin) or by [`Plane::new`]
+//!   from coefficients, each of which checks the plane's budget below at construction (chapter
+//!   6.2); a [`Tpi`] can only be made by
 //!   [`Tpi::new`], which checks that its homogeneous coordinates fit their types. Every
 //!   intermediate fits its type by the derivation written on each function; the arithmetic of
 //!   every derivation, and every figure in the table below, is asserted when the crate compiles
@@ -281,6 +282,23 @@ impl Plane {
             Some(([0, 0, 0], _)) => Err(NumError::Degenerate),
             Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),
             _ => Err(NumError::BudgetExceeded),
+        }
+    }
+
+    /// The plane n · p + d = 0 from its coefficients, as a stored or reduced plane gives them.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] for a zero normal, and [`NumError::BudgetExceeded`] for a
+    /// coefficient over its budget (|`n_i`| ≥ 2^83 or |d| ≥ 2^125): chapter 6.2 has the type refuse
+    /// it here, so no plane over budget reaches an exact computation.
+    pub const fn new(n: [i128; 3], d: i128) -> Result<Plane, NumError> {
+        if n[0] == 0 && n[1] == 0 && n[2] == 0 {
+            Err(NumError::Degenerate)
+        } else if within_budget(&n, d) {
+            Ok(Plane { n, d })
+        } else {
+            Err(NumError::BudgetExceeded)
         }
     }
 
@@ -565,6 +583,12 @@ impl Tpi {
             }
             None => Err(NumError::BudgetExceeded),
         }
+    }
+
+    /// The sign of the point's weight w = det(`n_p`, `n_q`, `n_r`), exactly: never `Zero`.
+    #[must_use]
+    pub const fn weight(&self) -> Sign {
+        self.weight
     }
 
     /// The three planes, in the order given to [`Tpi::new`].
