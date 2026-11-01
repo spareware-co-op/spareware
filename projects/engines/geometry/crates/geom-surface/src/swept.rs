@@ -1209,6 +1209,22 @@ swept_surface!(Extrusion, Extrusion);
 swept_surface!(Ruled, Ruled);
 
 impl Revolution {
+    /// The profile, the axis direction and the frame, as [`Revolution::new`] took them.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] never: a revolution holds a revolution's shape.
+    pub fn shape(&self) -> Result<(&Trimmed<3>, [f64; 3], Frame<3>), CurveError> {
+        match &self.inner.shape {
+            Shape::Revolution {
+                profile,
+                axis,
+                frame,
+            } => Ok((profile, *axis, *frame)),
+            _ => Err(CurveError::Defect),
+        }
+    }
+
     /// The surface swept by `profile` turning about the axis through `axis` along the frame's
     /// normal, u in half-turns over `angles` (at most one turn), v the profile's parameter.
     ///
@@ -1244,6 +1260,18 @@ impl Revolution {
 }
 
 impl Extrusion {
+    /// The profile and the direction, as [`Extrusion::new`] took them.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] never: an extrusion holds an extrusion's shape.
+    pub fn shape(&self) -> Result<(&Trimmed<3>, [f64; 3]), CurveError> {
+        match &self.inner.shape {
+            Shape::Extrusion { profile, direction } => Ok((profile, *direction)),
+            _ => Err(CurveError::Defect),
+        }
+    }
+
     /// The surface swept by `profile` moving along `direction`, u the profile's parameter and v
     /// over `along`.
     ///

@@ -38,7 +38,9 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola};
+use geom_curve::{
+    Axes, Basis, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola, Trimmed,
+};
 use geom_curve::{HYPERBOLA_REACH, ParamCurve, tight};
 use geom_num::grid::{GridStep, P3, Steps};
 use geom_num::interval::Interval;
@@ -51,13 +53,14 @@ use crate::closed::{self, Natural, Position};
 use crate::curve::{exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole};
 use crate::curve_surface::{cross, curve_surface, dot, lift, minus, sides};
 use crate::error::IntersectError;
+use crate::reduced;
 use crate::result::{
     Coincidence, Coverage, CurveContact, CurveEnd, Intersection, Item, OverlapRegion, ParamBox,
     PointContact, StepsInterval,
 };
 
 /// A vector, enclosed.
-type Vector = [Interval; 3];
+pub(crate) type Vector = [Interval; 3];
 
 /// How far a point can stand from a curve and still be read as on it, in steps.
 const STEP: f64 = 2.0;
@@ -66,7 +69,7 @@ const STEP: f64 = 2.0;
 const REACH: f64 = 1_099_511_627_776.0;
 
 /// What a pair's closed form finds.
-enum Piece {
+pub(crate) enum Piece {
     /// A curve on both.
     Curve {
         curve: Box<CurveKind<3>>,
@@ -79,45 +82,45 @@ enum Piece {
     Same,
 }
 
-fn scale(v: Vector, k: Interval) -> Result<Vector, IntersectError> {
+pub(crate) fn scale(v: Vector, k: Interval) -> Result<Vector, IntersectError> {
     let [x, y, z] = v;
     Ok([x.mul(k)?, y.mul(k)?, z.mul(k)?])
 }
 
-fn plus(a: Vector, b: Vector) -> Result<Vector, IntersectError> {
+pub(crate) fn plus(a: Vector, b: Vector) -> Result<Vector, IntersectError> {
     let [p, q, r] = a;
     let [x, y, z] = b;
     Ok([p.add(x)?, q.add(y)?, r.add(z)?])
 }
 
-fn unit(v: Vector) -> Result<Vector, IntersectError> {
+pub(crate) fn unit(v: Vector) -> Result<Vector, IntersectError> {
     let [x, y, z] = v;
     let length = tight::norm(&[x, y, z])?;
     Ok([x.div(length)?, y.div(length)?, z.div(length)?])
 }
 
-fn middle(v: Vector) -> [f64; 3] {
+pub(crate) fn middle(v: Vector) -> [f64; 3] {
     v.map(tight::middle)
 }
 
 /// How wide an enclosure of a vector is.
-fn wide(v: Vector) -> f64 {
+pub(crate) fn wide(v: Vector) -> f64 {
     let [x, y, z] = v.map(|c: Interval| c.hi() - c.lo());
     tight::larger(tight::larger(x, y), z)
 }
 
-fn point(v: f64) -> Result<Interval, IntersectError> {
+pub(crate) fn point(v: f64) -> Result<Interval, IntersectError> {
     Ok(Interval::point(v)?)
 }
 
 /// The square root of what is known not to be negative, whose enclosure may reach below zero.
-fn root(v: Interval) -> Result<Interval, IntersectError> {
+pub(crate) fn root(v: Interval) -> Result<Interval, IntersectError> {
     let lo = if v.lo() < 0.0 { 0.0 } else { v.lo() };
     Ok(Interval::new(lo, tight::larger(lo, v.hi()))?.sqrt()?)
 }
 
 /// A vector not along `n`, for a frame's reference direction.
-fn beside(n: [f64; 3]) -> [f64; 3] {
+pub(crate) fn beside(n: [f64; 3]) -> [f64; 3] {
     let [x, y, z] = n.map(f64::abs);
     if x <= y && x <= z {
         [1.0, 0.0, 0.0]
@@ -129,7 +132,7 @@ fn beside(n: [f64; 3]) -> [f64; 3] {
 }
 
 /// A full circle about `centre` in the plane of `normal`, as a piece.
-fn circle(
+pub(crate) fn circle(
     centre: Vector,
     radius: Interval,
     normal: Vector,
@@ -146,7 +149,7 @@ fn circle(
 }
 
 /// A line through `at` along `along`, as a piece, over all of the grid its surfaces let it reach.
-fn line(at: Vector, along: Vector, tangent: bool) -> Result<Piece, IntersectError> {
+pub(crate) fn line(at: Vector, along: Vector, tangent: bool) -> Result<Piece, IntersectError> {
     let curve = Line::infinite(middle(at), middle(along))?;
     Ok(Piece::Curve {
         curve: Box::new(CurveKind::Line(curve)),
@@ -156,7 +159,7 @@ fn line(at: Vector, along: Vector, tangent: bool) -> Result<Piece, IntersectErro
 }
 
 /// How a sign stands: the exact decision where one came, the enclosure's otherwise, or `None`.
-fn decided(exact: Option<Result<Sign, NumError>>, enclosure: Interval) -> Option<Sign> {
+pub(crate) fn decided(exact: Option<Result<Sign, NumError>>, enclosure: Interval) -> Option<Sign> {
     if let Some(Ok(sign)) = exact {
         return Some(sign);
     }
@@ -171,13 +174,13 @@ fn decided(exact: Option<Result<Sign, NumError>>, enclosure: Interval) -> Option
 
 /// A plane as a point and a unit normal, whatever made it.
 #[derive(Clone, Copy)]
-struct Sheet {
-    at: Vector,
-    normal: Vector,
-    exact: Option<quadric::Plane>,
+pub(crate) struct Sheet {
+    pub(crate) at: Vector,
+    pub(crate) normal: Vector,
+    pub(crate) exact: Option<quadric::Plane>,
 }
 
-fn sheet(plane: &Plane) -> Result<Sheet, IntersectError> {
+pub(crate) fn sheet(plane: &Plane) -> Result<Sheet, IntersectError> {
     let (c, a, b) = plane.vectors();
     let far = |v: [f64; 3]| {
         let [p, q, r] = c;
@@ -293,7 +296,7 @@ fn off_line(p: [f64; 3], c: [f64; 3], e: [f64; 3]) -> bool {
 }
 
 /// Whether two stored directions are parallel, exactly.
-fn parallel(a: [f64; 3], b: [f64; 3]) -> bool {
+pub(crate) fn parallel(a: [f64; 3], b: [f64; 3]) -> bool {
     let [p, q, r] = a;
     let [x, y, z] = b;
     [
@@ -306,7 +309,7 @@ fn parallel(a: [f64; 3], b: [f64; 3]) -> bool {
 }
 
 /// Whether two axes are one line, by their stored doubles.
-fn same_line(a: [f64; 3], e: [f64; 3], b: [f64; 3], f: [f64; 3]) -> bool {
+pub(crate) fn same_line(a: [f64; 3], e: [f64; 3], b: [f64; 3], f: [f64; 3]) -> bool {
     parallel(e, f) && !off_line(b, a, e)
 }
 
@@ -686,12 +689,17 @@ fn sphere_sphere(a: &Sphere, b: &Sphere) -> Result<Option<Vec<Piece>>, Intersect
 }
 
 /// A height along an axis from a point on it, of a point of space.
-fn height(at: Vector, on: &Axis) -> Result<Interval, IntersectError> {
+pub(crate) fn height(at: Vector, on: &Axis) -> Result<Interval, IntersectError> {
     dot(minus(at, on.at)?, on.along)
 }
 
 /// The circle about `on` at height `z` with the given radius.
-fn ring(on: &Axis, z: Interval, r: Interval, tangent: bool) -> Result<Piece, IntersectError> {
+pub(crate) fn ring(
+    on: &Axis,
+    z: Interval,
+    r: Interval,
+    tangent: bool,
+) -> Result<Piece, IntersectError> {
     circle(plus(on.at, scale(on.along, z)?)?, r, on.along, tangent)
 }
 
@@ -1113,7 +1121,11 @@ fn shared_apex(p: &Funnel, q: &Funnel) -> Result<Option<Vec<Piece>>, IntersectEr
 }
 
 /// The closed form of a pair in the order plane, sphere, cylinder, cone; `None` for any other.
-fn pieces(a: &SurfaceKind, b: &SurfaceKind) -> Result<Option<Vec<Piece>>, IntersectError> {
+fn pieces(
+    a: &SurfaceKind,
+    b: &SurfaceKind,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Vec<Piece>>, IntersectError> {
     match (a, b) {
         (SurfaceKind::Plane(x), SurfaceKind::Plane(y)) => plane_plane(x, y),
         (SurfaceKind::Plane(x), SurfaceKind::Sphere(y)) => plane_sphere(x, y),
@@ -1125,6 +1137,16 @@ fn pieces(a: &SurfaceKind, b: &SurfaceKind) -> Result<Option<Vec<Piece>>, Inters
         (SurfaceKind::Cylinder(x), SurfaceKind::Cylinder(y)) => cylinder_cylinder(x, y),
         (SurfaceKind::Cylinder(x), SurfaceKind::Cone(y)) => cylinder_cone(x, y),
         (SurfaceKind::Cone(x), SurfaceKind::Cone(y)) => cone_cone(x, y),
+        (SurfaceKind::Plane(x), SurfaceKind::Torus(y)) => reduced::plane_torus(x, y, meter),
+        (_, SurfaceKind::Torus(y)) => reduced::about_torus(a, y, meter),
+        (SurfaceKind::Plane(x), SurfaceKind::Revolution(y)) => {
+            reduced::plane_revolution(x, y, meter)
+        }
+        (_, SurfaceKind::Revolution(y)) => reduced::about_revolution(a, y, meter),
+        (SurfaceKind::Plane(x), SurfaceKind::Extrusion(y)) => reduced::plane_extrusion(x, y, meter),
+        (SurfaceKind::Cylinder(_) | SurfaceKind::Extrusion(_), SurfaceKind::Extrusion(_)) => {
+            reduced::sweeps(a, b, meter)
+        }
         _ => Ok(None),
     }
 }
@@ -1136,6 +1158,9 @@ const fn rank(s: &SurfaceKind) -> Option<u8> {
         SurfaceKind::Sphere(_) => Some(1),
         SurfaceKind::Cylinder(_) => Some(2),
         SurfaceKind::Cone(_) => Some(3),
+        SurfaceKind::Torus(_) => Some(4),
+        SurfaceKind::Revolution(_) => Some(5),
+        SurfaceKind::Extrusion(_) => Some(6),
         _ => None,
     }
 }
@@ -1204,6 +1229,22 @@ fn parameters(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>
                 whole_turn(x, y)?,
                 Interval::atan2(z, round)?.div(Interval::PI)?,
             ]
+        }
+        SurfaceKind::Torus(t) => {
+            let [x, y, z] = local(&t.frame(), t.center())?;
+            let (major, _) = t.radii();
+            let out = tight::norm(&[x, y])?.sub(point(major)?)?;
+            let turn = turn_of(out, z.mul(point(t.axial_sign())?)?)?;
+            // The tube's turn reads from −1 to 1, and its domain from 0.
+            let two = point(2.0)?;
+            let (_, (v0, _)) = ParamSurface::domain(t);
+            let v = if turn.hi() < v0 { turn.add(two)? } else { turn };
+            [whole_turn(x, y)?, v]
+        }
+        // Each piece of these is built on them: a box of the domain is true, and all they need.
+        SurfaceKind::Revolution(_) | SurfaceKind::Extrusion(_) => {
+            let ((u0, u1), (v0, v1)) = ParamSurface::domain(surface);
+            [Interval::new(u0, u1)?, Interval::new(v0, v1)?]
         }
         _ => return Ok(None),
     }))
@@ -1385,7 +1426,11 @@ fn closed(curve: &CurveKind<3>) -> bool {
 }
 
 /// `curve` over `(lo, hi)`.
-fn stretch(curve: &CurveKind<3>, lo: f64, hi: f64) -> Result<Option<CurveKind<3>>, IntersectError> {
+pub(crate) fn stretch(
+    curve: &CurveKind<3>,
+    lo: f64,
+    hi: f64,
+) -> Result<Option<CurveKind<3>>, IntersectError> {
     Ok(match curve {
         CurveKind::Line(l) => Some(CurveKind::Line(Line::new(
             l.origin(),
@@ -1411,6 +1456,14 @@ fn stretch(curve: &CurveKind<3>, lo: f64, hi: f64) -> Result<Option<CurveKind<3>
         CurveKind::Parabola(p) => Some(CurveKind::Parabola(Parabola::new(
             p.vertex(),
             p.axes(),
+            (lo, hi),
+        )?)),
+        CurveKind::Nurbs(n) => Some(CurveKind::Trimmed(Trimmed::new(
+            Basis::Nurbs(n.clone()),
+            (lo, hi),
+        )?)),
+        CurveKind::Trimmed(t) => Some(CurveKind::Trimmed(Trimmed::new(
+            t.basis().clone(),
             (lo, hi),
         )?)),
         _ => None,
@@ -1688,7 +1741,7 @@ pub fn natural(
     };
     let turned = first > second;
     let (x, y) = if turned { (b, a) } else { (a, b) };
-    let Some(found) = pieces(x, y)? else {
+    let Some(found) = pieces(x, y, meter)? else {
         return Ok(None);
     };
     let items = items_of(found, x, y, meter)?;
