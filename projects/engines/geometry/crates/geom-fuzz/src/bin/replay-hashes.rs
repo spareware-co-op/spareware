@@ -21,7 +21,7 @@
 //! Cost: one run of each log. Recursion: none.
 
 use geom_fuzz::sequence::{decode, replay_line};
-use geom_test::{Entropy, Seed, SplitMix64};
+use geom_test::{Seed, SplitMix64};
 
 /// How many logs it prints.
 const LOGS: usize = 2_000;
