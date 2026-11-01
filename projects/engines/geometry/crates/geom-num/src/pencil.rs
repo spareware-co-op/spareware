@@ -227,11 +227,19 @@ pub fn revolution<R: Ring>(c: [R; 3], e: [R; 3], alpha: R, beta: R, gamma: R) ->
         }
         corner = corner.plus(image.times(*c.get(r)?)?)?;
         let side = zero.minus(image)?;
-        *form.get_mut(r)?.get_mut(3)? = side;
-        *form.get_mut(3)?.get_mut(r)? = side;
+        put(&mut form, r, 3, side)?;
+        put(&mut form, 3, r, side)?;
     }
-    *form.get_mut(3)?.get_mut(3)? = corner;
+    put(&mut form, 3, 3, corner)?;
     Some(form)
+}
+
+/// Writes one cell.
+fn put<R: Ring>(form: &mut Form<R>, r: usize, c: usize, v: R) -> Option<()> {
+    let row: &mut [R; 4] = form.get_mut(r)?;
+    let cell: &mut R = row.get_mut(c)?;
+    *cell = v;
+    Some(())
 }
 
 /// `sphere` about the point `origin`. `None` if a step does not fit, which the budget rules out.
@@ -708,7 +716,9 @@ fn sign_with_root(x: &Big, y: &Big, d: &Big) -> Option<Sign> {
 /// Δ its discriminant, after reducing `terms` modulo the quadratic to αt + β over g₂².
 fn sign_on_quadratic(terms: &[Big; TERMS], g: &[Big; 3], up: bool) -> Option<Sign> {
     let [g0, g1, g2] = g;
-    let (c0, c1, c2) = (terms.first()?, terms.get(1)?, terms.get(2)?);
+    let c0: &Big = terms.first()?;
+    let c1: &Big = terms.get(1)?;
+    let c2: &Big = terms.get(2)?;
     // c₂t² = c₂(−g₁t − g₀)/g₂, so the value times g₂ is (c₁g₂ − c₂g₁)t + c₀g₂ − c₂g₀.
     let alpha = c1.checked_mul(g2)?.checked_sub(&c2.checked_mul(g1)?)?;
     let beta = c0.checked_mul(g2)?.checked_sub(&c2.checked_mul(g0)?)?;
