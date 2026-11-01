@@ -1,5 +1,7 @@
 # A05: Multi-user: server-ordered operation log or CRDT
 
+**Status, 2026-10-31:** the server-ordered log, claims and checkpoints here are the method [note K08](../../kit/notes/K08-cloud-foundation.md) builds. The owner has since decided on browser only, one co-op cloud and TiKV, so where this note assumes a desktop core, a project file or an offline copy, K08 wins.
+
 ## The question
 
 How do several people edit one Spare Construct model at once, and offline? The map leans to a server that holds the authoritative operation log and decides the order. Clients send operations and the server broadcasts them. A text CRDT is used only for free text ([ARCHITECTURE.md](../ARCHITECTURE.md), Multi-user and history). It leaves one question to discuss: "Server first, or peer-to-peer with a relay?" The piece asks for a recommendation covering offline work, conflicts and determinism.
