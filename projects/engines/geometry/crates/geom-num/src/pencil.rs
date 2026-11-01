@@ -1159,9 +1159,8 @@ fn clear_three(m: &Form<Entry>) -> Option<bool> {
 fn one_apex(a: &Form<Entry>, b: &Form<Entry>, v: &[Big; 4]) -> Result<Pencil, NumError> {
     let on = |f: &Form<Entry>| on_base(f, v).ok_or(NumError::BudgetExceeded);
     let (p, q) = (on(a)?, on(b)?);
-    let Some((c, s)) = basis(&p, &q, clear_three)? else {
-        return Err(NumError::Degenerate);
-    };
+    // A member of rank three on three coordinates makes the base determinant no zero polynomial.
+    let (c, s) = basis(&p, &q, clear_three)?.ok_or(NumError::Degenerate)?;
     let pencil = Exact::new(&c, &s, 3)?;
     let last = pencil.chain.last();
     let (terms, degree) = last.ok_or(NumError::Degenerate)?;
@@ -1197,8 +1196,7 @@ fn one_apex(a: &Form<Entry>, b: &Form<Entry>, v: &[Big; 4]) -> Result<Pencil, Nu
                     meets: 1,
                     ..EMPTY
                 },
-                _ if left.rank() == 3 && left.one_sided() => apex,
-                _ if right.rank() == 3 && right.one_sided() => apex,
+                _ if [left, right].iter().any(|i| i.rank() == 3 && i.one_sided()) => apex,
                 _ => Topology {
                     double_lines: 2,
                     meets: 1,
@@ -1487,4 +1485,125 @@ pub fn filtered(a: &Form<Interval>, b: &Form<Interval>) -> Option<Topology> {
         steps = steps.checked_mul(4)?;
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::indexing_slicing,
+        reason = "test code: a failure should stop loudly"
+    )]
+
+    use super::*;
+
+    fn big(v: i64) -> Big {
+        Big::from_i64(v)
+    }
+
+    #[test]
+    fn a_sum_with_a_root_reads_each_sign() {
+        let sign = |x, y, d| sign_with_root(&big(x), &big(y), &big(d)).unwrap();
+        assert_eq!(sign(3, 0, 2), Sign::Positive);
+        assert_eq!(sign(-3, 5, 0), Sign::Negative);
+        assert_eq!(sign(0, -2, 3), Sign::Negative);
+        assert_eq!(sign(3, 4, 5), Sign::Positive);
+        assert_eq!(sign(-3, -4, 5), Sign::Negative);
+        assert_eq!(sign(5, -1, 2), Sign::Positive);
+        assert_eq!(sign(1, -5, 2), Sign::Negative);
+        assert_eq!(sign(6, -3, 4), Sign::Zero);
+    }
+
+    #[test]
+    fn a_quadratic_s_two_roots_read_apart() {
+        // t² − 2, at ±√2, of 2t + 1: −1.8 and 3.8.
+        let g = [big(-2), big(0), big(1)];
+        let line = [big(1), big(2), big(0), big(0), big(0)];
+        assert_eq!(sign_on_quadratic(&line, &g, true), Some(Sign::Positive));
+        assert_eq!(sign_on_quadratic(&line, &g, false), Some(Sign::Negative));
+    }
+
+    #[test]
+    fn zero_has_no_primitive_form() {
+        assert_eq!(primitive(&[Big::ZERO, Big::ZERO]), None);
+        assert_eq!(primitive(&[big(6), big(-9)]), Some([big(2), big(-3)]));
+    }
+
+    #[test]
+    fn a_turned_point_keeps_its_second_part_up() {
+        let point = |num, den| At {
+            num: big(num),
+            den: big(den),
+        };
+        assert_eq!(upright(&point(3, 4)), Some(point(4, 3)));
+        assert_eq!(upright(&point(-3, 4)), Some(point(-4, 3)));
+    }
+
+    /// x₀² − x₁² + 2x₂² on the three coordinates other than `apex`.
+    fn cone_at(apex: usize) -> Form<Entry> {
+        let mut form = [[Entry::ZERO; 4]; 4];
+        let others: Vec<usize> = (0..4).filter(|k| *k != apex).collect();
+        form[others[0]][others[0]] = Entry::one();
+        form[others[1]][others[1]] = Entry::from_i64(-1);
+        form[others[2]][others[2]] = Entry::from_i64(2);
+        form
+    }
+
+    #[test]
+    fn a_shared_kernel_is_read_on_any_coordinate() {
+        for apex in 0..4 {
+            let mut v = [Big::ZERO; 4];
+            v[apex] = Big::one();
+            let base = on_base(&cone_at(apex), &v).unwrap();
+            let rows = Rows {
+                first: &base,
+                second: &base,
+                mask: 0,
+            };
+            assert_eq!(rows.principal(7).unwrap(), Entry::from_i64(-2));
+            assert_eq!(rows.principal(15).unwrap(), Entry::ZERO);
+        }
+    }
+
+    fn sums_of(diagonal: [i64; 4]) -> [[Interval; TERMS]; 4] {
+        let mut form = [[Interval::of(0).unwrap(); 4]; 4];
+        for (i, v) in diagonal.into_iter().enumerate() {
+            form[i][i] = Interval::of(v).unwrap();
+        }
+        // The pencil t·form + form: at t = 0 the sums are the form's own.
+        minors(&form, &form).unwrap()
+    }
+
+    #[test]
+    fn the_filter_s_definite_test_reads_what_it_can() {
+        assert_eq!(definite_filtered(&sums_of([1, 2, 3, 4]), 0, 1), Some(true));
+        assert_eq!(
+            definite_filtered(&sums_of([-1, -2, -3, -4]), 0, 1),
+            Some(true)
+        );
+        assert_eq!(
+            definite_filtered(&sums_of([1, 2, -3, -4]), 0, 1),
+            Some(false)
+        );
+        // A sum that is truly zero, which no interval proves, and nothing else against either way.
+        assert_eq!(
+            definite_filtered(&sums_of([1, 1, 1, -1]), 0, 1),
+            Some(false)
+        );
+        assert_eq!(definite_filtered(&sums_of([1, 0, 0, 0]), 0, 1), None);
+    }
+
+    #[test]
+    fn the_walk_sees_four_changes_or_says_nothing() {
+        let c = |v: i64| Interval::of(v).unwrap();
+        // (t − 2)(t − 1)(t + 1)(t + 2) = t⁴ − 5t² + 4.
+        let four = [c(4), c(0), c(-5), c(0), c(1)];
+        assert!(gaps(&four, 64).is_some());
+        // Two roots of the four closer than the walk's steps.
+        assert_eq!(gaps(&four, 2), None);
+        // t⁴ + 1 changes sign nowhere.
+        assert_eq!(gaps(&[c(1), c(0), c(0), c(0), c(1)], 64), None);
+        // A form with a root on the walk's own points reads past it.
+        assert!(gaps(&[c(0), c(4), c(0), c(-5), c(1)], 64).is_some());
+    }
 }

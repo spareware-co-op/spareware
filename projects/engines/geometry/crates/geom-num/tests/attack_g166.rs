@@ -21,13 +21,16 @@
 )]
 
 use geom_num::NumError;
+use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::pencil::{
-    Entry, Form, Inertia, Pencil, Quartic, Segre, Topology, classify, filtered, inertia_of,
-    revolution,
+    Entry, Form, Inertia, Pencil, Quartic, Segre, Topology, classify, cone_form, cylinder_form,
+    filtered, inertia_certain, inertia_of, revolution, sphere_form,
 };
-use geom_num::quadric::Ring;
+use geom_num::quadric::{self, Ring, Slope};
 use geom_num::sign::Sign;
+use geom_num::sturm::{gcd, square_root};
+use geom_num::wide::Wide;
 
 const NONE: Topology = Topology {
     quartic: None,
@@ -983,4 +986,118 @@ fn inertia_reads_each_sign_pattern() {
             negative: 4
         }
     );
+}
+
+fn grid(x: i64, y: i64, z: i64) -> P3 {
+    P3::new(x, y, z).unwrap()
+}
+
+#[test]
+fn natural_quadrics_are_written_about_any_grid_point() {
+    let origin = grid(1, 2, 3);
+    let s = quadric::Sphere {
+        centre: grid(4, 2, 3),
+        radius: Steps(5),
+    };
+    assert_eq!(sphere_form(&s, origin), Some(sphere([3, 0, 0], 5)));
+    let c = quadric::Cylinder {
+        base: grid(1, 2, 3),
+        along: grid(1, 2, 7),
+        radius: Steps(2),
+    };
+    assert_eq!(
+        cylinder_form(&c, origin),
+        Some(cylinder([0, 0, 0], [0, 0, 4], 2))
+    );
+    let k = quadric::Cone {
+        apex: grid(1, 2, 3),
+        along: grid(1, 2, 4),
+        slope: Slope { rise: 3, run: 2 },
+    };
+    assert_eq!(
+        cone_form(&k, origin),
+        Some(cone([0, 0, 0], [0, 0, 1], 3, 2))
+    );
+}
+
+#[test]
+fn a_definite_member_in_a_far_gap_is_found_by_the_turned_chain() {
+    // Roots of b + k·a at k = −7.1, −7.2, −7.3 and −7.4, which t reads past ±1.
+    let diagonal = |signs: [i128; 4], a: i128, offset: i128| {
+        let mut pair = zero();
+        for (i, s) in signs.into_iter().enumerate() {
+            pair.a[i][i] = s * a;
+            pair.b[i][i] = s * (offset + i128::try_from(i).unwrap() + 1);
+        }
+        pair
+    };
+    for (a, offset, signs, empty) in [
+        (10, 70, [1, 1, 1, 1], true),
+        (10, 70, [-1, -1, 1, 1], true),
+        (10, 70, [1, -1, 1, -1], false),
+        (-10, -71, [1, 1, 1, 1], true),
+        (-10, -71, [1, 1, -1, -1], true),
+        (-10, -71, [1, -1, 1, -1], false),
+    ] {
+        let (x, y) = diagonal(signs, a, offset).forms();
+        let got = classify(&x, &y).unwrap();
+        assert_eq!(got.segre, Segre::Simple);
+        let want = if empty { NONE } else { smooth(2) };
+        assert_eq!(got.topology, want, "{signs:?}");
+    }
+}
+
+#[test]
+fn certain_inertia_is_read_or_refused() {
+    let form = |d: [i64; 4]| {
+        let mut f = [[Interval::of(0).unwrap(); 4]; 4];
+        for (i, v) in d.into_iter().enumerate() {
+            f[i][i] = Interval::of(v).unwrap();
+        }
+        f
+    };
+    let inertia = |positive, negative| Inertia { positive, negative };
+    assert_eq!(inertia_certain(&form([1, 2, 3, 4])), Some(inertia(4, 0)));
+    assert_eq!(inertia_certain(&form([1, 2, -5, -7])), Some(inertia(2, 2)));
+    // The trace is zero, and no interval proves that.
+    assert_eq!(inertia_certain(&form([1, 1, -1, -1])), None);
+}
+
+#[test]
+fn the_filter_gives_way_when_its_walk_cannot_part_the_roots() {
+    let i = |v: i64| Interval::of(v).unwrap();
+    // Roots at ±1 and ±(1 + 2^-40) of t, parted by no step of the walk.
+    let mut a = [[i(0); 4]; 4];
+    let mut b = [[i(0); 4]; 4];
+    for (k, (x, y)) in [
+        (1, 1),
+        (-1, 1),
+        ((1 << 40) + 1, 1 << 40),
+        (-(1 << 40) - 1, 1 << 40),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        a[k][k] = i(y);
+        b[k][k] = i(-x);
+    }
+    assert_eq!(filtered(&a, &b), None);
+}
+
+#[test]
+fn whole_numbers_divide_down() {
+    type W = Wide<4>;
+    let w = |v: i64| W::from_i64(v);
+    assert_eq!(gcd(&w(0), &w(-7)), Some(w(7)));
+    assert_eq!(gcd(&w(12), &w(0)), Some(w(12)));
+    assert_eq!(gcd(&w(-12), &w(18)), Some(w(6)));
+    assert_eq!(gcd(&w(1 << 40), &w(3 << 38)), Some(w(1 << 38)));
+    assert_eq!(gcd(&w(35), &w(64)), Some(w(1)));
+    assert_eq!(square_root(&w(-4)), None);
+    assert_eq!(square_root(&w(0)), Some(w(0)));
+    assert_eq!(square_root(&w(1)), Some(w(1)));
+    assert_eq!(square_root(&w(144)), Some(w(12)));
+    assert_eq!(square_root(&w(145)), None);
+    let huge = w(1 << 62).checked_mul(&w(1 << 62)).unwrap();
+    assert_eq!(square_root(&huge), Some(w(1 << 62)));
 }
