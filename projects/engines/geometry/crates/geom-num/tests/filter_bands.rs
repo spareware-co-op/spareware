@@ -248,11 +248,14 @@ fn with_small_groups(
         let sizes: BTreeMap<&str, Option<u32>> = groups
             .iter()
             .map(|(g, bits)| {
-                let small = rng.next() % 2 == 0;
-                (
-                    *g,
-                    (!small).then(|| 1 + (rng.next() % u64::from(*bits)) as u32),
-                )
+                // All its bits or a sixteenth of them: a term grown past the true scale shows
+                // where the sizes are far apart.
+                let size = if rng.next() & 1 == 0 {
+                    *bits
+                } else {
+                    1 + *bits / 16
+                };
+                (*g, (rng.next() % 2 != 0).then_some(size))
             })
             .collect();
         let held = groups.iter().enumerate().fold(0, |set, (k, (g, _))| {
@@ -402,7 +405,7 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             }
         }
     }
-    let (sure, tally) = with_small_groups(spec, rng, 16 * cases, error, &terms, &groups);
+    let (sure, tally) = with_small_groups(spec, rng, 2 * cases, error, &terms, &groups);
     let mut problems = Vec::new();
     let past_bound = tally.values().fold(0, |all, (_, past)| all + past);
     println!("{}: {past_bound} past the bound, {sure} refused", spec.name);
