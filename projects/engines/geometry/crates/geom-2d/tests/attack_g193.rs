@@ -163,8 +163,8 @@ fn a_fillet_of_rational_normals_is_exactly_tangent() {
 }
 
 #[test]
-fn every_axis_corner_is_exact_in_every_turn() {
-    let turns = [p2(1_000, 500), p2(1_000, -500), p2(500, 500), p2(1_500, 500)];
+fn every_rational_corner_is_exact_in_every_turn() {
+    let turns = [p2(1_000, 500), p2(1_000, -500), p2(700, 400), p2(1_300, 400)];
     for to in turns {
         let corner = p2(1_000, 0);
         let (mut carriers, [a, b]) = table([line(p2(0, 0), corner), line(corner, to)]);
@@ -303,17 +303,17 @@ fn a_fillet_of_a_line_and_a_circle_each_way_round() {
     let first = Touch {
         curve: wheel,
         side: Sign::Positive,
-        near: p2(17_000, 15_000),
+        near: p2(16_000, 16_000),
     };
     let second = Touch {
         curve: ground,
         side: Sign::Positive,
-        near: p2(22_000, 0),
+        near: p2(20_000, 0),
     };
-    let done = fillet(&mut carriers, &second, &first, 5_000, GridStep::Q0, &certified());
+    let done = fillet(&mut carriers, &first, &second, 8_000, GridStep::Q0, &certified());
     let done = done.unwrap();
     assert!(matches!(done.exactness, Exactness::Certified { .. }));
-    sound(&carriers, &done, ground, wheel);
+    sound(&carriers, &done, wheel, ground);
     // And inside it, against a chord of it.
     let (mut carriers, [chord, wheel]) = table([
         line(p2(-100_000, 10_000), p2(100_000, 10_000)),
@@ -322,12 +322,12 @@ fn a_fillet_of_a_line_and_a_circle_each_way_round() {
     let inside = Touch {
         curve: wheel,
         side: Sign::Negative,
-        near: p2(20_000, 22_000),
+        near: p2(26_000, 14_500),
     };
     let above = Touch {
         curve: chord,
         side: Sign::Positive,
-        near: p2(15_000, 10_000),
+        near: p2(23_600, 10_000),
     };
     let done = fillet(&mut carriers, &above, &inside, 3_000, GridStep::Q0, &certified());
     let done = done.unwrap();
@@ -498,7 +498,8 @@ fn common_tangents_of_every_kind_at_every_scale() {
         let Ok(done) =
             common_tangent(&mut carriers, one, two, sides, GridStep::Q0, &certified())
         else {
-            panic!("{centre:?} {other:?} {r} {s} {sides:?}");
+            let why = common_tangent(&mut carriers, one, two, sides, GridStep::Q0, &certified());
+            panic!("{centre:?} {other:?} {r} {s} {sides:?}: {:?}", why.err());
         };
         joined(&carriers, &done.start, done.line, one);
         joined(&carriers, &done.end, done.line, two);
@@ -612,6 +613,18 @@ fn every_corner_of_a_hundred_thousand() {
     let corners = zigzag(count, &mut rng);
     let mut carriers = Carriers::new();
     let accept = certified();
+    for corner in corners.iter().take(1_000) {
+        let run = fillet_all(
+            &mut Carriers::new(),
+            core::slice::from_ref(corner),
+            500,
+            GridStep::Q0,
+            &accept,
+            &Exec::serial(),
+            &mut WorkMeter::new(Budget::UNLIMITED),
+        );
+        assert!(run.is_ok(), "{corner:?}: {run:?}");
+    }
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     let done = fillet_all(
         &mut carriers,

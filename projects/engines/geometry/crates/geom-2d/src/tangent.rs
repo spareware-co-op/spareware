@@ -1202,8 +1202,9 @@ pub fn common_tangent(
     };
     let [dx, dy] = between(aim(0.5)?, aim(1.5)?)?;
     let length = norm([dd(dx)?, dd(dy)?])?;
-    // Fine enough that a whole c places the line within an eighth of the depth.
-    let wanted = DD::from_i64(8).div(reach)?.div(length)?;
+    // Fine enough that a whole c places the line within an eighth of the lesser depth.
+    let least = if reach < depth { reach } else { depth };
+    let wanted = DD::from_i64(8).div(least)?.div(length)?;
     let bits = exponent(wanted.hi())?.saturating_add(1);
     let bits = if bits < 0 { 0 } else { bits.unsigned_abs() };
     let fits = NumError::BudgetExceeded;
