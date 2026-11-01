@@ -675,6 +675,22 @@
       "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step -1 on axis 0 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step -1 on axis 1 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
       "mutant": "replace + with * in check",
       "line_text": "let outside = beyond + 1.0;",
