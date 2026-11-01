@@ -795,6 +795,62 @@ impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
     }
 }
 
+// The triangulation's types (decision 32.44's count benchmarks for piece G153).
+
+impl Canonical for crate::inputs::mesh::Terrain {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::exact::build::Polygons {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::exact::ExactMesh {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::exact::MeshError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_mesh::Cdt<u32> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::CdtError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
 
 impl<const D: usize> Canonical for geom_bvh::Aabb<D> {

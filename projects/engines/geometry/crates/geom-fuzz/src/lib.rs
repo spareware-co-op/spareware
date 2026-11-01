@@ -8,6 +8,9 @@
 //! changed input. It has five targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! changed input. It has eleven targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has seven targets so far: [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
+//! mesh and gives one mesh in any input order; [`cdt`] (G153), `geom-mesh`'s triangulation is a true constrained
+//! Delaunay triangulation and one answer in any input order; [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -156,6 +159,8 @@
 //! - `bolero` 0.13.7, a development dependency only: the `check!` front end, with its test-mode
 //!   engine and, under cargo-bolero, the engine chosen (`bolero-libfuzzer`, `bolero-afl`,
 //!   `bolero-honggfuzz` or `bolero-kani`).
+//! - `geom-mesh`, `geom-op` and `geom-run` (MPL-2.0, ours), the meshes under test, their names
+//!   and their meter.
 //! - `geom-gen` (MPL-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
 //! - `geom-format` and `geom-run` (MPL-2.0, ours), the code under test of the [`cbor`] target and
@@ -231,7 +236,9 @@ pub mod batch;
 pub mod boxtree;
 pub mod cache;
 pub mod cbor;
+pub mod cdt;
 pub mod curves;
+pub mod exact;
 pub mod intersect;
 pub mod linalg;
 pub mod make;

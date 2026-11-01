@@ -2643,6 +2643,30 @@ pub mod batch {
     );
 }
 
+/// The triangulation's hot path (piece G153; decision 32.44).
+pub mod mesh {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/cdt/typical"))]
+    fn cdt(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/exact_build/typical"))]
+    fn exact_build(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = mesh;
+        benchmarks = cdt, exact_build
+    );
+}
+
 /// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
 pub mod nurbs {
     use super::*;

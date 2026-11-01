@@ -2361,6 +2361,27 @@ fn batch_typical_batches_all_succeed() {
     );
 }
 
+/// Every typical batch of the triangulation's benchmark (decision 32.44) triangulates.
+#[test]
+fn mesh_typical_batches_all_succeed() {
+    use geom_bench::inputs::mesh as m;
+    use geom_bench::kernels::mesh as k;
+    let batch = m::cdt(Typical);
+    all_ok("cdt", k::cdt, &batch);
+    let mut out = Vec::new();
+    k::cdt(&batch, &mut out);
+    assert!(
+        out.iter()
+            .flatten()
+            .all(|c| c.triangles.len() >= usize::from(m::POINTS))
+    );
+    let polygons = m::exact_build(Typical);
+    all_ok("exact_build", k::exact_build, &polygons);
+    let mut built = Vec::new();
+    k::exact_build(&polygons, &mut built);
+    assert!(built.iter().flatten().all(|mesh| mesh.faces() == m::FACES));
+}
+
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
 /// bounds every input.
 #[test]

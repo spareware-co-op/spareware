@@ -27,7 +27,7 @@
 //! `geom-nurbs`'s evaluation, interpolation and Bernstein bound, and the curve and surface kinds'
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
 //! and, from phase 3, `geom-make`'s primitives and transforms, and from phase 4 `geom-intersect`'s
-//! canonical order, each named in the catalogue with its crate's path and checked to be a public
+//! canonical order and `geom-mesh`'s triangulation, each named in the catalogue with its crate's path and checked to be a public
 //! function there.
 //! Beside the gates, [`steps`] tallies which step of chapter 23.2's ladder settled each call, per
 //! corpus.

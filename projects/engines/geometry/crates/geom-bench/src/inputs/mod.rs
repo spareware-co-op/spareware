@@ -52,6 +52,7 @@ pub mod linalg;
 pub mod make;
 pub mod math;
 pub mod math_types;
+pub mod mesh;
 pub mod newton;
 pub mod nurbs;
 pub mod perturb;

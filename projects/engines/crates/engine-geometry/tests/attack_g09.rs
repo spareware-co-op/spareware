@@ -1230,6 +1230,7 @@ mod repository {
         ("geom-heal", "G417 G419 G420"),
         ("geom-ifc", "G421 G422 G423 G424 G426"),
         ("geom-landxml", "G437"),
+        ("geom-make", "G101"),
         (
             "geom-mesh",
             "G146 G147 G148 G149 G150 G151 G152 G153 G288 G289 G290 G291 G298 G299 G300 G301 \

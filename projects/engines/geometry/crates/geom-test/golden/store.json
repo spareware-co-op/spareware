@@ -242,9 +242,15 @@
               "kind": "corpus",
               "piece": "G142",
               "why": "the phase 4 integration train: piece/G142's count benchmarks with G158's canonical order (a list sorted, a circle's key, a pair of lines), merged; no existing digest moved"
+            },
+            {
+              "sha256": "b6def317782dfaf6db8988d5eb24c48dde0993f8afd723772f8b1f4ce7e896dd",
+              "kind": "corpus",
+              "piece": "G146",
+              "why": "the phase 4 integration train: piece/G146's count benchmarks on the exact mesh and G153's on the triangulation, merged; no existing digest moved"
             }
           ],
-          "sha256": "b6def317782dfaf6db8988d5eb24c48dde0993f8afd723772f8b1f4ce7e896dd"
+          "sha256": "147817a90a09679487ffa70173c81a2dd286f52abf776aeb91ba6c76839b038c"
         },
         {
           "id": "geom-nurbs/operations",
@@ -636,6 +642,26 @@
             "function": "the_catalogue_is_pinned"
           },
           "sha256": "72833e2e0e317cd26acba70110f485d2ad8a6bc8b8ed6f2cdcf04beadc0031db"
+        },
+        {
+          "id": "geom-mesh/cdt",
+          "what": "The constrained Delaunay triangulation of geom-mesh (piece G153): cocircular grids of 2 to 32 points a side, plain and with crossing constraints; 16 scatters with constraints between random points; 8 outlines refined to a quality. Vertices, triangles and constrained edges in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "cdt_determinism",
+            "function": "cdt_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e785c8bb58ed861f1eafccaa437e35dca30ec69a695ddf3abb238d1db057cb11"
+        },
+        {
+          "id": "geom-mesh/exact",
+          "what": "The exact mesh of geom-mesh (piece G146): boxes at five scales, 16 closed height fields and a cut pyramid with corners off the grid. Every array of each mesh and its volume, in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "exact_determinism",
+            "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
         }
       ]
     }

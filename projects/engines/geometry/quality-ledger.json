@@ -5513,6 +5513,318 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "It moves the ray infinitely little to the other side of y, in every face at once. That is another ray from a point infinitely near the first, which orientation's precondition keeps off the shell, so it lies on the same side of it, and the parity of a ray that meets no edge is that side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace > with >= in ahead",
+      "line_text": "dot(x, b, u) > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and b are on one line through u and neither is u, so (x − u) · (b − u) is never 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 32)) & 0x0000_0000_ffff_ffff_0000_0000_ffff_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 16)) & 0x0000_ffff_0000_ffff_0000_ffff_0000_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 8)) & 0x00ff_00ff_00ff_00ff_00ff_00ff_00ff_00ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 4)) & 0x0f0f_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 2)) & 0x3333_3333_3333_3333_3333_3333_3333_3333;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "(x | (x << 1)) & 0x5555_5555_5555_5555_5555_5555_5555_5555",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton",
+      "line_text": "spread(shift(p.x.get())) | (spread(shift(p.y.get())) << 1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The first term holds only even places and the second only odd ones, so no bit is set in both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with == in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The walk still ends at a segment in the way or at the triangle holding the centre, and either is a valid next step of refinement: a different edge first changes which valid mesh comes out for this input, the same on every target, and never its quality or its validity."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with > in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The walk still ends at a segment in the way or at the triangle holding the centre, and either is a valid next step of refinement: a different edge first changes which valid mesh comes out for this input, the same on every target, and never its quality or its validity."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The edges of one triangle are distinct, so an edge never equals the least so far."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in refine",
+      "line_text": "&& dot(mesh.p(x)?, mesh.p(y)?, centre) < 0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A centre exactly on a segment's diametral circle counts as encroaching, so that segment is split instead of the centre going in: a valid step either way, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with == in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Which encroached segment is split first changes the order of the splits: each split is a valid step and every encroached segment is still split, so the result is still valid and refined, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with > in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Which encroached segment is split first changes the order of the splits: each split is a valid step and every encroached segment is still split, so the result is still valid and refined, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The edges of one triangle are distinct, so an edge never equals the least so far."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in gcd",
+      "line_text": "return u128::from(x | y);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One of x and y is 0 on this line, so or and exclusive or give one number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace >>= with <<= in gcd",
+      "line_text": "x >>= x.trailing_zeros();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A large even x shifts out to 0, which never ends the loop."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace >>= with <<= in gcd",
+      "line_text": "y >>= y.trailing_zeros();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "y stays even, so the loop never reaches 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace < with <= in every_third",
+      "line_text": "while shift < u128::BITS {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The shifts go up in steps of 3, 6, 12, 24, 48 and 96 from 0, none of which lands on 128."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 64)) & every_third(32);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 32)) & every_third(16);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 16)) & every_third(8);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 8)) & every_third(4);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 4)) & every_third(2);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "(x | (x << 2)) & every_third(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "delete match arm (Ok(a), Ok(b)) in part",
+      "line_text": "(Ok(a), Ok(b)) => a.checked_div(b).map_or(0, i128::from),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The arm only saves the 128-bit division below it, which gives the same quotient."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace | with ^ in rank",
+      "line_text": "let key = (u64::from(width) << 56) | top;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "top is below 2^56, and the width sits above it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace | with ^ in rank",
+      "line_text": "(1 << 63) | key",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A plane coefficient is below 2^127, so its width is at most 127 and key is below 2^63."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace < with <= in grouped",
+      "line_text": "forward: a < b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "An edge from a vertex to itself is refused whichever way it counts, and no other edge has a equal to b."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace > with >= in emit",
+      "line_text": "let ordered = if last.saturating_sub(first) > 1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A face of one loop sorts to that same loop, at the cost of the sort."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": "&& p.he_vert.iter().all(|&v| (v as usize) < p.verts.len())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": ".all(|&h| h == NONE || (h as usize) < halves)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": ".all(|f| (f.row as usize) < p.planes.len())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace > with >= in plane_in_order",
+      "line_text": "let upright = [x, y, z].iter().find(|c| **c != 0).is_some_and(|c| *c > 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "find stops at a coefficient that is not 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace == with != in vertices",
+      "line_text": "let same = rest.iter().take_while(|e| e.0 == head.0).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A run of no points never moves past the head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in morton",
+      "line_text": "spread(shift(p.x.get())) | (spread(shift(p.y.get())) << 1) | (spread(shift(p.z.get())) << 2)",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Spread coordinates hold every third bit, and the shifts by 1 and 2 keep them apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace rank -> u64 with 0",
+      "line_text": "let magnitude = v.unsigned_abs();",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With every rank equal, every plane ties and the sort of ties gives the same order, one thread and more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace rank -> u64 with 1",
+      "line_text": "let magnitude = v.unsigned_abs();",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With every rank equal, every plane ties and the sort of ties gives the same order, one thread and more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace != with == in radial",
+      "line_text": "reversed: facing.flipped != against,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant turns every flap over at once, which moves each by half a circle about the edge and leaves their order round it, and so the pairs, as they were."
     }
   ],
   "coverage_off": [

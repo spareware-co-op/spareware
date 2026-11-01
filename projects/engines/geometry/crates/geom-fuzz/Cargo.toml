@@ -12,6 +12,9 @@ description = "Spare Kit geometry kernel, development only: fuzz harnesses and b
 reference = ["geom-test/reference"]
 
 [dependencies]
+# The triangulation target (G153) and the exact mesh target (G146).
+geom-mesh = { path = "../geom-mesh" }
+geom-op = { path = "../geom-op" }
 geom-num = { path = "../geom-num" }
 # The exact rationals of the nurbs target's oracle (Gate 2, 32.44), as geom-test's NURBS reference
 # uses them. MIT OR Apache-2.0, the version geom-test pins.
@@ -42,7 +45,6 @@ geom-poly = { path = "../geom-poly" }
 # oracles come from (ours, MPL-2.0).
 geom-check = { path = "../geom-check", features = ["full"] }
 geom-make = { path = "../geom-make" }
-geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.

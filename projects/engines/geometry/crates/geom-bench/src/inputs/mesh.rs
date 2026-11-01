@@ -1,0 +1,140 @@
+//! Inputs for `geom-mesh`'s hot paths (pieces G153 and G146, decision 32.44): a small terrain, a
+//! scatter of survey points with breaklines across it; and a small height field, every face on its
+//! own plane, for the exact mesh's build and check.
+//!
+//! Class `typical` only: each input is a [`Terrain`] of [`POINTS`] distinct grid points and
+//! [`BREAKLINE`] constraints spread across them, or polygons of [`FACES`] triangles. The refusals
+//! are tested in `geom-mesh` itself.
+//!
+//! Guarantees: every batch is full and the same on every target, and every result of a typical
+//! batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly
+//! (`tests/attack_g06.rs`).
+//!
+//! Method: the board's scatter with breaklines (chapter 19.2's target) at a size a count run can
+//! afford, measured as chapter 28.14 sets benchmarks out,
+//! `projects/engines/geometry/architecture/28-testing.md`.
+//!
+//! Cost: one pass over the points per input, once per batch, outside every measured run.
+
+use std::collections::BTreeSet;
+
+use geom_mesh::Site;
+use geom_mesh::exact::build::{Corner, Polygons, Source};
+use geom_mesh::exact::{PropTable, Role};
+use geom_num::Exactness;
+use geom_num::grid::{P2, P3};
+use geom_op::NameId;
+
+use super::{Class, batch_of, rng};
+use crate::rng::SplitMix64;
+
+/// The points of one terrain.
+pub const POINTS: u16 = 96;
+
+/// The breaklines of one terrain.
+pub const BREAKLINE: u16 = 8;
+
+/// The points of a height field's side.
+const SIDE: u16 = 8;
+
+/// The triangles of a height field: two to each of 7 × 7 cells.
+pub const FACES: usize = 98;
+
+/// What `geom_mesh::triangulate` takes.
+#[derive(Clone, Debug)]
+pub struct Terrain {
+    /// The survey points, keyed by their order.
+    pub sites: Vec<Site<u32>>,
+    /// The breaklines, between points spread across the scatter.
+    pub constraints: Vec<[u32; 2]>,
+}
+
+/// One terrain from `rng`.
+fn terrain(r: &mut SplitMix64) -> Option<Terrain> {
+    let mut seen = BTreeSet::new();
+    while seen.len() < usize::from(POINTS) {
+        let (x, y) = (r.next_u64() >> 44, r.next_u64() >> 44);
+        seen.insert((i64::try_from(x).ok()?, i64::try_from(y).ok()?));
+    }
+    let mut sites = Vec::with_capacity(usize::from(POINTS));
+    for (&(x, y), key) in seen.iter().zip(0_u32..) {
+        sites.push(Site {
+            at: P2::new(x, y).ok()?,
+            key,
+        });
+    }
+    let step = u32::from(POINTS / BREAKLINE);
+    let constraints = (0..u32::from(BREAKLINE))
+        .map(|i| {
+            let start = i.saturating_mul(step);
+            [start, start.saturating_add(step).saturating_sub(1)]
+        })
+        .collect();
+    Some(Terrain { sites, constraints })
+}
+
+/// Terrains for `geom_mesh::triangulate`.
+#[must_use]
+pub fn cdt(class: Class) -> Vec<Terrain> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::cdt", class);
+    batch_of(|_| terrain(&mut g))
+}
+
+/// One height field from `rng`: two triangles to a cell, at random heights.
+fn field(r: &mut SplitMix64) -> Option<Polygons> {
+    let side = u32::from(SIDE);
+    let mut vertices = Vec::with_capacity(usize::from(SIDE).saturating_mul(usize::from(SIDE)));
+    for y in 0..i64::from(SIDE) {
+        for x in 0..i64::from(SIDE) {
+            let z = i64::try_from(r.next_u64() >> 52).ok()?;
+            let at = P3::new(x.saturating_mul(4096), y.saturating_mul(4096), z).ok()?;
+            vertices.push(Corner::Grid(at));
+        }
+    }
+    let mut corners = Vec::with_capacity(FACES.saturating_mul(3));
+    for y in 0..side.saturating_sub(1) {
+        for x in 0..side.saturating_sub(1) {
+            let a = y.saturating_mul(side).saturating_add(x);
+            let (b, d) = (a.saturating_add(1), a.saturating_add(side));
+            let c = d.saturating_add(1);
+            corners.extend([a, b, c, a, c, d]);
+        }
+    }
+    let faces = u32::try_from(FACES).ok()?;
+    Some(Polygons {
+        vertices,
+        corners,
+        loop_start: (0..=faces).map(|f| f.saturating_mul(3)).collect(),
+        face_loops: (0..=faces).collect(),
+        face_run: alloc_zeros(FACES),
+        runs: vec![Source {
+            name: NameId::from_bytes([1; 16]),
+            role: Role::Face,
+            flags: 0,
+        }],
+        face_plane: Vec::new(),
+        edge_plane: Vec::new(),
+        corner_prop: Vec::new(),
+        props: PropTable::default(),
+        face_dev: Vec::new(),
+        class: Exactness::Exact,
+    })
+}
+
+/// `n` zeros.
+fn alloc_zeros(n: usize) -> Vec<u32> {
+    vec![0; n]
+}
+
+/// Polygons for `geom_mesh::exact::build::build`.
+#[must_use]
+pub fn exact_build(class: Class) -> Vec<Polygons> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::exact_build", class);
+    batch_of(|_| field(&mut g))
+}

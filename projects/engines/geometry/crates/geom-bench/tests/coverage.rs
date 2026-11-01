@@ -554,6 +554,16 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[("batch", include_str!("../../geom-op/src/batch.rs"))],
     ),
     (
+        "geom_mesh",
+        &[
+            ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),
+            (
+                "exact::build",
+                include_str!("../../geom-mesh/src/exact/build.rs"),
+            ),
+        ],
+    ),
+    (
         "geom_nurbs",
         &[
             ("curve", include_str!("../../geom-nurbs/src/curve.rs")),
