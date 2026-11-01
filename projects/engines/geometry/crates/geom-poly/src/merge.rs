@@ -877,6 +877,28 @@ fn sides_of_first(
     Ok(first.map_or_else(|| (Winding::new(), Winding::new()), |c| (c.front, c.back)))
 }
 
+/// Which of the shells `among` lie around a point behind shell `at`.
+fn around_shell(
+    of_shell: &[Vec<&Piece>],
+    at: usize,
+    among: &[usize],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<usize>, MergeError> {
+    let number = |shell: usize| u32::try_from(shell).unwrap_or(u32::MAX);
+    let list = of_shell.get(at).ok_or(MergeError::Open)?;
+    let mut polygons = polygons_of(list, None);
+    for shell in among.iter().filter(|shell| **shell != at) {
+        let others = of_shell.get(*shell).ok_or(MergeError::Open)?;
+        polygons.extend(polygons_of(others, Some(number(*shell))));
+    }
+    let (_, back) = sides_of_first(&polygons, meter)?;
+    Ok(among
+        .iter()
+        .copied()
+        .filter(|shell| *shell != at && back.count(number(*shell)) > 0)
+        .collect())
+}
+
 /// Which shells face out, and the outer shell around each cavity. A shell faces out if the point in
 /// front of it is outside it, which takes only its own pieces, so this is linear in the pieces
 /// when there are no cavities. A cavity is held by the innermost outer shell around a point behind
@@ -902,22 +924,6 @@ fn nest(
         let (front, _) = sides_of_first(&polygons_of(list, Some(0)), meter)?;
         outer.push(front.count(0) == 0);
     }
-    let number = |at: usize| u32::try_from(at).unwrap_or(u32::MAX);
-    let around = |at: usize, among: &[usize], meter: &mut WorkMeter<'_>| {
-        let list = of_shell.get(at).ok_or(MergeError::Open)?;
-        let mut polygons = polygons_of(list, None);
-        for shell in among.iter().filter(|shell| **shell != at) {
-            let others = of_shell.get(*shell).ok_or(MergeError::Open)?;
-            polygons.extend(polygons_of(others, Some(number(*shell))));
-        }
-        let (_, back) = sides_of_first(&polygons, meter)?;
-        let inside: Vec<usize> = among
-            .iter()
-            .copied()
-            .filter(|shell| *shell != at && back.count(number(*shell)) > 0)
-            .collect();
-        Ok::<Vec<usize>, MergeError>(inside)
-    };
     let outers: Vec<usize> = (0..shells)
         .filter(|at| outer.get(*at) == Some(&true))
         .collect();
@@ -928,11 +934,11 @@ fn nest(
             continue;
         }
         meter.charge(1)?;
-        let candidates = around(at, &outers, meter)?;
+        let candidates = around_shell(&of_shell, at, &outers, meter)?;
         // The innermost of those around it lies inside all the others.
         let mut best = None;
         for shell in &candidates {
-            let depth = around(*shell, &candidates, meter)?.len();
+            let depth = around_shell(&of_shell, *shell, &candidates, meter)?.len();
             if best.is_none_or(|(most, _)| depth >= most) {
                 best = Some((depth, *shell));
             }

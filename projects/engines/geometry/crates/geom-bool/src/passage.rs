@@ -27,7 +27,7 @@
 //! Cost: O(b log b) over the b blocks walked, each traced through every polygon. Charges the meter
 //! one unit per polygon per path segment.
 
-use alloc::collections::{BTreeMap, BinaryHeap};
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use geom_num::plane::Plane;
@@ -185,11 +185,11 @@ pub fn narrowest(
     };
     let mut best: BTreeMap<[usize; 3], i64> = BTreeMap::new();
     let mut pinch: BTreeMap<[usize; 3], Option<Passage>> = BTreeMap::new();
-    let mut queue = BinaryHeap::new();
-    queue.push((i64::MAX, start));
+    let mut queue = BTreeSet::new();
+    queue.insert((i64::MAX, start));
     best.insert(start, i64::MAX);
     pinch.insert(start, None);
-    while let Some((reach, block)) = queue.pop() {
+    while let Some((reach, block)) = queue.pop_last() {
         if block == goal {
             return Ok(pinch.get(&block).copied().flatten());
         }
@@ -213,7 +213,7 @@ pub fn narrowest(
                     before
                 };
                 pinch.insert(next, here);
-                queue.push((wide, next));
+                queue.insert((wide, next));
             }
         }
     }
