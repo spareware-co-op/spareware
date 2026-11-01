@@ -255,7 +255,7 @@ fn with_small_groups(
         let top = |at: &Inputs| {
             evaluated(terms, &maxima(spec, at))
                 .into_iter()
-                .fold(0.0, f64::max)
+                .fold(0.0, larger)
         };
         let bound = error * top(&inputs);
         if bound == 0.0 {
@@ -423,7 +423,7 @@ fn grid(inputs: &Inputs, x: &str, y: &str) -> P2 {
 /// `v`, added to what `group` holds.
 fn widen(m: &mut BTreeMap<&'static str, f64>, group: &'static str, v: i128) {
     let held = m.entry(group).or_insert(0.0);
-    *held = held.max((v as f64).abs());
+    *held = larger(*held, (v as f64).abs());
 }
 
 const SPECS: &[Spec] = &[
