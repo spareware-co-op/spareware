@@ -10,6 +10,8 @@
 //! changed input. It has eleven targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! changed input. It has seven targets so far: [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
 //! changed input. It has nine targets so far: [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
+//! changed input. It has ten targets so far: [`solids`] (G147 to G152), `geom-mesh`'s operations on small
+//! solids agree with counted cells; [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
 //! mesh and gives one mesh in any input order; [`cdt`] (G153), `geom-mesh`'s triangulation is a true constrained
 //! Delaunay triangulation and one answer in any input order; [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
@@ -252,6 +254,7 @@ pub mod robustness;
 pub mod roots;
 pub mod seeded;
 pub mod sequence;
+pub mod solids;
 pub mod surfaces;
 pub mod transforms;
 pub mod variants;

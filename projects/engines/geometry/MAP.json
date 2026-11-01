@@ -5467,6 +5467,29 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_BOXES`] boxes, one arrangement, and about a hundred more exact operations.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes on a lattice of [`SIDE`] cells a side, where shared faces, edges and corners are the rule, scaled by one of [`SCALES`]. [`check`] counts the cells the boxes cover, which is the truth here, and holds to it every operation that reaches: booleans (G148), point location (G147), slices, hulls and exports (G149), Minkowski sums (G150), contact (G151) and the envelope (G152). [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/solids.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic or an error is a failure.** Every decoded case is valid, so an error is a [`Finding`].",
+            "**A broken law is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-mesh`'s operations on small solids agree with counted cells and with each other.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "chapter 19's laws (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`), by counting. Each box is a set of whole cells, so what covers a cell is a matter of three comparisons, written here without the code's help. A union, an intersection and a difference have the volumes their cells say; a cell's middle is inside what covers it; a slice has the area of the cells under it; a hull holds every corner; the sum of two boxes adds their sides; a text file carries the mesh with nothing rounded; a corner of a box is inside its envelope; and boxes with a cell between them are apart."
+          },
+          "path": "geom_fuzz::solids",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.44).",
           "family": [],
@@ -7871,6 +7894,28 @@
             "text": "quickhull (Barber, Dobkin and Huhdanpaa, 1996, <https://doi.org/10.1145/235815.235821>), with Edelsbrunner and Mücke's Simulation of Simplicity (<https://doi.org/10.1145/77635.77639>) in place of its tolerances (19.5, 6.2). The farthest point is only a choice of which to take next, so a rough plane in coordinates cut to 21 bits serves; the exact tests decide everything else. A face's ring is Andrew's monotone chain (<https://doi.org/10.1016/0020-0190(79)90072-3>) in the two axes its normal leans on least."
           },
           "path": "geom_mesh::hull",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(t² log t) for t triangles a side for the hulls, then the union of up to t² hulls.",
+          "does": "[`minkowski`] gives the sum of two closed meshes as one closed mesh of one run. It is the volume a tool translating over a shape sweeps.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/minkowski.rs",
+          "guarantees": [
+            "**Exact on grid vertices.** Every sum of grid points is a grid point, every hull is exact, and the union is exact. A vertex off the grid is committed to it first, which makes the result [`Sum::class`] `Certified` by that half step, on each solid.",
+            "**The size is the product of the solids', and stays inside its budget.** One hull for each pair of triangles, and one n-ary union of them all, charged to the meter. Two convex solids take one hull of all their sums.",
+            "**Refused past the frame.** A sum outside the frame is [`NumError::OutOfRange`]."
+          ],
+          "job": "Minkowski sums of flat solids (19.6): every a + b for a in one solid and b in the other.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.6's table (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). Both solids split into convex pieces, each pair's sum is the exact convex hull of the sums of their corners, and the sums are united in one boolean. The pieces here are the triangles of the boundary, whose corners are all on the grid, not solid cells: the boundary of a sum lies in the sums of the boundaries, and one copy of each solid, moved by a point of the other, fills what is inside. A pair of parallel triangles has a flat sum, which its neighbours' sums cover, so it is left out."
+          },
+          "path": "geom_mesh::minkowski",
           "provenance": [],
           "spdx": null,
           "target": "lib"
