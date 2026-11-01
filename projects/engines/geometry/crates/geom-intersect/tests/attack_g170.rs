@@ -27,8 +27,9 @@ const FLOOR: f64 = 1e-3;
 const CEILING: f64 = 1e-2;
 const TURN: f64 = 2.0;
 
+/// A meter above what any case here takes, so a march that loses its way fails, not hangs.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::of_work(1 << 24))
+    WorkMeter::new(Budget::of_work(1 << 21))
 }
 
 fn frame() -> Frame<3> {
@@ -201,4 +202,39 @@ fn the_march_is_deterministic() {
     let low = bowl(2.0, -1.0, 1.0);
     let high = bowl(2.0, 1.0, -1.0);
     assert_eq!(trace(&low, &high), trace(&low, &high));
+}
+
+/// A march's work and the shape of its answer, to the unit: it is a pure function, so a change here
+/// is a change to how steps are taken or how far a chord is said to reach, which where the branch
+/// lies cannot show. A pin holds at its own work and fails one unit under it.
+#[test]
+fn each_march_takes_the_work_it_always_took() {
+    let plane = patch();
+    let sphere = SurfaceKind::Sphere(
+        Sphere::new(
+            [1.0, 2.0, 3.0],
+            5.0,
+            frame(),
+            ((0.0625, TURN), (-0.49, 0.49)),
+        )
+        .unwrap(),
+    );
+    let low = bowl(2.0, -1.0, 1.0);
+    let high = bowl(2.0, 1.0, -1.0);
+    let cases: [(&SurfaceKind, &SurfaceKind, u64, usize, u64); 2] = [
+        (&plane, &sphere, 64_314, 252, 4_576_822_122_997_009_047),
+        (&low, &high, 309_337, 185, 4_576_806_869_884_785_410),
+    ];
+    for (a, b, work, vertices, reach) in cases {
+        let found = subdivide(a, b, FLOOR, &mut meter()).unwrap();
+        let run = |budget: u64| {
+            let mut m = WorkMeter::new(Budget::of_work(budget));
+            march(a, b, &found, FLOOR, CEILING, &mut m)
+        };
+        assert_eq!(run(work - 1), Err(IntersectError::BudgetExceeded));
+        let t = run(work).unwrap();
+        let total: usize = t.branches.iter().map(|x| x.vertices.len()).sum();
+        let most = t.branches.iter().fold(0.0f64, |m, x| m.max(x.deviation));
+        assert_eq!((total, most.to_bits()), (vertices, reach));
+    }
 }
