@@ -3418,6 +3418,29 @@
       "layer": "1",
       "modules": [
         {
+          "cost": "as charged in the worst case, and near linear in z on the matrices a sketch makes; O(z + n) memory for the lists. No recursion.",
+          "does": "[`colamd`] orders the columns of a matrix A for the Cholesky factor of Aᵀ·A, which is the R of its QR, without forming Aᵀ·A. Each row of A is a clique of the columns it touches. The column of least approximate degree is eliminated; the rows it touches merge into one new row, the pivot row, whose columns get new scores; rows the pivot row covers are absorbed, and columns left with the same rows merge into one supercolumn and are ordered together. [`symmetric`] orders a symmetric matrix the same way, through a matrix with one row for each pair of neighbours.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/colamd.rs",
+          "guarantees": [
+            "**Structure only.** The order depends on the pattern alone, so it is computed once for every matrix of one pattern (chapter 15.7).",
+            "**Deterministic.** The least score goes first and a tie goes to the lowest variable; supercolumns are found by sorted comparison, and no hash or address decides anything (chapter 15.6).",
+            "**A permutation.** Every column appears once, and the empty columns and the dense ones last, in variable order.",
+            "**Charged first.** It charges (z + n)·(n + 1) multiply-adds before it starts, z the stored entries and n the columns: each elimination visits each column's rows at most."
+          ],
+          "job": "Column ordering by approximate minimum degree: the order to eliminate a sparse matrix's columns in, so that the factors of its QR or Cholesky decomposition stay sparse.",
+          "method": {
+            "links": [
+              "doi:10.1145/1024074.1024079"
+            ],
+            "text": "T. A. Davis, J. R. Gilbert, S. I. Larimore and E. G. Ng, \"A column approximate minimum degree ordering algorithm\", ACM TOMS 30(3) (2004), doi:10.1145/1024074.1024079: its scores, its row absorption, its supercolumns and its dense rows, in our own words and in safe Rust, with ties broken by variable order (chapter 15.6). It is written from the paper, not from `colamd.c`, so its lists are plain vectors and it has no packed workspace and no garbage collection. It leaves out the paper's final postorder of the assembly tree, which changes neither the fill nor the work."
+          },
+          "path": "geom_linalg::colamd",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one allocation of len · count doubles; access is constant time, copies linear.",
           "does": "[`Cols`] holds `count` columns of `len` doubles each, one after another, so a column is one contiguous slice and two columns can be borrowed together for a rotation. [`Cols::to_matrix`] copies chosen columns, in a chosen order, into a row-major [`Matrix`].",
           "family": [],
@@ -3552,6 +3575,90 @@
           "target": "lib"
         },
         {
+          "cost": "`n` columns and `z` entries take O(n + z) memory; construction sorts each column, O(z log z).",
+          "does": "[`Sparse`] is a matrix in compressed sparse column form, each column's row indices ascending. It is made from triplets in any order; repeated positions add up, in the order given. An entry that is stored stays stored when its value is zero, so a matrix's pattern depends on the positions given and never on the values: a factorisation's analysis can be reused for every matrix of one pattern (chapter 15.7).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/sparse.rs",
+          "guarantees": [
+            "**Finite.** Every value is finite; a constructor refuses NaN and infinities with [`LinalgError::NotFinite`], and a sum that overflows is refused the same way.",
+            "**Canonical.** One pattern and one set of values have one representation, whatever order the triplets came in, so two matrices are equal exactly when `==` says so.",
+            "**No panic, no abort.** Indices are checked; allocations are fallible."
+          ],
+          "job": "Sparse matrices of finite doubles, stored by columns, with the checked steps every sparse factorisation is written in.",
+          "method": {
+            "links": [
+              "doi:10.1093/acprof:oso/9780198508380.001.0001"
+            ],
+            "text": "compressed sparse column storage, I. S. Duff, A. M. Erisman and J. K. Reid, *Direct Methods for Sparse Matrices*, 2nd ed., Oxford (2017), doi:10.1093/acprof:oso/9780198508380.001.0001, section 2."
+          },
+          "path": "geom_linalg::sparse",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as charged; O(|L| + n) memory. No recursion.",
+          "does": "[`SymbolicCholesky`] reads a symmetric pattern: the order, the elimination tree, and the pattern of each row of L. It is computed once for every matrix of that pattern (chapter 15.7). [`SparseCholesky::factor`] gives P·A·Pᵀ = L·Lᵀ, and [`SparseLdlt::factor`] gives P·A·Pᵀ = L·D·Lᵀ with L unit lower triangular and D diagonal, for a symmetric quasi-definite matrix: neither pivots, so the order is the pattern's alone. Each row of L is solved in turn against the rows above it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_cholesky.rs",
+          "guarantees": [
+            "**Deterministic.** Plain scalar loops in a fixed order, and an order from the pattern alone (chapter 15.6).",
+            "**Symmetric, or refused.** A matrix that is not its own transpose, entry for entry, is refused: nothing is silently read from one triangle.",
+            "**Refused, never approximate.** A pivot at or below zero stops Cholesky, and a zero pivot stops L·D·Lᵀ: there is no shifting and no pivoting behind the caller's back.",
+            "**Charged first.** The analysis charges [`crate::colamd::symmetric`]'s cost and 2·z more; a factorisation Σⱼ |L₍ⱼ₎|², from the pattern alone; a solve 2·|L|."
+          ],
+          "job": "Sparse Cholesky and L·D·Lᵀ of symmetric matrices, the analysis kept apart from the numbers.",
+          "method": {
+            "links": [
+              "doi:10.1137/0611010",
+              "doi:10.1145/1114268.1114277",
+              "doi:10.1137/0805005"
+            ],
+            "text": "the elimination tree and row subtrees, J. W. H. Liu, \"The role of elimination trees in sparse factorization\", SIAM J. Matrix Anal. Appl. 11(1) (1990), doi:10.1137/0611010; the up-looking factorisation by rows, T. A. Davis, \"Algorithm 849: a concise sparse Cholesky factorization package\", ACM TOMS 31(4) (2005), doi:10.1145/1114268.1114277, read for its method only; L·D·Lᵀ of quasi-definite matrices without pivoting, R. J. Vanderbei, \"Symmetric quasidefinite matrices\", SIAM J. Optim. 5(1) (1995), doi:10.1137/0805005."
+          },
+          "path": "geom_linalg::sparse_cholesky",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as charged; O(|R| + |V| + m + n) memory. No recursion.",
+          "does": "[`SymbolicQr`] reads a pattern: the column order, the elimination tree of Aᵀ·A and the pattern of R. It is computed once for every matrix of that pattern (chapter 15.7). [`SparseQr::factor`] then factors one matrix, column by column from the left: each column takes the reflections of the earlier columns R says reach it, and makes its own on the rows it holds. A row enters at the first column it touches, and each column hands the rows it did not use as its pivot to its parent in the tree. A column with nothing left, to the rank tolerance, is dead: it makes no reflection and uses no pivot, and its rows go on up, so A·Π = Q·R with R a staircase. [`SparseQr::least_squares`] solves A·x = b in the least-squares sense with the least norm. On a staircase, and on any under-determined system, it factors Rᵀ too and solves through that. Where solvi fixes its rows in its symbolic step and fails on a rank-deficient matrix, a dead column here hands its rows on and the solve stays least-norm.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+          "guarantees": [
+            "**Deterministic.** Plain scalar loops in a fixed order, the order and the tree coming from the pattern alone; a column's pivot is the lowest-numbered row it holds (chapter 15.6).",
+            "**Least change, never basic.** The solution has the least Euclidean norm among all the least-squares solutions of the kept rows: no free variable is set to zero by its place in the order. It equals the dense path, [`crate::Cod::least_squares`], to rounding, while both find the same rank.",
+            "**Rank decided once, and only roughly.** A column is dead when what is left of it is at most `tol` times the largest column of A. There is no column pivoting, so this can miss a near rank deficiency that column pivoting would find, which is why chapter 15.8's verdicts rest on the dense path.",
+            "**Never the normal equations.** Aᵀ·A is never formed; its tree is read from A's rows.",
+            "**Charged first.** [`SymbolicQr::new`] charges [`crate::colamd::colamd`]'s cost and 2·z more; [`SparseQr::factor`] charges 2·(Σⱼ |R₍ⱼ₎|·|V₍ⱼ₎| + Σⱼ |V₍ⱼ₎|) from the pattern alone, V the Householder vectors, and a staircase the second factorisation's own; a solve charges 2·(|V| + |R|)."
+          ],
+          "job": "Sparse QR with Householder reflections, its analysis kept apart from its numbers, and the least-squares solution of least norm.",
+          "method": {
+            "links": [
+              "doi:10.1023/A:1021943902025",
+              "doi:10.1137/0611010",
+              "doi:10.1137/0903014"
+            ],
+            "text": "the elimination tree of Aᵀ·A, read from A's rows, J. R. Gilbert, X. S. Li, E. G. Ng and B. W. Peyton, \"Computing row and column counts for sparse QR and LU factorization\", BIT 41(4) (2001), doi:10.1023/A:1021943902025; R's pattern as the row subtrees of that tree, J. W. H. Liu, \"The role of elimination trees in sparse factorization\", SIAM J. Matrix Anal. Appl. 11(1) (1990), doi:10.1137/0611010; left-looking Householder QR with rows handed up the tree, in the structure of solvi's `decomposition/sparse/qr.rs`; dead columns and the staircase, M. T. Heath, \"Some extensions of an algorithm for sparse linear least squares problems\", SIAM J. Sci. Stat. Comput. 3(2) (1982), doi:10.1137/0903014; the minimum-norm solve through the QR of Rᵀ, G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins (2013), section 5.6."
+          },
+          "path": "geom_linalg::sparse_qr",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 OR MIT",
+              "link": "https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/solvi/src/decomposition/sparse/qr.rs",
+              "method_note": null,
+              "name": "solvi (Linebender)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its left-looking structure and the handing of rows up the tree.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "Jacobi charges n²·(5m + 2n) per sweep and converges in a handful of sweeps; Golub–Kahan charges 8·m·n² + 4·n³ for the reduction and the accumulation, then (k + 1)·(4(m + n) + 12) per QR step. Each allocates its working copy, U and V.",
           "does": "[`Svd::jacobi`] and [`Svd::golub_kahan`] factor an m × n matrix as A = U·Σ·Vᵀ, with k = min(m, n) singular values in Σ, largest first, U m × k and V n × k with orthonormal columns. A wide matrix is factored through its transpose.",
           "family": [],
@@ -3581,7 +3688,7 @@
       "provenance": [],
       "sections": "15.6 and 16.6; open questions OQ-15.7, OQ-16.1 and OQ-29.16; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "dense decompositions built (G49, G50); the sparse parts (G215) to come.",
+      "status": "dense decompositions built (G49, G50); sparse parts built (G215).",
       "summary": "Spare Kit geometry kernel: deterministic linear algebra."
     },
     {
@@ -9993,6 +10100,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-run/src/exec.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0 OR MIT",
+      "link": "https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/solvi/src/decomposition/sparse/qr.rs",
+      "method_note": null,
+      "name": "solvi (Linebender)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs"
       ]
     },
     {

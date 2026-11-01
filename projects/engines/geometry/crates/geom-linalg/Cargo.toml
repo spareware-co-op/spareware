@@ -25,6 +25,11 @@ geom-test = { path = "../geom-test" }
 name = "qr"
 harness = false
 
+# The 10,000-unknown sparse benchmark (piece G215), the same way.
+[[bench]]
+name = "sparse"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
