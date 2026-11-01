@@ -289,7 +289,8 @@ impl Disc {
         let ([x, y], v) = z.coordinates();
         let ([cx, cy], w) = self.centre.coordinates();
         let wide = I512::from_i128;
-        let part = |p: i128, c: i128| less(&times(&wide(p), &wide(w))?, &times(&wide(c), &wide(v))?);
+        let part =
+            |p: i128, c: i128| less(&times(&wide(p), &wide(w))?, &times(&wide(c), &wide(v))?);
         let (dx, dy) = (part(x, cx)?, part(y, cy)?);
         let far = times(&dx, &dx)?
             .checked_add(&times(&dy, &dy)?)

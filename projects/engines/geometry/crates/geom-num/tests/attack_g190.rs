@@ -1245,6 +1245,12 @@ fn a_point_inside_a_stretch_of_another_root_is_not_that_root() {
     let (found, there) = (point.roots().unwrap(), open.roots().unwrap());
     let middle = found.iter().nth(1).unwrap();
     let root = there.iter().nth(1).unwrap();
-    assert_eq!(compare(&point, middle, &open, root).unwrap(), Sign::Negative);
-    assert_eq!(compare(&open, root, &point, middle).unwrap(), Sign::Positive);
+    assert_eq!(
+        compare(&point, middle, &open, root).unwrap(),
+        Sign::Negative
+    );
+    assert_eq!(
+        compare(&open, root, &point, middle).unwrap(),
+        Sign::Positive
+    );
 }

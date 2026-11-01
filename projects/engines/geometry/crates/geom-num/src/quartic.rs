@@ -673,7 +673,10 @@ impl RealRoot {
         let x = if self.point {
             low
         } else {
-            let next = self.a.checked_add(&Big::one()).ok_or(NumError::BudgetExceeded)?;
+            let next = self
+                .a
+                .checked_add(&Big::one())
+                .ok_or(NumError::BudgetExceeded)?;
             Interval::new(low.lo(), enclose(&next)?.div(scale)?.hi())?
         };
         let square = x.mul(x)?;

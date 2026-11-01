@@ -133,9 +133,9 @@ fn crossing_bytes(out: &mut Vec<u8>, p: &Result<Crossing2, NumError>) {
 /// How a pair meets: its quartic's integers and each root's place and multiplicity.
 fn meeting_bytes(
     out: &mut Vec<u8>,
-    meeting: Result<Meeting, NumError>,
+    meeting: &Result<Meeting, NumError>,
 ) -> Option<(Quartic, RealRoot)> {
-    let Meeting::At { quartic, roots } = meeting.unwrap() else {
+    let Meeting::At { quartic, roots } = *meeting.as_ref().unwrap() else {
         out.push(10);
         return None;
     };
@@ -174,7 +174,7 @@ fn corpus() -> Vec<u8> {
         let (r, s) = other.ratio();
         let there = Ellipse2::new(e.centre(), other.major(), r, s).unwrap();
         let conic = Conic::of_ellipse(&there).unwrap();
-        let found = meeting_bytes(&mut out, e.meeting(&conic));
+        let found = meeting_bytes(&mut out, &e.meeting(&conic));
         if let (Some((a, p)), Some((b, q))) = (&found, &last) {
             out.push(sign_byte(compare(a, p, b, q)));
         }

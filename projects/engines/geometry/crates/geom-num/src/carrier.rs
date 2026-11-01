@@ -82,7 +82,7 @@ const _: () = {
     assert!(2 * POINT_BITS + WEIGHT_BITS + 3 + 1 == 335);
     assert!(FINE_NORMAL_BITS + crate::grid::COORD_BITS + 1 == FINE_OFFSET_BITS);
     assert!(FINE_NORMAL_BITS + POINT_BITS == 199 && FINE_OFFSET_BITS + WEIGHT_BITS == 199);
-    assert!(199 + 2 + 1 == 202 && 202 < 256);
+    assert!(FINE_NORMAL_BITS + POINT_BITS + 2 + 1 < 256);
 };
 
 /// The largest magnitude below 2 to `bits`.

@@ -22,6 +22,7 @@
 )]
 #![allow(
     clippy::many_single_char_names,
+    clippy::similar_names,
     reason = "the formulas' own names, as in the module"
 )]
 #![allow(
@@ -84,12 +85,10 @@ fn big(v: i128) -> IBig {
 }
 
 fn sign_of(v: &IBig) -> Sign {
-    if *v > IBig::ZERO {
-        Sign::Positive
-    } else if *v < IBig::ZERO {
-        Sign::Negative
-    } else {
-        Sign::Zero
+    match v.cmp(&IBig::ZERO) {
+        core::cmp::Ordering::Greater => Sign::Positive,
+        core::cmp::Ordering::Less => Sign::Negative,
+        core::cmp::Ordering::Equal => Sign::Zero,
     }
 }
 
@@ -106,7 +105,12 @@ const TOP_POINT: i128 = (1 << POINT_BITS) - 1;
 const TOP_WEIGHT: i128 = (1 << WEIGHT_BITS) - 1;
 
 fn top_rr() -> I256 {
-    I256::from_le_limbs([u64::MAX, u64::MAX, u64::MAX, (1 << (SQUARED_BITS - 192)) - 1])
+    I256::from_le_limbs([
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        (1 << (SQUARED_BITS - 192)) - 1,
+    ])
 }
 
 fn p2(x: i64, y: i64) -> P2 {
@@ -162,7 +166,10 @@ fn a_disc_is_made_only_within_its_budget() {
     );
     assert!(Disc::new(centre, top_rr()).is_ok());
     let over = top_rr().checked_add(&I256::from_i64(1)).unwrap();
-    assert_eq!(Disc::new(centre, over).err(), Some(NumError::BudgetExceeded));
+    assert_eq!(
+        Disc::new(centre, over).err(),
+        Some(NumError::BudgetExceeded)
+    );
 }
 
 #[test]
@@ -181,7 +188,10 @@ fn a_disc_answers_as_the_oracle_does_at_the_extremes() {
     let fine_top = (1_i128 << FINE_NORMAL_BITS) - 1;
     let fine_c = (1_i128 << FINE_OFFSET_BITS) - 1;
     let l = FineLine::new(fine_top, -fine_top, fine_c).unwrap();
-    assert_eq!(d.meets_fine(&l).unwrap(), meets_oracle(&d, l.coefficients()));
+    assert_eq!(
+        d.meets_fine(&l).unwrap(),
+        meets_oracle(&d, l.coefficients())
+    );
 }
 
 #[test]
@@ -195,7 +205,10 @@ fn a_disc_answers_as_the_oracle_does_at_random() {
         let l = Carrier::new(rng.sized(41), rng.sized(41).abs().max(1), rng.sized(82)).unwrap();
         assert_eq!(d.meets(&l).unwrap(), meets_oracle(&d, l.coefficients()));
         let m = FineLine::new(rng.sized(75), rng.sized(75).abs().max(1), rng.sized(116)).unwrap();
-        assert_eq!(d.meets_fine(&m).unwrap(), meets_oracle(&d, m.coefficients()));
+        assert_eq!(
+            d.meets_fine(&m).unwrap(),
+            meets_oracle(&d, m.coefficients())
+        );
     }
 }
 
@@ -214,7 +227,10 @@ fn a_disc_on_the_circle_exactly_is_zero_and_one_step_off_is_not() {
         );
         assert_eq!(d.meets(&tangent).unwrap(), Contact::Tangent);
         assert_eq!(d.meets(&near).unwrap(), Contact::Crossing);
-        assert_eq!(d.meets(&Carrier::new(3, 4, 26).unwrap()).unwrap(), Contact::Apart);
+        assert_eq!(
+            d.meets(&Carrier::new(3, 4, 26).unwrap()).unwrap(),
+            Contact::Apart
+        );
     }
 }
 
@@ -403,10 +419,19 @@ fn a_gap_is_exactly_zero_at_a_tangency_and_a_bound_otherwise() {
     let right = d.gap_to_carrier(&through).unwrap().get();
     assert!((1.59..=1.61).contains(&right), "{right}");
     // At distance 24/5 of the radius 5 the sine is 7/25, past the small angle.
-    let near = d.gap_to_carrier(&Carrier::new(3, 4, 24).unwrap()).unwrap().get();
+    let near = d
+        .gap_to_carrier(&Carrier::new(3, 4, 24).unwrap())
+        .unwrap()
+        .get();
     assert!(near >= 0.28, "{near}");
+    // The same line over 2^40: the same bound, within the few steps of outward rounding that
+    // enclosing its larger integers takes.
     let fine = FineLine::new(3 << 40, 4 << 40, 24 << 40).unwrap();
-    assert_eq!(d.gap_to_fine(&fine).unwrap().get(), near);
+    let scaled = d.gap_to_fine(&fine).unwrap().get();
+    assert!(
+        (scaled - near).abs() <= 8.0 * f64::EPSILON * near,
+        "{scaled} and {near}"
+    );
     // Hair-thin, by a depth of 2^-69 of the radius: the sine is 2^-34, and the bound holds it.
     let w = 1_i128 << 72;
     let r = 5 * w;
@@ -415,7 +440,7 @@ fn a_gap_is_exactly_zero_at_a_tangency_and_a_bound_otherwise() {
         I256::from_i128(r).checked_mul(&I256::from_i128(r)).unwrap(),
     )
     .unwrap();
-    let c = 25 - 0;
+    let c = 25;
     let l = Carrier::new(3, 4, c).unwrap();
     assert_eq!(thin.gap_to_carrier(&l).unwrap().get(), 0.0);
     let off = Disc::new(
@@ -444,10 +469,19 @@ fn a_gap_between_circles_is_their_angle() {
     // The same over other weights.
     let w = 1_i128 << 40;
     let scaled = Disc::new(Rational2::new(0, 0, w).unwrap(), square(3 * w)).unwrap();
-    assert_eq!(scaled.gap_to_disc(&disc(5, 4)).unwrap().get(), right);
-    // A small angle is bounded, not lost: sine 2 · 1 · 1000 / ... from Heron.
-    let near = disc(0, 1_000).gap_to_disc(&disc(1_999, 1_000)).unwrap().get();
-    assert!(near > 0.0 && near < 0.1, "{near}");
+    let over = scaled.gap_to_disc(&disc(5, 4)).unwrap().get();
+    assert!(
+        (over - right).abs() <= 8.0 * f64::EPSILON * right,
+        "{over} and {right}"
+    );
+    // A small angle is bounded, not lost. Radii 1000 and 1000, 1999 apart: Heron's rule gives
+    // the sine at a crossing as 1999·√3999 / (2·10^6) = 0.063207..., the angle 0.063249..., and
+    // the bound may stand up to the 1.6 times the sine that asin x ≤ 1.6 x allows.
+    let near = disc(0, 1_000)
+        .gap_to_disc(&disc(1_999, 1_000))
+        .unwrap()
+        .get();
+    assert!((0.063_249..=1.6 * 0.063_208).contains(&near), "{near}");
 }
 
 /// The value of `conic` at the grid point `at`.
@@ -455,7 +489,11 @@ fn value(conic: &Conic, at: P2) -> IBig {
     let [xx, xy, yy, x, y, c] = conic.coefficients().map(|v| {
         let mut out = IBig::ZERO;
         let negative = v.is_negative();
-        let magnitude = if negative { v.checked_neg().unwrap() } else { v };
+        let magnitude = if negative {
+            v.checked_neg().unwrap()
+        } else {
+            v
+        };
         for limb in magnitude.to_le_limbs().iter().rev() {
             out = (out << 64) + IBig::from(*limb);
         }
@@ -479,7 +517,12 @@ fn an_equation_about_another_point_is_the_same_curve() {
         Conic::of_circle(&Circle2::new(p2(5, 6), 7).unwrap()).unwrap(),
         Conic::of_round(&Round::new(p2(1, 2), Rational2::new(7, 8, 3).unwrap())).unwrap(),
     ];
-    let at = |rng: &mut Rng| p2((rng.next() % (1 << 40)) as i64 - (1 << 39), (rng.next() % (1 << 30)) as i64);
+    let at = |rng: &mut Rng| {
+        p2(
+            (rng.next() % (1 << 40)) as i64 - (1 << 39),
+            (rng.next() % (1 << 30)) as i64,
+        )
+    };
     for conic in &conics {
         for _ in 0..cases {
             let (there, point) = (at(&mut rng), at(&mut rng));
@@ -540,19 +583,42 @@ fn a_disc_meets_an_ellipse_at_the_angles_of_its_roots() {
         panic!()
     };
     assert_eq!(roots.count(), 4);
-    for root in roots.iter() {
-        let [c, s] = root.angle().unwrap();
-        // x = 5 cos θ, y = 3 sin θ on a circle of radius 4.
-        let (x, y) = (5.0 * c.lo(), 3.0 * s.lo());
-        assert!((x * x + y * y - 16.0).abs() < 1e-6, "{x} {y}");
-    }
+    // x = 5 cos θ, y = 3 sin θ on the circle of radius 4: x² = 175/16 and y² = 81/16, so
+    // cos θ = ±√175 / 20 and sin θ = ±3/4. An angle is as wide as isolation left its root, here a
+    // whole quarter of the line each, so it is read as a box: each holds exactly one of the four
+    // crossings, and no two the same one.
+    let (cosine, sine) = (0.661_437_827_766_147_7, 0.75);
+    let crossings = [
+        (cosine, sine),
+        (-cosine, sine),
+        (-cosine, -sine),
+        (cosine, -sine),
+    ];
+    let mut held: Vec<usize> = roots
+        .iter()
+        .map(|root| {
+            let [c, s] = root.angle().unwrap();
+            let hits: Vec<usize> = (0..4)
+                .filter(|&i| {
+                    let (a, b) = crossings[i];
+                    c.lo() <= a && a <= c.hi() && s.lo() <= b && b <= s.hi()
+                })
+                .collect();
+            assert_eq!(hits.len(), 1, "{c:?} {s:?}");
+            hits[0]
+        })
+        .collect();
+    held.sort_unstable();
+    held.dedup();
+    assert_eq!(held.len(), 4);
 }
 
 #[test]
 fn an_integer_is_enclosed() {
     let v: Big = Big::from_i128(-(1 << 100) + 1);
     let i = enclose(&v).unwrap();
-    assert!(i.lo() <= -(2.0_f64.powi(100)) + 1.0 && -(2.0_f64.powi(100)) <= i.hi());
+    let two_100 = (1_u128 << 100) as f64;
+    assert!(i.lo() <= -two_100 + 1.0 && -two_100 <= i.hi());
     let zero = enclose(&Big::from_i64(0)).unwrap();
     assert_eq!((zero.lo(), zero.hi()), (0.0, 0.0));
 }
