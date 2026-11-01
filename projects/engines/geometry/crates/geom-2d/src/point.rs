@@ -129,6 +129,10 @@ pub enum Pt2 {
 
 /// Where a point is, exactly.
 #[derive(Clone, Copy, Debug)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a place is read and dropped at once, never stored, and the crate does not allocate"
+)]
 pub enum Place {
     /// A grid, rational or one-root point.
     OneRoot(Crossing2),
