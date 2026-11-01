@@ -66,6 +66,12 @@ const CORNERS: Phase = Phase::new("merge: corners");
 /// Sorting the corners.
 const SORT_CORNERS: Phase = Phase::new("merge: sort corners");
 
+/// Each piece's sheet key.
+const SHEETS: Phase = Phase::new("merge: sheet keys");
+
+/// Sorting the pieces by sheet.
+const SORT_SHEETS: Phase = Phase::new("merge: sort sheets");
+
 /// Making each piece's sides.
 const SIDES: Phase = Phase::new("merge: sides");
 
@@ -825,19 +831,26 @@ fn whole_runs(runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
     whole
 }
 
+/// A piece's place among the sheets: its canonical plane, which way it faces, and with seams kept
+/// its source and its two vectors.
+type SheetKey = (
+    (i128, [i128; 3]),
+    bool,
+    usize,
+    Vec<(u32, i32)>,
+    Vec<(u32, i32)>,
+);
+
 /// The sheets of `pieces`, sorted by exact keys so the input's order counts for nothing, and each
-/// piece on its sheet.
-fn sheets_of(pieces: &[Outward], merge: Merge) -> Result<(Vec<Sheet>, Vec<Held<'_>>), NumError> {
-    type Key = (
-        (i128, [i128; 3]),
-        bool,
-        usize,
-        Vec<(u32, i32)>,
-        Vec<(u32, i32)>,
-    );
+/// piece on its sheet. The keys are made, and sorted, on `exec`'s pool.
+fn sheets_of<'p>(
+    pieces: &'p [Outward],
+    merge: Merge,
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Vec<Sheet>, Vec<Held<'p>>), MergeError> {
     let seams = merge == Merge::KeepSeams;
-    let mut keyed: Vec<(Key, usize)> = Vec::with_capacity(pieces.len());
-    for (at, piece) in pieces.iter().enumerate() {
+    let made = exec.try_map(meter, SHEETS, PIECES, pieces, |_, piece, _| {
         let face = canonical(&piece.piece.face)?;
         let pairs = |w: &Winding| {
             if seams {
@@ -846,23 +859,32 @@ fn sheets_of(pieces: &[Outward], merge: Merge) -> Result<(Vec<Sheet>, Vec<Held<'
                 Vec::new()
             }
         };
-        let key = (
+        Ok::<SheetKey, MergeError>((
             (face.plane.d(), face.plane.n()),
             face.flipped,
             if seams { piece.source } else { 0 },
             pairs(&piece.front),
             pairs(&piece.back),
-        );
-        keyed.push((key, at));
-    }
-    // The sheet's source faces as the result does where one can, the lowest first (11.5).
-    let source = |at: usize| pieces.get(at).map(|p| (p.turned, p.polygon));
-    keyed.sort_by(|a, b| a.0.cmp(&b.0).then(source(a.1).cmp(&source(b.1))));
+        ))
+    });
+    let keys = made.map_err(|e| phase_error(e, meter))?;
+    // Equal keys by the sheet's source faces as the result does where one can, the lowest first
+    // (11.5); the stable sort keeps the input's order past that, as the serial sort did.
+    let keyed: Vec<(&SheetKey, (bool, usize))> = keys
+        .iter()
+        .zip(pieces)
+        .map(|(key, piece)| (key, (piece.turned, piece.polygon)))
+        .collect();
+    let sorted = exec.sort_stable(meter, SORT_SHEETS, SORT_PLAN, &keyed, |(key, source)| {
+        (*key, *source)
+    });
+    let order = sorted.map_err(|e| phase_error(e, meter))?;
     let mut sheets: Vec<Sheet> = Vec::new();
-    let mut held = Vec::with_capacity(keyed.len());
-    let mut last: Option<&Key> = None;
-    for (key, at) in &keyed {
-        let outward = pieces.get(*at).ok_or(NumError::Degenerate)?;
+    let mut held = Vec::with_capacity(order.len());
+    let mut last: Option<&SheetKey> = None;
+    for at in order {
+        let outward = pieces.get(at).ok_or(MergeError::Open)?;
+        let key = keys.get(at).ok_or(MergeError::Open)?;
         if last != Some(key) {
             sheets.push(Sheet {
                 face: outward.piece.face,
@@ -874,7 +896,7 @@ fn sheets_of(pieces: &[Outward], merge: Merge) -> Result<(Vec<Sheet>, Vec<Held<'
         held.push(Held {
             sheet: sheets.len().saturating_sub(1),
             piece: &outward.piece,
-            given: *at,
+            given: at,
         });
     }
     Ok((sheets, held))
@@ -1507,7 +1529,7 @@ pub fn merge_on(
     (mode, rules): (Merge, Rules<'_>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Merged, MergeError> {
-    let (sheets, mut held) = sheets_of(pieces, mode)?;
+    let (sheets, mut held) = sheets_of(pieces, mode, exec, meter)?;
     let kept = held.len();
     held.extend(rules.cuts.iter().map(|piece| Held {
         sheet: CUT,
