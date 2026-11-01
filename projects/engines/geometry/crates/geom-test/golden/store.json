@@ -118,9 +118,15 @@
               "kind": "corpus",
               "piece": "G149",
               "why": "The boolean's count benchmark on small prisms: mesh/boolean; no existing digest moved"
+            },
+            {
+              "sha256": "0ce76ad6f0c6b5d5bb00ef5fef6259f0710f137fc3cce180ba3a56e8b3628871",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "The count benchmarks in the catalogue's order; no digest moved"
             }
           ],
-          "sha256": "0ce76ad6f0c6b5d5bb00ef5fef6259f0710f137fc3cce180ba3a56e8b3628871"
+          "sha256": "521ad4c6cd0d6ea4a9ff91b0a27bbb5510f2f69939317a8f7d7922682f41ed6b"
         },
         {
           "id": "geom-bvh/cells",
