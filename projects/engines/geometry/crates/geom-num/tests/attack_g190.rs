@@ -1218,3 +1218,35 @@ fn ellipses_keep_their_laws() {
         assert_eq!(sorted(&a), sorted(&b));
     }
 }
+
+/// A dyadic root reached by narrowing keeps its name of a point: as an open stretch it would lie
+/// clear of itself in another quartic, where it is a point too.
+#[test]
+fn a_root_narrowed_onto_a_dyadic_point_stays_that_point() {
+    // A double root, so the factors, each isolated alone in the whole of (0, 1), and sorted apart by
+    // narrowing, whose second middle is the root 1 / 4 of the simple factor.
+    let q = quartic(&[(4, -1), (8, -3), (8, -3)], &[]);
+    let found = q.roots().unwrap();
+    let roots: Vec<_> = found.iter().collect();
+    assert_eq!(roots.len(), 2);
+    let other = quartic(&[(4, -1), (8, -1)], &[]);
+    let there = other.roots().unwrap();
+    let list: Vec<_> = there.iter().collect();
+    assert_eq!(list.len(), 2);
+    assert_eq!(compare(&q, roots[0], &other, list[1]).unwrap(), Sign::Zero);
+    assert_eq!(compare(&other, list[1], &q, roots[0]).unwrap(), Sign::Zero);
+}
+
+/// A dyadic point with a stretch of another quartic over it is apart from that root, not the same.
+#[test]
+fn a_point_inside_a_stretch_of_another_root_is_not_that_root() {
+    // 1 / 2 is a point of the first, its first middle; 5 / 8 is the only root of the second in the
+    // whole of (0, 1).
+    let point = quartic(&[(2, -1), (4, -1), (4, -3)], &[]);
+    let open = quartic(&[(8, -5), (1, 1)], &[]);
+    let (found, there) = (point.roots().unwrap(), open.roots().unwrap());
+    let middle = found.iter().nth(1).unwrap();
+    let root = there.iter().last().unwrap();
+    assert_eq!(compare(&point, middle, &open, root).unwrap(), Sign::Negative);
+    assert_eq!(compare(&open, root, &point, middle).unwrap(), Sign::Positive);
+}
