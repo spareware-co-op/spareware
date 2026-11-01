@@ -191,7 +191,7 @@ impl<K> From<geom_topo::Ix<K>> for RowOf {
 
 impl<K> From<Option<geom_topo::Ix<K>>> for RowOf {
     fn from(i: Option<geom_topo::Ix<K>>) -> Self {
-        RowOf(i.map_or(u32::MAX, |i| i.row()))
+        RowOf(i.map_or(u32::MAX, geom_topo::Ix::row))
     }
 }
 
@@ -379,8 +379,7 @@ fn fins_run_their_rings() {
         row_of[*fin] = row as u32;
     }
     let mut at = 0;
-    let mut looped = 0;
-    for ring in m.faces.iter().flat_map(|f| &f.rings) {
+    for (looped, ring) in m.faces.iter().flat_map(|f| &f.rings).enumerate() {
         assert_eq!(first_fin[looped], at as u32);
         for (k, fin) in ring.iter().enumerate() {
             let here = at + k;
@@ -396,7 +395,6 @@ fn fins_run_their_rings() {
             assert_eq!(sense[here] == Sense::Forward, forward);
         }
         at += ring.len();
-        looped += 1;
     }
     for held in &m.edges {
         for (k, fin) in held.fins.iter().enumerate() {

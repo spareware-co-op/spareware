@@ -3,6 +3,7 @@
 
 #![allow(
     clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     reason = "test checks; the rules are for kernel code"
 )]

@@ -214,7 +214,7 @@ impl<'m> Classifier<'m> {
                 return Err(MeshFault::Shape.into());
             };
             let [a, b, c] = rows.map(|row| at(&p.planes, row).copied());
-            implicit.push(Tpi::new(a?, b?, c?)?);
+            implicit.push(Tpi::meeting(a?, b?, c?)?);
         }
         let mut reach = Vec::with_capacity(p.verts.len());
         for (i, v) in p.verts.iter().enumerate() {
