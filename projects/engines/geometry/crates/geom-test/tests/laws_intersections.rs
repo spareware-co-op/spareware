@@ -13,10 +13,11 @@
 //! The fourth law of the row, completeness as section 12 promises it, is scored on the exact-truth
 //! SSI corpus by `ssi gate` (`geom_test::ssi::gate`), nightly in `ssi-acceptance`.
 //!
-//! The methods these laws are for come with G165 and G170 and are not built yet, so `stand_in`
-//! answers each case from its stated closed form, and `each_law_catches_its_planted_fault` shows
-//! each law refuting the wrong answer it exists for. A method joins by replacing `stand_in` in
-//! `the_laws_hold`, which is one call: everything the laws read is `pair`'s.
+//! The method these laws are for is G165's closed form, `geom_intersect::quadrics::natural`, which
+//! `the_laws_hold` runs on every case beside `stand_in`, each case's stated closed form, which holds
+//! the table and the laws to each other. `each_law_catches_its_planted_fault` shows each law
+//! refuting the wrong answer it exists for. A method joins by one more call in `the_laws_hold`:
+//! everything the laws read is `pair`'s. G170's marching joins when it answers these pairs.
 //!
 //! Each law lists every broken case it finds. Seeds: each law prints `seed: <hex>` and replays with
 //! `SPAREKIT_SEED`; pull requests run the fixed default seed, and the nightly workflow a fresh one.
@@ -67,7 +68,7 @@ use dashu_ratio::RBig;
 use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola, ParamCurve};
 use geom_intersect::{
     CanonicalKey, Coverage, CurveContact, CurveEnd, Geom, IntersectError, Intersection, Item,
-    Operand, ParamBox, PointContact, StepsInterval, pair,
+    Operand, ParamBox, PointContact, StepsInterval, pair, quadrics,
 };
 use geom_math::Box3;
 use geom_num::interval::Interval;
@@ -489,6 +490,12 @@ fn stand_in(case: &Case) -> Result<Intersection, IntersectError> {
         })
         .collect::<Result<Vec<Item>, IntersectError>>()?;
     Intersection::new(items, Coverage::TopologyCertified, vec![], &mut meter())
+}
+
+/// G165's answer in the roles the laws read, the plane's unknowns first, as `natural` gives them for
+/// its arguments in that order. A pair it calls not natural is no answer, which the laws report.
+fn closed_form(case: &Case) -> Result<Intersection, IntersectError> {
+    quadrics::natural(&case.plane, &case.quadric, &mut meter())?.ok_or(IntersectError::Internal)
 }
 
 fn sub(a: &[IBig; 3], b: &[IBig; 3]) -> [IBig; 3] {
@@ -936,17 +943,21 @@ fn plane_and_quadric_classify_as_stated() {
     findings.assert_none("a plane with a quadric classifies as stated");
 }
 
-/// Every method that answers these pairs runs here. Until G165 lands that is the stated closed form,
-/// which holds the laws and the table to each other.
+/// Every method that answers these pairs runs here: G165's closed form, and the stated one, which
+/// holds the laws and the table to each other.
 #[test]
 fn the_laws_hold() {
     let mut rng = rng("laws_intersections laws");
     let mut findings = Findings::default();
+    let methods: [(&str, &dyn Fn(&Case) -> Result<Intersection, IntersectError>); 2] =
+        [("natural", &closed_form), ("stated", &stand_in)];
     for _ in 0..scale(8) {
         let mv = Move::draw(&mut rng);
         for case in &cases(&mv, TRUE) {
-            for (law, why) in judge(case, &stand_in, &mut rng) {
-                findings.add(format!("{}: {law}", case.name), || why);
+            for (method, solve) in methods {
+                for (law, why) in judge(case, solve, &mut rng) {
+                    findings.add(format!("{method}, {}: {law}", case.name), || why);
+                }
             }
         }
     }
