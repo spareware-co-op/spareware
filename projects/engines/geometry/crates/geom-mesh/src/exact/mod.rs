@@ -174,9 +174,31 @@ pub struct Parts {
 }
 
 /// An exact polygon mesh: every face flat, every vertex a grid point or a meeting of three planes.
-#[derive(Clone, Debug, PartialEq)]
+/// Two meshes of the same arrays are equal, whether or not either is known to be a solid, and
+/// print the same: the flag is what is known of a mesh, not part of it.
+#[derive(Clone)]
 pub struct ExactMesh {
     parts: Parts,
+    /// Whether it is known to bound a solid ([`ExactMesh::is_solid`]).
+    solid: bool,
+}
+
+impl PartialEq for ExactMesh {
+    fn eq(&self, other: &Self) -> bool {
+        self.parts == other.parts
+    }
+}
+
+#[allow(
+    clippy::missing_fields_in_debug,
+    reason = "the solid flag is what is known of a mesh, not part of it, as PartialEq has it"
+)]
+impl fmt::Debug for ExactMesh {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExactMesh")
+            .field("parts", &self.parts)
+            .finish()
+    }
 }
 
 impl ExactMesh {
@@ -191,7 +213,28 @@ impl ExactMesh {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Self, MeshError> {
         check::check(&parts, exec, meter)?;
-        Ok(Self { parts })
+        Ok(Self {
+            parts,
+            solid: false,
+        })
+    }
+
+    /// Whether the mesh is known to bound a solid: no two of its faces cross, and its winding
+    /// number is 1 just behind every face and 0 just in front, EMBER's no-self-intersection and
+    /// no-nested-parts flags (11.3 step 4), so a boolean need neither cut nor trace where only its
+    /// faces are. Only what proves it says so: a boolean's result is one by construction, its
+    /// winding the test's 0 or 1. A mesh made from arrays says `false`.
+    #[must_use]
+    pub const fn is_solid(&self) -> bool {
+        self.solid
+    }
+
+    /// `self`, known to bound a solid: for the constructions that prove it.
+    pub(crate) fn proven_solid(self) -> Self {
+        Self {
+            solid: true,
+            ..self
+        }
     }
 
     /// The arrays.
