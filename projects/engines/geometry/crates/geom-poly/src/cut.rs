@@ -110,15 +110,19 @@ fn part(piece: &Piece, signs: &[Sign], keep: Sign, away: Sign, cut: Plane) -> Pi
 /// [`NumError::Degenerate`] for a piece whose adjacent bounds do not meet, and what
 /// [`Plane::side_of_tpi`] gives, which planes within budget cannot reach.
 pub fn clip(piece: &Piece, plane: &Plane) -> Result<Clipped, NumError> {
-    let signs = corners(piece, plane)?;
+    split(piece, &corners(piece, plane)?, plane)
+}
+
+/// `piece` against `plane`, whose signs at its corners are `signs`.
+fn split(piece: &Piece, signs: &[Sign], plane: &Plane) -> Result<Clipped, NumError> {
     let front = signs.contains(&Sign::Positive);
     let back = signs.contains(&Sign::Negative);
     Ok(match (front, back) {
         (true, true) => Clipped::Split(
-            part(piece, &signs, Sign::Positive, Sign::Negative, *plane),
+            part(piece, signs, Sign::Positive, Sign::Negative, *plane),
             part(
                 piece,
-                &signs,
+                signs,
                 Sign::Negative,
                 Sign::Positive,
                 opposite(plane)?,
@@ -214,6 +218,35 @@ fn meetings(piece: &Piece) -> Vec<Option<Meeting>> {
         .collect()
 }
 
+/// The sign of `plane` at the corner of `piece` where `bound` and `next` meet, read from `point`
+/// where it has one: what [`corners`] gives there.
+fn corner_sign(
+    piece: &Piece,
+    (bound, next): (&Plane, &Plane),
+    point: Option<&Meeting>,
+    plane: &Plane,
+) -> Result<Sign, NumError> {
+    let read = point
+        .filter(|p| p.weight() != Sign::Zero)
+        .and_then(|p| Some(p.reading(plane)?.mul(p.weight())));
+    match read {
+        Some(sign) => Ok(sign),
+        None => plane.side_of_tpi(&Tpi::meeting(piece.face, *bound, *next)?),
+    }
+}
+
+/// [`corners`], read from the points `at` of `piece`'s corners where they have them.
+fn corners_at(piece: &Piece, at: &[Option<Meeting>], plane: &Plane) -> Result<Vec<Sign>, NumError> {
+    let after = piece.bounds.iter().cycle().skip(1);
+    piece
+        .bounds
+        .iter()
+        .zip(after)
+        .zip(at)
+        .map(|((bound, next), point)| corner_sign(piece, (bound, next), point.as_ref(), plane))
+        .collect()
+}
+
 /// Which signs `plane` takes at the corners of `piece`, whose points are `at`, as whether it is
 /// positive, negative and zero at any: [`corners`]'s signs, each read from its point where that
 /// fits, else by the predicate as [`corners`] does.
@@ -221,13 +254,7 @@ fn signs_seen(piece: &Piece, at: &[Option<Meeting>], plane: &Plane) -> Result<[b
     let mut seen = [false; 3];
     let after = piece.bounds.iter().cycle().skip(1);
     for ((bound, next), point) in piece.bounds.iter().zip(after).zip(at) {
-        let read = point
-            .filter(|p| p.weight() != Sign::Zero)
-            .and_then(|p| Some(p.reading(plane)?.mul(p.weight())));
-        let sign = match read {
-            Some(sign) => sign,
-            None => plane.side_of_tpi(&Tpi::meeting(piece.face, *bound, *next)?)?,
-        };
+        let sign = corner_sign(piece, (bound, next), point.as_ref(), plane)?;
         let at = match sign {
             Sign::Positive => 0,
             Sign::Negative => 1,
@@ -293,7 +320,8 @@ pub fn local_cuts(
     let mut out: Vec<Vec<Piece>> = Vec::with_capacity(polygons.len());
     for (((at, polygon), own), own_points) in polygons.iter().enumerate().zip(&planes).zip(&points)
     {
-        let mut pieces = alloc::vec![polygon.clone()];
+        // Each piece with its corners' points, made once for every plane it is read against.
+        let mut pieces = alloc::vec![(polygon.clone(), own_points.clone())];
         let others = polygons.iter().enumerate().zip(&planes).zip(&points);
         for (((other_at, other), plane), other_points) in others {
             if other_at == at {
@@ -306,23 +334,29 @@ pub fn local_cuts(
                 continue;
             }
             let mut next = Vec::with_capacity(pieces.len());
-            for piece in pieces {
+            for (piece, at) in pieces {
                 meter.charge(1)?;
                 if coplanar {
-                    next.extend(carve(&piece, other)?);
+                    for part in carve(&piece, other)? {
+                        let points = meetings(&part);
+                        next.push((part, points));
+                    }
                     continue;
                 }
-                match clip(&piece, &other.face)? {
+                let signs = corners_at(&piece, &at, &other.face)?;
+                match split(&piece, &signs, &other.face)? {
                     Clipped::Split(front, back) if reaches(&piece, other)? => {
-                        next.push(front);
-                        next.push(back);
+                        for part in [front, back] {
+                            let points = meetings(&part);
+                            next.push((part, points));
+                        }
                     }
-                    _ => next.push(piece),
+                    _ => next.push((piece, at)),
                 }
             }
             pieces = next;
         }
-        out.push(pieces);
+        out.push(pieces.into_iter().map(|(piece, _)| piece).collect());
     }
     Ok(out)
 }
