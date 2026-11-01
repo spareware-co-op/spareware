@@ -7,8 +7,9 @@
 //! [`classify`]. A box whose every test is settled by its reference vector alone, whatever the
 //! polygons in it do, is dropped (step 4). [`arrange_with`] is also told which entries are solids:
 //! no two of their faces cross, and their winding is 1 just behind every face and 0 just in front,
-//! EMBER's no-self-intersection and no-nested-parts flags (its section 4.5.1, 11.3 step 4). A leaf
-//! whose polygons all bound one solid entry is solved without cuts or tracing.
+//! EMBER's no-self-intersection and no-nested-parts flags (its section 4.5.1, 11.3 step 4). A box
+//! whose polygons all bound one solid entry is a leaf at once, however many it holds, and is
+//! solved without cuts or tracing.
 //!
 //! Boxes split on odd half steps. Every polygon that comes from grid data lies on a whole step or
 //! is tilted, so no polygon lies in a split plane, and every polygon ending on a piece reaches it
@@ -29,8 +30,10 @@
 //! - **A solid's leaf is what tracing would give.** In a leaf whose polygons all bound one solid
 //!   entry, no polygon crosses another, so each is one piece; the solid's count is 0 in front of
 //!   each and 1 behind, and every other entry's is the reference's, as nothing of theirs is in
-//!   the box. Each piece is the first of its plane, as no face of a solid overlaps another (tested
-//!   against the traced leaves). The caller vouches for the flag: a wrong one gives wrong pieces.
+//!   the box. Each piece is the first of its plane, as no face of a solid overlaps another. Such a
+//!   box is not split, so its pieces are fewer than tracing's leaves give, with the same vectors
+//!   at every point (tested against the traced arrangement and the blocks' own counts). The caller
+//!   vouches for the flag: a wrong one gives wrong pieces.
 //!
 //! Method: chapter 11.3's five steps (`projects/engines/geometry/architecture/11-booleans.md`),
 //! after EMBER's sections 4.1, 4.2 and 4.5 (Trettner, Nehring-Wirxel and Kobbelt 2022,
@@ -178,10 +181,17 @@ fn settled(node: &Node, tests: &[WindingTest]) -> bool {
         .all(|test| test.decided(&node.reference, &open).is_some())
 }
 
-/// What this level does to `node`.
+/// The solid entry every polygon of `node` bounds, if there is one.
+fn one_solid(node: &Node, solids: &[Entry]) -> Option<Entry> {
+    let only = node.polygons.first().and_then(|p| p.entry)?;
+    (solids.contains(&only) && node.polygons.iter().all(|p| p.entry == Some(only))).then_some(only)
+}
+
+/// What this level does to `node`. A box whose polygons all bound one solid is a leaf at once:
+/// solving it costs one copy of each polygon, so splitting it only makes more pieces to merge.
 fn divide(
     node: &Node,
-    leaf: usize,
+    (leaf, solids): (usize, &[Entry]),
     tests: &[WindingTest],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Outcome, TraceError> {
@@ -189,7 +199,7 @@ fn divide(
         return Ok(Outcome::Dropped);
     }
     let count = node.polygons.len();
-    if count <= leaf {
+    if count <= leaf || one_solid(node, solids).is_some() {
         return Ok(Outcome::Leaf);
     }
     // Faces that span every split are not separated by more of them.
@@ -281,10 +291,7 @@ fn solve(
     solids: &[Entry],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, TraceError> {
-    let only = node.polygons.first().and_then(|p| p.entry);
-    if let Some(entry) = only.filter(|e| solids.contains(e))
-        && node.polygons.iter().all(|p| p.entry == only)
-    {
+    if let Some(entry) = one_solid(node, solids) {
         return solid_leaf(node, entry, meter);
     }
     let pieces: Vec<Piece> = node.polygons.iter().map(|p| p.piece.clone()).collect();
@@ -346,8 +353,9 @@ pub fn arrange(
 }
 
 /// [`arrange`], told that the entries `solids` are solids: no two of their faces cross, and their
-/// winding is 1 just behind every face and 0 just in front. A leaf whose polygons all bound one of
-/// them is solved without cuts or tracing, with the same pieces.
+/// winding is 1 just behind every face and 0 just in front. A box whose polygons all bound one of
+/// them is a leaf, solved without cuts or tracing: fewer pieces, with the same vectors at every
+/// point.
 ///
 /// # Errors
 ///
@@ -371,7 +379,7 @@ pub fn arrange_with(
     let mut leaves = Vec::new();
     while !level.is_empty() {
         let outcomes = exec.try_map(meter, SPLITS, ONE_BOX, &level, |_, node, m| {
-            divide(node, leaf, tests, m)
+            divide(node, (leaf, solids), tests, m)
         })?;
         let mut next = Vec::new();
         for (node, outcome) in level.into_iter().zip(outcomes) {

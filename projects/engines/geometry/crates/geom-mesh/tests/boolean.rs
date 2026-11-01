@@ -268,6 +268,61 @@ fn solids_give_what_their_arrays_give() {
     assert!(!wedge(0, [20, 31, 27, 29], 1).is_solid());
 }
 
+/// Two rough fields of 120 faces each, the second moved along x by `x`: more faces than a leaf
+/// holds, so their boxes split.
+fn fields(x: i64) -> [ExactMesh; 2] {
+    let seed = resolve("geom-mesh boolean fields", Seed(0x1481)).unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let up = NonZeroU64::new(40).unwrap();
+    [(0, 1), (x, 2)].map(|(moved, name)| {
+        let heights: Vec<Vec<i64>> = (0..6)
+            .map(|_| (0..6).map(|_| 20 + rng.below(up) as i64).collect())
+            .collect();
+        let (mut input, _) = shapes::prism(&heights, 16);
+        for corner in &mut input.vertices {
+            if let Corner::Grid(p) = corner {
+                *corner = g(p.x.get() + moved, p.y.get(), p.z.get());
+            }
+        }
+        input.runs = vec![source(name)];
+        build(&input, &Exec::serial(), &mut meter()).unwrap()
+    })
+}
+
+#[test]
+fn solids_of_many_faces_give_what_their_arrays_give() {
+    // Overlapping in a strip a fifth of their width, as the benchmark's pair: most boxes hold one
+    // solid's faces only, and stop there.
+    let [a, b] = fields(64);
+    let (sa, sb) = (
+        one(&[&a], WindingTest::unite()).mesh,
+        one(&[&b], WindingTest::unite()).mesh,
+    );
+    assert!(sa.is_solid() && sb.is_solid());
+    let plain = |m: &ExactMesh| ExactMesh::new(m.parts().clone(), &Exec::serial(), &mut meter());
+    let (pa, pb) = (plain(&sa).unwrap(), plain(&sb).unwrap());
+    let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
+    for test in [
+        WindingTest::unite(),
+        WindingTest::intersect(2),
+        WindingTest::subtract(0),
+    ] {
+        for exec in [Exec::serial(), Exec::with_pool(&pool)] {
+            let run = |operands: &[&ExactMesh]| {
+                boolean(
+                    operands,
+                    std::slice::from_ref(&test),
+                    &step(),
+                    &exec,
+                    &mut meter(),
+                )
+                .unwrap()
+            };
+            assert_eq!(run(&[&sa, &sb]), run(&[&pa, &pb]));
+        }
+    }
+}
+
 #[test]
 fn two_faces_of_one_sheet_meet_at_a_point_on_an_edge() {
     // The corner of the second lies on an edge of the first, at (8, 16, 28), and the first's top

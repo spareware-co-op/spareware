@@ -579,7 +579,9 @@ fn any_block() -> impl Strategy<Value = Block> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(96))]
 
-    /// Every block is a solid, so its leaves may skip cuts and tracing: the pieces are the same.
+    /// Every block is a solid, so a box of one block's faces is a leaf, solved without cuts or
+    /// tracing: no more pieces than tracing gives, each with the blocks' own vectors, and the same
+    /// volumes.
     #[test]
     fn a_solid_s_leaves_are_what_tracing_gives(
         blocks in prop::collection::vec(any_block(), 1..5),
@@ -597,7 +599,35 @@ proptest! {
             &mut meter(),
         )
         .unwrap();
-        prop_assert_eq!(quick, run(&blocks, leaf, &[]));
+        let traced = run(&blocks, leaf, &[]);
+        prop_assert!(quick.len() <= traced.len());
+        agrees(&blocks, &quick);
+        for test in [
+            WindingTest::unite(),
+            WindingTest::intersect(blocks.len() as u32),
+            WindingTest::subtract(0),
+        ] {
+            prop_assert_eq!(volume(&test, &quick), volume(&test, &traced));
+        }
+    }
+
+    /// One block alone, a solid, is one leaf whatever the leaf size: its six faces whole.
+    #[test]
+    fn a_lone_solid_is_one_leaf(block in any_block(), leaf in 1usize..6) {
+        let list = polygons(&[block]);
+        let cell = around(&list).unwrap();
+        let quick = arrange_with(
+            &Exec::serial(),
+            (cell, Winding::new()),
+            &list,
+            (leaf, &[]),
+            &[0],
+            &mut meter(),
+        )
+        .unwrap();
+        let pieces: Vec<&Piece> = quick.iter().map(|c| &c.piece).collect();
+        let whole: Vec<&Piece> = list.iter().map(|p| &p.piece).collect();
+        prop_assert_eq!(pieces, whole);
     }
 
     #[test]
