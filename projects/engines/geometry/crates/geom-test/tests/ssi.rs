@@ -296,9 +296,9 @@ fn each_kind_reaches_as_far_as_it_says() {
         xaxis: x,
         yaxis: y,
         half_angle_deg: 45.0,
-        height: [0.0, 2.0],
+        height: [0.0, 3.0],
     };
-    assert!((reach_of(cone) - 5.0).abs() < 1e-12);
+    assert!((reach_of(cone) - 7.0).abs() < 1e-12);
     let torus = Surface::Torus {
         center: [2.0, 0.0, 0.0],
         xaxis: x,
@@ -439,6 +439,12 @@ fn a_stated_feature_holds_four_movements() {
     let mut case = tilted_by(0.1);
     case.feature_size = Some(0.000_2);
     let want = first_scale(16, 0.1, |moved, scale| moved * 4.0 <= 0.000_2 * scale);
+    assert_eq!(place(&case, None).expect("placed").log2, want);
+    // Times four, not plus four: a feature this small takes a movement under one step at the
+    // tolerance's own scale.
+    case.feature_size = Some(0.000_05);
+    let want = first_scale(16, 0.1, |moved, scale| moved * 4.0 <= 0.000_05 * scale);
+    assert_eq!(want, 16);
     assert_eq!(place(&case, None).expect("placed").log2, want);
 }
 
@@ -1017,6 +1023,28 @@ fn a_gap_one_step_past_its_flag_is_still_inside_it() {
         !broke.contains(&"uncovered".to_owned()) || broke.len() > 1,
         "{broke:?}"
     );
+}
+
+#[test]
+fn a_feature_one_step_outside_its_region_counts_and_two_do_not() {
+    let mut case = Case::parse(SMALL).expect("it fits");
+    case.class = "7 near-degenerate".into();
+    case.expected = Expected::default();
+    case.expected.isolated_points = vec![[0.0; 3]];
+    let placed = place(&case, ACCURACY).expect("placed");
+    assert_eq!(placed.moved(), 0.0);
+    let from = |lo: i64| {
+        let mut out = Output::empty(&placed);
+        out.flagged.push(Flag {
+            why: Why::TangentBand,
+            lo: [lo, -1, -1],
+            hi: [lo + 2, 1, 1],
+        });
+        broken(&case, &placed, Mode::Default, &out, &open())
+    };
+    let uncovered = "uncovered".to_owned();
+    assert!(!from(1).contains(&uncovered), "{:?}", from(1));
+    assert!(from(2).contains(&uncovered), "{:?}", from(2));
 }
 
 #[test]
