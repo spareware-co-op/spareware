@@ -472,7 +472,7 @@ impl Line {
 
     /// How the line sorts, a double's bits being one exact key for one exact value.
     fn key(self) -> (usize, u64) {
-        (self.axis, (self.at + 0.0).to_bits())
+        (self.axis, self.at.to_bits())
     }
 }
 
@@ -494,7 +494,10 @@ fn narrow(
     (floor, speed): (f64, f64),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Interval, IntersectError> {
-    while (b - a) * speed > floor {
+    loop {
+        if (b - a) * speed <= floor {
+            break;
+        }
         let Some(m) = halfway((a, b)) else {
             break;
         };
@@ -623,7 +626,8 @@ fn crossings(
     }
     let low = |c: &Crossing| c.at.get(axis).map_or(0.0, |i| i.lo());
     out.sort_by(|x, y| low(x).total_cmp(&low(y)));
-    // Arcs lie over disjoint spans, so each pair must end before the next begins.
+    // Arcs lie over disjoint spans, so each pair must end before the next begins. A side's roots
+    // are simple and the corners signed, so arcs come in pairs: an odd count stops the stitching.
     let apart = out.chunks(2).zip(out.chunks(2).skip(1)).all(|(x, y)| {
         let high = x
             .last()
@@ -631,7 +635,7 @@ fn crossings(
             .map_or(0.0, |i| i.hi());
         y.first().is_some_and(|c| high < low(c))
     });
-    Ok((out.len() % 2 == 0 && apart).then_some(out))
+    Ok(apart.then_some(out))
 }
 
 /// A settled box.
@@ -696,28 +700,29 @@ fn decide(
     // The curve is a graph over the parameter whose partial may vanish; of two, take the flatter.
     let steep = |over: Interval, by: Interval| over.neg().div(by).map_or(f64::INFINITY, width);
     let (over_u, over_v) = (steep(s.du, s.dv), steep(s.dv, s.du));
-    let graph_over_u = signed(s.dv) && !(signed(s.du) && over_v < over_u);
+    let graph_over_u = over_u <= over_v;
     let (axis, sag) = if graph_over_u {
         (0, over_u * (b - a) / 4.0 * sv)
     } else {
         (1, over_v * (d - c) / 4.0 * su)
     };
-    if sag > ceiling && !small {
-        return Ok((Verdict::Split, whole));
-    }
-    let verdict = match crossings(reader, region, axis, floor, meter)? {
-        None => fall(singular),
-        Some(found) if found.is_empty() => Verdict::Empty,
-        Some(crossings) => Verdict::Settled(Leaf { crossings, sag }),
+    let verdict = if sag <= ceiling || small {
+        match crossings(reader, region, axis, floor, meter)? {
+            None => fall(singular),
+            Some(crossings) => Verdict::Settled(Leaf { crossings, sag }),
+        }
+    } else {
+        Verdict::Split
     };
     Ok((verdict, whole))
 }
 
 /// The cells of `domain` between the surface's breaks, in order.
 fn cells(domain: Region, (us, vs): (&[f64], &[f64])) -> Result<Vec<Region>, IntersectError> {
+    // `ParamSurface::breaks` lists only what is strictly inside the domain.
     let cuts = |(a, b): (f64, f64), inner: &[f64]| {
         let mut out = alloc::vec![a];
-        out.extend(inner.iter().copied().filter(|x| a < *x && *x < b));
+        out.extend(inner.iter().copied());
         out.push(b);
         out
     };
@@ -995,11 +1000,18 @@ pub fn trace(
                         };
                         place((c, d), clear)?.map(|m| (((a, b), (m, d)), ((a, b), (c, m))))
                     };
-                    let Some((later, sooner)) = cuts else {
-                        return Err(IntersectError::Internal);
-                    };
-                    work.push(later);
-                    work.push(sooner);
+                    if let Some((later, sooner)) = cuts {
+                        work.push(later);
+                        work.push(sooner);
+                    } else {
+                        // No double between its sides, so nothing here can be told apart.
+                        flagged.push(FlaggedBox {
+                            at: [span(region.0)?, span(region.1)?],
+                            why: Unresolved::UndecidedAtFloor {
+                                test: Test::Uniqueness,
+                            },
+                        });
+                    }
                 }
             }
         }

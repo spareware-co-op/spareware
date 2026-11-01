@@ -580,7 +580,9 @@ fn a_floor_below_the_doubles_still_ends() {
 
 /// The least budget a call finishes under.
 fn least_work(call: &dyn Fn(&mut WorkMeter<'_>) -> bool) -> u64 {
-    let (mut too_little, mut enough) = (0u64, 1u64 << 22);
+    let (mut too_little, mut enough) = (0u64, 1u64 << 17);
+    // A search that cannot finish here has lost its way, and bisecting would only take longer.
+    assert!(call(&mut WorkMeter::new(Budget::of_work(enough))));
     while too_little + 1 < enough {
         let middle = too_little.midpoint(enough);
         if call(&mut WorkMeter::new(Budget::of_work(middle))) {
