@@ -319,17 +319,21 @@ fn narrow_order(a: i128, b: i128, c: i128, d: i128) -> Option<Ordering> {
 
 /// X and w in machine words, if all four fit.
 fn narrowed(x: &[I320; 3], w: &I256) -> Option<([i128; 3], i128)> {
-    let [a, b, c] = x;
-    Some(([a.to_i128()?, b.to_i128()?, c.to_i128()?], w.to_i128()?))
+    let mut words = [0; 3];
+    for (word, coordinate) in words.iter_mut().zip(x) {
+        *word = coordinate.to_i128()?;
+    }
+    Some((words, w.to_i128()?))
 }
 
 /// Points lexicographically: in machine words where both fit, else at most 2^294 · 2^252 in 576
 /// bits. The first coordinate that differs decides, and the rest are not compared.
 fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
     for i in 0..3 {
-        let order = match (&a.narrow, &b.narrow) {
-            (Some((x, w)), Some((y, v))) => narrow_order(*x.get(i)?, *w, *y.get(i)?, *v)?,
-            _ => ratio_order::<5, 4, 9>(a.x.get(i)?, &a.w, b.x.get(i)?, &b.w)?,
+        let order = if let (Some((own, under)), Some((other, beneath))) = (&a.narrow, &b.narrow) {
+            narrow_order(*own.get(i)?, *under, *other.get(i)?, *beneath)?
+        } else {
+            ratio_order::<5, 4, 9>(a.x.get(i)?, &a.w, b.x.get(i)?, &b.w)?
         };
         if order != Ordering::Equal {
             return Some(order);
@@ -415,15 +419,11 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
 
 /// A line's coordinates in machine words, if all six fit.
 fn narrow_line(coordinates: &[I256; 6]) -> Option<[i128; 6]> {
-    let [a, b, c, d, e, f] = coordinates;
-    Some([
-        a.to_i128()?,
-        b.to_i128()?,
-        c.to_i128()?,
-        d.to_i128()?,
-        e.to_i128()?,
-        f.to_i128()?,
-    ])
+    let mut words = [0; 6];
+    for (word, coordinate) in words.iter_mut().zip(coordinates) {
+        *word = coordinate.to_i128()?;
+    }
+    Some(words)
 }
 
 /// The order of two lines, equal when they are one line: by which component of the direction comes
@@ -436,14 +436,11 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     }
     let over = a.first;
     for i in 0..6 {
-        let order = match (&a.narrow, &b.narrow) {
-            (Some(p), Some(q)) => {
-                narrow_order(*p.get(i)?, *p.get(over)?, *q.get(i)?, *q.get(over)?)?
-            }
-            _ => {
-                let (p, q) = (&a.coordinates, &b.coordinates);
-                ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?
-            }
+        let order = if let (Some(p), Some(q)) = (&a.narrow, &b.narrow) {
+            narrow_order(*p.get(i)?, *p.get(over)?, *q.get(i)?, *q.get(over)?)?
+        } else {
+            let (p, q) = (&a.coordinates, &b.coordinates);
+            ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?
         };
         if order != Ordering::Equal {
             return Some(order);

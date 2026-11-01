@@ -1422,6 +1422,28 @@
       "layer": "6",
       "modules": [
         {
+          "cost": "one arrangement per host, linear in its faces plus local work around each tool.",
+          "does": "[`cut`] subtracts each [`Cut`]'s tools from its host in one arrangement, with the tools summed into one entry, so a winding vector stays two entries long however many tools there are, and tools that overlap or share a jamb need no union first. Each host gives one [`CutResult`], in input order, which accounts for every tool.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
+          "guarantees": [
+            "**Every tool is accounted for.** Each is reported, and one that touched nothing inside the host is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently.",
+            "**Atomic by default.** A tool that cannot enter fails the call and names itself. Under [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools are left out depends only on the inputs.",
+            "**Hosts run in parallel, and the threads do not show.** Results come in input order, and one host alone has the threads for its boxes."
+          ],
+          "job": "Batch cutting: any number of tools through any number of hosts (11.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.6 (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::batch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the body's fins, and in the pieces. Charges the meter one unit per edge, face and piece.",
           "does": "[`certify`] holds a rebuilt body to chapter 11.10's closure checks, cheap enough to run on every result: every edge's fins pair up, in radial order alternating which way they run, so each wedge around an edge is one cell; no edge has zero length; and every face has an area. [`labelled`] holds the pieces of a winding selection to the last: each separates two cells the test tells apart, the result's material behind it. Planes within budget need no check: a plane outside its budget cannot be made. A sheet's edge may have one fin, and a wire has no fins at all, so only bodies that bound something pair up.",
           "family": [],
@@ -9369,7 +9391,7 @@
           "target": "lib"
         },
         {
-          "cost": "[`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs of polygons at worst, in a box the subdivision keeps small. Charges the meter one unit per pair of pieces compared.",
+          "cost": "[`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs of polygons at worst, in a box the subdivision keeps small; a pair whose planes cannot cut is told from the two polygons whole, O(k + m), and its pieces are not compared. Charges the meter one unit per pair of pieces, compared or not.",
           "does": "[`clip`] splits a convex [`Piece`] by a plane. [`crosses`] says whether two pieces on different planes truly pass through each other: each has points on both sides of the other's plane, and their stretches of the line the planes share overlap by a length. [`local_cuts`] takes the polygons of one box and cuts each by every polygon that crosses it or ends on it, keeping each as a list of convex pieces of the polygon, the leaves of the small tree of EMBER's section 4.3.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/cut.rs",
@@ -9494,7 +9516,7 @@
           "target": "lib"
         },
         {
-          "cost": "at most five segments per piece, each testing each polygon: one or two sign evaluations, and one per bound of a polygon the segment's line crosses. Charges the meter one unit per polygon a segment tests.",
+          "cost": "at most five segments per piece, each testing each polygon: one or two sign evaluations, and one per bound of a polygon the segment's line crosses. The last three run along the box's edges and are the same for every piece of a polygon that leaves the box by the same faces, so they are walked once for each. Charges the meter one unit per polygon a segment tests, walked or not.",
           "does": "[`classify`] takes the polygons of one box, the box and the winding vector at its reference point, and gives every piece of those polygons its two vectors. The vector just off a piece comes from a path to the reference point, adding up the signed crossings of the polygons on the way. No piece is crossed by another (11.3, step 2), so one path answers for a whole piece.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
