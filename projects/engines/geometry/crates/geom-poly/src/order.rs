@@ -351,6 +351,14 @@ fn signs(v: &[I256; 3]) -> [Sign; 3] {
     [x.signum(), y.signum(), z.signum()]
 }
 
+/// The signs of `n_a` × `n_b`'s components: [`cross`]'s, in `i128` where every step fits.
+fn cross_signs(a: &Plane, b: &Plane) -> Result<[Sign; 3], NumError> {
+    match cross_in_words(a.n(), b.n()) {
+        Some(v) => Ok(v.map(Sign::of_i128)),
+        None => Ok(signs(&cross(a, b)?)),
+    }
+}
+
 /// The line where two planes meet, running along `n_p` × `n_q`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Line {
@@ -367,7 +375,7 @@ impl Line {
     ///
     /// [`NumError::Degenerate`] for parallel planes, which meet in no line or in a whole plane.
     pub fn new(p: Plane, q: Plane) -> Result<Line, NumError> {
-        let direction = signs(&cross(&p, &q)?);
+        let direction = cross_signs(&p, &q)?;
         if direction == [Sign::Zero; 3] {
             return Err(NumError::Degenerate);
         }
@@ -402,8 +410,16 @@ pub fn along(line: &Line, c: &Plane, d: &Plane) -> Result<Ordering, NumError> {
     if crossing == Sign::Zero {
         return Err(NumError::Degenerate);
     }
-    let other = line.point(d)?;
-    Ok(match times(c.side_of_tpi(&other)?, crossing) {
+    // `c`'s side of the point where `d` crosses, read from the point in machine words where
+    // it has them, as [`Plane::side_of_tpi`] reads it.
+    let quick = Meeting::new(&p, &q, d)
+        .filter(|point| point.weight() != Sign::Zero)
+        .and_then(|point| Some(point.reading(c)?.mul(point.weight())));
+    let side = match quick {
+        Some(sign) => sign,
+        None => c.side_of_tpi(&line.point(d)?)?,
+    };
+    Ok(match times(side, crossing) {
         Sign::Positive => Ordering::Less,
         Sign::Negative => Ordering::Greater,
         Sign::Zero => Ordering::Equal,
@@ -446,11 +462,10 @@ pub fn turn(face: &Plane, a: &Ray, b: &Ray) -> Result<Sign, NumError> {
 
 /// Whether two rays of `face` on one line run the same way.
 fn same_way(face: &Plane, a: &Ray, b: &Ray) -> Result<bool, NumError> {
-    let (x, y) = (cross(face, &a.with)?, cross(face, &b.with)?);
+    let (x, y) = (cross_signs(face, &a.with)?, cross_signs(face, &b.with)?);
     let reversed = a.reversed != b.reversed;
-    Ok(signs(&x)
-        .iter()
-        .zip(signs(&y))
+    Ok(x.iter()
+        .zip(y)
         .find(|(s, _)| **s != Sign::Zero)
         .is_some_and(|(s, t)| turned(times(*s, t), reversed) == Sign::Positive))
 }
@@ -557,7 +572,7 @@ mod tests {
     use num_bigint::BigInt;
     use proptest::prelude::*;
 
-    use super::{Meeting, Span};
+    use super::{Line, Meeting, Span, along};
 
     /// Planes with small coefficients, so that ties and parallel normals come often, or with
     /// normals below 2^24 and offsets below 2^44, where every step stays below 2^122.
@@ -641,6 +656,45 @@ mod tests {
         #[test]
         fn floors_are_exact_floors_with_ties(rows in planes(2, 7)) {
             floors_as_divided(&rows);
+        }
+    }
+
+    /// [`along`] and [`Line::new`] as the three-plane point and the wide cross product give them.
+    fn along_as_points(rows: &[Plane]) {
+        let [p, q, c, d] = [rows[0], rows[1], rows[2], rows[3]];
+        let Ok(line) = Line::new(p, q) else {
+            assert_eq!(
+                super::signs(&super::cross(&p, &q).unwrap()),
+                [Sign::Zero; 3]
+            );
+            return;
+        };
+        assert_eq!(line.direction, super::signs(&super::cross(&p, &q).unwrap()));
+        let want = (|| {
+            let crossing = normals_sign(&p, &q, &c)?;
+            if crossing == Sign::Zero {
+                return Err(geom_num::NumError::Degenerate);
+            }
+            let side = c.side_of_tpi(&Tpi::meeting(p, q, d)?)?;
+            Ok(super::times(side, crossing))
+        })();
+        let got = along(&line, &c, &d).map(|order| match order {
+            core::cmp::Ordering::Less => Sign::Positive,
+            core::cmp::Ordering::Greater => Sign::Negative,
+            core::cmp::Ordering::Equal => Sign::Zero,
+        });
+        assert_eq!(got, want);
+    }
+
+    proptest! {
+        #[test]
+        fn along_is_the_point_s_side_with_ties(rows in planes(2, 3)) {
+            along_as_points(&rows);
+        }
+
+        #[test]
+        fn along_is_the_point_s_side_for_a_building(rows in planes(1 << 24, 1 << 44)) {
+            along_as_points(&rows);
         }
     }
 
