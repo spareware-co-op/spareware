@@ -241,7 +241,7 @@ pub fn compare(class: Class) -> Vec<(Quartic, RealRoot, Quartic, RealRoot)> {
         let other = if class == Class::Degenerate {
             Some((a, r))
         } else {
-            pairs.get(i + 1).and_then(first_root)
+            pairs.get((i + 1) % pairs.len()).and_then(first_root)
         };
         if let Some((b, s)) = other {
             out.push((a, r, b, s));

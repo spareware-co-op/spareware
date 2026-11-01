@@ -2640,7 +2640,7 @@ fn the_conic_classes_are_what_they_say() {
     for class in [Typical, Degenerate, Extreme] {
         assert_eq!(c::of_ellipse(class).len(), BATCH, "{class}");
         assert_eq!(c::against_ellipse(class).len(), BATCH, "{class}");
-        assert!(c::compare(class).len() >= BATCH - 1, "{class}");
+        assert_eq!(c::compare(class).len(), BATCH, "{class}");
     }
     assert!(
         c::side(Degenerate)
