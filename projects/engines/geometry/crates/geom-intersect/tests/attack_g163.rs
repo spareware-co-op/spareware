@@ -912,3 +912,19 @@ fn parallel_lines_of_space_one_coordinate_apart_do_not_meet() {
         is_empty(&meet(&a, &b));
     }
 }
+
+#[test]
+fn a_line_and_a_conic_in_closed_form_take_only_its_work() {
+    // The closed form answers these from the quadratic's discriminant; a refused discriminant
+    // would leave them to the engine, which takes far more. The counts are a deterministic
+    // function of the input.
+    let work = |a: &CurveKind<2>, b: &CurveKind<2>| {
+        let mut m = meter();
+        curves(a, b, &mut m).unwrap();
+        m.used().work
+    };
+    let e = ellipse([1.0, 1.0], 4.0, 2.0);
+    let miss = work(&infinite([6.0, 0.0], [0.0, 1.0]), &e);
+    let twice = work(&infinite([1.0, -9.0], [0.0, 1.0]), &e);
+    assert_eq!((miss, twice), (0, 6));
+}

@@ -1156,16 +1156,10 @@ fn quadratic(
     [a, b, c]: [Interval; 3],
     exact: Option<Meeting>,
 ) -> Result<Option<Vec<Interval>>, IntersectError> {
-    let flat = a.lo() == 0.0 && a.hi() == 0.0;
-    if a.contains(0.0) && !flat {
+    // A leading coefficient that may be zero, a line along a parabola's axis or a hyperbola's
+    // asymptote, is the engine's: its enclosure is never exactly zero, being rounded outward.
+    if a.contains(0.0) {
         return Ok(None);
-    }
-    if flat {
-        if b.contains(0.0) {
-            return Ok(None);
-        }
-        let root = c.neg().div(b.mul(Interval::point(2.0)?)?)?;
-        return Ok(Some(alloc::vec![root]));
     }
     let d = b.square()?.sub(a.mul(c)?)?;
     let meeting = match exact {
