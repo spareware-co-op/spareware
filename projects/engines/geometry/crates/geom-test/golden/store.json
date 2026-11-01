@@ -272,9 +272,15 @@
               "kind": "corpus",
               "piece": "G167",
               "why": "3 new count benchmarks on the reductions of 12.7 (decision 32.44): a plane square to a torus's axis through its tube, a cylinder about its axis through its tube, and a sloping plane across a wall; no existing digest moved"
+            },
+            {
+              "sha256": "816f930599c6a69a8f9c19371427c8eb7819069c26d4b8eeab4877b38c76f2cd",
+              "kind": "bug",
+              "piece": "G164",
+              "why": "intersect/surface_torus's result digest moved from 76a47ad1... to 764d5d58..., inputs unchanged (3c7d9153...): a line along a torus's equator crosses it four times, and the three crossings on a seam of the closed torus were BoundaryTouch; a join is no boundary (12.6), so they are Crossing now, at the same 256 points of the 64 inputs; merged from signed/G164, no other digest moved"
             }
           ],
-          "sha256": "816f930599c6a69a8f9c19371427c8eb7819069c26d4b8eeab4877b38c76f2cd"
+          "sha256": "2ad686191846a39422c831a2b5d8618f97e3bc167d570234c85346cc0cd27f11"
         },
         {
           "id": "geom-nurbs/operations",
