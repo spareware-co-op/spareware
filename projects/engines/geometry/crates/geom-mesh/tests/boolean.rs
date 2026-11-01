@@ -229,6 +229,45 @@ fn holds_up(a: &ExactMesh, b: &ExactMesh) {
     );
 }
 
+/// A boolean's result is a solid, and booleans of solids give what the same arrays give, not known
+/// to be solids: a solid's boxes away from the others are solved without cuts or tracing (11.3
+/// step 4), whatever the test and the threads.
+#[test]
+fn solids_give_what_their_arrays_give() {
+    let a = one(&[&wedge(0, [20, 31, 27, 29], 1)], WindingTest::unite()).mesh;
+    let b = one(&[&wedge(8, [25, 25, 28, 26], 2)], WindingTest::unite()).mesh;
+    let c = one(&[&solid([30, 2, 2], [40, 9, 9], 3)], WindingTest::unite()).mesh;
+    assert!(a.is_solid() && b.is_solid() && c.is_solid());
+    let plain = |m: &ExactMesh| {
+        let made = ExactMesh::new(m.parts().clone(), &Exec::serial(), &mut meter()).unwrap();
+        assert!(!made.is_solid());
+        assert_eq!(&made, m);
+        made
+    };
+    let (pa, pb, pc) = (plain(&a), plain(&b), plain(&c));
+    let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
+    for test in [
+        WindingTest::unite(),
+        WindingTest::intersect(2),
+        WindingTest::subtract(0),
+    ] {
+        for exec in [Exec::serial(), Exec::with_pool(&pool)] {
+            let run = |operands: &[&ExactMesh]| {
+                boolean(
+                    operands,
+                    std::slice::from_ref(&test),
+                    &step(),
+                    &exec,
+                    &mut meter(),
+                )
+                .unwrap()
+            };
+            assert_eq!(run(&[&a, &b, &c]), run(&[&pa, &pb, &pc]));
+        }
+    }
+    assert!(!wedge(0, [20, 31, 27, 29], 1).is_solid());
+}
+
 #[test]
 fn two_faces_of_one_sheet_meet_at_a_point_on_an_edge() {
     // The corner of the second lies on an edge of the first, at (8, 16, 28), and the first's top

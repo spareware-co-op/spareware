@@ -9,6 +9,9 @@
 //!
 //! - **Closed inputs only.** The arrangement needs a whole winding number everywhere, so an open
 //!   mesh is [`MeshError::NotClosed`], whose remedy is healing. Self-intersections are fine.
+//! - **A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no
+//!   two of its faces cross. A solid operand's boxes away from the others are solved without
+//!   cuts or tracing (11.3 step 4), with the same pieces.
 //! - **Bounded results only.** A test the outside passes, such as "not A", has no finite boundary:
 //!   [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.
 //! - **Conforming and exact.** The merge gives maximal faces and edges that end where other edges
@@ -47,9 +50,9 @@ use geom_op::{
 use geom_poly::merge::{Merge, Merged, Outward, merge, select};
 use geom_poly::order::normals_det;
 use geom_poly::plane::canonical;
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
+use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange_with};
 use geom_poly::trace::{Classified, Polygon, TraceError};
-use geom_poly::winding::{Winding, WindingTest};
+use geom_poly::winding::{Entry, Winding, WindingTest};
 use geom_run::{Exec, RunError, Stop, WorkMeter};
 
 use crate::classify::{pieces_of, trace_error};
@@ -529,14 +532,15 @@ fn outcome(
     let (history, face_run, runs) = account(&merged, &kept, gathered, op)?;
     let polygons = polygons_of(&merged, face_run, runs)?;
     Ok(Outcome {
-        mesh: build(&polygons, exec, meter)?,
+        // A result's winding is its test's, 0 or 1, and no two of its faces cross.
+        mesh: build(&polygons, exec, meter)?.proven_solid(),
         history,
     })
 }
 
 /// Every piece of `operands` for `tests`, from one arrangement.
 fn arranged(
-    gathered: &Gathered,
+    (gathered, solids): (&Gathered, &[Entry]),
     tests: &[WindingTest],
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
@@ -545,13 +549,12 @@ fn arranged(
         return Ok(Vec::new());
     }
     let cell = around(&gathered.polygons)?;
-    arrange(
+    arrange_with(
         exec,
-        cell,
-        Winding::new(),
+        (cell, Winding::new()),
         &gathered.polygons,
-        LEAF_POLYGONS,
-        tests,
+        (LEAF_POLYGONS, tests),
+        solids,
         meter,
     )
     .map_err(run_error)
@@ -589,7 +592,13 @@ pub fn boolean(
         return Err(MeshError::UnboundedResult { test: index(test)? });
     }
     let gathered = gather(operands, meter)?;
-    let classified = arranged(&gathered, tests, exec, meter)?;
+    // A solid operand's leaves away from the others need no cuts and no tracing (11.3 step 4).
+    let solids: Vec<Entry> = (0..)
+        .zip(operands)
+        .filter(|(_, mesh)| mesh.is_solid())
+        .map(|(entry, _)| entry)
+        .collect();
+    let classified = arranged((&gathered, &solids), tests, exec, meter)?;
     let mut out = Vec::with_capacity(tests.len());
     for test in tests {
         out.push(outcome(&gathered, &classified, test, (op, exec), meter)?);

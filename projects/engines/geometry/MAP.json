@@ -5193,6 +5193,7 @@
           "file": "projects/engines/geometry/crates/geom-mesh/src/boolean.rs",
           "guarantees": [
             "**Closed inputs only.** The arrangement needs a whole winding number everywhere, so an open mesh is [`MeshError::NotClosed`], whose remedy is healing. Self-intersections are fine.",
+            "**A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no two of its faces cross. A solid operand's boxes away from the others are solved without cuts or tracing (11.3 step 4), with the same pieces.",
             "**Bounded results only.** A test the outside passes, such as \"not A\", has no finite boundary: [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.",
             "**Conforming and exact.** The merge gives maximal faces and edges that end where other edges do, so no T-junction is left. Nothing is rounded, however often a mesh is cut: a corner off the grid stays three planes. Each result passes the mesh checker on the way out.",
             "**The same mesh however it was reached.** The boxes, the threads and the order of the faces do not show. A corner off the grid takes the lowest three planes around it, not the three that happened to cut a piece.",
@@ -9493,14 +9494,15 @@
           "target": "lib"
         },
         {
-          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 123 levels: a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons. Charges the meter one unit per polygon a split clips.",
-          "does": "[`arrange`] takes the polygons of an arrangement and classifies every piece. A box is split in two along its longest axis until it holds few polygons; polygons across the split are clipped exactly, and the upper box's reference point is walked up from the lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then [`classify`]. A box whose every test is settled by its reference vector alone, whatever the polygons in it do, is dropped (step 4).",
+          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 123 levels: a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons, and a solid's leaf one copy of each. Charges the meter one unit per polygon a split clips, and one per polygon of a solid's leaf.",
+          "does": "[`arrange`] takes the polygons of an arrangement and classifies every piece. A box is split in two along its longest axis until it holds few polygons; polygons across the split are clipped exactly, and the upper box's reference point is walked up from the lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then [`classify`]. A box whose every test is settled by its reference vector alone, whatever the polygons in it do, is dropped (step 4). [`arrange_with`] is also told which entries are solids: no two of their faces cross, and their winding is 1 just behind every face and 0 just in front, EMBER's no-self-intersection and no-nested-parts flags (its section 4.5.1, 11.3 step 4). A leaf whose polygons all bound one solid entry is solved without cuts or tracing.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
           "guarantees": [
             "**The same pieces whatever the threads.** Each level of the tree is one phase of the parallel helper, and the leaves are solved as another, in tree order, so the output is the same bits on any number of threads, and a failure the one a serial walk meets first (23.4).",
             "**No recursion.** The tree is walked level by level, so its depth never threatens a WebAssembly stack (principle 13). A box holding polygons that a split no longer separates, such as many faces on one plane, stops as a leaf instead of dividing down to the grid.",
-            "**Early outs are mechanical.** A box is dropped only when every test takes the same answer for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it is kept, and with no tests nothing is dropped."
+            "**Early outs are mechanical.** A box is dropped only when every test takes the same answer for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it is kept, and with no tests nothing is dropped.",
+            "**A solid's leaf is what tracing would give.** In a leaf whose polygons all bound one solid entry, no polygon crosses another, so each is one piece; the solid's count is 0 in front of each and 1 behind, and every other entry's is the reference's, as nothing of theirs is in the box. Each piece is the first of its plane, as no face of a solid overlaps another (tested against the traced leaves). The caller vouches for the flag: a wrong one gives wrong pieces."
           ],
           "job": "Adaptive subdivision and the parallel task tree: steps 1 and 4 of 11.3, around the local work.",
           "method": {

@@ -3,7 +3,9 @@
 //! and offset four fifths of their width so that they overlap in a strip, as a pair of models
 //! placed side by side mostly do. EMBER's geometric mean over 1,000 Thingi10K pairs of 1,000 to
 //! 100,000 faces was 1.6 ms; those models are not stored here, so this prints what these pairs
-//! take. Prints one line per run; the gate is the count benchmark in `geom-bench`.
+//! take, with the operands as built and as solids (each first united alone, which proves it, as
+//! 11.3 step 4 has every checked operand be). Prints one line per run; the gate is the count
+//! benchmark in `geom-bench`.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -125,17 +127,32 @@ fn main() {
         let mut rng = SplitMix64::new(Seed(0x148));
         let a = mesh(&field(side, 0, 1, &mut rng), &Exec::with_pool(&rayon));
         let b = mesh(&field(side, offset, 2, &mut rng), &Exec::with_pool(&rayon));
-        for (name, exec) in [
+        let alone = |m: &ExactMesh| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let pool = Exec::with_pool(&rayon);
+            boolean(&[m], &[WindingTest::unite()], &step, &pool, &mut meter)
+                .unwrap()
+                .remove(0)
+                .mesh
+        };
+        let (solid_a, solid_b) = (alone(&a), alone(&b));
+        for ((name, exec), (form, a, b)) in [
             ("1 thread", Exec::serial()),
             ("8 threads", Exec::with_pool(&rayon)),
-        ] {
+        ]
+        .into_iter()
+        .flat_map(|run| {
+            [
+                (run, ("as built", &a, &b)),
+                (run, ("as solids", &solid_a, &solid_b)),
+            ]
+        }) {
             let start = Instant::now();
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
-            let done =
-                boolean(&[&a, &b], &[WindingTest::unite()], &step, &exec, &mut meter).unwrap();
+            let done = boolean(&[a, b], &[WindingTest::unite()], &step, &exec, &mut meter).unwrap();
             let time = start.elapsed();
             println!(
-                "{} + {} faces {pair}, {name}: {} faces in {time:?}",
+                "{} + {} faces {pair}, {form}, {name}: {} faces in {time:?}",
                 a.faces(),
                 b.faces(),
                 done[0].mesh.faces()
