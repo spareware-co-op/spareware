@@ -2764,8 +2764,8 @@ pub mod make {
     );
 }
 
-/// geom-intersect's hot paths (pieces G158, G162, G168, G169, G170, G173, G174 and G176; decision
-/// 32.44).
+/// geom-intersect's hot paths (pieces G158, G162, G168, G169, G170, G173, G174, G176 and G177;
+/// decision 32.44).
 pub mod intersect {
     use super::*;
 
@@ -2854,6 +2854,13 @@ pub mod intersect {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/gap_pcurve/typical"))]
+    fn gap_pcurve(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("intersect/subdivide_patch/typical"))]
     fn subdivide_patch(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
@@ -2918,7 +2925,7 @@ pub mod intersect {
 
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, trace_patch, subdivide_patch, march_plate, march_poles, known_tangent, selfcross_sweep, analyse_rest, trace_silhouette, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, trace_patch, subdivide_patch, march_plate, march_poles, known_tangent, selfcross_sweep, gap_pcurve, analyse_rest, trace_silhouette, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch
     );
 }
 

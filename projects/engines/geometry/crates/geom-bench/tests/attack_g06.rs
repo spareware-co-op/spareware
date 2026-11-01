@@ -1442,6 +1442,12 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::selfcross::self_intersect(sheet, 1.0 / 16.0, 1.0 / 4.0, &mut meter)
             }))
         }
+        ("intersect", "gap_pcurve") => fold(inputs::intersect::pcurve_gaps(class).iter().map(
+            |(patch, pcurve, curve)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::gap::mapped(patch, (pcurve, curve), (0.0, 1.0), &mut meter)
+            },
+        )),
         ("intersect", "analyse_rest") => {
             fold(inputs::intersect::rests(class).iter().map(|(plate, ball)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

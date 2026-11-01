@@ -2119,6 +2119,7 @@ pub mod intersect {
         Operand, Projection, Silhouette, pair, project_curve, project_surface, trace,
     };
     use geom_num::Steps;
+    use geom_num::interval::Interval;
     use geom_run::{Budget, WorkMeter};
     use geom_surface::{Sphere, SurfaceKind};
 
@@ -2295,6 +2296,17 @@ pub mod intersect {
             let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
             let found = subdivide(surface, &sphere, 1.0, &mut meter())?;
             march(surface, &sphere, &found, 1.0, 1.0, &mut meter())
+        });
+    }
+
+    /// `gap::mapped` over each pcurve's whole span: the checker's bound on it against its edge.
+    #[inline(never)]
+    pub fn pcurve_gap(
+        batch: &[(SurfaceKind, CurveKind<2>, CurveKind<3>)],
+        out: &mut Vec<Result<Option<(Interval, f64)>, IntersectError>>,
+    ) {
+        run(batch, out, |(patch, pcurve, curve)| {
+            geom_intersect::gap::mapped(patch, (pcurve, curve), (0.0, 1.0), &mut meter())
         });
     }
 

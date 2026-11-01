@@ -308,9 +308,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "da864792d9d055457d70a069b3c5edba643b0969416435765c905ae098167c3e",
+              "kind": "corpus",
+              "piece": "G177",
+              "why": "1 new count benchmark on the checker's pcurve bound (decision 32.44): a pcurve held to its edge through a tilted patch, by geom-intersect's gap; no existing digest moved"
             }
           ],
-          "sha256": "da864792d9d055457d70a069b3c5edba643b0969416435765c905ae098167c3e"
+          "sha256": "48e007bb1517ae687e83b67a0a5347429760f7137e165d3e8228ff267da9cc99"
         },
         {
           "id": "geom-nurbs/operations",

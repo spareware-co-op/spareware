@@ -3,7 +3,8 @@
 //! canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that
 //! meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a
 //! sphere and seen in silhouette, planes through a whole sphere's poles, sheets tangent to a plane
-//! along a known line (G174), and swept loops that cross themselves (G176).
+//! along a known line (G174), swept loops that cross themselves (G176), and pcurves held to their
+//! edges through tilted patches (G177).
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -305,6 +306,43 @@ pub fn sweeps(class: Class) -> Vec<SurfaceKind> {
             }
         }
         Some(SurfaceKind::Nurbs(Surface::new(across, along, &net).ok()?))
+    })
+}
+
+/// A tilted planar patch S(u, v) = (u, v, c₀ + c₁·u/8 + c₂·v/8) over [0, 8]², a pcurve line in it,
+/// and the 3D line it maps to, every value dyadic so the line is exact, for `gap::mapped`, the
+/// checker's bound on a pcurve against its edge (piece G177).
+#[must_use]
+pub fn pcurve_gaps(class: Class) -> Vec<(SurfaceKind, CurveKind<2>, CurveKind<3>)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::pcurve_gaps", class);
+    batch_of(|_| {
+        let mut eighths = |lo: i64, hi: i64| -> Option<f64> {
+            Some(f64::from(i32::try_from(g.range(lo, hi)).ok()?) / 8.0)
+        };
+        let (c0, c1, c2) = (eighths(-16, 16)?, eighths(-16, 16)?, eighths(-16, 16)?);
+        let height = |u: f64, v: f64| c0 + c1 * u / 8.0 + c2 * v / 8.0;
+        let basis = || Basis::new(1, vec![0.0, 0.0, 8.0, 8.0]).ok();
+        let mut net = Vec::new();
+        for u in [0.0, 8.0] {
+            for v in [0.0, 8.0] {
+                net.push([u, v, height(u, v)]);
+            }
+        }
+        let patch = Surface::new(basis()?, basis()?, &net).ok()?;
+        let (a, b) = (eighths(0, 64)?, eighths(0, 64)?);
+        let (c, d) = (eighths(0, 64)?, eighths(0, 64)?);
+        if a == c && b == d {
+            return None;
+        }
+        let pcurve = CurveKind::Line(Line::new([a, b], [c - a, d - b], (0.0, 1.0)).ok()?);
+        let (p, q) = ([a, b, height(a, b)], [c, d, height(c, d)]);
+        let curve = CurveKind::Line(
+            Line::new(p, [q[0] - p[0], q[1] - p[1], q[2] - p[2]], (0.0, 1.0)).ok()?,
+        );
+        Some((SurfaceKind::Nurbs(patch), pcurve, curve))
     })
 }
 
