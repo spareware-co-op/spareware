@@ -50,7 +50,7 @@ use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 use crate::convex::{Piece, opposite};
 use crate::order::{Flap, Line, Meeting, Ray, about, around, plane_words, wide_product};
 use crate::plane::canonical;
-use crate::subdivide::around as box_around;
+use crate::subdivide::around_on;
 use crate::trace::{Classified, Polygon, TraceError, classify};
 use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
 
@@ -483,6 +483,17 @@ impl<const N: usize> Ord for CellKey<'_, N> {
 fn phase_error(error: RunError<MergeError>, meter: &mut WorkMeter<'_>) -> MergeError {
     match error {
         RunError::Failed(e) => e,
+        _ => meter
+            .poll()
+            .err()
+            .map_or(MergeError::Defect, MergeError::Stopped),
+    }
+}
+
+/// A parallel arrangement step's error as the merge's, as [`phase_error`] reads the merge's own.
+fn traced(error: RunError<TraceError>, meter: &mut WorkMeter<'_>) -> MergeError {
+    match error {
+        RunError::Failed(e) => e.into(),
         _ => meter
             .poll()
             .err()
@@ -1288,9 +1299,10 @@ fn polygons_of(pieces: &[&Piece], entry: Option<Entry>) -> Vec<Polygon> {
 /// The vectors in front of and behind the first of `polygons`, traced through all of them.
 fn sides_of_first(
     polygons: &[Polygon],
+    exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Winding, Winding), MergeError> {
-    let cell = box_around(polygons)?;
+    let cell = around_on(exec, polygons, meter).map_err(|e| traced(e, meter))?;
     let lists: Vec<Vec<Piece>> = polygons
         .iter()
         .take(1)
@@ -1304,8 +1316,8 @@ fn sides_of_first(
 /// Which of the shells `among` lie around a point behind shell `at`.
 fn around_shell(
     of_shell: &[Vec<&Piece>],
-    at: usize,
-    among: &[usize],
+    (at, among): (usize, &[usize]),
+    exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<usize>, MergeError> {
     let number = |shell: usize| u32::try_from(shell).unwrap_or(u32::MAX);
@@ -1315,7 +1327,7 @@ fn around_shell(
         let others = of_shell.get(*shell).ok_or(MergeError::Open)?;
         polygons.extend(polygons_of(others, Some(number(*shell))));
     }
-    let (_, back) = sides_of_first(&polygons, meter)?;
+    let (_, back) = sides_of_first(&polygons, exec, meter)?;
     Ok(among
         .iter()
         .copied()
@@ -1330,8 +1342,8 @@ fn around_shell(
 /// to back.
 fn nest(
     held: &[Held<'_>],
-    shell_of_piece: &[usize],
-    shells: usize,
+    (shell_of_piece, shells): (&[usize], usize),
+    exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<(bool, Option<usize>)>, MergeError> {
     let mut of_shell: Vec<Vec<&Piece>> = alloc::vec![Vec::new(); shells];
@@ -1345,7 +1357,7 @@ fn nest(
     let mut outer = Vec::with_capacity(shells);
     for list in &of_shell {
         meter.charge(1)?;
-        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), meter)?;
+        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), exec, meter)?;
         outer.push(front.count(0) == 0);
     }
     let outers: Vec<usize> = (0..shells)
@@ -1358,11 +1370,11 @@ fn nest(
             continue;
         }
         meter.charge(1)?;
-        let candidates = around_shell(&of_shell, at, &outers, meter)?;
+        let candidates = around_shell(&of_shell, (at, &outers), exec, meter)?;
         // The innermost of those around it lies inside all the others.
         let mut best = None;
         for shell in &candidates {
-            let depth = around_shell(&of_shell, *shell, &candidates, meter)?.len();
+            let depth = around_shell(&of_shell, (*shell, &candidates), exec, meter)?.len();
             if best.is_none_or(|(most, _)| depth >= most) {
                 best = Some((depth, *shell));
             }
@@ -1654,7 +1666,7 @@ pub fn merge_on(
     } else if held.is_empty() {
         Vec::new()
     } else {
-        nest(&held, &shell_of_piece, tops.len(), meter)?
+        nest(&held, (&shell_of_piece, tops.len()), exec, meter)?
     };
 
     // Faces and shells.
