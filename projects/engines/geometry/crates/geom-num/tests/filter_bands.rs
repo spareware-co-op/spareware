@@ -43,8 +43,8 @@ use std::collections::BTreeMap;
 
 use geom_num::Sign;
 use geom_num::generated::{
-    carrier_order, carrier_side, circle_gap, circle_line, circle_side, rational_cmp,
-    rational_orient, round_grid, round_line, round_rational,
+    carrier_order, carrier_side, circle_gap, circle_line, circle_side, ellipse_line, ellipse_side,
+    rational_cmp, rational_orient, round_grid, round_line, round_rational,
 };
 use geom_num::grid::P2;
 use geom_num::wide::Wide;
@@ -699,6 +699,66 @@ const SPECS: &[Spec] = &[
             ("t^2", "circle_gap_answers_only_past_t_squared"),
             ("y^2", SQUARE),
             ("x^2", SQUARE),
+        ],
+    },
+    Spec {
+        name: "ellipse_side",
+        module: include_str!("../src/generated/ellipse_side.rs"),
+        inputs: &[
+            ("x", "a", 124),
+            ("y", "a", 124),
+            ("w", "w", 83),
+            ("k_x", "x", 40),
+            ("k_y", "y", 40),
+            ("mx", "m", 41),
+            ("my", "m", 41),
+            ("p", "r", 22),
+            ("q", "r", 22),
+        ],
+        moved: &["x", "y"],
+        value: |i| {
+            let [x, y, w, mx, my, p, q] = get(i, ["x", "y", "w", "mx", "my", "p", "q"]);
+            real(&ellipse_side::value(x, y, w, grid(i, "k_x", "k_y"), mx, my, p, q).unwrap())
+        },
+        filter: |i| {
+            let [x, y, w, mx, my, p, q] = get(i, ["x", "y", "w", "mx", "my", "p", "q"]);
+            ellipse_side::filter(x, y, w, grid(i, "k_x", "k_y"), mx, my, p, q)
+        },
+        variables: |_, _| {},
+        idle: &[
+            ("y·a·w·m^2·r^2", MEAN),
+            ("x·a·w·m^2·r^2", MEAN),
+            ("x·y·w^2·m^2·r^2", MEAN),
+        ],
+    },
+    Spec {
+        name: "ellipse_line",
+        module: include_str!("../src/generated/ellipse_line.rs"),
+        inputs: &[
+            ("a", "n", 41),
+            ("b", "n", 41),
+            ("d", "d", 82),
+            ("k_x", "x", 40),
+            ("k_y", "y", 40),
+            ("mx", "m", 41),
+            ("my", "m", 41),
+            ("p", "r", 22),
+            ("q", "r", 22),
+        ],
+        moved: &["d"],
+        value: |i| {
+            let [a, b, d, mx, my, p, q] = get(i, ["a", "b", "d", "mx", "my", "p", "q"]);
+            real(&ellipse_line::value(a, b, d, grid(i, "k_x", "k_y"), mx, my, p, q).unwrap())
+        },
+        filter: |i| {
+            let [a, b, d, mx, my, p, q] = get(i, ["a", "b", "d", "mx", "my", "p", "q"]);
+            ellipse_line::filter(a, b, d, grid(i, "k_x", "k_y"), mx, my, p, q)
+        },
+        variables: |_, _| {},
+        idle: &[
+            ("y·n·d·r^2", MEAN),
+            ("x·n·d·r^2", MEAN),
+            ("x·y·n^2·r^2", MEAN),
         ],
     },
 ];
