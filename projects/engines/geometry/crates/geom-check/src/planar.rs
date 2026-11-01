@@ -847,9 +847,8 @@ fn contact(cut: &Cut, s: &Side, t: &Side) -> Result<Option<Stretch>, Stuck> {
             let (p, q) = (cut.mark(&t.start.at)?, cut.mark(&t.end.at)?);
             Some(cut.stretch(p, q)?)
         }
-        (Sign::Zero, _) => Some(point(cut.mark(&t.start.at)?)),
-        (_, Sign::Zero) => Some(point(cut.mark(&t.end.at)?)),
         (p, q) if p == q => None,
+        // An end of `t` on the line is where `t`'s own plane crosses it.
         _ => Some(point(Mark(t.across))),
     })
 }

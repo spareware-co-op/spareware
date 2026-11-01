@@ -729,6 +729,92 @@ fn ring_of_meetings() -> Rows {
 }
 
 #[test]
+fn a_corner_resting_on_a_face_is_found_from_either_face() {
+    // No vertex in common, so nothing excuses the touch, whichever face is asked first.
+    let square: &[[i64; 3]] = &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]];
+    let tooth: &[[i64; 3]] = &[[5, 5, 0], [8, 5, 6], [2, 5, 6]];
+    for rings in [[tooth, square], [square, tooth]] {
+        let found = report(&sheets(&rings), BodyKind::General, Exactness::Exact);
+        assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+    }
+}
+
+#[test]
+fn two_faces_along_one_line_with_only_its_ends_in_common_are_found() {
+    // Two corners in common and an edge each between them: the shared corners excuse their own
+    // places and nothing in between.
+    let r = sheets(&[
+        &[[0, 0, 0], [4, 0, 0], [10, 0, 0], [5, 5, 0]],
+        &[[0, 0, 0], [6, 0, 0], [10, 0, 0], [5, 0, 5]],
+    ]);
+    let found = report(&r, BodyKind::General, Exactness::Exact);
+    assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+}
+
+#[test]
+fn a_corner_in_the_middle_of_an_edge_of_its_own_face_is_found() {
+    // The way down x = 60 turns at (60, 0), which the edge along y = 0 passes through without ending
+    // there: nothing they share excuses it, though each of the two has an end there.
+    let found = plan_faults(&[&[
+        [60, 100],
+        [60, 0],
+        [60, -100],
+        [0, -100],
+        [0, 0],
+        [100, 0],
+        [100, 100],
+    ]]);
+    assert!(kinds(&found).contains(&FaultKind::EdgesCross), "{found:?}");
+}
+
+#[test]
+fn a_face_folded_flat_along_one_line_is_found() {
+    // Every corner on one line: each pair of edges lies along the other.
+    let found = plan_faults(&[&[[0, 0], [100, 0], [50, 0]]]);
+    assert!(kinds(&found).contains(&FaultKind::EdgesCross), "{found:?}");
+}
+
+#[test]
+fn a_bent_face_with_a_second_loop_has_no_fan() {
+    // A fan runs round one ring. This second loop turns on from the first as seen from its first
+    // corner, so that a fan through both would pass every test of a fan: it must still have none,
+    // and the face beside it cannot be told apart from it.
+    let mut r = Rows::empty();
+    let shell = r.shell(0);
+    let numbers = |r: &mut Rows, ring: &[[i64; 3]]| -> Vec<u32> {
+        ring.iter().map(|p| r.vertex(*p)).collect()
+    };
+    let outer = numbers(&mut r, &[[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]]);
+    let inner = numbers(&mut r, &[[-1, 10, 0], [-2, 9, 0], [-3, 8, 0], [-4, 6, 0]]);
+    let (outer, inner) = (fins(&mut r, &outer), fins(&mut r, &inner));
+    r.face(shell, &[&outer, &inner]);
+    let shell = r.shell(0);
+    let beside = numbers(
+        &mut r,
+        &[[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]],
+    );
+    let beside = fins(&mut r, &beside);
+    r.face(shell, &[&beside]);
+    r.surfaces[0] = off_grid();
+    let found = report(&r, BodyKind::General, certified());
+    assert_eq!(kinds(found.faults()), [FaultKind::PairUnchecked]);
+}
+
+#[test]
+fn what_a_check_reserves_is_what_its_lists_hold() {
+    // Logical memory is budgeted as work is: a face's lists are reserved by their lengths, here to
+    // the byte.
+    for (body, bytes) in [
+        (ring_on_the_grid().body(BodyKind::Sheet), RING_BYTES),
+        (ring_of_meetings().body(BodyKind::Sheet), MEETINGS_BYTES),
+    ] {
+        let mut m = WorkMeter::new(Budget::UNLIMITED);
+        check(&body, Exactness::Exact, Level::Full, &mut m).unwrap();
+        assert_eq!(m.used().logical_bytes, bytes);
+    }
+}
+
+#[test]
 fn a_face_turned_with_its_one_hole_is_found() {
     // Its hole now runs counter-clockwise and its outer loop clockwise: one of each.
     for mut r in [ring_on_the_grid(), ring_of_meetings()] {
@@ -897,6 +983,12 @@ const TETRA: Spec<'_> = Spec {
     points: &TETRA_POINTS,
     regions: &[&[&TETRA_SHELL]],
 };
+
+/// What a check of [`ring_on_the_grid`] reserves.
+const RING_BYTES: u128 = 3_960;
+
+/// What a check of [`ring_of_meetings`] reserves.
+const MEETINGS_BYTES: u128 = 9_208;
 
 /// Every budget short of what checking `body` costs stops it, cleanly, and that much does not.
 fn stops_wherever_its_budget_ends(body: &Body) {
