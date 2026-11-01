@@ -58,8 +58,11 @@ fn extreme(g: &mut SplitMix64) -> Option<Ellipse2> {
     Ellipse2::new(extreme2(g), major, (1 << 21) - 1, 1 << 21).ok()
 }
 
+/// An ellipse, its Pythagorean axis, and its vertex.
+type Along = (Ellipse2, (i128, i128), (i128, i128));
+
 /// An ellipse along a Pythagorean axis, of `k` times it, about `centre`: with the axis and vertex.
-fn along(g: &mut SplitMix64, centre: P2, k: i64) -> Option<(Ellipse2, (i128, i128), (i128, i128))> {
+fn along(g: &mut SplitMix64, centre: P2, k: i64) -> Option<Along> {
     let (a, b) = pick(g, TRIPLES)?;
     let (p, q) = pick(g, RATIOS)?;
     let e = Ellipse2::new(centre, [a * k, b * k], p, q).ok()?;
@@ -71,13 +74,13 @@ fn along(g: &mut SplitMix64, centre: P2, k: i64) -> Option<(Ellipse2, (i128, i12
 }
 
 /// [`along`] about a typical point.
-fn typical_along(g: &mut SplitMix64) -> Option<(Ellipse2, (i128, i128), (i128, i128))> {
+fn typical_along(g: &mut SplitMix64) -> Option<Along> {
     let (centre, k) = (typical2(g), g.range(1 << 8, 1 << 20));
     along(g, centre, k)
 }
 
 /// [`along`] tiny, and a long way from the origin.
-fn far_along(g: &mut SplitMix64) -> Option<(Ellipse2, (i128, i128), (i128, i128))> {
+fn far_along(g: &mut SplitMix64) -> Option<Along> {
     let centre = p2(1 << 39, -(1 << 38));
     let k = g.range(1, 1 << 8);
     along(g, centre, k)
