@@ -29,24 +29,14 @@ name: Kernel fuzzing and proofs
 #   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-bench, geom-curve, geom-gen, geom-linalg,
-# geom-math, geom-name, geom-num, geom-nurbs, geom-op, geom-run, geom-surface, geom-test and
-# geom-topo today;
-# every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
-# geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-mesh, geom-name, geom-num,
-# geom-nurbs, geom-op, geom-poly, geom-pool, geom-run, geom-sketch, geom-spatial, geom-subd,
-# geom-surface, geom-test and geom-topo today, with engine-geometry and kit-core through geom-gen's
-# facade generators;
-# kit-core through geom-gen's facade generators;
-# geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
-# its job kani-op, geom-format for kani-format, the workspace
-# every crate of the workspace it depends on (geom-gen, geom-num, geom-poly, geom-run, geom-test and what they build on today;
-# geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), the workspace
-# its job kani-op, the workspace
-# every crate of the workspace it depends on (geom-fuzz's tests/attack_g14.rs fails until a new
-# target's crates are listed here), the workspace
-# files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
-# ClusterFuzzLite files and this workflow.
+# every crate of the workspace it depends on (engine-geometry, geom-2d, geom-bench, geom-bvh,
+# geom-check, geom-cloud, geom-curve, geom-draw, geom-field, geom-format, geom-gen, geom-intersect,
+# geom-linalg, geom-make, geom-math, geom-mesh, geom-name, geom-num, geom-nurbs, geom-op, geom-poly,
+# geom-pool, geom-run, geom-sketch, geom-spatial, geom-subd, geom-surface, geom-test, geom-topo and
+# kit-core today, engine-geometry and kit-core through geom-gen's facade generators; geom-fuzz's
+# tests/attack_g14.rs fails until a new target's crates are listed here), the workspace files that
+# change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the ClusterFuzzLite files
+# and this workflow.
 #
 # Pins: the compiler in RUST_TOOLCHAIN is the workspace's (the scaffold test checks every
 # workflow that names it); FUZZ_NIGHTLY is the nightly compiler for libFuzzer's flags, a dated

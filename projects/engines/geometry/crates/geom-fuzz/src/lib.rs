@@ -4,68 +4,41 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has fourteen targets so far: [`predicates`] (G11), `geom-num`'s exact
-//! changed input. It has five targets so far: [`predicates`] (G11), `geom-num`'s exact
-//! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
-//! changed input. It has eleven targets so far: [`predicates`] (G11), `geom-num`'s exact
-//! changed input. It has seven targets so far: [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
-//! changed input. It has nine targets so far: [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
-//! changed input. It has ten targets so far: [`solids`] (G147 to G152), `geom-mesh`'s operations on small
-//! solids agree with counted cells; [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
-//! mesh and gives one mesh in any input order; [`cdt`] (G153), `geom-mesh`'s triangulation is a true constrained
-//! Delaunay triangulation and one answer in any input order; [`predicates`] (G11), `geom-num`'s exact
-//! changed input. It has twenty targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has twenty-four targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
-//! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
-//! operation at every width; [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers; [`arenas`] (G80),
-//! `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see each
-//! other's edits; [`attributes`] (G90), `geom-name`'s attribute step gives each output exactly
-//! what section 8.4's table gives; [`cbor`] (G91), `geom-format`'s strict CBOR decoder and its
-//! text form never panic, refuse inside their input and convert both ways bit for bit; [`cache`]
-//! (G105), `geom-format`'s memo store keeps to its bound, forgets the entry used longest ago first
-//! and answers only where the caller's budget covers the stored run; [`make`] (G101), the
-//! primitives and transforms return only what the full checker passes, keep their laws, and refuse
-//! with a typed error; [`sequence`] (G116), whole operation logs replay to the same hash and keep
-//! every law at every step; [`batch`] (G104), `geom-op`'s batch driver gives each item its own
-//! result, and the curve and surface kinds' many-point calls give the single calls' bits; [`cbor`]
-//! (G91), `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their
-//! input and convert both ways bit for bit; [`make`] (G101), the primitives and transforms return
-//! only what the full checker passes, keep their laws, and refuse with a typed error; [`make`]
-//! (G101), the primitives and transforms return only what the full checker passes, keep their
-//! laws, and refuse with a typed error; [`sequence`] (G116), whole operation logs replay to the
-//! same hash and keep every law at every step; [`cbor`] (G91), `geom-format`'s strict CBOR decoder
-//! and its text form never panic, refuse inside their input and convert both ways bit for bit; [`planes`] (G123), `geom-poly`'s canonical planes and
-//! arrangement predicates give one entry to one plane and one order to any points or rays; and
-//! [`variants`] (G42), every variant of every generated exact path returns the exact value of its
-//! description, evaluated in big integers. [`adversarial`] holds the generators aimed at chapter
-//! 28.5's hard cases, and [`robustness`] counts how many plain designs succeed. The layout every
-//! target follows, and how each engine runs it locally and in CI, is in this crate's `README.md`.
-//! operation at every width; and [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers; and [`planes`] (G123),
-//! `geom-poly`'s canonical planes and arrangement predicates give one entry to one plane and one
-//! order to any points or rays. The layout every target follows, and how each engine runs it locally and in CI,
-//! other's edits; [`make`] (G101), the primitives and transforms return only what the full checker passes, keep their laws,
-//! and refuse with a typed error; and [`planes`] (G123), `geom-poly`'s canonical planes and
-//! arrangement predicates give one entry to one plane and one order to any points or rays. The
-//! layout every target follows, and how each engine runs it locally and in CI,
-//! returns the exact value of its description, evaluated in big integers; [`cbor`] (G91),
-//! `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input
-//! and convert both ways bit for bit; [`cache`] (G105), `geom-format`'s memo store keeps to its
-//! bound, forgets the entry used longest ago first and answers only where the caller's budget
-//! covers the stored run; [`arenas`] (G80), `geom-topo` publishes exactly the arenas its rules
-//! allow, and a body's versions never see each other's edits; and [`make`] (G101), the primitives
-//! and transforms return only what the full checker passes, keep their laws, and refuse with a
-//! typed error; [`planes`] (G123), `geom-poly`'s canonical planes and arrangement predicates
-//! give one entry to one plane and one order to any points or rays; [`sequence`] (G116), whole operation logs replay to the same hash and keep
-//! every law at every step; and [`intersect`] (G158), an intersection's items keep their
-//! invariants against an all-pairs oracle and a pair asked either way round makes one call.
-//! [`adversarial`] holds the generators aimed at chapter 28.5's hard
-//! cases, and [`robustness`] counts how many plain designs succeed. The layout every target
-//! follows, and how each engine runs it locally and in CI,
-//! is in this crate's `README.md`.
+//! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every operation at
+//! every width; and [`variants`] (G42), every variant of every generated exact path returns the
+//! exact value of its description, evaluated in big integers. Gate 2 (32.44) adds [`curves`], every
+//! curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and [`surfaces`], every
+//! surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep their stated bounds
+//! against exact rational evaluation (G56, G58, G59), and [`transforms`], the typed transforms move
+//! grid points as their definitions say and decimals round-trip (G45, G46, G48), and [`boxtree`],
+//! the box tree and cell index answer as brute force does (G54, G55), and [`linalg`], the dense
+//! decompositions are refused or finite and the spectral ones backward stable (G49, G50), and
+//! [`roots`], the root engine misses no root and proves none twice, Brent's zero brackets its sign
+//! change (G51, G52, G53), and [`maths`], the proven maths functions are correctly rounded (G47).
+//! Later pieces add [`arenas`] (G80), `geom-topo` publishes exactly the arenas its rules allow, and
+//! a body's versions never see each other's edits; [`attributes`] (G90), `geom-name`'s attribute
+//! step gives each output exactly what section 8.4's table gives; [`cbor`] (G91), `geom-format`'s
+//! strict CBOR decoder and its text form never panic, refuse inside their input and convert both
+//! ways bit for bit; [`make`] (G101), the primitives and transforms return only what the full
+//! checker passes, keep their laws, and refuse with a typed error; [`batch`] (G104), `geom-op`'s
+//! batch driver gives each item its own result, and the curve and surface kinds' many-point calls
+//! give the single calls' bits; [`cache`] (G105), `geom-format`'s memo store keeps to its bound,
+//! forgets the entry used longest ago first and answers only where the caller's budget covers the
+//! stored run; [`sequence`] (G116), whole operation logs replay to the same hash and keep every law
+//! at every step; [`planes`] (G123), `geom-poly`'s canonical planes and arrangement predicates give
+//! one entry to one plane and one order to any points or rays; [`exact`] (G146), `geom-mesh`'s
+//! exact mesh refuses what is not a mesh and gives one mesh in any input order; [`solids`] (G147 to
+//! G152), `geom-mesh`'s operations on small solids agree with counted cells; [`cdt`] (G153),
+//! `geom-mesh`'s triangulation is a true constrained Delaunay triangulation and one answer in any
+//! input order; and [`intersect`] (G158), an intersection's items keep their invariants against an
+//! all-pairs oracle and a pair asked either way round makes one call. [`adversarial`] holds the
+//! generators aimed at chapter 28.5's hard cases, and [`robustness`] counts how many plain designs
+//! succeed. The layout every target follows, and how each engine runs it locally and in CI, is in
+//! this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
