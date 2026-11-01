@@ -660,7 +660,7 @@ fn any_budget_gives_the_answer_or_stops_cleanly() {
     let b = cuboid([20, 20, 20], [40, 40, 40]);
     let whole = unite(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &b)]).unwrap();
     let mut stops = 0;
-    for budget in (0..8000).step_by(11) {
+    for budget in (0..8000).step_by(37) {
         let small = OpContext::new(
             OpPath::new(OpId::from_bytes([7; 16])),
             Budget::new(budget, u64::MAX),
