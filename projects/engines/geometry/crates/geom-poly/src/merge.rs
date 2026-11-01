@@ -42,6 +42,7 @@ use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
 
+use geom_math::gcd_u128;
 use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{I256, I320, NumError, Sign, Wide};
 use geom_run::{Stopped, WorkMeter};
@@ -317,10 +318,12 @@ fn narrow_order(a: i128, b: i128, c: i128, d: i128) -> Option<Ordering> {
     Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
 }
 
-/// A ratio v / over, over positive, as its floor and its remainder in [0, over): two ratios
-/// compare by their floors, and only equal floors with neither remainder zero need
-/// [`narrow_order`]'s products. A corner of a building's faces on the grid has every remainder
-/// zero, and so do most of a line's coordinates over a short direction.
+/// A ratio v / over, over positive, as its floor and its remainder in [0, over), the remainder
+/// and divisor in lowest terms: two ratios compare by their floors, a zero remainder settles a
+/// tie, equal fractions are equal terms, and only then do their cross products decide, in `i128`
+/// where the terms fit `i64`, else [`narrow_order`]'s. A corner of a building's faces on the grid
+/// has every remainder zero, one on a box's split a half, and so do most of a line's coordinates
+/// over a short direction.
 #[derive(Clone, Copy, Debug)]
 struct Cell {
     floor: i128,
@@ -334,10 +337,13 @@ impl Cell {
         if over <= 0 {
             return None;
         }
+        let rest = v.checked_rem_euclid(over)?;
+        // Both are positive or the rest zero, so the divisor is at least 1.
+        let common = i128::try_from(gcd_u128(rest.unsigned_abs(), over.unsigned_abs())).ok()?;
         Some(Cell {
             floor: v.checked_div_euclid(over)?,
-            rest: v.checked_rem_euclid(over)?,
-            over,
+            rest: rest.checked_div(common)?,
+            over: over.checked_div(common)?,
         })
     }
 
@@ -349,6 +355,18 @@ impl Cell {
         }
         if self.rest == 0 || other.rest == 0 {
             return Some((self.rest != 0).cmp(&(other.rest != 0)));
+        }
+        if (self.rest, self.over) == (other.rest, other.over) {
+            return Some(Ordering::Equal);
+        }
+        let words = |v: i128| i64::try_from(v).ok().map(i128::from);
+        if let (Some(a), Some(b), Some(c), Some(d)) = (
+            words(self.rest),
+            words(self.over),
+            words(other.rest),
+            words(other.over),
+        ) {
+            return Some(a.checked_mul(d)?.cmp(&c.checked_mul(b)?));
         }
         narrow_order(self.rest, self.over, other.rest, other.over)
     }
@@ -1459,6 +1477,24 @@ mod tests {
                 agrees(a, b, c, d);
             }
         }
+    }
+
+    #[test]
+    fn equal_ratios_in_other_terms_are_equal() {
+        for (a, b, c, d) in [
+            (1, 2, 2, 4),
+            (7, 2, 21, 6),
+            (-3, 4, -6, 8),
+            (5, 10, 1 << 70, 1 << 71),
+        ] {
+            agrees(a, b, c, d);
+            assert_eq!(
+                Cell::new(a, b).unwrap().order(&Cell::new(c, d).unwrap()),
+                Some(Ordering::Equal)
+            );
+        }
+        // Terms past i64 after reduction take the wide products.
+        agrees((1 << 100) + 1, 1 << 101, (1 << 99) + 1, 1 << 100);
     }
 
     #[test]
