@@ -26,7 +26,8 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Modules today: [`boolean`] (piece G148), mesh booleans with run-level history; [`hull`], [`slice`]
+//! Modules today: [`minkowski`] (piece G150), Minkowski sums of flat solids; [`boolean`] (piece
+//! G148), mesh booleans with run-level history; [`hull`], [`slice`]
 //! and [`export`] (piece G149), exact hulls, plane slices and writing at each format's precision;
 //! [`classify`] (piece G147), where a point is against a closed mesh; [`cdt`] (piece G153), the
 //! kernel's one exact constrained Delaunay triangulation,
@@ -49,6 +50,7 @@ pub mod envelope;
 pub mod exact;
 pub mod export;
 pub mod hull;
+pub mod minkowski;
 pub mod slice;
 
 pub use cdt::{Cdt, CdtError, Quality, Site, Vertex, triangulate};
