@@ -43,6 +43,8 @@ geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 # The dense linear algebra of phase 2 (pieces G49 and G50), for the same count benchmarks.
 geom-linalg = { path = "../geom-linalg" }
+# The intersection results and canonical order of phase 4 (piece G158), for the same count benchmarks.
+geom-intersect = { path = "../geom-intersect" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
 # crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
 # sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which

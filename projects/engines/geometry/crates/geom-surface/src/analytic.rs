@@ -57,6 +57,7 @@ use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
 
 use crate::extent::{self, Factored};
+use crate::implicit::{ImplicitBound, ImplicitEnclosure};
 use crate::param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
 use crate::terms::{Fun, Term, Terms};
 
@@ -1353,5 +1354,150 @@ impl ParamSurface for AffineSurface {
         let m = Motion::of::<3>(transform)?;
         meter.charge(1)?;
         affine_image(&self.terms, self.domain, self.angular, &m)
+    }
+}
+
+/// `a·b`.
+fn inner(a: &[Interval; 3], b: &[Interval; 3]) -> Result<Interval, CurveError> {
+    let mut sum = Interval::point(0.0)?;
+    for (x, y) in a.iter().zip(b) {
+        sum = sum.add(x.mul(*y)?)?;
+    }
+    Ok(sum)
+}
+
+/// `a·a`, tighter than [`inner`] where a coordinate spans zero.
+fn squared(a: &[Interval; 3]) -> Result<Interval, CurveError> {
+    let mut sum = Interval::point(0.0)?;
+    for x in a {
+        sum = sum.add(x.square()?)?;
+    }
+    Ok(sum)
+}
+
+/// `a·k + b·m`, coordinate by coordinate.
+fn blend(
+    a: &[Interval; 3],
+    k: Interval,
+    b: &[Interval; 3],
+    m: Interval,
+) -> Result<[Interval; 3], CurveError> {
+    let mut out = [Interval::point(0.0)?; 3];
+    for ((o, x), y) in out.iter_mut().zip(a).zip(b) {
+        *o = x.mul(k)?.add(y.mul(m)?)?;
+    }
+    Ok(out)
+}
+
+impl Round {
+    /// A point's parts about the axis: its component w perpendicular to n̂, its height h along n̂,
+    /// and n̂. Every round kind's equation reads these.
+    fn parts(
+        &self,
+        region: &[Interval; 3],
+    ) -> Result<([Interval; 3], Interval, [Interval; 3]), CurveError> {
+        let (_, [_, _, n]) = self.frame.unit_vectors()?;
+        let mut gap = [Interval::point(0.0)?; 3];
+        for ((g, x), c) in gap.iter_mut().zip(region).zip(&self.center) {
+            *g = x.sub(Interval::point(*c)?)?;
+        }
+        let h = inner(&gap, &n)?;
+        let one = Interval::point(1.0)?;
+        Ok((blend(&gap, one, &n, h.neg())?, h, n))
+    }
+}
+
+impl ImplicitBound for Plane {
+    /// F(x) = (x − o)·(a × b).
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let [a0, a1, a2] = self.a.map(Interval::point);
+        let [b0, b1, b2] = self.b.map(Interval::point);
+        let ([a0, a1, a2], [b0, b1, b2]) = ([a0?, a1?, a2?], [b0?, b1?, b2?]);
+        let gradient = [
+            a1.mul(b2)?.sub(a2.mul(b1)?)?,
+            a2.mul(b0)?.sub(a0.mul(b2)?)?,
+            a0.mul(b1)?.sub(a1.mul(b0)?)?,
+        ];
+        let mut gap = [Interval::point(0.0)?; 3];
+        for ((g, x), o) in gap.iter_mut().zip(&region).zip(&self.origin) {
+            *g = x.sub(Interval::point(*o)?)?;
+        }
+        Ok(ImplicitEnclosure {
+            value: inner(&gap, &gradient)?,
+            gradient,
+            smooth: true,
+        })
+    }
+}
+
+impl ImplicitBound for Sphere {
+    /// F(x) = |x − c|² − r².
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let (w, h, n) = self.round.parts(&region)?;
+        let r = Interval::point(self.round.lengths[0])?;
+        let two = Interval::point(2.0)?;
+        Ok(ImplicitEnclosure {
+            value: squared(&w)?.add(h.square()?)?.sub(r.square()?)?,
+            gradient: blend(&w, two, &n, two.mul(h)?)?,
+            smooth: true,
+        })
+    }
+}
+
+impl ImplicitBound for Cylinder {
+    /// F(x) = |w|² − r², for w the point's component perpendicular to the axis.
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let (w, _, n) = self.round.parts(&region)?;
+        let r = Interval::point(self.round.lengths[0])?;
+        let two = Interval::point(2.0)?;
+        Ok(ImplicitEnclosure {
+            value: squared(&w)?.sub(r.square()?)?,
+            gradient: blend(&w, two, &n, Interval::point(0.0)?)?,
+            smooth: true,
+        })
+    }
+}
+
+impl ImplicitBound for Cone {
+    /// F(x) = |w|² − (r₀ + k·s·h)², for w and h the point's parts about the axis. It vanishes on
+    /// both nappes: past the apex as well as on the kind.
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let (w, h, n) = self.round.parts(&region)?;
+        let [r0, k] = self.round.lengths;
+        let slope = Interval::point(k * self.round.sign)?;
+        let radius = Interval::point(r0)?.add(slope.mul(h)?)?;
+        let two = Interval::point(2.0)?;
+        Ok(ImplicitEnclosure {
+            value: squared(&w)?.sub(radius.square()?)?,
+            gradient: blend(&w, two, &n, two.mul(radius)?.mul(slope)?.neg())?,
+            smooth: true,
+        })
+    }
+}
+
+impl ImplicitBound for Torus {
+    /// F(x) = (|w|² + h² + R² − r²)² − 4R²|w|², the quartic, for w and h the point's parts about
+    /// the axis.
+    fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
+        let (w, h, n) = self.round.parts(&region)?;
+        let [major, minor] = self.round.lengths;
+        let (big, small) = (
+            Interval::point(major)?.square()?,
+            Interval::point(minor)?.square()?,
+        );
+        let across = squared(&w)?;
+        let a = across.add(h.square()?)?.add(big)?.sub(small)?;
+        let four = Interval::point(4.0)?;
+        let eight = Interval::point(8.0)?;
+        Ok(ImplicitEnclosure {
+            value: a.square()?.sub(four.mul(big)?.mul(across)?)?,
+            gradient: blend(
+                &w,
+                four.mul(a)?.sub(eight.mul(big)?)?,
+                &n,
+                four.mul(a)?.mul(h)?,
+            )?,
+            smooth: true,
+        })
     }
 }

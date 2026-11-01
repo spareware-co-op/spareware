@@ -2025,3 +2025,136 @@ pub mod roots {
         });
     }
 }
+
+/// `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.44): items put in
+/// canonical order, a key read, a pair put in order, a point projected and a level curve traced,
+/// under an unlimited budget.
+pub mod intersect {
+    use geom_curve::CurveKind;
+    use geom_intersect::{
+        CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, LevelCurves, OnImplicit,
+        Operand, Projection, Silhouette, pair, project_curve, project_surface, trace,
+    };
+    use geom_num::Steps;
+    use geom_run::{Budget, WorkMeter};
+    use geom_surface::{Sphere, SurfaceKind};
+
+    use super::run;
+
+    /// The floor of a projection: a micrometre, in metres.
+    const FLOOR: f64 = 1e-6;
+
+    /// The floor of a trace. A trace reads a function thousands of times, so a benchmark keeps it
+    /// coarse: the path is the same at any floor.
+    const COARSE: f64 = 1e-3;
+
+    /// The ceiling of a trace.
+    const CEILING: f64 = 1e-1;
+
+    /// A meter of its own, under no limit.
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// `Intersection::new` on each list.
+    #[inline(never)]
+    pub fn sorted(batch: &[Vec<Item>], out: &mut Vec<Result<Intersection, IntersectError>>) {
+        run(batch, out, |items| {
+            Intersection::new(
+                items.clone(),
+                Coverage::CompleteOutsideFlagged,
+                Vec::new(),
+                &mut meter(),
+            )
+        });
+    }
+
+    /// `CanonicalKey::of_curve` on each curve.
+    #[inline(never)]
+    pub fn keys(batch: &[CurveKind<3>], out: &mut Vec<Result<CanonicalKey, IntersectError>>) {
+        run(batch, out, |curve| {
+            CanonicalKey::of_curve(curve, &mut meter())
+        });
+    }
+
+    /// An operand of `curve`.
+    fn operand(curve: &CurveKind<3>) -> Result<Operand<'_>, IntersectError> {
+        Ok(Operand {
+            geom: Geom::Curve(curve),
+            domain: None,
+            bound: Steps(0),
+            key: CanonicalKey::of_curve(curve, &mut meter())?,
+        })
+    }
+
+    /// The empty answer of a method that finds nothing.
+    fn nothing(_: &Operand<'_>, _: &Operand<'_>) -> Result<Intersection, IntersectError> {
+        Intersection::new(
+            Vec::new(),
+            Coverage::TopologyCertified,
+            Vec::new(),
+            &mut meter(),
+        )
+    }
+
+    /// `pair` on each pair of curves, their keys read first.
+    #[inline(never)]
+    pub fn paired(
+        batch: &[(CurveKind<3>, CurveKind<3>)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| {
+            pair(&operand(a)?, &operand(b)?, nothing)
+        });
+    }
+
+    /// `project_curve` on each arc and point.
+    #[inline(never)]
+    pub fn on_arcs(
+        batch: &[(CurveKind<3>, [f64; 3])],
+        out: &mut Vec<Result<Projection<1, 3>, IntersectError>>,
+    ) {
+        run(batch, out, |(curve, p)| {
+            project_curve(curve, p, FLOOR, &mut meter())
+        });
+    }
+
+    /// `trace` of a sphere of radius 5 about each centre on its plane patch.
+    #[inline(never)]
+    pub fn cut_patches(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<LevelCurves, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, centre)| {
+            let frame = geom_curve::Frame::standard().map_err(|_| IntersectError::Internal)?;
+            let domain = ((0.0, 2.0), (-0.5, 0.5));
+            let sphere = Sphere::new(*centre, 5.0, frame, domain)?;
+            trace(surface, &OnImplicit(&sphere), COARSE, CEILING, &mut meter())
+        });
+    }
+
+    /// `trace` of each torus's silhouette along its direction.
+    #[inline(never)]
+    pub fn silhouettes(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<LevelCurves, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, direction)| {
+            let level = Silhouette {
+                direction: *direction,
+            };
+            trace(surface, &level, COARSE, CEILING, &mut meter())
+        });
+    }
+
+    /// `project_surface` on each band and point.
+    #[inline(never)]
+    pub fn on_spheres(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<Projection<2, 3>, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, p)| {
+            project_surface(surface, p, FLOOR, &mut meter())
+        });
+    }
+}

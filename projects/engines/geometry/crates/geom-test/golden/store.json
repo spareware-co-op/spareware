@@ -230,9 +230,27 @@
               "kind": "corpus",
               "piece": "G70",
               "why": "26 new count benchmarks on the hot paths of phase 2's code pieces (decision 32.44): geom-math 7, geom-curve 5, geom-surface 5, geom-nurbs 3, geom-linalg 2, geom-bvh 2, geom-num 2; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G158",
+              "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
+            },
+            {
+              "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63",
+              "kind": "corpus",
+              "piece": "G162",
+              "why": "2 new count benchmarks on geom-intersect's projection (decision 32.44): the search on an arc and on a band of a sphere; no existing digest moved"
+            },
+            {
+              "sha256": "c6ad6ae11db193fbb5f9ca80bf84189b6ef77a320dc0a152592e208d889d487d",
+              "kind": "corpus",
+              "piece": "G168",
+              "why": "2 new count benchmarks on geom-intersect's tracer (decision 32.44): a sphere through a plane patch and a torus's silhouette; no existing digest moved"
             }
           ],
-          "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6"
+          "sha256": "b30b5a738b930b272752097bc44c67634cf3181d585ca879bc769e685c11538d"
         },
         {
           "id": "geom-nurbs/operations",

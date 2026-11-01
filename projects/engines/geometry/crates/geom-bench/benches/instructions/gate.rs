@@ -2725,3 +2725,63 @@ pub mod quadrature {
         benchmarks = gauss_legendre
     );
 }
+
+/// geom-intersect's hot paths (pieces G158, G162 and G168; decision 32.44).
+pub mod intersect {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/sort_items/typical"))]
+    fn sort_items(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/key_circle/typical"))]
+    fn key_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/pair_lines/typical"))]
+    fn pair_lines(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/project_arc/typical"))]
+    fn project_arc(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/project_sphere/typical"))]
+    fn project_sphere(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/trace_patch/typical"))]
+    fn trace_patch(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/trace_silhouette/typical"))]
+    fn trace_silhouette(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = intersect;
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, trace_patch,
+            trace_silhouette
+    );
+}
