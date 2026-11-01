@@ -1440,6 +1440,56 @@ fn on_both(
     Ok(on_surface(a, at)?.is_some() && on_surface(b, at)?.is_some())
 }
 
+/// Where `curve` passes through `at`, a point of an edge: its parameter there, or `None` if `at`
+/// lies off it.
+fn cut_at(
+    curve: &CurveKind<3>,
+    at: Vector,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<f64>, IntersectError> {
+    // A point of another piece of this pair projects onto this curve too: only one that lies on
+    // the curve cuts it.
+    let Some(s) = along_curve(curve, at)? else {
+        return Ok(None);
+    };
+    let (lo, hi) = crate::curve::finite(curve)?;
+    let mut t = tight::middle(s);
+    // On a loop the turns wrap.
+    if closed(curve) {
+        let period = hi - lo;
+        while t < lo {
+            t += period;
+        }
+        while t >= hi {
+            t -= period;
+        }
+    }
+    if t < lo || t > hi {
+        return Ok(None);
+    }
+    let gap = minus(at_parameter(curve, t, meter)?, at)?;
+    Ok(gap
+        .iter()
+        .all(|c| c.lo() <= STEP && c.hi() >= -STEP)
+        .then_some(t))
+}
+
+/// The apex of a cone whose domain ends there: an edge of one point, where the edge circles of
+/// [`edges`] have no radius.
+fn apex_ends(surface: &SurfaceKind) -> Result<Vec<Vector>, IntersectError> {
+    let SurfaceKind::Cone(c) = surface else {
+        return Ok(Vec::new());
+    };
+    let (r0, k) = c.radius_and_slope();
+    let (_, (v0, v1)) = ParamSurface::domain(c);
+    let ends = [v0, v1].iter().filter(|v| r0 + k * **v == 0.0).count();
+    Ok(if ends > 0 {
+        alloc::vec![funnel(c)?.apex]
+    } else {
+        Vec::new()
+    })
+}
+
 /// Where the curve's stretches on both domains end: the parameters at which an edge of either surface
 /// meets the other, sorted.
 fn cuts(
@@ -1457,31 +1507,15 @@ fn cuts(
                     continue;
                 };
                 let box_of = edge.bound((t.lo(), t.hi()), meter)?;
-                let at = sides(&box_of)?;
-                // A point of another piece of this pair projects onto this curve too: only one
-                // that lies on the curve cuts it.
-                let Some(s) = along_curve(curve, at)? else {
-                    continue;
-                };
-                let (lo, hi) = crate::curve::finite(curve)?;
-                let mut t = tight::middle(s);
-                // On a loop the turns wrap.
-                if closed(curve) {
-                    let period = hi - lo;
-                    while t < lo {
-                        t += period;
-                    }
-                    while t >= hi {
-                        t -= period;
-                    }
-                }
-                if t < lo || t > hi {
-                    continue;
-                }
-                let gap = minus(at_parameter(curve, t, meter)?, at)?;
-                if gap.iter().all(|c| c.lo() <= STEP && c.hi() >= -STEP) {
+                if let Some(t) = cut_at(curve, sides(&box_of)?, meter)? {
                     out.push(t);
                 }
+            }
+        }
+        // A curve through an apex the domain ends at leaves the domain there.
+        for at in apex_ends(surface)? {
+            if let Some(t) = cut_at(curve, at, meter)? {
+                out.push(t);
             }
         }
     }
