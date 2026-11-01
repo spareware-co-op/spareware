@@ -125,6 +125,22 @@ fn a_wall_makes_two_rooms_each_named_by_its_seed() {
         .map(|r| r.cell.as_ref().unwrap().keys[0])
         .collect();
     assert!(keys.contains(&key(50)) && keys.contains(&key(51)));
+    // A room's region is named by its seed, whatever else changes.
+    let name = |room: &Combined| room.body.names().unwrap().regions.clone();
+    assert_ne!(name(&rooms[0]), name(&rooms[1]));
+    let thicker = cuboid(2, [47, 0, 0], [6, 100, 30]);
+    let again = Selection::Cells {
+        test: room_test(&[2]),
+        seeds: vec![seed(50, p(20, 50, 15)), seed(51, p(80, 50, 15))],
+    };
+    let moved = picked(vec![solid(1, &envelope), solid(2, &thicker)], again);
+    for (room, other) in rooms.iter().zip(&moved.result[0]) {
+        assert_eq!(
+            name(room),
+            name(other),
+            "the wall moved and the room kept its name"
+        );
+    }
 }
 
 #[test]

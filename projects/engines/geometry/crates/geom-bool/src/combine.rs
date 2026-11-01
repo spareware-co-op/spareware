@@ -45,7 +45,7 @@ use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
 use geom_topo::Body;
 
 use crate::certificate::{Fault, certify, labelled};
-use crate::names::{Named, Naming, NamingError, Sources, name};
+use crate::names::{Named, Naming, NamingError, Sources, name, name_curves};
 use crate::operand::{
     BooleanInput, CellSeed, Operand, OperandKey, PrepareError, Prepared, Selection, prepare,
 };
@@ -193,6 +193,8 @@ struct Job<'j> {
     open: bool,
     /// The input faces that other results of this selection hold pieces of.
     split: &'j BTreeSet<(usize, u32)>,
+    /// The seed that names this cell.
+    seed: Option<OperandKey>,
 }
 
 /// A piece of a cell.
@@ -425,6 +427,7 @@ impl<'a> Scene<'a> {
             rows: &self.ready.rows,
             planes: &self.planes,
             split: job.split,
+            seed: job.seed,
         };
         let Naming {
             names,
@@ -459,6 +462,7 @@ impl<'a> Scene<'a> {
             target,
             open: false,
             split: &BTreeSet::new(),
+            seed: None,
         };
         let (result, qualified) = self.finished(&merged, job, &kept, meter)?;
         Ok(Picked {
@@ -548,6 +552,7 @@ impl<'a> Scene<'a> {
                 target,
                 open: false,
                 split: &split,
+                seed: None,
             };
             let (result, qualified) = self.finished(&merged, job, &pieces, meter)?;
             picked.results.push(result);
@@ -699,6 +704,7 @@ impl<'a> Scene<'a> {
                 target: None,
                 open: false,
                 split: &split,
+                seed: seated.iter().map(|seed| seed.key).min(),
             };
             let (mut result, qualified) = self.finished(&merged, job, &pieces, meter)?;
             let mut keys: Vec<OperandKey> = seated.iter().map(|seed| seed.key).collect();
@@ -769,6 +775,7 @@ impl<'a> Scene<'a> {
             target,
             open: true,
             split: &BTreeSet::new(),
+            seed: None,
         };
         let (result, qualified) = self.finished(&merged, job, pieces, meter)?;
         Ok(Picked {
@@ -830,10 +837,28 @@ impl<'a> Scene<'a> {
             pieces.push((c.piece.clone(), owner.copied().ok_or(RebuildError::Broken)?));
         }
         let curves = section(&pieces, meter)?;
+        let split = BTreeSet::new();
+        let polygons: Vec<usize> = self.classified.iter().map(|c| c.polygon).collect();
+        let naming = match self.named(None) {
+            Some(named) => {
+                let sources = Sources {
+                    operands: &named,
+                    owners: &self.ready.owners,
+                    rows: &self.ready.rows,
+                    planes: &self.planes,
+                    split: &split,
+                    seed: None,
+                };
+                Some(name_curves(self.op, &curves, &polygons, &sources)?)
+            }
+            None => None,
+        };
+        let names = naming.as_ref().map(|held| &held.names);
+        let body = wire(&curves, names, meter)?;
         Ok(Picked {
             results: alloc::vec![Combined {
-                body: wire(&curves, meter)?,
-                history: None,
+                body,
+                history: naming.map(|held| held.history),
                 cell: None,
             }],
             separated: true,
