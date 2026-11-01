@@ -612,11 +612,9 @@ pub(crate) fn boolean_into(
         meter,
     )?;
     let face_run = alloc::vec![0; merged.faces.len()];
-    build(
-        &polygons_of(&merged, face_run, alloc::vec![source])?,
-        exec,
-        meter,
-    )
+    let polygons = polygons_of(&merged, face_run, alloc::vec![source])?;
+    // A boolean's result: its winding is its test's, 0 or 1, and no two of its faces cross.
+    Ok(build(&polygons, exec, meter)?.proven_solid())
 }
 
 /// The arrangement's errors as a mesh's.
