@@ -6,6 +6,11 @@
 //! take, with the operands as built and as solids (each first united alone, which proves it, as
 //! 11.3 step 4 has every checked operand be). Prints one line per run; the gate is the count
 //! benchmark in `geom-bench`.
+//!
+//! Arguments: a side (23, 71 or 224; all three by default), then text a run's line must hold to
+//! run, such as "in a strip, as solids, 1 thread". Each timed run is the call `timed`, so a
+//! profiler can count it alone: `valgrind --tool=callgrind --collect-atstart=no
+//! --toggle-collect='boolean::timed*'`.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -108,6 +113,14 @@ fn mesh(input: &Polygons, exec: &Exec<'_>) -> ExactMesh {
     build(input, exec, &mut WorkMeter::new(Budget::UNLIMITED)).unwrap()
 }
 
+/// One timed run: the union of `a` and `b`, and the faces it has.
+#[inline(never)]
+fn timed(a: &ExactMesh, b: &ExactMesh, step: &OpPath, exec: &Exec<'_>) -> usize {
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let done = boolean(&[a, b], &[WindingTest::unite()], step, exec, &mut meter).unwrap();
+    done[0].mesh.faces()
+}
+
 fn main() {
     let rayon = Rayon::new(NonZeroUsize::new(8).unwrap()).unwrap();
     let step = OpPath::new(OpId::from_bytes([7; 16]));
@@ -115,6 +128,7 @@ fn main() {
         Some(side) => vec![side],
         None => vec![23, 71, 224],
     };
+    let only = std::env::args().nth(2).unwrap_or_default();
     for (side, (pair, offset)) in sides
         .iter()
         .flat_map(|&side| [("crossing", 2048), ("in a strip", 0)].map(|p| (side, p)))
@@ -147,16 +161,14 @@ fn main() {
                 (run, ("as solids", &solid_a, &solid_b)),
             ]
         }) {
+            let run = format!("{} + {} faces {pair}, {form}, {name}", a.faces(), b.faces());
+            if !run.contains(&only) {
+                continue;
+            }
             let start = Instant::now();
-            let mut meter = WorkMeter::new(Budget::UNLIMITED);
-            let done = boolean(&[a, b], &[WindingTest::unite()], &step, &exec, &mut meter).unwrap();
+            let faces = timed(a, b, &step, &exec);
             let time = start.elapsed();
-            println!(
-                "{} + {} faces {pair}, {form}, {name}: {} faces in {time:?}",
-                a.faces(),
-                b.faces(),
-                done[0].mesh.faces()
-            );
+            println!("{run}: {faces} faces in {time:?}");
         }
     }
 }
