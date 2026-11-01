@@ -656,7 +656,7 @@ fn two_circles_meet_on_both_and_their_order_is_the_one_stated() {
     assert!(p.cmp_x(&q).is_ok());
     let arc = Arc2::new(p2(M, M), p2(-M, M), p2(0, 0).into()).unwrap();
     assert!(arc.order_crossings(&p, &q).is_ok());
-    assert!(BIG_LIMBS * 64 > 5_041);
+    const { assert!(BIG_LIMBS * 64 > 5_041) };
 }
 
 #[test]
@@ -765,7 +765,7 @@ fn the_extreme_values_reach_every_width_and_every_step_fits() {
     for (x, y) in [(M, M), (M, -M), (-M, M), (-M, -M)] {
         let circle = Circle2::new(p2(x, y), R).unwrap();
         for (a, b) in [(N, N), (N, -N), (-N, N), (-N, -N), (N, 1), (1, N)] {
-            let c = (a * (x.signum() as i128) * m + b * (y.signum() as i128) * m).clamp(-D, D);
+            let c = (a * i128::from(x.signum()) * m + b * i128::from(y.signum()) * m).clamp(-D, D);
             let l = Carrier::new(a, b, c).unwrap();
             let Ok(p) = Crossing2::of_circle(&l, &circle, Root::First) else {
                 continue;
@@ -808,7 +808,7 @@ fn the_extreme_values_reach_every_width_and_every_step_fits() {
     let (k, l) = (wide(limit, 209), wide(limit, 209));
     assert!(sign_of_two_roots(&a, &b, &c, &d, &k, &l).is_ok());
     assert!(sign_of_root(&a, &b, &k).is_ok());
-    assert!(BIG_LIMBS * 64 > 1_688);
+    const { assert!(BIG_LIMBS * 64 > 1_688) };
 }
 
 #[test]

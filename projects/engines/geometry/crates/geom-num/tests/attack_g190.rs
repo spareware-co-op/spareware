@@ -11,7 +11,7 @@
 //! - **Contacts** come from geometry worked by hand: tangent circles, the circle of curvature, an
 //!   inscribed ellipse, a point on the ellipse by its Pythagorean parameter.
 //!
-//! CADCraft's issue 1690, a hatch boundary lost to the gaps where lines meet a flattened ellipse, is
+//! `CADCraft`'s issue 1690, a hatch boundary lost to the gaps where lines meet a flattened ellipse, is
 //! `a_line_ending_on_an_ellipse_closes_its_boundary`.
 //!
 //! Seeds: each randomised test prints `seed: <hex>` and runs from a fixed default;
@@ -29,7 +29,13 @@
 )]
 #![allow(
     clippy::many_single_char_names,
+    clippy::similar_names,
     reason = "p, q, k and the like are the formulas'"
+)]
+#![allow(
+    clippy::assert_is_empty,
+    clippy::disallowed_methods,
+    reason = "test code: an empty answer reads best as is_empty, and an oracle may sum its counts"
 )]
 #![allow(
     clippy::unwrap_used,
@@ -198,7 +204,7 @@ fn sign_of(v: &IBig) -> Sign {
 // ------------------------------------------------------------------------------------------------
 
 /// `c` times the polynomial `by`, lowest term first.
-fn multiply(c: [Big; 5], by: [i128; 3]) -> [Big; 5] {
+fn multiply(c: &[Big; 5], by: [i128; 3]) -> [Big; 5] {
     let mut out = [Big::from_i64(0); 5];
     for (i, v) in c.iter().enumerate() {
         for (j, w) in by.iter().enumerate() {
@@ -220,10 +226,10 @@ fn quartic(linear: &[(i128, i128)], quadratics: &[[i128; 3]]) -> Quartic {
     let mut c = [Big::from_i64(0); 5];
     c[0] = Big::from_i64(1);
     for (q, p) in linear {
-        c = multiply(c, [-p, *q, 0]);
+        c = multiply(&c, [-p, *q, 0]);
     }
     for f in quadratics {
-        c = multiply(c, *f);
+        c = multiply(&c, *f);
     }
     Quartic::new(c)
 }
@@ -1124,7 +1130,7 @@ fn the_extreme_values_reach_every_width_and_every_step_fits() {
             assert!(e.meeting(&Conic::of_ellipse(&other).unwrap()).is_ok());
         }
     }
-    assert!(BIG_LIMBS * 64 > 2_024);
+    const { assert!(BIG_LIMBS * 64 > 2_024) };
     // A quartic at the budget, with its roots a hair apart: the largest coefficients a pair of
     // ellipses makes.
     let a = ellipse((M, M), [TOP, TOP], p, q);
