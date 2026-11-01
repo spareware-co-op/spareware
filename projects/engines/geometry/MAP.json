@@ -1581,14 +1581,13 @@
           "target": "lib"
         },
         {
-          "cost": "linear in what [`merge`] returns, after its cost.",
-          "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge`] make them faces, edges and shells, and writes those into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.",
+          "cost": "[`merge_with`]'s, and [`publish`]'s, linear in what [`merge_with`] returns.",
+          "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge_with`] make them faces, edges and shells, and has [`publish`] write those into a body; [`wire`] writes a section's curves. The writing itself is `geom-poly`'s, shared with `geom-mesh`'s faceted B-rep: here its refusals, and the naming that only booleans do, become a [`RebuildError`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
           "guarantees": [
-            "**The same bytes however the boxes fell.** Every row comes in the order [`merge`] numbers the shape, which depends on the shape alone (11.3; tested).",
-            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
-            "**Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a [`RebuildError`]."
+            "**The same bytes however the boxes fell.** Every row comes in the order [`merge_with`] numbers the shape, which depends on the shape alone (11.3; tested).",
+            "**Refused, never guessed.** What [`merge_with`] and [`publish`] refuse is a [`RebuildError`]."
           ],
           "job": "The canonical rebuild: merged pieces published as a body (11.3, step 5).",
           "method": {
@@ -1596,7 +1595,7 @@
               "projects/engines/geometry/architecture/11-booleans.md",
               "https://doi.org/10.1145/3528223.3530181"
             ],
-            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), into the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
           },
           "path": "geom_bool::rebuild",
           "provenance": [],
@@ -5135,6 +5134,11 @@
               "shape": "struct"
             },
             {
+              "doc": "Planes to slice by must be parallel and rise along their normal.",
+              "name": "SlicesOutOfOrder",
+              "shape": "unit"
+            },
+            {
               "doc": "The box tree refused.",
               "name": "Bvh",
               "shape": "tuple"
@@ -5167,6 +5171,79 @@
           ],
           "module": "geom_mesh::exact",
           "name": "MeshError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a mesh could not be written.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+          "kinds": [
+            {
+              "doc": "Rounding broke the mesh here. The remedies are a finer unit, splitting the faces, or accepting it, which is recorded with the file.",
+              "name": "RoundingFlip",
+              "shape": "struct"
+            },
+            {
+              "doc": "A face could not be split into triangles.",
+              "name": "Cdt",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The mesh does not fit together.",
+              "name": "Fault",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The box tree refused.",
+              "name": "Bvh",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More triangles or vertices than the format's 32-bit indices can name.",
+              "name": "Full",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_mesh::export",
+          "name": "ExportError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a hull could not be found.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More points than 32-bit indices can name.",
+              "name": "Full",
+              "shape": "unit"
+            },
+            {
+              "doc": "Two faces lost their link: a defect here, never the input's doing.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_mesh::hull",
+          "name": "HullError",
           "non_exhaustive": false
         }
       ],
@@ -5455,6 +5532,101 @@
             "text": "chapter 19.2's \"Raw meshes\", `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`."
           },
           "path": "geom_mesh::exact::raw",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) for n triangles: one triangulation per face that is not a triangle, and a query of a box tree per triangle for the check, charged to the meter per test.",
+          "does": "[`triangles`] commits a mesh to the grid and splits its faces into triangles. [`export`] writes those as OBJ, ASCII STL or a 3MF model part, in exact decimals of millimetres, or as binary STL or binary glTF, in `f32` relative to a chunk origin. It then checks what it wrote with exact predicates, and says how far from the mesh the file can be.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+          "guarantees": [
+            "**Text carries grid points exactly.** A grid step is a whole number of quarter-nanometres, so a coordinate is a decimal of at most eight places in millimetres, written in full.",
+            "**`f32` is rounded once, on one lattice.** Every value of a chunk is rounded to the nearest multiple of the power of two that fits the chunk's largest value in 24 bits. Each such multiple is an `f32`, so the error is at most half a unit in the last place at the chunk's extent. That is what 19.5 asks, at every value and not only the largest, and it makes the written points small integers, which the kernel's own predicates can check.",
+            "**The bound is proven and stated.** [`Export::bound`] adds the lattice's half step to the commit of three-plane points to the grid, in quarter-nanometres.",
+            "**Rounding that breaks the mesh is refused.** A triangle that turned over or closed up, or two that came to touch, are [`Flaw`]s, with their faces. [`export`] returns [`ExportError::RoundingFlip`] unless told to accept them, and then lists them.",
+            "**Deterministic.** The bytes depend on the mesh and the options alone, and no floating-point sum is done: an `f32` is built from its integer."
+          ],
+          "job": "Exact meshes written at each format's precision (19.5, 24.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html"
+            ],
+            "text": "19.5's export and 24.10's steps 3 to 5 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`, `24-file-format-exchange.md`), for OBJ (Wavefront's appendix to the Advanced Visualizer manual), STL (3D Systems, 1989), the 3MF Core Specification and glTF 2.0 (<https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html>). A face that is not a triangle goes through this crate's constrained Delaunay triangulation in the plan its normal leans on least. The zip a 3MF package needs is the exchange layer's, not this one's."
+          },
+          "path": "geom_mesh::export",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the merge's O(n log n) exact comparisons for n sides of pieces, then the publication.",
+          "does": "[`faceted`] makes a closed mesh a body: adjacent faces on one plane merge into one face, and what is left of their edges merges into maximal edges.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/faceted.rs",
+          "guarantees": [
+            "**Planes are matched exactly.** Faces are on one plane when their reduced coefficients are equal, found by sorting those keys, never by comparing pairs of faces, which is what stalls on large slabs (19.5).",
+            "**The body is the mesh.** Its vertices are the mesh's points, grid points or three planes, and nothing moves.",
+            "**Closed meshes only.** An open mesh bounds nothing: [`MeshError::NotClosed`]."
+          ],
+          "job": "Exact meshes as faceted B-reps (19.5): an edge of the conversion graph.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.5's \"Mesh to faceted B-rep\" (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`): each face's convex pieces go through `geom-poly`'s merge and publication, the same two steps a boolean's result takes. A surface's `f64` frame is drawn from the plane's integer coefficients; the body's corners and edges stand on the planes, so the frame only shows where the face is for evaluation."
+          },
+          "path": "geom_mesh::faceted",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "about O(n log n) orientation tests for points in general position, O(n²) at worst, charged to the meter one by one, then a sort of the triangles by plane.",
+          "does": "[`Hull::of`] finds the convex hull of a set of grid points: its corners, and the ring of corners round each of its faces, outward. [`Hull::mesh`] makes it a closed exact mesh.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+          "guarantees": [
+            "**Exact.** Every decision is an exact orientation test. No point is near a face: it is above, on or below it, and a hull is the same at every scale.",
+            "**Coplanar points are no special case.** Ties break by symbolic perturbation in the points' sorted order, so the search always sees a hull of triangles. Triangles on one plane then merge into one face, and points on an edge or inside a face drop out. A face's corners are always corners of the hull: no three in a ring are on one line.",
+            "**The order of the input does not show.** Points are sorted and repeats dropped first, so the same set of points gives the same hull, face for face.",
+            "**Flat sets are answers too.** Points on a plane give one face, on a line its two ends, and one point itself. Only a solid hull makes a mesh."
+          ],
+          "job": "Exact convex hulls of grid points (19.5).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/235815.235821",
+              "https://doi.org/10.1145/77635.77639",
+              "https://doi.org/10.1016/0020-0190(79"
+            ],
+            "text": "quickhull (Barber, Dobkin and Huhdanpaa, 1996, <https://doi.org/10.1145/235815.235821>), with Edelsbrunner and Mücke's Simulation of Simplicity (<https://doi.org/10.1145/77635.77639>) in place of its tolerances (19.5, 6.2). The farthest point is only a choice of which to take next, so a rough plane in coordinates cut to 21 bits serves; the exact tests decide everything else. A face's ring is Andrew's monotone chain (<https://doi.org/10.1016/0020-0190(79)90072-3>) in the two axes its normal leans on least."
+          },
+          "path": "geom_mesh::hull",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(v log p) signs for v vertices and p planes, then a pass over the half-edges, then for each plane O(c log c) for its c crossings, plane by plane on the pool. The meter is charged one unit per vertex and one per crossing.",
+          "does": "[`slice`] cuts a mesh by parallel planes in rising order. Each plane gives closed contours, each a ring of [`Cut`]s: a vertex of the mesh on the plane, or a half-edge that crosses it. [`point`] gives a cut's exact point, and nothing is rounded before someone asks for a grid point with [`Point::to_grid`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+          "guarantees": [
+            "**Every contour closes.** A contour follows the mesh's own pairing of half-edges from face to face, so a closed mesh gives closed rings with no tolerance anywhere.",
+            "**A plane cuts just under itself.** A vertex on the plane counts as above it, the one rule every vertex takes, so an edge crosses or does not with no third case. A box from z = 0 to z = 1 has a contour at z = 1 and none at z = 0. A contour that closes up to under three points as the plane comes up to it, such as the tip of a cone, is left out.",
+            "**Which side is solid.** Seen from where the planes' normal points, a contour turns counter-clockwise round solid and clockwise round a cavity.",
+            "**The threads do not show.** Contours come in the order of their lowest half-edge, on any pool."
+          ],
+          "job": "Plane slices of closed exact meshes (19.5): layers for 3D printing, and plan cuts.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "each vertex finds its place among the planes by bisection with exact signs. An edge between places crosses each plane between them. In a face, the crossings on a plane run in pairs along the line where the plane meets the face: most faces have one pair, and the rest are sorted with 11.3's `along` (`projects/engines/geometry/architecture/11-booleans.md`). Pairs join across the mesh's half-edge pairs into rings. Crossing points are three-plane points, the face's, the edge's and the cut's, as 19.5 asks."
+          },
+          "path": "geom_mesh::slice",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -9302,6 +9474,30 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why merged pieces could not be made into a body.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/publish.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The topology refused.",
+              "name": "Topo",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A row past the end of a list: a defect, reported instead of a wrong body.",
+              "name": "Broken",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_poly::publish",
+          "name": "PublishError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a box could not be classified.",
           "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
           "kinds": [
@@ -9495,6 +9691,28 @@
             "text": "canonical plane coefficients as chapter 23.2 and 23.9 fix them (`projects/engines/geometry/architecture/23-performance.md`), on the plane-based geometry of Nehring-Wirxel, Trettner and Kobbelt 2021, <https://doi.org/10.1016/j.cad.2021.103015>."
           },
           "path": "geom_poly::plane",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in what the merge returns.",
+          "does": "[`publish`] writes what [`merge`](crate::merge::merge) made into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are. [`publish_with`] also writes an open merge as a sheet and publishes in the order of names given, and [`wire`] writes a section's curves as edges with no fins.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/publish.rs",
+          "guarantees": [
+            "**The same bytes however the boxes fell.** Every row comes in the order the merge numbers the shape, which depends on the shape alone (11.3).",
+            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
+            "**Refused, never guessed.** What the arenas refuse is a [`PublishError`]."
+          ],
+          "job": "Merged pieces published as a body (11.3, step 5), shared by `geom-bool`'s rebuild and `geom-mesh`'s faceted B-rep.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+          },
+          "path": "geom_poly::publish",
           "provenance": [],
           "spdx": null,
           "target": "lib"

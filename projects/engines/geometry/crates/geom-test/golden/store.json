@@ -98,8 +98,8 @@
             {
               "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4",
               "kind": "corpus",
-              "piece": "G148",
-              "why": "Count benchmarks of two stacks joined, and 1 new on mesh booleans (decision 32.44): mesh/boolean; no existing digest moved"
+              "piece": "G149",
+              "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull, mesh/slice; no existing digest moved"
             },
             {
               "sha256": "34578be2ad605ad7842a25d149edfcf271c21d869c257e8e4fdc00a19738e3b8",
@@ -110,8 +110,20 @@
             {
               "sha256": "ceb24eae92c96874d12498f59b4b59878a426492bfbabbb4d4886226fd108d91",
               "kind": "corpus",
-              "piece": "G148",
+              "piece": "G149",
+              "why": "Count benchmarks of two stacks joined; no existing digest moved"
+            },
+            {
+              "sha256": "321bdd4d60033e76b0849a442959aa5f13525845e39ca2fb4f3dbf42d2ba8e36",
+              "kind": "corpus",
+              "piece": "G149",
               "why": "The boolean's count benchmark on small prisms: mesh/boolean; no existing digest moved"
+            },
+            {
+              "sha256": "0ce76ad6f0c6b5d5bb00ef5fef6259f0710f137fc3cce180ba3a56e8b3628871",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "The count benchmarks in the catalogue's order; no digest moved"
             },
             {
               "sha256": "38df307b44466d7d9759aa9108631825877573adc4e1742a3b60a831083a2edc",
@@ -130,9 +142,21 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "Count benchmarks of two stacks joined: G138's 14 on geom-num's new public functions and G148's mesh/boolean; no existing digest moved"
+            },
+            {
+              "sha256": "521ad4c6cd0d6ea4a9ff91b0a27bbb5510f2f69939317a8f7d7922682f41ed6b",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "Count benchmarks of two stacks joined: G149's catalogue order with G138's 14 on geom-num's new public functions; no existing digest moved"
+            },
+            {
+              "sha256": "eaa79854dc3f526e985192c0b919aad740f1e29f934bb17121102c8227d15e3e",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "Count benchmarks of two stacks joined: G149's catalogue order with G138's 14 on geom-num's new public functions; no existing digest moved"
             }
           ],
-          "sha256": "eaa79854dc3f526e985192c0b919aad740f1e29f934bb17121102c8227d15e3e"
+          "sha256": "bf47c2eec429cf70455f69f0eaea2580c606360d8b1c997c87c03ce6f87643ef"
         },
         {
           "id": "geom-bvh/cells",
