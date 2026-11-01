@@ -2031,6 +2031,8 @@ pub mod roots {
 /// under an unlimited budget.
 pub mod intersect {
     use geom_curve::CurveKind;
+    use geom_intersect::curve::{curves, self_crossings};
+    use geom_intersect::curve_surface::curve_surface;
     use geom_intersect::general::{Subdivided, subdivide};
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, LevelCurves, OnImplicit,
@@ -2055,6 +2057,30 @@ pub mod intersect {
     /// A meter of its own, under no limit.
     fn meter() -> WorkMeter<'static> {
         WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// `curves` on each pair.
+    #[inline(never)]
+    pub fn met(
+        batch: &[(CurveKind<2>, CurveKind<2>)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| curves(a, b, &mut meter()));
+    }
+
+    /// `curve_surface` on each pair.
+    #[inline(never)]
+    pub fn pierced(
+        batch: &[(CurveKind<3>, SurfaceKind)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(c, s)| curve_surface(c, s, &mut meter()));
+    }
+
+    /// `self_crossings` on each curve.
+    #[inline(never)]
+    pub fn crossed(batch: &[CurveKind<2>], out: &mut Vec<Result<Intersection, IntersectError>>) {
+        run(batch, out, |curve| self_crossings(curve, &mut meter()));
     }
 
     /// `Intersection::new` on each list.
@@ -2171,5 +2197,62 @@ pub mod intersect {
         run(batch, out, |(surface, p)| {
             project_surface(surface, p, FLOOR, &mut meter())
         });
+    }
+}
+
+/// The exact decisions on lines and quadrics (piece G159, decision 32.44): each discriminant through
+/// its filter, a torus's roots, and the tangent sphere of a cylinder and a cone.
+pub mod quadric {
+    use geom_num::quadric::{
+        Cone, Cylinder, Line, Sphere, Surface, Torus, axis_gap, line_cone, line_cylinder,
+        line_sphere, parallel, roots, tangent_cylinder_cone,
+    };
+    use geom_num::sturm::Roots;
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `line_sphere` on each pair.
+    #[inline(never)]
+    pub fn spheres(batch: &[(Line, Sphere)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, s)| line_sphere(l, s));
+    }
+
+    /// `line_cylinder` on each pair.
+    #[inline(never)]
+    pub fn cylinders(batch: &[(Line, Cylinder)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, c)| line_cylinder(l, c));
+    }
+
+    /// `line_cone` on each pair.
+    #[inline(never)]
+    pub fn cones(batch: &[(Line, Cone)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, c)| line_cone(l, c));
+    }
+
+    /// `roots` on each line and torus.
+    #[inline(never)]
+    pub fn tori(batch: &[(Line, Torus)], out: &mut Vec<Result<Roots, NumError>>) {
+        run(batch, out, |(l, t)| roots(l, &Surface::Torus(*t)));
+    }
+
+    /// `parallel` on each pair of directions.
+    #[inline(never)]
+    pub fn directions(batch: &[(Line, Line)], out: &mut Vec<Result<bool, NumError>>) {
+        run(batch, out, |(u, v)| parallel(u.a, u.b, v.a, v.b));
+    }
+
+    /// `axis_gap` on each line's points and the other's first.
+    #[inline(never)]
+    pub fn gaps(batch: &[(Line, Line)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(u, v)| {
+            axis_gap(u.a, u.b, v.a, geom_num::grid::Steps(1024))
+        });
+    }
+
+    /// `tangent_cylinder_cone` on each pair.
+    #[inline(never)]
+    pub fn tangents(batch: &[(Cylinder, Cone)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(c, k)| tangent_cylinder_cone(c, k));
     }
 }

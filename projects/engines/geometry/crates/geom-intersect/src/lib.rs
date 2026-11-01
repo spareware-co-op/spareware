@@ -32,7 +32,10 @@
 //! - [`project`]: nearest points and inversion (G162).
 //! - [`level`]: the implicit-parametric tracer and level curves (G168).
 //! - [`general`]: general surface with surface, subdivision and start points (G169).
-//! - [`solve`]: the interval engine for small systems (G163).
+//! - [`solve`] and [`curve`] (piece G163): the interval engine, and where two curves meet.
+//! - [`curve_surface`] (piece G164): where a curve meets a surface.
+//! - [`closed`] (piece G159): exact decisions for a line with a quadric or torus, and the special
+//!   positions of two quadrics.
 //!
 //! Status: the result types and canonical order built by piece G158, projection and inversion by
 //! G162, the implicit tracer and level curves by G168, subdivision by G169; the other methods come
@@ -43,6 +46,9 @@
 
 extern crate alloc;
 
+pub mod closed;
+pub mod curve;
+pub mod curve_surface;
 pub mod error;
 pub mod general;
 pub mod level;
