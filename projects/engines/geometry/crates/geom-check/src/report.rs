@@ -249,6 +249,9 @@ pub enum FaultKind {
     /// An edge's curve does not lie on a face's surface within the body's bound. `at` is the
     /// edge, `with` the face.
     EdgeOffSurface,
+    /// A fin's pcurve, mapped through its face's surface, does not lie within the body's bound of
+    /// its edge's curve (G177). `at` is the pcurve, `with` the fin.
+    PcurveOffCurve,
     /// A vertex's three planes do not meet in one point. `at` is the vertex.
     MeetSingular,
     /// A carrier group 2 has no certified check for yet: a surface or curve of another kind, a
@@ -296,6 +299,7 @@ impl FaultKind {
             FaultKind::VertexOffSurface
             | FaultKind::VertexOffCurve
             | FaultKind::EdgeOffSurface
+            | FaultKind::PcurveOffCurve
             | FaultKind::MeetSingular
             | FaultKind::Unchecked
             | FaultKind::FaceBound => Group::Geometric,
@@ -353,6 +357,9 @@ impl FaultKind {
                 "the vertex is not at the edge's curve end within the bound"
             }
             FaultKind::EdgeOffSurface => "the edge is not on the face's surface within the bound",
+            FaultKind::PcurveOffCurve => {
+                "the pcurve, mapped through the face's surface, is not within the bound of the edge"
+            }
             FaultKind::Unchecked => "no certified check of this carrier exists yet",
             FaultKind::EdgesCross => "two edges of the face meet other than at a shared vertex",
             FaultKind::FacesCross => "the two faces meet other than along a shared edge or vertex",

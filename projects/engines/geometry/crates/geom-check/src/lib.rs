@@ -62,6 +62,7 @@ mod combinatorial;
 mod curved;
 mod exactness;
 mod flat;
+mod general;
 mod geometric;
 mod orientation;
 mod planar;

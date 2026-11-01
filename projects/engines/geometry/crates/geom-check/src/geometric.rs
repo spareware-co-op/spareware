@@ -54,13 +54,14 @@ use geom_num::plane::{Plane as GridPlane, Tpi};
 use geom_num::wide::I320;
 use geom_num::{Coord, Exactness, P3, Sign};
 use geom_run::Stopped;
-use geom_topo::entity::{Edge, Face, Fin, PointKind, Vertex};
+use geom_topo::entity::{Edge, Face, Fin, PcurveIx, PointKind, Vertex};
 use geom_topo::ix::Arena;
 use geom_topo::mass::Corner;
 use geom_topo::{Arenas, Body, CurveKind, Ix, SurfaceKind};
 
 use crate::combinatorial::{fin_edge, fin_ends, fin_face, rows};
 use crate::curved::{self, Carrier, Pair};
+use crate::general::{self, Verdict};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
 
@@ -89,7 +90,7 @@ pub(crate) fn check(
     }
     for f in rows::<Face>(a.rows(Arena::Face)) {
         sink.charge()?;
-        if surface(a, f, exact).is_none() {
+        if surface(a, f, exact).is_none() && any_kind(a, f, exact).is_none() {
             let at = a
                 .faces
                 .surface
@@ -101,11 +102,29 @@ pub(crate) fn check(
     }
     for n in rows::<Fin>(a.rows(Arena::Fin)) {
         sink.charge()?;
-        if let Some(p) = a.fins.pcurve.get(n).copied().flatten() {
-            sink.push(Fault::at(FaultKind::Unchecked, Entity::Pcurve(p)).with(Entity::Fin(n)));
-        }
-        let Some((face, on)) = fin_face(a, n).and_then(|f| surface(a, f, exact).map(|on| (f, on)))
-        else {
+        // A fin's pcurve against its edge's curve, through its face's surface, on any kind (G177).
+        let mapped = match a.fins.pcurve.get(n).copied().flatten() {
+            Some(p) => {
+                let verdict = pcurve_of(a, n, p, limit, sink)?;
+                match verdict {
+                    Verdict::Fails => sink.push(
+                        Fault::at(FaultKind::PcurveOffCurve, Entity::Pcurve(p))
+                            .with(Entity::Fin(n)),
+                    ),
+                    Verdict::Unknown => sink.push(
+                        Fault::at(FaultKind::Unchecked, Entity::Pcurve(p)).with(Entity::Fin(n)),
+                    ),
+                    Verdict::Holds => {}
+                }
+                verdict
+            }
+            None => Verdict::Unknown,
+        };
+        let Some(face) = fin_face(a, n) else {
+            continue;
+        };
+        let Some(on) = surface(a, face, exact) else {
+            general_fin(a, (n, face), (limit, exact), mapped, sink)?;
             continue;
         };
         if let Some((v, _)) = fin_ends(a, n)
@@ -133,8 +152,7 @@ pub(crate) fn check(
             a.edges.end.get(e).copied().flatten(),
         ];
         let Some(curve) = Ends::of(c.and_then(|c| a.curves.get(c))) else {
-            let curve = c.map_or(Entity::Edge(e), Entity::Curve);
-            sink.push(Fault::at(FaultKind::Unchecked, curve).with(Entity::Edge(e)));
+            general_edge(a, e, limit, sink)?;
             continue;
         };
         let (lo, hi) = curve.domain();
@@ -146,6 +164,131 @@ pub(crate) fn check(
                     Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(v)).with(Entity::Edge(e)),
                 );
             }
+        }
+    }
+    Ok(())
+}
+
+/// Face `f`'s surface when no closed form covers it, for the general checks (G177): any kind but a
+/// plane not given by integers in a body recorded Exact, which stays unchecked (G134).
+fn any_kind(a: &Arenas, f: Ix<Face>, exact: bool) -> Option<&SurfaceKind> {
+    let kind = a.faces.surface.get(f).and_then(|s| a.surfaces.get(*s))?;
+    (!(exact && matches!(kind, SurfaceKind::Plane(_)))).then_some(kind)
+}
+
+/// Where vertex `v` lies, exactly, and the step more a vertex where three planes meet takes when
+/// it is rounded to the grid; `None` for three planes that do not meet.
+fn placed(a: &Arenas, v: Ix<Vertex>) -> Option<([Interval; 3], f64)> {
+    match corner(a, v)? {
+        Corner::Grid(p) => curved::grid(p).map(|x| (x, 0.0)),
+        Corner::Tpi(meeting) => {
+            let rounded = meeting.to_grid().ok()?;
+            curved::grid(rounded.value()).map(|x| (x, 1.0))
+        }
+        Corner::Lpi(_) => None,
+    }
+}
+
+/// Fin `n`'s pcurve against its edge's curve through its face's surface, within `limit`.
+fn pcurve_of(
+    a: &Arenas,
+    n: Ix<Fin>,
+    pcurve: PcurveIx,
+    limit: f64,
+    sink: &mut Sink<'_, '_>,
+) -> Result<Verdict, Stopped> {
+    let surface = fin_face(a, n)
+        .and_then(|f| a.faces.surface.get(f))
+        .and_then(|s| a.surfaces.get(*s));
+    let curve = fin_edge(a, n)
+        .and_then(|e| a.edges.curve.get(e))
+        .and_then(|c| a.curves.get(*c));
+    match (surface, a.pcurves.get(pcurve), curve) {
+        (Some(s), Some(pc), Some(c)) => general::pcurve_on(s, pc, c, limit, sink.meter()),
+        _ => Ok(Verdict::Unknown),
+    }
+}
+
+/// Group 2 for a fin on a face no closed form covers (G177): its start on the face's surface, by
+/// the surface's nearest points, and its edge on the face, which its pcurve proves when `mapped`
+/// holds and which is unchecked otherwise.
+fn general_fin(
+    a: &Arenas,
+    (n, face): (Ix<Fin>, Ix<Face>),
+    (limit, exact): (f64, bool),
+    mapped: Verdict,
+    sink: &mut Sink<'_, '_>,
+) -> Result<(), Stopped> {
+    let Some(kind) = any_kind(a, face, exact) else {
+        return Ok(());
+    };
+    if let Some((v, _)) = fin_ends(a, n) {
+        let verdict = match placed(a, v) {
+            Some((place, more)) => {
+                general::vertex_on_surface(kind, &place, limit + more, sink.meter())?
+            }
+            None => Verdict::Unknown,
+        };
+        match verdict {
+            Verdict::Fails => sink.push(
+                Fault::at(FaultKind::VertexOffSurface, Entity::Vertex(v)).with(Entity::Face(face)),
+            ),
+            Verdict::Unknown => sink
+                .push(Fault::at(FaultKind::Unchecked, Entity::Vertex(v)).with(Entity::Face(face))),
+            Verdict::Holds => {}
+        }
+    }
+    if mapped != Verdict::Holds
+        && let Some(edge) = fin_edge(a, n)
+    {
+        let at = a
+            .faces
+            .surface
+            .get(face)
+            .copied()
+            .map_or(Entity::Face(face), Entity::Surface);
+        sink.push(Fault::at(FaultKind::Unchecked, at).with(Entity::Edge(edge)));
+    }
+    Ok(())
+}
+
+/// Group 2 for an edge on a curve no closed form covers (G177): each vertex at its end of the
+/// curve, by the curve's enclosure there.
+fn general_edge(
+    a: &Arenas,
+    e: Ix<Edge>,
+    limit: f64,
+    sink: &mut Sink<'_, '_>,
+) -> Result<(), Stopped> {
+    let ix = a.edges.curve.get(e).copied();
+    let Some(curve) = ix.and_then(|c| a.curves.get(c)) else {
+        sink.push(Fault::at(FaultKind::Unchecked, Entity::Edge(e)).with(Entity::Edge(e)));
+        return Ok(());
+    };
+    let (lo, hi) = curve.domain();
+    let ends = [
+        a.edges.start.get(e).copied().flatten(),
+        a.edges.end.get(e).copied().flatten(),
+    ];
+    for (vertex, t) in ends.into_iter().zip([lo, hi]) {
+        let Some(v) = vertex else {
+            continue;
+        };
+        let verdict = match placed(a, v) {
+            Some((place, more)) => {
+                general::vertex_at(curve, t, &place, limit + more, sink.meter())?
+            }
+            None => Verdict::Unknown,
+        };
+        match verdict {
+            Verdict::Fails => sink.push(
+                Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(v)).with(Entity::Edge(e)),
+            ),
+            Verdict::Unknown => {
+                let at = ix.map_or(Entity::Edge(e), Entity::Curve);
+                sink.push(Fault::at(FaultKind::Unchecked, at).with(Entity::Edge(e)));
+            }
+            Verdict::Holds => {}
         }
     }
     Ok(())

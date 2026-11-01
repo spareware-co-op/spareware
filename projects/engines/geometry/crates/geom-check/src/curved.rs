@@ -528,7 +528,7 @@ fn axis(frame: &Frame<3>) -> Option<V3> {
 }
 
 /// A grid point, enclosed exactly.
-fn grid(p: P3) -> Option<V3> {
+pub(crate) fn grid(p: P3) -> Option<V3> {
     let whole = |c: geom_num::Coord| {
         #[allow(
             clippy::cast_precision_loss,

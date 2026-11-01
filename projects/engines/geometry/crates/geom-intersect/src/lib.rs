@@ -31,6 +31,7 @@
 //! - [`error`]: why an intersection could not be computed.
 //! - [`project`]: nearest points and inversion (G162).
 //! - [`level`]: the implicit-parametric tracer and level curves (G168).
+//! - [`gap`]: how far a curve is from a point, and a mapped pcurve from a 3D curve (G177).
 //! - [`general`]: general surface with surface, subdivision and start points (G169).
 //! - [`march`]: certified marching between start points (G170).
 //! - [`known`]: intersections known by construction, taken out only where a tube is proven (G174).
@@ -58,6 +59,7 @@ pub mod contact;
 pub mod curve;
 pub mod curve_surface;
 pub mod error;
+pub mod gap;
 pub mod general;
 pub mod known;
 pub mod level;
