@@ -808,6 +808,32 @@ pub mod plane {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/tpi_meeting/typical"))]
+    #[bench::degenerate(leak("plane/tpi_meeting/degenerate"))]
+    #[bench::extreme(leak("plane/tpi_meeting/extreme"))]
+    fn tpi_meeting(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/normals_sign/typical"))]
+    #[bench::degenerate(leak("plane/normals_sign/degenerate"))]
+    #[bench::extreme(leak("plane/normals_sign/extreme"))]
+    fn normals_sign(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/normals_sign_faces/typical"))]
+    #[bench::degenerate(leak("plane/normals_sign_faces/degenerate"))]
+    fn normals_sign_faces(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("plane/tpi_homogeneous/typical"))]
     #[bench::extreme(leak("plane/tpi_homogeneous/extreme"))]
     fn tpi_homogeneous(run: &'static mut Named) -> &'static mut Named {
@@ -821,6 +847,24 @@ pub mod plane {
     #[bench::nearly_degenerate(leak("plane/side_of_tpi/nearly_degenerate"))]
     #[bench::extreme(leak("plane/side_of_tpi/extreme"))]
     fn side_of_tpi(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/determinant_sign/typical"))]
+    #[bench::degenerate(leak("plane/determinant_sign/degenerate"))]
+    #[bench::nearly_degenerate(leak("plane/determinant_sign/nearly_degenerate"))]
+    #[bench::extreme(leak("plane/determinant_sign/extreme"))]
+    fn determinant_sign(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/determinant_sign_faces/typical"))]
+    #[bench::degenerate(leak("plane/determinant_sign_faces/degenerate"))]
+    fn determinant_sign_faces(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
@@ -874,8 +918,9 @@ pub mod plane {
 
     library_benchmark_group!(
         name = plane;
-        benchmarks = through, side, tpi_new, tpi_homogeneous, side_of_tpi, to_grid, lpi_new,
-            lpi_homogeneous, side_of_lpi, lpi_to_grid
+        benchmarks = through, side, tpi_new, tpi_meeting, normals_sign, normals_sign_faces,
+            tpi_homogeneous, side_of_tpi, determinant_sign, determinant_sign_faces, to_grid,
+            lpi_new, lpi_homogeneous, side_of_lpi, lpi_to_grid
     );
 }
 
@@ -2717,9 +2762,16 @@ pub mod mesh {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/boolean/typical"))]
+    fn boolean(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = mesh;
-        benchmarks = cdt, exact_build, locate, point_point, point_line, point_plane, line_line,
+        benchmarks = cdt, exact_build, locate, boolean, point_point, point_line, point_plane, line_line,
             closest_dots, triangles, envelope
     );
 }

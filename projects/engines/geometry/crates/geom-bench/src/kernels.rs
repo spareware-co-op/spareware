@@ -276,6 +276,28 @@ pub mod plane {
         run(batch, out, |&[p, q, r]| Tpi::new(p, q, r));
     }
 
+    /// `Tpi::meeting` on each plane triple.
+    #[inline(never)]
+    pub fn tpi_meeting(batch: &[[Plane; 3]], out: &mut Vec<Result<Tpi, NumError>>) {
+        run(batch, out, |&[p, q, r]| Tpi::meeting(p, q, r));
+    }
+
+    /// `plane::normals_sign` on each plane triple.
+    #[inline(never)]
+    pub fn normals_sign(batch: &[[Plane; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| {
+            geom_num::plane::normals_sign(p, q, r)
+        });
+    }
+
+    /// `plane::normals_sign` on each face triple.
+    #[inline(never)]
+    pub fn normals_sign_faces(batch: &[[Plane; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| {
+            geom_num::plane::normals_sign(p, q, r)
+        });
+    }
+
     /// `Tpi::homogeneous` on each meeting point.
     #[inline(never)]
     pub fn tpi_homogeneous(batch: &[Tpi], out: &mut Vec<Result<([I320; 3], I256), NumError>>) {
@@ -286,6 +308,22 @@ pub mod plane {
     #[inline(never)]
     pub fn side_of_tpi(batch: &[(Plane, Tpi)], out: &mut Vec<Result<Sign, NumError>>) {
         run(batch, out, |(p, t)| p.side_of_tpi(t));
+    }
+
+    /// `plane::determinant_sign` on each four planes.
+    #[inline(never)]
+    pub fn determinant_sign(batch: &[[Plane; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r, s]| {
+            geom_num::plane::determinant_sign(p, q, r, s)
+        });
+    }
+
+    /// `plane::determinant_sign` on each four face planes.
+    #[inline(never)]
+    pub fn determinant_sign_faces(batch: &[[Plane; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r, s]| {
+            geom_num::plane::determinant_sign(p, q, r, s)
+        });
     }
 
     /// `Tpi::to_grid` on each meeting point.
@@ -1922,6 +1960,7 @@ pub mod batch {
 
 /// The triangulation's hot path (piece G153, decision 32.44).
 pub mod mesh {
+    use geom_mesh::boolean::{Outcome, boolean as combine};
     use geom_mesh::classify::{Classifier, Located};
     use geom_mesh::envelope::TriangleEnvelope;
     use geom_mesh::exact::build::{Polygons, build};
@@ -1929,6 +1968,8 @@ pub mod mesh {
     use geom_mesh::{Cdt, CdtError, contact, triangulate};
     use geom_num::grid::P3;
     use geom_num::{NumError, Sign, distance};
+    use geom_op::{OpId, OpPath};
+    use geom_poly::winding::WindingTest;
     use geom_run::{Budget, Exec, WorkMeter};
 
     use super::run;
@@ -2017,6 +2058,25 @@ pub mod mesh {
             Classifier::new(&probe.solid, &exec, &mut meter)?.locate_all(
                 &probe.points,
                 &exec,
+                &mut meter,
+            )
+        });
+    }
+
+    /// `geom_mesh::boolean::boolean`: each pair united, serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn boolean(
+        batch: &[crate::inputs::mesh::Pair],
+        out: &mut Vec<Result<Vec<Outcome>, MeshError>>,
+    ) {
+        let step = OpPath::new(OpId::from_bytes([7; 16]));
+        run(batch, out, |pair| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            combine(
+                &[&pair.first, &pair.second],
+                &[WindingTest::unite()],
+                &step,
+                &Exec::serial(),
                 &mut meter,
             )
         });

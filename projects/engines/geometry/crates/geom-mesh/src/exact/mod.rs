@@ -48,6 +48,7 @@ use geom_num::grid::{P3, Steps};
 use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError};
 use geom_op::NameId;
+use geom_poly::merge::MergeError;
 use geom_run::{ChunkPlan, Exceeded, Exec, RunError, Stop, Stopped, WorkMeter};
 
 pub mod build;
@@ -173,9 +174,18 @@ pub struct Parts {
 }
 
 /// An exact polygon mesh: every face flat, every vertex a grid point or a meeting of three planes.
-#[derive(Clone, Debug, PartialEq)]
+/// Two meshes of the same arrays are equal, whether or not either is known to be a solid.
+#[derive(Clone, Debug)]
 pub struct ExactMesh {
     parts: Parts,
+    /// Whether it is known to bound a solid ([`ExactMesh::is_solid`]).
+    solid: bool,
+}
+
+impl PartialEq for ExactMesh {
+    fn eq(&self, other: &Self) -> bool {
+        self.parts == other.parts
+    }
 }
 
 impl ExactMesh {
@@ -190,7 +200,28 @@ impl ExactMesh {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Self, MeshError> {
         check::check(&parts, exec, meter)?;
-        Ok(Self { parts })
+        Ok(Self {
+            parts,
+            solid: false,
+        })
+    }
+
+    /// Whether the mesh is known to bound a solid: no two of its faces cross, and its winding
+    /// number is 1 just behind every face and 0 just in front, EMBER's no-self-intersection and
+    /// no-nested-parts flags (11.3 step 4), so a boolean need neither cut nor trace where only its
+    /// faces are. Only what proves it says so: a boolean's result is one by construction, its
+    /// winding the test's 0 or 1. A mesh made from arrays says `false`.
+    #[must_use]
+    pub const fn is_solid(&self) -> bool {
+        self.solid
+    }
+
+    /// `self`, known to bound a solid: for the constructions that prove it.
+    pub(crate) fn proven_solid(self) -> Self {
+        Self {
+            solid: true,
+            ..self
+        }
     }
 
     /// The arrays.
@@ -364,8 +395,16 @@ pub enum MeshError {
     },
     /// More items than 32-bit indices can name.
     Full,
-    /// Inside and outside are undefined for an open mesh.
+    /// Inside and outside are undefined for an open mesh. Heal it first.
     NotClosed,
+    /// A boolean's pieces would not merge, which closed inputs should never cause.
+    Merge(MergeError),
+    /// The outside passes this test of a boolean, so its result has no finite boundary. Intersect
+    /// it with a box first.
+    UnboundedResult {
+        /// The test, by its place in the list given.
+        test: u32,
+    },
     /// The box tree refused.
     Bvh(BvhError),
     /// The numbers layer refused: a plane over budget, or a fault of its own.
@@ -391,7 +430,12 @@ impl fmt::Display for MeshError {
                 write!(f, "corner {corner} needs its edge plane")
             }
             MeshError::Full => f.write_str("more items than 32-bit indices can name"),
-            MeshError::NotClosed => f.write_str("an open mesh has no inside"),
+            MeshError::NotClosed => f.write_str("an open mesh has no inside: heal it first"),
+            MeshError::Merge(e) => write!(f, "{e}"),
+            MeshError::UnboundedResult { test } => write!(
+                f,
+                "test {test} passes outside everything, so its result has no boundary: intersect it with a box first"
+            ),
             MeshError::Bvh(e) => write!(f, "{e}"),
             MeshError::Num(e) => write!(f, "{e}"),
             MeshError::Stopped(e) => write!(f, "the mesh stopped: {e}"),
@@ -407,6 +451,16 @@ impl core::error::Error for MeshError {}
 impl From<MeshFault> for MeshError {
     fn from(e: MeshFault) -> MeshError {
         MeshError::Fault(e)
+    }
+}
+
+impl From<MergeError> for MeshError {
+    fn from(e: MergeError) -> Self {
+        match e {
+            MergeError::Num(e) => MeshError::Num(e),
+            MergeError::Stopped(s) => s.into(),
+            other => MeshError::Merge(other),
+        }
     }
 }
 

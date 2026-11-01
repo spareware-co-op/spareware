@@ -42,16 +42,35 @@ use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
 
-use geom_num::plane::{Plane, Tpi};
+use geom_math::gcd_u128;
+use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{I256, I320, NumError, Sign, Wide};
-use geom_run::{Stopped, WorkMeter};
+use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 
 use crate::convex::{Piece, opposite};
-use crate::order::{Flap, Line, Ray, about, around};
+use crate::order::{Flap, Line, Meeting, Ray, about, around, plane_words, wide_product};
 use crate::plane::canonical;
 use crate::subdivide::around as box_around;
 use crate::trace::{Classified, Polygon, TraceError, classify};
 use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
+
+/// Making corners or sides, a few dozen pieces a task.
+const PIECES: ChunkPlan = ChunkPlan::fixed::<64>();
+
+/// The sorts of corners and sides, in runs of this many.
+const SORT_PLAN: ChunkPlan = ChunkPlan::fixed::<4096>();
+
+/// Making each piece's corners.
+const CORNERS: Phase = Phase::new("merge: corners");
+
+/// Sorting the corners.
+const SORT_CORNERS: Phase = Phase::new("merge: sort corners");
+
+/// Making each piece's sides.
+const SIDES: Phase = Phase::new("merge: sides");
+
+/// Sorting the sides by line.
+const SORT_SIDES: Phase = Phase::new("merge: sort sides");
 
 /// What merges (11.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,6 +123,9 @@ pub enum MergeError {
     Open,
     /// A shell faces inward with no shell around it.
     Inside,
+    /// The parallel helper broke one of its own rules: a defect, reported instead of a wrong
+    /// merge.
+    Defect,
 }
 
 impl fmt::Display for MergeError {
@@ -112,6 +134,7 @@ impl fmt::Display for MergeError {
             MergeError::Num(e) => write!(f, "pieces that cannot be merged: {e:?}"),
             MergeError::Trace(e) => write!(f, "{e}"),
             MergeError::Stopped(_) => f.write_str("the meter stopped the merge"),
+            MergeError::Defect => f.write_str("the merge's parallel helper broke a rule"),
             MergeError::Overlap => f.write_str("two pieces of one face overlap"),
             MergeError::Open => f.write_str("kept pieces do not close"),
             MergeError::Inside => f.write_str("a shell faces inward with no shell around it"),
@@ -272,7 +295,7 @@ pub struct Merged {
     pub faces: Vec<Face>,
     /// The shells.
     pub shells: Vec<Shell>,
-    /// Each piece given, its face.
+    /// The face of each piece given: a piece wholly inside a face has no fin to say so.
     pub piece_face: Vec<usize>,
 }
 
@@ -284,11 +307,14 @@ struct Held<'p> {
     given: usize,
 }
 
-/// A corner of a piece, its coordinates X / w with w positive.
+/// A corner of a piece.
 struct Corner {
     point: Tpi,
-    x: [I320; 3],
-    w: I256,
+    /// Each coordinate `X_i` / w, w made positive, as a [`Cell`], where X and w fit machine
+    /// words; the wide coordinates are made only to compare a corner that has none.
+    cells: Option<[Cell; 3]>,
+    /// The planes of every corner at this point: its own, until [`numbered`] joins them.
+    through: Vec<Plane>,
 }
 
 /// The sign of a / b − c / d for b and d positive, in `Wide<M>`.
@@ -303,13 +329,172 @@ fn ratio_order<const A: usize, const B: usize, const M: usize>(
     Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
 }
 
-/// Points lexicographically: at most 2^294 · 2^252, in 576 bits.
-fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
-    let mut order = Ordering::Equal;
-    for (p, q) in a.x.iter().zip(&b.x) {
-        order = order.then(ratio_order::<5, 4, 9>(p, &a.w, q, &b.w)?);
+/// [`ratio_order`] for a, b, c and d in machine words: each product is below 2^254, so [`I256`]
+/// holds it, at a quarter of the limbs of the wide rung. Most corners and lines of a building's
+/// faces fit.
+fn narrow_order(a: i128, b: i128, c: i128, d: i128) -> Option<Ordering> {
+    let wide = I256::from_i128;
+    let left = wide(a).checked_mul(&wide(d))?;
+    let right = wide(c).checked_mul(&wide(b))?;
+    Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
+}
+
+/// A ratio v / over, over positive, as its floor and its remainder in [0, over), the remainder
+/// and divisor in lowest terms: two ratios compare by their floors, a zero remainder settles a
+/// tie, equal fractions are equal terms, and only then do their cross products decide, in `i128`
+/// where the terms fit `i64`, else [`narrow_order`]'s. A corner of a building's faces on the grid
+/// has every remainder zero, one on a box's split a half, and so do most of a line's coordinates
+/// over a short direction.
+#[derive(Clone, Copy, Debug)]
+struct Cell {
+    floor: i128,
+    rest: i128,
+    over: i128,
+}
+
+impl Cell {
+    /// v / `over` split, or `None` unless `over` is positive.
+    fn new(v: i128, over: i128) -> Option<Self> {
+        if over <= 0 {
+            return None;
+        }
+        let rest = v.checked_rem_euclid(over)?;
+        // Both are positive or the rest zero, so the divisor is at least 1.
+        let common = i128::try_from(gcd_u128(rest.unsigned_abs(), over.unsigned_abs())).ok()?;
+        Some(Cell {
+            floor: v.checked_div_euclid(over)?,
+            rest: rest.checked_div(common)?,
+            over: over.checked_div(common)?,
+        })
     }
-    Some(order)
+
+    /// The order of the two ratios, exactly.
+    fn order(&self, other: &Cell) -> Option<Ordering> {
+        let by_floor = self.floor.cmp(&other.floor);
+        if by_floor != Ordering::Equal {
+            return Some(by_floor);
+        }
+        if self.rest == 0 || other.rest == 0 {
+            return Some((self.rest != 0).cmp(&(other.rest != 0)));
+        }
+        if (self.rest, self.over) == (other.rest, other.over) {
+            return Some(Ordering::Equal);
+        }
+        let words = |v: i128| i64::try_from(v).ok().map(i128::from);
+        if let (Some(a), Some(b), Some(c), Some(d)) = (
+            words(self.rest),
+            words(self.over),
+            words(other.rest),
+            words(other.over),
+        ) {
+            // Each is an i64 widened, so each product is at most 2^126 and the wrapping one exact.
+            return Some(a.wrapping_mul(d).cmp(&c.wrapping_mul(b)));
+        }
+        narrow_order(self.rest, self.over, other.rest, other.over)
+    }
+}
+
+/// Each `X_i` / w as a [`Cell`], w made positive, if every step fits.
+fn cells_of(x: [i128; 3], w: i128) -> Option<[Cell; 3]> {
+    let turn = |v: i128| {
+        if w.is_negative() {
+            v.checked_neg()
+        } else {
+            Some(v)
+        }
+    };
+    let over = turn(w)?;
+    let [first, second, third] = x;
+    Some([
+        Cell::new(turn(first)?, over)?,
+        Cell::new(turn(second)?, over)?,
+        Cell::new(turn(third)?, over)?,
+    ])
+}
+
+/// A corner's X and w with w positive, in wide integers: at most 2^294 and 2^252.
+fn wide_of(corner: &Corner) -> Option<([I320; 3], I256)> {
+    let (coordinates, weight) = corner.point.homogeneous().ok()?;
+    if !weight.is_negative() {
+        return Some((coordinates, weight));
+    }
+    let [first, second, third] = coordinates;
+    Some((
+        [
+            first.checked_neg()?,
+            second.checked_neg()?,
+            third.checked_neg()?,
+        ],
+        weight.checked_neg()?,
+    ))
+}
+
+/// A corner's place in [`point_order`], or a line's after its `first` in [`line_order`], where it
+/// has [`Cell`]s, for a sort on the pool: comparing cells cannot fail, as each product they need
+/// is of two `i128`s, below 2^254 in [`I256`]. It borrows the cells, as the sort makes a key for
+/// every comparison.
+#[derive(Clone, Copy, Debug)]
+struct CellKey<'a, const N: usize>(&'a [Cell; N]);
+
+impl<const N: usize> PartialEq for CellKey<'_, N> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl<const N: usize> Eq for CellKey<'_, N> {}
+
+impl<const N: usize> PartialOrd for CellKey<'_, N> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<const N: usize> Ord for CellKey<'_, N> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        for (p, q) in self.0.iter().zip(other.0) {
+            // `None` needs a product past 2^255, which two `i128`s cannot make.
+            let order = p.order(q).unwrap_or(Ordering::Equal);
+            if order != Ordering::Equal {
+                return order;
+            }
+        }
+        Ordering::Equal
+    }
+}
+
+/// A parallel phase's error as the merge's: the item's own, or the meter's stop, which the helper
+/// latches; a stop it did not latch is the helper's defect.
+fn phase_error(error: RunError<MergeError>, meter: &mut WorkMeter<'_>) -> MergeError {
+    match error {
+        RunError::Failed(e) => e,
+        _ => meter
+            .poll()
+            .err()
+            .map_or(MergeError::Defect, MergeError::Stopped),
+    }
+}
+
+/// Points lexicographically: by [`Cell`]s where both have them, else at most 2^294 · 2^252 in
+/// 576 bits. The first coordinate that differs decides, and the rest are not compared.
+fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
+    if let (Some(own), Some(other)) = (&a.cells, &b.cells) {
+        for (p, q) in own.iter().zip(other) {
+            let order = p.order(q)?;
+            if order != Ordering::Equal {
+                return Some(order);
+            }
+        }
+        return Some(Ordering::Equal);
+    }
+    let ((own, under), (other, beneath)) = (wide_of(a)?, wide_of(b)?);
+    for (p, q) in own.iter().zip(&other) {
+        let order = ratio_order::<5, 4, 9>(p, &under, q, &beneath)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
+    }
+    Some(Ordering::Equal)
 }
 
 /// A corner of `face` where `p` and `q` meet.
@@ -318,17 +503,15 @@ fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
     reason = "p and q are planes, and x and w the point, as in Tpi::homogeneous"
 )]
 fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
-    let point = Tpi::new(face, p, q)?;
-    let (x, w) = point.homogeneous()?;
-    let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
-    let [a, b, c] = &x;
-    Ok(match point.weight() {
-        Sign::Negative => Corner {
-            point,
-            x: [turn(a)?, turn(b)?, turn(c)?],
-            w: w.checked_neg().ok_or(NumError::BudgetExceeded)?,
-        },
-        Sign::Positive | Sign::Zero => Corner { point, x, w },
+    let point = Tpi::meeting(face, p, q)?;
+    let cells = Meeting::new(&face, &p, &q).and_then(|at| {
+        let (x, w) = at.coordinates();
+        cells_of(x, w)
+    });
+    Ok(Corner {
+        point,
+        cells,
+        through: alloc::vec![face, p, q],
     })
 }
 
@@ -338,11 +521,26 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
 struct LineKey {
     coordinates: [I256; 6],
     first: usize,
+    /// Each coordinate over the direction's first non-zero component as a [`Cell`], where all
+    /// six fit machine words.
+    cells: Option<[Cell; 6]>,
 }
 
 /// The line where `p` and `q` meet: direction `n_p` × `n_q`, moment `d_p` `n_q` − `d_q` `n_p`, which
 /// is the same up to scale for any two planes through the line.
 fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
+    match line_in_words(p, q) {
+        Some((coordinates, first)) => Ok(LineKey {
+            cells: line_cells_of(&coordinates, first),
+            coordinates: coordinates.map(I256::from_i128),
+            first,
+        }),
+        None => wide_line_key(p, q),
+    }
+}
+
+/// [`line_key`] in [`I256`], for any two planes: each product below 2^250.
+fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     let wide = I256::from_i128;
     let product = |a: i128, b: i128| wide(a).checked_mul(&wide(b));
     let minor = |a: i128, b: i128, c: i128, d: i128| {
@@ -371,20 +569,82 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
             *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
         }
     }
-    Ok(LineKey { coordinates, first })
+    Ok(LineKey {
+        cells: line_cells(&coordinates, first),
+        coordinates,
+        first,
+    })
+}
+
+/// [`line_key`]'s coordinates and `first` where both planes' coefficients fit `i64`: a product of
+/// two `i64`s lies in [−2^126 + 2^63, 2^126], so a minor, the difference of two, has
+/// |ab − cd| ≤ 2^127 − 2^63, in `i128` with its negation (the checks never fail). `None` for a
+/// direction of zero, which [`line_key`] refuses.
+fn line_in_words(p: &Plane, q: &Plane) -> Option<([i128; 6], usize)> {
+    let (([px, py, pz], pd), ([qx, qy, qz], qd)) = (plane_words(p)?, plane_words(q)?);
+    let minor = |a, b, c, d| wide_product(a, b).checked_sub(wide_product(c, d));
+    let mut coordinates = [
+        minor(py, qz, pz, qy)?,
+        minor(pz, qx, px, qz)?,
+        minor(px, qy, py, qx)?,
+        minor(pd, qx, qd, px)?,
+        minor(pd, qy, qd, py)?,
+        minor(pd, qz, qd, pz)?,
+    ];
+    let first = coordinates.iter().take(3).position(|v| *v != 0)?;
+    if coordinates.get(first).is_some_and(|v| *v < 0) {
+        for slot in &mut coordinates {
+            *slot = slot.checked_neg()?;
+        }
+    }
+    Some((coordinates, first))
+}
+
+/// A line's coordinates over its `first` as [`Cell`]s, if all six fit machine words.
+fn line_cells(coordinates: &[I256; 6], first: usize) -> Option<[Cell; 6]> {
+    let mut words = [0i128; 6];
+    for (word, coordinate) in words.iter_mut().zip(coordinates) {
+        *word = coordinate.to_i128()?;
+    }
+    line_cells_of(&words, first)
+}
+
+/// [`line_cells`] of coordinates in `i128`.
+fn line_cells_of(coordinates: &[i128; 6], first: usize) -> Option<[Cell; 6]> {
+    let over = *coordinates.get(first)?;
+    let mut cells = [Cell {
+        floor: 0,
+        rest: 0,
+        over,
+    }; 6];
+    for (cell, coordinate) in cells.iter_mut().zip(coordinates) {
+        *cell = Cell::new(*coordinate, over)?;
+    }
+    Some(cells)
 }
 
 /// The order of two lines, equal when they are one line: by which component of the direction comes
-/// first, then every coordinate over that component, below 2^418 in 512 bits.
+/// first, then every coordinate over that component, by [`Cell`]s where both have them, else
+/// below 2^418 in 512 bits. The first coordinate that differs decides, and the rest are not
+/// compared.
 fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
-    let (over_a, over_b) = (a.coordinates.get(a.first)?, b.coordinates.get(b.first)?);
-    let mut order = a.first.cmp(&b.first);
-    if order == Ordering::Equal {
-        for (p, q) in a.coordinates.iter().zip(&b.coordinates) {
-            order = order.then(ratio_order::<4, 4, 8>(p, over_a, q, over_b)?);
+    let order = a.first.cmp(&b.first);
+    if order != Ordering::Equal {
+        return Some(order);
+    }
+    let over = a.first;
+    for i in 0..6 {
+        let order = if let (Some(p), Some(q)) = (&a.cells, &b.cells) {
+            p.get(i)?.order(q.get(i)?)?
+        } else {
+            let (p, q) = (&a.coordinates, &b.coordinates);
+            ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?
+        };
+        if order != Ordering::Equal {
+            return Some(order);
         }
     }
-    Some(order)
+    Some(Ordering::Equal)
 }
 
 /// `order`, with a failure written down: a sort's comparison cannot return one.
@@ -615,32 +875,49 @@ fn sheets_of(pieces: &[Outward], merge: Merge) -> Result<(Vec<Sheet>, Vec<Held<'
 /// points in order.
 fn numbered(
     held: &[Held<'_>],
+    exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<usize>, Vec<Corner>), MergeError> {
-    let mut corners = Vec::new();
-    for piece in held {
+    let made = exec.try_map(meter, CORNERS, PIECES, held, |_, piece, m| {
         let after = piece.piece.bounds.iter().cycle().skip(1);
+        let mut out = Vec::with_capacity(piece.piece.bounds.len());
         for (bound, next) in piece.piece.bounds.iter().zip(after) {
-            meter.charge(1)?;
-            corners.push(Some(corner(piece.piece.face, *bound, *next)?));
+            m.charge(1)?;
+            out.push(corner(piece.piece.face, *bound, *next)?);
         }
-    }
-    let mut order: Vec<usize> = (0..corners.len()).collect();
-    let mut failed = false;
-    let at = |i: &usize| corners.get(*i).and_then(Option::as_ref);
-    order.sort_by(|a, b| {
-        let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
-        noted(found, &mut failed)
+        Ok::<_, MergeError>(out)
     });
-    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
+    let made = made.map_err(|e| phase_error(e, meter))?;
+    let mut corners: Vec<Option<Corner>> = made.into_iter().flatten().map(Some).collect();
+    let keys: Option<Vec<&[Cell; 3]>> = corners
+        .iter()
+        .map(|c| c.as_ref().and_then(|c| c.cells.as_ref()))
+        .collect();
+    let order = if let Some(keys) = keys {
+        // Equal points keep their order, as the serial stable sort keeps it.
+        let sorted = exec.sort_stable(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| CellKey(k));
+        sorted.map_err(|e| phase_error(e, meter))?
+    } else {
+        let mut order: Vec<usize> = (0..corners.len()).collect();
+        let mut failed = false;
+        let at = |i: &usize| corners.get(*i).and_then(Option::as_ref);
+        order.sort_by(|a, b| {
+            let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
+            noted(found, &mut failed)
+        });
+        (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
+        order
+    };
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
     for i in order {
         let held = corners.get_mut(i).and_then(Option::take);
         let held = held.ok_or(MergeError::Open)?;
-        let same = places.last().and_then(|last| point_order(last, &held));
-        if same != Some(Ordering::Equal) {
-            places.push(held);
+        match places.last_mut() {
+            Some(last) if point_order(last, &held) == Some(Ordering::Equal) => {
+                last.through.extend(held.through);
+            }
+            _ => places.push(held),
         }
         number
             .iter_mut()
@@ -651,23 +928,66 @@ fn numbered(
     Ok((number, places))
 }
 
-/// Every side of `held`, sorted by line.
+/// Whether `plane` is a split of [`crate::subdivide`]'s, on an odd half step.
+fn splits_boxes(plane: &Plane) -> bool {
+    let n = plane.n();
+    n.iter().filter(|v| **v != 0).count() == 1
+        && n.iter().any(|v| v.unsigned_abs() == 2)
+        && plane.d() & 1 != 0
+}
+
+/// `corner`'s point under a name the boxes cannot change: the first three planes through it, in
+/// plane order and leaving out the boxes' own, that meet in one point. Which corners a point has
+/// depends on how the boxes fell, but which faces pass through it does not. A point with no such
+/// three, which only a seam has, keeps its corner's.
+fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
+    let mut list: Vec<Plane> = corner
+        .through
+        .iter()
+        .filter(|plane| !splits_boxes(plane))
+        .copied()
+        .collect();
+    list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    list.dedup();
+    for (i, a) in list.iter().enumerate() {
+        for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
+            for c in list.iter().skip(j.saturating_add(1)) {
+                meter.charge(1)?;
+                if normals_sign(a, b, c)? != Sign::Zero {
+                    return Ok(Tpi::meeting(*a, *b, *c)?);
+                }
+            }
+        }
+    }
+    Ok(corner.point)
+}
+
+/// Every side of `held`, sorted by line: made on `exec`'s pool, and sorted there where every side
+/// has its [`Cell`]s.
 fn sides_of(
     held: &[Held<'_>],
     number: &[usize],
+    exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Side>, MergeError> {
-    let mut sides: Vec<Side> = Vec::new();
+    // Each piece's first corner's place in `number`.
+    let mut bases = Vec::with_capacity(held.len());
     let mut base = 0usize;
-    for (at, entry) in held.iter().enumerate() {
+    for entry in held {
+        bases.push(base);
+        base = base.saturating_add(entry.piece.bounds.len());
+    }
+    let made = exec.try_map(meter, SIDES, PIECES, held, |at, entry, m| {
         let k = entry.piece.bounds.len();
+        let base = bases.get(at).copied().ok_or(MergeError::Open)?;
+        let mut out = Vec::with_capacity(k);
         for (i, bound) in entry.piece.bounds.iter().enumerate() {
-            meter.charge(1)?;
+            m.charge(1)?;
             // Bound i runs from corner i − 1 to corner i.
             let before = base.saturating_add(i.checked_sub(1).unwrap_or(k.saturating_sub(1)));
             let from = number.get(before).copied().unwrap_or(0);
             let to = number.get(base.saturating_add(i)).copied().unwrap_or(0);
-            sides.push(Side {
+            out.push(Side {
                 key: line_key(&entry.piece.face, bound)?,
                 low: from.min(to),
                 high: from.max(to),
@@ -677,7 +997,25 @@ fn sides_of(
                 bound: *bound,
             });
         }
-        base = base.saturating_add(k);
+        Ok::<_, MergeError>(out)
+    });
+    let made = made.map_err(|e| phase_error(e, meter))?;
+    let mut sides: Vec<Side> = made.into_iter().flatten().collect();
+    let keys: Option<Vec<(usize, &[Cell; 6])>> = sides
+        .iter()
+        .map(|s| s.key.cells.as_ref().map(|cells| (s.key.first, cells)))
+        .collect();
+    if let Some(keys) = keys {
+        // Sides on one line keep their order, as the serial stable sort keeps it.
+        let sorted = exec.sort_stable(meter, SORT_SIDES, SORT_PLAN, &keys, |(first, cells)| {
+            (*first, CellKey(cells))
+        });
+        let order = sorted.map_err(|e| phase_error(e, meter))?;
+        let mut slots: Vec<Option<Side>> = sides.into_iter().map(Some).collect();
+        let taken = order
+            .iter()
+            .map(|i| slots.get_mut(*i).and_then(Option::take));
+        return taken.map(|side| side.ok_or(MergeError::Open)).collect();
     }
     let mut failed = false;
     sides.sort_by(|a, b| noted(line_order(&a.key, &b.key), &mut failed));
@@ -702,16 +1040,40 @@ fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
     runs
 }
 
-/// `runs`, each cut wherever another run ends on its line.
+/// The whole parts of a corner's coordinates, where it has [`Cell`]s: it lies in the unit cell from
+/// them.
+fn floors(corner: &Corner) -> Option<[i128; 3]> {
+    corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])
+}
+
+/// Whether a corner whose floors are `at` lies outside the cells from `a` to `b`: a point of the
+/// segment between two corners lies within their floors' range and a unit more.
+fn beyond(at: &[i128; 3], (a, b): (&[i128; 3], &[i128; 3])) -> bool {
+    at.iter()
+        .zip(a.iter().zip(b))
+        .any(|(v, (p, q))| v < &(*p).min(*q) || v > &(*p).max(*q))
+}
+
+/// `runs`, each cut wherever another run ends on its line. A run's line holds only points between
+/// its ends' cells, so a point outside them is not read.
 fn cut_at_ends(runs: Vec<Run>, places: &[Corner]) -> Result<Vec<Run>, MergeError> {
     let mut ends: Vec<usize> = runs.iter().flat_map(|r| [r.low, r.high]).collect();
     ends.sort_unstable();
     ends.dedup();
+    let cells: Vec<Option<[i128; 3]>> = places.iter().map(floors).collect();
     let mut edges: Vec<Run> = Vec::with_capacity(runs.len());
     for run in runs {
         let [p, q] = run.on;
         let mut low = run.low;
+        let span = cells.get(run.low).zip(cells.get(run.high));
+        let span = span.and_then(|(a, b)| a.as_ref().zip(b.as_ref()));
         for mark in ends.iter().filter(|e| **e > run.low && **e < run.high) {
+            let outside = span
+                .zip(cells.get(*mark).and_then(Option::as_ref))
+                .is_some_and(|(span, at)| beyond(at, span));
+            if outside {
+                continue;
+            }
             let place = places.get(*mark).ok_or(MergeError::Open)?;
             let side = |plane: &Plane| plane.side_of_tpi(&place.point);
             if side(&p)? == Sign::Zero && side(&q)? == Sign::Zero {
@@ -1024,8 +1386,8 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
             given,
         })
         .collect();
-    let (number, points) = numbered(&held, meter)?;
-    let sides = sides_of(&held, &number, meter)?;
+    let (number, points) = numbered(&held, &Exec::serial(), meter)?;
+    let sides = sides_of(&held, &number, &Exec::serial(), meter)?;
     let mut runs: Vec<Run> = Vec::new();
     let mut start = 0usize;
     for end in 1..=sides.len() {
@@ -1049,7 +1411,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
     }
     let mut vertices = Vec::with_capacity(used.len());
     for id in &used {
-        vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
     }
     Ok(Curves {
         vertices,
@@ -1080,14 +1442,29 @@ pub fn merge(
 /// # Errors
 ///
 /// As [`merge`]; open pieces need not close.
-#[allow(
-    clippy::too_many_lines,
-    reason = "the steps of one merge in their order, each short, sharing the numbers they fill"
-)]
 pub fn merge_with(
     pieces: &[Outward],
     mode: Merge,
     rules: Rules<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Merged, MergeError> {
+    merge_on(&Exec::serial(), pieces, (mode, rules), meter)
+}
+
+/// [`merge_with`], its corners made and sorted on `exec`'s pool: the same merge on any pool
+/// (23.4).
+///
+/// # Errors
+///
+/// As [`merge_with`], and [`MergeError::Defect`] if the parallel helper breaks one of its rules.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the steps of one merge in their order, each short, sharing the numbers they fill"
+)]
+pub fn merge_on(
+    exec: &Exec<'_>,
+    pieces: &[Outward],
+    (mode, rules): (Merge, Rules<'_>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Merged, MergeError> {
     let (sheets, mut held) = sheets_of(pieces, mode)?;
@@ -1097,8 +1474,8 @@ pub fn merge_with(
         piece,
         given: CUT,
     }));
-    let (number, points) = numbered(&held, meter)?;
-    let sides = sides_of(&held, &number, meter)?;
+    let (number, points) = numbered(&held, exec, meter)?;
+    let sides = sides_of(&held, &number, exec, meter)?;
     held.truncate(kept);
 
     // Each line's runs, and which pieces join across them.
@@ -1244,7 +1621,7 @@ pub fn merge_with(
     }
     let mut vertices = Vec::with_capacity(used.len());
     for id in &used {
-        vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
     }
     Ok(Merged {
         sheets,
@@ -1255,4 +1632,149 @@ pub fn merge_with(
         shells,
         piece_face,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::arithmetic_side_effects,
+        clippy::many_single_char_names,
+        clippy::unwrap_used,
+        reason = "tests: native arithmetic, ratios a / b and c / d, and a failure stops the test"
+    )]
+
+    use core::cmp::Ordering;
+
+    use num_bigint::BigInt;
+    use proptest::prelude::*;
+
+    use geom_num::plane::Plane;
+    use geom_num::wide::I256;
+
+    use super::{Cell, line_in_words, wide_line_key};
+
+    /// a / b against c / d, b and d positive, by cross-multiplying big integers.
+    fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
+        (BigInt::from(a) * BigInt::from(d)).cmp(&(BigInt::from(c) * BigInt::from(b)))
+    }
+
+    fn agrees(a: i128, b: i128, c: i128, d: i128) {
+        let order = Cell::new(a, b).unwrap().order(&Cell::new(c, d).unwrap());
+        assert_eq!(
+            order,
+            Some(exact(a, b, c, d)),
+            "{a} / {b} against {c} / {d}"
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn cells_order_as_their_ratios_when_ties_are_common(
+            a in -40i128..40, b in 1i128..9, c in -40i128..40, d in 1i128..9,
+        ) {
+            agrees(a, b, c, d);
+        }
+
+        #[test]
+        fn cells_order_as_their_ratios_across_i128(
+            a in any::<i128>(), b in 1i128.., c in any::<i128>(), d in 1i128..,
+        ) {
+            agrees(a, b, c, d);
+        }
+    }
+
+    #[test]
+    fn cells_order_at_the_ends_of_i128() {
+        for (a, b) in [
+            (i128::MIN, 1),
+            (i128::MAX, 1),
+            (i128::MIN, i128::MAX),
+            (-1, i128::MAX),
+        ] {
+            for (c, d) in [(i128::MIN, 3), (i128::MAX, 2), (0, 1), (1, i128::MAX)] {
+                agrees(a, b, c, d);
+            }
+        }
+    }
+
+    #[test]
+    fn equal_ratios_in_other_terms_are_equal() {
+        for (a, b, c, d) in [
+            (1, 2, 2, 4),
+            (7, 2, 21, 6),
+            (-3, 4, -6, 8),
+            (5, 10, 1 << 70, 1 << 71),
+        ] {
+            agrees(a, b, c, d);
+            assert_eq!(
+                Cell::new(a, b).unwrap().order(&Cell::new(c, d).unwrap()),
+                Some(Ordering::Equal)
+            );
+        }
+        // Terms past i64 after reduction take the wide products.
+        agrees((1 << 100) + 1, 1 << 101, (1 << 99) + 1, 1 << 100);
+    }
+
+    #[test]
+    fn a_divisor_that_is_not_positive_has_no_cell() {
+        assert!(Cell::new(1, 0).is_none());
+        assert!(Cell::new(1, -2).is_none());
+    }
+
+    /// The machine-word line is the wide one, and is refused only where the wide one is.
+    fn same_line(p: ([i64; 3], i64), q: ([i64; 3], i64)) {
+        let plane = |(n, d): ([i64; 3], i64)| Plane::new(n.map(i128::from), i128::from(d));
+        let (Ok(p), Ok(q)) = (plane(p), plane(q)) else {
+            return;
+        };
+        let wide = wide_line_key(&p, &q);
+        match line_in_words(&p, &q) {
+            Some((coordinates, first)) => {
+                let wide = wide.unwrap();
+                assert_eq!(coordinates.map(I256::from_i128), wide.coordinates);
+                assert_eq!(first, wide.first);
+            }
+            None => assert!(wide.is_err()),
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn a_line_in_words_is_the_wide_line(
+            p in ([-9i64..9, -9i64..9, -9i64..9], -99i64..99),
+            q in ([-9i64..9, -9i64..9, -9i64..9], -99i64..99),
+        ) {
+            same_line(p, q);
+        }
+
+        #[test]
+        fn a_line_in_words_is_the_wide_line_across_i64(
+            p in (any::<[i64; 3]>(), any::<i64>()),
+            q in (any::<[i64; 3]>(), any::<i64>()),
+        ) {
+            same_line(p, q);
+        }
+    }
+
+    #[test]
+    fn a_line_at_the_ends_of_i64_stays_in_words() {
+        let (low, high) = (i64::MIN, i64::MAX);
+        let ends = [low, low + 1, -1, 0, 1, high - 1, high];
+        for (a, b, c) in ends.iter().flat_map(|a| ends.map(|b| (*a, b, b))) {
+            for (p, q) in [
+                (([a, b, c], a), ([b, a, c], c)),
+                (([a, 0, 0], a), ([b, c, 0], b)),
+                (([a, b, 0], c), ([c, a, b], a)),
+            ] {
+                same_line(p, q);
+            }
+        }
+        // The largest minor: (−2^63)(−2^63) − (−2^63)(2^63 − 1) = 2^127 − 2^63.
+        let p = Plane::new([i128::from(low), 0, 0], i128::from(low)).unwrap();
+        let q = Plane::new([i128::from(low), i128::from(low), 0], i128::from(high)).unwrap();
+        let (coordinates, first) = line_in_words(&p, &q).unwrap();
+        assert_eq!(first, 2);
+        assert_eq!(coordinates.get(3), Some(&(i128::MAX - (1 << 63) + 1)));
+        same_line(([low, 0, 0], low), ([low, low, 0], high));
+    }
 }

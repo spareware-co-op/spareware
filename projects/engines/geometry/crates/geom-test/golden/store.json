@@ -254,9 +254,15 @@
               "kind": "corpus",
               "piece": "G147",
               "why": "the phase 4 integration train: piece/G147's count benchmark on point location, with G151's and G152's, merged; no existing digest moved"
+            },
+            {
+              "sha256": "54ca7f29da99fd041340b96768061ae7fd7934c8cf5641b6fdd7aaaec4922a91",
+              "kind": "corpus",
+              "piece": "G148",
+              "why": "the phase 4 integration train: piece/G148's count benchmarks of Tpi::meeting, plane::normals_sign and plane::determinant_sign merged; no existing digest moved"
             }
           ],
-          "sha256": "54ca7f29da99fd041340b96768061ae7fd7934c8cf5641b6fdd7aaaec4922a91"
+          "sha256": "e0c594dd4130745d206a03badec8796ab1bf0af81f5d5809deb49a10cf837fca"
         },
         {
           "id": "geom-nurbs/operations",

@@ -846,6 +846,24 @@ fn tilted_solids_meet_where_three_planes_do() {
 }
 
 #[test]
+fn a_point_on_a_split_is_not_named_by_it() {
+    // The edge from (0, 0, -1) to (1, 2, 1) pierces the wide solid's top at (1/2, 1, 0), and the
+    // first split, half way along x, runs through that point.
+    let turned_out = |t: [[i64; 3]; 4]| {
+        let fits = tetrahedron(t, 0, &mut Vec::new()).is_some();
+        if fits { t } else { [t[1], t[0], t[2], t[3]] }
+    };
+    let wide = turned_out([[-20, -15, 0], [21, -15, 0], [0, 15, 0], [0, 0, -30]]);
+    let spike = turned_out([[0, 0, -1], [1, 2, 1], [3, 0, 1], [0, 4, 1]]);
+    let test = WindingTest::unite();
+    let whole = tilted(&[wide, spike], &test, 1000).unwrap();
+    for leaf in [1, 2, 4, 8] {
+        let m = tilted(&[wide, spike], &test, leaf).unwrap();
+        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+    }
+}
+
+#[test]
 fn two_faces_that_meet_at_their_lowest_corner_keep_their_numbers() {
     let mut polygons = Vec::new();
     let up = [[0, 0, 0], [40, 10, 0], [40, 30, 0], [30, 20, 30]];

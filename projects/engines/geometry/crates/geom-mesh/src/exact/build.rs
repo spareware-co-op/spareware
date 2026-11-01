@@ -321,7 +321,7 @@ fn vertices(
         let on_grid = match corner {
             Corner::Grid(p) => Some(*p),
             Corner::Planes([p, q, r]) => {
-                let rounded = Tpi::new(*p, *q, *r)?.to_grid()?;
+                let rounded = Tpi::meeting(*p, *q, *r)?.to_grid()?;
                 rounded.is_exact().then(|| rounded.value())
             }
         };

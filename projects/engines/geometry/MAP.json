@@ -1035,9 +1035,9 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/inputs/plane.rs",
           "guarantees": [
-            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule and exact rounding by `tests/attack_g06.rs`."
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule, exact determinants and exact rounding by `tests/attack_g06.rs`."
           ],
-          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
+          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_meeting`] (`Tpi::meeting`), [`normals_sign`] and [`normals_sign_faces`] (`plane::normals_sign`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`determinant_sign`] and [`determinant_sign_faces`] (`plane::determinant_sign`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
           "method": {
             "links": [
               "https://doi.org/10.1111/j.1467-8659.2009.01609.x",
@@ -1617,6 +1617,28 @@
       "kind": "kernel",
       "layer": "6",
       "modules": [
+        {
+          "cost": "one arrangement per host, linear in its faces plus local work around each tool.",
+          "does": "[`cut`] subtracts each [`Cut`]'s tools from its host in one arrangement, with the tools summed into one entry, so a winding vector stays two entries long however many tools there are, and tools that overlap or share a jamb need no union first. Each host gives one [`CutResult`], in input order, which accounts for every tool.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
+          "guarantees": [
+            "**Every tool is accounted for.** Each is reported, and one that touched nothing inside the host is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently.",
+            "**Atomic by default.** A tool that cannot enter fails the call and names itself. Under [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools are left out depends only on the inputs.",
+            "**Hosts run in parallel, and the threads do not show.** Results come in input order, and one host alone has the threads for its boxes."
+          ],
+          "job": "Batch cutting: any number of tools through any number of hosts (11.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.6 (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::batch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "linear in the body's fins, and in the pieces. Charges the meter one unit per edge, face and piece.",
           "does": "[`certify`] holds a rebuilt body to chapter 11.10's closure checks, cheap enough to run on every result: every edge's fins pair up, in radial order alternating which way they run, so each wedge around an edge is one cell; no edge has zero length; and every face has an area. [`labelled`] holds the pieces of a winding selection to the last: each separates two cells the test tells apart, the result's material behind it. Planes within budget need no check: a plane outside its budget cannot be made. A sheet's edge may have one fin, and a wire has no fins at all, so only bodies that bound something pair up.",
@@ -7365,9 +7387,19 @@
               "shape": "unit"
             },
             {
-              "doc": "Inside and outside are undefined for an open mesh.",
+              "doc": "Inside and outside are undefined for an open mesh. Heal it first.",
               "name": "NotClosed",
               "shape": "unit"
+            },
+            {
+              "doc": "A boolean's pieces would not merge, which closed inputs should never cause.",
+              "name": "Merge",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The outside passes this test of a boolean, so its result has no finite boundary. Intersect it with a box first.",
+              "name": "UnboundedResult",
+              "shape": "struct"
             },
             {
               "doc": "The box tree refused.",
@@ -7421,6 +7453,32 @@
       "kind": "kernel",
       "layer": "7",
       "modules": [
+        {
+          "cost": "the arrangement's, in `geom-poly`, then the merge's O(n log n) exact comparisons for n sides of kept pieces, for each test, and the mesh's build. G148's budgets, timed apart: the soup within 3 times EMBER's 1.6 ms on `Thingi10K` pairs, and the merge and build within 0.5 µs for each kept piece and each result face, two of G146's builds, whose done-when is a million faces built and checked in 0.5 s (`projects/kit/notes/G148-stage-budgets.md`).",
+          "does": "[`boolean`] hands the faces of closed meshes and their planes to `geom-poly`'s arrangement, and for each [`WindingTest`] keeps the pieces its indicator keeps, merges them into maximal faces with `geom-poly`'s merge, and builds an [`ExactMesh`] with the history of its runs. Cutting 300 openings is one call, and several results share one arrangement. [`soup`] stops after the selection, with the kept pieces as a polygon soup, the stage EMBER times.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/boolean.rs",
+          "guarantees": [
+            "**Closed inputs only.** The arrangement needs a whole winding number everywhere, so an open mesh is [`MeshError::NotClosed`], whose remedy is healing. Self-intersections are fine.",
+            "**A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no two of its faces cross. A solid operand's boxes away from the others are solved without cuts or tracing (11.3 step 4): fewer pieces, the same vectors, the same mesh.",
+            "**Bounded results only.** A test the outside passes, such as \"not A\", has no finite boundary: [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.",
+            "**Conforming and exact.** The merge gives maximal faces and edges that end where other edges do, so no T-junction is left. Nothing is rounded, however often a mesh is cut: a corner off the grid stays three planes. Each result passes the mesh checker on the way out.",
+            "**The same mesh however it was reached.** The boxes, the threads and the order of the faces do not show. A corner off the grid takes the lowest three planes around it, not the three that happened to cut a piece.",
+            "**Run-level history.** Each output run is unchanged, modified, split or merged, with deleted runs listed (20.3). A split run's pieces are named by the runs that cut them and the side, as `Split { piece: ByTools { tools, side } }`, and pieces those leave the same take weak ordinals in the order of their faces (20.2). Faces inside a run have no names of their own, so references should target runs."
+          ],
+          "job": "Mesh booleans (19.5): the arrangement's pieces a selection keeps, as one exact mesh per test.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "19.5 and 11.3 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`, `11-booleans.md`): EMBER's plane-based arrangement (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>), and hypermesh's many operands with a small expression over their winding numbers, rewritten from 19.5's description."
+          },
+          "path": "geom_mesh::boolean",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "Points are inserted along a Morton curve, each walked to from the last, O(n log n) expected on points that are not adversarial (sorting, then a short walk and a few flips each). Each constraint costs its length in triangles. Crossings cost a box tree of the constraints per round. Nothing recurses.",
           "does": "[`triangulate`] takes grid points in the plane, each with a key from the caller, and constraints between them, and returns the triangles that keep every constraint as edges and are otherwise as close to equal-sided as the points allow. Constraints that cross are cut where they cross, each crossing constructed exactly from the two constraints' ends and committed to the grid before any circle test, so every circle test runs on grid points. With a [`Quality`] it then adds points until every triangle meets it.",
@@ -11755,6 +11813,11 @@
               "doc": "A shell faces inward with no shell around it.",
               "name": "Inside",
               "shape": "unit"
+            },
+            {
+              "doc": "The parallel helper broke one of its own rules: a defect, reported instead of a wrong merge.",
+              "name": "Defect",
+              "shape": "unit"
             }
           ],
           "module": "geom_poly::merge",
@@ -11881,7 +11944,7 @@
           "target": "lib"
         },
         {
-          "cost": "for n edges, at most n cuts, each classifying the edges left in its cell: O(n²) exact predicates at worst, and a piece of k bounds takes O(k²) more to put in order. Charges the meter one unit per edge classified and per bound ordered.",
+          "cost": "for n edges, at most n cuts, each classifying the edges left in its cell: O(n²) exact predicates at worst, and a piece of k bounds takes O(k²) more to put in order. A lone convex triangle or quadrilateral, the common face, takes one predicate per corner and one more. Charges the meter one unit per edge classified, per bound ordered and per corner checked.",
           "does": "EMBER takes convex polygons, each a supporting plane and one bounding plane per edge. [`convex_pieces`] takes a face as its plane and its rings, each ring a cycle of [`Side`]s, and splits it along its own edges' planes only: a binary space partition of the face, by each edge in the order given, which a caller makes name order. Every piece is a [`Piece`]: the face's plane and its bounding planes in turn around it, each with the interior on its positive side.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
@@ -11889,6 +11952,7 @@
             "**Nothing new.** Every plane of a piece is the face's or one of its sides': each edge of a piece lies on an existing plane, and each corner is the meeting of three, so 6.2's budget holds, as EMBER's section 3.2 needs.",
             "**A partition of the face.** The pieces are convex, cover the face and overlap nowhere, each side of the partition being a half-plane of the cut (tested against exact areas).",
             "**The same pieces every time.** Pieces depend only on the planes and the order of the sides; nothing is hashed, and every decision is an exact predicate.",
+            "**A convex face is itself.** A lone ring of three or four sides that turns left at every corner, inside on the left, is one piece with the ring's bounds in the ring's order, as the partition gives it, found without cuts (tested against the partition).",
             "**No recursion.** The tree is an explicit stack, so its depth never threatens a WebAssembly stack (principle 13).",
             "**Refused, never guessed.** A side parallel to the face is `Degenerate`; so are two adjacent sides on one line, which leave a corner undefined. Merge such sides first: the corner they share is no corner. So are rings that leave a piece without an end, such as a hole with no outline around it."
           ],
@@ -11908,7 +11972,7 @@
           "target": "lib"
         },
         {
-          "cost": "[`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs of polygons at worst, in a box the subdivision keeps small. Charges the meter one unit per pair of pieces compared.",
+          "cost": "[`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs of polygons at worst, in a box the subdivision keeps small; a pair whose planes cannot cut is told from the two polygons whole, O(k + m), and its pieces are not compared, and a pair whose grid spans miss (`crate::order`'s `Span`) is told in a few comparisons. Charges the meter one unit per pair of pieces, compared or not.",
           "does": "[`clip`] splits a convex [`Piece`] by a plane. [`crosses`] says whether two pieces on different planes truly pass through each other: each has points on both sides of the other's plane, and their stretches of the line the planes share overlap by a length. [`local_cuts`] takes the polygons of one box and cuts each by every polygon that crosses it or ends on it, keeping each as a list of convex pieces of the polygon, the leaves of the small tree of EMBER's section 4.3.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/cut.rs",
@@ -12010,14 +12074,15 @@
           "target": "lib"
         },
         {
-          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 123 levels: a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons. Charges the meter one unit per polygon a split clips.",
-          "does": "[`arrange`] takes the polygons of an arrangement and classifies every piece. A box is split in two along its longest axis until it holds few polygons; polygons across the split are clipped exactly, and the upper box's reference point is walked up from the lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then [`classify`]. A box whose every test is settled by its reference vector alone, whatever the polygons in it do, is dropped (step 4).",
+          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 123 levels: a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons, and a solid's leaf one copy of each. Charges the meter one unit per polygon a split clips, and one per polygon of a solid's leaf.",
+          "does": "[`arrange`] takes the polygons of an arrangement and classifies every piece. A box is split in two along its longest axis until it holds few polygons; polygons across the split are clipped exactly, and the upper box's reference point is walked up from the lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then [`classify`]. A box whose every test is settled by its reference vector alone, whatever the polygons in it do, is dropped (step 4). [`arrange_with`] is also told which entries are solids: no two of their faces cross, and their winding is 1 just behind every face and 0 just in front, EMBER's no-self-intersection and no-nested-parts flags (its section 4.5.1, 11.3 step 4). A box whose polygons all bound one solid entry is a leaf at once, however many it holds, and is solved without cuts or tracing.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
           "guarantees": [
             "**The same pieces whatever the threads.** Each level of the tree is one phase of the parallel helper, and the leaves are solved as another, in tree order, so the output is the same bits on any number of threads, and a failure the one a serial walk meets first (23.4).",
             "**No recursion.** The tree is walked level by level, so its depth never threatens a WebAssembly stack (principle 13). A box holding polygons that a split no longer separates, such as many faces on one plane, stops as a leaf instead of dividing down to the grid.",
-            "**Early outs are mechanical.** A box is dropped only when every test takes the same answer for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it is kept, and with no tests nothing is dropped."
+            "**Early outs are mechanical.** A box is dropped only when every test takes the same answer for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it is kept, and with no tests nothing is dropped.",
+            "**A solid's leaf is what tracing would give.** In a leaf whose polygons all bound one solid entry, no polygon crosses another, so each is one piece; the solid's count is 0 in front of each and 1 behind, and every other entry's is the reference's, as nothing of theirs is in the box. Each piece is the first of its plane, as no face of a solid overlaps another. Such a box is not split, so its pieces are fewer than tracing's leaves give, with the same vectors at every point (tested against the traced arrangement and the blocks' own counts). The caller vouches for the flag: a wrong one gives wrong pieces."
           ],
           "job": "Adaptive subdivision and the parallel task tree: steps 1 and 4 of 11.3, around the local work.",
           "method": {
@@ -12033,12 +12098,12 @@
           "target": "lib"
         },
         {
-          "cost": "at most five segments per piece, each testing each polygon: one or two sign evaluations, and one per bound of a polygon the segment's line crosses. Charges the meter one unit per polygon a segment tests.",
+          "cost": "at most five segments per piece, each testing each polygon: one or two sign evaluations, and one per bound of a polygon the segment's line crosses. The last three run along the box's edges and are the same for every piece of a polygon that leaves the box by the same faces, so they are walked once for each. A pair whose spans miss costs a few comparisons. Charges the meter one unit per polygon a segment tests, walked, passed over or not.",
           "does": "[`classify`] takes the polygons of one box, the box and the winding vector at its reference point, and gives every piece of those polygons its two vectors. The vector just off a piece comes from a path to the reference point, adding up the signed crossings of the polygons on the way. No piece is crossed by another (11.3, step 2), so one path answers for a whole piece.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
           "guarantees": [
-            "**Exact, within 6.2's budget.** Every sign is a 4 × 4 determinant of plane coefficients, at most 384 bits, or a 3 × 3 determinant of normals, at most 252. Nothing is rounded, and the path's points are never computed.",
+            "**Exact, within 6.2's budget.** Every sign is a 4 × 4 determinant of plane coefficients, at most 384 bits, or a 3 × 3 determinant of normals, at most 252. Nothing is rounded, and the path's points are never computed for a sign. A segment and a polygon whose grid cells, the floors of their corners a step wider each way, do not meet share no point, so the segment cannot cross it, and the pair is passed over: a filter that never decides a crossing.",
             "**Ties are settled by moving the path, never by a tolerance.** Every plane of the path is moved by its own infinitesimal, in a fixed order, so the path misses every edge and corner of every polygon, and each sign that would be zero is decided by the determinant's first term in those infinitesimals (Edelsbrunner and Mücke's Simulation of Simplicity, in the order of `Rank`). Real ties, faces on one plane, are counted, not moved apart: a piece's two vectors differ by every coincident face over it, whichever way that face looks (11.5).",
             "**One emission of an overlap.** Where polygons on one plane overlap, [`Classified::first`] marks the copy of the lowest polygon in the order given, which a caller makes (operand key, name).",
             "**Cutters change nothing.** A polygon with no entry cuts but counts no crossing (11.1).",

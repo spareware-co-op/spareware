@@ -803,6 +803,18 @@ impl Canonical for crate::inputs::mesh::Terrain {
     }
 }
 
+impl Canonical for geom_mesh::boolean::Outcome {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::mesh::Pair {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for crate::inputs::mesh::Probe {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
