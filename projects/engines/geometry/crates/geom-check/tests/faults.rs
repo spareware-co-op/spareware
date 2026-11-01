@@ -485,6 +485,34 @@ fn an_exact_record_on_curved_geometry() {
 }
 
 #[test]
+fn a_pcurve_off_its_edge() {
+    // The floor on a NURBS patch S(u, v) = (u, v, 0), and fin 0's pcurve two steps across edge 0
+    // (vertex 0 to vertex 2, along y at x = 0): mapped through the patch, it misses the edge (G177).
+    let found = broken_cube(|r| {
+        let basis = || geom_nurbs::Basis::new(1, vec![0.0, 0.0, 10.0, 10.0]).unwrap();
+        let net = [
+            [0.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0],
+            [10.0, 0.0, 0.0],
+            [10.0, 10.0, 0.0],
+        ];
+        r.surfaces[0] = geom_surface::SurfaceKind::Nurbs(
+            geom_nurbs::Surface::new(basis(), basis(), &net).unwrap(),
+        );
+        r.pcurves.push(geom_curve::CurveKind::Line(
+            geom_curve::Line::new([2.0, 0.0], [0.0, 10.0], (0.0, 1.0)).unwrap(),
+        ));
+        r.fins[0].pcurve = Some(ix(0));
+    });
+    assert!(
+        found.contains(
+            &Fault::at(FaultKind::PcurveOffCurve, Entity::Pcurve(ix(0))).with(Entity::Fin(ix(0)))
+        ),
+        "{found:?}"
+    );
+}
+
+#[test]
 fn faults_past_the_cap_are_counted() {
     // 300 fins in no loop and on no ring: 600 faults.
     let mut r = cube();
@@ -543,6 +571,7 @@ fn every_fault_says_what_is_wrong_in_its_group() {
         FaultKind::VertexOffSurface,
         FaultKind::VertexOffCurve,
         FaultKind::EdgeOffSurface,
+        FaultKind::PcurveOffCurve,
         FaultKind::Unchecked,
         FaultKind::EdgesCross,
         FaultKind::FacesCross,
@@ -565,6 +594,7 @@ fn every_fault_says_what_is_wrong_in_its_group() {
             FaultKind::VertexOffSurface
             | FaultKind::VertexOffCurve
             | FaultKind::EdgeOffSurface
+            | FaultKind::PcurveOffCurve
             | FaultKind::Unchecked => Group::Geometric,
             FaultKind::EdgesCross | FaultKind::FacesCross | FaultKind::PairUnchecked => {
                 Group::SelfIntersection

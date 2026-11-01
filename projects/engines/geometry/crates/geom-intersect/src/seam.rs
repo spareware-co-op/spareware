@@ -66,6 +66,7 @@
 
 use alloc::vec::Vec;
 
+use geom_curve::tight::{larger, smaller};
 use geom_num::eft::{two_prod, two_sum};
 use geom_num::interval::Interval;
 use geom_num::math::{ceil, floor};
@@ -645,6 +646,20 @@ fn read_pole(
     } else {
         Read::On(on)
     })
+}
+
+/// Each of `cells` cut down to `region`, those it meets, in their order: where a search over part
+/// of a surface starts (8.3's checks on one face, G177).
+pub(crate) fn cells_in(cells: &[Region], region: Region) -> Vec<Region> {
+    let ((a, b), (c, d)) = region;
+    cells
+        .iter()
+        .filter_map(|&((u0, u1), (v0, v1))| {
+            let (lo_u, hi_u) = (larger(u0, a), smaller(u1, b));
+            let (lo_v, hi_v) = (larger(v0, c), smaller(v1, d));
+            (lo_u <= hi_u && lo_v <= hi_v).then_some(((lo_u, hi_u), (lo_v, hi_v)))
+        })
+        .collect()
 }
 
 /// `surface`'s domain cut at the lines of [`cuts`], in order of u and then of v.

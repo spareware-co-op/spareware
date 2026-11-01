@@ -479,7 +479,7 @@ fn edge_on(a: &Arenas, e: Ix<Edge>, on: &Surface, b: u64, limit: f64) -> bool {
 }
 
 /// The bound a vertex may lie from its carriers, in steps: 0 for an Exact body.
-const fn bound(exactness: Exactness) -> u64 {
+pub(crate) const fn bound(exactness: Exactness) -> u64 {
     match exactness {
         Exactness::Exact => 0,
         Exactness::Certified { bound, .. } => bound.get(),

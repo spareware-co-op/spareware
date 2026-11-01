@@ -1583,6 +1583,29 @@
           "target": "lib"
         },
         {
+          "cost": "one self-intersection search per curved face and one known-curve search per pair of curved faces whose boxes meet in space, each as 12.8 costs them, and [`CHAIN`] + 1 pcurve reads per shared edge. Recursion: none.",
+          "does": "[`face_box`] bounds the part of its surface a face uses by its fins' pcurves. [`alone`] runs `geom_intersect::selfcross::self_intersect_over` on that box. [`pair`] runs `geom_intersect::known::subdivide_known_over` on the two faces' boxes, every edge the two share given as a known curve read from its two fins' pcurves (12.11, G174), as a crossing and, where that tube does not prove, as a tangency.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/crossing.rs",
+          "guarantees": [
+            "**Apart only when proven.** [`Meet::Apart`] only when the search leaves nothing: no branch, no settled pair, no flagged or unproven region. A face can cross itself, or two faces each other, only where the search finds something, by 12.8 and 12.13's guarantees, and a shared edge is left out only inside the tube proven about it.",
+            "**Never called a crossing on a box.** A face is its loops' part of its box, so what the search finds in the box may lie outside the face: it is [`Meet::Unknown`], reported unchecked, and never [`Meet::Cross`] here.",
+            "**Fails closed.** A fin without a pcurve, a pcurve on another span than its edge, or a kind's error leaves the pair [`Meet::Unknown`]; only the meter's stop ends the check."
+          ],
+          "job": "Group 3 of chapter 8.3 on faces no closed form covers: a face against itself, and two faces against each other, by `geom-intersect`'s searches over each face's part of its surface (G177).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 8.3's group 3 (`projects/engines/geometry/architecture/08-topology.md`), on the searches of chapter 12.8, 12.11 and 12.13 (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_check::crossing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few dozen interval operations per check; no loop. Recursion: none.",
           "does": "[`carrier`] turns a face's surface into its closed form ([`Carrier`]), and each check bounds a distance from above and compares it with the body's bound b. With w = p − c, h = w · n̂ (height along the axis) and ρ = |w × n̂| (distance from it), the distance of a point from each kind is:",
           "family": [],
@@ -1873,7 +1896,7 @@
       "provenance": [],
       "sections": "8.3, 10.2, 16.1, 18.10, 19.2, 22, 24.7 and 28.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the framework and groups 1 and 4 (G84) and groups 2 and 3 for primitive bodies (G85) built. Group 3 tests primitives with its own exact predicates and closed forms, as `geom-intersect` is not built yet. Flat bodies' orientation and nesting are built (G102), and plane-based bodies, with their vertices where three planes meet and faces of any shape (G134); pcurves, general surfaces and the same checks on curved faces come in G177 and G322, and a report counts what it left for them ([`Report::deferred`]).",
+      "status": "the framework and groups 1 and 4 (G84) and groups 2 and 3 for primitive bodies (G85) built. Group 3 tests primitives with its own exact predicates and closed forms, as `geom-intersect` is not built yet. Flat bodies' orientation and nesting are built (G102), and plane-based bodies, with their vertices where three planes meet and faces of any shape (G134); pcurves, general surfaces and the same checks on curved faces are built (G177) where the faces' fins carry pcurves; `SubD` faces come with G322, and a report counts what it left for them ([`Report::deferred`]).",
       "summary": "Spare Kit geometry kernel: the validity checker."
     },
     {
@@ -4179,7 +4202,7 @@
         },
         {
           "cost": "a few reads of each kind per call, to first order. Recursion: none.",
-          "does": "[`at_point`] encloses |C(t) − p| for a curve C and a point p. [`mapped`] reads one piece [a, b] of a span for f(t) = S(p(t)) − C(t), a pcurve p mapped through its surface S against a 3D curve C: an enclosure of |f(m)| at the middle m, and an upper bound on |f| over the whole piece by the mean-value form.",
+          "does": "[`at_point`] encloses |C(t) − p| for a curve C and a point p, and [`pcurve_at`] a pcurve's point. [`mapped`] reads one piece [a, b] of a span for f(t) = S(p(t)) − C(t), a pcurve p mapped through its surface S against a 3D curve C: an enclosure of |f(m)| at the middle m, and an upper bound on |f| over the whole piece by the mean-value form.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-intersect/src/gap.rs",
           "guarantees": [

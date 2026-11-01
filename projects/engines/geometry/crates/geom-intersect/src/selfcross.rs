@@ -84,7 +84,7 @@ use crate::general::{FlaggedPair, Leave, Settled, cross, normals, partials, subd
 use crate::march::{Branch, march};
 use crate::project::{dot, exact, image, positive};
 use crate::result::{Test, Unresolved};
-use crate::seam::{Charts, cells, charts, cuts};
+use crate::seam::{Charts, cells, cells_in, charts, cuts};
 
 /// The most stretches a boundary is cut into before it counts as not proven simple.
 pub const STRETCHES: usize = 64;
@@ -566,6 +566,22 @@ pub fn self_intersect(
     ceiling: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<SelfCrossing, IntersectError> {
+    self_intersect_over(surface, surface.domain(), floor, ceiling, meter)
+}
+
+/// Where `surface` crosses itself over `region` of its parameters alone, as [`self_intersect`]
+/// over the whole domain: the part a face uses (8.3, G177).
+///
+/// # Errors
+///
+/// As [`self_intersect`].
+pub fn self_intersect_over(
+    surface: &SurfaceKind,
+    region: Region,
+    floor: f64,
+    ceiling: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<SelfCrossing, IntersectError> {
     if floor.is_nan() || floor <= 0.0 || ceiling.is_nan() || ceiling <= 0.0 {
         return Err(IntersectError::InvalidInput);
     }
@@ -582,7 +598,7 @@ pub fn self_intersect(
         domain: surface.domain(),
         charts: seams,
     };
-    let whole = cells(surface, &lines.charts);
+    let whole = cells_in(&cells(surface, &lines.charts), region);
     let mut start = Vec::new();
     for a in &whole {
         for b in &whole {

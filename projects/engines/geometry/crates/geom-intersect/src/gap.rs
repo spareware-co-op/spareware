@@ -1,7 +1,8 @@
 //! How far a curve is from a point, and a pcurve mapped through its surface from a 3D curve,
 //! certified: what the checker's group 2 (8.3) and the intersection curve's fit (12.12) bound.
 //!
-//! What it does: [`at_point`] encloses |C(t) − p| for a curve C and a point p. [`mapped`] reads one
+//! What it does: [`at_point`] encloses |C(t) − p| for a curve C and a point p, and [`pcurve_at`] a
+//! pcurve's point. [`mapped`] reads one
 //! piece [a, b] of a span for f(t) = S(p(t)) − C(t), a pcurve p mapped through its surface S
 //! against a 3D curve C: an enclosure of |f(m)| at the middle m, and an upper bound on |f| over the
 //! whole piece by the mean-value form.
@@ -61,6 +62,21 @@ pub fn at_point(
     let read = curve.enclose(t, side(t, curve.domain()), 0, meter)?;
     let at = read.first().ok_or(IntersectError::Internal)?;
     Ok(Interval::norm(&minus_box(at, p)?)?)
+}
+
+/// An enclosure of the pcurve's point at `t`, read from inside its domain: a known curve's vertex
+/// on one face (8.3's group 3, G177).
+///
+/// # Errors
+///
+/// The kind's: a parameter outside the domain is [`IntersectError::InvalidInput`]; the meter's.
+pub fn pcurve_at(
+    pcurve: &CurveKind<2>,
+    t: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; 2], IntersectError> {
+    let read = pcurve.enclose(t, side(t, pcurve.domain()), 0, meter)?;
+    read.first().copied().ok_or(IntersectError::Internal)
 }
 
 /// A box of (u, v) as a region.

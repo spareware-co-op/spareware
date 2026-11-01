@@ -54,10 +54,13 @@ use geom_run::WorkMeter;
 use geom_surface::{ImplicitBound, ParamBox as Region, ParamSurface, SurfaceKind, partial_index};
 
 use crate::IntersectError;
-use crate::general::{Leave, Subdivided, around, ends, partials, speeds, subdivide_with};
+use crate::general::{
+    Leave, Subdivided, around, ends, partials, speeds, subdivide_from, subdivide_with,
+};
 use crate::march::unique_over;
 use crate::project::{dot, negative, positive};
 use crate::result::Unresolved;
+use crate::seam::{cells, cells_in, charts};
 
 /// How two surfaces meet along a known curve.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -495,4 +498,33 @@ pub fn subdivide_known(
     }
     let tube = Tube::prove(first, second, known, floor, meter)?;
     subdivide_with(first, second, floor, &tube, meter)
+}
+
+/// [`subdivide_known`] over `regions` of the two surfaces alone: two faces' parts (8.3, G177).
+///
+/// # Errors
+///
+/// As [`subdivide_known`].
+pub fn subdivide_known_over(
+    (first, second): (&SurfaceKind, &SurfaceKind),
+    (a, b): (Region, Region),
+    known: &[Known],
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Subdivided, IntersectError> {
+    if floor.is_nan() || floor <= 0.0 {
+        return Err(IntersectError::InvalidInput);
+    }
+    let tube = Tube::prove(first, second, known, floor, meter)?;
+    let (one, two) = (
+        cells_in(&cells(first, &charts(first)), a),
+        cells_in(&cells(second, &charts(second)), b),
+    );
+    let mut start = Vec::with_capacity(one.len().saturating_mul(two.len()));
+    for x in &one {
+        for y in &two {
+            start.push((*x, *y));
+        }
+    }
+    subdivide_from(first, second, (start, floor), &tube, meter)
 }

@@ -61,8 +61,9 @@ use geom_topo::mass::Corner;
 use geom_topo::{Arenas, Body, Ix};
 
 use crate::combinatorial::{edge_fins, face_fins, fin_edge, fin_face, rows};
+use crate::crossing;
 use crate::curved::{self, Pair};
-use crate::geometric::{Ends, corner, surface};
+use crate::geometric::{Ends, bound, corner, surface};
 use crate::planar::{self, Outline};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
@@ -95,14 +96,31 @@ pub(crate) fn check(
             }
         }
     }
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a bound past 2^53 steps exceeds every distance between points of the grid's range (below 2^42), so rounding it changes no answer"
+    )]
+    let limit = bound(exactness) as f64;
+    // A face no closed form covers, against itself (G177): its kind may fold.
+    for f in rows::<Face>(a.rows(Arena::Face)) {
+        if surface(a, f, exact).is_none() {
+            sink.charge()?;
+            let found = crossing::alone(a, f, limit, sink.meter())?;
+            report(sink, found, Entity::Face(f), Entity::Face(f));
+        }
+    }
     for (i, f) in rows::<Face>(a.rows(Arena::Face)).enumerate() {
         for g in rows::<Face>(a.rows(Arena::Face)).skip(i).skip(1) {
             sink.charge()?;
-            let found = if pieces(f).is_empty() || pieces(g).is_empty() {
+            let mut found = if pieces(f).is_empty() || pieces(g).is_empty() {
                 other_faces_meet(a, f, g, exact)
             } else {
                 planar::slots_meet(a, pieces(f), pieces(g), sink)?
             };
+            // What no closed form separates, the search may (G177).
+            if found == Meet::Unknown {
+                found = crossing::pair(a, (f, g), limit, sink.meter())?;
+            }
             report(sink, found, Entity::Face(f), Entity::Face(g));
         }
     }
