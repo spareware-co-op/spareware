@@ -223,7 +223,8 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) {
             let v = if rng.next() % 3 == 0 {
                 rng.with_bits(size)
             } else {
-                rng.with_bits(1 + (rng.next() % u64::from(size)) as u32)
+                let less = 1 + (rng.next() % u64::from(size)) as u32;
+                rng.with_bits(less)
             };
             inputs.insert(name, v);
         }
