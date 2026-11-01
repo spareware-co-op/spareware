@@ -102,17 +102,17 @@ fn plane_words(p: &Plane) -> Option<([i64; 3], i64)> {
     ))
 }
 
-/// `a` · `b` for `a` and `b` in `i64`, in `i128`: each product fits, which the compiler sees, so
-/// it is one multiplication; only the sums are checked.
-fn wide_product(a: i64, b: i64) -> Option<i128> {
-    i128::from(a).checked_mul(i128::from(b))
+/// `a` · `b` for `a` and `b` in `i64`, in `i128`: |a b| ≤ 2^126, so the wrapping product is exact,
+/// and is one multiplication where a checked one is a call; only the sums are checked.
+fn wide_product(a: i64, b: i64) -> i128 {
+    i128::from(a).wrapping_mul(i128::from(b))
 }
 
 /// `a` × `b` for `a` and `b` in `i64`, in `i128` and then `i64`, if that fits.
 fn cross_of_words(a: [i64; 3], b: [i64; 3]) -> Option<[i64; 3]> {
     let ([ax, ay, az], [bx, by, bz]) = (a, b);
     let minor = |s: i64, t: i64, u: i64, v: i64| {
-        i64::try_from(wide_product(s, t)?.checked_sub(wide_product(u, v)?)?).ok()
+        i64::try_from(wide_product(s, t).checked_sub(wide_product(u, v))?).ok()
     };
     Some([
         minor(ay, bz, az, by)?,
@@ -124,9 +124,9 @@ fn cross_of_words(a: [i64; 3], b: [i64; 3]) -> Option<[i64; 3]> {
 /// `a` · `b` for `a` and `b` in `i64`, in `i128`.
 fn dot_of_words(a: [i64; 3], b: [i64; 3]) -> Option<i128> {
     let ([ax, ay, az], [bx, by, bz]) = (a, b);
-    wide_product(ax, bx)?
-        .checked_add(wide_product(ay, by)?)?
-        .checked_add(wide_product(az, bz)?)
+    wide_product(ax, bx)
+        .checked_add(wide_product(ay, by))?
+        .checked_add(wide_product(az, bz))
 }
 
 /// X and w in `i64`, if they fit.
@@ -188,9 +188,9 @@ impl Meeting {
         );
         let mut x = [0; 3];
         for (slot, ((a, b), c)) in x.iter_mut().zip(qr.iter().zip(&pr).zip(&pq)) {
-            *slot = wide_product(d_q, *b)?
-                .checked_sub(wide_product(d_p, *a)?)?
-                .checked_sub(wide_product(d_r, *c)?)?;
+            *slot = wide_product(d_q, *b)
+                .checked_sub(wide_product(d_p, *a))?
+                .checked_sub(wide_product(d_r, *c))?;
         }
         Some(Meeting {
             x,
@@ -226,7 +226,7 @@ impl Meeting {
     /// + `d_s` · w, or `None` if a step leaves `i128`.
     pub(crate) fn reading(&self, s: &Plane) -> Option<Sign> {
         if let (Some((x, w)), Some((n, d))) = (self.words, plane_words(s)) {
-            let value = dot_of_words(n, x)?.checked_add(wide_product(d, w)?)?;
+            let value = dot_of_words(n, x)?.checked_add(wide_product(d, w))?;
             return Some(Sign::of_i128(value));
         }
         let value = dot_in_words(s.n(), self.x)?.checked_add(s.d().checked_mul(self.w)?)?;

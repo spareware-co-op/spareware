@@ -365,7 +365,8 @@ impl Cell {
             words(other.rest),
             words(other.over),
         ) {
-            return Some(a.checked_mul(d)?.cmp(&c.checked_mul(b)?));
+            // Each is an i64 widened, so each product is at most 2^126 and the wrapping one exact.
+            return Some(a.wrapping_mul(d).cmp(&c.wrapping_mul(b)));
         }
         narrow_order(self.rest, self.over, other.rest, other.over)
     }
