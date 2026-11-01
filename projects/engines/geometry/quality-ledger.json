@@ -5569,6 +5569,14 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "With every rank equal, every plane ties and the sort of ties gives the same order, one thread and more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace == with != in Classifier<'m>::plane_edge",
+      "line_text": "crossed: run.mul(rise) == Sign::Positive,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Either sign of the ε² move is a valid perturbation: both faces of an edge flip together, and the ray counts one of them."
     }
   ],
   "coverage_off": [
