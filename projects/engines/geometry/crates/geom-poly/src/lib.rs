@@ -38,6 +38,7 @@ pub mod cut;
 pub mod merge;
 pub mod order;
 pub mod plane;
+pub mod publish;
 pub mod subdivide;
 pub mod trace;
 pub mod winding;
