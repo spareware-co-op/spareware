@@ -645,7 +645,9 @@ fn walked_arcs(
         ) else {
             return Ok(None);
         };
-        let to = if d < a {
+        // The fall comes before the rise round the loop when its bracket ends where the rise's
+        // begins or earlier: one negative sample between them is enough.
+        let to = if d <= a {
             to.add(tight::point(1.0)?)?
         } else {
             to

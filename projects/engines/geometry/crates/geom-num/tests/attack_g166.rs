@@ -560,6 +560,14 @@ fn fourfold_roots_of_rank_two() {
                 Topology { conics: 1, ..NONE }
             };
             check("[(31)]", pair, Segre::FourfoldPair, want);
+            // The root's own member first, so the basis reads the fourfold root at t = 0, where a
+            // minor's value is zero and only its slope says whether it vanishes twice.
+            check(
+                "[(31)] from its root",
+                pair.mixed([0, 1, 1, 0]),
+                Segre::FourfoldPair,
+                want,
+            );
             let pair = zero().block(0, 2, 0, e).block(2, 2, 0, s);
             let want = if e * s < 0 {
                 Topology {
@@ -1097,7 +1105,119 @@ fn whole_numbers_divide_down() {
     assert_eq!(square_root(&w(0)), Some(w(0)));
     assert_eq!(square_root(&w(1)), Some(w(1)));
     assert_eq!(square_root(&w(144)), Some(w(12)));
+    // (2^126 + 12345)², every limb in use.
+    let full = W::from_le_limbs([0x915_6cb1, 1 << 63, 0x181c, 1 << 60]);
+    assert_eq!(
+        square_root(&full),
+        Some(W::from_le_limbs([0x3039, 1 << 62, 0, 0]))
+    );
     assert_eq!(square_root(&w(145)), None);
     let huge = w(1 << 62).checked_mul(&w(1 << 62)).unwrap();
     assert_eq!(square_root(&huge), Some(w(1 << 62)));
+}
+
+#[test]
+fn a_root_beside_the_basis_run_stays_off_its_ends() {
+    // Concentric spheres of radii one and two: (t + 1)(x² + y² + z²) − (t + 4)w², a triple root of
+    // rank one at −1, a simple root at −4, and definite members between, so the two share no real
+    // point. The basis comes from the first three members b + k·a in a row that are not roots,
+    // k = −8, −7 and −6, and its ends C ± S must not reach past them to the root at −4.
+    let pair = zero()
+        .block(0, 1, -1, 1)
+        .block(1, 1, -1, 1)
+        .block(2, 1, -1, 1)
+        .block(3, 1, -4, -1);
+    check("[(111)1] beside the run", pair, Segre::TripleRankOne, NONE);
+}
+
+#[test]
+fn a_definite_member_at_the_basis_s_lower_end_is_found() {
+    // (t + 9)x₀² − (2t + 15)x₁² − t·x₂² − (t − 1)x₃²: definite between −9 and −7.5 only. The basis
+    // is C = b − 7a, S = a: its member C − S, at −8, is in that gap, and C + S, at −6, is past the
+    // root at −7.5, so only the sample at C − S finds it.
+    let mut pair = zero();
+    for (i, (a, b)) in [(1, 9), (-2, -15), (-1, 0), (-1, 1)]
+        .into_iter()
+        .enumerate()
+    {
+        pair.a[i][i] = a;
+        pair.b[i][i] = b;
+    }
+    check("[1111] definite at C − S", pair, Segre::Simple, NONE);
+}
+
+#[test]
+fn parallel_axes_in_any_direction_meet_at_their_point_at_infinity() {
+    // The shared kernel is the axes' direction at infinity: (1, 0, 0, 0) along x and (1, 1, 0, 0)
+    // along x + y, whose last part that is not zero is their first and second. Each pair is the
+    // pair along z turned, so it meets as that one does: two lines through the point at infinity.
+    let upright = on(&cylinder([0, 0, 0], Z, 5), &cylinder([6, 0, 0], Z, 5));
+    assert_eq!(upright.segre, Segre::OneApex);
+    assert_eq!(
+        upright.topology,
+        Topology {
+            lines: 2,
+            meets: 1,
+            ..NONE
+        }
+    );
+    for (d, offset) in [(X, [0, 6, 0]), ([1, 1, 0], [0, 0, 6])] {
+        let turned = on(&cylinder([0, 0, 0], d, 5), &cylinder(offset, d, 5));
+        assert_eq!(
+            (turned.segre, turned.topology),
+            (upright.segre, upright.topology),
+            "{d:?}"
+        );
+    }
+}
+
+#[test]
+fn cones_of_one_apex_with_a_singular_base_in_the_basis_run() {
+    // Base conics x² + y² − z² and 7x² + 3y² − 2z², the second inside the first, so they share only
+    // the apex. Their pencil's roots are −7, −3 and −2: b − 7a, among the first members the basis
+    // tries, is singular on the base, and the basis must pass it by.
+    let mut pair = zero();
+    for (i, (a, b)) in [(1, 7), (1, 3), (-1, -2)].into_iter().enumerate() {
+        pair.a[i][i] = a;
+        pair.b[i][i] = b;
+    }
+    check(
+        "[111] past a singular base",
+        pair,
+        Segre::OneApex,
+        Topology { points: 1, ..NONE },
+    );
+}
+
+#[test]
+fn the_filter_answers_on_well_parted_roots_either_way_round() {
+    // Four simple roots at 0, 1, 2 and 3: the walk parts them, and the filter answers what the exact
+    // path does, definite or not. Turned round, every member's sign turns, so a definite member the
+    // walk reads as positive one way it reads as negative the other.
+    let i = |v: i128| Interval::of(i64::try_from(v).unwrap()).unwrap();
+    for signs in [
+        [1, 1, -1, -1],
+        [1, 1, 1, -1],
+        [1, 1, 1, 1],
+        [1, -1, 1, -1],
+        [-1, 1, 1, -1],
+    ] {
+        let pair = zero()
+            .block(0, 1, 0, signs[0])
+            .block(1, 1, 1, signs[1])
+            .block(2, 1, 2, signs[2])
+            .block(3, 1, 3, signs[3]);
+        let roots: Vec<(i128, i128)> = (0..4).map(|k| (k as i128, signs[k])).collect();
+        let want = if definite(&roots) { NONE } else { smooth(2) };
+        let (a, b) = pair.forms();
+        assert_eq!(classify(&a, &b).unwrap().topology, want, "{signs:?}");
+        for turn in [1, -1] {
+            let form = |m: &Small| m.map(|row| row.map(|v| i(turn * v)));
+            assert_eq!(
+                filtered(&form(&pair.a), &form(&pair.b)),
+                Some(want),
+                "{signs:?} turned {turn}"
+            );
+        }
+    }
 }
