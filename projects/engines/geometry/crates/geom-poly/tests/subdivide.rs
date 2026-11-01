@@ -15,7 +15,7 @@
 use geom_num::NumError;
 use geom_num::plane::{Plane, Tpi};
 use geom_poly::convex::Piece;
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
+use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange, arrange_with};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError};
 use geom_poly::winding::{Kept, Winding, WindingTest, kept};
 #[cfg(not(target_family = "wasm"))]
@@ -245,6 +245,33 @@ fn the_box_around_polygons_is_clear_of_them_on_odd_half_steps() {
         entry: None,
     };
     assert_eq!(around(&[broken]), Err(NumError::Degenerate));
+}
+
+/// A and B as one entry: inside both its count is 2, so it is no solid, and a leaf holding only
+/// its faces there must be traced. Read as a solid's, those faces would bound the union.
+#[test]
+fn an_entry_that_overlaps_itself_is_traced() {
+    let mut list = polygons(&[A, B]);
+    for polygon in &mut list {
+        polygon.entry = Some(0);
+    }
+    let cell = around(&list).unwrap();
+    let classified = arrange(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &list,
+        1,
+        &[],
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(volume(&WindingTest::unite(), &classified), 120 * 8);
+    let inner = classified
+        .iter()
+        .filter(|c| c.front.count(0) == 1 && c.back.count(0) == 2)
+        .count();
+    assert!(inner > 0);
 }
 
 #[test]
@@ -551,6 +578,27 @@ fn any_block() -> impl Strategy<Value = Block> {
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(96))]
+
+    /// Every block is a solid, so its leaves may skip cuts and tracing: the pieces are the same.
+    #[test]
+    fn a_solid_s_leaves_are_what_tracing_gives(
+        blocks in prop::collection::vec(any_block(), 1..5),
+        leaf in 1usize..12,
+    ) {
+        let list = polygons(&blocks);
+        let cell = around(&list).unwrap();
+        let solids: Vec<u32> = (0..blocks.len() as u32).collect();
+        let quick = arrange_with(
+            &Exec::serial(),
+            (cell, Winding::new()),
+            &list,
+            (leaf, &[]),
+            &solids,
+            &mut meter(),
+        )
+        .unwrap();
+        prop_assert_eq!(quick, run(&blocks, leaf, &[]));
+    }
 
     #[test]
     fn every_arrangement_agrees_with_the_blocks(
