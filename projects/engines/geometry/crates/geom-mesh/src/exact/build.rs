@@ -54,6 +54,7 @@ use super::{
     Vertex, at, gcd, index, morton,
 };
 
+const SORT_VERTICES: Phase = Phase::new("exact mesh: sort vertices");
 const FACE_PLANES: Phase = Phase::new("exact mesh: face planes");
 const EDGE_PLANES: Phase = Phase::new("exact mesh: edge planes");
 const PLANE_RANKS: Phase = Phase::new("exact mesh: rank planes");
@@ -263,8 +264,13 @@ struct Vertices {
     point: Vec<Option<P3>>,
 }
 
-/// Sorts the grid points and turns any three-plane point on the grid into one.
-fn vertices(input: &Polygons, meter: &mut WorkMeter<'_>) -> Result<Vertices, MeshError> {
+/// Sorts the grid points and turns any three-plane point on the grid into one. The sort is
+/// [`Exec`]'s: keys are (Morton code, input vertex), all different, so any sort gives one order.
+fn vertices(
+    input: &Polygons,
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vertices, MeshError> {
     let mut keyed = Vec::with_capacity(input.vertices.len());
     let mut implicit = Vec::new();
     let mut point = Vec::with_capacity(input.vertices.len());
@@ -295,11 +301,13 @@ fn vertices(input: &Polygons, meter: &mut WorkMeter<'_>) -> Result<Vertices, Mes
             (None, Corner::Grid(_)) => return Err(MeshFault::Shape.into()),
         }
     }
-    keyed.sort_unstable();
+    let order: Result<Vec<usize>, RunError<MeshError>> =
+        exec.sort_stable(meter, SORT_VERTICES, SORT_PLAN, &keyed, |k| *k);
     let mut grid = Vec::with_capacity(keyed.len());
     let mut of_input = alloc::vec![0_u32; input.vertices.len()];
     let mut last = None;
-    for (key, v) in keyed {
+    for i in phase(order)? {
+        let (key, v) = *keyed.get(i).ok_or(MeshFault::Shape)?;
         if last != Some(key) {
             grid.push((*at(&point, v)?).ok_or(MeshFault::Shape)?);
             last = Some(key);
@@ -1170,7 +1178,7 @@ pub fn build(
     meter: &mut WorkMeter<'_>,
 ) -> Result<ExactMesh, MeshError> {
     let (faces, loops) = fits(input)?;
-    let verts = vertices(input, meter)?;
+    let verts = vertices(input, exec, meter)?;
     let face_ids: Vec<u32> = (0..faces).collect();
     let by_face: Result<Vec<Turned>, RunError<MeshError>> =
         exec.try_map(meter, FACE_PLANES, PLAN, &face_ids, |_, &face, m| {
