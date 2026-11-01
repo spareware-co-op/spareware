@@ -228,6 +228,11 @@ impl Sparse {
         Ok(())
     }
 
+    /// Sets every stored entry to zero: the pattern stays.
+    pub fn clear_values(&mut self) {
+        self.values.fill(0.0);
+    }
+
     /// The entry stored at `place`.
     ///
     /// # Errors

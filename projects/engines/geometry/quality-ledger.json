@@ -5065,6 +5065,286 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/colamd.rs",
+      "mutant": "replace > with >= in dense",
+      "line_text": "len > DENSE_FLOOR",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at exactly 16 entries. Then the second clause asks 16² > 100·n, and n is at least 16 (a row of 16 entries has 16 columns; a column of 16 entries has 16 rows), so it is false either way and the line is never dense."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_cholesky.rs",
+      "mutant": "replace && with || in tree",
+      "line_text": "while i != NONE && i < k {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the walk no longer stops at k, so it follows ancestor links it has just pointed at k and circles. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_cholesky.rs",
+      "mutant": "replace < with <= in tree",
+      "line_text": "while i != NONE && i < k {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: at i = k it points k's ancestor at k itself and then walks from k to k for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_cholesky.rs",
+      "mutant": "replace < with <= in Lower::factor",
+      "line_text": "} else if i < k {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at i = k, which the branch before it takes (`if i == k`), so this one never sees it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace && with || in tree",
+      "line_text": "while j != NONE && j < k {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the walk no longer stops at k, so it follows ancestor links it has just pointed at k and circles. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace < with <= in tree",
+      "line_text": "while j != NONE && j < k {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: at j = k it points k's ancestor at k itself and then walks from k to k for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace > with >= in SparseQr::plain",
+      "line_text": "if size > largest {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when a column's norm equals the largest so far, and then both keep the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace sum -> Result<i128, PlaneError> with Ok(-1)",
+      "line_text": "a.checked_add(b).ok_or(PlaneError::OutOfRange)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every sum is -1, so nearest never answers 0 and Lagrange's reduction never stops. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace sum -> Result<i128, PlaneError> with Ok(1)",
+      "line_text": "a.checked_add(b).ok_or(PlaneError::OutOfRange)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every sum is 1, so nearest never answers 0 and Lagrange's reduction never stops. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace minor -> Result<i128, PlaneError> with Ok(-1)",
+      "line_text": "product(a, b)?",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: each remainder of Euclid's loop in bezout is -1, so it never reaches 0. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace minor -> Result<i128, PlaneError> with Ok(1)",
+      "line_text": "product(a, b)?",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: each remainder of Euclid's loop in bezout is 1, so it never reaches 0. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace dot -> Result<i128, PlaneError> with Ok(-1)",
+      "line_text": "sum(",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: u·v and u·u are both -1, so nearest answers 1 for ever and the reduction never stops. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace dot -> Result<i128, PlaneError> with Ok(1)",
+      "line_text": "sum(",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: u·v and u·u are both 1, so nearest answers 1 for ever and the reduction never stops. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace < with <= in bezout",
+      "line_text": "if r0 < 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at r0 = 0, which needs both inputs 0. Its caller basis_of returns before using the coefficients when g is 0, and Lattice::of_normal refuses a zero normal, so the negated zero coefficients are never read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace == with != in reduced",
+      "line_text": "if k == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the reduction returns only on a step k that is not 0, and from a reduced pair it keeps taking k = 0 steps. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace nearest -> Result<i128, PlaneError> with Ok(-1)",
+      "line_text": "let whole = top",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: nearest never answers 0, so Lagrange's reduction never stops. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace nearest -> Result<i128, PlaneError> with Ok(1)",
+      "line_text": "let whole = top",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: nearest never answers 0, so Lagrange's reduction never stops. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace < with == in nearest",
+      "line_text": "Ok(if twice > bottom || (twice == bottom && whole < 0) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a positive half then rounds away from zero, so the reduction steps between two pairs of the same lengths. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace < with <= in Lattice::of_normal",
+      "line_text": "if u.iter().find(|x| **x != 0).is_some_and(|x| *x < 0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The value tested is the first nonzero component, found by `find(|x| **x != 0)`, so it is never 0 and the two agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+      "mutant": "replace < with <= in Rotated::place",
+      "line_text": "if value.abs() < 2_199_023_255_552.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at exactly 2^41 steps, which P3::new refuses (the grid ends at 2^40 − 1), and its refusal maps to the same PlaneError::OutOfRange."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace > with >= in characteristic",
+      "line_text": "let most = if a > b { a } else { b };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the lengths are equal, and then both take the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace > with >= in span",
+      "line_text": "if dx > dy { dx } else { dy }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when dx equals dy, and then both return the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace * with / in measure",
+      "line_text": "Ok((u[0] * (p[1] - a[1]) - u[1] * (p[0] - a[0])) / length(u, [0.0, 0.0])? * sign)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The factor is a side's sign, +1 or −1 (Side::sign), and dividing a double by ±1 gives the same bits as multiplying by it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in root",
+      "line_text": "if up == v {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the search for a set's root stops only on a variable that is not its own parent, and from a root it halves the path from v to v for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace < with <= in join",
+      "line_text": "let (low, high) = if a < b { (a, b) } else { (b, a) };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when a equals b, and then both give the pair (a, a)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace greedy -> Result<(), SketchError> with Ok(())",
+      "line_text": "for e in 0..graph.equations() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "greedy only seeds the matching. Hopcroft and Karp's phases find a largest matching from an empty one too, and nothing the analysis returns depends on which largest matching it found: the Dulmage-Mendelsohn parts and the square blocks are fixed by the graph alone, their members are listed ascending, and the solve order is chosen by each block's lowest equation."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in greedy",
+      "line_text": "if get(&matching.of_variable, v)? == NONE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every variable starts unmatched and greedy is the first to match any, so `!= NONE` never holds and greedy matches nothing: the same as greedy doing nothing, whose entry says why the result is unchanged."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace layers -> Result<bool, SketchError> with Ok(true)",
+      "line_text": "queue.clear();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every phase claims a free variable was reached, so the phases never end. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in layers",
+      "line_text": "if get(&matching.of_equation, e)? == NONE {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the free equations are no longer the layers' roots, so a phase finds no path while claiming one. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in layers",
+      "line_text": "if w == NONE {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a free variable no longer ends a layer, so the phases never agree that none is left. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace augment -> Result<(), SketchError> with Ok(())",
+      "line_text": "stack.clear();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: no path is ever augmented, so each phase finds the same free variable again. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in augment",
+      "line_text": "if get(depth, w)? == next(get(depth, e)?)? {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the search leaves the layers, so it augments nothing and the phases repeat. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "delete ! in match_all",
+      "line_text": "if !layers(graph, &matching, &mut depth, &mut queue)? {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the loop now runs while no free variable is reached, the reverse of its rule. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace < with <= in blocks_of",
+      "line_text": "if there < get(&low, e)? {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the values are equal, and then both keep the same low link."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace < with <= in blocks_of",
+      "line_text": "if mine < get(&low, up)? {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the values are equal, and then both keep the same low link."
     }
   ],
   "coverage_off": [

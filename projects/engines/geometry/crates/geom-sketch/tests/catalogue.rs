@@ -547,11 +547,45 @@ fn every_dimension_measures() {
     reads("sweep 4.1 1", 1.5);
     reads("arc-length 4.0 1", 5.0 * PI);
     reads("arc-length 4.1 1", 15.0 * PI);
+    // Off the origin: a line at y = 30 and one at x = 40, a rise from (0, 30), and two slanted
+    // lines, so no coordinate of the measure is zero.
+    reads("point-line 1.12 2.2 1 left", 20.0);
+    reads("point-line 1.3 2.1 1 left", 40.0);
+    reads("upward 1.3 1.12 1", 20.0);
+    // atan(4/3)/π: the angle from (40, 30) to (0, 30), in half-turns.
+    reads("turned 2.4 2.1 1", 0.295_167_235_300_866_5);
     let s = alone("horizontal 2.0").unwrap();
     assert_eq!(
         measure(&s, s.constraints().last().unwrap()),
         Err(SketchError::NotADimension(id(20, 0)))
     );
+}
+
+#[test]
+fn a_rule_on_lines_of_no_length_is_scaled_by_one() {
+    // Both lines start with no length, so the parallel rule's length scale is 1, not the smallest
+    // double: off that start its residual is the cross product of the two directions itself.
+    let s = parse(
+        "sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\nentity 7.0 point 0 0\nentity 7.1 point 0 0\n\
+         entity 7.2 point 5 5\nentity 7.3 point 5 5\nentity 8.0 line 7.0 7.1 segment\n\
+         entity 8.1 line 7.2 7.3 segment\nconstraint 20.0 driving 0 parallel 8.0 8.1\n",
+    )
+    .unwrap();
+    let mut a = Assembly::new(&s).unwrap();
+    let x = moved(&a, &[(id(7, 1), 0, 1.0), (id(7, 3), 1, 1.0)]);
+    a.evaluate_at(&x).unwrap();
+    assert_eq!(a.residuals(), &[1.0]);
+}
+
+#[test]
+fn an_arc_whose_ends_meet_sweeps_nothing() {
+    // Sweeps run from 0 up to 2 half-turns, 2 not included: ends at one place sweep 0.
+    let text = format!(
+        "{}entity 7.0 point 30 50\nentity 7.1 arc 1.7 10 1.9 7.0\nconstraint 20.0 driving 0 sweep 7.1 1\n",
+        bare()
+    );
+    let s = parse(&text).unwrap();
+    assert_eq!(measure(&s, s.constraints().last().unwrap()), Ok(0.0));
 }
 
 #[test]
