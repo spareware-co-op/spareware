@@ -484,6 +484,21 @@ impl SparseQr {
         &self.order
     }
 
+    /// The smallest pivot: the least |R[k, k]|, and 0 if a column is dead.
+    #[must_use]
+    pub fn smallest_pivot(&self) -> f64 {
+        if self.rank < self.diagonal.len() {
+            return 0.0;
+        }
+        let mut least = f64::INFINITY;
+        for pivot in &self.diagonal {
+            if pivot.abs() < least {
+                least = pivot.abs();
+            }
+        }
+        least
+    }
+
     /// What a solve costs.
     fn solve_cost(&self) -> u64 {
         wide(self.v_rows.len())

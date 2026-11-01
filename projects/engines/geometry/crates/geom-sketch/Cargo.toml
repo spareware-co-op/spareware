@@ -32,6 +32,11 @@ harness = false
 name = "catalogue"
 harness = false
 
+# A family sketch and a floor outline solved (piece G222), the same way.
+[[bench]]
+name = "solve"
+harness = false
+
 # The 100,000-equation benchmark (piece G221), the same way.
 [[bench]]
 name = "structure"

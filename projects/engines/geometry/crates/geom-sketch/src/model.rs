@@ -62,7 +62,7 @@ impl ItemId {
 }
 
 /// Why a sketch or one of its items could not be made.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SketchError {
     /// Two items have this id.
     Duplicate(ItemId),
@@ -82,6 +82,17 @@ pub enum SketchError {
     RootChoiceUndetermined(ItemId),
     /// The start is on this constraint's singular set.
     Degenerate(ItemId),
+    /// A block would not converge: this is its worst rule.
+    Unsolved(ItemId),
+    /// A path could not be followed past this rule, this share of the way along it.
+    BranchLost {
+        /// The rule.
+        constraint: ItemId,
+        /// How far along, from 0 to 1.
+        along: f64,
+    },
+    /// A path's two ends are not one sketch with new values.
+    NotTheSameSketch,
     /// Text that is not `sketch v1`, at this line, from 1.
     Text {
         /// The line.
@@ -136,6 +147,9 @@ impl core::fmt::Display for SketchError {
             SketchError::NotADimension(_) => "only a dimension can be a reference",
             SketchError::RootChoiceUndetermined(_) => "the drawing does not decide the root",
             SketchError::Degenerate(_) => "the start is on a singular set",
+            SketchError::Unsolved(_) => "a block would not converge",
+            SketchError::BranchLost { .. } => "the path could not be followed",
+            SketchError::NotTheSameSketch => "a path's two ends are not one sketch",
             SketchError::Text { .. } => "text that is not sketch v1",
             SketchError::Plane(_) => "the plane's frame is refused",
             SketchError::Numeric(_) => "the arithmetic refused",
@@ -1323,6 +1337,51 @@ impl Sketch {
             Ordering::Less => Ok(false),
             Ordering::Equal => Err(undecided),
         }
+    }
+
+    /// This sketch with `values`, one for each of [`Sketch::variables`], in that order.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for too few; what [`Sketch::add_entity`] refuses of a value, such as
+    /// a radius that is no longer positive.
+    pub fn with_values(&self, values: &[f64]) -> Result<Sketch, SketchError> {
+        let mut sketch = self.clone();
+        let mut next = values.iter().copied();
+        let mut take = |held: &mut f64| -> Result<(), SketchError> {
+            *held = next.next().ok_or(SketchError::Internal)?;
+            Ok(())
+        };
+        for entity in &mut sketch.entities {
+            match &mut entity.kind {
+                EntityKind::Point { x, y } => {
+                    take(x)?;
+                    take(y)?;
+                }
+                EntityKind::Circle { radius, .. } | EntityKind::Arc { radius, .. } => take(radius)?,
+                EntityKind::Ellipse { axis, minor, .. } => {
+                    let [first, second] = axis;
+                    take(first)?;
+                    take(second)?;
+                    take(minor)?;
+                }
+                EntityKind::Parameter { t, .. } => take(t)?,
+                EntityKind::Scalar { value, .. } => take(value)?,
+                EntityKind::Placement { offset, turn, .. } => {
+                    let [first, second] = offset;
+                    take(first)?;
+                    take(second)?;
+                    take(turn)?;
+                }
+                EntityKind::Line { .. }
+                | EntityKind::Spline { .. }
+                | EntityKind::Reference { .. } => {}
+            }
+        }
+        for entity in &sketch.entities {
+            entity.kind.check(&sketch)?;
+        }
+        Ok(sketch)
     }
 
     /// Every variable, in authoring order of its entity and slot order within it.

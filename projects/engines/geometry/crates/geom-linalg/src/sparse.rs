@@ -228,9 +228,16 @@ impl Sparse {
         Ok(())
     }
 
-    /// Sets every stored entry to zero: the pattern stays.
-    pub fn clear_values(&mut self) {
-        self.values.fill(0.0);
+    /// The entry stored at `place`.
+    ///
+    /// # Errors
+    ///
+    /// [`LinalgError::Shape`] if nothing is stored there.
+    pub fn at_place(&self, place: usize) -> Result<f64, LinalgError> {
+        self.values
+            .get(place)
+            .copied()
+            .ok_or(LinalgError::Shape)
     }
 
     /// A·x.

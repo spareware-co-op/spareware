@@ -55,13 +55,15 @@ use alloc::vec::Vec;
 use geom_linalg::Sparse;
 use geom_num::NumError;
 use geom_num::dual::Dual;
+use geom_num::interval::Interval;
 use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 
 use crate::model::{
-    Amount, Constraint, ConstraintKind, Entity, EntityKind, ItemId, Sketch, SketchError, Standing,
-    Variable, power_of_two,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, ItemId, Side, Sketch, SketchError,
+    Standing, Variable, power_of_two,
 };
+use crate::structure::{Substituted, merges};
 
 /// What a residual cannot be differentiated at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,6 +72,15 @@ pub enum Singular {
     ZeroLengthLine,
     /// A circle of no radius, or a distance of zero, has no smooth form.
     ZeroRadius,
+}
+
+/// Which way round a rule with two branches is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sense {
+    /// Its branch quantity is above zero.
+    Positive,
+    /// Its branch quantity is below zero.
+    Negative,
 }
 
 /// One input of a kind: a sketch variable, by its index, or a constant.
@@ -94,6 +105,16 @@ pub trait Residual<const N: usize, const E: usize> {
     /// Whether `x` is on the singular set.
     fn singular(&self, _x: &[f64; N]) -> Option<Singular> {
         None
+    }
+
+    /// For a residual zero at two angles half a turn apart, a quantity whose sign says which: a
+    /// path checks that it keeps it (chapter 15.7).
+    ///
+    /// # Errors
+    ///
+    /// What the arithmetic refuses.
+    fn branch<S: Scalar>(&self, _x: [S; N]) -> Result<Option<S>, NumError> {
+        Ok(None)
     }
 }
 
@@ -247,6 +268,13 @@ impl Residual<10, 1> for Turned {
         let zero = (x[0] == x[2] && x[1] == x[3]) || (x[4] == x[6] && x[5] == x[7]);
         zero.then_some(Singular::ZeroLengthLine)
     }
+
+    fn branch<S: Scalar>(&self, x: [S; 10]) -> Result<Option<S>, NumError> {
+        let [ax, ay, bx, by, cx, cy, dx, dy, t, _] = x;
+        let (u, v) = (minus([bx, by], [ax, ay])?, minus([dx, dy], [cx, cy])?);
+        let (sin, cos) = (t.sinpi()?, t.cospi()?);
+        Ok(Some(dot(u, v)?.mul(cos)?.add(cross(u, v)?.mul(sin)?)?))
+    }
 }
 
 /// The line ab points at the angle `t`, in half-turns, from the frame's x axis.
@@ -261,6 +289,12 @@ impl Residual<5, 1> for Heading {
 
     fn singular(&self, x: &[f64; 5]) -> Option<Singular> {
         (x[0] == x[2] && x[1] == x[3]).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 5]) -> Result<Option<S>, NumError> {
+        let [ax, ay, bx, by, t] = x;
+        let (dx, dy) = (bx.sub(ax)?, by.sub(ay)?);
+        Ok(Some(dx.mul(t.cospi()?)?.add(dy.mul(t.sinpi()?)?)?))
     }
 }
 
@@ -834,6 +868,35 @@ fn sweep_of(u: [f64; 2], v: [f64; 2]) -> Result<f64, SketchError> {
     })
 }
 
+/// What a rule has chosen among the roots of its residual, if anything.
+fn choice(kind: &ConstraintKind) -> Option<bool> {
+    match *kind {
+        ConstraintKind::FromLine { side, .. }
+        | ConstraintKind::LinesApart { side, .. }
+        | ConstraintKind::TangentLine { side, .. } => Some(side == Side::Left),
+        ConstraintKind::FromCircle { outside, .. }
+        | ConstraintKind::TangentCircles { outside, .. } => Some(outside),
+        ConstraintKind::Offset { grows, .. } => Some(grows),
+        _ => None,
+    }
+}
+
+/// How far a rule's `i`th input moves off a singular set: between an eighth and a quarter of a step,
+/// its size and sign from the rule's id and `i` alone (chapter 15.4).
+fn nudge_of(id: ItemId, i: usize) -> f64 {
+    let place = u64::try_from(i).unwrap_or(u64::MAX);
+    let mixed = id
+        .sequence
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(id.key)
+        .wrapping_mul(0xBF58_476D_1CE4_E5B9)
+        .wrapping_add(place)
+        .wrapping_mul(0x94D0_49BB_1331_11EB);
+    let bits = mixed >> 60;
+    let size = 0.125 + f64::from(u32::try_from(bits & 7).unwrap_or(0)) / 64.0;
+    if bits & 8 == 0 { size } else { -size }
+}
+
 /// The cheapest constant that keeps a gradient near one: the larger of two lengths, rounded down to a
 /// power of two, and 1 for two lengths of nothing.
 fn characteristic(a: f64, b: f64) -> f64 {
@@ -856,13 +919,55 @@ impl Assembly {
     ///
     /// [`SketchError::OutOfMemory`]; [`SketchError::Linear`]; what the sketch's lookups refuse.
     pub fn new(sketch: &Sketch) -> Result<Assembly, SketchError> {
-        let variables = sketch.variables()?;
+        Assembly::built(sketch, None)
+    }
+
+    /// The rows of `sketch`'s rules on `substituted`'s merged variables: each column is a set of
+    /// merged variables, at the value of its oldest, and a rule that only merges has no row. The rows
+    /// are `substituted.graph`'s.
+    ///
+    /// # Errors
+    ///
+    /// As [`Assembly::new`].
+    pub fn merged(sketch: &Sketch, substituted: &Substituted) -> Result<Assembly, SketchError> {
+        Assembly::built(sketch, Some(substituted))
+    }
+
+    fn built(sketch: &Sketch, merging: Option<&Substituted>) -> Result<Assembly, SketchError> {
+        let all = sketch.variables()?;
+        let mut variables = Vec::new();
+        variables
+            .try_reserve_exact(all.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        match merging {
+            None => variables.extend_from_slice(&all),
+            Some(substituted) => {
+                // Merged ids count up from each set's oldest variable.
+                for (variable, column) in all.iter().zip(&substituted.merged) {
+                    if *column == variables.len() {
+                        variables.push(*variable);
+                    }
+                }
+            }
+        }
         let (mut rows, mut slots, mut triplets) = (Vec::new(), Vec::new(), Vec::new());
         let mut equations = 0_usize;
         for (id, kind) in rules_of(sketch)? {
             let at = slots.len();
             let from = triplets.len();
-            let here = inputs_of(sketch, &kind, &variables, &mut slots)?;
+            let here = inputs_of(sketch, &kind, &all, &mut slots)?;
+            if let Some(substituted) = merging {
+                let list = slots.get_mut(at..).ok_or(SketchError::Internal)?;
+                if merges(&kind, list).is_some() {
+                    slots.truncate(at);
+                    continue;
+                }
+                for slot in list {
+                    if let Slot::Variable(v) = slot {
+                        *v = *substituted.merged.get(*v).ok_or(SketchError::Internal)?;
+                    }
+                }
+            }
             let list = slots.get(at..).ok_or(SketchError::Internal)?;
             for e in 0..here {
                 let row = equations.checked_add(e).ok_or(SketchError::Internal)?;
@@ -917,6 +1022,194 @@ impl Assembly {
             .map_err(|_| SketchError::OutOfMemory)?;
         x.extend(self.variables.iter().map(|v| v.value));
         Ok(x)
+    }
+
+    /// The inputs of every rule, in order: what a path moves.
+    #[must_use]
+    pub(crate) fn slots(&self) -> &[Slot] {
+        &self.slots
+    }
+
+    /// The scale of column `column`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a column it does not have.
+    pub(crate) fn scale_of(&self, column: usize) -> Result<f64, SketchError> {
+        Ok(self
+            .variables
+            .get(column)
+            .ok_or(SketchError::Internal)?
+            .scale)
+    }
+
+    /// The rule that writes row `row`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a row it does not have.
+    pub(crate) fn rule_of(&self, row: usize) -> Result<usize, SketchError> {
+        if row >= self.residuals.len() {
+            return Err(SketchError::Internal);
+        }
+        self.rows
+            .partition_point(|rule| rule.first <= row)
+            .checked_sub(1)
+            .ok_or(SketchError::Internal)
+    }
+
+    /// The name of rule `rule`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a rule it does not have.
+    pub(crate) fn name_of_rule(&self, rule: usize) -> Result<ItemId, SketchError> {
+        Ok(self.rows.get(rule).ok_or(SketchError::Internal)?.id)
+    }
+
+    /// The name of the rule that writes row `row`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a row it does not have.
+    pub(crate) fn name_of_row(&self, row: usize) -> Result<ItemId, SketchError> {
+        self.name_of_rule(self.rule_of(row)?)
+    }
+
+    /// Whether `other` is this assembly with other values: the same rules with the same root
+    /// choices, on the same variables.
+    #[must_use]
+    pub(crate) fn same_structure(&self, other: &Assembly) -> bool {
+        let rule = |(a, b): (&Row, &Row)| {
+            a.id == b.id
+                && core::mem::discriminant(&a.kind) == core::mem::discriminant(&b.kind)
+                && a.first == b.first
+                && a.at == b.at
+                && a.from == b.from
+                && choice(&a.kind) == choice(&b.kind)
+        };
+        let slot = |(a, b): (&Slot, &Slot)| match (a, b) {
+            (Slot::Variable(x), Slot::Variable(y)) => x == y,
+            (Slot::Constant(_), Slot::Constant(_)) => true,
+            _ => false,
+        };
+        self.variables.len() == other.variables.len()
+            && self.rows.len() == other.rows.len()
+            && self.slots.len() == other.slots.len()
+            && self.rows.iter().zip(&other.rows).all(rule)
+            && self.slots.iter().zip(&other.slots).all(slot)
+    }
+
+    /// Sets every constant to where a straight path from `old` to `new` is at `along`, 1 being
+    /// exactly `new`, and reads the lengths at `x`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for an `x` of another length.
+    pub(crate) fn move_along(
+        &mut self,
+        old: &[Slot],
+        new: &[Slot],
+        along: f64,
+        x: &[f64],
+    ) -> Result<(), SketchError> {
+        for ((slot, from), to) in self.slots.iter_mut().zip(old).zip(new) {
+            if let (Slot::Constant(from), Slot::Constant(to)) = (from, to) {
+                *slot = Slot::Constant(if along == 1.0 {
+                    *to
+                } else {
+                    *from + along * (*to - *from)
+                });
+            }
+        }
+        self.rescale(x)
+    }
+
+    /// The inputs of `rule`.
+    fn inputs(&self, rule: usize) -> Result<&[Slot], SketchError> {
+        let row = self.rows.get(rule).ok_or(SketchError::Internal)?;
+        let end = rule
+            .checked_add(1)
+            .and_then(|next| self.rows.get(next))
+            .map_or(self.slots.len(), |next| next.at);
+        self.slots.get(row.at..end).ok_or(SketchError::Internal)
+    }
+
+    /// Moves the variables among `columns` of the rules named `id` off a singular set, by amounts
+    /// that depend on `id` alone (chapter 15.4).
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for an `x` of another length.
+    pub(crate) fn nudge(&self, id: ItemId, x: &mut [f64], columns: &[usize]) -> Result<(), SketchError> {
+        let first = self.rows.partition_point(|row| row.id < id);
+        let last = self.rows.partition_point(|row| row.id <= id);
+        for rule in first..last {
+            for (i, slot) in self.inputs(rule)?.iter().enumerate() {
+                if let Slot::Variable(v) = slot
+                    && columns.contains(v)
+                {
+                    let held = x.get_mut(*v).ok_or(SketchError::Internal)?;
+                    *held += nudge_of(id, i);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The sense of `rule` at `x`, if it has two branches and interval arithmetic can certify one.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`]; what the arithmetic refuses.
+    pub(crate) fn sense_of(&self, rule: usize, x: &[f64]) -> Result<Option<Sense>, SketchError> {
+        let row = self.rows.get(rule).ok_or(SketchError::Internal)?;
+        match row.kind {
+            ConstraintKind::Turned { .. }
+            | ConstraintKind::Parallel { .. }
+            | ConstraintKind::Perpendicular { .. }
+            | ConstraintKind::Sweep { .. } => self.sense(&Turned, row, x),
+            ConstraintKind::Heading { .. } => self.sense(&Heading, row, x),
+            _ => Ok(None),
+        }
+    }
+
+    fn sense<R: Residual<N, E>, const N: usize, const E: usize>(
+        &self,
+        kind: &R,
+        row: &Row,
+        x: &[f64],
+    ) -> Result<Option<Sense>, SketchError> {
+        let values = self.values::<N>(row, x)?;
+        let mut held = [Interval::point(0.0)?; N];
+        for (out, value) in held.iter_mut().zip(values) {
+            *out = Interval::point(value)?;
+        }
+        Ok(kind.branch(held)?.and_then(|quantity| {
+            if quantity.lo() > 0.0 {
+                Some(Sense::Positive)
+            } else if quantity.hi() < 0.0 {
+                Some(Sense::Negative)
+            } else {
+                None
+            }
+        }))
+    }
+
+    /// Every rule with a certified sense at `x`, and that sense.
+    ///
+    /// # Errors
+    ///
+    /// As [`Assembly::sense_of`]; [`SketchError::OutOfMemory`].
+    pub(crate) fn senses(&self, x: &[f64]) -> Result<Vec<(usize, Sense)>, SketchError> {
+        let mut list = Vec::new();
+        for rule in 0..self.rows.len() {
+            if let Some(sense) = self.sense_of(rule, x)? {
+                list.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;
+                list.push((rule, sense));
+            }
+        }
+        Ok(list)
     }
 
     /// The variables, in the Jacobian's column order.
@@ -998,6 +1291,25 @@ impl Assembly {
         Ok(())
     }
 
+    /// A rule's `N` inputs.
+    fn list_of<const N: usize>(&self, row: &Row) -> Result<&[Slot; N], SketchError> {
+        self.slots
+            .get(row.at..)
+            .and_then(|tail| tail.get(..N))
+            .and_then(|part| part.try_into().ok())
+            .ok_or(SketchError::Internal)
+    }
+
+    /// A rule's `N` inputs' values at `x`.
+    fn values<const N: usize>(&self, row: &Row, x: &[f64]) -> Result<[f64; N], SketchError> {
+        let list: &[Slot; N] = self.list_of(row)?;
+        let mut values = [0.0; N];
+        for (value, slot) in values.iter_mut().zip(list) {
+            *value = Assembly::read(*slot, x)?;
+        }
+        Ok(values)
+    }
+
     /// Runs one kind: reads its inputs, checks its singular set, and stores what it gives.
     fn run<R: Residual<N, E>, const N: usize, const E: usize>(
         &mut self,
@@ -1005,21 +1317,14 @@ impl Assembly {
         row: &Row,
         x: &[f64],
     ) -> Result<(), SketchError> {
-        let list: &[Slot; N] = self
-            .slots
-            .get(row.at..)
-            .and_then(|tail| tail.get(..N))
-            .and_then(|part| part.try_into().ok())
-            .ok_or(SketchError::Internal)?;
-        let mut values = [0.0; N];
-        for (value, slot) in values.iter_mut().zip(list) {
-            *value = Assembly::read(*slot, x)?;
-        }
+        let list: &[Slot; N] = self.list_of(row)?;
+        let values = self.values::<N>(row, x)?;
         if kind.singular(&values).is_some() {
             return Err(SketchError::Degenerate(row.id));
         }
         let mut seeds = [Dual::new(Real::ZERO, [Real::ZERO; N]); N];
-        for (j, ((seed, value), slot)) in seeds.iter_mut().zip(&values).zip(list).enumerate() {
+        let list = *list;
+        for (j, ((seed, value), slot)) in seeds.iter_mut().zip(&values).zip(&list).enumerate() {
             let mut partials = [Real::ZERO; N];
             if matches!(slot, Slot::Variable(_))
                 && let Some(unit) = partials.get_mut(j)
@@ -1037,7 +1342,7 @@ impl Assembly {
         for (e, out) in result.iter().enumerate() {
             let at = row.first.checked_add(e).ok_or(SketchError::Internal)?;
             *self.residuals.get_mut(at).ok_or(SketchError::Internal)? = out.value().get();
-            for (partial, slot) in out.partials().iter().zip(list) {
+            for (partial, slot) in out.partials().iter().zip(&list) {
                 if let Slot::Variable(i) = slot {
                     let scale = self.variables.get(*i).ok_or(SketchError::Internal)?.scale;
                     let spot = *stored.next().ok_or(SketchError::Internal)?;
@@ -1070,12 +1375,28 @@ impl Assembly {
     /// [`SketchError::Degenerate`] for an input on a singular set, naming the constraint;
     /// [`SketchError::Numeric`] for what the arithmetic refuses.
     pub fn evaluate_at(&mut self, x: &[f64]) -> Result<(), SketchError> {
-        self.jacobian.clear_values();
-        for place in 0..self.rows.len() {
-            let row = *self.rows.get(place).ok_or(SketchError::Internal)?;
-            self.one(&row, x)?;
+        for rule in 0..self.rows.len() {
+            self.evaluate_rule(rule, x)?;
         }
         Ok(())
+    }
+
+    /// Fills the rows of rule `rule` alone at `x`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Assembly::evaluate_at`].
+    pub(crate) fn evaluate_rule(&mut self, rule: usize, x: &[f64]) -> Result<(), SketchError> {
+        let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
+        let end = rule
+            .checked_add(1)
+            .and_then(|next| self.rows.get(next))
+            .map_or(self.places.len(), |next| next.from);
+        let spots = self.places.get(row.from..end).ok_or(SketchError::Internal)?;
+        for &spot in spots {
+            self.jacobian.set_at(spot, 0.0)?;
+        }
+        self.one(&row, x)
     }
 
     fn one(&mut self, row: &Row, x: &[f64]) -> Result<(), SketchError> {

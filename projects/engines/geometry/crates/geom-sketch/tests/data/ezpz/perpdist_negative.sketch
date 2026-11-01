@@ -1,0 +1,11 @@
+sketch v1
+plane lattice 0 0 0 1 0 0 0 1 0 q0
+entity 1.0 point 102.4 102.4
+entity 1.1 point 2150.4 2048
+entity 1.2 point 1024 1024
+entity 3.0 construction line 1.0 1.1 segment
+constraint 4.0 driving 0 fix 1.0 0 0
+constraint 4.1 driving 0 fix 1.0 1 0
+constraint 4.2 driving 0 fix 1.1 0 2048
+constraint 4.3 driving 0 fix 1.1 1 3072
+constraint 4.4 driving 0 point-line 1.2 3.0 1024 right

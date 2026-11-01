@@ -229,7 +229,7 @@ const fn pairs(kind: &ConstraintKind) -> Option<&'static [(usize, usize)]> {
 
 /// The pairs a rule merges: none if an end is a constant, a reference point's, so that it stays an
 /// equation.
-fn merges(kind: &ConstraintKind, slots: &[Slot]) -> Option<&'static [(usize, usize)]> {
+pub(crate) fn merges(kind: &ConstraintKind, slots: &[Slot]) -> Option<&'static [(usize, usize)]> {
     let variable = |i: usize| matches!(slots.get(i), Some(Slot::Variable(_)));
     pairs(kind).filter(|list| list.iter().all(|&(a, b)| variable(a) && variable(b)))
 }
