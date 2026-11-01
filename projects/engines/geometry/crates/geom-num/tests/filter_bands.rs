@@ -27,6 +27,10 @@
     reason = "oracles and generators; the rules are for kernel code"
 )]
 #![allow(
+    clippy::too_many_lines,
+    reason = "the drawing, placing and checking of one case read best in one piece"
+)]
+#![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
