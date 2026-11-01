@@ -17,7 +17,9 @@
 //!
 //! - **Exact, within 6.2's budget.** Every sign is a 4 × 4 determinant of plane coefficients, at
 //!   most 384 bits, or a 3 × 3 determinant of normals, at most 252. Nothing is rounded, and the
-//!   path's points are never computed.
+//!   path's points are never computed for a sign. A segment and a polygon whose grid cells, the
+//!   floors of their corners a step wider each way, do not meet share no point, so the segment
+//!   cannot cross it, and the pair is passed over: a filter that never decides a crossing.
 //! - **Ties are settled by moving the path, never by a tolerance.** Every plane of the path is
 //!   moved by its own infinitesimal, in a fixed order, so the path misses every edge and corner of
 //!   every polygon, and each sign that would be zero is decided by the determinant's first term in
@@ -39,8 +41,8 @@
 //! Cost: at most five segments per piece, each testing each polygon: one or two sign evaluations,
 //! and one per bound of a polygon the segment's line crosses. The last three run along the box's
 //! edges and are the same for every piece of a polygon that leaves the box by the same faces, so
-//! they are walked once for each. Charges the meter one unit per polygon a segment tests, walked
-//! or not.
+//! they are walked once for each. A pair whose spans miss costs a few comparisons. Charges the
+//! meter one unit per polygon a segment tests, walked, passed over or not.
 
 use alloc::vec::Vec;
 use core::fmt;
@@ -237,14 +239,61 @@ impl End {
     }
 }
 
+/// The grid cells around some points, a step wider each way: every point within a unit of one
+/// of them, an infinitesimal move included, lies inside. Two spans that miss share no point.
+#[derive(Clone, Copy, Debug)]
+struct Span {
+    low: [i64; 3],
+    high: [i64; 3],
+}
+
+impl Span {
+    /// The span of `points`, if every one has its floors.
+    fn of(points: impl IntoIterator<Item = Option<Meeting>>) -> Option<Self> {
+        let mut low = [i64::MAX; 3];
+        let mut high = [i64::MIN; 3];
+        for point in points {
+            let floors = point?.floors()?;
+            for ((l, h), v) in low.iter_mut().zip(&mut high).zip(floors) {
+                *l = (*l).min(v);
+                *h = (*h).max(v);
+            }
+        }
+        // A point lies in [floor, floor + 1) on each axis; a step more each way holds the moves.
+        Some(Span {
+            low: low.map(|v| v.saturating_sub(1)),
+            high: high.map(|v| v.saturating_add(2)),
+        })
+    }
+
+    /// Whether the two spans are apart on some axis.
+    fn misses(&self, other: &Span) -> bool {
+        let apart = |(a, b): (&Span, &Span)| a.high.iter().zip(&b.low).any(|(h, l)| h < l);
+        apart((self, other)) || apart((other, self))
+    }
+}
+
+/// The span of `piece`'s corners.
+fn piece_span(piece: &Piece) -> Option<Span> {
+    let after = piece.bounds.iter().cycle().skip(1);
+    Span::of(
+        piece
+            .bounds
+            .iter()
+            .zip(after)
+            .map(|(bound, next)| Meeting::new(&piece.face, bound, next)),
+    )
+}
+
 /// A stretch of the line where `p` and `q` meet, from plane `from` to plane `to`, with its two
-/// ends, which every polygon's test of it reads.
+/// ends, which every polygon's test of it reads, and the span of those ends.
 struct Segment {
     p: Moved,
     q: Moved,
     from: Moved,
     to: Moved,
     ends: (End, End),
+    span: Option<Span>,
 }
 
 impl Segment {
@@ -255,6 +304,7 @@ impl Segment {
             q,
             from,
             to,
+            span: Span::of([ends.0.at, ends.1.at]),
             ends,
         })
     }
@@ -280,21 +330,28 @@ fn end_reading(
 }
 
 /// Counts `polygon`'s crossing by `segment`, if it has one, into `winding`: walking back along a
-/// path, a crossing toward the front of a face leaves its material.
+/// path, a crossing toward the front of a face leaves its material. A polygon whose `span` the
+/// segment's misses cannot be crossed, as a crossing is a point of both, and is not read.
 fn count_crossing(
     segment: &Segment,
-    polygon: &Polygon,
+    (polygon, span): (&Polygon, Option<&Span>),
     winding: &mut Winding,
 ) -> Result<(), TraceError> {
     let Some(entry) = polygon.entry else {
         return Ok(());
     };
+    if let (Some(own), Some(other)) = (&segment.span, span)
+        && own.misses(other)
+    {
+        return Ok(());
+    }
     let Segment {
         p,
         q,
         from,
         to,
         ends: (at_from, at_to),
+        span: _,
     } = segment;
     let start = end_reading((p, q, from), at_from, &polygon.piece.face)?;
     let end = end_reading((p, q, to), at_to, &polygon.piece.face)?;
@@ -472,7 +529,7 @@ fn inward(own: &Canonical, boxes: &[Canonical]) -> Sign {
 /// and the meter is charged as if it had walked them, so the work counted is the same.
 fn vectors(
     (piece, index): (&Piece, usize),
-    polygons: &[(&Polygon, Canonical)],
+    polygons: &[(&Polygon, Canonical, Option<Span>)],
     (faces, boxes): (&[[Moved; 2]; 3], &[Canonical]),
     reference: &Winding,
     walked: &mut Vec<Walked>,
@@ -482,7 +539,11 @@ fn vectors(
     else {
         return Err(NumError::Degenerate.into());
     };
-    let own = canonical(&piece.face)?;
+    // A piece lies on its polygon's face, whose canonical form is held.
+    let own = match polygons.get(index) {
+        Some((polygon, held, _)) if polygon.piece.face == piece.face => *held,
+        _ => canonical(&piece.face)?,
+    };
     let near = inward(&own, boxes);
     let face = Moved {
         plane: piece.face,
@@ -502,9 +563,9 @@ fn vectors(
     let exits = exits(&face, &first, faces)?;
     let mut near_side = reference.clone();
     for segment in &opening(face, (first, second), exits, faces)? {
-        for (polygon, _) in polygons {
+        for (polygon, _, span) in polygons {
             meter.charge(1)?;
-            count_crossing(segment, polygon, &mut near_side)?;
+            count_crossing(segment, (polygon, span.as_ref()), &mut near_side)?;
         }
     }
     let seen = walked
@@ -519,9 +580,9 @@ fn vectors(
         let mut crossed = Winding::new();
         let segments = legs(face, exits, faces)?;
         for segment in &segments {
-            for (polygon, _) in polygons {
+            for (polygon, _, span) in polygons {
                 meter.charge(1)?;
-                count_crossing(segment, polygon, &mut crossed)?;
+                count_crossing(segment, (polygon, span.as_ref()), &mut crossed)?;
             }
         }
         walked.push(Walked {
@@ -541,7 +602,7 @@ fn vectors(
     // Across the piece: every polygon on its plane that covers it, the piece's own among them.
     let mut far_side = near_side.clone();
     let mut is_first = true;
-    for (at, (polygon, held)) in polygons.iter().enumerate() {
+    for (at, (polygon, held, _)) in polygons.iter().enumerate() {
         meter.charge(1)?;
         if held.plane != own.plane || !covers(polygon, &face, &first, &second)? {
             continue;
@@ -593,7 +654,7 @@ pub fn reference_above(
     let mut above = reference.clone();
     for polygon in polygons {
         meter.charge(1)?;
-        count_crossing(&segment, polygon, &mut above)?;
+        count_crossing(&segment, (polygon, None), &mut above)?;
     }
     Ok(above)
 }
@@ -627,7 +688,7 @@ pub fn winding_at(
     for segment in path(face, first, second, &faces)? {
         for polygon in polygons {
             meter.charge(1)?;
-            count_crossing(&segment, polygon, &mut here)?;
+            count_crossing(&segment, (polygon, None), &mut here)?;
         }
     }
     Ok(here)
@@ -655,7 +716,8 @@ pub fn classify(
     }
     let mut held = Vec::with_capacity(polygons.len());
     for polygon in polygons {
-        held.push((polygon, canonical(&polygon.piece.face)?));
+        let span = piece_span(&polygon.piece);
+        held.push((polygon, canonical(&polygon.piece.face)?, span));
     }
     let mut out = Vec::new();
     for (index, list) in pieces.iter().enumerate() {
@@ -679,4 +741,59 @@ pub fn classify(
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::arithmetic_side_effects,
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        reason = "tests: native arithmetic, and a failure stops the test"
+    )]
+
+    use geom_num::plane::Plane;
+    use num_bigint::BigInt;
+    use proptest::prelude::*;
+
+    use super::Span;
+    use crate::order::Meeting;
+
+    fn plane() -> impl Strategy<Value = Plane> {
+        ([-9i128..9, -9i128..9, -9i128..9], -999i128..999)
+            .prop_filter_map("a normal", |(n, d)| Plane::new(n, d).ok())
+    }
+
+    proptest! {
+        /// Every point a span is made of lies a unit inside it, exactly.
+        #[test]
+        fn a_span_holds_its_points_a_unit_inside(rows in prop::collection::vec((plane(), plane(), plane()), 1..5)) {
+            let points: Vec<Option<Meeting>> = rows.iter().map(|(p, q, r)| Meeting::new(p, q, r)).collect();
+            let Some(span) = Span::of(points.iter().copied()) else {
+                return Ok(());
+            };
+            for point in points.iter().flatten() {
+                let (x, w) = point.coordinates();
+                let (x, w) = if w < 0 { (x.map(|v| -v), -w) } else { (x, w) };
+                for ((v, low), high) in x.iter().zip(span.low).zip(span.high) {
+                    let at = BigInt::from(*v);
+                    let (low, high) = (BigInt::from(low + 1), BigInt::from(high - 1));
+                    prop_assert!(at >= &low * w && at <= &high * w);
+                }
+            }
+        }
+
+        /// Spans miss exactly when they are apart on an axis, either way round.
+        #[test]
+        fn spans_miss_when_apart(a in prop::array::uniform6(-9i64..9), b in prop::array::uniform6(-9i64..9)) {
+            let span = |v: [i64; 6]| Span {
+                low: [v[0].min(v[1]), v[2].min(v[3]), v[4].min(v[5])],
+                high: [v[0].max(v[1]), v[2].max(v[3]), v[4].max(v[5])],
+            };
+            let (s, t) = (span(a), span(b));
+            let apart = (0..3).any(|i| s.high[i] < t.low[i] || t.high[i] < s.low[i]);
+            prop_assert_eq!(s.misses(&t), apart);
+            prop_assert_eq!(t.misses(&s), apart);
+        }
+    }
 }

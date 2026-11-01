@@ -263,6 +263,33 @@ impl Meeting {
         }
         Some(out)
     }
+
+    /// Each coordinate's floor, ⌊`X_i` / w⌋, in `i64`: the point lies in the unit cell from it.
+    /// One division of machine words each where the point fits them. `None` for w zero, or a
+    /// floor past `i64`.
+    pub(crate) fn floors(&self) -> Option<[i64; 3]> {
+        if let Some((x, w)) = self.words
+            && w > 0
+        {
+            let [a, b, c] = x;
+            return Some([
+                a.checked_div_euclid(w)?,
+                b.checked_div_euclid(w)?,
+                c.checked_div_euclid(w)?,
+            ]);
+        }
+        let turn = self.w.is_negative();
+        let w = if turn { self.w.checked_neg()? } else { self.w };
+        if w == 0 {
+            return None;
+        }
+        let mut out = [0; 3];
+        for (slot, x) in out.iter_mut().zip(self.x) {
+            let x = if turn { x.checked_neg()? } else { x };
+            *slot = i64::try_from(x.checked_div_euclid(w)?).ok()?;
+        }
+        Some(out)
+    }
 }
 
 /// p · s − q · r, within 2^167 in magnitude for normal components below 2^83.
@@ -493,6 +520,7 @@ mod tests {
 
     use geom_num::Sign;
     use geom_num::plane::{Plane, Tpi, determinant_sign, normals_sign};
+    use num_bigint::BigInt;
     use proptest::prelude::*;
 
     use super::Meeting;
@@ -569,6 +597,47 @@ mod tests {
         #[test]
         fn a_rounding_is_the_grid_s_for_a_building(rows in planes(1 << 24, 1 << 44)) {
             rounds_as_the_grid_does(&rows);
+        }
+
+        #[test]
+        fn floors_are_exact_floors(rows in planes(1 << 24, 1 << 44)) {
+            floors_as_divided(&rows);
+        }
+
+        #[test]
+        fn floors_are_exact_floors_with_ties(rows in planes(2, 7)) {
+            floors_as_divided(&rows);
+        }
+    }
+
+    /// [`Meeting::floors`] against a floor of big integers, for words and for `i128`.
+    fn floors_as_divided(rows: &[Plane]) {
+        let [p, q, r] = [rows[0], rows[1], rows[2]];
+        let Some(at) = Meeting::new(&p, &q, &r) else {
+            return;
+        };
+        let (x, w) = at.coordinates();
+        let wide = Meeting { words: None, ..at };
+        for meeting in [at, wide] {
+            let got = meeting.floors();
+            if w == 0 {
+                assert!(got.is_none());
+                continue;
+            }
+            let want = x.map(|v| {
+                let (v, w) = if w < 0 {
+                    (-BigInt::from(v), -BigInt::from(w))
+                } else {
+                    (BigInt::from(v), BigInt::from(w))
+                };
+                // The remainder in [0, w), then an exact quotient.
+                let rest = ((&v % &w) + &w) % &w;
+                (v - rest) / w
+            });
+            match got {
+                Some(floors) => assert_eq!(floors.map(BigInt::from), want),
+                None => assert!(want.iter().any(|v| i64::try_from(v.clone()).is_err())),
+            }
         }
     }
 
