@@ -106,9 +106,15 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "Count benchmarks of two stacks joined, and 1 new on mesh booleans (decision 32.44): mesh/boolean; no existing digest moved"
+            },
+            {
+              "sha256": "ceb24eae92c96874d12498f59b4b59878a426492bfbabbb4d4886226fd108d91",
+              "kind": "corpus",
+              "piece": "G148",
+              "why": "The boolean's count benchmark on small prisms: mesh/boolean; no existing digest moved"
             }
           ],
-          "sha256": "ceb24eae92c96874d12498f59b4b59878a426492bfbabbb4d4886226fd108d91"
+          "sha256": "e7e4cc8c769f8227a9e33a693f4e7003abb5d62e300c259731c1b046a4530cb0"
         },
         {
           "id": "geom-bvh/cells",
