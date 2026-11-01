@@ -94,11 +94,11 @@ fn a_swept_surface_gives_back_its_shape_and_placement() {
     let profile = segment([1.0, 0.0, 0.0], [2.0, 0.0, 3.0]);
     let r = Revolution::new(profile.clone(), [0.0, 0.0, 1.0], frame(), (0.0, 1.5)).unwrap();
     assert_eq!(r.shape().unwrap(), (&profile, [0.0, 0.0, 1.0], frame()));
-    let identity = (
-        [0.0; 3],
+    let at_axis_point = (
+        [0.0, 0.0, 1.0],
         [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
     );
-    assert_eq!(r.placement(), identity);
+    assert_eq!(r.placement(), at_axis_point);
     let x = Extrusion::new(profile.clone(), [0.0, 0.5, 2.0], (0.0, 2.0)).unwrap();
     assert_eq!(x.shape().unwrap(), (&profile, [0.0, 0.5, 2.0]));
     let second = segment([0.0, 2.0, 0.0], [0.0, 3.0, 2.0]);

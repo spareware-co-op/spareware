@@ -5363,46 +5363,6 @@
       "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace Sets<'s>::size -> u32 with 0",
-      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace Sets<'s>::size -> u32 with 1",
-      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with == in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with > in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with <= in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
       "mutant": "replace log_fast -> (f64, f64) with (0.0, 0.0)",
       "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
@@ -5445,30 +5405,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
       "mutant": "replace + with * in atan2",
-      "line_text": "let lb = rh + (rl - eps);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace - with / in atan2",
-      "line_text": "let lb = rh + (rl - eps);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0, where H is z and e about 2^-90) the low part is the cubic term, about H^3/3 in size with |H| > 2^-53, so |l/e| is again more than 2^34 ulps of H: the mutant refuses too. It accepts only inputs the original accepts, with the same result."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace + with * in atan2",
-      "line_text": "let ub = rh + (rl + eps);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace + with * in atan2",
       "line_text": "let lb = fh + (fl - eps);",
       "occurrences": 1,
       "kind": "equivalent",
@@ -5481,62 +5417,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "mutant": "replace + with - in refine",
-      "line_text": "return sgn * h.r + sgn * h.d;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Every listed hard case's offset d is below half an ulp of its r: 2^-110 or 2^-109 for the small r of SINPI_HARD, and 2^-55 against r in [1/2, 1) (half an ulp 2^-54) for the others. So sgn·r + sgn·d and sgn·r - sgn·d both round to sgn·r (C writes the sum for the inexact flag): the same double for every listed case."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace & with | in Dint::mul_int",
-      "line_text": "t = t.checked_add(t & 1)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace & with ^ in Dint::mul_int",
-      "line_text": "t = t.checked_add(t & 1)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace | with & in Dint::mul_int",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace | with ^ in Dint::mul_int",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace << with >> in Dint::mul_int",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace >> with << in Dint::mul_int",
-      "line_text": "t = (1u128 << 127) | (t >> 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "mul_int's carry branch is never taken: its only call is mul_int(E, LOG2) with E the input's binary exponent (-1076 to 1025), and computing t + l exactly for every such E (log.rs's unit test mul_int_never_carries_for_ln, for every |E| <= 2000) gives no carry out of 128 bits. So this line never runs."
     }
   ],
   "coverage_off": [

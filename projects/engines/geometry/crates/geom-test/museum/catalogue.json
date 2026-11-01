@@ -53,6 +53,19 @@
       }
     },
     {
+      "id": "1/stamped-bodies",
+      "what": "Stamped bodies in format 1's body records, geom-format's archived stamps.",
+      "format": 1,
+      "edition": "pre-edition",
+      "file": "v1/stamped-bodies.skgf",
+      "sha256": "cf9aef7b0095d5988c6876980c1b11ff60efac1c6227901d44346a1fefb0b595",
+      "kind": {
+        "file": {
+          "records": 20
+        }
+      }
+    },
+    {
       "id": "1/wall-body",
       "what": "A wall as format 1's body index and chunk records, geom-format's archived body.",
       "format": 1,

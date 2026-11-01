@@ -61,18 +61,8 @@ on:
       - "projects/engines/geometry/crates/geom-draw/**"
       - "projects/engines/geometry/crates/geom-field/**"
       - "projects/engines/geometry/crates/geom-format/**"
-      - "projects/kit/crates/kit-core/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
-      - "projects/engines/geometry/crates/geom-check/**"
-      - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-gen/**"
-      - "projects/engines/geometry/crates/geom-gen/**"
-      - "projects/engines/geometry/crates/geom-linalg/**"
-      - "projects/engines/geometry/crates/geom-make/**"
-      - "projects/engines/geometry/crates/geom-math/**"
-      - "projects/engines/geometry/crates/geom-nurbs/**"
-      - "projects/engines/geometry/crates/geom-surface/**"
-      - "projects/engines/geometry/crates/geom-topo/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-make/**"
@@ -112,18 +102,8 @@ on:
       - "projects/engines/geometry/crates/geom-draw/**"
       - "projects/engines/geometry/crates/geom-field/**"
       - "projects/engines/geometry/crates/geom-format/**"
-      - "projects/kit/crates/kit-core/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
-      - "projects/engines/geometry/crates/geom-check/**"
-      - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-gen/**"
-      - "projects/engines/geometry/crates/geom-gen/**"
-      - "projects/engines/geometry/crates/geom-linalg/**"
-      - "projects/engines/geometry/crates/geom-make/**"
-      - "projects/engines/geometry/crates/geom-math/**"
-      - "projects/engines/geometry/crates/geom-nurbs/**"
-      - "projects/engines/geometry/crates/geom-surface/**"
-      - "projects/engines/geometry/crates/geom-topo/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-make/**"
@@ -579,7 +559,7 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-format --
-          cargo kani -p geom-format --harness range::proofs::bits_is_the_magnitude_width --exact
+          cargo kani -p geom-format -Z stubbing --harness range::proofs::bits_is_the_magnitude_width --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
