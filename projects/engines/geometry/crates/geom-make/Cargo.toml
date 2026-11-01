@@ -61,7 +61,8 @@ float_cmp = "allow"
 # MIT OR Apache-2.0. Without its default fork and timeout features, which pull in code that has no
 # WebAssembly (WASI) build, so the tests also run on wasm32-wasip1.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
-# Faces with their roles over real primitives (piece G102).
+# Faces with their roles over real primitives (piece G102), and the name graph a primitive's names
+# are classified in (attack_g101).
 geom-name = { path = "../geom-name" }
 # The kernel development crate: the history laws kit (piece G88), a development dependency only
 # (chapter 28.1).
