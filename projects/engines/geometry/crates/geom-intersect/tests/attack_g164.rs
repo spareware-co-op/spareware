@@ -13,6 +13,7 @@
     clippy::cast_precision_loss,
     clippy::disallowed_methods,
     clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
@@ -28,12 +29,12 @@ use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 use geom_test::{Seed, SplitMix64};
 
-fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
-}
-
+/// The meeting, within a budget well past the heaviest case here (a curve bent as the bowl is,
+/// some 4.5 million units): a closed form lost to the engine on an infinite line stops instead of
+/// running on.
 fn meet(c: &CurveKind<3>, s: &SurfaceKind) -> Intersection {
-    curve_surface(c, s, &mut meter()).unwrap()
+    let mut m = WorkMeter::new(Budget::of_work(50_000_000));
+    curve_surface(c, s, &mut m).unwrap()
 }
 
 fn line(o: [f64; 3], d: [f64; 3]) -> CurveKind<3> {
@@ -800,6 +801,64 @@ fn the_work_is_what_the_clipping_leaves() {
         Torus::new([3.0, 4.0, 0.0], 10.0, 2.0, frame(), (ROUND, ROUND)).unwrap(),
     );
     assert_eq!(work(&line([-20.0, 4.0, 2.0], [1.0, 0.0, 0.0]), &t), 39);
+    // A line of speed 2 reaches twice as far for each unit of t.
+    let ring = torus(10.0, 2.0);
+    assert_eq!(work(&line([-20.0, 0.0, 0.0], [2.0, 0.0, 0.0]), &ring), 35);
+    assert_eq!(work(&line([-20.0, 0.0, 2.0], [2.0, 0.0, 0.0]), &ring), 39);
+    // A patch of two pieces in u: each box is clipped by the piece that holds it.
+    let down = bezier(&[[600.0, 100.0, 2000.0], [600.0, 100.0, -2000.0]]);
+    assert_eq!(work(&down, &two_pieces()), 633);
+    let across = bezier(&[[-2000.0, 0.0, 100.0], [2000.0, 0.0, 100.0]]);
+    assert_eq!(work(&across, &two_pieces()), 12_188);
+}
+
+/// A bowl over [−1000, 1000]² of two biquadratic pieces in u, joined at u = 1/2.
+fn two_pieces() -> SurfaceKind {
+    let s = 1000.0;
+    let u = Basis::new(2, vec![0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0]).unwrap();
+    let mut net = Vec::new();
+    for x in [-1.0, -0.5, 0.5, 1.0] {
+        for y in [-1.0, 0.0, 1.0] {
+            net.push([s * x, s * y, s * (0.5 - 0.5 * x * x - 0.5 * y * y)]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(u, basis(2), &net).unwrap())
+}
+
+#[test]
+fn a_tangent_band_on_a_torus_is_as_wide_as_its_run() {
+    // Radii that are not whole leave the tangency to the engine. On a ring of radius about 10^6 a
+    // line along the top of its tube stays within a step of it for some 1,400 steps either side of
+    // the touch, where no box can be split: a band as wide in steps as its run of t times the
+    // line's speed, 2.
+    let major = 1_000_000.5;
+    let t =
+        SurfaceKind::Torus(Torus::new([0.0; 3], major, 100.0, frame(), (ROUND, ROUND)).unwrap());
+    let r = meet(&line([-5000.0, major, 100.0], [2.0, 0.0, 0.0]), &t);
+    let bands: Vec<_> = r
+        .items()
+        .iter()
+        .filter_map(|i| match i {
+            Item::Flagged {
+                at,
+                why: Unresolved::TangentBand { width },
+                ..
+            } => Some((at.spans()[0], width.0)),
+            _ => None,
+        })
+        .collect();
+    assert!(!bands.is_empty(), "{:?}", r.items());
+    for (t, width) in bands {
+        let run = ((t.hi() - t.lo()) * 2.0).ceil() as u64;
+        assert!(
+            width == run || width == run + 1,
+            "{width} for a run of {t:?}"
+        );
+        assert!(
+            width >= 3,
+            "{width}: too narrow to tell the speed's use apart"
+        );
+    }
 }
 
 #[test]
