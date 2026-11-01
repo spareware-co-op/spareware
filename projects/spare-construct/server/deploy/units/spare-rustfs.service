@@ -1,0 +1,14 @@
+[Unit]
+Description=RustFS, the file store
+After=network.target
+
+[Service]
+User=spare
+EnvironmentFile=/etc/spare-stack/rustfs.env
+Environment=RUSTFS_ADDRESS=127.0.0.1:9100 RUSTFS_CONSOLE_ENABLE=false
+ExecStart=/opt/spare-stack/bin/rustfs /opt/spare-stack/data/rustfs
+Restart=always
+LimitNOFILE=1000000
+
+[Install]
+WantedBy=multi-user.target

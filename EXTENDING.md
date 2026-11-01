@@ -184,7 +184,7 @@ Every extension point has the same four answers: who can add one, where it lives
 
 | Program or area | Format | Status |
 | --- | --- | --- |
-| Spare Construct | A SQLite container with a published, versioned schema; IFC 4.3 and 2x3 for exchange | Lean, open decision |
+| Spare Construct | Rows and file storage with a published, versioned format, and one file built on export; IFC 4.3 and 2x3 for exchange | Decided (note K08) |
 | Spare Office | OpenDocument (ISO/IEC 26300); reads and writes Word, Excel and PowerPoint files | Lean |
 | Mail and calendar | IMAP, SMTP, JMAP, CalDAV, CardDAV | Planned |
 | Chat | Matrix | Research first (piece OF05) |
@@ -252,7 +252,7 @@ Every extension point has the same four answers: who can add one, where it lives
 - A self-host package (container images, guides, upgrade paths) lets a member group run its own servers (KIT-A22-F7-P1).
 - Member servers join, share and stay trusted through a method still being researched (KIT-A22-F7-P2).
 - An account and its history can move between the co-op's servers and a member's server, either way (KIT-A22-F7-P3).
-- Shared project spaces between firms let each firm's own server join directly, so firms can host anywhere (Spare Construct map).
+- Shared project spaces between firms sit in one co-op cloud: each firm's hub links to the project, and bridges cross between hubs only if both permit (Spare Construct note K08).
 - Social and chat use open protocols. Spare Social is weighing ActivityPub and the AT Protocol (piece M01). Spare Office weighs Matrix for chat (piece OF05).
 - The legal duties of a group that self-hosts (tax, anti-money-laundering, privacy, safety) are set out in an agreement each group signs (KIT-A22-F7-P4).
 - Domains, signing keys and developer accounts are held under two-person control, so no one person can lose or take them (KIT-A14-F18-P2, KIT-A22-F2-P3).

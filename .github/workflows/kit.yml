@@ -1,0 +1,105 @@
+name: Kit
+
+# The kit's foundation crates: the store format, the edit log and the orderer. These need no
+# database: every failure is staged in-process (kit-store's `memory` feature), so they run on every
+# platform. The fuzz targets run as property tests in the first job, and for real under libFuzzer
+# in the second, with Spare Construct's table keys and recipes beside the kit's. TiKV itself is
+# tested in construct-server.yml.
+
+on:
+  pull_request:
+    paths:
+      - "projects/kit/crates/kit-core/**"
+      - "projects/kit/crates/kit-ops/**"
+      - "projects/kit/crates/kit-store/**"
+      - "projects/kit/crates/kit-sync/**"
+      - "projects/spare-construct/crates/construct-model/**"
+      - "projects/spare-construct/crates/construct-regen/**"
+      - "Cargo.lock"
+      - ".github/workflows/kit.yml"
+
+permissions:
+  contents: read
+
+env:
+  # The workspace's pinned compiler (rust-toolchain.toml).
+  RUST_TOOLCHAIN: "1.99.0"
+  # The nightly compiler and cargo-bolero the kernel's fuzzing uses (kernel-fuzz-campaign.yml).
+  FUZZ_NIGHTLY: nightly-2026-10-01
+  CARGO_BOLERO_VERSION: 0.13.5
+  KIT_CRATES: -p kit-core -p kit-ops -p kit-store -p kit-sync
+
+jobs:
+  test:
+    name: Tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Clippy
+        run: cargo clippy --locked $KIT_CRATES --all-targets -- -D warnings
+      - name: Tests, with the fuzz targets as property tests
+        run: cargo test --locked $KIT_CRATES
+
+  fuzz:
+    name: ${{ matrix.target.name }} under libFuzzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { package: kit-store, name: key_parsing_has_one_spelling }
+          - { package: kit-store, name: keys_built_from_ids_read_back }
+          - { package: kit-store, name: one_projects_range_never_holds_anothers_keys }
+          - { package: kit-ops, name: reading_any_bytes_is_safe }
+          - { package: kit-ops, name: entries_round_trip }
+          - { package: kit-sync, name: faults_in_any_order }
+          - { package: construct-model, name: construct_keys_have_one_spelling }
+          - { package: construct-model, name: construct_keys_read_back }
+          - { package: construct-regen, name: any_recipe_builds_or_says_why }
+          - { package: construct-regen, name: reading_any_recipe_text_is_safe }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly compiler
+        run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
+        run: >-
+          cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
+          --no-default-features --features libfuzzer
+      - name: Fuzz for two minutes
+        run: >-
+          cargo bolero test "${{ matrix.target.name }}" --package "${{ matrix.target.package }}"
+          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 120s
+      - name: Upload the crashing input
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: crashes-${{ matrix.target.name }}
+          path: |
+            projects/kit/crates/*/tests/__fuzz__/*/crashes/
+            projects/spare-construct/crates/*/tests/__fuzz__/*/crashes/
+          if-no-files-found: ignore

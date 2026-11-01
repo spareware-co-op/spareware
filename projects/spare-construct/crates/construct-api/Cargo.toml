@@ -4,7 +4,15 @@ version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
 
+[features]
+# What the cloud server runs: the access checks and the commands the orderer calls. Left out of the
+# browser's build, which has no use for a store.
+cloud = ["dep:kit-core", "dep:kit-store", "dep:kit-sync"]
+
 [dependencies]
+kit-core = { path = "../../../kit/crates/kit-core", optional = true }
+kit-store = { path = "../../../kit/crates/kit-store", optional = true }
+kit-sync = { path = "../../../kit/crates/kit-sync", optional = true }
 kit-ops = { path = "../../../kit/crates/kit-ops" }
 kit-plugin = { path = "../../../kit/crates/kit-plugin" }
 kit-mcp = { path = "../../../kit/crates/kit-mcp" }
@@ -20,3 +28,9 @@ engine-sim = { path = "../../../engines/crates/engine-sim" }
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip: numbers are read correctly rounded, as JSON.parse does (the transport engine relies on it)
 serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[dev-dependencies]
+construct-api = { path = ".", features = ["cloud"] }
+construct-regen = { path = "../construct-regen", features = ["server"] }
+kit-store = { path = "../../../kit/crates/kit-store", features = ["memory"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

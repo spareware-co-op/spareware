@@ -1,0 +1,25 @@
+[package]
+name = "kit-store-tikv"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MPL-2.0"
+
+# Every version is pinned here and by the services workspace's Cargo.lock. deny.toml there checks
+# licences.
+[dependencies]
+kit-store = { path = "../../crates/kit-store" }
+futures = "=0.3.31"                # MIT OR Apache-2.0
+object_store = { version = "=0.14.2", features = ["aws", "gcp"] }  # MIT OR Apache-2.0
+# Apache-2.0. Pinned to a commit because 0.4.0, the latest release, can't get past a dead TiKV: see
+# the lessons in src/lib.rs. Move back to a released version once one holds tikv/client-rust#562.
+tikv-client = { git = "https://github.com/tikv/client-rust", rev = "1b883bf144a8557938f6069682c61b4d39cf6bf2", default-features = false }
+url = "=2.5.8"                     # MIT OR Apache-2.0
+
+[dev-dependencies]
+anyhow = "=1.0.100"
+kit-core = { path = "../../crates/kit-core" }
+kit-ops = { path = "../../crates/kit-ops" }
+kit-sync = { path = "../../crates/kit-sync" }
+serde_json = "=1.0.154"
+tokio = { version = "=1.54.1", features = ["full"] }
