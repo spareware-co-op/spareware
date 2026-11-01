@@ -568,7 +568,9 @@ pub fn replay_line(case: &Case) -> Option<String> {
     }
     let log = OpLog::new(Vec::new(), done.log);
     match replay(&mut Kernel::new(), &log) {
-        Replayed::Done { hash, measures } => Some(format!("{} {measures:?}", String::from(hash))),
+        Replayed::Done { hash, measures, .. } => {
+            Some(format!("{} {measures:?}", String::from(hash)))
+        }
         Replayed::Failed { hash, kind, .. } => {
             Some(format!("{} {}", String::from(hash), kind.name()))
         }
