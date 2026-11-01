@@ -883,6 +883,11 @@ fn choice(kind: &ConstraintKind) -> Option<bool> {
 
 /// How far a rule's `i`th input moves off a singular set: between an eighth and a quarter of a step,
 /// its size and sign from the rule's id and `i` alone (chapter 15.4).
+///
+/// The size takes 32 bits of the mix, not a few. From a handful of sizes, two ends of a zero-length
+/// line often land exactly across the direction another rule asks of it (dx = 0 under a level line,
+/// dx = −dy under one at 45°). There that rule's row and the length's are parallel, and the
+/// least-change step only shortens the line, back onto the singular set.
 fn nudge_of(id: ItemId, i: usize) -> f64 {
     let place = u64::try_from(i).unwrap_or(u64::MAX);
     let mixed = id
@@ -892,9 +897,9 @@ fn nudge_of(id: ItemId, i: usize) -> f64 {
         .wrapping_mul(0xBF58_476D_1CE4_E5B9)
         .wrapping_add(place)
         .wrapping_mul(0x94D0_49BB_1331_11EB);
-    let bits = mixed >> 60;
-    let size = 0.125 + f64::from(u32::try_from(bits & 7).unwrap_or(0)) / 64.0;
-    if bits & 8 == 0 { size } else { -size }
+    let high = f64::from(u32::try_from(mixed >> 32).unwrap_or(0));
+    let size = 0.125 + high / 34_359_738_368.0;
+    if mixed & (1 << 31) == 0 { size } else { -size }
 }
 
 /// The cheapest constant that keeps a gradient near one: the larger of two lengths, rounded down to a
@@ -1141,7 +1146,12 @@ impl Assembly {
     /// # Errors
     ///
     /// [`SketchError::Internal`] for an `x` of another length.
-    pub(crate) fn nudge(&self, id: ItemId, x: &mut [f64], columns: &[usize]) -> Result<(), SketchError> {
+    pub(crate) fn nudge(
+        &self,
+        id: ItemId,
+        x: &mut [f64],
+        columns: &[usize],
+    ) -> Result<(), SketchError> {
         let first = self.rows.partition_point(|row| row.id < id);
         let last = self.rows.partition_point(|row| row.id <= id);
         for rule in first..last {
@@ -1392,7 +1402,10 @@ impl Assembly {
             .checked_add(1)
             .and_then(|next| self.rows.get(next))
             .map_or(self.places.len(), |next| next.from);
-        let spots = self.places.get(row.from..end).ok_or(SketchError::Internal)?;
+        let spots = self
+            .places
+            .get(row.from..end)
+            .ok_or(SketchError::Internal)?;
         for &spot in spots {
             self.jacobian.set_at(spot, 0.0)?;
         }

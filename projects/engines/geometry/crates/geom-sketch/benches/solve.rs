@@ -65,10 +65,23 @@ fn outline() -> Sketch {
         writeln!(text, "entity 1.{} point {} {}", 2 * i, x + 0.25, y - 0.25).unwrap();
         x += dx;
         y += dy;
-        writeln!(text, "entity 1.{} point {} {}", 2 * i + 1, x - 0.25, y + 0.25).unwrap();
+        writeln!(
+            text,
+            "entity 1.{} point {} {}",
+            2 * i + 1,
+            x - 0.25,
+            y + 0.25
+        )
+        .unwrap();
     }
     for i in 0..5_000_usize {
-        writeln!(text, "entity 2.{i} line 1.{} 1.{} segment", 2 * i, 2 * i + 1).unwrap();
+        writeln!(
+            text,
+            "entity 2.{i} line 1.{} 1.{} segment",
+            2 * i,
+            2 * i + 1
+        )
+        .unwrap();
     }
     writeln!(text, "constraint 3.0 driving 0 fix 1.0 0 0").unwrap();
     writeln!(text, "constraint 3.1 driving 0 fix 1.0 1 0").unwrap();
@@ -87,7 +100,12 @@ fn outline() -> Sketch {
         let (a, b) = (2 * i, 2 * i + 1);
         writeln!(text, "constraint 5.{i} driving 0 {part} 1.{a} 1.{b} {size}").unwrap();
         if i + 1 < 5_000 {
-            writeln!(text, "constraint 6.{i} driving 0 coincident 1.{b} 1.{}", b + 1).unwrap();
+            writeln!(
+                text,
+                "constraint 6.{i} driving 0 coincident 1.{b} 1.{}",
+                b + 1
+            )
+            .unwrap();
         }
     }
     parse(&text).unwrap()

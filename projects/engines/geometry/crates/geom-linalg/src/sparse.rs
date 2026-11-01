@@ -234,10 +234,7 @@ impl Sparse {
     ///
     /// [`LinalgError::Shape`] if nothing is stored there.
     pub fn at_place(&self, place: usize) -> Result<f64, LinalgError> {
-        self.values
-            .get(place)
-            .copied()
-            .ok_or(LinalgError::Shape)
+        self.values.get(place).copied().ok_or(LinalgError::Shape)
     }
 
     /// A·x.

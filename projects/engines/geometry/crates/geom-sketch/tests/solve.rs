@@ -330,8 +330,7 @@ fn a_path_past_the_end_of_its_solutions_is_lost_where_they_end() {
     // they are 1500, five sixths of the way, and the block's pivot falls as it gets there.
     let from = sketch(SPREAD);
     let to = sketch(&SPREAD.replace("1.2 2000", "1.2 1400"));
-    let Err(SketchError::BranchLost { constraint, along }) =
-        continue_to(&from, &to, &mut meter())
+    let Err(SketchError::BranchLost { constraint, along }) = continue_to(&from, &to, &mut meter())
     else {
         panic!("the path has no end");
     };
@@ -417,7 +416,11 @@ constraint 2.5 driving 0 distance 1.1 1.2 {d}
 "
         )
     };
-    let done = continue_to(&sketch(&lines(1500.0)), &sketch(&lines(1500.0)), &mut meter());
+    let done = continue_to(
+        &sketch(&lines(1500.0)),
+        &sketch(&lines(1500.0)),
+        &mut meter(),
+    );
     assert!(done.is_ok(), "{done:?}");
 }
 
@@ -449,12 +452,7 @@ entity 2.4 arc 1.0 1 1.0 1.0
         .map(|i| i as f64)
         .collect();
     let moved = s.with_values(&values).unwrap();
-    let held: Vec<f64> = moved
-        .variables()
-        .unwrap()
-        .iter()
-        .map(|v| v.value)
-        .collect();
+    let held: Vec<f64> = moved.variables().unwrap().iter().map(|v| v.value).collect();
     assert_eq!(held, values);
 }
 
