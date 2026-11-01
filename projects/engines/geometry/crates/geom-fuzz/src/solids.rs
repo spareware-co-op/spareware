@@ -16,7 +16,8 @@
 //! - **A panic or an error is a failure.** Every decoded case is valid, so an error is a [`Finding`].
 //! - **A broken law is a [`Finding`]** naming the law and the case.
 //!
-//! Method: the laws, by counting. Each box is a set of whole cells, so what covers a cell is a
+//! Method: chapter 19's laws (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`),
+//! by counting. Each box is a set of whole cells, so what covers a cell is a
 //! matter of three comparisons, written here without the code's help. A union, an intersection and
 //! a difference have the volumes their cells say; a cell's middle is inside what covers it; a slice
 //! has the area of the cells under it; a hull holds every corner; the sum of two boxes adds their

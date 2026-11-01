@@ -13,7 +13,8 @@
 //!   take one hull of all their sums.
 //! - **Refused past the frame.** A sum outside the frame is [`NumError::OutOfRange`].
 //!
-//! Method: 19.6's table. Both solids split into convex pieces, each pair's sum is the exact convex
+//! Method: 19.6's table (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`). Both
+//! solids split into convex pieces, each pair's sum is the exact convex
 //! hull of the sums of their corners, and the sums are united in one boolean. The pieces here are
 //! the triangles of the boundary, whose corners are all on the grid, not solid cells: the boundary
 //! of a sum lies in the sums of the boundaries, and one copy of each solid, moved by a point of
