@@ -36,10 +36,8 @@ pub fn jobs(seed: Seed, count: u64) -> Vec<Job> {
         .into_iter()
         .map(|job| {
             if job.op == Op::Remove {
-                refined(&job).unwrap_or(Job {
-                    op: Op::Insert,
-                    ..job
-                })
+                // A knot that cannot be inserted stays a job both sides must refuse.
+                refined(&job).unwrap_or(job)
             } else {
                 job
             }
