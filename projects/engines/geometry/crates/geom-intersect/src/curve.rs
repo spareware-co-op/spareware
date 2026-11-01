@@ -222,6 +222,12 @@ impl Seam {
         self.domain.1 - self.domain.0
     }
 
+    /// Whether `x` touches an end of the domain that is a true end: a closed kind's join is none.
+    pub(crate) fn ends_at(self, x: Interval) -> bool {
+        let (lo, hi) = self.domain;
+        !self.closed && (x.contains(lo) || x.contains(hi))
+    }
+
     /// The domain.
     pub(crate) fn whole(self) -> Result<Interval, IntersectError> {
         Ok(Interval::new(self.domain.0, self.domain.1)?)
