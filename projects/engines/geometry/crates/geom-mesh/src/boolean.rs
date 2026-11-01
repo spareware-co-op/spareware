@@ -569,6 +569,29 @@ fn arranged(
     .map_err(run_error)
 }
 
+/// What passes `test` as one run, `source`, with no history: for a result whose operands are
+/// steps of one operation, whose names mean nothing outside it.
+pub(crate) fn boolean_into(
+    operands: &[&ExactMesh],
+    test: &WindingTest,
+    source: Source,
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<ExactMesh, MeshError> {
+    let (_, classified) = classified(operands, core::slice::from_ref(test), exec, meter)?;
+    let kept = select(test, &classified)?;
+    let merged = merge_on(
+        exec,
+        &kept,
+        (Merge::RemoveRedundant, Rules::default()),
+        meter,
+    )?;
+    let face_run = alloc::vec![0; merged.faces.len()];
+    let polygons = polygons_of(&merged, face_run, alloc::vec![source])?;
+    // A boolean's result: its winding is its test's, 0 or 1, and no two of its faces cross.
+    Ok(build(&polygons, exec, meter)?.proven_solid())
+}
+
 /// The arrangement's errors as a mesh's.
 fn run_error(e: RunError<TraceError>) -> MeshError {
     match e {

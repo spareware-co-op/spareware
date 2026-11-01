@@ -4,7 +4,8 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has nine targets so far: [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
+//! changed input. It has ten targets so far: [`solids`] (G147 to G152), `geom-mesh`'s operations on small
+//! solids agree with counted cells; [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
 //! mesh and gives one mesh in any input order; [`cdt`] (G153), `geom-mesh`'s triangulation is a true constrained
 //! Delaunay triangulation and one answer in any input order; [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
@@ -175,6 +176,7 @@ pub mod orient2d;
 pub mod planes;
 pub mod predicates;
 pub mod seeded;
+pub mod solids;
 pub mod variants;
 pub mod wide;
 
