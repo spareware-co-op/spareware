@@ -33,8 +33,9 @@
 //! Cost: [`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is
 //! O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs
 //! of polygons at worst, in a box the subdivision keeps small; a pair whose planes cannot cut is
-//! told from the two polygons whole, O(k + m), and its pieces are not compared. Charges the meter
-//! one unit per pair of pieces, compared or not.
+//! told from the two polygons whole, O(k + m), and its pieces are not compared, and a pair whose
+//! grid spans miss (`crate::order`'s `Span`) is told in a few comparisons. Charges the meter one
+//! unit per pair of pieces, compared or not.
 
 use alloc::vec::Vec;
 use core::cmp::Ordering;
@@ -44,7 +45,7 @@ use geom_num::{NumError, Sign};
 use geom_run::WorkMeter;
 
 use crate::convex::{ConvexError, Piece, opposite};
-use crate::order::{Line, Meeting, along, normals_det};
+use crate::order::{Line, Meeting, Span, along, normals_det};
 use crate::plane::canonical;
 
 /// What a plane does to a piece.
@@ -322,18 +323,31 @@ pub fn local_cuts(
         planes.push(canonical(&polygon.face)?.plane);
     }
     let points: Vec<Vec<Option<Meeting>>> = polygons.iter().map(meetings).collect();
+    let spans: Vec<Option<Span>> = points.iter().map(|p| Span::of(p.iter().copied())).collect();
     let mut out: Vec<Vec<Piece>> = Vec::with_capacity(polygons.len());
-    for (((at, polygon), own), own_points) in polygons.iter().enumerate().zip(&planes).zip(&points)
-    {
+    let mine = polygons
+        .iter()
+        .enumerate()
+        .zip(&planes)
+        .zip(&points)
+        .zip(&spans);
+    for ((((at, polygon), own), own_points), own_span) in mine {
         // Each piece with its corners' points, made once for every plane it is read against.
         let mut pieces = alloc::vec![(polygon.clone(), own_points.clone())];
-        let others = polygons.iter().enumerate().zip(&planes).zip(&points);
-        for (((other_at, other), plane), other_points) in others {
+        let others = polygons
+            .iter()
+            .enumerate()
+            .zip(&planes)
+            .zip(&points)
+            .zip(&spans);
+        for ((((other_at, other), plane), other_points), other_span) in others {
             if other_at == at {
                 continue;
             }
             let coplanar = own == plane;
-            if !coplanar && !can_cut((polygon, other), (own_points, other_points))? {
+            // Polygons whose spans miss share no point, so neither reaches into the other.
+            let apart = matches!((own_span, other_span), (Some(a), Some(b)) if a.misses(b));
+            if !coplanar && (apart || !can_cut((polygon, other), (own_points, other_points))?) {
                 // Charged as if each piece had been compared, so the work counted is the same.
                 meter.charge(u64::try_from(pieces.len()).unwrap_or(u64::MAX))?;
                 continue;

@@ -52,7 +52,7 @@ use geom_num::{NumError, Sign};
 use geom_run::{Stopped, WorkMeter};
 
 use crate::convex::{ConvexError, Piece};
-use crate::order::{Meeting, normals_det};
+use crate::order::{Meeting, Span, normals_det};
 use crate::plane::{Canonical, canonical};
 use crate::winding::{Entry, Winding, WindingError};
 
@@ -236,40 +236,6 @@ impl End {
             None => normals_det(&p.plane, &q.plane, &r.plane)?,
         };
         Ok(End { weight, at })
-    }
-}
-
-/// The grid cells around some points, a step wider each way: every point within a unit of one
-/// of them, an infinitesimal move included, lies inside. Two spans that miss share no point.
-#[derive(Clone, Copy, Debug)]
-struct Span {
-    low: [i64; 3],
-    high: [i64; 3],
-}
-
-impl Span {
-    /// The span of `points`, if every one has its floors.
-    fn of(points: impl IntoIterator<Item = Option<Meeting>>) -> Option<Self> {
-        let mut low = [i64::MAX; 3];
-        let mut high = [i64::MIN; 3];
-        for point in points {
-            let floors = point?.floors()?;
-            for ((l, h), v) in low.iter_mut().zip(&mut high).zip(floors) {
-                *l = (*l).min(v);
-                *h = (*h).max(v);
-            }
-        }
-        // A point lies in [floor, floor + 1) on each axis; a step more each way holds the moves.
-        Some(Span {
-            low: low.map(|v| v.saturating_sub(1)),
-            high: high.map(|v| v.saturating_add(2)),
-        })
-    }
-
-    /// Whether the two spans are apart on some axis.
-    fn misses(&self, other: &Span) -> bool {
-        let apart = |(a, b): (&Span, &Span)| a.high.iter().zip(&b.low).any(|(h, l)| h < l);
-        apart((self, other)) || apart((other, self))
     }
 }
 
@@ -741,59 +707,4 @@ pub fn classify(
         }
     }
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(
-        clippy::arithmetic_side_effects,
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        reason = "tests: native arithmetic, and a failure stops the test"
-    )]
-
-    use geom_num::plane::Plane;
-    use num_bigint::BigInt;
-    use proptest::prelude::*;
-
-    use super::Span;
-    use crate::order::Meeting;
-
-    fn plane() -> impl Strategy<Value = Plane> {
-        ([-9i128..9, -9i128..9, -9i128..9], -999i128..999)
-            .prop_filter_map("a normal", |(n, d)| Plane::new(n, d).ok())
-    }
-
-    proptest! {
-        /// Every point a span is made of lies a unit inside it, exactly.
-        #[test]
-        fn a_span_holds_its_points_a_unit_inside(rows in prop::collection::vec((plane(), plane(), plane()), 1..5)) {
-            let points: Vec<Option<Meeting>> = rows.iter().map(|(p, q, r)| Meeting::new(p, q, r)).collect();
-            let Some(span) = Span::of(points.iter().copied()) else {
-                return Ok(());
-            };
-            for point in points.iter().flatten() {
-                let (x, w) = point.coordinates();
-                let (x, w) = if w < 0 { (x.map(|v| -v), -w) } else { (x, w) };
-                for ((v, low), high) in x.iter().zip(span.low).zip(span.high) {
-                    let at = BigInt::from(*v);
-                    let (low, high) = (BigInt::from(low + 1), BigInt::from(high - 1));
-                    prop_assert!(at >= &low * w && at <= &high * w);
-                }
-            }
-        }
-
-        /// Spans miss exactly when they are apart on an axis, either way round.
-        #[test]
-        fn spans_miss_when_apart(a in prop::array::uniform6(-9i64..9), b in prop::array::uniform6(-9i64..9)) {
-            let span = |v: [i64; 6]| Span {
-                low: [v[0].min(v[1]), v[2].min(v[3]), v[4].min(v[5])],
-                high: [v[0].max(v[1]), v[2].max(v[3]), v[4].max(v[5])],
-            };
-            let (s, t) = (span(a), span(b));
-            let apart = (0..3).any(|i| s.high[i] < t.low[i] || t.high[i] < s.low[i]);
-            prop_assert_eq!(s.misses(&t), apart);
-            prop_assert_eq!(t.misses(&s), apart);
-        }
-    }
 }
