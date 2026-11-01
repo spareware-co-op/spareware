@@ -9,6 +9,20 @@ description = "Spare Kit geometry kernel, development only: fuzz harnesses and b
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The exact rationals of the nurbs target's oracle (Gate 2, 32.44), as geom-test's NURBS reference
+# uses them. MIT OR Apache-2.0, the version geom-test pins.
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+# The maths target's 400-bit fixed point (geom_test::fixed). MIT OR Apache-2.0.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+# The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.44). Ours,
+# MPL-2.0.
+geom-bvh = { path = "../geom-bvh" }
+geom-curve = { path = "../geom-curve" }
+geom-linalg = { path = "../geom-linalg" }
+geom-math = { path = "../geom-math" }
+geom-nurbs = { path = "../geom-nurbs" }
+geom-run = { path = "../geom-run" }
+geom-surface = { path = "../geom-surface" }
 geom-test = { path = "../geom-test" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
 geom-bench = { path = "../geom-bench", default-features = false }

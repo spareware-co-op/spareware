@@ -137,7 +137,9 @@ fn bernstein<const D: usize>(
 }
 
 /// An upper bound on the norm of the (p + 1)-th derivative over `span`, and whether it is exactly
-/// zero.
+/// zero; [`CurveError::Unbounded`] where the kind cannot bound it there (a span too wide for an
+/// offset to separate its normal from zero, say), so a caller may try narrower pieces (piece G69:
+/// this was a `Defect`).
 fn derivative_norm<K: ParamCurve<D>, const D: usize>(
     kind: &K,
     span: (f64, f64),
@@ -145,7 +147,7 @@ fn derivative_norm<K: ParamCurve<D>, const D: usize>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(f64, bool), CurveError> {
     let DerivativeBound::Bounded(b) = kind.derivative_bound(span, order, meter)? else {
-        return Err(CurveError::Defect);
+        return Err(CurveError::Unbounded);
     };
     let zero = b.lo.iter().chain(&b.hi).all(|&x| x == 0.0);
     let mut m = Vec::with_capacity(D);
@@ -160,10 +162,29 @@ fn derivative_norm<K: ParamCurve<D>, const D: usize>(
 ///
 /// # Errors
 ///
-/// [`CurveError::Unbounded`] if the domain is not finite; [`CurveError::Degenerate`] if it is too
-/// narrow to cut; the kind's own errors; [`CurveError::Stopped`].
+/// [`CurveError::Unbounded`] if the domain is not finite, or where the kind cannot bound its
+/// derivative of order `degree` + 1 over a piece; [`CurveError::Degenerate`] if it is too narrow
+/// to cut; the kind's own errors; [`CurveError::Stopped`].
 pub fn same_parameter<K: ParamCurve<D>, const D: usize>(
     kind: &K,
+    degree: usize,
+    width: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Changed<NurbsForm<D>>, CurveError> {
+    same_parameter_between(kind, &[], degree, width, meter)
+}
+
+/// As [`same_parameter`], for a kind with `inner` breaks (sorted): each stretch between them is cut
+/// into pieces at most `width` long. Taylor's theorem holds only where the kind is smooth, so a
+/// piece that crossed a break would be one polynomial across a join, under a remainder that means
+/// nothing there.
+///
+/// # Errors
+///
+/// As [`same_parameter`].
+pub fn same_parameter_between<K: ParamCurve<D>, const D: usize>(
+    kind: &K,
+    inner: &[f64],
     degree: usize,
     width: f64,
     meter: &mut WorkMeter<'_>,
@@ -172,9 +193,44 @@ pub fn same_parameter<K: ParamCurve<D>, const D: usize>(
     if !(a.is_finite() && b.is_finite()) {
         return Err(CurveError::Unbounded);
     }
-    let n = pieces(b - a, width)?;
-    let cuts = breaks((a, b), n)?;
+    let ends = stretches((a, b), inner);
+    let mut stretch: Vec<usize> = Vec::with_capacity(ends.len());
+    for w in ends.windows(2) {
+        let (Some(&x), Some(&y)) = (w.first(), w.get(1)) else {
+            return Err(CurveError::Defect);
+        };
+        stretch.push(pieces(y - x, width)?);
+    }
+    let total = stretch
+        .iter()
+        .fold(0, |sum: usize, n| sum.saturating_add(*n));
+    // Charged before the cuts are allocated, so the budget stops a domain too long to cut, not the
+    // allocator.
+    meter.charge(u64::try_from(total).map_err(|_| CurveError::Defect)?)?;
+    let mut cuts: Vec<f64> = Vec::with_capacity(total.saturating_add(1));
+    for (w, &n) in ends.windows(2).zip(&stretch) {
+        let (Some(&x), Some(&y)) = (w.first(), w.get(1)) else {
+            return Err(CurveError::Defect);
+        };
+        let piece = breaks((x, y), n)?;
+        cuts.extend(piece.into_iter().skip(usize::from(!cuts.is_empty())));
+    }
     from_cuts(kind, degree, &cuts, meter)
+}
+
+/// The ends of the stretches of `domain` between `inner` breaks (sorted; those not strictly inside
+/// the domain, and repeats, skipped).
+fn stretches((a, b): (f64, f64), inner: &[f64]) -> Vec<f64> {
+    let mut ends = Vec::with_capacity(inner.len().saturating_add(2));
+    ends.push(a);
+    for &x in inner {
+        // Above the last end kept (the domain's start at first), so increasing and inside.
+        if x < b && ends.last().is_some_and(|&l| l < x) {
+            ends.push(x);
+        }
+    }
+    ends.push(b);
+    ends
 }
 
 /// The cuts of `domain`: each interval between consecutive `inner` breaks (sorted; those not
@@ -185,15 +241,7 @@ pub fn same_parameter<K: ParamCurve<D>, const D: usize>(
 ///
 /// As [`same_parameter`].
 pub fn cuts_between((a, b): (f64, f64), inner: &[f64], per: usize) -> Result<Vec<f64>, CurveError> {
-    let mut ends = Vec::with_capacity(inner.len().saturating_add(2));
-    ends.push(a);
-    for &x in inner {
-        // Above the last end kept (the domain's start at first), so increasing and inside.
-        if x < b && ends.last().is_some_and(|&l| l < x) {
-            ends.push(x);
-        }
-    }
-    ends.push(b);
+    let ends = stretches((a, b), inner);
     let mut out: Vec<f64> = Vec::new();
     for w in ends.windows(2) {
         let (Some(&x), Some(&y)) = (w.first(), w.get(1)) else {
