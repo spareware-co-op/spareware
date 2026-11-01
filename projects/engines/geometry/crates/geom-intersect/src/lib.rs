@@ -29,10 +29,12 @@
 //! - [`result`]: what an intersection returns, its items and contact types, in canonical order.
 //! - [`order`]: the canonical operand order, and pairs run one by one or as a batch.
 //! - [`error`]: why an intersection could not be computed.
+//! - [`solve`] and [`curve`] (piece G163): the interval engine, and where two curves meet.
 //! - [`closed`] (piece G159): exact decisions for a line with a quadric or torus, and the special
 //!   positions of two quadrics.
 //!
-//! Status: the result types and canonical order built by piece G158; the methods come with G159,
+//! Status: the result types and canonical order built by piece G158, projection and inversion by
+//! G162; the other methods come with G159,
 //! G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292,
 //! G320, G321, G372, G390, G392, G393, G466, G467, G468.
 #![cfg_attr(not(test), no_std)]
@@ -41,12 +43,19 @@
 extern crate alloc;
 
 pub mod closed;
+pub mod curve;
 pub mod error;
 pub mod order;
+pub mod project;
 pub mod result;
+pub mod solve;
 
 pub use error::IntersectError;
 pub use order::{CanonicalKey, Geom, Operand, PLAN, pair, pairs, share};
+pub use project::{
+    Continuum, Nearest, Place, Projection, invert_curve, invert_surface, project_curve,
+    project_surface,
+};
 pub use result::{
     Coincidence, Coverage, CurveContact, CurveEnd, Degeneracy, Diag, Intersection, Item,
     OverlapRegion, ParamBox, PointContact, StepsInterval, Test, Unresolved,

@@ -2726,7 +2726,7 @@ pub mod quadrature {
     );
 }
 
-/// geom-intersect's hot paths (piece G158; decision 32.44).
+/// geom-intersect's hot paths (pieces G158 and G162; decision 32.44).
 pub mod intersect {
     use super::*;
 
@@ -2751,9 +2751,58 @@ pub mod intersect {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/project_arc/typical"))]
+    fn project_arc(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/project_sphere/typical"))]
+    fn project_sphere(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_segments/typical"))]
+    fn curve_segments(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_circles/typical"))]
+    fn curve_circles(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_line_circle/typical"))]
+    fn curve_line_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_cubics/typical"))]
+    fn curve_cubics(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/curve_loop/typical"))]
+    fn curve_loop(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop
     );
 }
 

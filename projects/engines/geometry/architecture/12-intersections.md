@@ -199,6 +199,8 @@ Projection finds the nearest point, or points, of a curve or surface to a given 
   6. Prove the global minimum: every discarded candidate has a lower bound above the reported distance. If several candidates' distance enclosures overlap, all of them are returned, sorted by parameter. A caller that wants one answer gets the lowest parameter, and the result says a tie was broken. Where the uniqueness test still fails at the floor, the result is a typed `NonIsolated { enclosure }`. That happens when the nearest points form a continuum on a general NURBS, such as a point on the axis of a revolved NURBS.
 - **What it replaces.** OpenCascade's [`Extrema_GenExtPS`](https://github.com/Open-Cascade-SAS/OCCT/blob/53706f78a8640c4407bdcc6752df13a270b159f2/src/ModelingData/TKGeomBase/Extrema/Extrema_GenExtPS.hxx#L47-L58) seeds from a sampling grid and finds every extremum only if that grid "is great enough". NLib's global search samples and runs Newton from the three best candidates ([NL_CrvGeom.cpp L876-1471](https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvGeom.cpp#L876-L1471)).
 
+**As built (G162).** `geom_intersect::project`. Lines and planes use their closed forms, and a point on a round kind's axis gets a typed `Continuum`. Circles, spheres, cylinders, cones and tori otherwise go through the search, with their certified bounds as the closed forms: it adds what a closed form alone lacks, a trimmed domain. Step 3's Bernstein sign test is the sign of the slope over a span from the kind's own derivative bounds, so it reads every kind alike, transcendental ones included; a span whose second derivative of half the squared distance is positive holds at most one foot, which is the uniqueness test in one unknown. In two unknowns, a positive definite Hessian over the box plays that part. Undecided spans at the floor join into runs: a run within twice the floor is one nearest point, since nothing in it can be told apart on the grid, as at a sphere's pole; a longer one is `NonIsolated`.
+
 Stationing a point against a 50 km alignment is the hardest everyday case, because a clothoid has no polynomial form. Its interval bounds (12.3) make the same pruning work, so a station is certified to the frame's grid once the proven-bound maths functions of 12.3 exist. Until then, a station that needs them fails naming that piece, as section 17.2 says.
 
 ## 12.5 Curve with curve
@@ -215,6 +217,15 @@ Stationing a point against a 50 km alignment is the hardest everyday case, becau
   - Only an imported Tolerant edge (section 6.5) may count a gap within its recorded tolerance as a meeting, and the operation log records it.
 
   Vertices of solids are never found this way. They are where three surfaces meet, or where a curve meets a surface, and both are well-posed questions.
+
+**As built (G163).** `geom-intersect`'s `curve` answers any two kinds, and its `solve` is the engine for kinds bounded through their traits: Krawczyk's operator on each box first, then Bézier clipping on NURBS pieces, then bisection. The operator goes first because a clip can take a box below what the kinds' rounding lets the operator prove, and the operator settles a simple crossing from far wider boxes.
+
+- Closed forms: two lines in the plane and in space, with parallel, collinear and coplanar each an exact sign; two circles, the count from the exact signs of |c − e|² − (r ± q)², each a sum of products of doubles, and the points measured from the smaller circle by Kahan's stable Heron, which keeps CADCraft 926's two crossings apart at radii 2^30 to 1; a line with a circle, ellipse, branch of a hyperbola or parabola, a quadratic in the conic's own coordinates, its count exact on whole-number data for a circle. Two conics that are not both circles run the engine, Certified; their exact counts are piece G190's.
+- Two crossings the doubles cannot hold apart, where the exact signs say there are two, are one flagged band.
+- Overlap: the same carrier, a shared stretch of one line, and the turns two arcs of one circle share, an arc's shared end being a point. A near copy stays flagged.
+- Tangency: a box whose ‖I − Y·J(X)‖ does not contract cannot rule out a singular Jacobian. A run of those at the floor takes 12.9's test on the curves' signed curvatures: `TangentBand` with the width √(2δ/Δκ), δ the floor, where they differ; `HigherOrderContact` where they cannot be told apart.
+- In 3D the engine solves in the two coordinates that spread the pair most and the third decides. It is proven only where its enclosures agree exactly, as in a pair in one coordinate plane, and otherwise `NearMiss`.
+- `self_crossings` runs the engine above the diagonal, dropping every span the tangents show runs one way, and on a closed curve the short way round through its join.
 
 ## 12.6 Curve with surface
 
