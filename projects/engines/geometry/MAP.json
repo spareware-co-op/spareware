@@ -4849,6 +4849,11 @@
               "shape": "unit"
             },
             {
+              "doc": "A boolean's pieces would not merge, which closed inputs should never cause.",
+              "name": "Merge",
+              "shape": "tuple"
+            },
+            {
               "doc": "The outside passes this test of a boolean, so its result has no finite boundary. Intersect it with a box first.",
               "name": "UnboundedResult",
               "shape": "struct"

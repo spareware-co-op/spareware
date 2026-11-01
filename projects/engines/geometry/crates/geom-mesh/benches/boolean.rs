@@ -11,6 +11,8 @@
     clippy::cast_sign_loss,
     clippy::disallowed_methods,
     clippy::disallowed_types,
+    clippy::doc_markdown,
+    clippy::many_single_char_names,
     clippy::print_stdout,
     reason = "a benchmark program; the rules are for kernel code"
 )]

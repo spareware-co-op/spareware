@@ -4,6 +4,7 @@
 
 #![allow(
     clippy::arithmetic_side_effects,
+    clippy::assert_is_empty,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_precision_loss,
