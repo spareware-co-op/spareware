@@ -465,6 +465,36 @@ fn a_touching_sphere_is_flagged_not_a_curve() {
     }
 }
 
+/// A flat strip over the unit square of parameters, so each parameter has a speed of its own.
+fn strip(long: f64, wide: f64) -> SurfaceKind {
+    let basis = || Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    let net = [
+        [0.0, 0.0, 0.0],
+        [0.0, wide, 0.0],
+        [long, 0.0, 0.0],
+        [long, wide, 0.0],
+    ];
+    SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap())
+}
+
+/// The floor is a length in space, along whichever parameter runs faster.
+#[test]
+fn a_flagged_box_stops_at_the_floor_in_space_along_both_parameters() {
+    let floor = 1e-2;
+    for (long, wide) in [(64.0, 1.0), (1.0, 64.0)] {
+        let centre = [long / 2.0 + 0.0625, wide / 2.0 + 0.03125, 1.0];
+        let sphere = Sphere::new(centre, 1.0, frame(), ((0.0, TURN), (-0.5, 0.5))).unwrap();
+        let surface = strip(long, wide);
+        let found = trace(&surface, &OnImplicit(&sphere), floor, 1.0, &mut meter()).unwrap();
+        assert_ne!(found.flagged.len(), 0);
+        for flagged in &found.flagged {
+            let [u, v] = flagged.at;
+            let reach = ((u.hi() - u.lo()) * long).max((v.hi() - v.lo()) * wide);
+            assert!(reach <= 8.0 * floor, "{flagged:?}");
+        }
+    }
+}
+
 #[test]
 fn a_sphere_clear_of_the_patch_has_nothing() {
     let sphere = Sphere::new([1.0, 2.0, 9.0], 5.0, frame(), ((0.0, TURN), (-0.5, 0.5))).unwrap();
@@ -935,15 +965,66 @@ fn each_trace_takes_the_work_it_always_took() {
     let outline = Silhouette {
         direction: [1.0, 2.0, 3.0],
     };
-    let cases: [(&SurfaceKind, &dyn geom_intersect::Level, u64, usize, u64); 3] = [
-        (&flat, &circle, 27_162, 131, 4_576_741_634_584_209_240),
-        (&cylinder, &ellipse, 34_293, 166, 4_576_905_993_249_919_340),
-        (&torus, &outline, 244_468, 292, 4_576_913_829_044_423_827),
+    // Tangent to an edge from outside the strip: a double root that only the floor can stop, along
+    // a parameter whose speed is not 1.
+    let beside = Sphere::new([-1.0, 32.5, 0.0], 1.0, frame(), ((0.0, TURN), (-0.5, 0.5))).unwrap();
+    let edge = strip(1.0, 64.0);
+    let edged = OnImplicit(&beside);
+    // Dipping out of the band and back: two arcs in one cell, over spans of u that must not overlap.
+    let band = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-6.0, 6.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let dipping = Sphere::new([0.0, 9.5, 0.0], 10.0, frame(), ((0.0, TURN), (-0.5, 0.5))).unwrap();
+    let dip = OnImplicit(&dipping);
+    // A root the bisection lands on exactly: 0, 4, 2, 1, 1.5, 1.25.
+    let upright = Plane::new(
+        [1.25, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        ((-1.0, 1.0), (-1.0, 1.0)),
+    )
+    .unwrap();
+    let wall = patch(8.0);
+    let exact = OnImplicit(&upright);
+    let cases: [(
+        &SurfaceKind,
+        &dyn geom_intersect::Level,
+        f64,
+        u64,
+        usize,
+        u64,
+    ); 6] = [
+        (&flat, &circle, 1e-2, 27_162, 131, 4_576_741_634_584_209_240),
+        (
+            &cylinder,
+            &ellipse,
+            1e-2,
+            34_293,
+            166,
+            4_576_905_993_249_919_340,
+        ),
+        (
+            &torus,
+            &outline,
+            1e-2,
+            244_468,
+            292,
+            4_576_913_829_044_423_827,
+        ),
+        (&edge, &edged, 1e-2, 9_230, 0, 0),
+        (&band, &dip, 8.0, 336, 4, 4_616_454_535_679_897_858),
+        (&wall, &exact, 1e-2, 192, 2, 80),
     ];
-    for (surface, level, work, vertices, reach) in cases {
+    for (surface, level, ceiling, work, vertices, reach) in cases {
         let run = |budget: u64| {
             let mut m = WorkMeter::new(Budget::of_work(budget));
-            trace(surface, level, 1e-4, 1e-2, &mut m)
+            trace(surface, level, 1e-4, ceiling, &mut m)
         };
         assert_eq!(run(work - 1), Err(IntersectError::BudgetExceeded));
         let found = run(work).unwrap();

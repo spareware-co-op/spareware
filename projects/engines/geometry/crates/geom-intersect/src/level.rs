@@ -633,7 +633,10 @@ fn crossings(
             .last()
             .and_then(|c| c.at.get(axis))
             .map_or(0.0, |i| i.hi());
-        y.first().is_some_and(|c| high < low(c))
+        y.first().is_some_and(|c| {
+            let touching = low(c) <= high;
+            !touching
+        })
     });
     Ok(apart.then_some(out))
 }
@@ -820,7 +823,8 @@ fn follow(entries: &mut [Entry], start: usize) -> Result<Branch, IntersectError>
     let mut vertices = alloc::vec![vertex(entries, start)?];
     let mut deviation = 0.0;
     let mut k = start;
-    loop {
+    // Each round takes an entry for good, so a branch that runs out of them has lost its way.
+    for _ in 0..entries.len() {
         let entry = entries.get_mut(k).ok_or(IntersectError::Internal)?;
         entry.taken = true;
         let (mate, sag) = (entry.mate, entry.sag);
@@ -850,6 +854,7 @@ fn follow(entries: &mut [Entry], start: usize) -> Result<Branch, IntersectError>
             Across::Unknown => return Err(IntersectError::Internal),
         }
     }
+    Err(IntersectError::Internal)
 }
 
 /// Joins settled boxes across their shared sides into branches.
