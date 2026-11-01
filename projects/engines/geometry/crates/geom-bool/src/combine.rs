@@ -159,6 +159,7 @@ struct Scene<'a> {
 }
 
 /// What one result of a selection is told.
+#[derive(Clone, Copy)]
 struct Job<'j> {
     /// The operand that keeps its names, if not all do.
     target: Option<usize>,
@@ -303,7 +304,7 @@ fn accepted(would: Exactness, accept: Option<Exactness>) -> bool {
     }
 }
 
-impl Scene<'_> {
+impl<'a> Scene<'a> {
     /// `pieces`, each knowing the face it came from.
     fn sourced(&self, mut pieces: Vec<Outward>) -> Vec<Outward> {
         for piece in &mut pieces {

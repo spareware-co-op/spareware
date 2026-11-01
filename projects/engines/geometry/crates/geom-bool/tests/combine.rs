@@ -49,7 +49,7 @@ fn cuboid(low: [i64; 3], size: [u64; 3]) -> Body {
         min: p(low[0], low[1], low[2]),
         size: size.map(Steps),
     };
-    let made: Made = make_box(&ctx(), &input).unwrap().result.body;
+    let made: Made = make_box(&ctx(), &input).unwrap().result;
     made.body
 }
 
@@ -234,9 +234,9 @@ fn seams_stay_and_come_back_in() {
     let seamed = combine(&ctx(), &SERIAL, &input)
         .unwrap()
         .result
-        .body
         .remove(0)
-        .remove(0);
+        .remove(0)
+        .body;
     checked(&seamed);
     let tool = cuboid([30, 10, 10], [20, 20, 40]);
     let out = subtract(
@@ -705,7 +705,7 @@ fn keep_takes_a_sheet_that_lies_on_a_solids_face() {
         test: vec![Term::Inside(key(1))],
     };
     let out = picked(vec![solid(1, &block), cutter(2, &on_face)], selection);
-    assert_eq!(out.result[0][0].arenas().faces.len(), 1);
+    assert_eq!(out.result[0][0].body.arenas().faces.len(), 1);
 }
 
 #[test]
@@ -731,7 +731,8 @@ fn a_seam_that_ends_off_the_grid_comes_back_in() {
         .unwrap()
         .result
         .remove(0)
-        .remove(0);
+        .remove(0)
+        .body;
     // 3y + z = 101 meets the seam on top at y = 61/3.
     let tilt = half_space([p(0, 30, 11), p(1, 30, 11), p(0, 31, 8)], &mut meter()).unwrap();
     let meeting = call(
@@ -742,7 +743,8 @@ fn a_seam_that_ends_off_the_grid_comes_back_in() {
         .unwrap()
         .result
         .remove(0)
-        .remove(0);
+        .remove(0)
+        .body;
     checked(&cut);
     let off_grid = (0..cut.arenas().points.len()).any(|at| {
         matches!(
@@ -753,7 +755,7 @@ fn a_seam_that_ends_off_the_grid_comes_back_in() {
     assert!(off_grid);
     let tool = cuboid([30, 5, 5], [20, 5, 5]);
     let again = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &cut), solid(2, &tool)]).unwrap();
-    checked(&again.result);
+    checked(&again.result.body);
 }
 
 #[test]
@@ -763,7 +765,7 @@ fn a_loop_may_start_anywhere_along_a_side() {
     let line = sheet(0, 30, [-10, 20], [110, 110]);
     let selection = Selection::Imprint { target: key(1) };
     let mut out = picked(vec![solid(1, &slab), cutter(2, &line)], selection);
-    let body = out.result.remove(0).remove(0);
+    let body = out.result.remove(0).remove(0).body;
     assert_eq!(body.arenas().faces.len(), 7);
     let tool = cuboid([40, 40, -5], [20, 20, 40]);
     let want = 6 * (200_000 - 20 * 20 * 20);
@@ -780,7 +782,7 @@ fn a_loop_may_start_anywhere_along_a_side() {
             let turned = turned.unwrap();
             let pair = [solid(1, &turned), solid(2, &tool)];
             let cut = subtract(&ctx(), &SERIAL, key(1), &pair).unwrap();
-            assert_eq!(sixfold(&cut.result), want);
+            assert_eq!(sixfold(&cut.result.body), want);
             turns += 1;
             at = arenas.fins.get(at).unwrap().next;
         }
@@ -798,7 +800,7 @@ fn a_section_through_a_tilted_face_meets_off_the_grid() {
     };
     let tool = prism(&ctx(), &input).unwrap().result.body;
     let out = picked(vec![solid(1, &block), solid(2, &tool)], Selection::Section);
-    let curves = &out.result[0][0];
+    let curves = &out.result[0][0].body;
     assert_eq!(curves.kind(), BodyKind::Wire);
     let off_grid = (0..curves.arenas().points.len()).any(|at| {
         matches!(
@@ -823,7 +825,6 @@ fn a_curved_operand_waits_for_the_curved_path() {
     )
     .unwrap()
     .result
-    .body
     .body;
     let err = unite(&ctx(), &SERIAL, &[solid(1, &round)]).unwrap_err();
     assert_eq!(err.kind(), ErrorKind::Unsupported);

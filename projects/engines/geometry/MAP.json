@@ -1273,6 +1273,40 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a result could not be named: a defect, or a name the scheme refuses.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+          "kinds": [
+            {
+              "doc": "A row past the end of a list.",
+              "name": "Broken",
+              "shape": "unit"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A name could not be formed.",
+              "name": "Name",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A history could not be formed.",
+              "name": "History",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two entities tied under 20.2's order.",
+              "name": "Order",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_bool::names",
+          "name": "NamingError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a boolean's input was refused.",
           "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
           "kinds": [
@@ -1426,6 +1460,29 @@
             "text": "chapter 11.1 (`projects/engines/geometry/architecture/11-booleans.md`), which cites the IFC half-space entities."
           },
           "path": "geom_bool::half_space",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "`O(n log n)` in the entities of the result and the operands. Charges the meter nothing of its own: the rows it writes are charged by the publication.",
+          "does": "[`name`] gives every region, face, edge and vertex of a merged result its persistent name and its history record, from the names of the faces it came from. A target's face that passes through keeps its name; a tool's is `Created { op, role: tool(key), from }`; several kept pieces of one face are `Split { of, piece: ByTools }`; flush faces become `Merged { of }`. An edge or vertex that was already there keeps its name and a new one is `Bounded` by the faces around it. Names two operands both bring are qualified by the operand's key, and those that would still collide take a weak ordinal.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+          "guarantees": [
+            "**Ordered by name, never by address, hash order or thread timing.** Every list follows the operands' keys and the names; the rows of a result are the shape's own (11.9, 11.3).",
+            "**An unchanged entity keeps its name, and the history says so** (28.3).",
+            "**A qualified face is Generated.** Its name changes, so its history is never Unchanged or Modified: it is generated from its source, which is listed as deleted (11.9).",
+            "**Every input is accounted for.** It has descendants or it is listed as deleted (20.3)."
+          ],
+          "job": "Names and history of a boolean's result (11.9).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.9 (`projects/engines/geometry/architecture/11-booleans.md`) on chapter 20's names and histories."
+          },
+          "path": "geom_bool::names",
           "provenance": [],
           "spdx": null,
           "target": "lib"

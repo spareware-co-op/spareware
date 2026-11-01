@@ -114,7 +114,7 @@ fn lawful<'c>(result: &'c Combined, operands: &[&Body]) -> &'c History {
     history
 }
 
-fn origin_of<'h>(history: &'h History, name: NameId) -> &'h Origin {
+fn origin_of(history: &History, name: NameId) -> &Origin {
     &history
         .records()
         .iter()

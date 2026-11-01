@@ -39,7 +39,7 @@ use geom_op::{
     EdgeOrVertex, History, HistoryError, NameError, NameId, NameList, NameSet, OpPath, Origin,
     PieceKey, Record, Role, RoleArg, Side, TopoName,
 };
-use geom_poly::merge::{Merged, Outward};
+use geom_poly::merge::{Fin as Fin_, Merged, Outward};
 use geom_poly::plane::canonical;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{Arenas, Body, Edge, Face, Fin, Ix, PointKind, Vertex};
@@ -172,29 +172,38 @@ impl WeakOrder for Rank {
     }
 }
 
-/// `names`, every name that several rows share replaced by its weak names.
-fn told_apart(op: &[NameId], ranks: &[Rank]) -> Result<Vec<NameId>, NamingError> {
-    let mut rows: BTreeMap<NameId, Vec<usize>> = BTreeMap::new();
-    for (row, name) in op.iter().enumerate() {
-        rows.entry(*name).or_default().push(row);
-    }
-    let mut out = op.to_vec();
-    for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {
-        let mut held = Vec::with_capacity(list.len());
-        for row in list {
-            held.push(ranks.get(*row).ok_or(NamingError::Broken)?.clone());
+/// `names`, every name that several rows share replaced by its weak names. A weak name can itself
+/// be taken: a body comes back in holding the weak names of an earlier call, so this goes on until
+/// no two rows share one.
+fn told_apart(names: &[NameId], ranks: &[Rank]) -> Result<Vec<NameId>, NamingError> {
+    let mut out = names.to_vec();
+    loop {
+        let mut rows: BTreeMap<NameId, Vec<usize>> = BTreeMap::new();
+        for (row, name) in out.iter().enumerate() {
+            rows.entry(*name).or_default().push(row);
         }
-        // Rows of one vertex list are one entity's two uses of a rank: the row settles them.
-        for (row, weak) in list.iter().zip(weak_names(*name, &held)?) {
-            let new = weak.id()?;
-            out.iter_mut()
-                .skip(*row)
-                .take(1)
-                .for_each(|slot| *slot = new);
+        if rows.len() == out.len() {
+            return Ok(out);
+        }
+        for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {
+            let mut held = Vec::with_capacity(list.len());
+            for row in list {
+                held.push(ranks.get(*row).ok_or(NamingError::Broken)?.clone());
+            }
+            for (row, weak) in list.iter().zip(weak_names(*name, &held)?) {
+                let new = weak.id()?;
+                out.iter_mut()
+                    .skip(*row)
+                    .take(1)
+                    .for_each(|slot| *slot = new);
+            }
         }
     }
-    Ok(out)
 }
+
+/// An input edge a result's edge carries on: its operand and row, and whether its ends are the
+/// input's own.
+type EdgeSource = ((usize, u32), bool);
 
 /// What is known of one input operand's edges and vertices.
 struct Input<'a> {
@@ -223,6 +232,10 @@ enum At {
 }
 
 /// Where `v` of `a` is.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a is the arenas, v the vertex, g its grid point, and p, q and r its planes"
+)]
 fn at_vertex(a: &Arenas, v: Ix<Vertex>) -> Result<Option<At>, NumError> {
     let point = a
         .vertices
@@ -233,7 +246,7 @@ fn at_vertex(a: &Arenas, v: Ix<Vertex>) -> Result<Option<At>, NumError> {
         Some(PointKind::Meet([p, q, r])) => {
             let planes = [a.planes.get(p), a.planes.get(q), a.planes.get(r)];
             match planes {
-                [Some(p), Some(q), Some(r)] => Some(At::Meet(Tpi::new(p, q, r)?)),
+                [Some(p), Some(q), Some(r)] => Some(At::Meet(Tpi::new(*p, *q, *r)?)),
                 _ => None,
             }
         }
@@ -333,8 +346,36 @@ struct FacesDone {
     names: Vec<NameId>,
     records: Vec<Record>,
     sources: Vec<Vec<(usize, u32)>>,
+    inputs: Vec<Vec<NameId>>,
     deleted: BTreeSet<NameId>,
     qualified: bool,
+}
+
+/// Each plane any input face lies on: the operand, the face's name and which way it faces.
+type OnPlanes = BTreeMap<(i128, [i128; 3]), Vec<(usize, NameId, bool)>>;
+
+/// The input faces on each plane.
+fn on_planes(sources: &Sources<'_>) -> Result<OnPlanes, NamingError> {
+    let mut out: OnPlanes = BTreeMap::new();
+    let polygons = sources.planes.iter().zip(sources.owners).zip(sources.rows);
+    for ((plane, owner), row) in polygons {
+        let operand = sources.operands.get(*owner).ok_or(NamingError::Broken)?;
+        let held = canonical(plane)?;
+        let name = name_at(&operand.names.faces, *row)?;
+        let list = out.entry((held.plane.d(), held.plane.n())).or_default();
+        list.push((*owner, name, held.flipped));
+    }
+    Ok(out)
+}
+
+/// The fins of `face`.
+fn fins_of(merged: &Merged, face: usize) -> impl Iterator<Item = &Fin_> {
+    let rings = merged.faces.get(face).map(|held| &held.rings);
+    rings
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|fin| merged.fins.get(*fin))
 }
 
 /// The tools that bound `face`: the input faces of other operands on the planes its fins lie on,
@@ -343,31 +384,64 @@ fn tools_of(
     merged: &Merged,
     face: usize,
     owner: usize,
-    sources: &Sources<'_>,
+    planes: &OnPlanes,
 ) -> Result<(Vec<NameId>, Side), NamingError> {
-    let mut planes: BTreeMap<(i128, [i128; 3]), bool> = BTreeMap::new();
-    for fin in merged.fins.iter().filter(|fin| fin.face == face) {
-        let held = canonical(&fin.bound)?;
-        planes.insert((held.plane.d(), held.plane.n()), held.flipped);
-    }
     let mut found: BTreeMap<NameId, Side> = BTreeMap::new();
-    for ((plane, other), row) in sources.planes.iter().zip(sources.owners).zip(sources.rows) {
-        if *other == owner {
-            continue;
-        }
-        let held = canonical(plane)?;
-        if let Some(flipped) = planes.get(&(held.plane.d(), held.plane.n())) {
-            let operand = sources.operands.get(*other).ok_or(NamingError::Broken)?;
-            let side = if *flipped == held.flipped {
-                Side::Front
-            } else {
-                Side::Back
-            };
-            found.insert(name_at(&operand.names.faces, *row)?, side);
+    for fin in fins_of(merged, face) {
+        let held = canonical(&fin.bound)?;
+        let on = planes.get(&(held.plane.d(), held.plane.n()));
+        for (other, name, flipped) in on.into_iter().flatten() {
+            if *other != owner {
+                let side = if *flipped == held.flipped {
+                    Side::Front
+                } else {
+                    Side::Back
+                };
+                found.insert(*name, side);
+            }
         }
     }
     let side = found.values().next().copied().unwrap_or(Side::Front);
     Ok((found.into_keys().collect(), side))
+}
+
+/// The name and origin of a face with several sources, `names` by source of `list`, and the inputs
+/// that qualifying them deleted.
+fn merged_face(
+    op: &OpPath,
+    list: &[(usize, u32)],
+    names: &[NameId],
+    sources: &Sources<'_>,
+) -> Result<(NameId, Origin, BTreeSet<NameId>), NamingError> {
+    let inputs: BTreeSet<NameId> = names.iter().copied().collect();
+    if inputs.len() > 1 {
+        let of = NameSet::new(inputs)?;
+        let name = TopoName::Merged {
+            op: op.clone(),
+            of: of.clone(),
+        };
+        return Ok((name.id()?, Origin::Merged { of }, BTreeSet::new()));
+    }
+    // Flush faces of operands that brought one name: each qualified, then merged.
+    let mut qualified = BTreeSet::new();
+    for (owner, _) in list {
+        let operand = sources.operands.get(*owner).ok_or(NamingError::Broken)?;
+        let name = TopoName::Created {
+            op: op.clone(),
+            role: keyed_role("operand", operand.key)?,
+            from: NameList::new(inputs.iter().copied()),
+        };
+        qualified.insert(name.id()?);
+    }
+    let name = TopoName::Merged {
+        op: op.clone(),
+        of: NameSet::new(qualified)?,
+    };
+    let origin = Origin::Generated {
+        from: NameSet::new(inputs.iter().copied())?,
+        role: Role::new("merged", [])?,
+    };
+    Ok((name.id()?, origin, inputs))
 }
 
 /// Names every face of `merged`, whose `pieces` are as given.
@@ -378,7 +452,7 @@ fn name_faces(
     sources: &Sources<'_>,
 ) -> Result<FacesDone, NamingError> {
     let mut of_face: Vec<BTreeSet<(usize, u32)>> = alloc::vec![BTreeSet::new(); merged.faces.len()];
-    for (piece, face) in pieces.iter().zip(&merged.piece_faces) {
+    for (piece, face) in pieces.iter().zip(&merged.piece_face) {
         let owner = sources.owners.get(piece.polygon);
         let row = sources.rows.get(piece.polygon);
         let (owner, row) = owner.zip(row).ok_or(NamingError::Broken)?;
@@ -394,6 +468,7 @@ fn name_faces(
         }
     }
     // Names two operands bring are qualified, each by its operand's key.
+    let planes = on_planes(sources)?;
     let mut bringers: BTreeMap<NameId, BTreeSet<usize>> = BTreeMap::new();
     for (owner, row) in pieces_of.keys() {
         let operand = sources.operands.get(*owner).ok_or(NamingError::Broken)?;
@@ -404,6 +479,7 @@ fn name_faces(
         names: Vec::with_capacity(merged.faces.len()),
         records: Vec::with_capacity(merged.faces.len()),
         sources: Vec::with_capacity(merged.faces.len()),
+        inputs: Vec::with_capacity(merged.faces.len()),
         deleted: BTreeSet::new(),
         qualified: false,
     };
@@ -414,8 +490,8 @@ fn name_faces(
             let operand = sources.operands.get(*owner).ok_or(NamingError::Broken)?;
             names.push(name_at(&operand.names.faces, *row)?);
         }
-        let (name, origin) = match (list.as_slice(), names.as_slice()) {
-            ([(owner, row)], [own]) => {
+        let (name, origin) = if let ([(owner, row)], [own]) = (list.as_slice(), names.as_slice()) {
+            {
                 let operand = sources.operands.get(*owner).ok_or(NamingError::Broken)?;
                 let shared = bringers.get(own).is_some_and(|set| set.len() > 1);
                 let splits = pieces_of.get(&(*owner, *row)).copied().unwrap_or(1) > 1
@@ -438,7 +514,7 @@ fn name_faces(
                         },
                     )
                 } else if splits {
-                    let (tools, side) = tools_of(merged, face, *owner, sources)?;
+                    let (tools, side) = tools_of(merged, face, *owner, &planes)?;
                     let piece = PieceKey::ByTools {
                         tools: NameSet::new(tools)?,
                         side,
@@ -458,14 +534,11 @@ fn name_faces(
                     )
                 }
             }
-            _ => {
-                let of = NameSet::new(names.iter().copied())?;
-                let name = TopoName::Merged {
-                    op: op.clone(),
-                    of: of.clone(),
-                };
-                (name.id()?, Origin::Merged { of })
-            }
+        } else {
+            let (name, origin, gone) = merged_face(op, &list, &names, sources)?;
+            done.qualified = done.qualified || !gone.is_empty();
+            done.deleted.extend(gone);
+            (name, origin)
         };
         done.names.push(name);
         done.records.push(Record {
@@ -473,23 +546,16 @@ fn name_faces(
             origin,
         });
         done.sources.push(list);
+        done.inputs.push(names);
     }
     Ok(done)
 }
 
 /// A face's rank: its vertex numbers, the lowest first.
 fn face_ranks(merged: &Merged) -> Vec<Rank> {
-    merged
-        .faces
-        .iter()
-        .enumerate()
-        .map(|(at, _)| {
-            let mut list: Vec<usize> = merged
-                .fins
-                .iter()
-                .filter(|fin| fin.face == at)
-                .map(|fin| fin.from)
-                .collect();
+    (0..merged.faces.len())
+        .map(|at| {
+            let mut list: Vec<usize> = fins_of(merged, at).map(|fin| fin.from).collect();
             list.sort_unstable();
             Rank(list)
         })
@@ -531,12 +597,7 @@ fn untouched(
         }
         at_loop = held.and_then(|l| l.next);
     }
-    let fins: Vec<usize> = merged
-        .fins
-        .iter()
-        .filter(|fin| fin.face == face)
-        .map(|fin| fin.from)
-        .collect();
+    let fins: Vec<usize> = fins_of(merged, face).map(|fin| fin.from).collect();
     if fins.len() != corners.len() {
         return Ok(false);
     }
@@ -550,6 +611,283 @@ fn untouched(
         }
     }
     Ok(true)
+}
+
+/// One arena's names before ordinals, each with its origin and rank.
+#[derive(Default)]
+struct Rows {
+    names: Vec<NameId>,
+    origins: Vec<Origin>,
+    ranks: Vec<Rank>,
+}
+
+impl Rows {
+    /// The names told apart, with their records added to `records`.
+    fn finished(self, records: &mut Vec<Record>) -> Result<Vec<NameId>, NamingError> {
+        let names = told_apart(&self.names, &self.ranks)?;
+        for (name, origin) in names.iter().zip(self.origins) {
+            records.push(Record {
+                output: *name,
+                origin,
+            });
+        }
+        Ok(names)
+    }
+}
+
+/// The input edge each edge of `merged` carries on, if it lies between two faces of one operand:
+/// its operand and row, and whether its ends are the input's own.
+fn edge_sources(
+    merged: &Merged,
+    faces: &FacesDone,
+    inputs: &[Input<'_>],
+) -> Result<Vec<Option<EdgeSource>>, NamingError> {
+    let mut found = Vec::with_capacity(merged.edges.len());
+    for edge in &merged.edges {
+        let mut sides = BTreeSet::new();
+        for fin in &edge.fins {
+            let held = merged.fins.get(*fin).ok_or(NamingError::Broken)?;
+            let list = faces.sources.get(held.face).ok_or(NamingError::Broken)?;
+            if let [one] = list.as_slice() {
+                sides.insert(*one);
+            }
+        }
+        let mut hit = None;
+        let held: Vec<(usize, u32)> = sides.into_iter().collect();
+        if let [(owner, a), (other, b)] = held.as_slice()
+            && owner == other
+            && let Some(one) = inputs.get(*owner)
+            && let Some(list) = one.between.get(&((*a).min(*b), (*a).max(*b)))
+        {
+            let low = merged.vertices.get(edge.low).ok_or(NamingError::Broken)?;
+            let high = merged.vertices.get(edge.high).ok_or(NamingError::Broken)?;
+            let ends_at = found_vertex(one, low)?.zip(found_vertex(one, high)?);
+            for row in list {
+                let same = ends(one.arenas, *row).is_some_and(|(s, e)| {
+                    let (s, e) = (s.row(), e.row());
+                    ends_at == Some((s, e)) || ends_at == Some((e, s))
+                });
+                if same {
+                    hit = Some(((*owner, *row), true));
+                }
+            }
+            if let (None, [row]) = (hit, list.as_slice()) {
+                hit = Some(((*owner, *row), false));
+            }
+        }
+        found.push(hit);
+    }
+    Ok(found)
+}
+
+/// Every edge of `merged`, kept or `Bounded`.
+fn name_edges(
+    merged: &Merged,
+    faces: &FacesDone,
+    inputs: &[Input<'_>],
+    sources: &Sources<'_>,
+    alive: &mut BTreeSet<NameId>,
+) -> Result<Rows, NamingError> {
+    let hits = edge_sources(merged, faces, inputs)?;
+    let mut users: BTreeMap<(usize, u32), usize> = BTreeMap::new();
+    for (source, _) in hits.iter().flatten() {
+        let slot = users.entry(*source).or_insert(0);
+        *slot = slot.saturating_add(1);
+    }
+    let of_row = |at: usize| faces.names.get(at).copied().ok_or(NamingError::Broken);
+    let mut touching: Vec<BTreeSet<NameId>> = alloc::vec![BTreeSet::new(); merged.vertices.len()];
+    for fin in &merged.fins {
+        let held = of_row(fin.face)?;
+        for at in [fin.from, fin.to] {
+            touching.iter_mut().skip(at).take(1).for_each(|set| {
+                set.insert(held);
+            });
+        }
+    }
+    let mut rows = Rows::default();
+    for (edge, hit) in merged.edges.iter().zip(&hits) {
+        let mut around = BTreeSet::new();
+        let mut made_from = BTreeSet::new();
+        for fin in &edge.fins {
+            let held = merged.fins.get(*fin).ok_or(NamingError::Broken)?;
+            around.insert(of_row(held.face)?);
+            let names = faces.inputs.get(held.face).ok_or(NamingError::Broken)?;
+            made_from.extend(names.iter().copied());
+        }
+        let by = NameSet::new(around.iter().copied())?;
+        // Only a kept operand's edge keeps its name, and not where two brought one name.
+        let kept = |owner: usize| {
+            !faces.qualified && sources.operands.get(owner).is_some_and(|one| one.keeps)
+        };
+        let keeps = hit
+            .filter(|((owner, _), _)| kept(*owner))
+            .filter(|(source, _)| users.get(source) == Some(&1));
+        let (name, origin) = if let Some(((owner, row), exact)) = keeps {
+            let operand = sources.operands.get(owner).ok_or(NamingError::Broken)?;
+            let own = name_at(&operand.names.edges, row)?;
+            alive.insert(own);
+            let origin = if exact {
+                Origin::Unchanged
+            } else {
+                Origin::Modified {
+                    from: NameSet::new([own])?,
+                }
+            };
+            (own, origin)
+        } else {
+            let at_ends = [edge.low, edge.high]
+                .into_iter()
+                .filter_map(|v| touching.get(v));
+            let ending = at_ends.flatten().filter(|held| !around.contains(*held));
+            let name = TopoName::Bounded {
+                kind: EdgeOrVertex::Edge,
+                by,
+                ends: NameSet::new(ending.copied().collect::<BTreeSet<NameId>>())?,
+            };
+            let origin = Origin::Generated {
+                from: NameSet::new(made_from)?,
+                role: Role::new("edge", [])?,
+            };
+            (name.id()?, origin)
+        };
+        rows.names.push(name);
+        rows.origins.push(origin);
+        rows.ranks.push(Rank(alloc::vec![edge.low, edge.high]));
+    }
+    Ok(rows)
+}
+
+/// Every vertex of `merged`: a kept operand's name where it had one at the same point, or
+/// `Bounded` by the faces around it.
+fn name_vertices(
+    merged: &Merged,
+    faces: &FacesDone,
+    inputs: &[Input<'_>],
+    sources: &Sources<'_>,
+    alive: &mut BTreeSet<NameId>,
+) -> Result<Rows, NamingError> {
+    let mut around: Vec<BTreeSet<NameId>> = alloc::vec![BTreeSet::new(); merged.vertices.len()];
+    let mut made_from = around.clone();
+    for fin in &merged.fins {
+        let held = faces
+            .names
+            .get(fin.face)
+            .copied()
+            .ok_or(NamingError::Broken)?;
+        let names = faces.inputs.get(fin.face).ok_or(NamingError::Broken)?;
+        for at in [fin.from, fin.to] {
+            around.iter_mut().skip(at).take(1).for_each(|set| {
+                set.insert(held);
+            });
+            made_from.iter_mut().skip(at).take(1).for_each(|set| {
+                set.extend(names.iter().copied());
+            });
+        }
+    }
+    let mut rows = Rows::default();
+    let places = merged.vertices.iter().zip(&around).zip(&made_from);
+    for (at, ((point, set), from)) in places.enumerate() {
+        let mut own = None;
+        for (place, one) in inputs.iter().enumerate() {
+            let operand = sources.operands.get(place).ok_or(NamingError::Broken)?;
+            if own.is_none()
+                && operand.keeps
+                && !faces.qualified
+                && let Some(row) = found_vertex(one, point)?
+            {
+                own = Some(name_at(&operand.names.vertices, row)?);
+            }
+        }
+        let (name, origin) = if let Some(own) = own {
+            alive.insert(own);
+            (own, Origin::Unchanged)
+        } else {
+            let name = TopoName::Bounded {
+                kind: EdgeOrVertex::Vertex,
+                by: NameSet::new(set.iter().copied())?,
+                ends: NameSet::new([])?,
+            };
+            let origin = Origin::Generated {
+                from: NameSet::new(from.iter().copied())?,
+                role: Role::new("vertex", [])?,
+            };
+            (name.id()?, origin)
+        };
+        rows.names.push(name);
+        rows.origins.push(origin);
+        rows.ranks.push(Rank(alloc::vec![at]));
+    }
+    Ok(rows)
+}
+
+/// The regions of `merged`: one per outer shell, by its least face name, then the outside.
+fn name_regions(
+    op: &OpPath,
+    merged: &Merged,
+    faces: &[NameId],
+    records: &mut Vec<Record>,
+) -> Result<Vec<NameId>, NamingError> {
+    let mut regions = Vec::new();
+    let mut add = |role: Role| -> Result<(), NamingError> {
+        let name = TopoName::Created {
+            op: op.clone(),
+            role: role.clone(),
+            from: NameList::new([]),
+        }
+        .id()?;
+        regions.push(name);
+        records.push(Record {
+            output: name,
+            origin: Origin::Generated {
+                from: NameSet::new([])?,
+                role,
+            },
+        });
+        Ok(())
+    };
+    for shell in merged.shells.iter().filter(|shell| shell.outer) {
+        // The least name, which depends on no coordinate: a face's number does.
+        let names = shell.faces.iter().filter_map(|face| faces.get(*face));
+        let least = names.min().ok_or(NamingError::Broken)?;
+        add(Role::new("region.solid", [RoleArg::Name(*least)])?)?;
+    }
+    add(Role::new("region.outside", [])?)?;
+    Ok(regions)
+}
+
+/// Every input name with no descendant, or qualified away: the deleted list.
+fn deleted_names(
+    sources: &Sources<'_>,
+    records: &[Record],
+    alive: &BTreeSet<NameId>,
+    gone: &BTreeSet<NameId>,
+) -> Result<NameSet, NamingError> {
+    let mut named: BTreeSet<NameId> = BTreeSet::new();
+    for operand in sources.operands {
+        let lists = [
+            &operand.names.regions,
+            &operand.names.faces,
+            &operand.names.edges,
+            &operand.names.vertices,
+        ];
+        named.extend(
+            lists
+                .iter()
+                .flat_map(|list| list.iter().map(|key| id(*key))),
+        );
+    }
+    let carried: BTreeSet<NameId> = records
+        .iter()
+        .flat_map(|record| match &record.origin {
+            Origin::Modified { from } | Origin::Merged { of: from } => from.names().to_vec(),
+            Origin::Split { of, .. } => alloc::vec![*of],
+            Origin::Unchanged | Origin::Generated { .. } => Vec::new(),
+        })
+        .collect();
+    let deleted = named
+        .into_iter()
+        .filter(|name| gone.contains(name) || !(alive.contains(name) || carried.contains(name)));
+    Ok(NameSet::new(deleted)?)
 }
 
 /// The names and history of `merged`, a result of `op` holding `pieces`.
@@ -568,9 +906,8 @@ pub fn name(
         inputs.push(input(operand.body.arenas())?);
     }
     let mut faces = name_faces(op, merged, pieces, sources)?;
-    let ranks = face_ranks(merged);
-    faces.names = told_apart(&faces.names, &ranks)?;
-    for (record, (at, name)) in faces.records.iter_mut().zip(faces.names.iter().enumerate()) {
+    faces.names = told_apart(&faces.names, &face_ranks(merged))?;
+    for (at, (record, name)) in faces.records.iter_mut().zip(&faces.names).enumerate() {
         record.output = *name;
         if let (Origin::Modified { .. }, Some([source])) =
             (&record.origin, faces.sources.get(at).map(Vec::as_slice))
@@ -585,239 +922,18 @@ pub fn name(
         .filter(|r| matches!(r.origin, Origin::Unchanged | Origin::Modified { .. }))
         .map(|r| r.output)
         .collect();
-    let of_row = |at: usize| faces.names.get(at).copied().ok_or(NamingError::Broken);
-
-    // Edges keep their names where they lie between one operand's same two faces.
-    let mut edge_names = Vec::with_capacity(merged.edges.len());
-    let mut edge_ranks = Vec::with_capacity(merged.edges.len());
-    let mut edge_records = Vec::with_capacity(merged.edges.len());
-    let mut users: BTreeMap<(usize, u32), usize> = BTreeMap::new();
-    let mut matches = Vec::with_capacity(merged.edges.len());
-    for edge in &merged.edges {
-        let mut sides = BTreeSet::new();
-        for fin in &edge.fins {
-            let held = merged.fins.get(*fin).ok_or(NamingError::Broken)?;
-            let list = faces.sources.get(held.face).ok_or(NamingError::Broken)?;
-            if let [one] = list.as_slice() {
-                sides.insert(*one);
-            }
-        }
-        let mut owners = sides.iter().map(|(owner, _)| *owner);
-        let mut rows = sides.iter().map(|(_, row)| *row);
-        let found = match (owners.next(), owners.next(), rows.next(), rows.next()) {
-            (Some(p), Some(q), Some(a), Some(b)) if p == q && sides.len() == 2 => inputs
-                .get(p)
-                .and_then(|one| one.between.get(&(a.min(b), a.max(b))))
-                .map(|list| (p, list.clone())),
-            _ => None,
-        };
-        let mut hit = None;
-        if let Some((owner, list)) = found {
-            let (low, high) = (
-                merged.vertices.get(edge.low).ok_or(NamingError::Broken)?,
-                merged.vertices.get(edge.high).ok_or(NamingError::Broken)?,
-            );
-            let one = inputs.get(owner).ok_or(NamingError::Broken)?;
-            let (p, q) = (found_vertex(one, low)?, found_vertex(one, high)?);
-            for row in &list {
-                let same = ends(one.arenas, *row).is_some_and(|(s, e)| {
-                    let pair = (s.row(), e.row());
-                    Some(pair) == p.zip(q) || Some((pair.1, pair.0)) == p.zip(q)
-                });
-                if same {
-                    hit = Some(((owner, *row), true));
-                }
-            }
-            if hit.is_none()
-                && let [row] = list.as_slice()
-            {
-                hit = Some(((owner, *row), false));
-            }
-        }
-        if let Some((source, _)) = hit {
-            let slot = users.entry(source).or_insert(0);
-            *slot = slot.saturating_add(1);
-        }
-        matches.push(hit);
-    }
-    for (edge, hit) in merged.edges.iter().zip(&matches) {
-        let mut around = BTreeSet::new();
-        for fin in &edge.fins {
-            let held = merged.fins.get(*fin).ok_or(NamingError::Broken)?;
-            around.insert(of_row(held.face)?);
-        }
-        let by = NameSet::new(around.iter().copied())?;
-        let keeps = hit.filter(|(source, _)| users.get(source) == Some(&1));
-        let (name, origin) = if let Some(((owner, row), exact)) = keeps {
-            let operand = sources.operands.get(owner).ok_or(NamingError::Broken)?;
-            let own = name_at(&operand.names.edges, row)?;
-            alive.insert(own);
-            let origin = if exact {
-                Origin::Unchanged
-            } else {
-                Origin::Modified {
-                    from: NameSet::new([own])?,
-                }
-            };
-            (own, origin)
-        } else {
-            let mut ending = BTreeSet::new();
-            for fin in merged.fins.iter().filter(|fin| {
-                [fin.from, fin.to]
-                    .iter()
-                    .any(|v| *v == edge.low || *v == edge.high)
-            }) {
-                let held = of_row(fin.face)?;
-                if !around.contains(&held) {
-                    ending.insert(held);
-                }
-            }
-            let name = TopoName::Bounded {
-                kind: EdgeOrVertex::Edge,
-                by: by.clone(),
-                ends: NameSet::new(ending)?,
-            };
-            let origin = Origin::Generated {
-                from: by.clone(),
-                role: Role::new("edge", [])?,
-            };
-            (name.id()?, origin)
-        };
-        edge_names.push(name);
-        edge_ranks.push(Rank(alloc::vec![edge.low, edge.high]));
-        edge_records.push((name, origin));
-    }
-    let edge_names = told_apart(&edge_names, &edge_ranks)?;
-    for (name, (_, origin)) in edge_names.iter().zip(edge_records) {
-        records.push(Record {
-            output: *name,
-            origin,
-        });
-    }
-
-    // Vertices keep their names where a kept operand had one at the same point.
-    let mut around: Vec<BTreeSet<NameId>> = alloc::vec![BTreeSet::new(); merged.vertices.len()];
-    for fin in &merged.fins {
-        let held = of_row(fin.face)?;
-        for at in [fin.from, fin.to] {
-            around.iter_mut().skip(at).take(1).for_each(|set| {
-                set.insert(held);
-            });
-        }
-    }
-    let mut vertex_names = Vec::with_capacity(merged.vertices.len());
-    let mut vertex_records = Vec::with_capacity(merged.vertices.len());
-    for (point, set) in merged.vertices.iter().zip(&around) {
-        let mut own = None;
-        for (place, one) in inputs.iter().enumerate() {
-            let operand = sources.operands.get(place).ok_or(NamingError::Broken)?;
-            if own.is_none()
-                && operand.keeps
-                && let Some(row) = found_vertex(one, point)?
-            {
-                own = Some(name_at(&operand.names.vertices, row)?);
-            }
-        }
-        let (name, origin) = if let Some(own) = own {
-            alive.insert(own);
-            (own, Origin::Unchanged)
-        } else {
-            let by = NameSet::new(set.iter().copied())?;
-            let name = TopoName::Bounded {
-                kind: EdgeOrVertex::Vertex,
-                by: by.clone(),
-                ends: NameSet::new([])?,
-            };
-            let origin = Origin::Generated {
-                from: by,
-                role: Role::new("vertex", [])?,
-            };
-            (name.id()?, origin)
-        };
-        vertex_names.push(name);
-        vertex_records.push((name, origin));
-    }
-    let vertex_ranks: Vec<Rank> = (0..merged.vertices.len())
-        .map(|at| Rank(alloc::vec![at]))
-        .collect();
-    let vertex_names = told_apart(&vertex_names, &vertex_ranks)?;
-    for (name, (_, origin)) in vertex_names.iter().zip(vertex_records) {
-        records.push(Record {
-            output: *name,
-            origin,
-        });
-    }
-
-    // Regions: the outside, and one per outer shell by its lowest face.
-    let outside = TopoName::Created {
-        op: op.clone(),
-        role: Role::new("region.outside", [])?,
-        from: NameList::new([]),
-    }
-    .id()?;
-    let mut regions = Vec::new();
-    for shell in merged.shells.iter().filter(|shell| shell.outer) {
-        let first = shell.faces.first().copied().ok_or(NamingError::Broken)?;
-        let role = Role::new("region.solid", [RoleArg::Name(of_row(first)?)])?;
-        let name = TopoName::Created {
-            op: op.clone(),
-            role: role.clone(),
-            from: NameList::new([]),
-        }
-        .id()?;
-        regions.push(name);
-        records.push(Record {
-            output: name,
-            origin: Origin::Generated {
-                from: NameSet::new([])?,
-                role,
-            },
-        });
-    }
-    records.push(Record {
-        output: outside,
-        origin: Origin::Generated {
-            from: NameSet::new([])?,
-            role: Role::new("region.outside", [])?,
-        },
-    });
-    regions.push(outside);
-
-    // Every input name with no descendant is deleted.
-    let mut inputs_named: BTreeSet<NameId> = BTreeSet::new();
-    for operand in sources.operands {
-        let lists = [
-            &operand.names.faces,
-            &operand.names.edges,
-            &operand.names.vertices,
-        ];
-        inputs_named.extend(
-            lists
-                .iter()
-                .flat_map(|list| list.iter().map(|key| id(*key))),
-        );
-    }
-    let relations: BTreeSet<NameId> = records
-        .iter()
-        .flat_map(|record| match &record.origin {
-            Origin::Modified { from } | Origin::Merged { of: from } => from.names().to_vec(),
-            Origin::Split { of, .. } => alloc::vec![*of],
-            Origin::Unchanged | Origin::Generated { .. } => Vec::new(),
-        })
-        .collect();
-    let deleted = inputs_named
-        .into_iter()
-        .filter(|name| {
-            faces.deleted.contains(name) || !(alive.contains(name) || relations.contains(name))
-        })
-        .collect::<Vec<NameId>>();
-    let history = History::new(records, NameSet::new(deleted)?, [])?;
+    let edges = name_edges(merged, &faces, &inputs, sources, &mut alive)?.finished(&mut records)?;
+    let vertices =
+        name_vertices(merged, &faces, &inputs, sources, &mut alive)?.finished(&mut records)?;
+    let regions = name_regions(op, merged, &faces.names, &mut records)?;
+    let deleted = deleted_names(sources, &records, &alive, &faces.deleted)?;
+    let history = History::new(records, deleted, [])?;
     Ok(Naming {
         names: Names {
             regions: regions.into_iter().map(key_of).collect(),
             faces: faces.names.iter().copied().map(key_of).collect(),
-            edges: edge_names.into_iter().map(key_of).collect(),
-            vertices: vertex_names.into_iter().map(key_of).collect(),
+            edges: edges.into_iter().map(key_of).collect(),
+            vertices: vertices.into_iter().map(key_of).collect(),
         },
         history,
         qualified: faces.qualified,
