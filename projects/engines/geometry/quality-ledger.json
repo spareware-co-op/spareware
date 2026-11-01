@@ -5153,6 +5153,86 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "With == the highest limb found is the highest zero one, so for a value of a few limbs in pencil's 184-limb Big Newton's iteration starts at 2^5856 whatever the value: about 5,800 steps, each a division of 11,776-bit integers, for every square root two_doubles takes. attack_g166's double roots then run for far past cargo-mutants' timeout, which is how the tests catch it; whole_numbers_divide_down's root of a value using every limb, where the mutant finds no zero limb and returns None, fails at once but waits for that binary's other tests."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with < in diagonal",
+      "line_text": "if pair.2 > best.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The test only picks which pivot elimination of Lagrange takes next: the largest diagonal entry, or a sum of two rows. Any pivot that is not zero gives another congruence T^T m T = D of the same member, and one that cannot be told from zero returns None, after which ruled tries the next member. The ruling parameterised is then another basis of the same ruled quadric, so the curve, its topology and its arcs' sign changes are the same; only the enclosures' rounding differs, which the crate does not promise."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in diagonal",
+      "line_text": "if pair.2 > best.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "On a tie of the largest off-diagonal and diagonal sizes the mutant takes the sum of two rows instead of the diagonal pivot. Either is a valid pivot of elimination of Lagrange, or a refusal ruled moves past, so the diagonal form is another congruence of the same ruled member and the curve, its topology and its arcs are the same; only the enclosures' rounding differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace == with != in normalised",
+      "line_text": "if top == 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With != every matrix that is not zero comes back unscaled. normalised only divides the quadratic's coefficients by their largest bound so they stand near one: s/t = (-beta +- sqrt(Delta)) / 2 alpha and the sign of Delta do not change under a positive scale, so the curve and its arcs are the same, and only the doubles' range in use differs. A zero matrix, where the mutant would divide by zero, needs the other quadric to vanish on every ruling of the ruled member, which two distinct quadrics never do."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in ruled",
+      "line_text": "if size.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a diagonal entry's lower bound is exactly 0.0. geom_num::interval widens every bound of every operation outward by a step, so a lower bound of 0.0 comes only from a rounded bound of 2^-1074, the least subnormal: a pivot of a member of quadrics whose entries are below about 10^-160, nowhere near a model's coordinates. Only there would the mutant take an entry that may be zero as positive, and the square root of its column then refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace < with <= in ruled",
+      "line_text": "} else if size.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a diagonal entry's upper bound is exactly 0.0. geom_num::interval widens every bound outward by a step and writes -0.0 as 0.0, so an upper bound of 0.0 comes only from a rounded bound of -2^-1074, the least subnormal: quadrics whose entries are below about 10^-160, nowhere near a model's coordinates. Only there would the mutant take an entry that may be zero as negative."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace == with != in ruled",
+      "line_text": "let other = if q == 0 { b } else { a };",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "q is never 0 here: the member at q = 0 is a itself, and a sphere, cylinder or cone never has inertia (2, 2), so ruled has passed it by. The mutant then takes b as the other quadric instead of a. Both are members of the pencil other than the ruled one, and on its rulings any other member is the same quadratic times a nonzero factor (it differs by a multiple of the ruled member, which vanishes there), so alpha, beta and gamma scale together and s/t and the sign of Delta are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in refined",
+      "line_text": "Ok(if d.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's lower bound is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of 2^-1074, the least subnormal. Only there would the bisection read a value that may be zero as positive, and only in which half it keeps of a bracket whose ends already differ in sign."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace < with <= in refined",
+      "line_text": "} else if d.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's upper bound is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of -2^-1074, the least subnormal. Only there would the bisection read a value that may be zero as negative, and only in which half it keeps of a bracket whose ends already differ in sign."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in walked_arcs",
+      "line_text": "if d.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's lower bound at a step of the walk is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of 2^-1074, the least subnormal. Only there would the walk count a value that may be zero as positive; counts and the bisection's brackets would then refuse or refine the arcs as for any other step."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace < with <= in walked_arcs",
+      "line_text": "} else if d.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's upper bound at a step of the walk is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of -2^-1074, the least subnormal. Only there would the walk count a value that may be zero as negative."
     }
   ],
   "coverage_off": [

@@ -113,9 +113,9 @@ fn sampled(a: &SurfaceKind, b: &SurfaceKind, found: &Meeting) -> usize {
     let mut count = 0;
     let mut check = |theta: f64| {
         let t = Interval::point(theta).unwrap();
-        if curve.discriminant(t).unwrap().hi() < 0.0 {
-            return;
-        }
+        // Inside a branch the discriminant is never below zero.
+        let d = curve.discriminant(t).unwrap();
+        assert!(d.hi() >= 0.0, "{d:?} below zero inside a branch at {theta}");
         for upper in [true, false] {
             if let Some(p) = curve.point(t, upper).unwrap() {
                 assert!(on(a, p), "{p:?} off the first at {theta}");
@@ -132,6 +132,17 @@ fn sampled(a: &SurfaceKind, b: &SurfaceKind, found: &Meeting) -> usize {
                 }
             }
             Arc::Between { from, to } => {
+                // Each end brackets its sign change of the discriminant: below zero before the
+                // rise and after the fall, above it inside.
+                let sign = |theta: f64| {
+                    let d = curve
+                        .discriminant(Interval::point(theta.fract()).unwrap())
+                        .unwrap();
+                    assert!(d.lo() > 0.0 || d.hi() < 0.0, "{d:?} at {theta}");
+                    d.lo() > 0.0
+                };
+                assert!(!sign(from.lo()) && sign(from.hi()), "{from:?}");
+                assert!(sign(to.lo()) && !sign(to.hi()), "{to:?}");
                 let (lo, hi) = (from.hi(), to.lo());
                 assert!(lo <= hi);
                 for i in 1..16 {
@@ -173,6 +184,24 @@ fn a_thin_cylinder_through_a_sphere_leaves_two_loops() {
 }
 
 #[test]
+fn a_slanted_pipe_through_a_sphere_leaves_two_bounded_loops() {
+    // Two ovals the walk reads as two arcs, each from a rise to a fall, not one whole branch.
+    let (a, b) = (
+        sphere([0.0; 3], 5.0),
+        cylinder([2.0, 0.0, 0.0], [0.0, 1.0, 1.0], 1.5),
+    );
+    two_ovals(&a, &b);
+    let found = meeting(&a, &b);
+    assert_eq!(found.arcs.len(), 2);
+    assert!(
+        found
+            .arcs
+            .iter()
+            .all(|arc| matches!(arc, Arc::Between { .. }))
+    );
+}
+
+#[test]
 fn a_cylinder_across_a_sphere_s_edge_leaves_one() {
     one_oval(&sphere([0.0; 3], 5.0), &cylinder([5.0, 0.0, 0.0], Z, 1.0));
     one_oval(
@@ -187,6 +216,8 @@ fn skew_pipes() {
     // Equal, one apart: one loop. A thin pipe through a wide one: two.
     one_oval(&a, &cylinder([0.0, 1.0, 0.0], X, 1.0));
     two_ovals(&a, &cylinder([0.0, 0.25, 0.0], X, 2.0));
+    // A loop all round but for a stretch of the walk one sample wide: its arc wraps past the turn.
+    one_oval(&a, &cylinder([0.0, 0.302, 0.0], X, 1.3));
     // Slanted axes, whole direction.
     one_oval(&a, &cylinder([3.0, 0.0, 0.0], [3.0, 4.0, 0.0], 3.0));
 }
@@ -244,6 +275,19 @@ fn a_cubic_and_its_line_are_walked_too() {
     let tube = cylinder([0.0, 1.0, 0.0], [1.0, 0.0, 1.0], 1.0);
     let found = meeting(&c, &tube);
     assert_eq!(found.topology.cubics, 1);
+    assert_eq!(found.arcs.len(), 1, "{:?}", found.arcs);
+    assert!(sampled(&c, &tube, &found) > 4);
+}
+
+#[test]
+fn conics_are_left_to_the_closed_forms() {
+    // Two pipes of one radius square to each other meet in two ellipses: a pencil member is ruled,
+    // but no quartic or cubic is there to walk, so there is no curve.
+    let found = meeting(&cylinder([0.0; 3], Z, 1.0), &cylinder([0.0; 3], X, 1.0));
+    assert_eq!(found.segre, Segre::Pair);
+    assert_eq!(found.topology.conics, 2);
+    assert!(found.curve.is_none());
+    assert_eq!(found.arcs.len(), 0);
 }
 
 #[test]
