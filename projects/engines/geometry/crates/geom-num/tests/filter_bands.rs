@@ -230,9 +230,10 @@ fn placed(
 }
 
 /// Draws with some groups at 0, 1 or 2 and the rest of any size, with the value past the bound, or
-/// as it falls: for each set of groups held small, how many the filter did not answer of how many it
-/// should have. By the set, as a term grown past the true scale shows only in some: one in 64 of the
-/// draws of a filter of six groups, too few to show in a total the rounding also adds to.
+/// as it falls. Past 2.1 bounds the filter cannot refuse: what it computes is within one bound of the
+/// value, so a single refusal there is a scale grown past the true one, which shows only in some
+/// draws and is the count returned first. As the value falls past 1.5 bounds rounding may refuse a
+/// stray input: for each set of groups held small, how many it did not answer of how many it should.
 fn with_small_groups(
     spec: &Spec,
     rng: &mut Rng,
@@ -240,7 +241,8 @@ fn with_small_groups(
     error: f64,
     terms: &[(String, Vec<String>)],
     groups: &[(&str, u32)],
-) -> BTreeMap<u64, (u64, u64)> {
+) -> (u64, BTreeMap<u64, (u64, u64)>) {
+    let mut sure = 0;
     let mut tally: BTreeMap<u64, (u64, u64)> = BTreeMap::new();
     for _ in 0..cases {
         let sizes: BTreeMap<&str, Option<u32>> = groups
@@ -285,7 +287,7 @@ fn with_small_groups(
         if v.abs() > 2.1 * bound {
             *past_bound += 1;
             if (spec.filter)(&inputs).is_none() {
-                *missed += 1;
+                sure += 1;
             }
         }
         let which = (rng.next() % spec.moved.len() as u64) as usize;
@@ -306,7 +308,7 @@ fn with_small_groups(
             }
         }
     }
-    tally
+    (sure, tally)
 }
 
 /// Runs `spec`, and says what is wrong with each term not excused that was not tested, or with one
@@ -400,12 +402,15 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             }
         }
     }
-    let tally = with_small_groups(spec, rng, cases, error, &terms, &groups);
+    let (sure, tally) = with_small_groups(spec, rng, cases, error, &terms, &groups);
     let mut problems = Vec::new();
     let past_bound = tally.values().fold(0, |all, (_, past)| all + past);
-    println!("{}: {past_bound} past the bound", spec.name);
-    if past_bound == 0 {
-        problems.push(format!("{}: nothing past the bound", spec.name));
+    println!("{}: {past_bound} past the bound, {sure} refused", spec.name);
+    if past_bound == 0 || sure > 0 {
+        problems.push(format!(
+            "{}: {sure} of {past_bound} past the bound refused",
+            spec.name
+        ));
     }
     for (held, (missed, past)) in &tally {
         // Past the bound the filter's rounding refuses at most a stray input near 1.5 bounds.
