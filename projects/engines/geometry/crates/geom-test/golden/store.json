@@ -290,9 +290,15 @@
               "kind": "corpus",
               "piece": "G174",
               "why": "1 new count benchmark on geom-intersect's known curves (decision 32.44): sheets tangent to a plane along a known line, the tube about it proven and taken out of the search; no existing digest moved"
+            },
+            {
+              "sha256": "74f4b0821f7623cd24e3982a083eccbaddc428179fb74b0afa6ab03dfb56c8ec",
+              "kind": "corpus",
+              "piece": "G176",
+              "why": "1 new count benchmark on geom-intersect's self-intersection (decision 32.44): swept loops crossing themselves along a line; no existing digest moved"
             }
           ],
-          "sha256": "74f4b0821f7623cd24e3982a083eccbaddc428179fb74b0afa6ab03dfb56c8ec"
+          "sha256": "a297b632d40dbe4b5444f2f1cbfb52428df2ce5ba353a9ded06689e4f5a4ccd6"
         },
         {
           "id": "geom-nurbs/operations",

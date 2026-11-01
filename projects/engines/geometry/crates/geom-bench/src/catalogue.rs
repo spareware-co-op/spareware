@@ -454,6 +454,8 @@ pub static OPS: &[Op] = &[
     // Known curves (piece G174; decision 32.44): sheets tangent to a plane along a known line,
     // the tube about it proven and taken out of the search.
     Op { group: "intersect", name: "known_tangent", measures: "geom_intersect::known::subdivide_known", classes: T, prepare: |c| bind(inputs::intersect::tangents(c), kernels::intersect::known_cut) },
+    // Self-intersection (piece G176; decision 32.44): swept loops crossing themselves along a line.
+    Op { group: "intersect", name: "selfcross_sweep", measures: "geom_intersect::selfcross::self_intersect", classes: T, prepare: |c| bind(inputs::intersect::sweeps(c), kernels::intersect::self_cross) },
     // Contact analysis (piece G171; decision 32.44): a sphere resting on a plane patch.
     Op { group: "intersect", name: "analyse_rest", measures: "geom_intersect::contact::analyse", classes: T, prepare: |c| bind(inputs::intersect::rests(c), kernels::intersect::touched) },
     Op { group: "intersect", name: "trace_silhouette", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::tori(c), kernels::intersect::silhouettes) },

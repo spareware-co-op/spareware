@@ -2,8 +2,8 @@
 //! 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in
 //! canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that
 //! meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a
-//! sphere and seen in silhouette, planes through a whole sphere's poles, and sheets tangent to a
-//! plane along a known line (G174).
+//! sphere and seen in silhouette, planes through a whole sphere's poles, sheets tangent to a plane
+//! along a known line (G174), and swept loops that cross themselves (G176).
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -272,6 +272,39 @@ pub fn tangents(class: Class) -> Vec<(SurfaceKind, Known)> {
             contact: KnownContact::Tangent,
         };
         Some((SurfaceKind::Nurbs(sheet), known))
+    })
+}
+
+/// A sheet whose section at y = v is a cubic arch that loops, crossing itself along a line: the
+/// arch with control points (−a, 0), (b, h), (−b, h), (a, 0) in x and z, a, b and h dyadic and
+/// b > a in both end rows, for `self_intersect` (piece G176).
+#[must_use]
+pub fn sweeps(class: Class) -> Vec<SurfaceKind> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::sweeps", class);
+    batch_of(|_| {
+        let mut eighths = |lo: i64, hi: i64| -> Option<f64> {
+            Some(f64::from(i32::try_from(g.range(lo, hi)).ok()?) / 8.0)
+        };
+        let mut rows = Vec::new();
+        for _ in 0..2 {
+            let a = eighths(8, 12)?;
+            let b = a + eighths(2, 5)?;
+            let h = eighths(12, 20)?;
+            rows.push([[-a, 0.0], [b, h], [-b, h], [a, 0.0]]);
+        }
+        let across = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).ok()?;
+        let along = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).ok()?;
+        let mut net = Vec::new();
+        for i in 0..4 {
+            for (y, row) in [-1.0, 1.0].into_iter().zip(&rows) {
+                let [x, z] = *row.get(i)?;
+                net.push([x, y, z]);
+            }
+        }
+        Some(SurfaceKind::Nurbs(Surface::new(across, along, &net).ok()?))
     })
 }
 

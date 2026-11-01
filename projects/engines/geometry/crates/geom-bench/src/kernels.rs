@@ -2037,6 +2037,7 @@ pub mod intersect {
     use geom_intersect::general::{Subdivided, subdivide};
     use geom_intersect::known::{Known, subdivide_known};
     use geom_intersect::march::{Traced, march};
+    use geom_intersect::selfcross::{SelfCrossing, self_intersect};
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, LevelCurves, OnImplicit,
         Operand, Projection, Silhouette, pair, project_curve, project_surface, trace,
@@ -2218,6 +2219,14 @@ pub mod intersect {
             let sphere = SurfaceKind::Sphere(Sphere::new(*centre, 5.0, frame, domain)?);
             let found = subdivide(surface, &sphere, 1.0, &mut meter())?;
             march(surface, &sphere, &found, 1.0, 1.0, &mut meter())
+        });
+    }
+
+    /// `self_intersect` of each swept loop.
+    #[inline(never)]
+    pub fn self_cross(batch: &[SurfaceKind], out: &mut Vec<Result<SelfCrossing, IntersectError>>) {
+        run(batch, out, |sheet| {
+            self_intersect(sheet, 1.0 / 16.0, 1.0 / 4.0, &mut meter())
         });
     }
 

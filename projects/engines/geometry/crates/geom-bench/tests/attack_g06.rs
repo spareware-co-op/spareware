@@ -1417,6 +1417,12 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 )
             },
         )),
+        ("intersect", "selfcross_sweep") => {
+            fold(inputs::intersect::sweeps(class).iter().map(|sheet| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::selfcross::self_intersect(sheet, 1.0 / 16.0, 1.0 / 4.0, &mut meter)
+            }))
+        }
         ("intersect", "analyse_rest") => {
             fold(inputs::intersect::rests(class).iter().map(|(plate, ball)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

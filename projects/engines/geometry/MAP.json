@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a sphere and seen in silhouette, planes through a whole sphere's poles, and sheets tangent to a plane along a known line (G174).",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a sphere and seen in silhouette, planes through a whole sphere's poles, sheets tangent to a plane along a known line (G174), and swept loops that cross themselves (G176).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -3886,6 +3886,32 @@
           "target": "lib"
         },
         {
+          "cost": "a region's test takes one normal box per cell it spans and a read of each boundary stretch, at most [`STRETCHES`] of them, every two compared, for each pair the search does not prove apart first; the search and march are 12.8's, over both orders of every pair. Recursion: none.",
+          "does": "[`self_intersect`] runs the general search of 12.8 over the surface and itself, from every pair of its cells, and marches what that settles. Besides what the search proves apart, it leaves out a pair of pieces that a clean region holds: the rectangle that bounds them in parameters, or, where the domain closes (12.10), the two strips that reach them glued across the seam. A region is clean when its Gauss map lies in an open hemisphere and its boundary, projected along that hemisphere's axis, is a simple curve. A pair that touches, in parameters, across a seam or at a pole, and is not held clean is split, never settled: its starts would be the points it shares. The search cuts its two sides at different shares (12.8), so the pieces of the two sheets of a crossing never share a cut line inside the domain, and a sweep's crossing, on which the two sheets' parameters along the sweep agree, never runs through a corner both patches share.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/selfcross.rs",
+          "guarantees": [
+            "**A clean region cannot cross itself.** The proof: let D be a closed disk of parameters made of rectangles meeting edge to edge (the cells of 12.10 that the region spans), S continuous on D and C¹ on each rectangle, and π(x) = (b₁·x, b₂·x) a linear map onto the plane. The Jacobian determinant of π∘S is (b₁ × b₂)·(`S_u` × `S_v`). If it is positive on every rectangle, π∘S is a local homeomorphism inside each one, and across an edge between two, whose images lie on either side of the edge's image since both turn one way; where four meet, each image is a sector of less than a half-turn, so together they wind once. If π∘S is also one to one on ∂D, π∘S(∂D) is a Jordan curve J, and the number of preimages in D of a point off J is the degree of π∘S over it, J's winding number about it: 0 or 1. A point of J has its preimage on ∂D and none inside, or points beside it would have two. So π∘S is one to one on D, and so is S. A line of ∂D on which S is one point, a pole, is one point of J. This is Volino and Magnenat-Thalmann's criterion, with the degree argument for local homeomorphisms of a disk.",
+            "**Each step of it is proven.** b₁ × b₂ is enclosed from the doubles b₁ and b₂ themselves, and its product with each rectangle's normal box ([`ParamSurface::normal_bound`], a positive multiple of `S_u` × `S_v`) proven positive. The boundary is cut into stretches, each proven to move strictly one way along some direction of the plane (so it does not meet itself); each two in a row proven to move along one shared direction (so they meet only where they join); and every two others proven apart, their boxes disjoint. A stretch that will not prove is halved; past [`STRETCHES`] stretches, or at the floor, the region is not clean.",
+            "**Nothing is dropped.** A pair of pieces is proven apart, held clean, settled and marched, split, or flagged at the floor: a piece not proven clean there is flagged as a pair with a piece it touches, and where a crossing meets the domain's edge on both sheets at once, as a sweep's does, no start can be told from the patches' edges and a box a floor across is flagged, the branch traced up to it.",
+            "**Each crossing from both sheets.** The set where S crosses itself, the pairs p ≠ q with S(p) = S(q), is symmetric: each branch, (u, v) of one sheet then (u, v) of the other, is reported with its mirror image, (q, p) along it. So a branch whose sheets trade pieces, or trade places altogether, is followed whole.",
+            "**Exact for the analytic kinds.** A plane, cylinder, sphere, cone or torus, or an affine image of one, over at most a turn (as each kind's constructor requires) is one to one but on its poles and seams (12.10): it has no crossing to search. A cone's nappes meet only at its apex, and a spindle or horn torus's sheets only at its poles on the axis: the points ((R + r·cos v)·e(u), r·sin v) and ((R + r·cos v′)·e(u′), r·sin v′) are one only where R + r·cos v = 0."
+          ],
+          "job": "Surface self-intersection: where one surface crosses itself, for the checker (8.3, group 3) and offsets (13), by Volino and Magnenat-Thalmann's test and a split fallback (12.13).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1111/1467-8659.1330155",
+              "https://doi.org/10.1090/gsm/108"
+            ],
+            "text": "chapter 12.13 (`projects/engines/geometry/architecture/12-intersections.md`); P. Volino and N. Magnenat-Thalmann, \"Efficient self-collision detection on smoothly discretized surface animations using geometrical shape regularity\", Computer Graphics Forum 13(3) (1994), <https://doi.org/10.1111/1467-8659.1330155>; the degree of a map, as in E. Outerelo and J. M. Ruiz, *Mapping Degree Theory*, AMS (2009), <https://doi.org/10.1090/gsm/108>."
+          },
+          "path": "geom_intersect::selfcross",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "each box is one residual range and at most one operator step, each a few evaluations of the kind; O(N³) doubles for the inverse. One allocation for each list. Recursion: none.",
           "does": "a [`Field`] gives a system's residuals at a point and over a box, its Jacobian over a box, and how far a box reaches in space, from whatever a kind can bound. [`solve`] keeps boxes on a work list, discards each one a caller's test rules out or whose residuals exclude zero, takes a Krawczyk step, and splits what is left. `geom_num::isolate` does this for a system that is written once over its scalars; kinds that are bounded through their own traits come here.",
           "family": [],
@@ -3916,7 +3942,7 @@
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170, seams, poles and knot lines by G173, known curves by G174; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170, seams, poles and knot lines by G173, known curves by G174, self-intersection by G176; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G175, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {
