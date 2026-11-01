@@ -1537,6 +1537,36 @@ fn a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts() {
         );
         assert!((ms - s).abs() < 1e-4 && (mt - t).abs() < 1e-4, "{at:?}");
     }
+    // Crossings within the search's pad of the join (a 1024th of a turn), just before it and just
+    // after: each found once, on the domain, where it is.
+    let near = 5000.0 * (core::f64::consts::PI / 4096.0).sin();
+    for (y, s) in [(-near, 2.0 - 1.0 / 4096.0), (near, 1.0 / 4096.0)] {
+        let r = meet(
+            &turn(0.0),
+            &bezier(&[[4000.0, y], [5000.0, y], [6000.0, y]]),
+        );
+        assert_eq!(r.items().len(), 1, "{:?}", r.items());
+        let at = r.items()[0].at().spans()[0];
+        assert!((at.lo() * 0.5 + at.hi() * 0.5 - s).abs() < 1e-9, "{at:?}");
+    }
+    // A line all but tangent at the join crosses on both sides of it, within the pad: two
+    // crossings, never one, whichever side's boxes hold them.
+    let x = 5000.0 * (core::f64::consts::PI / 8192.0).cos();
+    let r = meet(&turn(0.0), &bezier(&[[x, -100.0], [x, 0.0], [x, 100.0]]));
+    let mut at: Vec<f64> = r
+        .items()
+        .iter()
+        .map(|i| {
+            let s = i.at().spans()[0];
+            s.lo() * 0.5 + s.hi() * 0.5
+        })
+        .collect();
+    at.sort_by(f64::total_cmp);
+    assert_eq!(at.len(), 2, "{:?}", r.items());
+    assert!(
+        (at[0] - 1.0 / 8192.0).abs() < 1e-9 && (at[1] - (2.0 - 1.0 / 8192.0)).abs() < 1e-9,
+        "{at:?}"
+    );
     // An arc from a quarter to three quarters of a turn, whose ends add to 2, is no whole turn:
     // the y axis touches it at both ends.
     let r = meet(
@@ -1554,4 +1584,54 @@ fn a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts() {
         "{:?}",
         r.items()
     );
+}
+
+#[test]
+fn a_meeting_at_the_grid_s_edge_is_on_the_grid() {
+    // The lines cross at (2^40 - 2, 0): the grid box around the crossing, rounded outward, reaches
+    // 2^40 - 1, the last grid coordinate, and is a box of the grid, not out of its range.
+    let reach = 2.0_f64.powi(40) - 1.0;
+    let x = reach - 1.0;
+    let r = meet(
+        &segment([x, -1.0], [x, 1.0]),
+        &segment([0.0, 0.0], [reach, 0.0]),
+    );
+    assert!(
+        matches!(
+            r.items(),
+            [Item::Point {
+                contact: PointContact::Crossing,
+                ..
+            }]
+        ),
+        "{:?}",
+        r.items()
+    );
+}
+
+#[test]
+fn a_whole_circle_s_search_takes_only_its_work() {
+    // What the engine charges on a whole circle pins where its search runs past the join and how
+    // a box across the join is read: the pad either side, and the stretch moved by a turn.
+    let turn = CurveKind::Circle(
+        Circle::new([0.0, 0.0], 5000.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap(),
+    );
+    let work = |b: &CurveKind<2>| {
+        let mut m = meter();
+        let r = curves(&turn, b, &mut m).unwrap();
+        (r.items().len(), m.used().work)
+    };
+    let x = 5000.0 * (core::f64::consts::PI / 8192.0).cos();
+    let near = 5000.0 * (core::f64::consts::PI / 4096.0).sin();
+    let got = [
+        work(&bezier(&[[x, -100.0], [x, 0.0], [x, 100.0]])),
+        work(&bezier(&[
+            [4000.0, -near],
+            [5000.0, -near],
+            [6000.0, -near],
+        ])),
+        work(&bezier(&[[4000.0, near], [5000.0, near], [6000.0, near]])),
+        work(&bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]])),
+    ];
+    assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1313)]);
 }

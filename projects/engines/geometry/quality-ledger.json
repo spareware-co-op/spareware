@@ -5483,6 +5483,46 @@
       "reason": "Either mutant differs only when a lower bound of s or t equals the end of its domain. s and t are the crossing's parameters on each line, computed by geom_num::interval, which widens every bound outward by a step: where the lines truly meet at an end of a domain, the enclosure strictly holds that end. A bound equal to an end needs the crossing to lie past it by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Seam::wrapped",
+      "line_text": "if self.closed && t < lo {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant moves a parameter exactly at lo a turn on, to hi. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in Seam::wrapped",
+      "line_text": "} else if self.closed && t > hi {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant moves a parameter exactly at hi a turn back, to lo. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Seam::spans",
+      "line_text": "(a < b).then_some((a, b))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant keeps a stretch of no length, a single point where a box moved by a turn just reaches the join; its bound is the curve's point there, which the box's other stretch already reaches at the other end of the domain, so the box's bound changes by rounding at most. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in Seam::onto",
+      "line_text": "let moved = if self.closed && x.hi() > hi {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant moves a box ending exactly at hi a turn back, where it ends at lo. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Seam::onto",
+      "line_text": "} else if self.closed && x.hi() < lo {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant moves a box ending exactly at lo a turn on, where it ends at hi. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
       "mutant": "replace > with >= in halves",
       "line_text": "let share = if whole > 0.0 {",
