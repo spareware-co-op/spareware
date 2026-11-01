@@ -16,6 +16,7 @@ use std::num::NonZeroU64;
 use geom_mesh::classify::{Classifier, Located};
 use geom_mesh::exact::build::{Corner, Polygons, build};
 use geom_mesh::exact::{ExactMesh, MeshError};
+use geom_num::Sign;
 use geom_num::grid::P3;
 use geom_num::plane::{Plane, Tpi};
 use geom_run::{Budget, Exec, WorkMeter};
@@ -24,7 +25,7 @@ use geom_test::{Seed, SplitMix64};
 
 mod shapes;
 
-use shapes::{cuboid, frustum, g, prism, soup};
+use shapes::{cuboid, frustum, g, hexahedron, prism, soup};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 22))
@@ -103,6 +104,100 @@ fn against_field(heights: &[Vec<i64>], step: i64, q: P3) -> Option<(i128, i128)>
         h00 * s + (h01 - h00) * dy + (h11 - h01) * dx
     };
     Some((i128::from(z) * s - scaled, s))
+}
+
+/// A point's place against a convex solid of outward `planes`, by their signs alone.
+fn against_planes(planes: &[Plane; 6], q: P3) -> Located {
+    let sides: Vec<Sign> = planes.iter().map(|plane| plane.side(q).unwrap()).collect();
+    if sides.contains(&Sign::Positive) {
+        Located::Winding(0)
+    } else if sides.contains(&Sign::Zero) {
+        Located::OnSurface
+    } else {
+        Located::Winding(1)
+    }
+}
+
+/// `n` with its axes turned `by` places.
+fn turn(n: [i128; 3], by: usize) -> [i128; 3] {
+    let [x, y, z] = n;
+    match by {
+        0 => [x, y, z],
+        1 => [z, x, y],
+        _ => [y, z, x],
+    }
+}
+
+/// A box with a leaning top, every corner off the grid, its edges through grid points, the whole
+/// turned `by` axes. The top leans by `(a, b)`, each 1 or −1.
+fn leaning(a: i128, b: i128, by: usize) -> [Plane; 6] {
+    let plane = |n: [i128; 3], d: i128| Plane::new(turn(n, by), d).unwrap();
+    [
+        plane([0, 0, -3], -1),
+        plane([-a, -b, 3], -16),
+        plane([0, -1, 0], 0),
+        plane([1, 0, 0], -6),
+        plane([0, 1, 0], -6),
+        plane([-1, 0, 0], 0),
+    ]
+}
+
+#[test]
+fn solids_off_the_grid_agree_with_their_planes() {
+    let span = |by: usize, k: usize| -> Vec<i64> {
+        // Height runs along whichever axis the turn sends z to.
+        if (k + by) % 3 == 2 {
+            (-2..=11).collect()
+        } else {
+            (-1..=7).collect()
+        }
+    };
+    let (mut inside, mut on) = (0, 0);
+    for (a, b) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
+        for by in 0..3 {
+            let planes = leaning(a, b, by);
+            let [base, top, s, e, n, w] = planes;
+            let corners = vec![
+                Corner::Planes([base, s, w]),
+                Corner::Planes([base, s, e]),
+                Corner::Planes([base, n, e]),
+                Corner::Planes([base, n, w]),
+                Corner::Planes([top, s, w]),
+                Corner::Planes([top, s, e]),
+                Corner::Planes([top, n, e]),
+                Corner::Planes([top, n, w]),
+            ];
+            let m = mesh(&hexahedron(corners, &planes));
+            let c = classifier(&m);
+            for &x in &span(by, 0) {
+                for &y in &span(by, 1) {
+                    for &z in &span(by, 2) {
+                        let q = p(x, y, z);
+                        let want = against_planes(&planes, q);
+                        assert_eq!(locate(&c, q), want, "{a} {b} {by} {q:?}");
+                        match want {
+                            Located::Winding(1) => inside += 1,
+                            Located::OnSurface => on += 1,
+                            Located::Winding(_) => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(inside > 1000 && on > 1000, "{inside} {on}");
+}
+
+#[test]
+fn a_corner_above_all_its_neighbours_is_on_the_surface() {
+    let m = mesh(&soup(
+        vec![g(0, 0, 5), g(6, 1, 0), g(1, 6, 0), g(9, 9, 9)],
+        &[&[0, 2, 1], &[0, 1, 3], &[1, 2, 3], &[2, 0, 3]],
+    ));
+    let c = classifier(&m);
+    for q in [p(9, 9, 9), p(0, 0, 5), p(6, 1, 0), p(1, 6, 0)] {
+        assert_eq!(locate(&c, q), Located::OnSurface, "{q:?}");
+    }
 }
 
 #[test]
