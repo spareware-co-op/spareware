@@ -964,7 +964,8 @@ fn whole_overlap(
 }
 
 /// Two arcs of one circle. A point of `b` at t lies on `a` at φ ± t, with φ where `b` starts its
-/// turns, so each of `b`'s ranges a whole turn apart can lie on `a`.
+/// turns, + when the two turn the same way (their normals agree), so each of `b`'s ranges a whole
+/// turn apart can lie on `a`.
 fn one_circle<const D: usize>(
     a: &Circle<D>,
     b: &Circle<D>,
@@ -976,13 +977,16 @@ fn one_circle<const D: usize>(
         return whole_overlap(s, t, meter);
     }
     let i = Interval::point;
-    let (_, [_, ay, _]) = a.frame().unit_vectors()?;
-    let (_, [bx, by, _]) = b.frame().unit_vectors()?;
+    let (_, [_, _, an]) = a.frame().unit_vectors()?;
+    let (_, [bx, _, bn]) = b.frame().unit_vectors()?;
     let [c, e] = axes;
     let phi = turn(a, at(&bx, c)?, at(&bx, e)?, axes)?;
-    let way = at(&ay, c)?
-        .mul(at(&by, c)?)?
-        .add(at(&ay, e)?.mul(at(&by, e)?)?)?;
+    // One circle's planes are one plane, so the unit normals are equal or opposite: the product is
+    // near 1 or −1, never near 0. (The ŷ axes' product would be cos φ, which a turn alone flips.)
+    let way = at(&an, 0)?
+        .mul(at(&bn, 0)?)?
+        .add(at(&an, 1)?.mul(at(&bn, 1)?)?)?
+        .add(at(&an, 2)?.mul(at(&bn, 2)?)?)?;
     let sign = if way.lo() > 0.0 { 1.0 } else { -1.0 };
     let ends = [
         phi.add(i(sign)?.mul(i(t.0)?)?)?,

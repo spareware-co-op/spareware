@@ -5297,6 +5297,46 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "let sign = if way.lo() > 0.0 { 1.0 } else { -1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "way is the product of the two circles' unit normals, and one_circle is called only for two circles of one circle, whose planes are one plane: the normals are equal or opposite, so way is enclosed within a few steps of 1 or -1 and its lower bound is never 0.0, the one value where > and >= differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "let [low, high] = if sign > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is 1.0 or -1.0, set on the line before, never 0.0, the one value where > and >= differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in one_circle",
+      "line_text": "if lo.lo() < s.0 { s.0 } else { lo.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where lo.lo() equals s.0 both branches give the same double, so the start of the part is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "if hi.hi() > s.1 { s.1 } else { hi.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where hi.hi() equals s.1 both branches give the same double, so the end of the part is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "if start > end {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "start equals end only when an end of the enclosure of b's range on a, phi + sign t moved by whole turns, is exactly an end of a's domain. geom_num::interval widens every bound outward by a step, so where b truly ends at a's end the enclosure strictly holds that end and start < end; equality needs b's true end to lie past a's end by under a step, a miss. There the original reports the boundary touch its enclosure cannot rule out and the mutant reports nothing, which is the truth of the inputs; every touch and overlap that exists is reported alike."
     }
   ],
   "coverage_off": [

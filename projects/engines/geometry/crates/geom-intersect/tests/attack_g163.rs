@@ -928,3 +928,103 @@ fn a_line_and_a_conic_in_closed_form_take_only_its_work() {
     let twice = work(&infinite([1.0, -9.0], [0.0, 1.0]), &e);
     assert_eq!((miss, twice), (0, 6));
 }
+
+/// Each item of `r` as whether it is an overlap, and its parameter box's bounds, s then t.
+fn pieces(r: &Intersection) -> Vec<(bool, [f64; 4])> {
+    r.items()
+        .iter()
+        .map(|i| {
+            let s = i.at().spans();
+            (
+                matches!(i, Item::Overlap { .. }),
+                [s[0].lo(), s[0].hi(), s[1].lo(), s[1].hi()],
+            )
+        })
+        .collect()
+}
+
+/// `r`'s items are `want`'s, each bound within 2^-40.
+fn pieces_are(r: &Intersection, want: &[(bool, [f64; 4])]) {
+    let got = pieces(r);
+    assert_eq!(got.len(), want.len(), "{got:?}");
+    for ((o, g), (p, w)) in got.iter().zip(want) {
+        assert_eq!(o, p, "{got:?}");
+        assert!(
+            g.iter()
+                .zip(w)
+                .all(|(g, w)| (g - w).abs() < 2.0_f64.powi(-40)),
+            "{got:?}"
+        );
+    }
+}
+
+/// An arc of the circle about the origin of radius 5, its frame's x̂ along `x` and its normal along
+/// ±z as `n` is.
+fn turned(x: [f64; 2], n: f64, domain: (f64, f64)) -> CurveKind<2> {
+    let frame = Frame::new(x, [0.0, 0.0, n]).unwrap();
+    CurveKind::Circle(Circle::new([0.0, 0.0], 5.0, frame, domain).unwrap())
+}
+
+#[test]
+fn an_arc_of_one_circle_is_placed_by_its_turn_and_its_normal() {
+    // The upper half, 0 to π; parameters are in half-turns.
+    let a = turned([1.0, 0.0], 1.0, (0.0, 1.0));
+    // Turned by π, the same way round: the lower half, meeting a at its two ends.
+    pieces_are(
+        &meet(&a, &turned([-1.0, 0.0], 1.0, (0.0, 1.0))),
+        &[(false, [0.0, 0.0, 1.0, 1.0]), (false, [1.0, 1.0, 0.0, 0.0])],
+    );
+    // Turned by π/2: from π/2 to 3π/2, one with a on a's second quarter.
+    pieces_are(
+        &meet(&a, &turned([0.0, 1.0], 1.0, (0.0, 1.0))),
+        &[(true, [0.5, 1.0, 0.0, 0.5])],
+    );
+    // The other way round from π: the upper half again, run backwards.
+    pieces_are(
+        &meet(&a, &turned([-1.0, 0.0], -1.0, (0.0, 1.0))),
+        &[(true, [0.0, 1.0, 0.0, 1.0])],
+    );
+    // The other way round from 0: the lower half, meeting a at its two ends.
+    pieces_are(
+        &meet(&a, &turned([1.0, 0.0], -1.0, (0.0, 1.0))),
+        &[(false, [0.0, 0.0, 0.0, 0.0]), (false, [1.0, 1.0, 1.0, 1.0])],
+    );
+    // Four turns on: the same half, its parameters 8 more.
+    pieces_are(
+        &meet(&a, &turned([1.0, 0.0], 1.0, (8.0, 9.0))),
+        &[(true, [0.0, 1.0, 8.0, 9.0])],
+    );
+}
+
+#[test]
+fn a_whole_circle_and_an_arc_of_it_share_only_the_arc() {
+    let whole = turned([1.0, 0.0], 1.0, (0.0, 2.0));
+    let part = turned([1.0, 0.0], 1.0, (0.5, 1.75));
+    pieces_are(&meet(&part, &whole), &[(true, [0.5, 1.75, 0.5, 1.75])]);
+    pieces_are(&meet(&whole, &part), &[(true, [0.5, 1.75, 0.5, 1.75])]);
+    pieces_are(&meet(&whole, &whole), &[(true, [0.0, 2.0, 0.0, 2.0])]);
+}
+
+#[test]
+fn arcs_end_to_end_on_one_circle_touch_at_both_shared_ends() {
+    // b runs from π to 2π, so it meets a, 0 to π, at π and at 2π, which is a's 0.
+    let r = meet(
+        &turned([1.0, 0.0], 1.0, (0.0, 1.0)),
+        &turned([1.0, 0.0], 1.0, (1.0, 2.0)),
+    );
+    assert!(
+        r.items().iter().all(|i| matches!(
+            i,
+            Item::Point {
+                contact: PointContact::BoundaryTouch,
+                ..
+            }
+        )),
+        "{:?}",
+        r.items()
+    );
+    pieces_are(
+        &r,
+        &[(false, [0.0, 0.0, 2.0, 2.0]), (false, [1.0, 1.0, 1.0, 1.0])],
+    );
+}
