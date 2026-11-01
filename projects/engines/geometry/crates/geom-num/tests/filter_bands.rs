@@ -197,8 +197,9 @@ fn placed(spec: &Spec, inputs: &Inputs, name: &'static str, target: f64, near: f
     None
 }
 
-/// Runs `spec`, and fails unless every term not excused was tested.
-fn run(spec: &Spec, rng: &mut Rng, cases: u64) {
+/// Runs `spec`, and says what is wrong with each term not excused that was not tested, or with one
+/// excused that was.
+fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
     let error = error_of(spec.module);
     let terms = terms_of(spec.module);
     let mut groups: Vec<(&str, u32)> = Vec::new();
@@ -277,30 +278,31 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) {
             }
         }
     }
+    let mut problems = Vec::new();
     for (k, (term, _)) in terms.iter().enumerate() {
-        let idle = spec.idle.iter().find(|(t, _)| t == term);
-        println!(
-            "{} {term}: refused {}, leaked {}, answered {}{}",
-            spec.name,
-            refused[k],
-            leaked[k],
-            answered[k],
-            if idle.is_some() { " (idle)" } else { "" }
-        );
-        if idle.is_none() {
-            assert!(refused[k] > 0, "{}: no input tested {term}", spec.name);
-            // The bound covers the filter's whole error and the rounding of its inputs usually takes
-            // only part of it, so some answers near it are right: the most that can.
-            assert!(
-                leaked[k] <= refused[k],
-                "{}: the filter answered inside {term}'s bound",
-                spec.name
-            );
-            assert!(answered[k] > 0, "{}: nothing answered past {term}", spec.name);
-        } else {
-            assert_eq!(refused[k], 0, "{}: {term} is not idle", spec.name);
+        let idle = spec.idle.iter().any(|(t, _)| t == term);
+        let name = spec.name;
+        let (no, leak, past) = (refused[k], leaked[k], answered[k]);
+        println!("{name} {term}: refused {no}, leaked {leak}, answered {past}, idle {idle}");
+        if idle {
+            if no > 0 {
+                problems.push(format!("{name}: {term} is not idle"));
+            }
+            continue;
+        }
+        if no == 0 {
+            problems.push(format!("{name}: no input tested {term}"));
+        }
+        // The bound covers the filter's whole error and the rounding of its inputs usually takes
+        // only part of it, so some answers near it are right: the most that can.
+        if leak > no {
+            problems.push(format!("{name}: the filter answered inside {term}'s bound"));
+        }
+        if past == 0 {
+            problems.push(format!("{name}: nothing answered past {term}"));
         }
     }
+    problems
 }
 
 fn get<const N: usize>(inputs: &Inputs, names: [&str; N]) -> [i128; N] {
@@ -418,7 +420,9 @@ fn each_term_of_each_scale_counts() {
     println!("seed: {seed:x}");
     let cases = if cfg!(debug_assertions) { 20_000 } else { 400_000 };
     let mut rng = Rng(seed);
+    let mut problems = Vec::new();
     for spec in SPECS {
-        run(spec, &mut rng, cases);
+        problems.extend(run(spec, &mut rng, cases));
     }
+    assert_eq!(problems, Vec::<String>::new());
 }
