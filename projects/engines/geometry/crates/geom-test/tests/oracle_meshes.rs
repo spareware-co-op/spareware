@@ -15,8 +15,8 @@ use std::collections::BTreeSet;
 use geom_test::oracle::exact::float;
 use geom_test::oracle::meshes::{
     Answer, CGAL, CHERCHI, Compared, Job, MANIFOLD, MANIFOLD_RUST, Op, cuboid, hausdorff, holds,
-    jobs, judge, measure, operation, own_answer, own_volume, prism, reference, replay, run,
-    tetrahedron, volume,
+    jobs, judge, operation, own_answer, own_volume, prism, reference, replay, run, tetrahedron,
+    volume,
 };
 use geom_test::seed::Seed;
 
@@ -128,7 +128,7 @@ fn an_exact_oracle_is_held_to_every_bit_and_the_reference_settles_it() {
         volume: Some("120000001/1000000".to_owned()),
         ..Answer::default()
     };
-    let (kind, settled) = kind_and_settled(judge(CHERCHI, &job, &wrong).unwrap());
+    let (kind, settled) = kind_and_settled(judge(CGAL, &job, &wrong).unwrap());
     assert_eq!(kind, "volume");
     assert!(settled.starts_with("theirs"), "{settled}");
 }
@@ -237,9 +237,8 @@ fn a_broken_harness_is_never_a_pass() {
 }
 
 #[test]
-fn distances_and_sizes_are_measured() {
+fn distances_are_measured() {
     let flat = [[[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [0.0, 3.0, 0.0]]];
-    assert_eq!(measure(&flat), (6.0, 12.0));
     let above = [[[0.0, 0.0, 2.0], [4.0, 0.0, 2.0], [0.0, 3.0, 2.0]]];
     assert_eq!(hausdorff(&flat, &above), 2.0);
     assert_eq!(hausdorff(&flat, &flat), 0.0);

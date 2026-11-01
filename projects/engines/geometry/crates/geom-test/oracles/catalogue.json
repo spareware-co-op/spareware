@@ -117,7 +117,7 @@
       "licence": "MIT AND LGPL-3.0-or-later",
       "run": "out-of-process",
       "state": "planned",
-      "checks": "Mesh booleans, compared exactly",
+      "checks": "Mesh booleans",
       "source": "https://github.com/gcherchi/InteractiveAndRobustMeshBooleans",
       "pin": null,
       "never_linked": [],
