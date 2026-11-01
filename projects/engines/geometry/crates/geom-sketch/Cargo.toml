@@ -27,6 +27,11 @@ geom-test = { path = "../geom-test" }
 name = "assemble"
 harness = false
 
+# Each constraint kind's residual and Jacobian (piece G218), the same way.
+[[bench]]
+name = "catalogue"
+harness = false
+
 # The 100,000-equation benchmark (piece G221), the same way.
 [[bench]]
 name = "structure"

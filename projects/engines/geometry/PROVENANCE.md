@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 37 | 35 |
+| PORT METHOD | 38 | 36 |
 | DEPEND | 2 | 2 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -52,6 +52,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | CGAL `FPU.h` | LGPL-3.0-or-later OR LicenseRef-Commercial | method only | <https://github.com/CGAL/cgal/blob/cbc3b81d4607c6f3a9d1f3a47d8709a2be3e6bfa/Number_types/include/CGAL/FPU.h> | `projects/engines/geometry/methods/cgal-nextafter-widening.md` | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its widening with `nextafter` when the rounding mode cannot change, which the Method above names. |
 | Clippy's `clippy_dev` token cursor | MIT OR Apache-2.0 | allowed | <https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs> | none | `projects/engines/geometry/crates/geom-test/src/map/errors.rs`: for the approach of finding declarations with a token cursor. No code copied. |
 | ezpz (Zoo) | MIT | allowed | <https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/README.md> | none | `projects/engines/geometry/crates/geom-sketch/src/text.rs`: for the idea of a problem file; none of its grammar is taken. |
+| ezpz (Zoo) | MIT | allowed | <https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/ezpz/src/constraints.rs> | none | `projects/engines/geometry/crates/geom-sketch/src/equation.rs`: for which kinds a sketch solver needs; its residuals are hand-differentiated and none is taken. |
 | Geogram `interval_nt.h` | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h> | none | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its round-to-nearest interval class `intervalRN`, which the Method above compares. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient2d.pck> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_lang.rs`: for the form of its predicate descriptions. No code copied. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.h> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs`: for its generated filters, a cross-check of the constants here. No code copied. |

@@ -474,6 +474,13 @@ ezpz (Zoo)
     projects/engines/geometry/crates/geom-sketch/src/text.rs
       for the idea of a problem file; none of its grammar is taken.
 
+ezpz (Zoo)
+  Licence:      MIT
+  Link:         https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/ezpz/src/constraints.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-sketch/src/equation.rs
+      for which kinds a sketch solver needs; its residuals are hand-differentiated and none is taken.
+
 Geogram `interval_nt.h`
   Licence:      BSD-3-Clause
   Link:         https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h

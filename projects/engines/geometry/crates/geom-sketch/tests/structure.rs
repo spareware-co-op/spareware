@@ -28,7 +28,8 @@
 use geom_num::{GridStep, P3};
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::model::{
-    Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Sketch, SketchError, Standing,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Sketch, SketchError,
+    Standing,
 };
 use geom_sketch::plane::{Lattice, PlaneFrame, SketchPlane};
 use geom_sketch::structure::{Analysis, Component, Graph, Part, analyse, substitute};
@@ -366,7 +367,7 @@ fn rectangle() -> (Vec<Entity>, Vec<Constraint>) {
             ConstraintKind::Distance {
                 a: p(0),
                 b: p(1),
-                distance: 40.0,
+                distance: Amount::Value(40.0),
             },
         ),
         constraint(
@@ -374,7 +375,7 @@ fn rectangle() -> (Vec<Entity>, Vec<Constraint>) {
             ConstraintKind::Distance {
                 a: p(1),
                 b: p(2),
-                distance: 30.0,
+                distance: Amount::Value(30.0),
             },
         ),
         constraint(
@@ -454,7 +455,7 @@ fn a_reference_dimension_adds_no_equation_and_a_coincidence_merges_all_of_it() {
             ConstraintKind::Distance {
                 a: p(0),
                 b: p(1),
-                distance: 5.0,
+                distance: Amount::Value(5.0),
             },
         )
     })

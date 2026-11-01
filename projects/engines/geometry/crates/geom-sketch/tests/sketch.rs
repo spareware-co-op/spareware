@@ -31,8 +31,8 @@
 use geom_num::{GridStep, P3};
 use geom_sketch::equation::{Assembly, measure};
 use geom_sketch::model::{
-    Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Side, Sketch, SketchError,
-    Standing, power_of_two,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Side, Sketch,
+    SketchError, Standing, power_of_two,
 };
 use geom_sketch::plane::{Lattice, PlaneFrame, Rotated, SketchPlane};
 use geom_sketch::text::{parse, write};
@@ -111,15 +111,15 @@ fn sampler() -> Sketch {
             ConstraintKind::Distance {
                 a: id(1, 0),
                 b: id(2, 0),
-                distance: 20.0,
+                distance: Amount::Value(20.0),
             },
         ),
         driving(
             14,
-            ConstraintKind::PointLine {
+            ConstraintKind::FromLine {
                 point: id(3, 0),
                 line: id(4, 0),
-                distance: 6.0,
+                distance: Amount::Value(6.0),
                 side: Side::Left,
             },
         ),
@@ -142,9 +142,9 @@ fn items_sort_by_their_ids_whatever_order_they_came_in() {
     let mut s = Sketch::new(plane());
     s.add_entity(point(3, 0.0, 0.0)).unwrap();
     s.add_entity(point(1, 0.0, 0.0)).unwrap();
-    s.add_entity(entity(id(2, 7), EntityKind::Reference))
+    s.add_entity(entity(id(2, 7), EntityKind::Reference { x: 0.0, y: 0.0 }))
         .unwrap();
-    s.add_entity(entity(id(2, 3), EntityKind::Reference))
+    s.add_entity(entity(id(2, 3), EntityKind::Reference { x: 0.0, y: 0.0 }))
         .unwrap();
     let order: Vec<ItemId> = s.entities().iter().map(|e| e.id).collect();
     assert_eq!(order, [id(1, 0), id(2, 3), id(2, 7), id(3, 0)]);
@@ -186,7 +186,7 @@ fn items_sort_by_their_ids_whatever_order_they_came_in() {
 fn references_must_resolve_and_values_be_sound() {
     let mut s = Sketch::new(plane());
     s.add_entity(point(1, 0.0, 0.0)).unwrap();
-    s.add_entity(entity(id(2, 0), EntityKind::Reference))
+    s.add_entity(entity(id(2, 0), EntityKind::Reference { x: 0.0, y: 0.0 }))
         .unwrap();
     let missing = id(9, 9);
     let refused = |s: &mut Sketch, kind: EntityKind| s.add_entity(entity(id(50, 0), kind));
@@ -480,7 +480,7 @@ fn references_must_resolve_and_values_be_sound() {
         s.add_constraint(c(ConstraintKind::Distance {
             a: p,
             b: p,
-            distance: 0.0
+            distance: Amount::Value(0.0)
         })),
         Err(SketchError::NotPositive)
     );
@@ -488,33 +488,33 @@ fn references_must_resolve_and_values_be_sound() {
         s.add_constraint(c(ConstraintKind::Distance {
             a: p,
             b: r,
-            distance: 1.0
+            distance: Amount::Value(1.0)
         })),
         Err(SketchError::WrongKind(r))
     );
     assert_eq!(
-        s.add_constraint(c(ConstraintKind::PointLine {
+        s.add_constraint(c(ConstraintKind::FromLine {
             point: p,
             line: r,
-            distance: 1.0,
+            distance: Amount::Value(1.0),
             side: Side::Left
         })),
         Err(SketchError::WrongKind(r))
     );
     assert_eq!(
-        s.add_constraint(c(ConstraintKind::PointLine {
+        s.add_constraint(c(ConstraintKind::FromLine {
             point: p,
             line: r,
-            distance: 0.0,
+            distance: Amount::Value(0.0),
             side: Side::Left
         })),
         Err(SketchError::NotPositive)
     );
     assert_eq!(
-        s.add_constraint(c(ConstraintKind::PointLine {
+        s.add_constraint(c(ConstraintKind::FromLine {
             point: r,
             line: p,
-            distance: 1.0,
+            distance: Amount::Value(1.0),
             side: Side::Left
         })),
         Err(SketchError::WrongKind(r))
@@ -661,7 +661,7 @@ fn variables_are_laid_out_in_order_on_exact_scales() {
         },
     ))
     .unwrap();
-    s.add_entity(entity(id(8, 0), EntityKind::Reference))
+    s.add_entity(entity(id(8, 0), EntityKind::Reference { x: 0.0, y: 0.0 }))
         .unwrap();
     s.add_entity(line(9, 1, 1)).unwrap();
     s.add_entity(entity(
@@ -740,8 +740,8 @@ fn every_jacobian_entry_is_the_derivative_of_its_residual() {
     // Residuals at hand: the coincidence's two gaps, 5 and −3; the line's dy and dx, 5... as values.
     assert_eq!(a.residuals()[0], 5.0);
     assert_eq!(a.residuals()[1], -3.0);
-    assert_eq!(a.residuals()[2], 4.0 - 9.0);
-    assert_eq!(a.residuals()[3], 3.0 - 13.0);
+    assert_eq!(a.residuals()[2], 9.0 - 4.0);
+    assert_eq!(a.residuals()[3], 13.0 - 3.0);
     assert_eq!(a.residuals()[4], (125.0 - 400.0) / 40.0);
     assert_eq!(a.residuals()[6], 8.0);
     for j in 0..a.variables().len() {
@@ -774,7 +774,7 @@ fn a_distance_residual_has_a_gradient_of_length_one_at_its_solution() {
         ConstraintKind::Distance {
             a: id(1, 0),
             b: id(2, 0),
-            distance: 5.0,
+            distance: Amount::Value(5.0),
         },
     ))
     .unwrap();
@@ -796,10 +796,10 @@ fn a_singular_start_names_its_constraint() {
     s.add_entity(line(4, 1, 2)).unwrap();
     let c = driving(
         9,
-        ConstraintKind::PointLine {
+        ConstraintKind::FromLine {
             point: id(3, 0),
             line: id(4, 0),
-            distance: 1.0,
+            distance: Amount::Value(1.0),
             side: Side::Right,
         },
     );
@@ -865,7 +865,7 @@ fn a_reference_dimension_is_measured_and_never_assembled() {
             ConstraintKind::Distance {
                 a: id(1, 0),
                 b: id(2, 0),
-                distance: 99.0,
+                distance: Amount::Value(99.0),
             },
         )
     };
@@ -873,10 +873,10 @@ fn a_reference_dimension_is_measured_and_never_assembled() {
         standing: Standing::Reference,
         ..driving(
             6,
-            ConstraintKind::PointLine {
+            ConstraintKind::FromLine {
                 point: id(3, 0),
                 line: id(4, 0),
-                distance: 99.0,
+                distance: Amount::Value(99.0),
                 side: Side::Left,
             },
         )
@@ -893,10 +893,10 @@ fn a_reference_dimension_is_measured_and_never_assembled() {
     assert_eq!(measure(&s, &gap), Ok(3.4));
     let right = Constraint {
         id: id(7, 0),
-        kind: ConstraintKind::PointLine {
+        kind: ConstraintKind::FromLine {
             point: id(3, 0),
             line: id(4, 0),
-            distance: 99.0,
+            distance: Amount::Value(99.0),
             side: Side::Right,
         },
         ..gap
@@ -1038,7 +1038,7 @@ fn everything(rotated: bool) -> Sketch {
         },
     ))
     .unwrap();
-    s.add_entity(entity(id(4, 3), EntityKind::Reference))
+    s.add_entity(entity(id(4, 3), EntityKind::Reference { x: 0.0, y: 0.0 }))
         .unwrap();
     let line = id(2, 0);
     for (key, kind) in [
@@ -1050,24 +1050,24 @@ fn everything(rotated: bool) -> Sketch {
             ConstraintKind::Distance {
                 a,
                 b,
-                distance: 1234.5,
+                distance: Amount::Value(1234.5),
             },
         ),
         (
             4,
-            ConstraintKind::PointLine {
+            ConstraintKind::FromLine {
                 point: c,
                 line,
-                distance: 2.0,
+                distance: Amount::Value(2.0),
                 side: Side::Left,
             },
         ),
         (
             5,
-            ConstraintKind::PointLine {
+            ConstraintKind::FromLine {
                 point: c,
                 line,
-                distance: 3.0,
+                distance: Amount::Value(3.0),
                 side: Side::Right,
             },
         ),
@@ -1093,7 +1093,7 @@ fn everything(rotated: bool) -> Sketch {
         kind: ConstraintKind::Distance {
             a,
             b,
-            distance: 3.0,
+            distance: Amount::Value(3.0),
         },
         standing: Standing::Reference,
         priority: 255,

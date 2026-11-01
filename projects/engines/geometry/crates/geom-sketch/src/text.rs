@@ -3,7 +3,8 @@
 //!
 //! What it does: [`write`] prints a sketch: its plane, then each entity and constraint in authoring
 //! order, one to a line. [`parse`] reads that back. An id is written `sequence.key`; a number as the
-//! shortest decimal that reads back to the same double, so a grid value is a whole number of steps.
+//! shortest decimal that reads back to the same double, so a grid value is a whole number of steps;
+//! an amount as a number, or `@sequence.key` for a named scalar.
 //!
 //! ```text
 //! sketch v1
@@ -45,8 +46,8 @@ use core::str::SplitAsciiWhitespace;
 use geom_num::{GridStep, P3};
 
 use crate::model::{
-    Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Side, Sketch, SketchError,
-    Standing,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Side, Sketch,
+    SketchError, Standing,
 };
 use crate::plane::{Lattice, PlaneFrame, Rotated, SketchPlane};
 
@@ -77,6 +78,35 @@ fn put(out: &mut String, value: impl core::fmt::Display) -> Result<(), SketchErr
 
 fn put_id(out: &mut String, id: ItemId) -> Result<(), SketchError> {
     write!(out, " {}.{}", id.sequence, id.key).map_err(|_| SketchError::OutOfMemory)
+}
+
+fn put_amount(out: &mut String, amount: Amount) -> Result<(), SketchError> {
+    match amount {
+        Amount::Value(x) => put(out, x),
+        Amount::Named(id) => {
+            write!(out, " @{}.{}", id.sequence, id.key).map_err(|_| SketchError::OutOfMemory)
+        }
+    }
+}
+
+const fn side_name(side: Side) -> &'static str {
+    match side {
+        Side::Left => "left",
+        Side::Right => "right",
+    }
+}
+
+const fn outside_name(outside: bool) -> &'static str {
+    if outside { "outside" } else { "inside" }
+}
+
+/// A constraint's tag and the items it names.
+fn put_kind(out: &mut String, tag: &str, ids: &[ItemId]) -> Result<(), SketchError> {
+    put(out, tag)?;
+    for id in ids {
+        put_id(out, *id)?;
+    }
+    Ok(())
 }
 
 fn write_entity(out: &mut String, entity: &Entity) -> Result<(), SketchError> {
@@ -164,12 +194,17 @@ fn write_entity(out: &mut String, entity: &Entity) -> Result<(), SketchError> {
             put(out, turn)?;
             put(out, size)?;
         }
-        EntityKind::Reference => out.push_str(" reference"),
+        EntityKind::Reference { x, y } => {
+            out.push_str(" reference");
+            put(out, x)?;
+            put(out, y)?;
+        }
     }
     out.push('\n');
     Ok(())
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm for each kind")]
 fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), SketchError> {
     out.push_str("constraint");
     put_id(out, constraint.id)?;
@@ -179,50 +214,144 @@ fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), Ske
     });
     put(out, constraint.priority)?;
     match constraint.kind {
-        ConstraintKind::Coincident { a, b } => {
-            out.push_str(" coincident");
-            put_id(out, a)?;
-            put_id(out, b)?;
+        ConstraintKind::Coincident { a, b } => put_kind(out, "coincident", &[a, b])?,
+        ConstraintKind::Concentric { a, b } => put_kind(out, "concentric", &[a, b])?,
+        ConstraintKind::OnLine { point, line } => put_kind(out, "on-line", &[point, line])?,
+        ConstraintKind::OnCircle { point, circle } => put_kind(out, "on-circle", &[point, circle])?,
+        ConstraintKind::Midpoint { point, a, b } => put_kind(out, "midpoint", &[point, a, b])?,
+        ConstraintKind::Collinear { a, b } => put_kind(out, "collinear", &[a, b])?,
+        ConstraintKind::Horizontal { line } => put_kind(out, "horizontal", &[line])?,
+        ConstraintKind::Vertical { line } => put_kind(out, "vertical", &[line])?,
+        ConstraintKind::Parallel { a, b } => put_kind(out, "parallel", &[a, b])?,
+        ConstraintKind::Perpendicular { a, b } => put_kind(out, "perpendicular", &[a, b])?,
+        ConstraintKind::Turned { a, b, angle } => {
+            put_kind(out, "turned", &[a, b])?;
+            put_amount(out, angle)?;
         }
-        ConstraintKind::Horizontal { line } => {
-            out.push_str(" horizontal");
-            put_id(out, line)?;
-        }
-        ConstraintKind::Vertical { line } => {
-            out.push_str(" vertical");
-            put_id(out, line)?;
+        ConstraintKind::Heading { line, angle } => {
+            put_kind(out, "heading", &[line])?;
+            put_amount(out, angle)?;
         }
         ConstraintKind::Distance { a, b, distance } => {
-            out.push_str(" distance");
-            put_id(out, a)?;
-            put_id(out, b)?;
-            put(out, distance)?;
+            put_kind(out, "distance", &[a, b])?;
+            put_amount(out, distance)?;
         }
-        ConstraintKind::PointLine {
+        ConstraintKind::FromLine {
             point,
             line,
             distance,
             side,
         } => {
-            out.push_str(" point-line");
-            put_id(out, point)?;
-            put_id(out, line)?;
-            put(out, distance)?;
-            out.push_str(match side {
-                Side::Left => " left",
-                Side::Right => " right",
-            });
+            put_kind(out, "point-line", &[point, line])?;
+            put_amount(out, distance)?;
+            put(out, side_name(side))?;
+        }
+        ConstraintKind::FromCircle {
+            point,
+            circle,
+            distance,
+            outside,
+        } => {
+            put_kind(out, "point-circle", &[point, circle])?;
+            put_amount(out, distance)?;
+            put(out, outside_name(outside))?;
+        }
+        ConstraintKind::LinesApart {
+            a,
+            b,
+            distance,
+            side,
+        } => {
+            put_kind(out, "lines-apart", &[a, b])?;
+            put_amount(out, distance)?;
+            put(out, side_name(side))?;
+        }
+        ConstraintKind::Across { a, b, distance } => {
+            put_kind(out, "across", &[a, b])?;
+            put_amount(out, distance)?;
+        }
+        ConstraintKind::Upward { a, b, distance } => {
+            put_kind(out, "upward", &[a, b])?;
+            put_amount(out, distance)?;
+        }
+        ConstraintKind::Length { line, length } => {
+            put_kind(out, "length", &[line])?;
+            put_amount(out, length)?;
+        }
+        ConstraintKind::EqualLength { a, b } => put_kind(out, "equal-length", &[a, b])?,
+        ConstraintKind::Radius { circle, radius } => {
+            put_kind(out, "radius", &[circle])?;
+            put_amount(out, radius)?;
+        }
+        ConstraintKind::Diameter { circle, diameter } => {
+            put_kind(out, "diameter", &[circle])?;
+            put_amount(out, diameter)?;
+        }
+        ConstraintKind::EqualRadius { a, b } => put_kind(out, "equal-radius", &[a, b])?,
+        ConstraintKind::Offset {
+            from,
+            to,
+            by,
+            grows,
+        } => {
+            put_kind(out, "offset", &[from, to])?;
+            put_amount(out, by)?;
+            put(out, if grows { "grows" } else { "shrinks" })?;
+        }
+        ConstraintKind::Sweep { arc, angle } => {
+            put_kind(out, "sweep", &[arc])?;
+            put_amount(out, angle)?;
+        }
+        ConstraintKind::ArcLength { arc, length } => {
+            put_kind(out, "arc-length", &[arc])?;
+            put_amount(out, length)?;
+        }
+        ConstraintKind::TangentLine { line, circle, side } => {
+            put_kind(out, "tangent-line", &[line, circle])?;
+            put(out, side_name(side))?;
+        }
+        ConstraintKind::TangentCircles { a, b, outside } => {
+            put_kind(out, "tangent-circles", &[a, b])?;
+            put(out, outside_name(outside))?;
+        }
+        ConstraintKind::TangentAtEnd { line, arc, point } => {
+            put_kind(out, "tangent-at-end", &[line, arc, point])?;
+        }
+        ConstraintKind::ArcsTangentAtEnd { a, b, point } => {
+            put_kind(out, "arcs-tangent-at-end", &[a, b, point])?;
+        }
+        ConstraintKind::Symmetric { a, b, line } => put_kind(out, "symmetric", &[a, b, line])?,
+        ConstraintKind::SymmetricAbout { point, a, b } => {
+            put_kind(out, "symmetric-about", &[point, a, b])?;
+        }
+        ConstraintKind::Spaced { a, b, c } => put_kind(out, "spaced", &[a, b, c])?,
+        ConstraintKind::LinearPattern { a, b, c, d } => {
+            put_kind(out, "linear-pattern", &[a, b, c, d])?;
+        }
+        ConstraintKind::CircularPattern {
+            centre,
+            a,
+            b,
+            angle,
+        } => {
+            put_kind(out, "circular-pattern", &[centre, a, b])?;
+            put_amount(out, angle)?;
         }
         ConstraintKind::Fix {
             entity,
             slot,
             value,
         } => {
-            out.push_str(" fix");
-            put_id(out, entity)?;
+            put_kind(out, "fix", &[entity])?;
             put(out, slot)?;
             put(out, value)?;
         }
+        ConstraintKind::Linear { a, b, ratio, plus } => {
+            put_kind(out, "linear", &[a, b])?;
+            put(out, ratio)?;
+            put(out, plus)?;
+        }
+        ConstraintKind::Product { a, b, c } => put_kind(out, "product", &[a, b, c])?,
     }
     out.push('\n');
     Ok(())
@@ -302,11 +431,44 @@ impl<'t> Words<'t> {
 
     fn id(&mut self) -> Result<ItemId, SketchError> {
         let word = self.word()?;
+        self.id_of(word)
+    }
+
+    fn id_of(&self, word: &str) -> Result<ItemId, SketchError> {
         let (sequence, key) = word.split_once('.').ok_or(self.bad())?;
         Ok(ItemId::new(
             sequence.parse().map_err(|_| self.bad())?,
             key.parse().map_err(|_| self.bad())?,
         ))
+    }
+
+    fn amount(&mut self) -> Result<Amount, SketchError> {
+        let word = self.word()?;
+        if let Some(name) = word.strip_prefix('@') {
+            return Ok(Amount::Named(self.id_of(name)?));
+        }
+        let value: f64 = word.parse().map_err(|_| self.bad())?;
+        if value.is_finite() {
+            Ok(Amount::Value(value))
+        } else {
+            Err(self.bad())
+        }
+    }
+
+    fn side(&mut self) -> Result<Side, SketchError> {
+        match self.word()? {
+            "left" => Ok(Side::Left),
+            "right" => Ok(Side::Right),
+            _ => Err(self.bad()),
+        }
+    }
+
+    fn outside(&mut self) -> Result<bool, SketchError> {
+        match self.word()? {
+            "outside" => Ok(true),
+            "inside" => Ok(false),
+            _ => Err(self.bad()),
+        }
     }
 
     fn end(&mut self) -> Result<(), SketchError> {
@@ -423,7 +585,10 @@ fn read_entity(words: &mut Words<'_>) -> Result<Entity, SketchError> {
             turn: words.real()?,
             size: words.real()?,
         },
-        "reference" => EntityKind::Reference,
+        "reference" => EntityKind::Reference {
+            x: words.real()?,
+            y: words.real()?,
+        },
         _ => return Err(words.bad()),
     };
     words.end()?;
@@ -434,6 +599,7 @@ fn read_entity(words: &mut Words<'_>) -> Result<Entity, SketchError> {
     })
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm for each kind")]
 fn read_constraint(words: &mut Words<'_>) -> Result<Constraint, SketchError> {
     let id = words.id()?;
     let standing = match words.word()? {
@@ -447,27 +613,179 @@ fn read_constraint(words: &mut Words<'_>) -> Result<Constraint, SketchError> {
             a: words.id()?,
             b: words.id()?,
         },
+        "concentric" => ConstraintKind::Concentric {
+            a: words.id()?,
+            b: words.id()?,
+        },
+        "on-line" => ConstraintKind::OnLine {
+            point: words.id()?,
+            line: words.id()?,
+        },
+        "on-circle" => ConstraintKind::OnCircle {
+            point: words.id()?,
+            circle: words.id()?,
+        },
+        "midpoint" => ConstraintKind::Midpoint {
+            point: words.id()?,
+            a: words.id()?,
+            b: words.id()?,
+        },
+        "collinear" => ConstraintKind::Collinear {
+            a: words.id()?,
+            b: words.id()?,
+        },
         "horizontal" => ConstraintKind::Horizontal { line: words.id()? },
         "vertical" => ConstraintKind::Vertical { line: words.id()? },
+        "parallel" => ConstraintKind::Parallel {
+            a: words.id()?,
+            b: words.id()?,
+        },
+        "perpendicular" => ConstraintKind::Perpendicular {
+            a: words.id()?,
+            b: words.id()?,
+        },
+        "turned" => ConstraintKind::Turned {
+            a: words.id()?,
+            b: words.id()?,
+            angle: words.amount()?,
+        },
+        "heading" => ConstraintKind::Heading {
+            line: words.id()?,
+            angle: words.amount()?,
+        },
         "distance" => ConstraintKind::Distance {
             a: words.id()?,
             b: words.id()?,
-            distance: words.real()?,
+            distance: words.amount()?,
         },
-        "point-line" => ConstraintKind::PointLine {
+        "point-line" => ConstraintKind::FromLine {
             point: words.id()?,
             line: words.id()?,
-            distance: words.real()?,
-            side: match words.word()? {
-                "left" => Side::Left,
-                "right" => Side::Right,
+            distance: words.amount()?,
+            side: words.side()?,
+        },
+        "point-circle" => ConstraintKind::FromCircle {
+            point: words.id()?,
+            circle: words.id()?,
+            distance: words.amount()?,
+            outside: words.outside()?,
+        },
+        "lines-apart" => ConstraintKind::LinesApart {
+            a: words.id()?,
+            b: words.id()?,
+            distance: words.amount()?,
+            side: words.side()?,
+        },
+        "across" => ConstraintKind::Across {
+            a: words.id()?,
+            b: words.id()?,
+            distance: words.amount()?,
+        },
+        "upward" => ConstraintKind::Upward {
+            a: words.id()?,
+            b: words.id()?,
+            distance: words.amount()?,
+        },
+        "length" => ConstraintKind::Length {
+            line: words.id()?,
+            length: words.amount()?,
+        },
+        "equal-length" => ConstraintKind::EqualLength {
+            a: words.id()?,
+            b: words.id()?,
+        },
+        "radius" => ConstraintKind::Radius {
+            circle: words.id()?,
+            radius: words.amount()?,
+        },
+        "diameter" => ConstraintKind::Diameter {
+            circle: words.id()?,
+            diameter: words.amount()?,
+        },
+        "equal-radius" => ConstraintKind::EqualRadius {
+            a: words.id()?,
+            b: words.id()?,
+        },
+        "offset" => ConstraintKind::Offset {
+            from: words.id()?,
+            to: words.id()?,
+            by: words.amount()?,
+            grows: match words.word()? {
+                "grows" => true,
+                "shrinks" => false,
                 _ => return Err(words.bad()),
             },
+        },
+        "sweep" => ConstraintKind::Sweep {
+            arc: words.id()?,
+            angle: words.amount()?,
+        },
+        "arc-length" => ConstraintKind::ArcLength {
+            arc: words.id()?,
+            length: words.amount()?,
+        },
+        "tangent-line" => ConstraintKind::TangentLine {
+            line: words.id()?,
+            circle: words.id()?,
+            side: words.side()?,
+        },
+        "tangent-circles" => ConstraintKind::TangentCircles {
+            a: words.id()?,
+            b: words.id()?,
+            outside: words.outside()?,
+        },
+        "tangent-at-end" => ConstraintKind::TangentAtEnd {
+            line: words.id()?,
+            arc: words.id()?,
+            point: words.id()?,
+        },
+        "arcs-tangent-at-end" => ConstraintKind::ArcsTangentAtEnd {
+            a: words.id()?,
+            b: words.id()?,
+            point: words.id()?,
+        },
+        "symmetric" => ConstraintKind::Symmetric {
+            a: words.id()?,
+            b: words.id()?,
+            line: words.id()?,
+        },
+        "symmetric-about" => ConstraintKind::SymmetricAbout {
+            point: words.id()?,
+            a: words.id()?,
+            b: words.id()?,
+        },
+        "spaced" => ConstraintKind::Spaced {
+            a: words.id()?,
+            b: words.id()?,
+            c: words.id()?,
+        },
+        "linear-pattern" => ConstraintKind::LinearPattern {
+            a: words.id()?,
+            b: words.id()?,
+            c: words.id()?,
+            d: words.id()?,
+        },
+        "circular-pattern" => ConstraintKind::CircularPattern {
+            centre: words.id()?,
+            a: words.id()?,
+            b: words.id()?,
+            angle: words.amount()?,
         },
         "fix" => ConstraintKind::Fix {
             entity: words.id()?,
             slot: words.whole()?,
             value: words.real()?,
+        },
+        "linear" => ConstraintKind::Linear {
+            a: words.id()?,
+            b: words.id()?,
+            ratio: words.real()?,
+            plus: words.real()?,
+        },
+        "product" => ConstraintKind::Product {
+            a: words.id()?,
+            b: words.id()?,
+            c: words.id()?,
         },
         _ => return Err(words.bad()),
     };

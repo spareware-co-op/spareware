@@ -7686,27 +7686,61 @@
       "layer": "10",
       "modules": [
         {
-          "cost": "[`Assembly::new`] sorts the Jacobian's entries once; [`Assembly::evaluate`] is linear in the constraints, with no allocation. No recursion.",
-          "does": "a kind implements [`Residual`]: its residual function, a length that is zero exactly when the constraint holds, and the part of the variables where it has no derivative. Its derivatives come from running that one function on dual numbers (`geom_num::dual`), never from a second text. [`Assembly`] reads a sketch's pattern once: which variables each driving constraint touches, in authoring order, and the Jacobian's stored entries. [`Assembly::evaluate`] then fills the residuals and the Jacobian, in the variables the solver sees: each divided by its power of two, so each column is multiplied by it. It checks the start against each singular set first.",
+          "cost": "[`fix_entity`] is linear in the sketch's variables and [`offset_chain`] in its pieces. No recursion.",
+          "does": "[`fix_entity`] gives the constraints that hold a whole entity at its values, and [`offset_chain`] the ones that tie each piece of a chain of lines and arcs to its offset copy: parallel and a distance apart for a line, concentric and a radius apart for an arc (chapter 15.2).",
           "family": [],
-          "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+          "file": "projects/engines/geometry/crates/geom-sketch/src/author.rs",
           "guarantees": [
-            "**Derivatives are generated.** A Jacobian entry is the dual number's, and tests hold it to central differences of the same residual (chapter 15.4).",
-            "**Every residual is a length, with a gradient of length one.** At the solution each residual equals the distance it measures to first order.",
-            "**Smooth forms.** A distance d uses (|PQ|² − d²) / 2d, a polynomial in the variables.",
-            "**Singular sets are declared.** [`Residual::singular`] is checked before differentiating, and a start on one is [`SketchError::Degenerate`], naming the constraint. The remedy of section 15.4, a perturbation derived from keys, is the solver's (G222).",
-            "**The pattern is structure alone.** [`Assembly::new`] reads no value, so it is built once for a sketch's structure and reused for every evaluation.",
-            "**Deterministic.** Constraints run in authoring order, and a NaN anywhere is [`SketchError::Numeric`] from the operation that made it."
+            "**Plain constraints.** A macro returns constraints a caller could write by hand, and changes nothing, so a refusal leaves the sketch as it was.",
+            "**Replayable.** Keys run up from the caller's `first_key`, in the pieces' order, so one replay authors one set of ids.",
+            "**One distance.** Every piece of an offset takes one [`Amount`], so changing a chain's distance is a change of value (chapter 15.7)."
           ],
-          "job": "Equations: each constraint's residual, written once over [`Scalar`], its singular set, and the assembly of a sketch's residuals and Jacobian.",
+          "job": "Authoring macros: the plain constraints a named operation writes for its caller.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/15-sketches.md"
             ],
-            "text": "section 15.4 (`projects/engines/geometry/architecture/15-sketches.md`), on the forward mode of `geom_num::dual`; the point-line distance as a cross product over a length, the standard form, H. S. M. Coxeter, *Introduction to Geometry*, 2nd ed., Wiley (1969), section 1.4."
+            "text": "section 15.2's offset chains and section 15.3's fixing (`projects/engines/geometry/architecture/15-sketches.md`)."
+          },
+          "path": "geom_sketch::author",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Assembly::new`] sorts the Jacobian's entries once; [`Assembly::evaluate_at`] is linear in the rows, with no allocation. No recursion.",
+          "does": "a kind implements [`Residual`]: its residual function, a length that is zero exactly when the constraint holds, and the part of its inputs where it has no derivative. Its derivatives come from running that one function on dual numbers (`geom_num::dual`), never from a second text. A kind's inputs are [`Slot`]s: a sketch variable, or a constant, such as a dimension's value or the characteristic length of an angle, which carries no derivative. A dimension given as a named scalar is the same kind with a variable in that slot. [`Assembly::new`] lays out the rows of the driving constraints and of each arc's two ends, in authoring order, and the Jacobian's stored entries. [`Assembly::evaluate`] then fills the residuals and the Jacobian, in the variables the solver sees: each divided by its power of two, so each column is multiplied by it. It checks the inputs against each singular set first.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+          "guarantees": [
+            "**Derivatives are generated.** A Jacobian entry is the dual number's, and tests hold it to central differences of the same residual, on every kind (chapter 15.4).",
+            "**Every residual is a length, with a gradient near one.** A distance's gradient has length one at its solution; an angle's or an incidence's is scaled by a characteristic length of its lines, a power of two fixed at the start, so one tolerance serves every constraint.",
+            "**Smooth forms.** A distance d uses (|PQ|² − d²) / 2d, a polynomial in the points. Square roots appear only in a point's distance from a line, and a sweep's length.",
+            "**Singular sets are declared.** [`Residual::singular`] is checked before differentiating, and an input on one is [`SketchError::Degenerate`], naming the constraint. The remedy of section 15.4, a perturbation derived from keys, is the solver's (G222).",
+            "**The rows are structure alone.** The Jacobian's pattern depends only on which items a sketch has. [`Assembly::rescale`] reads values, once, at the start of a solve; those lengths then stay fixed through it, so the residuals are one function of the variables.",
+            "**Deterministic.** Rows run in authoring order, and a NaN anywhere is [`SketchError::Numeric`] from the operation that made it."
+          ],
+          "job": "Equations: each constraint kind's residual, written once over [`Scalar`], its singular set, and the assembly of a sketch's residuals and Jacobian.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "https://archive.org/details/introductiontoge0000coxe"
+            ],
+            "text": "section 15.4 (`projects/engines/geometry/architecture/15-sketches.md`), on the forward mode of `geom_num::dual`; each residual is elementary coordinate geometry, H. S. M. Coxeter, *Introduction to Geometry*, 2nd ed., Wiley (1969), <https://archive.org/details/introductiontoge0000coxe>, chapter 1; the angle between two vectors as a rotated cross product, which has no square root and no branch."
           },
           "path": "geom_sketch::equation",
-          "provenance": [],
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/ezpz/src/constraints.rs",
+              "method_note": null,
+              "name": "ezpz (Zoo)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for which kinds a sketch solver needs; its residuals are hand-differentiated and none is taken.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -7720,7 +7754,8 @@
             "**Finite.** Every value is finite, and a radius, a length or a distance that must be positive is, or the item is refused.",
             "**References resolve.** An item that names another names one that exists and of the right kind, and an item with the id of another is refused.",
             "**Exact scales.** A variable's scale is a power of two, so dividing by it rounds nothing.",
-            "**Reference only where it means something.** Only a dimension can be a reference."
+            "**Reference only where it means something.** Only a dimension can be a reference.",
+            "**Root choices are stored.** A side, a sense or a tangency is a field of its constraint, and [`Sketch::drawn_side`], [`Sketch::drawn_outside`] and [`Sketch::drawn_touching_outside`] read it off a drawing by exact predicates, or say it cannot be read (chapter 15.3)."
           ],
           "job": "The sketch model: entities and their variables, constraints and their standing, in authoring order.",
           "method": {
@@ -7789,7 +7824,7 @@
         },
         {
           "cost": "linear in the text, and O(log n) a line for the sorted insert. No recursion.",
-          "does": "[`write`] prints a sketch: its plane, then each entity and constraint in authoring order, one to a line. [`parse`] reads that back. An id is written `sequence.key`; a number as the shortest decimal that reads back to the same double, so a grid value is a whole number of steps.",
+          "does": "[`write`] prints a sketch: its plane, then each entity and constraint in authoring order, one to a line. [`parse`] reads that back. An id is written `sequence.key`; a number as the shortest decimal that reads back to the same double, so a grid value is a whole number of steps; an amount as a number, or `@sequence.key` for a named scalar.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-sketch/src/text.rs",
           "guarantees": [
@@ -7826,7 +7861,7 @@
       "provenance": [],
       "sections": "15, and 22 for its errors, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216, G217 and G221 are done.",
+      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216, G217, G218 and G221 are done.",
       "summary": "Spare Kit geometry kernel: the constraint solver."
     },
     {
@@ -10283,6 +10318,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-sketch/src/text.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/ezpz/src/constraints.rs",
+      "method_note": null,
+      "name": "ezpz (Zoo)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-sketch/src/equation.rs"
       ]
     },
     {

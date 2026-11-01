@@ -24,7 +24,7 @@
 use geom_num::{GridStep, P3};
 use geom_sketch::equation::Assembly;
 use geom_sketch::model::{
-    Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Side, Sketch, Standing,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Side, Sketch, Standing,
 };
 use geom_sketch::plane::{Lattice, PlaneFrame, SketchPlane};
 use geom_sketch::text::{parse, write};
@@ -84,15 +84,15 @@ fn chain(rng: &mut Lcg, size: u64) -> Sketch {
                 ConstraintKind::Distance {
                     a: point(i - 1),
                     b: point(i),
-                    distance: 1.0 + rng.unit().abs() * 100.0,
+                    distance: Amount::Value(1.0 + rng.unit().abs() * 100.0),
                 },
             ),
             (
                 1,
-                ConstraintKind::PointLine {
+                ConstraintKind::FromLine {
                     point: point(i % size),
                     line: line(1 + (i * 3) % (size - 1)),
-                    distance: 1.0 + rng.unit().abs(),
+                    distance: Amount::Value(1.0 + rng.unit().abs()),
                     side,
                 },
             ),

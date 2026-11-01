@@ -45,8 +45,8 @@ use alloc::vec::Vec;
 
 use geom_run::WorkMeter;
 
-use crate::equation::touched_by;
-use crate::model::{Constraint, ConstraintKind, ItemId, Sketch, SketchError, Standing};
+use crate::equation::{Slot, inputs_of, rules_of};
+use crate::model::{ConstraintKind, ItemId, Sketch, SketchError};
 
 /// No node.
 const NONE: usize = usize::MAX;
@@ -213,26 +213,37 @@ fn join(parent: &mut [usize], a: usize, b: usize) -> Result<(), SketchError> {
     Ok(())
 }
 
-/// Whether a constraint only says two variables are equal, which pairs of its variables, and so
-/// how many there are: the stage 1 equalities of section 15.5.
-const fn pairs(constraint: &Constraint) -> Option<&'static [(usize, usize)]> {
-    match constraint.kind {
-        ConstraintKind::Coincident { .. } => Some(&[(0, 2), (1, 3)]),
-        ConstraintKind::Horizontal { .. } | ConstraintKind::Vertical { .. } => Some(&[(0, 1)]),
+/// Which of a kind's inputs it says are equal, if that is all it says: the stage 1 equalities of
+/// section 15.5.
+const fn pairs(kind: &ConstraintKind) -> Option<&'static [(usize, usize)]> {
+    match kind {
+        ConstraintKind::Coincident { .. } | ConstraintKind::Concentric { .. } => {
+            Some(&[(0, 2), (1, 3)])
+        }
+        ConstraintKind::Horizontal { .. }
+        | ConstraintKind::Vertical { .. }
+        | ConstraintKind::EqualRadius { .. } => Some(&[(0, 1)]),
         _ => None,
     }
 }
 
-/// How many equations a constraint has.
-const fn equations_of(constraint: &Constraint) -> usize {
-    match constraint.kind {
-        ConstraintKind::Coincident { .. } => 2,
-        _ => 1,
+/// The pairs a rule merges: none if an end is a constant, a reference point's, so that it stays an
+/// equation.
+fn merges(kind: &ConstraintKind, slots: &[Slot]) -> Option<&'static [(usize, usize)]> {
+    let variable = |i: usize| matches!(slots.get(i), Some(Slot::Variable(_)));
+    pairs(kind).filter(|list| list.iter().all(|&(a, b)| variable(a) && variable(b)))
+}
+
+/// The variable in `slots` at `i`.
+fn column(slots: &[Slot], i: usize) -> Result<usize, SketchError> {
+    match slots.get(i) {
+        Some(Slot::Variable(v)) => Ok(*v),
+        _ => Err(SketchError::Internal),
     }
 }
 
-/// The graph of `sketch`'s driving constraints, after merging the variables of every equality
-/// between two of them.
+/// The graph of `sketch`'s rules, the driving constraints and each arc's two ends, after merging the
+/// variables of every equality between two of them.
 ///
 /// # Errors
 ///
@@ -244,17 +255,13 @@ pub fn substitute(sketch: &Sketch) -> Result<Substituted, SketchError> {
     for (v, held) in parent.iter_mut().enumerate() {
         *held = v;
     }
-    let mut touched = Vec::new();
-    for constraint in sketch.constraints() {
-        if constraint.standing != Standing::Driving {
-            continue;
-        }
-        if let Some(list) = pairs(constraint) {
-            touched.clear();
-            touched_by(sketch, constraint, &variables, &mut touched)?;
-            for &(a, b) in list {
-                join(&mut parent, get(&touched, a)?, get(&touched, b)?)?;
-            }
+    let rules = rules_of(sketch)?;
+    let mut slots = Vec::new();
+    for (_, kind) in &rules {
+        slots.clear();
+        inputs_of(sketch, kind, &variables, &mut slots)?;
+        for &(a, b) in merges(kind, &slots).unwrap_or(&[]) {
+            join(&mut parent, column(&slots, a)?, column(&slots, b)?)?;
         }
     }
     let mut merged = filled(count, NONE)?;
@@ -270,20 +277,21 @@ pub fn substitute(sketch: &Sketch) -> Result<Substituted, SketchError> {
     }
     let mut rows: Vec<Vec<usize>> = Vec::new();
     let mut owners = Vec::new();
-    for constraint in sketch.constraints() {
-        if constraint.standing != Standing::Driving || pairs(constraint).is_some() {
+    for (id, kind) in &rules {
+        slots.clear();
+        let equations = inputs_of(sketch, kind, &variables, &mut slots)?;
+        if merges(kind, &slots).is_some() {
             continue;
         }
-        touched.clear();
-        let equations = touched_by(sketch, constraint, &variables, &mut touched)?;
         let mut row = Vec::new();
-        for &v in &touched {
-            push(&mut row, get(&merged, v)?)?;
+        for slot in &slots {
+            if let Slot::Variable(v) = slot {
+                push(&mut row, get(&merged, *v)?)?;
+            }
         }
-        debug_assert_eq!(equations, equations_of(constraint));
         for _ in 0..equations {
             push(&mut rows, row.clone())?;
-            push(&mut owners, constraint.id)?;
+            push(&mut owners, *id)?;
         }
     }
     let graph = Graph::new(next_id, rows.iter().map(Vec::as_slice))?;

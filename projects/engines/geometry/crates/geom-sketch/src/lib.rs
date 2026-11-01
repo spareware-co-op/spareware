@@ -27,17 +27,20 @@
 //!
 //! - [`plane`]: sketch planes, their maps into 3D and the Gram metric (piece G216).
 //! - [`model`]: entities, variables and constraints, in authoring order (piece G217).
-//! - [`equation`]: each constraint's residual and singular set, and the Jacobian's assembly (piece
-//!   G217).
+//! - [`equation`]: each constraint's residual and singular set, and the Jacobian's assembly (pieces
+//!   G217 and G218).
+//! - [`author`]: the plain constraints a macro writes, for fixing an entity and for offset chains
+//!   (piece G218).
 //! - [`structure`]: substitution, components, matching and the Dulmage–Mendelsohn decomposition
 //!   (piece G221).
 //! - [`text`]: the `sketch v1` text form (piece G217).
 //!
 //! Status: built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227,
-//! G228, G230, G477, G478; G216, G217 and G221 are done.
+//! G228, G230, G477, G478; G216, G217, G218 and G221 are done.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
+pub mod author;
 pub mod equation;
 pub mod model;
 pub mod plane;
