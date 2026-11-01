@@ -257,6 +257,21 @@ fn told_apart(
     }
 }
 
+/// The names more than one of `lists` holds: each list is one operand's names of one arena.
+fn shared_names<'a>(lists: impl Iterator<Item = &'a [NameKey]>) -> BTreeSet<NameId> {
+    let mut seen = BTreeSet::new();
+    let mut shared = BTreeSet::new();
+    for list in lists {
+        let own: BTreeSet<NameId> = list.iter().map(|k| NameId::from_bytes(k.0)).collect();
+        for name in own {
+            if !seen.insert(name) {
+                shared.insert(name);
+            }
+        }
+    }
+    shared
+}
+
 /// An input edge a result's edge carries on: its operand and row, and whether its ends are the
 /// input's own.
 type EdgeSource = ((usize, u32), bool);
@@ -751,6 +766,7 @@ fn name_edges(
     alive: &mut BTreeSet<NameId>,
     mint: &mut Mint,
 ) -> Result<Rows, NamingError> {
+    let shared = shared_names(sources.operands.iter().map(|o| o.names.edges.as_slice()));
     let hits = edge_sources(merged, faces, inputs)?;
     let mut users: BTreeMap<(usize, u32), usize> = BTreeMap::new();
     for (source, _) in hits.iter().flatten() {
@@ -778,12 +794,15 @@ fn name_edges(
             made_from.extend(names.iter().copied());
         }
         let by = NameSet::new(around.iter().copied())?;
-        // Only a kept operand's edge keeps its name, and not where two brought one name.
-        let kept = |owner: usize| {
-            !faces.qualified && sources.operands.get(owner).is_some_and(|one| one.keeps)
+        // Only a kept operand's edge keeps its name, and not a name two operands brought: the
+        // rule is per name, so the wall's own edges keep theirs beside two doors of one type.
+        let kept = |owner: usize, row: u32| {
+            sources.operands.get(owner).is_some_and(|one| {
+                one.keeps && name_at(&one.names.edges, row).is_ok_and(|n| !shared.contains(&n))
+            })
         };
         let keeps = hit
-            .filter(|((owner, _), _)| kept(*owner))
+            .filter(|((owner, row), _)| kept(*owner, *row))
             .filter(|(source, _)| users.get(source) == Some(&1));
         let (name, origin) = if let Some(((owner, row), exact)) = keeps {
             let operand = sources.operands.get(owner).ok_or(NamingError::Broken)?;
@@ -830,6 +849,7 @@ fn name_vertices(
     alive: &mut BTreeSet<NameId>,
     mint: &mut Mint,
 ) -> Result<Rows, NamingError> {
+    let shared = shared_names(sources.operands.iter().map(|o| o.names.vertices.as_slice()));
     let mut around: Vec<BTreeSet<NameId>> = alloc::vec![BTreeSet::new(); merged.vertices.len()];
     let mut made_from = around.clone();
     for fin in &merged.fins {
@@ -856,10 +876,13 @@ fn name_vertices(
             let operand = sources.operands.get(place).ok_or(NamingError::Broken)?;
             if own.is_none()
                 && operand.keeps
-                && !faces.qualified
                 && let Some(row) = found_vertex(one, point)?
             {
-                own = Some(name_at(&operand.names.vertices, row)?);
+                // Not a name two operands brought (per name, as for edges).
+                let name = name_at(&operand.names.vertices, row)?;
+                if !shared.contains(&name) {
+                    own = Some(name);
+                }
             }
         }
         let (name, origin) = if let Some(own) = own {
