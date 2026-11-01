@@ -5691,6 +5691,14 @@
       "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in circle_circle",
+      "line_text": "let small_first = r <= q;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "small_first only says which circle Crossing::of measures the crossings from. Swapped, its height is the same: Kahan's Heron area (d + l + s)(l + s - d)(d - (l - s))(d + (l - s)) has the same factors with l - s negated, multiplied in another order. So the tangent, merged and two-crossing decisions and the count are the same, and the points, reached from the other centre by the foot, are the same up to the rounding of their enclosures. That rounding is all the smaller circle's side improves, which the crate does not promise."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
       "mutant": "replace > with >= in halves",
       "line_text": "let share = if whole > 0.0 {",

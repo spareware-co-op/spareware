@@ -1475,3 +1475,24 @@ fn parallel_lines_in_space_apart_stay_apart_in_the_plane_they_are_read_in() {
         ));
     }
 }
+
+#[test]
+fn circles_off_the_axes_are_compared_by_the_distance_of_their_centres() {
+    // (3, 4) and (9, 12) are 10 apart: radii 5 and 5 touch once, 5 and 4 miss, 5 and 6 cross. Every
+    // coordinate is nonzero, so each cross term of |c - e|² counts.
+    let a = circle([3.0, 4.0], 5.0);
+    let touch = meet(&a, &circle([9.0, 12.0], 5.0));
+    assert!(
+        matches!(
+            touch.items(),
+            [Item::Point {
+                contact: PointContact::IsolatedTangent,
+                ..
+            }]
+        ),
+        "{:?}",
+        touch.items()
+    );
+    is_empty(&meet(&a, &circle([9.0, 12.0], 4.0)));
+    assert_eq!(meet(&a, &circle([9.0, 12.0], 6.0)).items().len(), 2);
+}
