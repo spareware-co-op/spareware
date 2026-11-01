@@ -73,13 +73,20 @@ use geom_num::real::Real;
 use crate::cols::{Cols, add, at, at_mut, mul, sub};
 use crate::matrix::{LinalgError, Matrix, Work, cost3, finite, wide, zeros};
 use crate::qr::{householder, norm};
-use crate::rotation::{givens, hypot, rotate_slices};
+use crate::rotation::{TINY, UP, givens, hypot, rotate_slices};
 
 /// The unit roundoff, 2^−53.
 const U: f64 = f64::from_bits(0x3CA0_0000_0000_0000);
 
 /// Twice the unit roundoff, 2^−52: the relative size below which a superdiagonal entry is zero.
 const EPS: f64 = f64::from_bits(0x3CB0_0000_0000_0000);
+
+/// 2^−500: a matrix whose entries are all below this is lifted before it is factored.
+const LOW: f64 = f64::from_bits(0x20B0_0000_0000_0000);
+/// 2^600, which takes every double below [`LOW`] exactly to a normal one.
+const LIFT: f64 = f64::from_bits(0x6570_0000_0000_0000);
+/// 2^−600, which brings a lifted singular value back.
+const BACK: f64 = f64::from_bits(0x1A70_0000_0000_0000);
 
 /// The most sweeps one-sided Jacobi makes.
 pub const MAX_SWEEPS: usize = 64;
@@ -115,6 +122,7 @@ impl Svd {
     pub fn jacobi(a: &Matrix, work: &mut Work) -> Result<Svd, LinalgError> {
         let wide_a = a.rows() < a.cols();
         let mut w = Cols::of(a, wide_a)?;
+        let back = lift(&mut w)?;
         let (m, n) = (w.len(), w.count());
         let mut v = Cols::identity(n, n)?;
         jacobi_sweeps(&mut w, &mut v, work)?;
@@ -123,14 +131,24 @@ impl Svd {
             let sigma = norm(w.col(j)?.iter().copied())?;
             *at_mut(&mut s, j)? = sigma;
             if sigma > 0.0 {
+                // A subnormal sigma keeps too few bits to divide by, so such a column is first
+                // scaled by a power of two, which is exact.
+                let (up, length) = if sigma < TINY {
+                    (UP, norm(w.col(j)?.iter().map(|x| x * UP))?)
+                } else {
+                    (1.0, sigma)
+                };
                 for x in w.col_mut(j)? {
-                    *x = finite(*x / sigma)?;
+                    *x = finite(*x * up / length)?;
                 }
             }
         }
         let order = descending(&s)?;
         complete(&mut w, &s, &order)?;
         let _ = m;
+        for x in &mut s {
+            *x *= back;
+        }
         finish(&w, &v, &s, &order, wide_a)
     }
 
@@ -142,6 +160,7 @@ impl Svd {
     pub fn golub_kahan(a: &Matrix, work: &mut Work) -> Result<Svd, LinalgError> {
         let wide_a = a.rows() < a.cols();
         let mut w = Cols::of(a, wide_a)?;
+        let back = lift(&mut w)?;
         let (m, n) = (w.len(), w.count());
         work.charge(cost3(m, n, mul(n, 8)?).saturating_add(cost3(n, n, mul(n, 4)?)))?;
         let (mut d, mut e, mut uu, mut vv) = bidiagonalize(&mut w)?;
@@ -156,6 +175,9 @@ impl Svd {
             }
         }
         let order = descending(&d)?;
+        for x in &mut d {
+            *x *= back;
+        }
         finish(&uu, &vv, &d, &order, wide_a)
     }
 
@@ -266,6 +288,23 @@ fn jacobi_sweeps(w: &mut Cols, v: &mut Cols, work: &mut Work) -> Result<(), Lina
         }
     }
     Err(LinalgError::NoConvergence)
+}
+
+/// Lifts the columns of a matrix whose entries are all below [`LOW`] by 2^600, which is exact, and
+/// returns what brings its singular values back: rotations among subnormal entries keep too few
+/// bits to stay orthogonal. Any other matrix is left as it is, so its results do not change.
+fn lift(w: &mut Cols) -> Result<f64, LinalgError> {
+    for j in 0..w.count() {
+        if w.col(j)?.iter().any(|x| x.abs() >= LOW) {
+            return Ok(1.0);
+        }
+    }
+    for j in 0..w.count() {
+        for x in w.col_mut(j)? {
+            *x *= LIFT;
+        }
+    }
+    Ok(BACK)
 }
 
 /// Column indices in order of `s`, largest first, ties by index.

@@ -2203,6 +2203,39 @@ fn isolate_and_ball_classes_are_what_they_claim() {
     );
 }
 
+/// Every typical batch of `geom-format`'s benchmarks is full and succeeds: every key is made, every
+/// lookup hits, and a new version writes the one chunk its edit touched.
+#[test]
+fn format_typical_batches_all_succeed() {
+    use geom_bench::inputs::format as m;
+    use geom_bench::kernels::format as k;
+    let keys = m::cache_key(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::cache_key(&keys, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+
+    let lookups = m::memo_get(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::memo_get(&lookups, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+
+    let versions = m::next_version(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::next_version(&versions, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+    let (first, body) = &versions[0];
+    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    assert_eq!(first.next(body, &mut meter).unwrap().written().len(), 1);
+    for class in [Degenerate, Extreme] {
+        assert!(m::cache_key(class).is_empty());
+        assert!(m::memo_get(class).is_empty());
+        assert!(m::next_version(class).is_empty());
+    }
+}
+
 /// Runs `kernel` on `batch` and requires a full batch of `Ok` results, naming the first error.
 fn all_ok<T, R, E: core::fmt::Debug>(
     name: &str,
@@ -2285,6 +2318,47 @@ fn bvh_typical_batches_all_succeed() {
         &m::tree_build_query(Typical),
     );
     all_ok("cells_within", k::cells_within, &m::cells_within(Typical));
+}
+
+/// Every typical batch of `geom-topo`'s benchmarks (decision 32.44) edits every column and
+/// publishes every builder, and a column's write lands in its rows.
+#[test]
+fn topo_typical_batches_all_succeed() {
+    use geom_bench::inputs::topo as m;
+    use geom_bench::kernels::topo as k;
+    let columns = m::column_edit(Typical);
+    assert!(columns.iter().all(|(_, row, _)| (*row as usize) < m::ROWS));
+    assert!(columns.iter().all(|(values, _, _)| values.len() == m::ROWS));
+    all_ok("column_edit", k::column_edit, &columns);
+    all_ok("publish", k::publish, &m::publish(Typical));
+}
+
+/// Every typical batch of the attribute step's benchmark (decision 32.44) carries every value it
+/// should: two of every three entities live on.
+#[test]
+fn attributes_typical_batches_all_succeed() {
+    use geom_bench::inputs::attributes as m;
+    use geom_bench::kernels::attributes as k;
+    let batch = m::apply(Typical);
+    all_ok("apply", k::apply, &batch);
+    let mut out = Vec::new();
+    k::apply(&batch, &mut out);
+    assert!(out.iter().all(|r| *r == Ok(16)));
+}
+
+/// Every typical batch of the batch runner's benchmarks (decision 32.44) runs every item and
+/// gives every point, and each list of items has distinct keys.
+#[test]
+fn batch_typical_batches_all_succeed() {
+    use geom_bench::inputs::batch as m;
+    use geom_bench::kernels::batch as k;
+    all_ok("run_items", k::run_items, &m::run_items(Typical));
+    all_ok("curve_points", k::curve_points, &m::curve_points(Typical));
+    all_ok(
+        "surface_points",
+        k::surface_points,
+        &m::surface_points(Typical),
+    );
 }
 
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and

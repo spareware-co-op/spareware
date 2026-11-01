@@ -24,11 +24,11 @@ unicode-normalization = { version = "=0.1.26", default-features = false }
 [dev-dependencies]
 # Property tests only, never linked into the kernel (chapter 29: a development dependency).
 # MIT OR Apache-2.0. Without its default fork and timeout features, which pull in code that has no
-# WebAssembly (WASI) build, so the tests also run on wasm32-wasip1, as geom-run's do.
+# WebAssembly (WASI) build, so the tests also run on wasm32-wasip1.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 # The kernel's development crate, a development dependency only (chapter 28.1): the golden store,
-# its one SHA-256 and the seed every property test prints (pieces G19 and G28), its Rust lexer, so
-# the attack test reads this crate's code as rustc does, and its map, whose error catalogue the
+# its one SHA-256 and the seed every property test prints (pieces G19 and G28); its Rust lexer, so
+# the attack test reads this crate's code as rustc does; and its map, whose error catalogue the
 # attack test checks against the code.
 geom-test = { path = "../geom-test" }
 # Oracles for the CBOR encoder, tests only: ciborium-ll's head and float encoding (Apache-2.0) and
@@ -36,16 +36,16 @@ geom-test = { path = "../geom-test" }
 ciborium-ll = { version = "=0.2.2", default-features = false }
 ciborium-io = { version = "=0.2.2", default-features = false, features = ["alloc"] }
 half = { version = "=2.7.1", default-features = false }
-# JSON: the values the cbor2 oracle reads and writes (oracles/cbor2.py), and MAP.json's error
-# catalogue, which the attack test reads. MIT OR Apache-2.0; the version geom-test uses.
+# The JSON form of the values the cbor2 oracle reads and writes (oracles/cbor2.py). MIT OR
+# Apache-2.0.
 serde_json = "1.0.149"
 
-# The encoder and hash benchmarks (piece G86) and the contract's own costs (piece G82), with the
-# standard library's clock only: `cargo bench -p geom-op`.
+# The encoder and hash benchmarks (piece G86), with the standard library's clock only.
 [[bench]]
 name = "encode"
 harness = false
 
+# The contract's own costs, with the standard library's clock only: `cargo bench -p geom-op`.
 [[bench]]
 name = "contract"
 harness = false

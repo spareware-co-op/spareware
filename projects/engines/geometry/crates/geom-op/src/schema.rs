@@ -184,6 +184,9 @@ pub struct OpSchema {
     pub charges: &'static [Charge],
     /// Whether it has a batch entry with one result per item (chapter 10.1).
     pub batch: bool,
+    /// Whether its geometry does not depend on names, so that calls on equal geometry may share a
+    /// cache entry and have their names filled in afterwards (23.8).
+    pub name_free: bool,
     /// An example call and its result, in plain words and values.
     pub example: &'static str,
 }

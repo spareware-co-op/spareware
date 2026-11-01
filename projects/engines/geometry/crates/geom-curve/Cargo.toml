@@ -27,6 +27,12 @@ geom-test = { path = "../geom-test" }
 name = "kind"
 harness = false
 
+# Piece G104: a 10,000-item batch through geom-op's driver against single calls, and many points
+# per call against single evaluations, with the standard library's clock only.
+[[bench]]
+name = "batch"
+harness = false
+
 [[bench]]
 name = "analytic"
 harness = false

@@ -95,6 +95,8 @@ fn every_detail() -> Vec<OpErrorDetail> {
     .map(OpErrorDetail::from)
     .collect();
     details.extend(every_num_error().into_iter().map(OpErrorDetail::from));
+    // The batch driver's own family (piece G104).
+    details.push(geom_op::BatchDetail::RepeatedKey { key: [0; 16] }.into());
     details
 }
 
@@ -321,6 +323,7 @@ fn the_maps_error_catalogue_is_the_codes() {
     // Every detail with the base kind its `kind` function returns.
     let mut run = Vec::new();
     let mut num = Vec::new();
+    let mut batch = Vec::new();
     for detail in every_detail() {
         let debug = format!("{detail:?}");
         let variant = debug
@@ -333,6 +336,7 @@ fn the_maps_error_catalogue_is_the_codes() {
         match detail {
             OpErrorDetail::Run(_) => run.push(entry),
             OpErrorDetail::Num(_) => num.push(entry),
+            OpErrorDetail::Batch(_) => batch.push(entry),
             _ => panic!("a detail family this test does not know: {detail:?}"),
         }
     }
@@ -344,12 +348,14 @@ fn the_maps_error_catalogue_is_the_codes() {
     };
     assert_eq!(sorted(listed("RunDetail")), sorted(run));
     assert_eq!(sorted(listed("NumDetail")), sorted(num));
+    assert_eq!(sorted(listed("BatchDetail")), sorted(batch));
     assert_eq!(
         listed("OpErrorDetail"),
         [
             ("Run".to_owned(), Some("held detail".to_owned())),
             ("Num".to_owned(), Some("held detail".to_owned())),
             ("Make".to_owned(), Some("held detail".to_owned())),
+            ("Batch".to_owned(), Some("held detail".to_owned())),
             ("Query".to_owned(), Some("held detail".to_owned())),
         ]
     );

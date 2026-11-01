@@ -15,7 +15,9 @@
 //!    `geom_op::history` counts them) through each step since. Live descendants resolve as
 //!    `FollowedHistory`: the one, or every piece if the reference wants them all; several for a
 //!    reference that wants one are `Ambiguous`. A walk left with no descendant is `Deleted` by the
-//!    step that removed the last of them; a walk that needs a pruned step is `HistoryPruned`.
+//!    step that removed the last of them; a walk that needs a pruned step is `HistoryPruned`, and
+//!    so is a walk from a name a `PruneHistory` operation did not hold that meets a step it cut
+//!    ([`Step::Kept`], made by [`prune`](crate::prune::prune)).
 //! 3. A weak name resolves with `weak` set. A weak name left with no live descendant while names
 //!    that share its base are in the body is `WeakChanged`, with those names as candidates.
 //! 4. A reference that wants the carrier resolves to the carrier its entity, or every live
@@ -38,7 +40,8 @@
 //!   history alone, every set of names is in name order, and nothing depends on an address, a hash
 //!   map's order or the machine.
 //! - **Pruned is never Deleted.** A walk that reaches a pruned step while it still has names to
-//!   follow answers `HistoryPruned`, whatever the later steps hold (24.4).
+//!   follow answers `HistoryPruned`, whatever the later steps hold, and so does a walk from a name
+//!   that a step's `PruneHistory` operation did not hold (24.4).
 //! - **Generated is not followed.** Only modified images are descendants: an entity generated from
 //!   the referenced one is a new entity, not the referenced one in a new form.
 //! - **Unknown is never guessed.** A name the graph cannot classify, or that no recorded step and
@@ -245,6 +248,19 @@ pub enum Step {
         /// The `PruneHistory` operation, or `None` for a version shared without its history.
         by: Option<OpPath>,
     },
+    /// An operation step a `PruneHistory` operation cut down to what walks from the names it held
+    /// can meet (24.4; [`prune`](crate::prune::prune)): a walk from one of those names follows it
+    /// as the full step, and a walk from any other name answers `HistoryPruned` with `pruned_by`.
+    Kept {
+        /// The step.
+        by: OpPath,
+        /// What it recorded, cut down.
+        history: History,
+        /// The `PruneHistory` operation.
+        pruned_by: OpPath,
+        /// The names that operation's references held, in name order.
+        held: NameSet,
+    },
 }
 
 /// The element as the program has it: the body a reference resolves against.
@@ -361,25 +377,27 @@ fn walk(name: NameId, history: &[Step]) -> Walk {
         if current.is_empty() {
             break;
         }
-        match step {
+        let (by, history) = match step {
             Step::Pruned { by } => return Walk::Pruned(by.clone()),
-            Step::Recorded { by, history } => {
-                let relations = history.relations();
-                let mut next: Vec<NameId> = Vec::new();
-                for (from, to) in relations.modified() {
-                    if holds(&current, from) {
-                        next.push(to);
-                    }
-                }
-                next.sort_unstable();
-                next.dedup();
-                let deleted_here = relations.deleted().any(|d| holds(&current, d));
-                if next.is_empty() && deleted_here {
-                    deleted_by = Some(by.clone());
-                }
-                current = next;
+            Step::Kept {
+                pruned_by, held, ..
+            } if !holds(held.names(), name) => return Walk::Pruned(Some(pruned_by.clone())),
+            Step::Recorded { by, history } | Step::Kept { by, history, .. } => (by, history),
+        };
+        let relations = history.relations();
+        let mut next: Vec<NameId> = Vec::new();
+        for (from, to) in relations.modified() {
+            if holds(&current, from) {
+                next.push(to);
             }
         }
+        next.sort_unstable();
+        next.dedup();
+        let deleted_here = relations.deleted().any(|d| holds(&current, d));
+        if next.is_empty() && deleted_here {
+            deleted_by = Some(by.clone());
+        }
+        current = next;
     }
     if current.is_empty() {
         return deleted_by.map_or(Walk::Unknown, Walk::Deleted);

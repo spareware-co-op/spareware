@@ -2,8 +2,9 @@
 //! on `geom-curve`'s trimmed curves and stored as itself.
 //!
 //! What it does: each kind is a placement c + L·X(u, v) of an unplaced shape X, with L a stored
-//! 3 × 3 matrix (the identity when built), so every affine transform keeps the kind on the same
-//! parameters (c′ = M·c + t, L′ = M·L):
+//! 3 × 3 matrix (the identity when built) and c a stored point (when built, the origin, or a
+//! revolution's axis point a, about which X turns), so every affine transform keeps the kind on
+//! the same parameters (c′ = M·c + t, L′ = M·L):
 //!
 //! | Kind | X(u, v) | Parameters |
 //! | --- | --- | --- |
@@ -44,7 +45,9 @@ use alloc::vec::Vec;
 
 use geom_curve::moved::Motion;
 use geom_curve::tight::{self, point};
-use geom_curve::{CurveError, CurveKind, DerivativeBound, Frame, ParamCurve, ParamMap, Trimmed};
+use geom_curve::{
+    CurveError, CurveKind, DerivativeBound, Frame, NurbsForm, ParamCurve, ParamMap, Trimmed,
+};
 use geom_math::TypedTransform;
 
 use geom_num::interval::Interval;
@@ -813,6 +816,14 @@ fn circle(a: f64, b: f64, meter: &mut WorkMeter<'_>) -> Result<(Form1, f64), Cur
     ))
 }
 
+/// A rail as Taylor pieces on its own parameter, cut at its breaks.
+fn between(
+    rail: &Trimmed<3>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Changed<NurbsForm<3>>, CurveError> {
+    geom_curve::taylor::same_parameter_between(rail, &rail.breaks(), 9, 0.125, meter)
+}
+
 impl Swept {
     #[allow(
         clippy::too_many_lines,
@@ -917,8 +928,8 @@ impl Swept {
                         f2.deviation,
                     )
                 } else {
-                    let g1 = geom_curve::taylor::same_parameter(first, 9, 0.125, meter)?;
-                    let g2 = geom_curve::taylor::same_parameter(second, 9, 0.125, meter)?;
+                    let g1 = between(first, meter)?;
+                    let g2 = between(second, meter)?;
                     (
                         g1.value.curve,
                         g2.value.curve,
@@ -1030,6 +1041,33 @@ fn compatible_pair(
 /// The `ParamSurface` implementation of a swept kind, written once for the three.
 macro_rules! swept_surface {
     ($kind:ident, $variant:ident) => {
+        impl $kind {
+            /// The placement c + L·x the shape is moved by, (c, L) with L by rows: the identity
+            /// until a transform moves the surface.
+            #[must_use]
+            pub fn placement(&self) -> ([f64; 3], [[f64; 3]; 3]) {
+                (self.inner.place.c, self.inner.place.l)
+            }
+
+            /// The same shape placed by c + L·x instead (L by rows), as a transform leaves it:
+            /// what a stored surface is rebuilt from.
+            ///
+            /// # Errors
+            ///
+            /// [`CurveError::NotFinite`] for a value that is not finite.
+            pub fn placed(&self, c: [f64; 3], l: [[f64; 3]; 3]) -> Result<$kind, CurveError> {
+                if !c.iter().chain(l.iter().flatten()).all(|x| x.is_finite()) {
+                    return Err(CurveError::NotFinite);
+                }
+                Ok($kind {
+                    inner: Swept {
+                        place: Placement { c, l },
+                        ..self.inner.clone()
+                    },
+                })
+            }
+        }
+
         impl ParamSurface for $kind {
             fn domain(&self) -> ParamBox {
                 self.inner.domain
@@ -1208,6 +1246,22 @@ swept_surface!(Extrusion, Extrusion);
 swept_surface!(Ruled, Ruled);
 
 impl Revolution {
+    /// The profile, the axis direction and the frame, as [`Revolution::new`] took them.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] never: a revolution holds a revolution's shape.
+    pub fn shape(&self) -> Result<(&Trimmed<3>, [f64; 3], Frame<3>), CurveError> {
+        match &self.inner.shape {
+            Shape::Revolution {
+                profile,
+                axis,
+                frame,
+            } => Ok((profile, *axis, *frame)),
+            _ => Err(CurveError::Defect),
+        }
+    }
+
     /// The surface swept by `profile` turning about the axis through `axis` along the frame's
     /// normal, u in half-turns over `angles` (at most one turn), v the profile's parameter.
     ///
@@ -1228,7 +1282,13 @@ impl Revolution {
                 axis,
                 frame,
             },
-            place: IDENTITY,
+            // X turns w = P − a about the axis, so the surface is a + X: placed at the axis
+            // point (piece G69's law catalogue found it placed at the origin, the profile moved
+            // by −a).
+            place: Placement {
+                c: axis,
+                l: IDENTITY.l,
+            },
             domain,
         };
         inner.check()?;
@@ -1237,6 +1297,18 @@ impl Revolution {
 }
 
 impl Extrusion {
+    /// The profile and the direction, as [`Extrusion::new`] took them.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] never: an extrusion holds an extrusion's shape.
+    pub fn shape(&self) -> Result<(&Trimmed<3>, [f64; 3]), CurveError> {
+        match &self.inner.shape {
+            Shape::Extrusion { profile, direction } => Ok((profile, *direction)),
+            _ => Err(CurveError::Defect),
+        }
+    }
+
     /// The surface swept by `profile` moving along `direction`, u the profile's parameter and v
     /// over `along`.
     ///
@@ -1261,6 +1333,39 @@ impl Extrusion {
 }
 
 impl Ruled {
+    /// The two profiles and σ, the sign of v: +1 from [`Ruled::new`], −1 once reversed in v.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] never: a ruled surface holds a ruled surface's shape.
+    pub fn shape(&self) -> Result<(&Trimmed<3>, &Trimmed<3>, f64), CurveError> {
+        match &self.inner.shape {
+            Shape::Ruled {
+                first,
+                second,
+                sigma,
+            } => Ok((first, second, *sigma)),
+            _ => Err(CurveError::Defect),
+        }
+    }
+
+    /// The same surface with σ = `sigma`, as reversing in v leaves it: what a stored ruled surface
+    /// is rebuilt from.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Degenerate`] unless σ is +1 or −1.
+    pub fn with_sigma(&self, sigma: f64) -> Result<Ruled, CurveError> {
+        if sigma != 1.0 && sigma != -1.0 {
+            return Err(CurveError::Degenerate);
+        }
+        let mut inner = self.inner.clone();
+        if let Shape::Ruled { sigma: s, .. } = &mut inner.shape {
+            *s = sigma;
+        }
+        Ok(Ruled { inner })
+    }
+
     /// The ruled surface from `first` (v = 0) to `second` (v = 1), on their one interval; v over
     /// `along` (usually [0, 1]).
     ///

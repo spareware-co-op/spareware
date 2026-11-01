@@ -27,7 +27,8 @@
 //!   deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).
 //! - **Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale,
 //!   the frame carried, a mirror flipping the axial sign); any other transform gives the moved
-//!   NURBS form. A plane takes every affine map.
+//!   NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly
+//!   is exact: deviation 0 (chapter 7; piece G69).
 //! - **Exact split and reversal.**
 //!
 //! Method: the elementary surfaces of ISO 10303-42 (`plane`, `cylindrical_surface`,
@@ -556,6 +557,19 @@ macro_rules! round_kind {
                 self.round.sign
             }
 
+            /// The same surface with its axial sign negated, as reversing or mirroring leaves
+            /// it: what a stored surface whose sign is −1 is rebuilt from.
+            ///
+            /// # Errors
+            ///
+            /// Those of building the surface's terms.
+            pub fn flipped_axially(&self) -> Result<$kind, CurveError> {
+                $kind::build(Round {
+                    sign: -self.round.sign,
+                    ..self.round
+                })
+            }
+
             fn build(round: Round) -> Result<$kind, CurveError> {
                 round.check($which)?;
                 let terms = round_terms($which, &round)?;
@@ -887,6 +901,14 @@ macro_rules! round_surface {
                     return affine_image(&self.terms, self.round.domain, angular($which), &m);
                 }
                 let k = $kind::build(self.round.moved(&m)?)?;
+                if m.exact_for(&[self.round.center])? {
+                    // A grid transform moving the centre exactly carries the frame, and its unit
+                    // vectors, exactly too (piece G69).
+                    return Ok(Changed {
+                        value: SurfaceKind::$variant(k),
+                        deviation: 0.0,
+                    });
+                }
                 let image = image_terms(&self.terms, &m)?;
                 let deviation = k.terms.distance(&image, self.round.domain)?;
                 Ok(Changed {
@@ -1194,6 +1216,68 @@ fn affine_image(
         }),
         deviation,
     })
+}
+
+impl AffineSurface {
+    /// The surface c + Σ fᵢ(u)·gᵢ(v)·Wᵢ over `domain`, `angular` saying which parameters are
+    /// angles in half-turns (each such side at most one turn long): what a stored affine image is
+    /// rebuilt from, term for term.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] for a value that is not finite; [`CurveError::Degenerate`] for no
+    /// terms; [`CurveError::SpanOutside`] for a side of the domain that is not finite and ordered,
+    /// or an angular side longer than a turn.
+    pub fn from_terms(
+        center: [f64; 3],
+        terms: &[(Fun, Fun, [f64; 3])],
+        domain: ParamBox,
+        angular: (bool, bool),
+    ) -> Result<AffineSurface, CurveError> {
+        if terms.is_empty() {
+            return Err(CurveError::Degenerate);
+        }
+        let (u, v) = domain;
+        for (side, turn) in [(u, angular.0), (v, angular.1)] {
+            if turn {
+                check_turn(side)?;
+            } else {
+                check_finite(side)?;
+            }
+        }
+        let [c0, c1, c2] = center;
+        let mut list = Vec::with_capacity(terms.len());
+        for &(f, g, w) in terms {
+            list.push(Term::exact(f, g, w)?);
+        }
+        Ok(AffineSurface {
+            terms: Terms {
+                c: center,
+                ce: [point(c0)?, point(c1)?, point(c2)?],
+                terms: list,
+            },
+            domain,
+            angular,
+        })
+    }
+
+    /// The centre c.
+    #[must_use]
+    pub fn center(&self) -> [f64; 3] {
+        self.terms.c
+    }
+
+    /// The terms (fᵢ, gᵢ, Wᵢ), in order.
+    #[must_use]
+    pub fn terms(&self) -> Vec<(Fun, Fun, [f64; 3])> {
+        self.terms.terms.iter().map(|t| (t.u, t.v, t.w)).collect()
+    }
+
+    /// Which parameters are angles in half-turns, (u, v).
+    #[must_use]
+    pub fn angular(&self) -> (bool, bool) {
+        self.angular
+    }
 }
 
 impl ParamSurface for AffineSurface {

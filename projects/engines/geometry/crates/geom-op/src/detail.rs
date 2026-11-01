@@ -47,6 +47,7 @@ use geom_run::{Exceeded, Interrupted, ItemError, RunError};
 
 use geom_num::Exactness;
 
+use crate::batch::BatchDetail;
 use crate::evidence::Value;
 use crate::kind::ErrorKind;
 use crate::remedy::{Bound, Remedy};
@@ -64,6 +65,8 @@ pub enum OpErrorDetail {
     /// A failure of the Make and Transform families: primitives, transforms and patterns
     /// (`geom-make`, piece G101).
     Make(MakeDetail),
+    /// A batch that could not run its items (piece G104).
+    Batch(BatchDetail),
     /// A failure of a query (chapter 22; piece G102).
     Query(QueryDetail),
 }
@@ -76,6 +79,7 @@ impl OpErrorDetail {
             OpErrorDetail::Run(detail) => detail.kind(),
             OpErrorDetail::Num(detail) => detail.kind(),
             OpErrorDetail::Make(detail) => detail.kind(),
+            OpErrorDetail::Batch(detail) => detail.kind(),
             OpErrorDetail::Query(detail) => detail.kind(),
         }
     }
@@ -87,6 +91,7 @@ impl OpErrorDetail {
             OpErrorDetail::Run(detail) => detail.remedies(),
             OpErrorDetail::Num(detail) => detail.remedies(),
             OpErrorDetail::Make(detail) => detail.remedies(),
+            OpErrorDetail::Batch(detail) => detail.remedies(),
             OpErrorDetail::Query(detail) => detail.remedies(),
         }
     }
@@ -98,6 +103,7 @@ impl fmt::Display for OpErrorDetail {
             OpErrorDetail::Run(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Num(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Make(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Batch(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Query(detail) => fmt::Display::fmt(detail, f),
         }
     }

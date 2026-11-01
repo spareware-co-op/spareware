@@ -488,6 +488,13 @@ fn the_parser_finds_every_public_function_however_it_is_written() {
 /// it measures there, by module name.
 const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
+        "geom_format",
+        &[
+            ("cache", include_str!("../../geom-format/src/cache.rs")),
+            ("body", include_str!("../../geom-format/src/body.rs")),
+        ],
+    ),
+    (
         "geom_math",
         &[
             ("typed", include_str!("../../geom-math/src/typed.rs")),
@@ -522,6 +529,21 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
             ("tree", include_str!("../../geom-bvh/src/tree.rs")),
             ("cells", include_str!("../../geom-bvh/src/cells.rs")),
         ],
+    ),
+    (
+        "geom_topo",
+        &[
+            ("column", include_str!("../../geom-topo/src/column.rs")),
+            ("builder", include_str!("../../geom-topo/src/builder.rs")),
+        ],
+    ),
+    (
+        "geom_name",
+        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
+    ),
+    (
+        "geom_op",
+        &[("batch", include_str!("../../geom-op/src/batch.rs"))],
     ),
     (
         "geom_nurbs",

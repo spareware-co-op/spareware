@@ -178,6 +178,7 @@ const SCHEMA: OpSchema = OpSchema {
         Charge::new(Phase::new("edges"), "output edge", 1),
     ],
     batch: false,
+    name_free: false,
     example: "a box of 1 m",
 };
 

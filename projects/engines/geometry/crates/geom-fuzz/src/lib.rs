@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has twenty targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -12,11 +12,27 @@
 //! operation at every width; [`variants`] (G42), every variant of every generated exact path
 //! returns the exact value of its description, evaluated in big integers; [`arenas`] (G80),
 //! `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see each
-//! other's edits; [`make`] (G101), the primitives and transforms return only what the full checker passes, keep their laws,
-//! and refuse with a typed error; and [`planes`] (G123), `geom-poly`'s canonical planes and
-//! arrangement predicates give one entry to one plane and one order to any points or rays. The
-//! layout every target follows, and how each engine runs it locally and in CI,
-//! is in this crate's `README.md`.
+//! other's edits; [`attributes`] (G90), `geom-name`'s attribute step gives each output exactly
+//! what section 8.4's table gives; [`cbor`] (G91), `geom-format`'s strict CBOR decoder and its
+//! text form never panic, refuse inside their input and convert both ways bit for bit; [`cache`]
+//! (G105), `geom-format`'s memo store keeps to its bound, forgets the entry used longest ago first
+//! and answers only where the caller's budget covers the stored run; [`make`] (G101), the
+//! primitives and transforms return only what the full checker passes, keep their laws, and refuse
+//! with a typed error; [`sequence`] (G116), whole operation logs replay to the same hash and keep
+//! every law at every step; [`batch`] (G104), `geom-op`'s batch driver gives each item its own
+//! result, and the curve and surface kinds' many-point calls give the single calls' bits; [`cbor`]
+//! (G91), `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their
+//! input and convert both ways bit for bit; [`make`] (G101), the primitives and transforms return
+//! only what the full checker passes, keep their laws, and refuse with a typed error; [`make`]
+//! (G101), the primitives and transforms return only what the full checker passes, keep their
+//! laws, and refuse with a typed error; [`sequence`] (G116), whole operation logs replay to the
+//! same hash and keep every law at every step; [`cbor`] (G91), `geom-format`'s strict CBOR decoder
+//! and its text form never panic, refuse inside their input and convert both ways bit for bit; [`planes`] (G123), `geom-poly`'s canonical planes and
+//! arrangement predicates give one entry to one plane and one order to any points or rays; and
+//! [`variants`] (G42), every variant of every generated exact path returns the exact value of its
+//! description, evaluated in big integers. [`adversarial`] holds the generators aimed at chapter
+//! 28.5's hard cases, and [`robustness`] counts how many plain designs succeed. The layout every
+//! target follows, and how each engine runs it locally and in CI, is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -117,10 +133,26 @@
 //!   `bolero-honggfuzz` or `bolero-kani`).
 //! - `geom-gen` (MPL-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
+//! - `geom-format` and `geom-run` (MPL-2.0, ours), the code under test of the [`cbor`] target and
+//!   the work meter it reads with, and of the [`cache`] target with `geom-op`.
+//!   the work meter it reads with.
 //! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (MPL-2.0, ours), the code
 //!   under test of the [`arenas`] target and the values that fill its arenas.
+//! - `geom-name` and `geom-op` (MPL-2.0, ours), the code under test of
+//!   the [`attributes`] target, with `geom-topo`.
+//! - `geom-make`, `geom-check`, `geom-math`, `geom-op`, `geom-run` and `geom-topo` (MPL-2.0, ours),
+//!   the code under test of the [`make`] target and the checker and values it judges them by.
+//! - `geom-op`, `geom-curve`, `geom-surface`, `geom-nurbs` and `geom-run` (MPL-2.0, ours), the
+//!   code under test of the [`batch`] target.
+//! - `geom-format` (MPL-2.0, ours), the code under test of the [`cbor`] target, which reads with
+//!   `geom-run`'s work meter.
 //! - `geom-make`, `geom-check` and `geom-op` (MPL-2.0, ours), with the crates above, the code under
 //!   test of the [`make`] target and the checker it judges them by.
+//! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (MPL-2.0, ours), the code
+//!   under test of the [`arenas`] target and the values that fill its arenas.
+//! - `geom-format` (MPL-2.0, ours), the code under test of the [`cbor`] target.
+//! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
+//!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -137,8 +169,10 @@
 //!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
-//!   `num-bigint`, `num-integer`, `num-traits` and `autocfg`.
+//!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,
+//!   `dashu-ratio` and `static_assertions`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
+//! - Apache-2.0: `num-modular` (through `dashu-int`).
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
@@ -163,12 +197,27 @@
 
 use core::fmt;
 
+pub mod adversarial;
 pub mod arenas;
+pub mod attributes;
+pub mod batch;
+pub mod boxtree;
+pub mod cache;
+pub mod cbor;
+pub mod curves;
+pub mod linalg;
 pub mod make;
+pub mod maths;
+pub mod nurbs;
 pub mod orient2d;
 pub mod planes;
 pub mod predicates;
+pub mod robustness;
+pub mod roots;
 pub mod seeded;
+pub mod sequence;
+pub mod surfaces;
+pub mod transforms;
 pub mod variants;
 pub mod wide;
 

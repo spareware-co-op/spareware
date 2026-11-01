@@ -102,6 +102,7 @@ use core::cmp::Ordering;
 use crate::error::NumError;
 use crate::generated;
 use crate::grid::{COORD_BITS, COORD_MAX, Coord, P3, Rounded};
+use crate::predicate::filtered;
 use crate::sign::Sign;
 use crate::wide::{I256, I320, Wide};
 // Named in the documentation only; the code reaches them as `Wide<6>` and `Wide<8>`.
@@ -864,9 +865,9 @@ fn lpi_routed(l: &Lpi, s: &Plane) -> Option<Sign> {
     let ([ax, ay, az], ad) = (l.plane.n, l.plane.d);
     let ([bx, by, bz], bd) = (s.n, s.d);
     let (p, q) = (l.p, l.q);
-    let weight = generated::lpi_weight::filter(ax, ay, az, p, q)
+    let weight = filtered(|| generated::lpi_weight::filter(ax, ay, az, p, q))
         .or_else(|| generated::lpi_weight::exact(ax, ay, az, p, q))?;
-    let side = generated::lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q)
+    let side = filtered(|| generated::lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q))
         .or_else(|| generated::lpi_side::exact(ax, ay, az, ad, bx, by, bz, bd, p, q))?;
     Some(side.mul(weight))
 }
@@ -895,9 +896,11 @@ fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     let ([bx, by, bz], bd) = (q.n, q.d);
     let ([cx, cy, cz], cd) = (r.n, r.d);
     let ([sx, sy, sz], sd) = (s.n, s.d);
-    let side = generated::tpi_side::filter(
-        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
-    )
+    let side = filtered(|| {
+        generated::tpi_side::filter(
+            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+        )
+    })
     .or_else(|| {
         generated::tpi_side::exact(
             ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,

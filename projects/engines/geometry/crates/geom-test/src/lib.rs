@@ -42,9 +42,29 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`faults`]: checker fault injection (chapter 28.4; G110): valid bodies broken one fault at a
+//!   time, each caught with the right kind, and every valid body passed.
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
 //!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
 //!   proptest generators of valid histories and chains.
+//! - [`canonical`]: the canonical output of one case and its SHA-256, a fixture's golden hash
+//!   (28.13; G96): bodies, names, history, exactness and diagnostics, or an error's kind, entities
+//!   and evidence.
+//! - [`fixture`]: the stored test cases every failure ends as (28.16; G97): [`fixture::Fixture`],
+//!   its [`fixture::Expect`] per edition and operation versions and its [`fixture::Status`]; the
+//!   operation log in the native format; the runner's Pass, Fail and Improved; the operation-log
+//!   minimiser; what a pull request may do to a stored fixture; the fails-on-base list. The binary
+//!   `fixture` lists, checks and runs them.
+//! - [`oracle`]: differential testing against outside oracles (28.10; G113): the catalogue, the
+//!   exact-input writer, exact and bounded comparisons, signatures and the four-outcome triage, and
+//!   the first oracle, geomdl, on NURBS. The binary `oracle` writes the jobs and judges the answers;
+//!   every harness lives in the oracle repository.
+//! - [`corpus`]: the corpus register of 28.12 (G114): every outside corpus with its source, version,
+//!   SHA-256, licence and whether we may store it, the licence rules of 29.15 and 32.11, and the
+//!   hash-checked fetcher. The binary `corpus` lists, checks and fetches.
+//! - [`museum`]: the format museum (28.13, 24.6; G99): sample files and operation logs of every
+//!   released format version and edition, compiled in and held to their recorded hashes on every
+//!   target.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -98,6 +118,16 @@
 //!   definitions without reading `geom-nurbs`. `tests/nurbs_reference.rs` compares `geom-nurbs`
 //!   with it on every pull request: knot vectors exactly, points and changed curves within the
 //!   bounds `geom-nurbs` states.
+//!
+//! Piece G69 adds the law catalogue of section 28.3 for NURBS and the curve and surface kinds:
+//!
+//! - [`fixed`]: fixed-point numbers of 400 fractional bits with π, cos, sin, exp and square roots,
+//!   the higher precision of the catalogue's dense refutation sampler.
+//! - [`nurbs_reference::Patch`]: NURBS surfaces in exact rationals, the tensor product of two bases.
+//! - `tests/laws_nurbs.rs`, `tests/laws_curves.rs` and `tests/laws_surfaces.rs`: each law of 28.3's
+//!   NURBS and kinds rows as a seeded property test, every stated bound refuted, if it is wrong, by
+//!   a dense sample of exact or 400-bit values (`tests/truth`, each kind's definition written from
+//!   its documentation); fixed seeds on pull requests, fresh ones nightly (`kernel-nightly.yml`).
 //!
 //! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
@@ -169,9 +199,14 @@
 //! - `yaml-rust2` 0.13, a development dependency (G21), which reads
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
-//!   rationals of [`nurbs_reference`].
-//! - `geom-nurbs` and `geom-run` (MPL-2.0, ours), development dependencies (G57): the curves
-//!   `tests/nurbs_reference.rs` compares with the reference, and the work meter they take.
+//!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
+//! - `geom-nurbs` and `geom-run` (MPL-2.0, ours), development dependencies: the curves
+//!   `tests/nurbs_reference.rs` (G57) compares with the reference, the work meter they take, and
+//!   `oracle::geomdl` (G113) with the first outside oracle.
+//! - `geom-curve`, `geom-surface` and `geom-math` (MPL-2.0, ours), development dependencies (G69):
+//!   the kinds and transforms the law catalogue checks.
+//! - `geom-format` and `geom-run` (MPL-2.0, ours), dependencies (G97): a fixture's operation log is
+//!   a standalone native file, and the meter its readers take.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -183,7 +218,7 @@
 //!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `toml`, `toml_datetime`, `toml_parser`,
 //!   `toml_writer`, `serde_spanned`, `camino`, `cargo-platform`, `semver`, `thiserror`,
 //!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
-//!   `yaml-rust2`, `hashlink`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
+//!   `yaml-rust2`, `hashlink`, `hex`, `wait-timeout`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
 //!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
 //!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
 //!   `static_assertions`.
@@ -198,8 +233,13 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod canonical;
+pub mod corpus;
 pub mod coverage;
 pub mod deps;
+pub mod faults;
+pub mod fixed;
+pub mod fixture;
 pub mod foundation;
 pub mod golden;
 pub mod grid;
@@ -209,8 +249,10 @@ pub mod ledger;
 pub mod licence;
 pub mod map;
 pub mod miri;
+pub mod museum;
 pub mod mutants;
 pub mod nurbs_reference;
+pub mod oracle;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;

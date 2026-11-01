@@ -72,6 +72,26 @@ pub trait ParamCurve<const D: usize> {
     /// [`CurveError::ParameterOutside`] if `t` is not in the domain; [`CurveError::NotFinite`].
     fn point(&self, t: f64, side: Limit) -> Result<[f64; D], CurveError>;
 
+    /// The points at every parameter of `t`, into flat arrays (chapter 23.6): coordinate k of the
+    /// point at `t[i]` goes to `out[k·n + i]`, n = `t.len()` (all x values, then all y values, …),
+    /// and `results[i]` says whether it succeeded. Each point is [`ParamCurve::point`]'s at
+    /// `t[i]` and `side`, bit for bit; a parameter that fails gets [`ParamCurve::point`]'s error in
+    /// `results` and zeros in `out`, and fails no other ([`crate::flat::fill`]).
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::ArrayLength`] unless `results` holds n entries and `out` D·n values; then
+    /// nothing is written.
+    fn points(
+        &self,
+        t: &[f64],
+        side: Limit,
+        out: &mut [f64],
+        results: &mut [Result<(), CurveError>],
+    ) -> Result<(), CurveError> {
+        crate::flat::fill(out, results, t.iter().map(|&ti| self.point(ti, side)))
+    }
+
     /// The point and its derivatives at `t` into `out`: `out[k]` is the k-th derivative, for k up to
     /// `out.len()` − 1.
     ///

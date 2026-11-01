@@ -32,6 +32,8 @@ use geom_num::grid::{COORD_MAX, Coord, P2, P3};
 
 use crate::rng::{SplitMix64, seed_for};
 
+pub mod attributes;
+pub mod batch;
 pub mod bvh;
 pub mod crossing;
 pub mod curve;
@@ -39,6 +41,7 @@ pub mod dd;
 pub mod eft;
 pub mod exact_sum;
 pub mod exactness;
+pub mod format;
 pub mod generated;
 pub mod grid;
 pub mod growth;
@@ -58,6 +61,7 @@ pub mod rng;
 pub mod roots;
 pub mod sign;
 pub mod surface;
+pub mod topo;
 pub mod wide;
 pub mod wide32;
 

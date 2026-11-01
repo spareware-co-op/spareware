@@ -1036,3 +1036,117 @@ fn an_empty_body_publishes_by_name() {
     assert_eq!(body.outside(), ix(0));
     let _ = wall_outside();
 }
+
+/// Whether `b` shares each chunk of `a`.
+fn each<K, V>(a: &geom_topo::Column<K, V>, b: &geom_topo::Column<K, V>) -> Vec<bool> {
+    (0..a.chunks().count())
+        .map(|i| a.shares_chunk(b, i))
+        .collect()
+}
+
+/// Every chunk of every column of `a` that `b` shares, and every chunk there is.
+fn shared_chunks(a: &Arenas, b: &Arenas) -> (usize, usize) {
+    let mut shared = 0;
+    let mut all = 0;
+    let mut count = |here: Vec<bool>| {
+        all += here.len();
+        shared += here.iter().filter(|s| **s).count();
+    };
+    count(each(&a.regions.kind, &b.regions.kind));
+    count(each(&a.regions.first_shell, &b.regions.first_shell));
+    count(each(&a.shells.region, &b.shells.region));
+    count(each(&a.shells.next, &b.shells.next));
+    count(each(&a.shells.first_face, &b.shells.first_face));
+    count(each(&a.faces.shell, &b.faces.shell));
+    count(each(&a.faces.next, &b.faces.next));
+    count(each(&a.faces.surface, &b.faces.surface));
+    count(each(&a.faces.sense, &b.faces.sense));
+    count(each(&a.faces.first_loop, &b.faces.first_loop));
+    count(each(&a.faces.bound, &b.faces.bound));
+    count(each(&a.loops.face, &b.loops.face));
+    count(each(&a.loops.next, &b.loops.next));
+    count(each(&a.loops.first_fin, &b.loops.first_fin));
+    count(each(&a.fins.loop_, &b.fins.loop_));
+    count(each(&a.fins.next, &b.fins.next));
+    count(each(&a.fins.prev, &b.fins.prev));
+    count(each(&a.fins.edge, &b.fins.edge));
+    count(each(&a.fins.sense, &b.fins.sense));
+    count(each(&a.fins.radial, &b.fins.radial));
+    count(each(&a.fins.pcurve, &b.fins.pcurve));
+    count(each(&a.edges.first_fin, &b.edges.first_fin));
+    count(each(&a.edges.start, &b.edges.start));
+    count(each(&a.edges.end, &b.edges.end));
+    count(each(&a.edges.curve, &b.edges.curve));
+    count(each(&a.vertices.point, &b.vertices.point));
+    count(each(&a.points, &b.points));
+    count(each(&a.surfaces, &b.surfaces));
+    count(each(&a.curves, &b.curves));
+    count(each(&a.pcurves, &b.pcurves));
+    (shared, all)
+}
+
+/// A named wall, republished from its own arenas.
+fn republished() -> (Body, Body) {
+    let w = wall();
+    let body = publish(&w, &names(&w, 0)).unwrap();
+    let names = body.names().unwrap().clone();
+    let again = Builder {
+        arenas: body.arenas().clone(),
+    }
+    .publish_named(&names, body.kind(), body.outside(), &mut meter())
+    .unwrap();
+    (body, again)
+}
+
+#[test]
+fn republishing_a_body_shares_every_chunk_it_did_not_change() {
+    let (body, again) = republished();
+    assert_eq!(again, body);
+    let (shared, all) = shared_chunks(again.arenas(), body.arenas());
+    assert_eq!(shared, all);
+    assert!(all >= 26, "{all} chunks");
+}
+
+#[test]
+fn a_chunk_that_changed_stays_changed() {
+    let (body, _) = republished();
+    let mut arenas = body.arenas().clone();
+    let far =
+        geom_math::Box3::new(P3::new(-9, -9, -9).unwrap(), P3::new(9, 9, 9).unwrap()).unwrap();
+    arenas.faces.bound.set(ix(0), far).unwrap();
+    let names = body.names().unwrap().clone();
+    let edited = Builder { arenas }
+        .publish_named(&names, body.kind(), body.outside(), &mut meter())
+        .unwrap();
+    assert_eq!(edited.arenas().faces.bound.get(ix(0)), Some(&far));
+    let (shared, all) = shared_chunks(edited.arenas(), body.arenas());
+    assert_eq!(shared, all - 1);
+}
+
+/// Two curves that compare equal but differ in bits, swapped by name: comparing them would keep
+/// the first chunk, and with it the old order of the bits.
+#[test]
+fn a_pool_whose_rows_moved_shares_nothing_even_if_its_rows_compare_equal() {
+    let w = wall();
+    let body = publish(&w, &names(&w, 0)).unwrap();
+    let mut arenas = body.arenas().clone();
+    let mut signed = |zero: f64, row: u32| {
+        let c = CurveKind::Line(Line::new([zero, 0.0, 0.0], [1.0, 0.0, 0.0], (0.0, 1.0)).unwrap());
+        arenas.curves.set(ix(row), c).unwrap();
+    };
+    signed(0.0, 0);
+    signed(-0.0, 1);
+    let mut names = body.names().unwrap().clone();
+    names.edges.swap(0, 1);
+    let swapped = Builder { arenas }
+        .publish_named(&names, body.kind(), body.outside(), &mut meter())
+        .unwrap();
+    let chunk = swapped.arenas().curves.chunks().next().unwrap();
+    assert!(format!("{:?}", chunk[0]).contains("-0.0"), "{:?}", chunk[0]);
+    assert!(
+        !swapped
+            .arenas()
+            .curves
+            .shares_chunk(&body.arenas().curves, 0)
+    );
+}

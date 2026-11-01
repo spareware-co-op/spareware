@@ -7,8 +7,26 @@ publish.workspace = true
 license.workspace = true
 description = "Spare Kit geometry kernel, development only: fuzz harnesses and bounded proofs, run as tests on stable, under libFuzzer with cargo-bolero, in ClusterFuzzLite and under Kani."
 
+[features]
+# Reference mode (23.13; piece G106), for `replay-hashes`.
+reference = ["geom-test/reference"]
+
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The exact rationals of the nurbs target's oracle (Gate 2, 32.44), as geom-test's NURBS reference
+# uses them. MIT OR Apache-2.0, the version geom-test pins.
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+# The maths target's 400-bit fixed point (geom_test::fixed). MIT OR Apache-2.0.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+# The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.44). Ours,
+# MPL-2.0.
+geom-bvh = { path = "../geom-bvh" }
+geom-curve = { path = "../geom-curve" }
+geom-linalg = { path = "../geom-linalg" }
+geom-math = { path = "../geom-math" }
+geom-nurbs = { path = "../geom-nurbs" }
+geom-run = { path = "../geom-run" }
+geom-surface = { path = "../geom-surface" }
 geom-test = { path = "../geom-test" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
 geom-bench = { path = "../geom-bench", default-features = false }
@@ -19,19 +37,17 @@ geom-gen = { path = "../geom-gen" }
 # oracles come from (ours, MPL-2.0).
 geom-check = { path = "../geom-check", features = ["full"] }
 geom-make = { path = "../geom-make" }
-geom-math = { path = "../geom-math" }
-geom-op = { path = "../geom-op" }
-geom-run = { path = "../geom-run" }
-geom-topo = { path = "../geom-topo" }
 # The planes target (G123): geom-poly's planes and orders, under test (ours, MPL-2.0).
 geom-poly = { path = "../geom-poly" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
-# The arenas target (G80): geom-topo's arenas and builder, under test, and the kernel crates
-# whose values fill them (ours, MPL-2.0).
-geom-curve = { path = "../geom-curve" }
-geom-surface = { path = "../geom-surface" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
+# The code under test of the cbor target (G91), and the work meter it is read with (MPL-2.0, ours).
+# The code under test of the cbor target (G91; MPL-2.0, ours).
+geom-format = { path = "../geom-format" }
+geom-name = { path = "../geom-name" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

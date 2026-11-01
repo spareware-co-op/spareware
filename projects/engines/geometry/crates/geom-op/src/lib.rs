@@ -21,7 +21,9 @@
 //! [`OpErrorDetail`], with the entities involved, the [`Evidence`], plain words and the
 //! [`Remedy`]s that would make it succeed. [`OpContext::run`] runs an operation's body inside its
 //! context's budget, charging by its schema's [`Charge`] schedule, and publishes nothing once
-//! stopped. Every operation is also described as data by an [`OpSchema`].
+//! stopped. Every operation is also described as data by an [`OpSchema`]. A batch call runs the
+//! operation once per item through [`Batch`], each item its own operation at the batch's path plus
+//! the caller's key, with one result per item.
 //!
 //! ```
 //! use geom_num::NumError;
@@ -65,16 +67,18 @@
 //!
 //! Status: the context, the error base and its details for the parallel helper and the numbers
 //! layer, the exactness class and warnings of an output, operation identity and the schema types
-//! built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the
-//! canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their
-//! `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their laws and their
-//! composition ([`history`]) built (G88); the batch runner to come in G104, per-entity bounds in
+//! built (G82), and the batch driver (G104); budgets in the contract, the charge schedule and
+//! fallible reservations (G83); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built
+//! (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history
+//! records, their laws and their composition ([`history`]) built (G88); per-entity bounds to come in
 //! G143, the local-operation driver in G144 and preview precision in G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
+pub mod batch;
+pub mod canonical;
 pub mod cbor;
 pub mod context;
 pub mod detail;
@@ -90,6 +94,7 @@ pub mod remedy;
 pub mod run;
 pub mod schema;
 
+pub use batch::{Batch, BatchDetail, Key};
 pub use context::{OpContext, Precision};
 pub use detail::{MakeDetail, NumDetail, OpErrorDetail, QueryDetail, RunDetail};
 pub use error::OpError;
@@ -102,10 +107,11 @@ pub use history::{
 pub use id::{Label, NameId, OpId, OpPath};
 pub use kind::ErrorKind;
 pub use name::{
-    EdgeOrVertex, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal, PieceKey, Role,
-    RoleArg, Side, TopoName,
+    BLANK_OP, EdgeOrVertex, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet, Ordinal, PieceKey,
+    Role, RoleArg, Side, Stamp, TopoName,
 };
 pub use output::{Diagnostic, OpOutput};
 pub use remedy::{Bound, Remedy};
+pub use run::Tally;
 pub use run::{Charge, RUN, reserve};
 pub use schema::{Class, DiagnosticSpec, ErrorSpec, Family, Field, OpSchema, RoleSpec, Unit};

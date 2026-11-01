@@ -732,6 +732,69 @@ impl<T: Canonical> Canonical for Result<T, geom_linalg::LinalgError> {
     }
 }
 
+// `geom-topo`'s types (decision 32.44's count benchmarks for piece G80).
+
+impl Canonical for geom_topo::Builder {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_topo::TopoError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// The attribute step's types (decision 32.44's count benchmarks for piece G90).
+
+impl Canonical for crate::inputs::attributes::Scene {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_name::AttrError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-op`'s error (decision 32.44's count benchmarks for piece G104).
+
+impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
 
 impl<const D: usize> Canonical for geom_bvh::Aabb<D> {
@@ -776,6 +839,37 @@ impl<const D: usize> Canonical for geom_nurbs::Bounds<D> {
     fn encode(&self, h: &mut Sha256) {
         self.lo.encode(h);
         self.hi.encode(h);
+    }
+}
+
+impl Canonical for geom_format::cache::CacheKey {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&self.to_bytes());
+    }
+}
+
+impl Canonical for geom_format::content::ContentId {
+    fn encode(&self, h: &mut Sha256) {
+        self.alg().encode(h);
+        h.update(self.digest());
+    }
+}
+
+impl Canonical for geom_format::body::BodyVersion {
+    // A version is what it names.
+    fn encode(&self, h: &mut Sha256) {
+        self.content_id().encode(h);
+    }
+}
+
+impl Canonical for geom_topo::Body {
+    // A body is the bytes it stores: its content ID, or a mark for one that has no stored form.
+    fn encode(&self, h: &mut Sha256) {
+        let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+        geom_format::body::write_body(self, &mut meter)
+            .ok()
+            .map(|stored| stored.content_id())
+            .encode(h);
     }
 }
 
@@ -880,21 +974,6 @@ impl Canonical for geom_op::OpOutput<geom_make::Made> {
             }
         }
         u32::from(self.exactness.rank()).encode(h);
-    }
-}
-
-impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
-    fn encode(&self, h: &mut Sha256) {
-        match self {
-            Ok(v) => {
-                h.update(&[0]);
-                v.encode(h);
-            }
-            Err(e) => {
-                h.update(&[1]);
-                debug_text(e, h);
-            }
-        }
     }
 }
 

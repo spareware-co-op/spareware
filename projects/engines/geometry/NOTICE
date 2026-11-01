@@ -523,6 +523,13 @@ Geogram's PCK `_SOS` predicates
     projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs
       for its compile-time bit counting, a cross-check of the certificate here. No code copied.
 
+github-action-benchmark
+  Licence:      MIT
+  Link:         https://github.com/benchmark-action/github-action-benchmark/blob/84ec6ea748925b6580796c05ce7a1c8fd0d15f3b/README.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-bench/src/timings.rs
+      for keeping benchmark history in a branch of the repository it measures. No code copied.
+
 Gitiles
   Licence:      Apache-2.0
   Link:         https://github.com/google/gitiles/blob/e54582fdd2a8783a6078f3a25eb08bb622f2e497/java/com/google/gitiles/ViewFilter.java
@@ -709,6 +716,7 @@ PUBLISHED CRATES
 The published crates the kernel crates depend on (DEPEND, section 29.1). Their notices, and those of
 every other crate compiled into a shipped binary, go in the generated third-party notices file.
 
+  crc 3.4.0 (Apache-2.0 OR MIT), https://crates.io/crates/crc/3.4.0, named by projects/engines/geometry/crates/geom-format/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml

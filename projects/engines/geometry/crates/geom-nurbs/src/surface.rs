@@ -21,6 +21,11 @@
 //!   rational one within `γ_(14p+14q+5)` times the same sum over |w·P| divided by Σ `NU_i` `NV_j`
 //!   `w_ij`. Each inner sum carries `γ_(7q+1)`, and each product with a u basis value and the
 //!   outer sum add `γ_(6p)` and p + 1 roundings.
+//! - **Underflow.** These bounds are relative, so where a product falls below 2^−1022 (gradual
+//!   underflow) a rounding may also err by up to 2^−1075 absolutely: each bound gains n·2^−1074
+//!   for its count n of roundings (7p + 7q + 2 for a point, 7p + 7q + 6 or e below for a
+//!   derivative); for a rational surface, whose weights are taken in the normal range,
+//!   n·2^−1074·(1 + 1 / `Σ_i` `NU_i` `Σ_j` `NV_j`·`w_ij`) (piece G69).
 //! - **Derivatives.** A nonrational derivative is within `γ_(7p+7q+6)` · `Σ_i` `MU_(k,i)` `Σ_j`
 //!   `MV_(l,j)`·|`P_ij`|. A rational one is within `γ_e` · `MS_(k,l)`, e = (D + 1)(14p + 14q +
 //!   2D + 12), where `MS` is A4.4's recurrence run on magnitudes (every subtraction an addition,

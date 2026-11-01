@@ -187,11 +187,13 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 114] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 125] = [
+    ("aho-corasick", "Unlicense OR MIT", "MIT"),
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
     ("anyhow", "MIT OR Apache-2.0", "MIT"),
     ("arraydeque", "MIT/Apache-2.0", "MIT"),
     ("autocfg", "Apache-2.0 OR MIT", "MIT"),
+    ("base64", "MIT OR Apache-2.0", "MIT"),
     ("bit-set", "Apache-2.0 OR MIT", "MIT"),
     ("bit-vec", "Apache-2.0 OR MIT", "MIT"),
     ("bitflags", "MIT OR Apache-2.0", "MIT"),
@@ -210,6 +212,8 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 114] = [
     ("condtype", "MIT OR Apache-2.0", "MIT"),
     ("core_detect", "MIT/Apache-2.0", "MIT"),
     ("cpufeatures", "MIT OR Apache-2.0", "MIT"),
+    ("crc", "MIT OR Apache-2.0", "MIT"),
+    ("crc-catalog", "MIT OR Apache-2.0", "MIT"),
     ("crossbeam-deque", "MIT OR Apache-2.0", "MIT"),
     ("crossbeam-epoch", "MIT OR Apache-2.0", "MIT"),
     ("crossbeam-utils", "MIT OR Apache-2.0", "MIT"),
@@ -226,6 +230,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 114] = [
     ("errno", "MIT OR Apache-2.0", "MIT"),
     ("find-msvc-tools", "MIT OR Apache-2.0", "MIT"),
     ("fixedbitset", "MIT OR Apache-2.0", "MIT"),
+    ("float-ord", "MIT / Apache-2.0", "MIT"),
     ("getrandom", "MIT OR Apache-2.0", "MIT"),
     ("gungraun", "Apache-2.0 OR MIT", "MIT"),
     ("gungraun-common", "Apache-2.0 OR MIT", "MIT"),
@@ -248,6 +253,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 114] = [
         "MIT",
     ),
     ("memchr", "Unlicense OR MIT", "MIT"),
+    ("minimal-lexical", "MIT/Apache-2.0", "MIT"),
     ("num-bigint", "MIT OR Apache-2.0", "MIT"),
     ("num-integer", "MIT OR Apache-2.0", "MIT"),
     ("num-rational", "MIT OR Apache-2.0", "MIT"),
@@ -269,6 +275,8 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 114] = [
     ("rand_xoshiro", "MIT OR Apache-2.0", "MIT"),
     ("rayon", "MIT OR Apache-2.0", "MIT"),
     ("rayon-core", "MIT OR Apache-2.0", "MIT"),
+    ("regex", "MIT OR Apache-2.0", "MIT"),
+    ("regex-automata", "MIT OR Apache-2.0", "MIT"),
     ("regex-lite", "MIT OR Apache-2.0", "MIT"),
     ("regex-syntax", "MIT OR Apache-2.0", "MIT"),
     ("robust", "MIT OR Apache-2.0", "MIT"),
@@ -278,6 +286,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 114] = [
         "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
         "MIT",
     ),
+    ("rustversion", "MIT OR Apache-2.0", "MIT"),
     ("semver", "MIT OR Apache-2.0", "MIT"),
     ("serde", "MIT OR Apache-2.0", "MIT"),
     ("serde_core", "MIT OR Apache-2.0", "MIT"),
@@ -310,12 +319,14 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 114] = [
         "(MIT OR Apache-2.0) AND Unicode-3.0",
         "MIT AND Unicode-3.0",
     ),
+    ("unicode-segmentation", "MIT OR Apache-2.0", "MIT"),
     ("unty-next", "MIT OR Apache-2.0", "MIT"),
     (
         "wasip2",
         "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
         "MIT",
     ),
+    ("wait-timeout", "MIT/Apache-2.0", "MIT"),
     ("windows-link", "MIT OR Apache-2.0", "MIT"),
     ("windows-sys", "MIT OR Apache-2.0", "MIT"),
     (
