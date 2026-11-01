@@ -188,7 +188,7 @@ fn clear_of_slab(
 }
 
 /// A box around a patch.
-fn around(
+pub(crate) fn around(
     surface: &SurfaceKind,
     region: Region,
     meter: &mut WorkMeter<'_>,
@@ -216,7 +216,7 @@ pub(crate) fn may_be_parallel(a: &[Interval; 3], b: &[Interval; 3]) -> Result<bo
 type Read = (Vec<[Interval; 3]>, Vec<[Interval; 3]>);
 
 /// `a − b`.
-fn minus_box(a: &[Interval; 3], b: &[Interval; 3]) -> Result<[Interval; 3], NumError> {
+pub(crate) fn minus_box(a: &[Interval; 3], b: &[Interval; 3]) -> Result<[Interval; 3], NumError> {
     let [a0, a1, a2] = *a;
     let [b0, b1, b2] = *b;
     Ok([a0.sub(b0)?, a1.sub(b1)?, a2.sub(b2)?])
@@ -323,14 +323,14 @@ impl Field<3> for Edge<'_> {
 }
 
 /// Whether two parameter boxes of a pair overlap.
-fn same(a: &[Interval; 4], b: &[Interval; 4]) -> bool {
+pub(crate) fn same(a: &[Interval; 4], b: &[Interval; 4]) -> bool {
     a.iter()
         .zip(b)
         .all(|(x, y)| x.lo() <= y.hi() && y.lo() <= x.hi())
 }
 
 /// The start points of one settled pair, or `None` if they could not all be proven.
-fn starts_of(
+pub(crate) fn starts_of(
     first: &SurfaceKind,
     second: &SurfaceKind,
     pair: (Region, Region),
@@ -393,7 +393,7 @@ fn halved(region: Region, speed: [f64; 2], share: f64) -> Option<(Region, Region
 }
 
 /// The speeds of a patch along its parameters.
-fn speeds(
+pub(crate) fn speeds(
     surface: &SurfaceKind,
     region: Region,
     meter: &mut WorkMeter<'_>,

@@ -272,9 +272,15 @@
               "kind": "corpus",
               "piece": "G170",
               "why": "1 new count benchmark on geom-intersect's marching (decision 32.44): the branches of a sphere through a plane patch; no existing digest moved"
+            },
+            {
+              "sha256": "9c0f3d471e31b39dc2a038e37205a513ea11aa4fc0d57eecd0a05282ca194d9e",
+              "kind": "corpus",
+              "piece": "G171",
+              "why": "1 new count benchmark on geom-intersect's contact analysis (decision 32.44): a sphere resting on a plane patch. march_plate's digest moves with it: the march now pads each parameter's box at that parameter's speed, without which it could not walk a NURBS surface against a plane at grid scale."
             }
           ],
-          "sha256": "9c0f3d471e31b39dc2a038e37205a513ea11aa4fc0d57eecd0a05282ca194d9e"
+          "sha256": "b59060fccfa0cc11a8c2e21c0ef9e3a30750f66e442147425073903464bf184b"
         },
         {
           "id": "geom-nurbs/operations",

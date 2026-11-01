@@ -30,14 +30,18 @@ use common::holds;
 
 use geom_curve::Frame;
 use geom_fuzz::general::{
-    Case, MAX_INPUT_BYTES, Outcome, check, decode, harness, judge, judge_march, surface,
+    Case, MAX_INPUT_BYTES, Outcome, check, decode, harness, judge, judge_contact, judge_march,
+    surface,
 };
 use geom_fuzz::seeded;
-use geom_intersect::general::{Subdivided, subdivide};
+use geom_intersect::contact::Reading;
+use geom_intersect::general::{Settled, Subdivided, subdivide};
 use geom_intersect::march::march;
+use geom_intersect::result::{Coincidence, CurveContact, PointContact, StepsInterval, Unresolved};
+use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{ImplicitBound, Sphere, SurfaceKind};
+use geom_surface::{ImplicitBound, ParamSurface, Sphere, SurfaceKind};
 use geom_test::{Seed, SplitMix64};
 
 /// Random byte strings per `cargo test` run of the bolero leg. A subdivision takes tens of
@@ -193,4 +197,87 @@ fn a_march_is_held_to_its_laws() {
     traced.branches[0].vertices[0][3] = far;
     let law = judge_march(&plane, &other, &traced).unwrap_err();
     assert!(law.law.contains("both surfaces"), "{law}");
+}
+
+#[test]
+fn an_analysis_is_held_to_its_laws() {
+    let (first, second, _, _) = pair();
+    let (a, b) = (first.domain(), second.domain());
+    let point = |x: f64| Interval::point(x).unwrap();
+    let mid = |(lo, hi): (f64, f64)| point(lo / 2.0 + hi / 2.0);
+    let at = [mid(a.0), mid(a.1), mid(b.0), mid(b.1)];
+    let near = Interval::new(-1.0, 1.0).unwrap();
+    let judged = |r: Reading| judge_contact(&first, &second, &[r]);
+    let higher = Unresolved::HigherOrderContact;
+    let gap = StepsInterval::new(Steps(0), Steps(1)).unwrap();
+    let fine = [
+        Reading::Undecided {
+            first: a,
+            second: b,
+            why: higher,
+        },
+        // A contact read from its branches is a box, and its middle need not be on either surface.
+        Reading::Point {
+            at,
+            gap: near,
+            contact: PointContact::Singular { branches: 2 },
+        },
+        Reading::Overlap {
+            first: a,
+            second: b,
+            coincidence: Coincidence::Identical,
+        },
+    ];
+    for reading in fine {
+        assert!(judged(reading).is_ok());
+    }
+    let beyond = |r: ((f64, f64), (f64, f64))| ((r.0.0, r.0.1 + 1.0), r.1);
+    let broken = [
+        Reading::Point {
+            at,
+            gap: point(1.0),
+            contact: PointContact::Singular { branches: 2 },
+        },
+        Reading::Point {
+            at,
+            gap: near,
+            contact: PointContact::IsolatedTangent,
+        },
+        Reading::Point {
+            at,
+            gap: near,
+            contact: PointContact::Singular { branches: 4 },
+        },
+        Reading::Crossing(Settled {
+            first: a,
+            second: b,
+            starts: vec![at],
+        }),
+        Reading::Curve {
+            first: a,
+            second: b,
+            contact: CurveContact::Tangent {
+                band: Steps(2),
+                gap,
+            },
+        },
+        Reading::Overlap {
+            first: a,
+            second: b,
+            coincidence: Coincidence::Within(Steps(2)),
+        },
+        Reading::Undecided {
+            first: beyond(a),
+            second: b,
+            why: higher,
+        },
+        Reading::Undecided {
+            first: a,
+            second: beyond(b),
+            why: higher,
+        },
+    ];
+    for reading in broken {
+        assert!(judged(reading).is_err());
+    }
 }

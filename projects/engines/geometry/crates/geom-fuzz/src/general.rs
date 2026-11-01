@@ -1,5 +1,6 @@
 //! Fuzz target: `geom-intersect`'s subdivision leaves no crossing outside its settled or flagged
-//! pairs, and its marching stays on both surfaces, on any bytes.
+//! pairs, its marching stays on both surfaces, and its analysis of the flagged pairs says nothing
+//! the surfaces deny, on any bytes.
 //!
 //! What it does: [`decode`] turns a fuzzer's bytes into a [`Case`]: one of four surfaces on small
 //! lattice sizes, and a sphere or a plane through it. [`check`] subdivides the pair and holds the
@@ -14,15 +15,17 @@
 //!   the input that reaches it.
 //! - **A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing
 //!   no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd
-//!   count, a chord past its ceiling, an internal error, or a budget that changes an answer instead
-//!   of stopping it.
+//!   count, a chord past its ceiling, a contact whose point is on one surface only, a bound past
+//!   its ceiling, a region off its surface, an internal error, or a budget that changes an answer
+//!   instead of stopping it.
 //!
 //! Method: chapter 12.8's subdivision
 //! (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack
 //! (`projects/engines/geometry/architecture/28-testing.md`). The grid proves a crossing, so the law
 //! cannot be broken by a true answer.
 //!
-//! Cost: one subdivision, one budgeted rerun and one march, and [`CELLS`] squared evaluations.
+//! Cost: one subdivision, one budgeted rerun, one march and one analysis, and [`CELLS`] squared
+//! evaluations.
 
 #![allow(
     clippy::many_single_char_names,
@@ -31,13 +34,16 @@
 
 use geom_curve::Frame;
 use geom_intersect::IntersectError;
+use geom_intersect::contact::{Reading, analyse};
 use geom_intersect::general::{Subdivided, subdivide};
 use geom_intersect::march::{Traced, march};
+use geom_intersect::result::{Coincidence, CurveContact, PointContact};
+use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_nurbs::Limit;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{
-    Cone, Cylinder, ImplicitBound, ParamSurface, Plane, Sphere, SurfaceKind, Torus,
+    Cone, Cylinder, ImplicitBound, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind, Torus,
 };
 use geom_test::{ByteSource, Entropy};
 
@@ -322,6 +328,126 @@ pub fn judge_march(
     Ok(())
 }
 
+/// How far apart a parameter box's two surface points are, at the middle of each.
+fn apart_at(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    [a, b, c, d]: &[Interval; 4],
+) -> Result<f64, Finding> {
+    let mid = |x: &Interval| x.lo() / 2.0 + x.hi() / 2.0;
+    let p = on(first, mid(a), mid(b))?;
+    let q = on(second, mid(c), mid(d))?;
+    Ok(p.iter()
+        .zip(&q)
+        .fold(0.0, |sum, (x, y)| sum + (x - y) * (x - y))
+        .sqrt())
+}
+
+/// Whether `outer` holds `inner`.
+fn holds(outer: ParamBox, inner: ParamBox) -> bool {
+    let ((p, q), (r, s)) = outer;
+    let ((t, w), (x, y)) = inner;
+    p <= t && w <= q && r <= x && y <= s
+}
+
+/// The laws of an analysis: a contact's point is on both surfaces, a settled pair's starts are, a
+/// bound keeps within its ceiling, and every region lies on its surface.
+///
+/// # Errors
+///
+/// The first law `readings` breaks.
+pub fn judge_contact(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    readings: &[Reading],
+) -> Result<(), Finding> {
+    let lying_on = |a: ParamBox, b: ParamBox| {
+        if holds(first.domain(), a) && holds(second.domain(), b) {
+            Ok(())
+        } else {
+            Err(Finding::new("a reading lies on its surfaces", || {
+                format!("{a:?} {b:?}")
+            }))
+        }
+    };
+    let within = |steps: Steps| {
+        if steps <= Steps(exact_ceiling()) {
+            Ok(())
+        } else {
+            Err(Finding::new("a reading keeps within its ceiling", || {
+                format!("{steps:?}")
+            }))
+        }
+    };
+    for reading in readings {
+        match reading {
+            Reading::Point { at, gap, contact } => {
+                if !gap.contains(0.0) {
+                    return Err(Finding::new("a contact's gap may be zero", || {
+                        format!("{reading:?}")
+                    }));
+                }
+                // A contact read from a cluster's branches is a box, not a point.
+                let tight = matches!(
+                    contact,
+                    PointContact::IsolatedTangent | PointContact::Singular { branches: 4 }
+                );
+                if tight && apart_at(first, second, at)? > REACH {
+                    return Err(Finding::new("a contact is on both surfaces", || {
+                        format!("{reading:?}")
+                    }));
+                }
+            }
+            Reading::Crossing(pair) => {
+                for start in &pair.starts {
+                    if apart_at(first, second, start)? > REACH {
+                        return Err(Finding::new("a settled start is on both surfaces", || {
+                            format!("{pair:?}")
+                        }));
+                    }
+                }
+                lying_on(pair.first, pair.second)?;
+            }
+            Reading::Curve {
+                first: a,
+                second: b,
+                contact,
+            } => {
+                if let CurveContact::Tangent { band, .. } = contact {
+                    within(*band)?;
+                }
+                lying_on(*a, *b)?;
+            }
+            Reading::Overlap {
+                first: a,
+                second: b,
+                coincidence,
+            } => {
+                if let Coincidence::Within(distance) = coincidence {
+                    within(*distance)?;
+                }
+                lying_on(*a, *b)?;
+            }
+            Reading::Undecided {
+                first: a,
+                second: b,
+                ..
+            } => lying_on(*a, *b)?,
+        }
+    }
+    Ok(())
+}
+
+/// [`CEILING`] rounded up to whole steps, as a reading rounds its bounds.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a small positive constant"
+)]
+fn exact_ceiling() -> u64 {
+    CEILING.ceil() as u64
+}
+
 /// Whether a point near the second surface's equation stands over its trimmed patch: a sphere
 /// band's latitude, or a plane patch's whole reach.
 fn reaches(second: &SurfaceKind, p: [f64; 3]) -> bool {
@@ -362,6 +488,17 @@ pub fn check(case: Case) -> Result<Outcome, Finding> {
                 Err(e) => {
                     return Err(Finding::new(
                         "a march accounts for every start point",
+                        || format!("{e:?}"),
+                    ));
+                }
+            }
+            let mut meter = WorkMeter::new(Budget::of_work(WORK));
+            match analyse(&first, &other, &found, FLOOR, CEILING, &mut meter) {
+                Ok(readings) => judge_contact(&first, &other, &readings)?,
+                Err(IntersectError::BudgetExceeded | IntersectError::UnprovenMaths) => {}
+                Err(e) => {
+                    return Err(Finding::new(
+                        "an analysis stops only on its budget or unproven maths",
                         || format!("{e:?}"),
                     ));
                 }

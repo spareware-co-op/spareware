@@ -54,7 +54,9 @@ use geom_run::WorkMeter;
 use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
-use crate::general::{Settled, Subdivided, cross, ends, may_be_parallel, normals, partials, point};
+use crate::general::{
+    Settled, Subdivided, cross, ends, may_be_parallel, normals, partials, point, speeds,
+};
 use crate::project::{negative, positive};
 use crate::result::CurveEnd;
 
@@ -130,6 +132,8 @@ struct System<'a> {
     second: &'a SurfaceKind,
     /// The coordinate of space that moves one way along every branch here.
     axis: usize,
+    /// Each parameter's speed, to turn a length in space into a width of that parameter.
+    speeds: [f64; 4],
 }
 
 /// The surfaces read over a box of unknowns: each point and its partials.
@@ -301,17 +305,19 @@ impl System<'_> {
     }
 }
 
-/// A box of unknowns around the path from `x` along `rates` for a step of `h`.
+/// A box of unknowns around the path from `x` along `rates` for a step of `h`, with `pad` of space
+/// to spare: a length that is a wide box in a surface's parameter and a thin one in a plane's unless
+/// each parameter takes it at its own `speeds`.
 fn around_step(
     x: &[f64; 4],
     rates: &[f64; 4],
-    h: f64,
-    pad: f64,
+    (h, pad): (f64, f64),
+    speeds: &[f64; 4],
 ) -> Result<[Interval; 4], NumError> {
     let mut out = [point(0.0)?; 4];
-    for ((slot, a), r) in out.iter_mut().zip(x).zip(rates) {
+    for (((slot, a), r), speed) in out.iter_mut().zip(x).zip(rates).zip(speeds) {
         let b = a + r * h;
-        let reach = (b - a).abs() * ROOM + pad;
+        let reach = (b - a).abs() * ROOM + pad / speed;
         *slot = Interval::new(smaller(*a, b) - reach, larger(*a, b) + reach)?;
     }
     Ok(out)
@@ -428,7 +434,7 @@ fn walk(
         };
         let signed = rates.map(|r| r * way);
         let pad = floor / 1024.0 + h * SMALLEST;
-        let b = around_step(&x, &signed, h, pad)?;
+        let b = around_step(&x, &signed, (h, pad), &system.speeds)?;
         let over_c = Interval::new(smaller(c, c + way * h), larger(c, c + way * h))?;
         let proven = system.prove(&b, over_c, meter)?;
         let read = system.read(&b, meter)?;
@@ -661,11 +667,16 @@ pub fn march(
     }
     let mut pieces: Vec<Piece> = Vec::new();
     let mut unproven = Vec::new();
+    let ([a, b], [c, d]) = (
+        speeds(first, first.domain(), meter)?,
+        speeds(second, second.domain(), meter)?,
+    );
     for (index, pair) in found.settled.iter().enumerate() {
         let system = System {
             first,
             second,
             axis: axis_of(first, second, pair, meter)?,
+            speeds: [a, b, c, d],
         };
         let mut done = alloc::vec![false; pair.starts.len()];
         let mut bad = false;

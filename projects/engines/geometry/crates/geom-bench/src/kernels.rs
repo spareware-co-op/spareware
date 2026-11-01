@@ -2031,6 +2031,7 @@ pub mod roots {
 /// under an unlimited budget.
 pub mod intersect {
     use geom_curve::CurveKind;
+    use geom_intersect::contact::{Reading, analyse};
     use geom_intersect::curve::{curves, self_crossings};
     use geom_intersect::curve_surface::curve_surface;
     use geom_intersect::general::{Subdivided, subdivide};
@@ -2055,9 +2056,24 @@ pub mod intersect {
     /// The ceiling of a trace.
     const CEILING: f64 = 1e-1;
 
+    /// The floor of an analysis, which reads each flagged pair to the second order.
+    const TOUCHING: f64 = 1e-2;
+
     /// A meter of its own, under no limit.
     fn meter() -> WorkMeter<'static> {
         WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// `analyse` on each pair's flagged pairs, subdivided first.
+    #[inline(never)]
+    pub fn touched(
+        batch: &[(SurfaceKind, SurfaceKind)],
+        out: &mut Vec<Result<Vec<Reading>, IntersectError>>,
+    ) {
+        run(batch, out, |(plate, ball)| {
+            let found = subdivide(plate, ball, TOUCHING, &mut meter())?;
+            analyse(plate, ball, &found, TOUCHING, 1.0, &mut meter())
+        });
     }
 
     /// `curves` on each pair.

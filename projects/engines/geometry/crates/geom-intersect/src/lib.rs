@@ -48,6 +48,7 @@
 extern crate alloc;
 
 pub mod closed;
+pub mod contact;
 pub mod curve;
 pub mod curve_surface;
 pub mod error;

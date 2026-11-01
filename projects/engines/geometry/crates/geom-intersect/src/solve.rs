@@ -98,6 +98,14 @@ pub trait Field<const N: usize> {
         Ok(Some(*x))
     }
 
+    /// How much one unit of each variable moves things, for the test that a step contracts. Any
+    /// positive weights give a norm that proves it, so these are free to be what the field knows;
+    /// a field whose variables are in unlike units needs them, or the plain norm hides a contraction
+    /// that is there.
+    fn weights(&self) -> [f64; N] {
+        [1.0; N]
+    }
+
     /// How far `x` reaches in space, in grid steps: the widest side of a box around its image.
     ///
     /// # Errors
@@ -215,6 +223,8 @@ fn step<F: Field<N>, const N: usize>(
     let mid = x.map(middle);
     let value = field.at(mid, meter)?;
     let mut image = *x;
+    let weights = field.weights();
+    let weight = |k: usize| weights.get(k).copied().ok_or_internal();
     let mut contraction: f64 = 0.0;
     for (i, (slot, y)) in image.iter_mut().zip(&inverted).enumerate() {
         // m − Y·f(m)
@@ -231,7 +241,8 @@ fn step<F: Field<N>, const N: usize>(
             }
             let width = cell(x, j, zero).sub(Interval::point(*mid.get(j).ok_or_internal()?)?)?;
             k = k.add(entry.mul(width)?)?;
-            row += entry.lo().abs().max_of(entry.hi().abs());
+            let scale = weight(i)? / weight(j)?;
+            row += entry.lo().abs().max_of(entry.hi().abs()) * scale;
         }
         contraction = contraction.max_of(row);
         *slot = k;
@@ -350,7 +361,7 @@ fn halves<const N: usize>(
 
 /// The enclosure of the zero in `start`, by the operator, until it reaches less than `floor` or stops
 /// shrinking.
-fn refined<F: Field<N>, const N: usize>(
+pub(crate) fn refined<F: Field<N>, const N: usize>(
     field: &F,
     start: [Interval; N],
     floor: f64,
