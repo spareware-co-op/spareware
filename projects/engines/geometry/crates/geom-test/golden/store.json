@@ -260,9 +260,15 @@
               "kind": "corpus",
               "piece": "G165",
               "why": "4 new count benchmarks on natural quadrics in closed form (decision 32.44): a plane across a cylinder, two spheres, a pipe tee and two cones through one apex; no existing digest moved"
+            },
+            {
+              "sha256": "6b02bbbbb0e7b356fd0b3a7b80c4bd4073dbd8e121996e9fa282dcf5b843844b",
+              "kind": "corpus",
+              "piece": "G166",
+              "why": "3 new count benchmarks on pencils of quadrics (decision 32.44): a sphere and a cylinder in general position and touching inside, and the walk of their curve; no existing digest moved"
             }
           ],
-          "sha256": "6b02bbbbb0e7b356fd0b3a7b80c4bd4073dbd8e121996e9fa282dcf5b843844b"
+          "sha256": "d65403e6452cd1407aca5518178c5661f4546d82c15e8f6551823f9ab3a46af5"
         },
         {
           "id": "geom-nurbs/operations",

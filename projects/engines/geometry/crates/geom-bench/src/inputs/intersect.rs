@@ -1,7 +1,8 @@
-//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G165, decision 32.44): a list of
+//! Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G166, decision 32.44): a list of
 //! items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a
 //! point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5
-//! once, curves through surfaces, each path of 12.6 once, and natural quadrics, four rows of 12.7.
+//! once, curves through surfaces, each path of 12.6 once, natural quadrics, four rows of 12.7, and a
+//! sphere and a cylinder in general position, whose curve is walked.
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -386,5 +387,24 @@ pub fn apexes(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
         let first = Cone::new(at, 0.0, 2.0, Frame::standard().ok()?, (TURN, TALL)).ok()?;
         let second = Cone::new(at, 0.0, 2.0, across, (TURN, TALL)).ok()?;
         Some((SurfaceKind::Cone(first), SurfaceKind::Cone(second)))
+    })
+}
+
+/// A cylinder through a sphere, off its centre: one curve or two, walked.
+#[must_use]
+pub fn walks(class: Class) -> Vec<(SurfaceKind, SurfaceKind)> {
+    typical(class, "intersect::walks", |g| {
+        let [a, b, c] = point(g);
+        let radius = 1024.0 + plain(g).abs() / 8.0;
+        let band = (-0.5, 0.5);
+        let sphere = Sphere::new([a, b, c], radius, Frame::standard().ok()?, (TURN, band)).ok()?;
+        let tube = Cylinder::new(
+            [a + radius * 0.25, b, c],
+            radius * 0.5,
+            Frame::standard().ok()?,
+            (TURN, TALL),
+        )
+        .ok()?;
+        Some((SurfaceKind::Sphere(sphere), SurfaceKind::Cylinder(tube)))
     })
 }

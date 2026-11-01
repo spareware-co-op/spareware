@@ -110,6 +110,7 @@ pub mod isolate;
 pub mod ladder;
 pub mod math;
 pub mod newton;
+pub mod pencil;
 pub mod perturb;
 pub mod plane;
 pub mod predicate;
