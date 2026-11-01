@@ -29,7 +29,7 @@ use geom_poly::merge::{Merge, Outward, Rules};
 use geom_poly::winding::Winding;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_topo::query::volume;
-use geom_topo::{Body, BodyKind, FlatSurface, Sense, SurfaceKind};
+use geom_topo::{Body, BodyKind, Builder, FlatSurface, Sense, SurfaceKind};
 use proptest::prelude::*;
 
 fn ctx() -> OpContext<'static> {
@@ -652,6 +652,142 @@ fn a_refused_preparation_says_why() {
             OpErrorDetail::Combine(CombineDetail::UnknownOperand)
         );
     }
+}
+
+#[test]
+fn any_budget_gives_the_answer_or_stops_cleanly() {
+    let a = cuboid([0, 0, 0], [40, 40, 40]);
+    let b = cuboid([20, 20, 20], [40, 40, 40]);
+    let whole = unite(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &b)]).unwrap();
+    let mut stops = 0;
+    for budget in (0..8000).step_by(11) {
+        let small = OpContext::new(
+            OpPath::new(OpId::from_bytes([7; 16])),
+            Budget::new(budget, u64::MAX),
+        );
+        match unite(&small, &SERIAL, &[solid(1, &a), solid(2, &b)]) {
+            Ok(out) => assert_eq!(out.result, whole.result),
+            Err(e) => {
+                assert_eq!(e.kind(), ErrorKind::BudgetExceeded, "{e:?}");
+                stops += 1;
+            }
+        }
+    }
+    assert!(stops > 0);
+}
+
+#[test]
+fn keep_takes_a_sheet_that_lies_on_a_solids_face() {
+    let block = cuboid([0, 0, 0], [40, 40, 40]);
+    let on_face = sheet(0, 0, [10, 10], [30, 30]);
+    let selection = Selection::Keep {
+        target: key(2),
+        test: vec![Term::Inside(key(1))],
+    };
+    let out = picked(vec![solid(1, &block), cutter(2, &on_face)], selection);
+    assert_eq!(out.result[0][0].arenas().faces.len(), 1);
+}
+
+#[test]
+fn a_half_space_on_a_side_of_the_range_box_is_the_whole_box() {
+    let m = geom_num::grid::COORD_MAX;
+    let whole = half_space([p(m, 0, 0), p(m, 1, 0), p(m, 0, 1)], &mut meter()).unwrap();
+    assert_eq!(whole.arenas().faces.len(), 6);
+    checked(&whole);
+}
+
+#[test]
+fn a_seam_that_ends_off_the_grid_comes_back_in() {
+    let a = cuboid([0, 0, 0], [40, 40, 40]);
+    let b = cuboid([40, 0, 0], [40, 40, 40]);
+    let call = |operands, selection| BooleanInput {
+        operands,
+        select: vec![selection],
+        merge: Merge::KeepSeams,
+        accept: None,
+    };
+    let united = call(vec![solid(1, &a), solid(2, &b)], Selection::Unite);
+    let seamed = combine(&ctx(), &SERIAL, &united)
+        .unwrap()
+        .result
+        .remove(0)
+        .remove(0);
+    // 3y + z = 101 meets the seam on top at y = 61/3.
+    let tilt = half_space([p(0, 30, 11), p(1, 30, 11), p(0, 31, 8)], &mut meter()).unwrap();
+    let meeting = call(
+        vec![solid(1, &seamed), solid(2, &tilt)],
+        Selection::Intersect,
+    );
+    let cut = combine(&ctx(), &SERIAL, &meeting)
+        .unwrap()
+        .result
+        .remove(0)
+        .remove(0);
+    checked(&cut);
+    let off_grid = (0..cut.arenas().points.len()).any(|at| {
+        matches!(
+            cut.arenas().points.get(geom_topo::Ix::new(at).unwrap()),
+            Some(geom_topo::PointKind::Meet(_))
+        )
+    });
+    assert!(off_grid);
+    let tool = cuboid([30, 5, 5], [20, 5, 5]);
+    let again = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &cut), solid(2, &tool)]).unwrap();
+    checked(&again.result);
+}
+
+#[test]
+fn a_loop_may_start_anywhere_along_a_side() {
+    let slab = cuboid([0, 0, 0], [100, 100, 20]);
+    // A sheet that stands on the top: the side faces gain a vertex in the middle of a side.
+    let line = sheet(0, 30, [-10, 20], [110, 110]);
+    let selection = Selection::Imprint { target: key(1) };
+    let mut out = picked(vec![solid(1, &slab), cutter(2, &line)], selection);
+    let body = out.result.remove(0).remove(0);
+    assert_eq!(body.arenas().faces.len(), 7);
+    let tool = cuboid([40, 40, -5], [20, 20, 40]);
+    let want = 6 * (200_000 - 20 * 20 * 20);
+    let arenas = body.arenas();
+    let mut turns = 0;
+    for row in 0..arenas.loops.len() {
+        let ix = geom_topo::Ix::new(row).unwrap();
+        let start = arenas.loops.get(ix).unwrap().first_fin.unwrap();
+        let mut at = arenas.fins.get(start).unwrap().next;
+        while at != start {
+            let mut builder = Builder::edit(&body);
+            builder.arenas.loops.first_fin.set(ix, Some(at)).unwrap();
+            let turned = builder.publish(body.kind(), body.outside(), &mut meter());
+            let turned = turned.unwrap();
+            let pair = [solid(1, &turned), solid(2, &tool)];
+            let cut = subtract(&ctx(), &SERIAL, key(1), &pair).unwrap();
+            assert_eq!(sixfold(&cut.result), want);
+            turns += 1;
+            at = arenas.fins.get(at).unwrap().next;
+        }
+    }
+    assert!(turns > 18);
+}
+
+#[test]
+fn a_section_through_a_tilted_face_meets_off_the_grid() {
+    let block = cuboid([0, 0, 0], [60, 60, 60]);
+    let base = vec![p(-20, 10, -5), p(31, -17, -5), p(30, 45, -5)];
+    let input = geom_make::PrismInput {
+        base,
+        height: Steps(80),
+    };
+    let tool = prism(&ctx(), &input).unwrap().result.body;
+    let out = picked(vec![solid(1, &block), solid(2, &tool)], Selection::Section);
+    let curves = &out.result[0][0];
+    assert_eq!(curves.kind(), BodyKind::Wire);
+    let off_grid = (0..curves.arenas().points.len()).any(|at| {
+        matches!(
+            curves.arenas().points.get(geom_topo::Ix::new(at).unwrap()),
+            Some(geom_topo::PointKind::Meet(_))
+        )
+    });
+    assert!(off_grid);
+    checked(curves);
 }
 
 #[test]
