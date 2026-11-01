@@ -4668,11 +4668,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
-      "mutant": "replace > with >= in BernsteinCurve<D>::clip",
+      "mutant": "replace > with >= in clipped_span",
       "line_text": "if t0 > t1 {",
       "occurrences": 1,
       "kind": "harmless",
-      "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
+      "reason": "The two differ only at t0 == t1. The curve's clip and the patch's (on the largest coefficient of each row and column) both come here with ranges from nonnegative_range, whose every end is an outward-rounded interval end strictly beyond the exact one (each i/p is a widened quotient), or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one, nor do attack_g164's slabs touching a patch's edge or a curve's end, which keep a range ending exactly there."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
@@ -5113,6 +5113,158 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace < with <= in line_cone",
+      "line_text": "let flip = if rho.hi() < 0.0 { -1.0 } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at rho.hi() == 0. The line before returns when rho contains 0, and an interval whose upper bound is 0 contains it (its lower bound is at most its upper), so here rho.hi() is never 0 and < and <= choose the same flip for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let least = if difference.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at difference.lo() == 0. second_order has already returned when difference contains 0, and an interval whose lower bound is 0 contains it, so here the lower bound is never 0 and both pick the same end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let width = exact_steps(if band.hi() > run { band.hi() } else { run });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when band.hi() == run, and then both branches are the same double: the larger of two equal values is either, so the width is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in <impl Field<3> for Contact<'_>>::reach",
+      "line_text": "Ok(if c > s { c } else { s })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when c == s, and then both branches are the same double, so the reach is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace < with <= in near_origin",
+      "line_text": "Ok((lo < hi).then_some((lo, hi)))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the stretch is a single parameter, where the line touches the ball of radius R + r + 1 about the torus's centre or its domain ends there: a point at least a unit from every point of the torus, so the quartic solved on it has no root and no undecided region, and the answer is the same empty, certified intersection. Only the work charged for that solve differs, which the crate does not promise."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace + with * in normals",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with + in normals",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with / in normals",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace / with * in normals",
+      "line_text": "(w != 0.0).then(|| n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with + in normals",
+      "line_text": "(w != 0.0).then(|| n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with / in normals",
+      "line_text": "(w != 0.0).then(|| n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace == with != in normals",
+      "line_text": "if x == 0.0 && y == 0.0 && z == 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace <= with > in normals",
+      "line_text": "let axis = if x <= y && x <= z {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with + in <impl Field<1> for Quartic>::reach",
+      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With + in place of the product it no longer shrinks with the box, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori then run past cargo-mutants' timeout, which is how the tests catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace - with + in <impl Field<1> for Quartic>::reach",
+      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With the sum of t's ends in place of their difference it stays near twice the root's own t however small the box, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace - with / in <impl Field<1> for Quartic>::reach",
+      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With the ratio of t's ends in place of their difference it tends to one, not zero, as the box shrinks, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace closed_form -> Result<Option<Intersection>, IntersectError> with Ok(None)",
+      "line_text": "let seams = seams_of(surface);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With no closed form every line, circle and helix against a plane, sphere, cylinder, cone or torus goes to the subdivision engine instead of its exact or one-dimensional solve, and on attack_g164's long lines, wide surfaces and tangencies that engine splits boxes far past the budgeted meets' work: the tests run past cargo-mutants' timeout, which is how they catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in <impl Field<3> for Contact<'_>>::narrow",
+      "line_text": "if lo > hi {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a coordinate's two clipped ranges meet at a single double, lo == hi. Every clip rounds its ends a step outward (geom-nurbs's clipped_span takes the lower end of the interval below and the upper of the interval above), so a root lies strictly inside each range, and two ranges that both hold a root overlap by more than a point. A box they leave as one point holds no root, so the mutant's None loses nothing; only the work of looking at that box differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with / in second_order",
+      "line_text": "let band = Interval::point(2.0 * RESOLUTION_FLOOR.get())?",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate: Real::ONE), so 2.0 * 1.0 and 2.0 / 1.0 are the same double and the band is the same for every input."
     }
   ],
   "coverage_off": [

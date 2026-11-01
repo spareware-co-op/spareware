@@ -3398,7 +3398,8 @@
             "**Every root found or flagged.** A box is discarded only on a proof, so a meeting no item reports does not exist.",
             "**Exact where the data are.** On whole-number data the count, and whether a root is double, come from exact signs, within the budgets of chapter 6.2. Elsewhere an interval decides, and what it cannot tell goes to the engine.",
             "**Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's tangent plane the box is a candidate, and the second order test compares the curve's normal curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ, [`Unresolved::HigherOrderContact`] where they cannot be told apart, and [`Unresolved::NearCoincident`] for a long run, a curve lying near the surface.",
-            "**Overlap by identity.** A line in a plane or along a ruling, and a helix on a coaxial cylinder of its radius, are [`Item::Overlap`]s with [`Coincidence::Identical`]."
+            "**Overlap by identity.** A line in a plane or along a ruling, and a helix on a coaxial cylinder of its radius, are [`Item::Overlap`]s with [`Coincidence::Identical`].",
+            "**A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands exactly on an end holds a value past it, and misses."
           ],
           "job": "Where a curve meets a surface (chapter 12.6).",
           "method": {
