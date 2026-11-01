@@ -69,14 +69,14 @@ use crate::solve::{Field, Reason, Solved, grown, runs, solve};
 const LONG_RUN: f64 = 64.0;
 
 /// The dot product of two enclosed vectors.
-fn dot(a: [Interval; 3], b: [Interval; 3]) -> Result<Interval, IntersectError> {
+pub(crate) fn dot(a: [Interval; 3], b: [Interval; 3]) -> Result<Interval, IntersectError> {
     let [p, q, r] = a;
     let [x, y, z] = b;
     Ok(p.mul(x)?.add(q.mul(y)?)?.add(r.mul(z)?)?)
 }
 
 /// The cross product of two enclosed vectors.
-fn cross(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], IntersectError> {
+pub(crate) fn cross(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], IntersectError> {
     let [p, q, r] = a;
     let [x, y, z] = b;
     Ok([
@@ -87,14 +87,14 @@ fn cross(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], IntersectE
 }
 
 /// `a − b`.
-fn minus(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], IntersectError> {
+pub(crate) fn minus(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], IntersectError> {
     let [p, q, r] = a;
     let [x, y, z] = b;
     Ok([p.sub(x)?, q.sub(y)?, r.sub(z)?])
 }
 
 /// `v` enclosed.
-fn lift(v: [f64; 3]) -> Result<[Interval; 3], IntersectError> {
+pub(crate) fn lift(v: [f64; 3]) -> Result<[Interval; 3], IntersectError> {
     let [x, y, z] = v;
     Ok([
         Interval::point(x)?,
@@ -104,7 +104,7 @@ fn lift(v: [f64; 3]) -> Result<[Interval; 3], IntersectError> {
 }
 
 /// A box as its three sides.
-fn sides(b: &Bounds<3>) -> Result<[Interval; 3], IntersectError> {
+pub(crate) fn sides(b: &Bounds<3>) -> Result<[Interval; 3], IntersectError> {
     let ([a, c, e], [f, g, h]) = (b.lo, b.hi);
     Ok([
         Interval::new(a, f)?,

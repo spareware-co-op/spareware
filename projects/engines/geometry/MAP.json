@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G163, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, and curves through surfaces, each path of 12.6 once.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G165, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, and natural quadrics, four rows of 12.7.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2564,6 +2564,29 @@
           "target": "lib"
         },
         {
+          "cost": "a few predicates and square roots, and a curve-surface pair for each edge, up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: two surfaces, each a plane, sphere, cylinder or cone, on a coarse lattice with axes from a short list, so that coaxial, parallel, tangent and same-apex pairs are common. [`check`] asks where they meet in closed form and holds the answer to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/natural.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: an answer that changes between two runs or with the order of the pair, a point of a curve off either surface or past either's domain, a point where the surfaces are apart, a surface that crosses a sphere with no item, or a smaller budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect` says where two natural quadrics meet, and what it says is so.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.7 (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): each surface's equation is written here from the drawn numbers, sharing nothing with the closed forms it judges."
+          },
+          "path": "geom_fuzz::natural",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "per case, 6 checked `i128` products and 5 checked sums for the reference, one call each to the predicate, the exact path and the filter (each constant time), and at most [`MAX_INPUT_BYTES`] bytes read by [`decode`]. No allocation unless a finding is reported.",
           "does": "[`check`] takes three grid points a, b, c and computes [`reference`], the determinant of the 3 × 3 matrix whose rows are (a.x, a.y, 1), (b.x, b.y, 1) and (c.x, c.y, 1), expanded along its third column in `i128`: (b.x·c.y − b.y·c.x) − (a.x·c.y − a.y·c.x) + (a.x·b.y − a.y·b.x). That determinant is orient2d's definition (Shewchuk 1997, section 4.1); this module computes it with no code shared with `geom-num`, and by another formula than `geom-num`'s (b − a) × (c − a), so the two agree only if both are right. Against it, `check` holds `geom-num` to three claims:",
           "family": [],
@@ -3454,6 +3477,31 @@
             "text": "X. Ma and W. Hewitt, Point inversion and projection for NURBS curve and surface, Computer Aided Geometric Design 20 (2003), <https://doi.org/10.1016/S0167-8396(03)00021-9>, for the pruning, with convex-hull distance replaced by each kind's certified bound; chapter 12.4 (`projects/engines/geometry/architecture/12-intersections.md`). A span's convexity test is the sign of the second derivative of half the squared distance, an interval of the kind's certified derivative bounds, so a span it passes holds at most one foot, by Rolle's theorem. Circles, spheres, cylinders, cones and tori go through the same search: their certified bounds are their own closed forms, and the search adds what a closed form alone lacks, a trimmed domain."
           },
           "path": "geom_intersect::project",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few predicates and square roots for a pair, and a curve-surface pair for each edge that a trimmed domain has. Recursion: none.",
+          "does": "[`natural`] answers for a plane, sphere, cylinder or cone with any other, wherever the pair's meeting holds a conic. A plane cuts each quadric in its conic section; two spheres meet in a circle; coaxial quadrics meet in circles at the roots of their meridians; parallel cylinders in lines; cones of one slope on parallel axes in one conic; and two quadrics with a sphere tangent to both about the meeting of their axes in two conics, Goldman and Miller's condition, each conic a plane through the pair cutting one of them. What is left, a pair in general position, is `None`: the general paths take it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
+          "guarantees": [
+            "**Exact type decisions on exact data.** Empty, touching or crossing, and which conic, are signs from `geom_num::quadric` on whole-number data, or from the stored doubles where the question is a sum of their products. Elsewhere an interval decides, and a pair it cannot tell is `None`.",
+            "**Certified curves.** A result's data are the midpoints of enclosures of the exact conic, and its class carries how far those enclosures reach.",
+            "**Tangency named.** A tangent line or circle is a curve of [`CurveContact::Tangent`] with no band, and a touch at one point a [`PointContact::IsolatedTangent`].",
+            "**Trimmed to both domains.** Each curve is cut where the edges of either surface meet the other, and each stretch is kept if its middle lies on both."
+          ],
+          "job": "Where two natural quadrics meet, in closed form (chapter 12.7).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/112515.112545",
+              "https://doi.org/10.1006/gmip.1995.1006",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "Goldman and Miller, SMA '91 (<https://doi.org/10.1145/112515.112545>) and GMIP 57(1), 1995 (<https://doi.org/10.1006/gmip.1995.1006>); the table of chapter 12.7 (`projects/engines/geometry/architecture/12-intersections.md`). Two surfaces of revolution tangent to one sphere S along planes P and Q are S − k·P² and S − l·Q², so their difference factors as (√l·Q − √k·P)(√l·Q + √k·P), two planes."
+          },
+          "path": "geom_intersect::quadrics",
           "provenance": [],
           "spdx": null,
           "target": "lib"

@@ -254,9 +254,15 @@
               "kind": "corpus",
               "piece": "G164",
               "why": "3 new count benchmarks on where curves meet surfaces (decision 32.44): a line through a plane, a line along a torus's equator and a cubic through a graph; no existing digest moved"
+            },
+            {
+              "sha256": "0addf11ef9e85ac52b1858fff68014e4dbe595ceb2a811ae5ef5823f7fef51b9",
+              "kind": "corpus",
+              "piece": "G165",
+              "why": "4 new count benchmarks on natural quadrics in closed form (decision 32.44): a plane across a cylinder, two spheres, a pipe tee and two cones through one apex; no existing digest moved"
             }
           ],
-          "sha256": "0addf11ef9e85ac52b1858fff68014e4dbe595ceb2a811ae5ef5823f7fef51b9"
+          "sha256": "6b02bbbbb0e7b356fd0b3a7b80c4bd4073dbd8e121996e9fa282dcf5b843844b"
         },
         {
           "id": "geom-nurbs/operations",

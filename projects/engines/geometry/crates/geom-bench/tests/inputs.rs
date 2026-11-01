@@ -2393,6 +2393,18 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("surface_plane", k::pierced, &m::line_planes(Typical));
     all_ok("surface_torus", k::pierced, &m::line_tori(Typical));
     all_ok("surface_patch", k::pierced, &m::cubic_patches(Typical));
+    all_ok(
+        "natural_plane",
+        k::closed_forms,
+        &m::plane_cylinders(Typical),
+    );
+    all_ok(
+        "natural_spheres",
+        k::closed_forms,
+        &m::sphere_pairs(Typical),
+    );
+    all_ok("natural_tee", k::closed_forms, &m::tees(Typical));
+    all_ok("natural_apex", k::closed_forms, &m::apexes(Typical));
     all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
     all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
 }
