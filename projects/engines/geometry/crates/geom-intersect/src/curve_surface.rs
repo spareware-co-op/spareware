@@ -21,6 +21,10 @@
 //!   [`Unresolved::NearCoincident`] for a long run, a curve lying near the surface.
 //! - **Overlap by identity.** A line in a plane or along a ruling, and a helix on a coaxial cylinder of
 //!   its radius, are [`Item::Overlap`]s with [`Coincidence::Identical`].
+//! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
+//!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
+//!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
+//!   exactly on an end holds a value past it, and misses.
 //!
 //! Method: chapter 12.6 (`projects/engines/geometry/architecture/12-intersections.md`): the Interval
 //! Projected Polyhedron solver ([Sherbrooke and Patrikalakis
