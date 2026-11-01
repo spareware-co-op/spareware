@@ -17,8 +17,7 @@
 //! Why: chapter 26.3 asks for a machine-readable map of every crate, module, invariant and error
 //! kind, "generated from annotations in the code and checked in CI, so it can never drift from the
 //! code", and chapter 29.20 asks the same generator to read the `Source:` and `Consulted:` lines
-//! into one record per source. Operations and geometry kinds join the map when the pieces that
-//! define them land.
+//! into one record per source. Operations and geometry kinds are [`registry`]'s.
 //!
 //! Guarantees:
 //!
@@ -72,6 +71,7 @@ pub mod items;
 pub mod json;
 pub mod links;
 pub mod provenance;
+pub mod registry;
 pub mod repo;
 pub mod rust;
 
@@ -153,6 +153,8 @@ pub enum Rule {
     /// A detail whose base kind the map cannot read from its enum's `kind` function, or a base kind
     /// that is not a variant of `ErrorKind`.
     ErrorBase,
+    /// A `Covers:` item that names no operation or kind, or a kind's module with no `Tier:`.
+    Covers,
     /// The committed map is missing or differs from the generated one.
     Stale,
     /// A known gap that no longer occurs.
@@ -161,7 +163,7 @@ pub enum Rule {
 
 impl Rule {
     /// Every rule, in the order `HEADERS.md` lists them.
-    pub const ALL: [Rule; 23] = [
+    pub const ALL: [Rule; 24] = [
         Rule::Manifest,
         Rule::Root,
         Rule::Unreadable,
@@ -183,6 +185,7 @@ impl Rule {
         Rule::ErrorEnum,
         Rule::ErrorDoc,
         Rule::ErrorBase,
+        Rule::Covers,
         Rule::Stale,
         Rule::GapStale,
     ];
@@ -212,6 +215,7 @@ impl Rule {
             Rule::ErrorEnum => "Error enum",
             Rule::ErrorDoc => "Error doc",
             Rule::ErrorBase => "Error base",
+            Rule::Covers => "Covers",
             Rule::Stale => "Stale map",
             Rule::GapStale => "Stale gap",
         }
@@ -304,6 +308,18 @@ pub struct Input {
     /// The entries of [`PENDING`] whose folder the workspace does not hold, so links into them
     /// are not checked yet.
     pub pending: Vec<Pending>,
+    /// What the map's operations and kinds are read from; `None` for a tree without the facade's
+    /// generated tool descriptions, whose two lists are then empty.
+    pub registry: Option<Registry>,
+}
+
+/// What the map's operations and kinds are read from ([`registry`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Registry {
+    /// The facade's generated tool descriptions.
+    pub tools: String,
+    /// The test, fuzz and benchmark files that may claim a part.
+    pub evidence: Vec<SourceFile>,
 }
 
 impl Input {
@@ -1232,6 +1248,10 @@ pub fn build(input: &Input, gaps: &[Gap]) -> Generated {
             crate_value(&k, input, &mut collected)
         })
         .collect();
+    let (operations, kinds) = input.registry.as_ref().map_or_else(
+        || (Vec::new(), Vec::new()),
+        |registry| registry::values(registry, &crates, &mut collected),
+    );
     let (sources, source_problems) = merged_sources(&crate_values);
     collected.problems.extend(source_problems);
     collected.problems.extend(base_kind_problems(&crate_values));
@@ -1293,6 +1313,8 @@ pub fn build(input: &Input, gaps: &[Gap]) -> Generated {
         ("gaps", Value::Array(gap_values)),
         ("generated_by", Value::from(WRITE_COMMAND)),
         ("grammar", Value::from(GRAMMAR_FILE)),
+        ("kinds", Value::Array(kinds)),
+        ("operations", Value::Array(operations)),
         ("pending", Value::Array(pending_values)),
         ("sources", Value::Array(sources)),
     ]);

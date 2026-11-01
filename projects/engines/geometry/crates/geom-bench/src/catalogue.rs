@@ -23,6 +23,8 @@
 //!
 //! Cost: the tables are static. Finding a name scans them once (a few hundred entries), and
 //! preparing a benchmark builds its batch, O([`inputs::BATCH`]).
+//!
+//! Covers: make.box, make.cylinder, transform.move, transform.rotate.
 
 use core::fmt;
 

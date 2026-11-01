@@ -33,17 +33,19 @@ geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
 # MPL-2.0; development only).
 geom-gen = { path = "../geom-gen" }
-# The make target (G101): geom-make's operations under test, and the kernel crates its inputs and
-# oracles come from (ours, MPL-2.0).
+# The make target (G101) and the arenas target (G80): geom-make's operations and geom-topo's
+# arenas and builder, under test, with the checker and the operation contract they are judged by;
+# the kinds above fill their inputs (ours, MPL-2.0).
 geom-check = { path = "../geom-check", features = ["full"] }
 geom-make = { path = "../geom-make" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
-geom-op = { path = "../geom-op" }
-geom-topo = { path = "../geom-topo" }
 # The code under test of the cbor target (G91), and the work meter it is read with (MPL-2.0, ours).
 # The code under test of the cbor target (G91; MPL-2.0, ours).
+# The code under test of the cbor target (G91), read with geom-run's work meter (MPL-2.0, ours).
 geom-format = { path = "../geom-format" }
 geom-name = { path = "../geom-name" }
 

@@ -5393,6 +5393,70 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace Sets<'s>::size -> u32 with 0",
+      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace Sets<'s>::size -> u32 with 1",
+      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with == in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with > in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with <= in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::open -> Result<(), CborError> with Ok(())",
+      "line_text": "let (start, end) = head;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without pushing the frame or moving past the container's head, the next call of next reads the same head again, for ever under the tests' unlimited meter (a metered read stops at its budget). It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::complete -> Result<(), CborError> with Ok(())",
+      "line_text": "self.at = end;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without moving past the item it just read, the next call of next reads the same head again, for ever under the tests' unlimited meter. It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Parser<'_>::item -> Result<bool, TextError> with Ok(false)",
+      "line_text": "let (line, column) = (self.cursor.line, self.cursor.column);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "No item ever completes and nothing is consumed, so the parse loop calls item for ever under the tests' unlimited meter. It hangs; it never returns bytes."
     }
   ],
   "coverage_off": [
