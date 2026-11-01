@@ -5403,6 +5403,110 @@
       "reason": "Where d.lo() equals 0.0 both branches give 0.0, so the root is the same."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_conic",
+      "line_text": "if s.hi() < domain.0 || s.lo() > domain.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when s.hi() equals the domain's start. s encloses a root of the line's quadratic, computed by geom_num::interval, which widens every bound outward by a step: where the line truly meets the conic at an end of its domain, s strictly holds that end. A bound of s equal to an end needs the root to lie past that end by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_conic",
+      "line_text": "if s.hi() < domain.0 || s.lo() > domain.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when s.lo() equals the domain's end. s encloses a root of the line's quadratic, computed by geom_num::interval, which widens every bound outward by a step: where the line truly meets the conic at an end of its domain, s strictly holds that end. A bound of s equal to an end needs the root to lie past that end by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_conic",
+      "line_text": "Shape::Branch if alpha.hi() < 0.0 => None,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when alpha's upper bound is exactly 0.0, where the mutant drops the root as one on the other branch. alpha is a0 + s a1 by geom_num::interval, which widens every bound outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of -2^-1074, the least subnormal: a hyperbola's first coordinate within about 10^-308 of its centre, though at any root of the branch's equation alpha^2 - beta^2 = 1, so |alpha| >= 1."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in self_crossings",
+      "line_text": "if s.lo() < t.lo() { s.lo() } else { t.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where s.lo() equals t.lo() both branches give the same double, so the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in self_crossings",
+      "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where s.hi() equals t.hi() both branches give the same double, so the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with == in self_crossings",
+      "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant's hull ends at t.hi() even where s reaches past it. Pruning on that smaller hull is still sound: a crossing in the box has s0 < t0 <= t.hi() with s0 >= the hull's start, so the curve between them lies in it, and a stretch that runs along one heading cannot cross itself; a pair with s0 > t0 is the mirror of one in a box above the diagonal, which keeps its own full hull. So no crossing is lost, and only which boxes are pruned, and the work, can change; the tests' work pins see no change."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in self_crossings",
+      "line_text": "let join = s.contains(lo) && t.contains(hi);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant drops a zero whose enclosure holds lo or hi alone, the original only one holding both. solve proves a zero unique only when the Krawczyk image of a box lies inside that box, and the image, refined, is the zero's enclosure; every box lies inside the domain, so an enclosure holds an end of the domain only if an outward-rounded bound of the image lands exactly on it, a coincidence of rounding (a zero on the end itself comes out flagged in the tests: its image reaches past the box)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in self_crossings",
+      "line_text": "!(join || diagonal)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant keeps a zero that is the join but not on the diagonal, or on the diagonal but not the join. No proven zero meets the diagonal s = t: every point of the diagonal is a zero of a(s) - a(t), so a box meeting it holds a segment of zeros, while solve proves a zero only where its box holds exactly one (Krawczyk with contraction below 1). A zero at the join needs an enclosure holding both ends: solve proves a zero unique only when the Krawczyk image of a box lies inside that box, and the image, refined, is the zero's enclosure; every box lies inside the domain, so an enclosure holds an end of the domain only if an outward-rounded bound of the image lands exactly on it, a coincidence of rounding (a zero on the end itself comes out flagged in the tests: its image reaches past the box)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in self_crossings",
+      "line_text": "let diagonal = s.lo() <= t.hi() && t.lo() <= s.hi();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "No proven zero meets the diagonal s = t: every point of the diagonal is a zero of a(s) - a(t), so a box meeting it holds a segment of zeros, while solve proves a zero only where its box holds exactly one (Krawczyk with contraction below 1). So for every proven zero the original's diagonal is false; the mutant's needs s.lo() > t.hi(), a zero wholly below the diagonal, but the search keeps only boxes with s.lo() < t.hi() and proves none that meet the diagonal, so every proven zero lies wholly above it and the mutant's is false too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in second_order",
+      "line_text": "if speed_a.lo() <= 0.0 || speed_b.lo() <= 0.0 || along.contains(0.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant of the first ||, (speed_a.lo() <= 0.0 && speed_b.lo() <= 0.0) || along.contains(0.0), is the original: a speed's bound ax^2 + ay^2 reaches 0 only when both components' boxes hold 0, and then each product of along = ax bx + ay by holds 0, so along holds 0 and the last test already holds. Both are along.contains(0.0). (The second ||'s mutant is killed by a_tangency_too_sharp_to_read_at_one_step_is_higher_order.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let difference = if along.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "along does not hold 0 here, the test before having returned where it does, so along.lo() is never 0.0 and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let least = if difference.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "difference does not hold 0 here, the test before having returned where it does, so difference.lo() is never 0.0 and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in second_order",
+      "line_text": "let band = Interval::point(2.0 * RESOLUTION_FLOOR.get())?",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate), so 2 x 1 and 2 / 1 are the same double. The floor is named, not an accepted rung (6.5), and a change to it would be a decision with its own tests."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
       "mutant": "replace > with >= in halves",
       "line_text": "let share = if whole > 0.0 {",

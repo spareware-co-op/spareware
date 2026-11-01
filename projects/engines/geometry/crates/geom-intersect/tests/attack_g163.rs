@@ -1294,3 +1294,163 @@ fn a_line_meets_a_hyperbola_only_on_its_arc() {
     let r = meet(&infinite([0.0, 1.0], [1.0, 0.0]), &h);
     touches_are(&touches(&r), &[(PointContact::Crossing, 2.0_f64.sqrt())]);
 }
+
+/// A closed cubic B-spline on a figure eight's polygon, a thousand grid steps to a unit, starting
+/// and ending at the right lobe's tip: it crosses itself once, at the waist, away from its join.
+fn closed_eight() -> CurveKind<2> {
+    let polygon: Vec<[f64; 2]> = [
+        [10.0, 0.0],
+        [10.0, 6.0],
+        [5.0, 6.0],
+        [-5.0, -6.0],
+        [-10.0, -6.0],
+        [-10.0, 6.0],
+        [-5.0, 6.0],
+        [5.0, -6.0],
+        [10.0, -6.0],
+        [10.0, 0.0],
+    ]
+    .iter()
+    .map(|[x, y]| [x * 1000.0, y * 1000.0])
+    .collect();
+    let knots = vec![
+        0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 7.0, 7.0, 7.0,
+    ];
+    CurveKind::Nurbs(Curve::new(Basis::new(3, knots).unwrap(), &polygon).unwrap())
+}
+
+#[test]
+fn a_closed_curve_crossing_itself_away_from_its_join_is_found() {
+    // Sampled 20,000 times, the curve's only crossing is at parameters 1.5 and 5.5.
+    let r = self_crossings(&closed_eight(), &mut meter()).unwrap();
+    assert!(
+        matches!(
+            r.items(),
+            [Item::Point {
+                contact: PointContact::Crossing,
+                ..
+            }]
+        ),
+        "{:?}",
+        r.items()
+    );
+    let [s, t] = [r.items()[0].at().spans()[0], r.items()[0].at().spans()[1]];
+    assert!(s.contains(1.5) && t.contains(5.5), "{s:?} {t:?}");
+}
+
+#[test]
+fn a_crossing_through_a_closed_curve_s_join_is_kept_flagged() {
+    // The join is the waist: the curve passes it again halfway. The engine cannot prove a zero
+    // at the end of its domain, so both pairs are flagged; neither is the join itself.
+    let eight = bezier(&[
+        [0.0, 0.0],
+        [12000.0, 12000.0],
+        [12000.0, -12000.0],
+        [-12000.0, 12000.0],
+        [-12000.0, -12000.0],
+        [0.0, 0.0],
+    ]);
+    let r = self_crossings(&eight, &mut meter()).unwrap();
+    let at: Vec<(f64, f64)> = r
+        .items()
+        .iter()
+        .map(|i| {
+            assert!(matches!(i, Item::Flagged { .. }), "{i:?}");
+            let s = i.at().spans();
+            (
+                s[0].lo() * 0.5 + s[0].hi() * 0.5,
+                s[1].lo() * 0.5 + s[1].hi() * 0.5,
+            )
+        })
+        .collect();
+    assert_eq!(at.len(), 2, "{:?}", r.items());
+    assert!(
+        (at[0].0 - 0.0).abs() < 1e-3 && (at[0].1 - 0.5).abs() < 1e-3,
+        "{at:?}"
+    );
+    assert!(
+        (at[1].0 - 0.5).abs() < 1e-3 && (at[1].1 - 1.0).abs() < 1e-3,
+        "{at:?}"
+    );
+}
+
+#[test]
+fn self_crossings_take_only_their_work() {
+    // As for pairs: what the search charges pins which boxes its tests prune, the join's among them.
+    let work = |c: &CurveKind<2>| {
+        let mut m = meter();
+        let r = self_crossings(c, &mut m).unwrap();
+        (r.items().len(), m.used().work)
+    };
+    let got = [
+        work(&closed_eight()),
+        work(&bezier(&[
+            [0.0, 0.0],
+            [3000.0, 3000.0],
+            [-1000.0, 3000.0],
+            [2000.0, 0.0],
+        ])),
+        work(&bezier(&[
+            [0.0, 0.0],
+            [12000.0, 2000.0],
+            [-4000.0, 8000.0],
+            [4000.0, -4000.0],
+        ])),
+    ];
+    assert_eq!(got, [(1, 39450), (1, 8789), (1, 6774)]);
+}
+
+#[test]
+fn a_tangency_s_band_is_set_by_the_curvatures_difference() {
+    // Each pair touches at (1000, 1000), where the hump has curvature -1/500 and the dip +1/500,
+    // and the wide hump -1/1000: 12.9's band √(2δ/Δκ), δ one step, is √500 = 22.4 and √2000 = 44.7,
+    // rounded up. Run the other way round, a curve's curvature changes sign with its tangent, so
+    // the band is the same; so it is with the pair swapped.
+    let hump = bezier(&[[0.0, 0.0], [1000.0, 2000.0], [2000.0, 0.0]]);
+    let dip = bezier(&[[0.0, 2000.0], [1000.0, 0.0], [2000.0, 2000.0]]);
+    let pid = bezier(&[[2000.0, 2000.0], [1000.0, 0.0], [0.0, 2000.0]]);
+    let wide = bezier(&[[-1000.0, -1000.0], [1000.0, 3000.0], [3000.0, -1000.0]]);
+    let band = |a: &CurveKind<2>, b: &CurveKind<2>| match meet(a, b).items() {
+        [
+            Item::Flagged {
+                why: Unresolved::TangentBand { width },
+                ..
+            },
+        ] => width.0,
+        other => panic!("{other:?}"),
+    };
+    let got = [
+        band(&hump, &dip),
+        band(&hump, &pid),
+        band(&dip, &hump),
+        band(&pid, &hump),
+        band(&hump, &wide),
+        band(&wide, &hump),
+    ];
+    assert_eq!(got, [23, 23, 23, 23, 45, 45]);
+}
+
+#[test]
+fn a_tangency_too_sharp_to_read_at_one_step_is_higher_order() {
+    // Both curves are bent to about a grid step's radius where they touch, at (1000, 500000), the
+    // hump at curvature -1 and the wider one at -0.8 or -0.95: across the run of boxes left at the
+    // floor each tangent turns through about a quarter, so the derivative bounds cannot say whether
+    // the tangents agree or oppose, and no difference of curvatures can be read. The second order
+    // test gives up rather than guess a band (for the first, √(2/0.2) is 3.2 steps; a guess gave 2).
+    let hump = bezier(&[[0.0, 0.0], [1000.0, 1.0e6], [2000.0, 0.0]]);
+    for (y0, y1) in [(-1.1e6, 2.1e6), (-1.4e6, 2.4e6)] {
+        let wider = bezier(&[[-1000.0, y0], [1000.0, y1], [3000.0, y0]]);
+        let r = meet(&hump, &wider);
+        assert!(
+            matches!(
+                r.items(),
+                [Item::Flagged {
+                    why: Unresolved::HigherOrderContact,
+                    ..
+                }]
+            ),
+            "{:?}",
+            r.items()
+        );
+    }
+}
