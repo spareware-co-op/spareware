@@ -10,7 +10,8 @@
 //! Arguments: a side (23, 71 or 224; all three by default), then text a run's line must hold to
 //! run, such as "in a strip, as solids, 1 thread". Each timed run is the call `timed`, so a
 //! profiler can count it alone: `valgrind --tool=callgrind --collect-atstart=no
-//! --toggle-collect='boolean::timed*'`.
+//! --toggle-collect='boolean::timed*'`. With that text, the operands are made on one thread, and
+//! a pair it does not name is not made.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -138,13 +139,23 @@ fn main() {
         } else {
             offset
         };
+        // A filter that names the other pair skips this one's making.
+        if ["crossing", "in a strip"].iter().any(|p| only.contains(p)) && !only.contains(pair) {
+            continue;
+        }
+        // With a filter, the operands are made on one thread: a pool's threads are counted from
+        // their start, so a profiler counting `timed` alone would count them too.
+        let setup = if only.is_empty() {
+            Exec::with_pool(&rayon)
+        } else {
+            Exec::serial()
+        };
         let mut rng = SplitMix64::new(Seed(0x148));
-        let a = mesh(&field(side, 0, 1, &mut rng), &Exec::with_pool(&rayon));
-        let b = mesh(&field(side, offset, 2, &mut rng), &Exec::with_pool(&rayon));
+        let a = mesh(&field(side, 0, 1, &mut rng), &setup);
+        let b = mesh(&field(side, offset, 2, &mut rng), &setup);
         let alone = |m: &ExactMesh| {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
-            let pool = Exec::with_pool(&rayon);
-            boolean(&[m], &[WindingTest::unite()], &step, &pool, &mut meter)
+            boolean(&[m], &[WindingTest::unite()], &step, &setup, &mut meter)
                 .unwrap()
                 .remove(0)
                 .mesh
