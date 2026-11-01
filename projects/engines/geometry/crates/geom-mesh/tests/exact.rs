@@ -26,7 +26,7 @@ use geom_num::plane::{Plane, Tpi};
 use geom_num::wide::I256;
 use geom_num::{Exactness, NumError, Sign};
 use geom_op::NameId;
-use geom_run::{Budget, Exec, WorkMeter};
+use geom_run::{Budget, BudgetKind, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
@@ -878,6 +878,77 @@ fn corners_on_and_off_the_grid_sort_together() {
 /// A dart whose loop is stored from its notch: the notch's walls reduce to normals (2, ±1, 0), and
 /// sort just after the face's plane, ahead of the long walls (6, ±11, 0), so the notch has the lowest
 /// key and the loop starts there. The checker must still find the corner lowest in x, y and z.
+/// The work `build` charges is part of what it does: a budget stops it at the same item every
+/// time (23.10). One unit per input vertex, per corner, per edge and twice per face, and the
+/// checker's own, pinned for two shapes; a change to the schedule changes these numbers.
+#[test]
+fn the_build_charges_its_light_phases_too() {
+    let charged = |input: &Polygons| {
+        let mut meter = meter();
+        build(input, &Exec::serial(), &mut meter).unwrap();
+        meter.used().get(BudgetKind::Work)
+    };
+    assert_eq!(charged(&cuboid(3, 4, 5)), 94);
+    let field = prism(&[vec![5, 6, 7], vec![6, 8, 6], vec![5, 7, 9]], 4).0;
+    assert_eq!(charged(&field), 313);
+}
+
+/// Two faces on one dominant axis share their edge's plane only where `build` makes it: an edge
+/// whose planes are given keeps each half-edge's own, even where the two differ.
+#[test]
+fn given_edge_planes_are_never_shared() {
+    // One cell of a height field: two top triangles, a b c and a c d, meet on the diagonal a c.
+    let (mut input, _) = prism(&[vec![5, 6], vec![7, 6]], 4);
+    let corner = |k: usize| match input.vertices[input.corners[k] as usize] {
+        Corner::Grid(p) => p,
+        Corner::Planes(_) => panic!("a prism's corners are grid points"),
+    };
+    let (a, c) = (corner(0), corner(2));
+    assert_eq!((corner(3), corner(4)), (a, c));
+    // The diagonal's half-edges: c to a in the first triangle, a to c in the second.
+    let (b, d) = (corner(1), corner(5));
+    let tilted = |start: P3, off: [i64; 3], inside: P3| {
+        let lift = g(
+            start.x.get() + off[0],
+            start.y.get() + off[1],
+            start.z.get() + off[2],
+        );
+        let Corner::Grid(lift) = lift else {
+            panic!("a grid point")
+        };
+        let plane = Plane::through(a, c, lift).unwrap();
+        // Positive toward the face's own third corner.
+        let [x, y, z] = plane.n();
+        let at = |p: P3| {
+            x * i128::from(p.x.get())
+                + y * i128::from(p.y.get())
+                + z * i128::from(p.z.get())
+                + plane.d()
+        };
+        if at(inside) > 0 {
+            plane
+        } else {
+            Plane::new([-x, -y, -z], -plane.d()).unwrap()
+        }
+    };
+    let first = tilted(a, [1, -2, 3], b);
+    let second = tilted(a, [-2, 1, 5], d);
+    let mut given = vec![None; input.corners.len()];
+    given[2] = Some(first);
+    given[3] = Some(second);
+    input.edge_plane = given;
+    let mesh = build(&input, &Exec::serial(), &mut meter()).unwrap();
+    let pooled = |plane: &Plane| {
+        let [x, y, z] = plane.n();
+        let turned = Plane::new([-x, -y, -z], -plane.d()).unwrap();
+        mesh.parts()
+            .planes
+            .iter()
+            .any(|q| q == plane || *q == turned)
+    };
+    assert!(pooled(&first) && pooled(&second));
+}
+
 #[test]
 fn a_loop_stored_from_its_notch_turns_at_its_lowest_corner() {
     let outline = [(0, -6), (11, 0), (0, 6), (3, 0)];
