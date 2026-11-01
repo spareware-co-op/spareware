@@ -2031,6 +2031,7 @@ pub mod roots {
 pub mod intersect {
     use geom_curve::CurveKind;
     use geom_intersect::curve::{curves, self_crossings};
+    use geom_intersect::curve_surface::curve_surface;
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, Projection,
         pair, project_curve, project_surface,
@@ -2056,6 +2057,15 @@ pub mod intersect {
         out: &mut Vec<Result<Intersection, IntersectError>>,
     ) {
         run(batch, out, |(a, b)| curves(a, b, &mut meter()));
+    }
+
+    /// `curve_surface` on each pair.
+    #[inline(never)]
+    pub fn pierced(
+        batch: &[(CurveKind<3>, SurfaceKind)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(c, s)| curve_surface(c, s, &mut meter()));
     }
 
     /// `self_crossings` on each curve.

@@ -248,9 +248,15 @@
               "kind": "corpus",
               "piece": "G163",
               "why": "5 new count benchmarks on where curves meet (decision 32.44): two segments, two circles, a line with a circle, two cubics and a loop; merged with G159's quadric and G162's projection lines; no existing digest moved"
+            },
+            {
+              "sha256": "ad9c15a7d6201c5b6d42ec0316a502e33dbd22a68046da6b5b30336df585d071",
+              "kind": "corpus",
+              "piece": "G164",
+              "why": "3 new count benchmarks on where curves meet surfaces (decision 32.44): a line through a plane, a line along a torus's equator and a cubic through a graph; no existing digest moved"
             }
           ],
-          "sha256": "ad9c15a7d6201c5b6d42ec0316a502e33dbd22a68046da6b5b30336df585d071"
+          "sha256": "0addf11ef9e85ac52b1858fff68014e4dbe595ceb2a811ae5ef5823f7fef51b9"
         },
         {
           "id": "geom-nurbs/operations",
