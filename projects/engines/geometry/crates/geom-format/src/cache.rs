@@ -372,6 +372,9 @@ impl<R> MemoStore<R> {
     /// The answer stored for `key`, if [`CacheEntry::answer`] gives one under `budget`; a hit
     /// makes the entry the most recently used.
     pub fn get(&mut self, key: &CacheKey, budget: Budget) -> Option<&Result<OpOutput<R>, OpError>> {
+        if cfg!(feature = "reference") {
+            return None;
+        }
         let now = self.tick();
         let slot = self.slots.get_mut(key)?;
         slot.entry.answer(budget)?;

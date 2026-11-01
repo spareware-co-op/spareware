@@ -4577,6 +4577,26 @@
           "target": "lib"
         },
         {
+          "cost": "one run of each log. Recursion: none.",
+          "does": "draws [`LOGS`] byte strings from a fixed seed, decodes each as a `sequence` case, runs it, replays its log and prints the log's hash and the result's measures. The hash covers every operation's bodies, names, history, exactness and diagnostics (28.13), so two builds that print the same lines gave the same answers. Golden work counts join with G98.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/bin/replay-hashes.rs",
+          "guarantees": [
+            "the same lines on every run of a build: the seed is a constant, and nothing is read from the world. Exit code 0 unless a line cannot be written."
+          ],
+          "job": "`replay-hashes`: one line per seeded operation log, for reference mode's comparison (23.13; piece G106).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "chapter 23.13's reference mode, with chapter 28.5's sequence target as its corpus (`projects/engines/geometry/architecture/23-performance.md`)."
+          },
+          "path": "replay-hashes",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
           "family": [],
