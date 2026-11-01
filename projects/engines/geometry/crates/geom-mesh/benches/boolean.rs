@@ -1,8 +1,9 @@
 //! How fast meshes combine, by the standard library's clock (piece G148): two closed height fields
-//! of about 2,000, 20,000 and 200,000 faces, offset so that their tops cross all over. EMBER's
-//! geometric mean over 1,000 Thingi10K pairs of 1,000 to 100,000 faces was 1.6 ms; those models are
-//! not stored here, so this prints what these pairs take. Prints one line per run; the gate is the
-//! count benchmark in `geom-bench`.
+//! of about 2,000, 20,000 and 200,000 faces, offset half a cell so that their tops cross all over,
+//! and offset four fifths of their width so that they overlap in a strip, as a pair of models
+//! placed side by side mostly do. EMBER's geometric mean over 1,000 Thingi10K pairs of 1,000 to
+//! 100,000 faces was 1.6 ms; those models are not stored here, so this prints what these pairs
+//! take. Prints one line per run; the gate is the count benchmark in `geom-bench`.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -112,10 +113,18 @@ fn main() {
         Some(side) => vec![side],
         None => vec![23, 71, 224],
     };
-    for side in sides {
+    for (side, (pair, offset)) in sides
+        .iter()
+        .flat_map(|&side| [("crossing", 2048), ("in a strip", 0)].map(|p| (side, p)))
+    {
+        let offset = if offset == 0 {
+            i64::from(side) * 4096 * 4 / 5
+        } else {
+            offset
+        };
         let mut rng = SplitMix64::new(Seed(0x148));
         let a = mesh(&field(side, 0, 1, &mut rng), &Exec::with_pool(&rayon));
-        let b = mesh(&field(side, 2048, 2, &mut rng), &Exec::with_pool(&rayon));
+        let b = mesh(&field(side, offset, 2, &mut rng), &Exec::with_pool(&rayon));
         for (name, exec) in [
             ("1 thread", Exec::serial()),
             ("8 threads", Exec::with_pool(&rayon)),
@@ -126,7 +135,7 @@ fn main() {
                 boolean(&[&a, &b], &[WindingTest::unite()], &step, &exec, &mut meter).unwrap();
             let time = start.elapsed();
             println!(
-                "{} + {} faces, {name}: {} faces in {time:?}",
+                "{} + {} faces {pair}, {name}: {} faces in {time:?}",
                 a.faces(),
                 b.faces(),
                 done[0].mesh.faces()

@@ -37,12 +37,14 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cmp::Reverse;
 
-use geom_num::NumError;
+use geom_num::grid::Coord;
 use geom_num::plane::{Plane, Tpi};
+use geom_num::{NumError, Sign};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::convex::Piece;
 use crate::cut::{Clipped, clip, local_cuts};
+use crate::order::Meeting;
 use crate::trace::{Cell, Classified, Polygon, TraceError, classify, reference_above};
 use crate::winding::{Entry, Winding, WindingTest};
 
@@ -97,8 +99,7 @@ pub fn around(polygons: &[Polygon]) -> Result<Cell, NumError> {
         let Piece { face, bounds } = &polygon.piece;
         let after = bounds.iter().cycle().skip(1);
         for (bound, next) in bounds.iter().zip(after) {
-            let at = Tpi::meeting(*face, *bound, *next)?.to_grid()?.value();
-            let coordinates = [at.x.get(), at.y.get(), at.z.get()];
+            let coordinates = nearest(face, bound, next)?;
             for ((l, h), v) in low.iter_mut().zip(&mut high).zip(coordinates) {
                 *l = (*l).min(v);
                 *h = (*h).max(v);
@@ -116,6 +117,23 @@ pub fn around(polygons: &[Polygon]) -> Result<Cell, NumError> {
         low: low.map(|v| half(v, -3)),
         high: high.map(|v| half(v, 3)),
     })
+}
+
+/// The grid point nearest where `face`, `bound` and `next` meet, as `Tpi::to_grid` gives it, in
+/// machine words where the point fits them, and refused as it refuses.
+fn nearest(face: &Plane, bound: &Plane, next: &Plane) -> Result<[i64; 3], NumError> {
+    let words = Meeting::new(face, bound, next)
+        .filter(|point| point.weight() != Sign::Zero)
+        .and_then(|point| point.rounded());
+    if let Some([x, y, z]) = words {
+        return Ok([
+            Coord::from_i128(x)?.get(),
+            Coord::from_i128(y)?.get(),
+            Coord::from_i128(z)?.get(),
+        ]);
+    }
+    let at = Tpi::meeting(*face, *bound, *next)?.to_grid()?.value();
+    Ok([at.x.get(), at.y.get(), at.z.get()])
 }
 
 /// The odd half steps to try splitting `cell` at, as (axis, half step), the longest axis first.

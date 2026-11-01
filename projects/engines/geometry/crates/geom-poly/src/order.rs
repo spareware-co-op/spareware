@@ -237,6 +237,26 @@ impl Meeting {
     pub(crate) const fn weight(&self) -> Sign {
         Sign::of_i128(self.w)
     }
+
+    /// Each coordinate `X_i` / w rounded to the nearest integer, ties to even, as
+    /// `Tpi::to_grid` rounds: ties to even are the same whether the magnitude or the signed value
+    /// is rounded. `None` for w zero, or a step that leaves `i128`.
+    pub(crate) fn rounded(&self) -> Option<[i128; 3]> {
+        let turn = self.w.is_negative();
+        let w = if turn { self.w.checked_neg()? } else { self.w };
+        if w == 0 {
+            return None;
+        }
+        let mut out = [0; 3];
+        for (slot, x) in out.iter_mut().zip(self.x) {
+            let x = if turn { x.checked_neg()? } else { x };
+            let (floor, rest) = (x.checked_div_euclid(w)?, x.checked_rem_euclid(w)?);
+            let twice = rest.checked_mul(2)?;
+            let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);
+            *slot = if up { floor.checked_add(1)? } else { floor };
+        }
+        Some(out)
+    }
 }
 
 /// p · s − q · r, within 2^167 in magnitude for normal components below 2^83.
@@ -466,7 +486,7 @@ mod tests {
     )]
 
     use geom_num::Sign;
-    use geom_num::plane::{Plane, determinant_sign, normals_sign};
+    use geom_num::plane::{Plane, Tpi, determinant_sign, normals_sign};
     use proptest::prelude::*;
 
     use super::Meeting;
@@ -512,6 +532,38 @@ mod tests {
         let far = 1i128 << 124;
         let [a, b, c] = [[1, 2, 3], [3, -1, 2], [2, 3, -5]].map(|n| Plane::new(n, far).unwrap());
         assert!(Meeting::new(&a, &b, &c).is_none());
+    }
+
+    fn rounds_as_the_grid_does(rows: &[Plane]) {
+        let [p, q, r] = [rows[0], rows[1], rows[2]];
+        let Some(rounded) = Meeting::new(&p, &q, &r).and_then(|m| m.rounded()) else {
+            assert!(Tpi::meeting(p, q, r).is_err());
+            return;
+        };
+        let at = Tpi::meeting(p, q, r).unwrap().to_grid();
+        match at {
+            Ok(near) => {
+                let v = near.value();
+                assert_eq!(
+                    rounded,
+                    [v.x.get(), v.y.get(), v.z.get()].map(i128::from),
+                    "{p:?} {q:?} {r:?}"
+                );
+            }
+            Err(_) => assert!(rounded.iter().any(|v| v.unsigned_abs() > (1u128 << 40))),
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn a_rounding_is_the_grid_s_with_ties(rows in planes(2, 7)) {
+            rounds_as_the_grid_does(&rows);
+        }
+
+        #[test]
+        fn a_rounding_is_the_grid_s_for_a_building(rows in planes(1 << 24, 1 << 44)) {
+            rounds_as_the_grid_does(&rows);
+        }
     }
 
     #[test]
