@@ -611,30 +611,6 @@
       "reason": "from and to are equal only for a side shrunk to a point, whose low equals its high. A stretch runs between two different marks, so such a side is along no stretch and its direction is never read."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with > in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "rising is only compared with rising of another fin of the same edge, and a fin's ends differ, so turning every answer over leaves every comparison as it was."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with <= in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace == with != in radial",
-      "line_text": "reversed: rising(&fin) == rising(&start),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant turns every flap about the line by half a turn, the reference with the rest. about orders flaps by their angle from the reference, and that does not change when all of them turn together."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(0)); 3]",
       "line_text": "let at = |axis: usize| {",
