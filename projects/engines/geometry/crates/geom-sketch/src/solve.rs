@@ -25,10 +25,13 @@
 //!   its worst rule, and running out of budget is [`SketchError::Stopped`]; neither returns a sketch.
 //! - **A singular start is nudged once.** A rule on its singular set has its points moved by small
 //!   amounts derived from its id alone, which the report records; a rule still on it is
-//!   [`SketchError::Degenerate`] (chapter 15.4).
+//!   [`SketchError::Degenerate`] (chapter 15.4). A square block whose Jacobian is singular at its
+//!   start, though no rule of it is on its own singular set, is started again with every rule's
+//!   inputs nudged if it does not converge: no step leaves such a start.
 //! - **The branch is followed.** Each stored sense is checked after each step of a path with interval
 //!   arithmetic, and a sign that cannot be certified counts as at risk; the smallest pivot of each
-//!   square block is held at or above [`INDEPENDENT`]. After [`MOST_HALVINGS`] halvings at one place
+//!   square block is held at or above [`INDEPENDENT`], and the sign of its determinant is kept: a
+//!   step that changes it has jumped to another branch. After [`MOST_HALVINGS`] halvings at one place
 //!   the answer is [`SketchError::BranchLost`], with the rule and how far along the path it stopped.
 //!   A step is halved after a failure and doubled after a success, and the halvings are those that
 //!   brought the step to its size: a failed step of 2^-10 of the path loses it. Read as halvings
@@ -55,6 +58,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use geom_linalg::matrix::Work;
 use geom_linalg::sparse_qr::{SparseQr, SymbolicQr};
@@ -108,7 +112,8 @@ pub struct Report {
     pub freedoms: usize,
     /// The largest residual at the answer, in steps.
     pub largest: f64,
-    /// The rules whose start was nudged off a singular set.
+    /// The rules whose start was nudged off a singular set, and those of a square block that started
+    /// singular and did not converge from there.
     pub nudged: Vec<ItemId>,
 }
 
@@ -356,8 +361,48 @@ impl Stage {
         assembly.name_of_row(at(&self.rows, i)?)
     }
 
-    /// Solves this stage from `x`, holding everything else fixed.
+    /// Solves this stage from `x`, holding everything else fixed. A square block that does not
+    /// converge from a start where its Jacobian is singular is started once more, from there with
+    /// its rules' inputs moved by their nudges, which the report records (chapter 15.4): from such
+    /// a start no step leaves the singular place, as a point straight above the end of a level line
+    /// it must be a distance from never moves sideways.
     fn solve(
+        &mut self,
+        assembly: &mut Assembly,
+        x: &mut [f64],
+        report: &mut Report,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<(), SketchError> {
+        let mut from = Vec::new();
+        for &column in &self.columns {
+            push(&mut from, *x.get(column).ok_or(SketchError::Internal)?)?;
+        }
+        let failed = match self.iterate(assembly, x, report, meter) {
+            Err(SketchError::Unsolved(id)) if self.square => id,
+            other => return other,
+        };
+        for (&column, &value) in self.columns.iter().zip(&from) {
+            *x.get_mut(column).ok_or(SketchError::Internal)? = value;
+        }
+        let mut r = zeros(self.rows.len())?;
+        let singular = match self.pivot_at(assembly, x, &mut r, meter) {
+            Ok((pivot, _)) => pivot < INDEPENDENT,
+            Err(SketchError::Degenerate(_) | SketchError::Numeric(_)) => true,
+            Err(e) => return Err(e),
+        };
+        if !singular {
+            return Err(SketchError::Unsolved(failed));
+        }
+        for &rule in &self.rules {
+            let id = assembly.name_of_rule(rule)?;
+            assembly.nudge(id, x, &self.columns)?;
+            push(&mut report.nudged, id)?;
+        }
+        self.iterate(assembly, x, report, meter)
+    }
+
+    /// Gauss–Newton with Moré's damping from `x`, after [`Stage::start`]'s one nudge.
+    fn iterate(
         &mut self,
         assembly: &mut Assembly,
         x: &mut [f64],
@@ -442,22 +487,23 @@ impl Stage {
         }
     }
 
-    /// The smallest pivot of this stage's Jacobian at the last evaluation.
-    fn smallest_pivot(
+    /// The smallest pivot of this stage's Jacobian at `x`, and the sign of its determinant if it is
+    /// square and none of its columns is dead.
+    fn pivot_at(
         &mut self,
         assembly: &mut Assembly,
         x: &[f64],
         r: &mut [f64],
         meter: &mut WorkMeter<'_>,
-    ) -> Result<f64, SketchError> {
+    ) -> Result<(f64, Option<Ordering>), SketchError> {
         self.evaluate(assembly, x, r)?;
         self.load(assembly)?;
         let mut work = Work::new(u64::MAX);
         let factored = SparseQr::factor(&self.plain_order, &self.plain, Real::ZERO, &mut work);
         meter.charge(u64::MAX.saturating_sub(work.left()))?;
         match factored {
-            Ok(qr) => Ok(qr.smallest_pivot()),
-            Err(LinalgError::Singular) => Ok(0.0),
+            Ok(qr) => Ok((qr.smallest_pivot(), qr.determinant_sign()?)),
+            Err(LinalgError::Singular) => Ok((0.0, None)),
             Err(e) => Err(e.into()),
         }
     }
@@ -539,13 +585,16 @@ impl Plan {
         })
     }
 
-    /// The first rule whose stored sense has flipped, or cannot be certified, at `x`, or a square
-    /// stage's first rule if its smallest pivot has fallen below [`INDEPENDENT`].
+    /// The first rule whose stored sense has flipped, or cannot be certified, at `x`, or a watched
+    /// stage's first rule if its smallest pivot has fallen below [`INDEPENDENT`] or its determinant
+    /// has changed sign. A path of solutions keeps that sign while it passes no singular place, so a
+    /// change says the step jumped to another branch, past one, as a point at a distance from a
+    /// moving reference does when it lands on the reference's other side.
     fn at_risk(
         &mut self,
         x: &[f64],
         senses: &[(usize, Sense)],
-        watched: &[bool],
+        watched: &[Option<Ordering>],
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<ItemId>, SketchError> {
         for &(rule, sense) in senses {
@@ -555,9 +604,10 @@ impl Plan {
         }
         let mut r = Vec::new();
         for (stage, watch) in self.stages.iter_mut().zip(watched) {
-            if *watch {
+            if watch.is_some() {
                 r.resize(stage.rows.len(), 0.0);
-                if stage.smallest_pivot(&mut self.assembly, x, &mut r, meter)? < INDEPENDENT {
+                let (pivot, sign) = stage.pivot_at(&mut self.assembly, x, &mut r, meter)?;
+                if pivot < INDEPENDENT || sign != *watch {
                     return Ok(Some(stage.rule_name(&self.assembly, 0)?));
                 }
             }
@@ -620,8 +670,11 @@ pub fn continue_to(
     let mut r = Vec::new();
     for stage in &mut plan.stages {
         r.resize(stage.rows.len(), 0.0);
-        let pivot = stage.smallest_pivot(&mut plan.assembly, &x, &mut r, meter)?;
-        push(&mut watched, stage.square && pivot >= INDEPENDENT)?;
+        let (pivot, sign) = stage.pivot_at(&mut plan.assembly, &x, &mut r, meter)?;
+        push(
+            &mut watched,
+            sign.filter(|_| stage.square && pivot >= INDEPENDENT),
+        )?;
     }
     // The step is 2^-depth of the path: halved after a failure, doubled after a success. Counting
     // halvings only since the last success would let a path that creeps up on a singular place

@@ -56,6 +56,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use geom_num::real::Real;
 
@@ -259,6 +260,25 @@ pub struct SparseQr {
     rank: usize,
     /// The QR of Rᵀ, when some column is dead.
     second: Option<Box<SparseQr>>,
+}
+
+/// Whether the permutation `p` of 0..n is odd: each cycle of length l is l − 1 swaps.
+fn odd(p: &[usize]) -> Result<bool, LinalgError> {
+    let mut seen = filled(p.len(), false)?;
+    let mut odd = false;
+    for start in 0..p.len() {
+        let mut i = start;
+        let mut first = true;
+        while !at(&seen, i)? {
+            *slot(&mut seen, i)? = true;
+            if !first {
+                odd = !odd;
+            }
+            first = false;
+            i = at(p, i)?;
+        }
+    }
+    Ok(odd)
 }
 
 /// H·x, for the reflection with `rows` and `values` and its `tau`.
@@ -497,6 +517,37 @@ impl SparseQr {
             }
         }
         least
+    }
+
+    /// The sign of det A, for a square A with no dead column; `None` otherwise. A·Π = Q·P·R, with
+    /// P putting each column's pivot row in its place, so the sign is that of R's diagonal, turned
+    /// once for each reflection made (τ ≠ 0; τ = 0 is the identity), once if Π is odd and once if
+    /// P is. A path of solutions keeps this sign while it meets no singular configuration
+    /// (chapter 15.7), so a change says a step crossed to another branch.
+    ///
+    /// # Errors
+    ///
+    /// [`LinalgError::OutOfMemory`]; [`LinalgError::Defect`] if the pivots are not a permutation,
+    /// which only a defect can cause.
+    pub fn determinant_sign(&self) -> Result<Option<Ordering>, LinalgError> {
+        let n = self.diagonal.len();
+        if self.rows != n || self.rank < n {
+            return Ok(None);
+        }
+        let mut negative = odd(&self.order)? != odd(&self.pivot)?;
+        for (tau, beta) in self.tau.iter().zip(&self.diagonal) {
+            if *tau != 0.0 {
+                negative = !negative;
+            }
+            if *beta < 0.0 {
+                negative = !negative;
+            }
+        }
+        Ok(Some(if negative {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }))
     }
 
     /// What a solve costs.

@@ -190,11 +190,23 @@ fn a_budget_stops_it_with_no_answer() {
     let s = sketch(TRIANGLE);
     let mut none = WorkMeter::new(Budget::of_work(1));
     assert_eq!(solve(&s, &mut none), Err(SketchError::Stopped));
-    // The plan fits, and the iterations do not.
-    let mut plan_only = WorkMeter::new(Budget::of_work(400));
+    // What the whole solve costs, and what its plan alone does: a sketch already at its answer
+    // takes no iteration. A budget that holds the plan and not the iterations stops it.
+    let cost = |s: &Sketch| {
+        let mut m = meter();
+        let done = solve(s, &mut m).unwrap();
+        (u64::try_from(m.used().work).unwrap(), done)
+    };
+    let (whole, done) = cost(&s);
+    let (plan, again) = cost(&done.sketch);
+    assert_eq!(again.report.iterations, 0);
+    assert!(plan < whole, "{plan} {whole}");
+    let mut plan_only = WorkMeter::new(Budget::of_work(plan));
     assert_eq!(solve(&s, &mut plan_only), Err(SketchError::Stopped));
-    let mut enough = WorkMeter::new(Budget::of_work(1 << 30));
-    assert!(solve(&s, &mut enough).is_ok());
+    let mut short = WorkMeter::new(Budget::of_work(whole - 1));
+    assert_eq!(solve(&s, &mut short), Err(SketchError::Stopped));
+    let mut enough = WorkMeter::new(Budget::of_work(whole));
+    assert_eq!(solve(&s, &mut enough), Ok(done));
 }
 
 const FLAT_START: &str = "entity 1.0 point 100 200

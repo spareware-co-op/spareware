@@ -7590,6 +7590,21 @@
               "shape": "tuple"
             },
             {
+              "doc": "A block would not converge: this is its worst rule.",
+              "name": "Unsolved",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A path could not be followed past this rule, this share of the way along it.",
+              "name": "BranchLost",
+              "shape": "struct"
+            },
+            {
+              "doc": "A path's two ends are not one sketch with new values.",
+              "name": "NotTheSameSketch",
+              "shape": "unit"
+            },
+            {
               "doc": "Text that is not `sketch v1`, at this line, from 1.",
               "name": "Text",
               "shape": "struct"
@@ -7795,6 +7810,44 @@
           "target": "lib"
         },
         {
+          "cost": "each iteration of a stage is one factorisation of its rows, charged to the work meter with the rows' evaluation, and the meter is checked once an iteration. No recursion.",
+          "does": "a plan is what depends on a sketch's structure alone: the merged variables, the Jacobian's pattern, the stages in solve order and an analysis of each. Each stage is a component's over-determined part, one of its square blocks, or its under-determined part, and holds everything before it fixed. [`solve`] runs every stage from the sketch's values until each residual is within a 64th of a grid step, and returns the sketch at those values with a [`Report`]. [`continue_to`] moves the changed values along a straight path instead of jumping, solving at each step from the last, and halves a step that does not converge, puts a stored sense at risk or nears a singular configuration.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+          "guarantees": [
+            "**Least change.** The full step is the least-norm least-squares step, the limit of the damped steps as the damping goes to zero, so a free variable does not jump (chapter 15.6). Every variable has weight one: after the scaling of chapter 15.4 each acts as a length. Weights of their own are the dragging piece's (G228).",
+            "**QR, never normal equations.** A damped step is the least-squares solution of J stacked on √λ·I, by `geom_linalg`'s sparse QR; the pattern of each is analysed once, in the plan.",
+            "**Convergence in grid steps.** A stage has converged when each of its residuals is at most [`TOLERANCE`]. Every residual is a length with a gradient near one, so that means the same at any size, and no further division by the block's size would change a step.",
+            "**Never a partial answer.** A block that does not converge is [`SketchError::Unsolved`], naming its worst rule, and running out of budget is [`SketchError::Stopped`]; neither returns a sketch.",
+            "**A singular start is nudged once.** A rule on its singular set has its points moved by small amounts derived from its id alone, which the report records; a rule still on it is [`SketchError::Degenerate`] (chapter 15.4). A square block whose Jacobian is singular at its start, though no rule of it is on its own singular set, is started again with every rule's inputs nudged if it does not converge: no step leaves such a start.",
+            "**The branch is followed.** Each stored sense is checked after each step of a path with interval arithmetic, and a sign that cannot be certified counts as at risk; the smallest pivot of each square block is held at or above [`INDEPENDENT`], and the sign of its determinant is kept: a step that changes it has jumped to another branch. After [`MOST_HALVINGS`] halvings at one place the answer is [`SketchError::BranchLost`], with the rule and how far along the path it stopped. A step is halved after a failure and doubled after a success, and the halvings are those that brought the step to its size: a failed step of 2^-10 of the path loses it. Read as halvings since the last success, 15.7's rule would let a path creep up on a singular place in ever smaller steps that each succeed, and never end. So a path takes at most about 2,000 steps: each success moves at least 2^-10 of it, and each failure undoes at most one doubling.",
+            "**Deterministic.** Stages, rows and steps run in an order that depends on stored data alone, and the schedule of a path on the stored state and the new values alone (chapter 15.7)."
+          ],
+          "job": "The block solver and continuation: Gauss–Newton steps with Moré's damping on each block of a sketch, least change where it is under-determined, and a followed path when its values change.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/BFb0067700",
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "Levenberg–Marquardt as J. J. Moré, *The Levenberg–Marquardt algorithm: implementation and theory*, Numerical Analysis, Springer LNM 630 (1978), <https://doi.org/10.1007/BFb0067700>: accept a step on the ratio of actual to predicted reduction, and move the damping by a factor of four on the same ratio. The trust-region radius of that paper is replaced by the damping itself, as in Marquardt's original. Continuation is section 15.7 (`projects/engines/geometry/architecture/15-sketches.md`)."
+          },
+          "path": "geom_sketch::solve",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/solve/lm.rs",
+              "method_note": null,
+              "name": "fiksi (Endoli)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for solving the stacked system instead of the normal equations; no code is taken.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(z√n) for the matching and O(z + n log n) for the rest, z the graph's edges and n its nodes; O(z + n) memory. No recursion.",
           "does": "[`Graph`] is the bipartite graph of equations and variables. [`substitute`] builds it from a sketch, merging the two variables of every equality between single variables, such as coincident points or a horizontal line. [`analyse`] splits the graph into connected [`Component`]s, finds a largest matching of equations to variables by Hopcroft and Karp's method, and from it the Dulmage–Mendelsohn decomposition of each component: an over-determined part, an under-determined part, and square [`Part`]s in the order to solve them.",
           "family": [],
@@ -7861,7 +7914,7 @@
       "provenance": [],
       "sections": "15, and 22 for its errors, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216, G217, G218 and G221 are done.",
+      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216, G217, G218, G221 and G222 are done.",
       "summary": "Spare Kit geometry kernel: the constraint solver."
     },
     {
@@ -10440,6 +10493,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-run/src/exec.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/solve/lm.rs",
+      "method_note": null,
+      "name": "fiksi (Endoli)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-sketch/src/solve.rs"
       ]
     },
     {
