@@ -42,8 +42,9 @@
 //!
 //! Cost: O(n) clips per level for n polygons across the level's boxes, and at most 123 levels:
 //! a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and
-//! [`classify`] cost on its polygons, and a solid's leaf one copy of each. Charges the meter one
-//! unit per polygon a split clips, and one per polygon of a solid's leaf.
+//! [`classify`] cost on its polygons, and a solid's leaf one copy of each. A polygon's corner points
+//! are made once and carried into every box it enters whole; only a split's two parts make theirs.
+//! Charges the meter one unit per polygon a split clips, and one per polygon of a solid's leaf.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -55,7 +56,7 @@ use geom_num::{NumError, Sign};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::convex::Piece;
-use crate::cut::{Clipped, clip, local_cuts};
+use crate::cut::{Clipped, clip_at, local_cuts_at, meetings};
 use crate::order::Meeting;
 use crate::trace::{Cell, Classified, Polygon, TraceError, classify, reference_above};
 use crate::winding::{Entry, Winding, WindingTest};
@@ -85,6 +86,9 @@ struct Node {
     polygons: Vec<Polygon>,
     /// The index in the input of each polygon.
     sources: Vec<usize>,
+    /// Each polygon's corner points, as `crate::cut::meetings` makes them: made once, and kept
+    /// by every box a polygon passes into whole.
+    points: Vec<Vec<Option<Meeting>>>,
 }
 
 /// What a level does to a box.
@@ -212,27 +216,32 @@ fn divide(
         };
         let n = [0, 1, 2].map(|i| if i == axis { 2 } else { 0 });
         let plane = Plane::new(n, i128::from(at).saturating_neg())?;
-        let mut below = (Vec::new(), Vec::new());
-        let mut above = (Vec::new(), Vec::new());
+        let mut below = (Vec::new(), Vec::new(), Vec::new());
+        let mut above = (Vec::new(), Vec::new(), Vec::new());
         let mut in_plane = false;
-        for (polygon, source) in node.polygons.iter().zip(&node.sources) {
+        let each = node.polygons.iter().zip(&node.sources).zip(&node.points);
+        for ((polygon, source), points) in each {
             meter.charge(1)?;
             let part = |piece: Piece| Polygon {
                 piece,
                 entry: polygon.entry,
             };
-            match clip(&polygon.piece, &plane)? {
+            match clip_at(&polygon.piece, points, &plane)? {
                 Clipped::Front => {
                     above.0.push(polygon.clone());
                     above.1.push(*source);
+                    above.2.push(points.clone());
                 }
                 Clipped::Back => {
                     below.0.push(polygon.clone());
                     below.1.push(*source);
+                    below.2.push(points.clone());
                 }
                 Clipped::Split(front, back) => {
+                    above.2.push(meetings(&front));
                     above.0.push(part(front));
                     above.1.push(*source);
+                    below.2.push(meetings(&back));
                     below.0.push(part(back));
                     below.1.push(*source);
                 }
@@ -271,6 +280,7 @@ fn divide(
                 reference: node.reference.clone(),
                 polygons: below.0,
                 sources: below.1,
+                points: below.2,
             },
             Node {
                 key: node.key | bit,
@@ -279,6 +289,7 @@ fn divide(
                 reference,
                 polygons: above.0,
                 sources: above.1,
+                points: above.2,
             },
         ))));
     }
@@ -295,7 +306,7 @@ fn solve(
         return solid_leaf(node, entry, meter);
     }
     let pieces: Vec<Piece> = node.polygons.iter().map(|p| p.piece.clone()).collect();
-    let cuts = local_cuts(&pieces, meter)?;
+    let cuts = local_cuts_at(&pieces, &node.points, meter)?;
     let mut classified = classify(&node.cell, &node.reference, &node.polygons, &cuts, meter)?;
     for piece in &mut classified {
         piece.polygon = node
@@ -375,6 +386,7 @@ pub fn arrange_with(
         reference,
         polygons: polygons.to_vec(),
         sources: (0..polygons.len()).collect(),
+        points: polygons.iter().map(|p| meetings(&p.piece)).collect(),
     }];
     let mut leaves = Vec::new();
     while !level.is_empty() {

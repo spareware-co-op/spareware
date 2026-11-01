@@ -119,6 +119,16 @@ pub fn clip(piece: &Piece, plane: &Plane) -> Result<Clipped, NumError> {
     split(piece, &corners(piece, plane)?, plane)
 }
 
+/// [`clip`], reading the corners from `at`, the points of `piece`'s corners as [`meetings`]
+/// makes them: the same signs, without making the points again.
+pub(crate) fn clip_at(
+    piece: &Piece,
+    at: &[Option<Meeting>],
+    plane: &Plane,
+) -> Result<Clipped, NumError> {
+    split(piece, &corners_at(piece, at, plane)?, plane)
+}
+
 /// `piece` against `plane`, whose signs at its corners are `signs`.
 fn split(piece: &Piece, signs: &[Sign], plane: &Plane) -> Result<Clipped, NumError> {
     let front = signs.contains(&Sign::Positive);
@@ -214,7 +224,7 @@ fn reaches(piece: &Piece, other: &Piece) -> Result<bool, NumError> {
 
 /// The points of `piece`'s corners, corner i where bounds i and i + 1 meet, in machine words where
 /// they fit, for reading against many planes.
-fn meetings(piece: &Piece) -> Vec<Option<Meeting>> {
+pub(crate) fn meetings(piece: &Piece) -> Vec<Option<Meeting>> {
     let after = piece.bounds.iter().cycle().skip(1);
     piece
         .bounds
@@ -318,18 +328,27 @@ pub fn local_cuts(
     polygons: &[Piece],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Vec<Piece>>, ConvexError> {
+    let points: Vec<Vec<Option<Meeting>>> = polygons.iter().map(meetings).collect();
+    local_cuts_at(polygons, &points, meter)
+}
+
+/// [`local_cuts`], with each polygon's corner points, as [`meetings`] makes them, given.
+pub(crate) fn local_cuts_at(
+    polygons: &[Piece],
+    points: &[Vec<Option<Meeting>>],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Vec<Piece>>, ConvexError> {
     let mut planes = Vec::with_capacity(polygons.len());
     for polygon in polygons {
         planes.push(canonical(&polygon.face)?.plane);
     }
-    let points: Vec<Vec<Option<Meeting>>> = polygons.iter().map(meetings).collect();
     let spans: Vec<Option<Span>> = points.iter().map(|p| Span::of(p.iter().copied())).collect();
     let mut out: Vec<Vec<Piece>> = Vec::with_capacity(polygons.len());
     let mine = polygons
         .iter()
         .enumerate()
         .zip(&planes)
-        .zip(&points)
+        .zip(points)
         .zip(&spans);
     for ((((at, polygon), own), own_points), own_span) in mine {
         // Each piece with its corners' points, made once for every plane it is read against.
@@ -338,7 +357,7 @@ pub fn local_cuts(
             .iter()
             .enumerate()
             .zip(&planes)
-            .zip(&points)
+            .zip(points)
             .zip(&spans);
         for ((((other_at, other), plane), other_points), other_span) in others {
             if other_at == at {
