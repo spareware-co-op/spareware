@@ -918,9 +918,9 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/inputs/plane.rs",
           "guarantees": [
-            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule and exact rounding by `tests/attack_g06.rs`."
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule, exact determinants and exact rounding by `tests/attack_g06.rs`."
           ],
-          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
+          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_meeting`] (`Tpi::meeting`), [`normals_sign`] and [`normals_sign_faces`] (`plane::normals_sign`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`determinant_sign`] and [`determinant_sign_faces`] (`plane::determinant_sign`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
           "method": {
             "links": [
               "https://doi.org/10.1111/j.1467-8659.2009.01609.x",

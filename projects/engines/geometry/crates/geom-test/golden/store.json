@@ -112,9 +112,27 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "The boolean's count benchmark on small prisms: mesh/boolean; no existing digest moved"
+            },
+            {
+              "sha256": "38df307b44466d7d9759aa9108631825877573adc4e1742a3b60a831083a2edc",
+              "kind": "corpus",
+              "piece": "G138",
+              "why": "14 new benchmarks of geom-num's three new public functions (principle 12): plane::determinant_sign on side_of_tpi's four classes and on the planes of a building's faces, which its machine-word rung decides; plane::normals_sign on Tpi::new's three classes and on faces; Tpi::meeting on Tpi::new's three classes; no existing digest moved"
+            },
+            {
+              "sha256": "e7e4cc8c769f8227a9e33a693f4e7003abb5d62e300c259731c1b046a4530cb0",
+              "kind": "corpus",
+              "piece": "G148",
+              "why": "Count benchmarks of two stacks joined: G138's 14 on geom-num's new public functions and G148's mesh/boolean; no existing digest moved"
+            },
+            {
+              "sha256": "91e230c9be3ea00519aef334715657a4d3ff0d1393f929bb58a3a9e408b8d188",
+              "kind": "corpus",
+              "piece": "G148",
+              "why": "Count benchmarks of two stacks joined: G138's 14 on geom-num's new public functions and G148's mesh/boolean; no existing digest moved"
             }
           ],
-          "sha256": "e7e4cc8c769f8227a9e33a693f4e7003abb5d62e300c259731c1b046a4530cb0"
+          "sha256": "eaa79854dc3f526e985192c0b919aad740f1e29f934bb17121102c8227d15e3e"
         },
         {
           "id": "geom-bvh/cells",
