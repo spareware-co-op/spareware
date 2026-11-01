@@ -205,8 +205,8 @@ fn a_shell_is_judged_only_once_its_loops_are_sound() {
 
 #[test]
 fn a_shell_that_encloses_nothing_never_reaches_orientation() {
-    // A pillow: two triangles on one plane, back to back, their edges shared. Faces on one plane
-    // are a pair group 3 has no test for, so it fails closed there.
+    // A pillow: two triangles on one plane, back to back, their edges shared: they lie on one side
+    // of each edge, so group 3 finds them crossing.
     let mut r = Rows::empty();
     let region = r.region(RegionKind::Solid);
     let s = r.shell(region);
@@ -214,7 +214,7 @@ fn a_shell_that_encloses_nothing_never_reaches_orientation() {
         r.vertex(p);
     }
     faces_into(&mut r, s, &[&[0, 1, 2], &[0, 2, 1]]);
-    assert_eq!(kinds(exact(&r).faults()), [FaultKind::PairUnchecked],);
+    assert_eq!(kinds(exact(&r).faults()), [FaultKind::FacesCross]);
 }
 
 #[test]

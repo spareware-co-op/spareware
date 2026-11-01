@@ -170,7 +170,11 @@ fn strip(n: u32, last: Option<NameKey>) -> Body {
     }
     for v in 0..2 * (n + 1) {
         a.points
-            .push(P3::new(i64::from(v / 2), i64::from(v % 2), 0).unwrap())
+            .push(
+                P3::new(i64::from(v / 2), i64::from(v % 2), 0)
+                    .unwrap()
+                    .into(),
+            )
             .unwrap();
         a.vertices.push(Vertex { point: ix(v) }).unwrap();
     }

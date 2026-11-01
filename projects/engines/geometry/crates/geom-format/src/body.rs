@@ -689,13 +689,15 @@ fn write(
         |i| points.get(i).map_or(0, |c| c.len()),
         |i| old.is_some_and(|o| a.points.shares_chunk(&o.points, i)),
         |e, i| {
-            let xyz: Vec<i64> = points
-                .get(i)
-                .copied()
-                .unwrap_or_default()
-                .iter()
-                .flat_map(|p| [p.x.get(), p.y.get(), p.z.get()])
-                .collect();
+            let mut xyz: Vec<i64> = Vec::new();
+            for p in points.get(i).copied().unwrap_or_default() {
+                // Phase-4 train: a point where three pool planes meet (G129's PointKind::Meet) has
+                // no stored form yet; G129's owner decides it.
+                let p = p.grid().ok_or(BodyError::Shape(
+                    "a point where three planes meet has no stored form yet",
+                ))?;
+                xyz.extend([p.x.get(), p.y.get(), p.z.get()]);
+            }
             e.i64_column(&xyz)?;
             Ok(())
         },
@@ -1284,7 +1286,7 @@ fn read_chunk(
                 return Err(BodyError::Shape("three coordinates per point"));
             }
             for &[x, y, z] in xyz.as_chunks::<3>().0 {
-                a.points.push(grid(x, y, z)?)?;
+                a.points.push(grid(x, y, z)?.into())?;
             }
         }
         table::SURFACES => {

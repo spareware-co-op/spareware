@@ -59,13 +59,15 @@ pub enum Arena {
     Curve,
     /// The pcurve pool: the curves fins lie on, in their face's parameter space.
     Pcurve,
-    /// The point pool: the points vertices lie at.
+    /// The point pool: where vertices lie.
     Point,
+    /// The plane pool: the planes a plane-based body's vertices meet on.
+    Plane,
 }
 
 impl Arena {
     /// Every arena, in this order: the topology from region to vertex, then the pools.
-    pub const ALL: [Arena; 11] = [
+    pub const ALL: [Arena; 12] = [
         Arena::Region,
         Arena::Shell,
         Arena::Face,
@@ -77,6 +79,7 @@ impl Arena {
         Arena::Curve,
         Arena::Pcurve,
         Arena::Point,
+        Arena::Plane,
     ];
 
     /// The arena's name, as the errors write it: `region`, `shell`, and so on.
@@ -94,6 +97,7 @@ impl Arena {
             Arena::Curve => "curve",
             Arena::Pcurve => "pcurve",
             Arena::Point => "point",
+            Arena::Plane => "plane",
         }
     }
 }

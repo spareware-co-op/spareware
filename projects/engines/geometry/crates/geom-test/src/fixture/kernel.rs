@@ -222,7 +222,8 @@ impl Engine for Kernel {
             counts.faces = counts.faces.saturating_add(u64::from(a.faces.len()));
             counts.edges = counts.edges.saturating_add(u64::from(a.edges.len()));
             counts.vertices = counts.vertices.saturating_add(u64::from(a.vertices.len()));
-            for point in a.points.iter() {
+            // Phase-4 train: the grid points only; a meeting of pool planes (G129) has none.
+            for point in a.points.iter().filter_map(|p| p.grid()) {
                 let p = [point.x.get(), point.y.get(), point.z.get()];
                 let [low, high] = bounds.get_or_insert([p, p]);
                 for ((l, h), v) in low.iter_mut().zip(high.iter_mut()).zip(p) {

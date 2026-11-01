@@ -2,10 +2,12 @@
 //! lies where its region allows (issue #438's flat half, with G177 for curved shells).
 //!
 //! What it does: [`check`] takes the sign of each shell's exact six-times volume
-//! (`geom_topo::query::shell_volume`): positive faces outward, and anything else is a cavity's. A
-//! solid region must have exactly one shell facing outward. Then, on a
+//! (`geom_topo::query::shell_volume`), or for a shell with a vertex where three planes meet its
+//! certified one (`geom_topo::query::certified_shell_volume`): positive faces outward, and anything
+//! else is a cavity's. A solid region must have exactly one shell facing outward. Then, on a
 //! body with no fault so far, it compares shells by which side of each other they lie
-//! (`geom_topo::query::shell_side`): a cavity lies inside its region's outer shell and outside the
+//! (`geom_topo::query::shell_side`, and for such a shell `crate::planar::shell_side`): a cavity
+//! lies inside its region's outer shell and outside the
 //! region's other cavities, and a solid region's outer shell inside another's lies inside one of
 //! that region's cavities. A shell with a curved face or edge is left for G177 and counted in the
 //! report ([`crate::Report::deferred`]), and judges nothing else.
@@ -13,7 +15,9 @@
 //! Guarantees:
 //!
 //! - **Exact.** Signs of exact integers and the exact predicates behind `shell_side`; no double
-//!   decides anything here.
+//!   decides anything here, but for the sign of a shell with a vertex where three planes meet, a
+//!   certified interval measured from the shell's own corner. A sign that cannot decide is
+//!   [`FaultKind::Unchecked`], never a pass.
 //! - **Runs on bodies that do not cross.** It runs only on a solid body that passed everything
 //!   before it, so each shell is closed, its loops run true, and two shells lie wholly on one side
 //!   of each other: one vertex decides.
@@ -34,10 +38,11 @@ use geom_num::Sign;
 use geom_run::Stopped;
 use geom_topo::entity::{Region, RegionIx, RegionKind, Shell, ShellIx};
 use geom_topo::ix::Arena;
-use geom_topo::query::{QueryError, Side, shell_side, shell_volume};
+use geom_topo::query::{QueryError, Side, certified_shell_volume, shell_side, shell_volume};
 use geom_topo::{Arenas, Body, BodyKind};
 
 use crate::combinatorial::rows;
+use crate::planar;
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
 
@@ -58,6 +63,30 @@ fn region(a: &Arenas, s: ShellIx) -> Option<RegionIx> {
     a.shells.region.get(s).copied()
 }
 
+/// The word for a shell of a sign.
+fn word_of(sign: Sign) -> u32 {
+    if sign == Sign::Positive {
+        OUTER
+    } else {
+        CAVITY
+    }
+}
+
+/// The word for shell `s`, which has a vertex where three planes meet, by its certified volume.
+fn certified_word(body: &Body, s: ShellIx, sink: &mut Sink<'_, '_>) -> Result<u32, Stopped> {
+    let sign = match certified_shell_volume(body, s, sink.meter()) {
+        Err(QueryError::Stopped(stop)) => return Err(stop),
+        found => found.ok().and_then(|v| v.certain_sign()),
+    };
+    Ok(sign.map_or_else(
+        || {
+            sink.push(Fault::at(FaultKind::Unchecked, Entity::Shell(s)));
+            UNJUDGED
+        },
+        word_of,
+    ))
+}
+
 /// Each shell's sign into `roles`, with its faults.
 fn signs(body: &Body, roles: &mut [u32], sink: &mut Sink<'_, '_>) -> Result<(), Stopped> {
     let a = body.arenas();
@@ -65,9 +94,9 @@ fn signs(body: &Body, roles: &mut [u32], sink: &mut Sink<'_, '_>) -> Result<(), 
         sink.charge()?;
         let word = match shell_volume(body, s, sink.meter()) {
             // A closed shell that crosses nothing encloses something, so no sign here is zero.
-            Ok(v) if v.signum() == Sign::Positive => OUTER,
-            Ok(_) => CAVITY,
+            Ok(v) => word_of(v.signum()),
             Err(QueryError::Stopped(stop)) => return Err(stop),
+            Err(QueryError::Implicit(_)) => certified_word(body, s, sink)?,
             Err(_) => {
                 sink.defer();
                 UNJUDGED
@@ -118,6 +147,7 @@ fn side(
 ) -> Result<Option<Side>, Stopped> {
     match shell_side(body, s, t, sink.meter()) {
         Err(QueryError::Stopped(stop)) => Err(stop),
+        Err(QueryError::Implicit(_)) => planar::shell_side(body.arenas(), s, t, sink),
         found => Ok(found.ok().flatten()),
     }
 }

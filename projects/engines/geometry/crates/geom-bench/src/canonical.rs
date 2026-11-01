@@ -969,7 +969,9 @@ impl Canonical for geom_op::OpOutput<geom_make::Made> {
     // A built body, as a transform's input: its corners, then its class's rank.
     fn encode(&self, h: &mut Sha256) {
         for point in self.result.body.arenas().points.iter() {
-            point.encode(h);
+            if let Some(p) = point.grid() {
+                p.encode(h);
+            }
         }
         u32::from(self.exactness.rank()).encode(h);
     }

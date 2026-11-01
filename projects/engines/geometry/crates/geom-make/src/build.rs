@@ -48,8 +48,8 @@ use geom_run::{LogicalSize, Phase, WorkMeter};
 use geom_surface::SurfaceKind;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense, Shell,
-    TopoError, Vertex,
+    Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, RegionKind, Sense,
+    Shell, TopoError, Vertex,
 };
 
 /// The phase every Make and Transform operation charges in.
@@ -431,6 +431,7 @@ fn filled(rows: &Rows, part: Part) -> Result<Builder, TopoError> {
     a.surfaces
         .extend(part.faces.into_iter().map(|f| f.surface))?;
     a.curves.extend(part.edges.into_iter().map(|e| e.curve))?;
-    a.points.extend(part.vertices.into_iter().map(|v| v.at))?;
+    a.points
+        .extend(part.vertices.into_iter().map(|v| PointKind::Grid(v.at)))?;
     Ok(b)
 }

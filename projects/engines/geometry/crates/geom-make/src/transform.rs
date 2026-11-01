@@ -55,7 +55,7 @@ use geom_surface::{ParamSurface, SurfaceKind};
 use geom_topo::ix::Arena;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Body, Builder, Edge, Face, Fin, Ix, Loop, Region, Sense, Shell, TopoError, Vertex,
+    Body, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, Sense, Shell, TopoError, Vertex,
 };
 
 use crate::build::{Made, Motion, PHASE, charge_rows, fail, finish, unbuilt};
@@ -368,9 +368,12 @@ pub(crate) fn moved_copy(
     let mut rounded = false;
     let mut points = Vec::new();
     for p in every(a.rows(Arena::Vertex)).filter_map(|v| a.vertices.point.get(v)) {
-        let image = t
-            .apply(*a.points.get(*p).ok_or_else(defect)?)
-            .map_err(num)?;
+        let place = a.points.get(*p).ok_or_else(defect)?;
+        // The rebuild that first makes such a body brings the move of its planes (G129).
+        let Some(point) = place.grid() else {
+            return Err(fail(ctx, MakeDetail::NotCertifiedYet { piece: "G129" }));
+        };
+        let image = t.apply(point).map_err(num)?;
         rounded |= !image.is_exact();
         points.push(image.value());
     }
@@ -406,8 +409,12 @@ pub(crate) fn moved_copy(
         bounds.push(moved_box(t, bound).map_err(num)?);
     }
     let exactness = record(ctx, input, stretch, rounded, deviation)?;
-    let awaits =
-        (rounded || deviation > 0.0).then_some(if curved(input.body) { "G177" } else { "G134" });
+    let awaits = (rounded || deviation > 0.0).then_some(if curved(input.body) {
+        "G177"
+    } else {
+        // A flat face no fan of triangles can stand for: one with a hole or a reflex corner.
+        "G417"
+    });
     // Rows: copied, each pointing at its moved geometry; a mirror reverses faces and loops.
     let flip = |s: Sense| match s {
         Sense::Forward => Sense::Reversed,
@@ -507,7 +514,7 @@ pub(crate) fn moved_copy(
         out.surfaces.extend(surfaces)?;
         out.curves.extend(curves)?;
         out.pcurves.extend(pcurves)?;
-        out.points.extend(points)
+        out.points.extend(points.into_iter().map(PointKind::Grid))
     };
     fill().map_err(|e| unbuilt(ctx, meter, e))?;
     // Names: each renamed, and its record.

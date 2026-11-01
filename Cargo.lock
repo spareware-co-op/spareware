@@ -915,7 +915,9 @@ dependencies = [
  "geom-op",
  "geom-poly",
  "geom-run",
+ "geom-surface",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]

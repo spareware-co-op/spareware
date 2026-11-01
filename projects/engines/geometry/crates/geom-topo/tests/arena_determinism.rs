@@ -32,8 +32,8 @@ use geom_num::grid::P3;
 use geom_test::golden::{self, hex, sha256};
 use geom_test::{Seed, SplitMix64};
 use geom_topo::{
-    Arena, Arenas, Body, BodyKind, Builder, Column, Edge, Face, Fin, Ix, Link, Loop, Region,
-    RegionIx, RegionKind, Sense, Shell, Vertex,
+    Arena, Arenas, Body, BodyKind, Builder, Column, Edge, Face, Fin, Ix, Link, Loop, PointKind,
+    Region, RegionIx, RegionKind, Sense, Shell, Vertex,
 };
 
 /// The corpus's golden in the golden store.
@@ -190,7 +190,9 @@ fn arenas(rng: &mut SplitMix64, big: bool) -> (Builder, RegionIx) {
         a.surfaces.extend(surface_rows).unwrap();
         a.curves.extend(curve_rows).unwrap();
         a.pcurves.extend(pcurve_rows).unwrap();
-        a.points.extend(point_rows).unwrap();
+        a.points
+            .extend(point_rows.into_iter().map(PointKind::Grid))
+            .unwrap();
     } else {
         for r in region_rows {
             a.regions.push(r).unwrap();
@@ -223,7 +225,7 @@ fn arenas(rng: &mut SplitMix64, big: bool) -> (Builder, RegionIx) {
             a.pcurves.push(r).unwrap();
         }
         for r in point_rows {
-            a.points.push(r).unwrap();
+            a.points.push(PointKind::Grid(r)).unwrap();
         }
     }
     (b, ix(outside))
@@ -305,7 +307,7 @@ impl Record {
             self.u32(a.rows(arena));
         }
         self.u32(a.surfaces.chunk_count());
-        self.column(&a.points, |r, p| r.p3(*p));
+        self.column(&a.points, |r, p| r.p3(p.grid().unwrap()));
     }
 
     fn body(&mut self, body: &Body) {

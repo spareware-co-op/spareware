@@ -84,7 +84,7 @@ fn builder(g: &mut SplitMix64) -> Option<Builder> {
     let line = Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, 1.0)).ok()?;
     let surface = a.surfaces.push(SurfaceKind::Plane(plane)).ok()?;
     let curve = a.curves.push(CurveKind::Line(line)).ok()?;
-    let point = a.points.push(low).ok()?;
+    let point = a.points.push(low.into()).ok()?;
     let vertex = a.vertices.push(Vertex { point }).ok()?;
     for f in 0..FACES {
         a.faces

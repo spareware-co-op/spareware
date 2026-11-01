@@ -441,8 +441,8 @@ fn vertex_off_surface(body: &Body, exactness: Exactness) -> Option<Broken> {
     let by = past(exactness)?;
     same(body, exactness, |a| {
         let (row, normal) = on_flat(a)?;
-        let moved = along(*a.points.get(row)?, normal, by)?;
-        a.points.set(row, moved).ok()
+        let moved = along(a.points.get(row)?.grid()?, normal, by)?;
+        a.points.set(row, moved.into()).ok()
     })
 }
 
@@ -451,8 +451,8 @@ fn vertex_off_surface(body: &Body, exactness: Exactness) -> Option<Broken> {
 fn lowered_bound(body: &Body, _exactness: Exactness) -> Option<Broken> {
     let broken = edited(body, |a| {
         let (row, normal) = on_flat(a)?;
-        let moved = along(*a.points.get(row)?, normal, 8)?;
-        a.points.set(row, moved).ok()
+        let moved = along(a.points.get(row)?.grid()?, normal, 8)?;
+        a.points.set(row, moved.into()).ok()
     })?;
     Some(Broken {
         body: broken,
@@ -650,7 +650,7 @@ fn crossing_faces(body: &Body, exactness: Exactness) -> Option<Broken> {
     }
     for row in (0..points).filter_map(Ix::new) {
         out.points
-            .push(t.apply(*a.points.get(row)?).ok()?.value())
+            .push(t.apply(a.points.get(row)?.grid()?).ok()?.value().into())
             .ok()?;
     }
     let body = builder

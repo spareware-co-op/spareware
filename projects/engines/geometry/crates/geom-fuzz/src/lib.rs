@@ -6,6 +6,7 @@
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
 //! changed input. It has fourteen targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! changed input. It has five targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -37,6 +38,10 @@
 //! returns the exact value of its description, evaluated in big integers; and [`planes`] (G123),
 //! `geom-poly`'s canonical planes and arrangement predicates give one entry to one plane and one
 //! order to any points or rays. The layout every target follows, and how each engine runs it locally and in CI,
+//! other's edits; [`make`] (G101), the primitives and transforms return only what the full checker passes, keep their laws,
+//! and refuse with a typed error; and [`planes`] (G123), `geom-poly`'s canonical planes and
+//! arrangement predicates give one entry to one plane and one order to any points or rays. The
+//! layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
