@@ -32,8 +32,9 @@
 //!
 //! Cost: [`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is
 //! O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs
-//! of polygons at worst, in a box the subdivision keeps small. Charges the meter one unit per pair
-//! of pieces compared.
+//! of polygons at worst, in a box the subdivision keeps small; a pair whose planes cannot cut is
+//! told from the two polygons whole, O(k + m), and its pieces are not compared. Charges the meter
+//! one unit per pair of pieces, compared or not.
 
 use alloc::vec::Vec;
 use core::cmp::Ordering;
@@ -201,6 +202,19 @@ fn reaches(piece: &Piece, other: &Piece) -> Result<bool, NumError> {
         && along(&line, &b_in, &a_out)? == Ordering::Less)
 }
 
+/// Whether `other`, on another plane, can cut any piece of `polygon`: `polygon` has corners on both
+/// sides of `other`'s plane, and `other` crosses `polygon`'s plane or ends on it. A piece lies in
+/// its polygon, so where the first fails [`clip`] splits no piece, and where the second fails
+/// [`reaches`] holds for none, whatever the piece.
+fn can_cut(polygon: &Piece, other: &Piece) -> Result<bool, NumError> {
+    let signs = corners(polygon, &other.face)?;
+    if !signs.contains(&Sign::Positive) || !signs.contains(&Sign::Negative) {
+        return Ok(false);
+    }
+    let on = corners(other, &polygon.face)?;
+    Ok(on.contains(&Sign::Zero) || (on.contains(&Sign::Positive) && on.contains(&Sign::Negative)))
+}
+
 /// `piece`, cut by the bounds of `other`, on its plane, where the two overlap: the parts beyond each
 /// bound in turn, then the part inside them all. If they share no area, `piece` whole.
 fn carve(piece: &Piece, other: &Piece) -> Result<Vec<Piece>, NumError> {
@@ -230,14 +244,23 @@ pub fn local_cuts(
     polygons: &[Piece],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Vec<Piece>>, ConvexError> {
+    let mut planes = Vec::with_capacity(polygons.len());
+    for polygon in polygons {
+        planes.push(canonical(&polygon.face)?.plane);
+    }
     let mut out: Vec<Vec<Piece>> = Vec::with_capacity(polygons.len());
-    for (at, polygon) in polygons.iter().enumerate() {
+    for ((at, polygon), own) in polygons.iter().enumerate().zip(&planes) {
         let mut pieces = alloc::vec![polygon.clone()];
-        for (other_at, other) in polygons.iter().enumerate() {
+        for ((other_at, other), plane) in polygons.iter().enumerate().zip(&planes) {
             if other_at == at {
                 continue;
             }
-            let coplanar = canonical(&polygon.face)?.plane == canonical(&other.face)?.plane;
+            let coplanar = own == plane;
+            if !coplanar && !can_cut(polygon, other)? {
+                // Charged as if each piece had been compared, so the work counted is the same.
+                meter.charge(u64::try_from(pieces.len()).unwrap_or(u64::MAX))?;
+                continue;
+            }
             let mut next = Vec::with_capacity(pieces.len());
             for piece in pieces {
                 meter.charge(1)?;

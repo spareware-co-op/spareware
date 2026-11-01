@@ -37,8 +37,10 @@
 //! <https://doi.org/10.1145/77635.77639>.
 //!
 //! Cost: at most five segments per piece, each testing each polygon: one or two sign evaluations,
-//! and one per bound of a polygon the segment's line crosses. Charges the meter one unit per
-//! polygon a segment tests.
+//! and one per bound of a polygon the segment's line crosses. The last three run along the box's
+//! edges and are the same for every piece of a polygon that leaves the box by the same faces, so
+//! they are walked once for each. Charges the meter one unit per polygon a segment tests, walked
+//! or not.
 
 use alloc::vec::Vec;
 use core::fmt;
@@ -208,12 +210,30 @@ fn read(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign, NumError> {
     Ok(moved_determinant(p, q, r, s)?.mul(weight))
 }
 
-/// A stretch of the line where `p` and `q` meet, from plane `from` to plane `to`.
+/// A stretch of the line where `p` and `q` meet, from plane `from` to plane `to`, with the signs
+/// of the weights of its two ends, which every polygon's test of it reads.
 struct Segment {
     p: Moved,
     q: Moved,
     from: Moved,
     to: Moved,
+    weights: (Sign, Sign),
+}
+
+impl Segment {
+    fn new(p: Moved, q: Moved, from: Moved, to: Moved) -> Result<Self, NumError> {
+        let weights = (
+            normals_det(&p.plane, &q.plane, &from.plane)?,
+            normals_det(&p.plane, &q.plane, &to.plane)?,
+        );
+        Ok(Segment {
+            p,
+            q,
+            from,
+            to,
+            weights,
+        })
+    }
 }
 
 /// Counts `polygon`'s crossing by `segment`, if it has one, into `winding`: walking back along a
@@ -226,17 +246,18 @@ fn count_crossing(
     let Some(entry) = polygon.entry else {
         return Ok(());
     };
-    let Segment { p, q, from, to } = segment;
+    let Segment {
+        p,
+        q,
+        from,
+        to,
+        weights: (at_from, at_to),
+    } = segment;
     let face = Moved::fixed(polygon.piece.face);
-    let start = read(p, q, from, &face)?;
-    let end = read(p, q, to, &face)?;
-    if start == end {
+    let start = moved_determinant(p, q, from, &face)?.mul(*at_from);
+    let end = moved_determinant(p, q, to, &face)?.mul(*at_to);
+    if start == end || !covers(polygon, p, q, &face)? {
         return Ok(());
-    }
-    for bound in &polygon.piece.bounds {
-        if read(p, q, &face, &Moved::fixed(*bound))? != Sign::Positive {
-            return Ok(());
-        }
     }
     let by = if end == Sign::Positive { 1 } else { -1 };
     Ok(winding.add(entry, by)?)
@@ -302,6 +323,61 @@ fn face_at(faces: &[[Moved; 2]; 3], (axis, end): (usize, usize)) -> Result<Moved
         .ok_or(NumError::Degenerate)
 }
 
+/// The faces of the box a path from a corner of a piece on `face` leaves by, as (axis, end): the
+/// one the line of the piece's edge on `first` meets first, and then the one that the line where
+/// `face` meets that face meets first.
+type Exits = ((usize, usize), (usize, usize));
+
+/// [`Exits`] for the piece's edge on `first`.
+fn exits(face: &Moved, first: &Moved, faces: &[[Moved; 2]; 3]) -> Result<Exits, NumError> {
+    let out = exit(face, first, faces)?;
+    let along = exit(face, &face_at(faces, out)?, faces)?;
+    Ok((out, along))
+}
+
+/// The first two legs of the path from the corner where `first` and `second` meet on `face`:
+/// along the edge's line to the box, then along the box's face to its edge.
+fn opening(
+    face: Moved,
+    (first, second): (Moved, Moved),
+    (out, along): Exits,
+    faces: &[[Moved; 2]; 3],
+) -> Result<[Segment; 2], NumError> {
+    let wall = face_at(faces, out)?;
+    Ok([
+        Segment::new(face, first, second, wall)?,
+        Segment::new(face, wall, first, face_at(faces, along)?)?,
+    ])
+}
+
+/// The rest of the path, along the box's edges to its reference corner: the same for every piece
+/// on `face` whose path leaves by the same [`Exits`].
+fn legs(
+    face: Moved,
+    (out, along): Exits,
+    faces: &[[Moved; 2]; 3],
+) -> Result<Vec<Segment>, NumError> {
+    let mut segments = Vec::with_capacity(3);
+    let (wall, edge) = (face_at(faces, out)?, face_at(faces, along)?);
+    // The third axis: 0 + 1 + 2 less the other two.
+    let third = 3usize.saturating_sub(out.0).saturating_sub(along.0);
+    let floor = face_at(faces, (third, 0))?;
+    segments.push(Segment::new(wall, edge, face, floor)?);
+    let home = face_at(faces, (out.0, 0))?;
+    if out.1 != 0 {
+        segments.push(Segment::new(edge, floor, wall, home)?);
+    }
+    if along.1 != 0 {
+        segments.push(Segment::new(
+            home,
+            floor,
+            edge,
+            face_at(faces, (along.0, 0))?,
+        )?);
+    }
+    Ok(segments)
+}
+
 /// The path from the corner where `first` and `second` meet on `face` to the box's reference
 /// corner: along the edge's line, along the face, along the box's edges.
 fn path(
@@ -310,96 +386,61 @@ fn path(
     second: Moved,
     faces: &[[Moved; 2]; 3],
 ) -> Result<Vec<Segment>, NumError> {
-    let mut segments = Vec::with_capacity(5);
-    let out = exit(&face, &first, faces)?;
-    let wall = face_at(faces, out)?;
-    segments.push(Segment {
-        p: face,
-        q: first,
-        from: second,
-        to: wall,
-    });
-    let along = exit(&face, &wall, faces)?;
-    let edge = face_at(faces, along)?;
-    segments.push(Segment {
-        p: face,
-        q: wall,
-        from: first,
-        to: edge,
-    });
-    // The third axis: 0 + 1 + 2 less the other two.
-    let third = 3usize.saturating_sub(out.0).saturating_sub(along.0);
-    let floor = face_at(faces, (third, 0))?;
-    segments.push(Segment {
-        p: wall,
-        q: edge,
-        from: face,
-        to: floor,
-    });
-    let home = face_at(faces, (out.0, 0))?;
-    if out.1 != 0 {
-        segments.push(Segment {
-            p: edge,
-            q: floor,
-            from: wall,
-            to: home,
-        });
-    }
-    if along.1 != 0 {
-        segments.push(Segment {
-            p: home,
-            q: floor,
-            from: edge,
-            to: face_at(faces, (along.0, 0))?,
-        });
-    }
+    let exits = exits(&face, &first, faces)?;
+    let mut segments = Vec::from(opening(face, (first, second), exits, faces)?);
+    segments.extend(legs(face, exits, faces)?);
     Ok(segments)
+}
+
+/// What a polygon's legs along the box's edges added, for the face, the side and the exits they
+/// were walked from, and how many legs there were.
+struct Walked {
+    plane: Plane,
+    by: Sign,
+    exits: Exits,
+    crossed: Winding,
+    legs: u64,
 }
 
 /// Whether `polygon` covers the point where `p`, `q` and `r` meet.
 fn covers(polygon: &Polygon, p: &Moved, q: &Moved, r: &Moved) -> Result<bool, NumError> {
+    let weight = normals_det(&p.plane, &q.plane, &r.plane)?;
     for bound in &polygon.piece.bounds {
-        if read(p, q, r, &Moved::fixed(*bound))? != Sign::Positive {
+        if moved_determinant(p, q, r, &Moved::fixed(*bound))?.mul(weight) != Sign::Positive {
             return Ok(false);
         }
     }
     Ok(true)
 }
 
-/// Which side of `plane` a path should start on: the side inside the box. A plane that is no face
-/// of the box has room on both sides of a piece, and takes its front.
-fn inward(plane: &Plane, faces: &[[Moved; 2]; 3]) -> Result<Sign, NumError> {
-    let own = canonical(plane)?;
-    for row in faces {
-        for face in row {
-            let held = canonical(&face.plane)?;
-            if held.plane == own.plane {
-                return Ok(if held.flipped == own.flipped {
-                    Sign::Positive
-                } else {
-                    Sign::Negative
-                });
-            }
-        }
+/// Which side of the plane `own` a path should start on: the side inside the box, whose faces in
+/// canonical form are `boxes`. A plane that is no face of the box has room on both sides of a
+/// piece, and takes its front.
+fn inward(own: &Canonical, boxes: &[Canonical]) -> Sign {
+    match boxes.iter().find(|held| held.plane == own.plane) {
+        Some(held) if held.flipped != own.flipped => Sign::Negative,
+        _ => Sign::Positive,
     }
-    Ok(Sign::Positive)
 }
 
 /// The vectors in front of and behind `piece`, which lies on polygon `index`, and whether it is
-/// the first copy of its overlap.
+/// the first copy of its overlap. `walked` holds what the box's edges added on the paths of the
+/// polygon's pieces so far: a piece whose path leaves the box as one of theirs did reads it there,
+/// and the meter is charged as if it had walked them, so the work counted is the same.
 fn vectors(
-    piece: &Piece,
-    index: usize,
+    (piece, index): (&Piece, usize),
     polygons: &[(&Polygon, Canonical)],
-    faces: &[[Moved; 2]; 3],
+    (faces, boxes): (&[[Moved; 2]; 3], &[Canonical]),
     reference: &Winding,
+    walked: &mut Vec<Walked>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Winding, Winding, bool), TraceError> {
     let (Some(first_bound), Some(second_bound)) = (piece.bounds.first(), piece.bounds.get(1))
     else {
         return Err(NumError::Degenerate.into());
     };
-    let near = inward(&piece.face, faces)?;
+    let own = canonical(&piece.face)?;
+    let near = inward(&own, boxes);
     let face = Moved {
         plane: piece.face,
         rank: Rank::Face,
@@ -415,15 +456,46 @@ fn vectors(
         rank: Rank::Second,
         by: Sign::Positive,
     };
+    let exits = exits(&face, &first, faces)?;
     let mut near_side = reference.clone();
-    for segment in path(face, first, second, faces)? {
+    for segment in &opening(face, (first, second), exits, faces)? {
         for (polygon, _) in polygons {
             meter.charge(1)?;
-            count_crossing(&segment, polygon, &mut near_side)?;
+            count_crossing(segment, polygon, &mut near_side)?;
         }
     }
+    let seen = walked
+        .iter()
+        .position(|w| w.plane == face.plane && w.by == face.by && w.exits == exits);
+    let walk = if let Some(at) = seen {
+        let held = walked.get(at).ok_or(NumError::Degenerate)?;
+        let count = u64::try_from(polygons.len()).unwrap_or(u64::MAX);
+        meter.charge(held.legs.saturating_mul(count))?;
+        held
+    } else {
+        let mut crossed = Winding::new();
+        let segments = legs(face, exits, faces)?;
+        for segment in &segments {
+            for (polygon, _) in polygons {
+                meter.charge(1)?;
+                count_crossing(segment, polygon, &mut crossed)?;
+            }
+        }
+        walked.push(Walked {
+            plane: face.plane,
+            by: face.by,
+            exits,
+            crossed,
+            legs: u64::try_from(segments.len()).unwrap_or(u64::MAX),
+        });
+        walked.last().ok_or(NumError::Degenerate)?
+    };
+    // Counts only add, so the legs' crossings can join the vector in one go: a count would have
+    // to pass 2^31 crossings to leave `i32` in one order and not the other.
+    for (entry, by) in walk.crossed.pairs() {
+        near_side.add(*entry, *by)?;
+    }
     // Across the piece: every polygon on its plane that covers it, the piece's own among them.
-    let own = canonical(&piece.face)?;
     let mut far_side = near_side.clone();
     let mut is_first = true;
     for (at, (polygon, held)) in polygons.iter().enumerate() {
@@ -466,15 +538,15 @@ pub fn reference_above(
         axis.saturating_add(1).checked_rem(3).unwrap_or(0),
         axis.saturating_add(2).checked_rem(3).unwrap_or(0),
     );
-    let segment = Segment {
-        p: face_at(&faces, (next, 0))?,
-        q: face_at(&faces, (last, 0))?,
-        from: Moved {
+    let segment = Segment::new(
+        face_at(&faces, (next, 0))?,
+        face_at(&faces, (last, 0))?,
+        Moved {
             plane: Plane::new(n, i128::from(at).saturating_neg())?,
             ..low
         },
-        to: low,
-    };
+        low,
+    )?;
     let mut above = reference.clone();
     for polygon in polygons {
         meter.charge(1)?;
@@ -534,14 +606,26 @@ pub fn classify(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, TraceError> {
     let faces = faces(cell)?;
+    let mut boxes = Vec::with_capacity(6);
+    for face in faces.iter().flatten() {
+        boxes.push(canonical(&face.plane)?);
+    }
     let mut held = Vec::with_capacity(polygons.len());
     for polygon in polygons {
         held.push((polygon, canonical(&polygon.piece.face)?));
     }
     let mut out = Vec::new();
     for (index, list) in pieces.iter().enumerate() {
+        let mut walked = Vec::new();
         for piece in list {
-            let (front, back, first) = vectors(piece, index, &held, &faces, reference, meter)?;
+            let (front, back, first) = vectors(
+                (piece, index),
+                &held,
+                (&faces, &boxes),
+                reference,
+                &mut walked,
+                meter,
+            )?;
             out.push(Classified {
                 polygon: index,
                 piece: piece.clone(),

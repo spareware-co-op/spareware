@@ -289,6 +289,8 @@ struct Corner {
     point: Tpi,
     x: [I320; 3],
     w: I256,
+    /// X and w in machine words, where all four fit.
+    narrow: Option<([i128; 3], i128)>,
     /// The planes of every corner at this point: its own, until [`numbered`] joins them.
     through: Vec<Plane>,
 }
@@ -305,13 +307,35 @@ fn ratio_order<const A: usize, const B: usize, const M: usize>(
     Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
 }
 
-/// Points lexicographically: at most 2^294 · 2^252, in 576 bits.
+/// [`ratio_order`] for a, b, c and d in machine words: each product is below 2^254, so [`I256`]
+/// holds it, at a quarter of the limbs of the wide rung. Most corners and lines of a building's
+/// faces fit.
+fn narrow_order(a: i128, b: i128, c: i128, d: i128) -> Option<Ordering> {
+    let wide = I256::from_i128;
+    let left = wide(a).checked_mul(&wide(d))?;
+    let right = wide(c).checked_mul(&wide(b))?;
+    Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
+}
+
+/// X and w in machine words, if all four fit.
+fn narrowed(x: &[I320; 3], w: &I256) -> Option<([i128; 3], i128)> {
+    let [a, b, c] = x;
+    Some(([a.to_i128()?, b.to_i128()?, c.to_i128()?], w.to_i128()?))
+}
+
+/// Points lexicographically: in machine words where both fit, else at most 2^294 · 2^252 in 576
+/// bits. The first coordinate that differs decides, and the rest are not compared.
 fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
-    let mut order = Ordering::Equal;
-    for (p, q) in a.x.iter().zip(&b.x) {
-        order = order.then(ratio_order::<5, 4, 9>(p, &a.w, q, &b.w)?);
+    for i in 0..3 {
+        let order = match (&a.narrow, &b.narrow) {
+            (Some((x, w)), Some((y, v))) => narrow_order(*x.get(i)?, *w, *y.get(i)?, *v)?,
+            _ => ratio_order::<5, 4, 9>(a.x.get(i)?, &a.w, b.x.get(i)?, &b.w)?,
+        };
+        if order != Ordering::Equal {
+            return Some(order);
+        }
     }
-    Some(order)
+    Some(Ordering::Equal)
 }
 
 /// A corner of `face` where `p` and `q` meet.
@@ -325,19 +349,19 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
     let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
     let [a, b, c] = &x;
     let through = alloc::vec![face, p, q];
-    Ok(match point.weight() {
-        Sign::Negative => Corner {
-            point,
-            x: [turn(a)?, turn(b)?, turn(c)?],
-            w: w.checked_neg().ok_or(NumError::BudgetExceeded)?,
-            through,
-        },
-        Sign::Positive | Sign::Zero => Corner {
-            point,
-            x,
-            w,
-            through,
-        },
+    let (x, w) = match point.weight() {
+        Sign::Negative => (
+            [turn(a)?, turn(b)?, turn(c)?],
+            w.checked_neg().ok_or(NumError::BudgetExceeded)?,
+        ),
+        Sign::Positive | Sign::Zero => (x, w),
+    };
+    Ok(Corner {
+        point,
+        narrow: narrowed(&x, &w),
+        x,
+        w,
+        through,
     })
 }
 
@@ -347,6 +371,8 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
 struct LineKey {
     coordinates: [I256; 6],
     first: usize,
+    /// The coordinates in machine words, where all six fit.
+    narrow: Option<[i128; 6]>,
 }
 
 /// The line where `p` and `q` meet: direction `n_p` × `n_q`, moment `d_p` `n_q` − `d_q` `n_p`, which
@@ -380,20 +406,50 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
             *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
         }
     }
-    Ok(LineKey { coordinates, first })
+    Ok(LineKey {
+        narrow: narrow_line(&coordinates),
+        coordinates,
+        first,
+    })
+}
+
+/// A line's coordinates in machine words, if all six fit.
+fn narrow_line(coordinates: &[I256; 6]) -> Option<[i128; 6]> {
+    let [a, b, c, d, e, f] = coordinates;
+    Some([
+        a.to_i128()?,
+        b.to_i128()?,
+        c.to_i128()?,
+        d.to_i128()?,
+        e.to_i128()?,
+        f.to_i128()?,
+    ])
 }
 
 /// The order of two lines, equal when they are one line: by which component of the direction comes
-/// first, then every coordinate over that component, below 2^418 in 512 bits.
+/// first, then every coordinate over that component, in machine words where both fit, else below
+/// 2^418 in 512 bits. The first coordinate that differs decides, and the rest are not compared.
 fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
-    let (over_a, over_b) = (a.coordinates.get(a.first)?, b.coordinates.get(b.first)?);
-    let mut order = a.first.cmp(&b.first);
-    if order == Ordering::Equal {
-        for (p, q) in a.coordinates.iter().zip(&b.coordinates) {
-            order = order.then(ratio_order::<4, 4, 8>(p, over_a, q, over_b)?);
+    let order = a.first.cmp(&b.first);
+    if order != Ordering::Equal {
+        return Some(order);
+    }
+    let over = a.first;
+    for i in 0..6 {
+        let order = match (&a.narrow, &b.narrow) {
+            (Some(p), Some(q)) => {
+                narrow_order(*p.get(i)?, *p.get(over)?, *q.get(i)?, *q.get(over)?)?
+            }
+            _ => {
+                let (p, q) = (&a.coordinates, &b.coordinates);
+                ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?
+            }
+        };
+        if order != Ordering::Equal {
+            return Some(order);
         }
     }
-    Some(order)
+    Some(Ordering::Equal)
 }
 
 /// `order`, with a failure written down: a sort's comparison cannot return one.

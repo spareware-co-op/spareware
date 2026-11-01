@@ -146,7 +146,7 @@ fn vertices(p: &Parts, meter: &mut WorkMeter<'_>) -> Result<(), MeshError> {
                     return Err(MeshFault::VerticesOutOfOrder { vertex }.into());
                 }
                 let [q, r, s] = rows.map(|row| at(&p.planes, row).copied());
-                let tpi = Tpi::new(q?, r?, s?).map_err(|e| match e {
+                let tpi = Tpi::meeting(q?, r?, s?).map_err(|e| match e {
                     NumError::Degenerate => MeshError::Fault(MeshFault::PlanesDoNotMeet { vertex }),
                     other => other.into(),
                 })?;
@@ -276,7 +276,7 @@ fn on(p: &Parts, plane: &Plane, vertex: &Vertex) -> Result<bool, MeshError> {
         Vertex::Grid(c) => value(plane, *c) == 0,
         Vertex::Planes(rows) => {
             let [a, b, c] = rows.map(|row| at(&p.planes, row).copied());
-            plane.side_of_tpi(&Tpi::new(a?, b?, c?)?)? == Sign::Zero
+            plane.side_of_tpi(&Tpi::meeting(a?, b?, c?)?)? == Sign::Zero
         }
     })
 }
@@ -464,7 +464,7 @@ fn place(p: &Parts, v: u32) -> Result<([I320; 3], I256), MeshError> {
         }
         Vertex::Planes([a, b, c]) => {
             let row = |r: u32| at(&p.planes, r).copied();
-            let (x, w) = Tpi::new(row(a)?, row(b)?, row(c)?)?.homogeneous()?;
+            let (x, w) = Tpi::meeting(row(a)?, row(b)?, row(c)?)?.homogeneous()?;
             if !w.is_negative() {
                 return Ok((x, w));
             }
@@ -502,7 +502,7 @@ fn side(p: &Parts, plane: &Plane, v: u32) -> Result<Sign, MeshError> {
         Vertex::Grid(c) => plane.side(c)?,
         Vertex::Planes([a, b, c]) => {
             let row = |r: u32| at(&p.planes, r).copied();
-            plane.side_of_tpi(&Tpi::new(row(a)?, row(b)?, row(c)?)?)?
+            plane.side_of_tpi(&Tpi::meeting(row(a)?, row(b)?, row(c)?)?)?
         }
     })
 }
