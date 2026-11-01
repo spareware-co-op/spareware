@@ -90,7 +90,7 @@ fn cross_in_words(a: [i128; 3], b: [i128; 3]) -> Option<[i128; 3]> {
 }
 
 /// A plane's coefficients in `i64`, if they fit.
-fn plane_words(p: &Plane) -> Option<([i64; 3], i64)> {
+pub(crate) fn plane_words(p: &Plane) -> Option<([i64; 3], i64)> {
     let [x, y, z] = p.n();
     Some((
         [
@@ -104,7 +104,7 @@ fn plane_words(p: &Plane) -> Option<([i64; 3], i64)> {
 
 /// `a` · `b` for `a` and `b` in `i64`, in `i128`: |a b| ≤ 2^126, so the wrapping product is exact,
 /// and is one multiplication where a checked one is a call; only the sums are checked.
-fn wide_product(a: i64, b: i64) -> i128 {
+pub(crate) fn wide_product(a: i64, b: i64) -> i128 {
     i128::from(a).wrapping_mul(i128::from(b))
 }
 

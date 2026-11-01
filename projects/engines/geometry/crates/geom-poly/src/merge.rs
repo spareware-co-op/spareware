@@ -48,7 +48,7 @@ use geom_num::{I256, I320, NumError, Sign, Wide};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 
 use crate::convex::{Piece, opposite};
-use crate::order::{Flap, Line, Meeting, Ray, about, around};
+use crate::order::{Flap, Line, Meeting, Ray, about, around, plane_words, wide_product};
 use crate::plane::canonical;
 use crate::subdivide::around as box_around;
 use crate::trace::{Classified, Polygon, TraceError, classify};
@@ -529,6 +529,18 @@ struct LineKey {
 /// The line where `p` and `q` meet: direction `n_p` × `n_q`, moment `d_p` `n_q` − `d_q` `n_p`, which
 /// is the same up to scale for any two planes through the line.
 fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
+    match line_in_words(p, q) {
+        Some((coordinates, first)) => Ok(LineKey {
+            cells: line_cells_of(&coordinates, first),
+            coordinates: coordinates.map(I256::from_i128),
+            first,
+        }),
+        None => wide_line_key(p, q),
+    }
+}
+
+/// [`line_key`] in [`I256`], for any two planes: each product below 2^250.
+fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     let wide = I256::from_i128;
     let product = |a: i128, b: i128| wide(a).checked_mul(&wide(b));
     let minor = |a: i128, b: i128, c: i128, d: i128| {
@@ -564,16 +576,49 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     })
 }
 
+/// [`line_key`]'s coordinates and `first` where both planes' coefficients fit `i64`: a product of
+/// two `i64`s lies in [−2^126 + 2^63, 2^126], so a minor, the difference of two, has
+/// |ab − cd| ≤ 2^127 − 2^63, in `i128` with its negation (the checks never fail). `None` for a
+/// direction of zero, which [`line_key`] refuses.
+fn line_in_words(p: &Plane, q: &Plane) -> Option<([i128; 6], usize)> {
+    let (([px, py, pz], pd), ([qx, qy, qz], qd)) = (plane_words(p)?, plane_words(q)?);
+    let minor = |a, b, c, d| wide_product(a, b).checked_sub(wide_product(c, d));
+    let mut coordinates = [
+        minor(py, qz, pz, qy)?,
+        minor(pz, qx, px, qz)?,
+        minor(px, qy, py, qx)?,
+        minor(pd, qx, qd, px)?,
+        minor(pd, qy, qd, py)?,
+        minor(pd, qz, qd, pz)?,
+    ];
+    let first = coordinates.iter().take(3).position(|v| *v != 0)?;
+    if coordinates.get(first).is_some_and(|v| *v < 0) {
+        for slot in &mut coordinates {
+            *slot = slot.checked_neg()?;
+        }
+    }
+    Some((coordinates, first))
+}
+
 /// A line's coordinates over its `first` as [`Cell`]s, if all six fit machine words.
 fn line_cells(coordinates: &[I256; 6], first: usize) -> Option<[Cell; 6]> {
-    let over = coordinates.get(first)?.to_i128()?;
+    let mut words = [0i128; 6];
+    for (word, coordinate) in words.iter_mut().zip(coordinates) {
+        *word = coordinate.to_i128()?;
+    }
+    line_cells_of(&words, first)
+}
+
+/// [`line_cells`] of coordinates in `i128`.
+fn line_cells_of(coordinates: &[i128; 6], first: usize) -> Option<[Cell; 6]> {
+    let over = *coordinates.get(first)?;
     let mut cells = [Cell {
         floor: 0,
         rest: 0,
         over,
     }; 6];
     for (cell, coordinate) in cells.iter_mut().zip(coordinates) {
-        *cell = Cell::new(coordinate.to_i128()?, over)?;
+        *cell = Cell::new(*coordinate, over)?;
     }
     Some(cells)
 }
@@ -1579,7 +1624,10 @@ mod tests {
     use num_bigint::BigInt;
     use proptest::prelude::*;
 
-    use super::Cell;
+    use geom_num::plane::Plane;
+    use geom_num::wide::I256;
+
+    use super::{Cell, line_in_words, wide_line_key};
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -1647,5 +1695,62 @@ mod tests {
     fn a_divisor_that_is_not_positive_has_no_cell() {
         assert!(Cell::new(1, 0).is_none());
         assert!(Cell::new(1, -2).is_none());
+    }
+
+    /// The machine-word line is the wide one, and is refused only where the wide one is.
+    fn same_line(p: ([i64; 3], i64), q: ([i64; 3], i64)) {
+        let plane = |(n, d): ([i64; 3], i64)| Plane::new(n.map(i128::from), i128::from(d));
+        let (Ok(p), Ok(q)) = (plane(p), plane(q)) else {
+            return;
+        };
+        let wide = wide_line_key(&p, &q);
+        match line_in_words(&p, &q) {
+            Some((coordinates, first)) => {
+                let wide = wide.unwrap();
+                assert_eq!(coordinates.map(I256::from_i128), wide.coordinates);
+                assert_eq!(first, wide.first);
+            }
+            None => assert!(wide.is_err()),
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn a_line_in_words_is_the_wide_line(
+            p in ([-9i64..9, -9i64..9, -9i64..9], -99i64..99),
+            q in ([-9i64..9, -9i64..9, -9i64..9], -99i64..99),
+        ) {
+            same_line(p, q);
+        }
+
+        #[test]
+        fn a_line_in_words_is_the_wide_line_across_i64(
+            p in (any::<[i64; 3]>(), any::<i64>()),
+            q in (any::<[i64; 3]>(), any::<i64>()),
+        ) {
+            same_line(p, q);
+        }
+    }
+
+    #[test]
+    fn a_line_at_the_ends_of_i64_stays_in_words() {
+        let (low, high) = (i64::MIN, i64::MAX);
+        let ends = [low, low + 1, -1, 0, 1, high - 1, high];
+        for (a, b, c) in ends.iter().flat_map(|a| ends.map(|b| (*a, b, b))) {
+            for (p, q) in [
+                (([a, b, c], a), ([b, a, c], c)),
+                (([a, 0, 0], a), ([b, c, 0], b)),
+                (([a, b, 0], c), ([c, a, b], a)),
+            ] {
+                same_line(p, q);
+            }
+        }
+        // The largest minor: (−2^63)(−2^63) − (−2^63)(2^63 − 1) = 2^127 − 2^63.
+        let p = Plane::new([i128::from(low), 0, 0], i128::from(low)).unwrap();
+        let q = Plane::new([i128::from(low), i128::from(low), 0], i128::from(high)).unwrap();
+        let (coordinates, first) = line_in_words(&p, &q).unwrap();
+        assert_eq!(first, 2);
+        assert_eq!(coordinates.get(3), Some(&(i128::MAX - (1 << 63) + 1)));
+        same_line(([low, 0, 0], low), ([low, low, 0], high));
     }
 }
