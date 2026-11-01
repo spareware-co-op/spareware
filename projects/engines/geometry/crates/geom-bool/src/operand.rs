@@ -87,7 +87,16 @@ pub enum Term {
     Not,
 }
 
-/// What to keep of the arrangement (11.1). General fuse and cells come with their regions (G137).
+/// A point in a room and the key that names it (11.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CellSeed {
+    /// The point.
+    pub point: P3,
+    /// The room's key.
+    pub key: OperandKey,
+}
+
+/// What to keep of the arrangement (11.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Selection {
     /// Inside any solid.
@@ -127,6 +136,14 @@ pub enum Selection {
     },
     /// Only the curves where operands meet, as a wire body.
     Section,
+    /// The cells that pass a test, each a body. With seeds, the cells that hold them, named by
+    /// their keys; with none, every such cell, labelled with the operands around it.
+    Cells {
+        /// The test.
+        test: Vec<Term>,
+        /// The seeds.
+        seeds: Vec<CellSeed>,
+    },
 }
 
 /// A boolean's input, without the budget and exactness its caller's context holds.
@@ -495,7 +512,11 @@ fn target_of(
         | Selection::Split { target }
         | Selection::Keep { target, .. }
         | Selection::Trim { target, .. } => target,
-        Selection::Unite | Selection::Intersect | Selection::Where(_) | Selection::Section => {
+        Selection::Unite
+        | Selection::Intersect
+        | Selection::Where(_)
+        | Selection::Section
+        | Selection::Cells { .. } => {
             return Ok(None);
         }
     };
@@ -527,7 +548,9 @@ fn test_of(
             WindingTest::new(alloc::vec![Inner::Inside(entry_of(target)?)])
                 .map_err(PrepareError::BadTest)?
         }
-        Selection::Where(terms) | Selection::Keep { test: terms, .. } => {
+        Selection::Where(terms)
+        | Selection::Keep { test: terms, .. }
+        | Selection::Cells { test: terms, .. } => {
             let mut inner = Vec::with_capacity(terms.len());
             for term in terms {
                 inner.push(match term {
