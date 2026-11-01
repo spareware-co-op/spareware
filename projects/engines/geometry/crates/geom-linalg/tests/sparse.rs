@@ -205,6 +205,11 @@ fn an_entry_is_found_and_set_in_place() {
     assert_eq!(a.place_of(0, 2), Err(LinalgError::Shape));
     a.set_at(1, 7.0).unwrap();
     assert_eq!(a.column(0).unwrap().1, &[1.0, 7.0]);
+    // Read back by place: each stored entry, and nothing past them.
+    assert_eq!(a.at_place(0), Ok(1.0));
+    assert_eq!(a.at_place(1), Ok(7.0));
+    assert_eq!(a.at_place(2), Ok(3.0));
+    assert_eq!(a.at_place(3), Err(LinalgError::Shape));
     assert_eq!(a.set_at(3, 1.0), Err(LinalgError::Shape));
     assert_eq!(a.set_at(0, f64::NAN), Err(LinalgError::NotFinite));
     assert_eq!(a.column(0).unwrap().1, &[1.0, 7.0]);
@@ -737,6 +742,26 @@ fn exact_sign(a: &Sparse) -> core::cmp::Ordering {
         previous = m[k][k];
     }
     (sign * m[n - 1][n - 1]).cmp(&0)
+}
+
+#[test]
+fn the_smallest_pivot_is_the_least_diagonal_and_zero_for_a_dead_column() {
+    let pivot = |triplets: &[(usize, usize, f64)], m: usize, n: usize| {
+        let a = Sparse::from_triplets(m, n, triplets).unwrap();
+        let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
+        SparseQr::factor(&symbolic, &a, tol(), &mut work())
+            .unwrap()
+            .smallest_pivot()
+    };
+    // A diagonal matrix's R is its diagonal up to signs: the least magnitude, wherever it is.
+    assert_eq!(pivot(&[(0, 0, 3.0), (1, 1, -0.5), (2, 2, 2.0)], 3, 3), 0.5);
+    assert_eq!(pivot(&[(0, 0, 0.25), (1, 1, 4.0)], 2, 2), 0.25);
+    assert_eq!(pivot(&[(0, 0, -6.0)], 1, 1), 6.0);
+    // Two equal columns: the second is dead, so the smallest pivot is 0.
+    assert_eq!(
+        pivot(&[(0, 0, 1.0), (0, 1, 1.0), (1, 0, 2.0), (1, 1, 2.0)], 2, 2),
+        0.0
+    );
 }
 
 #[test]

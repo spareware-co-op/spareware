@@ -5705,6 +5705,230 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "delete ! in odd",
+      "line_text": "if !first {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "odd is private and called only by determinant_sign, on Π and on P, both permutations of the same n. The mutant counts one swap per cycle, c in all, where the definition counts n − c; both parities move by n mod 2 together, so odd(Π) != odd(P), all the sign reads, is unchanged."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace < with > in SparseQr::smallest_pivot",
+      "line_text": "if self.rank < self.diagonal.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The rank is never above the columns, so the mutant always takes the loop. With every column live that is the original; with a dead column, whose diagonal is stored as 0 (the field's rule), the least |R[k, k]| the loop finds is 0, the value the guard returns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace < with <= in SparseQr::smallest_pivot",
+      "line_text": "if pivot.abs() < least {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when a pivot ties the least so far, and then both keep the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace < with <= in SparseQr::determinant_sign",
+      "line_text": "if *beta < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sign is given only at full rank, when every diagonal is a live pivot. A column is dead when what is left of it is at most tol times the largest, and tol is never negative, so a column with nothing left is dead: a live pivot is never 0, and < and <= agree on it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace == with != in choice",
+      "line_text": "| ConstraintKind::TangentLine { side, .. } => Some(side == Side::Left),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "choice is read only by same_structure, which compares two rules' choices for equality. Negating side == Left on both sides is a bijection of the same bool, so every comparison is unchanged."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace > with >= in Assembly::sense",
+      "line_text": "if quantity.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only when the enclosure of the branch quantity starts at exactly 0. Senses are read only at solved points (continue_to and at_risk, after a block has converged), where a heading's quantity is ±|ab| and a turn's ±|u||v|: 0 only for a line of no length, which is singular and refused before any sense is read. A point enclosure of a value that far from 0 never touches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace < with <= in Assembly::sense",
+      "line_text": "} else if quantity.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only when the enclosure of the branch quantity ends at exactly 0. Senses are read only at solved points (continue_to and at_risk, after a block has converged), where a heading's quantity is ±|ab| and a turn's ±|u||v|: 0 only for a line of no length, which is singular and refused before any sense is read. A point enclosure of a value that far from 0 never touches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in Stage::iterate",
+      "line_text": "if lambda > MOST_DAMPING {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only at λ = 10^12 exactly, which the damping λ is 0 or 10^-6·4^k, since it starts at 0, is set to 10^-6 and only ever multiplied or divided by 4, each exact in binary: 10^-6·4^k = 10^12 would need 4^k = 10^18 = 2^18·5^18, which no power of 4 is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in Stage::solve",
+      "line_text": "Ok((pivot, _)) => pivot < INDEPENDENT,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when the smallest pivot is exactly 2^-12. The threshold (chapter 15.7) bounds where a block is read as singular, not which side an exact tie takes: either way the block is restarted from a nudge or reported unsolved, both answers the method allows there."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in Plan::at_risk",
+      "line_text": "if pivot < INDEPENDENT || sign != *watch {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when a watched block's smallest pivot is exactly 2^-12. The threshold (chapter 15.7) bounds where a step is read as near a singular place, not which side an exact tie takes: either way the step is halved or kept, and a halved step only walks the same path more finely."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in Plan::finish",
+      "line_text": "if largest > TOLERANCE {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when the largest residual is exactly 1/64, the tolerance. Every block stops at most <= TOLERANCE, so a residual at exactly the tolerance is one the method accepts; refusing it too is the same rule read strictly at its edge."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in Stage::iterate",
+      "line_text": "if ratio > 0.75 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when a step's ratio of actual to predicted reduction is exactly 0.75: Moré's update (1978) leaves the edges of its bands open, and either reading only changes how fast the damping falls, not whether the block converges or where."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in Stage::iterate",
+      "line_text": "} else if ratio < 0.25 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when a step's ratio of actual to predicted reduction is exactly 0.25: Moré's update (1978) leaves the edges of its bands open, and either reading only changes how fast the damping rises, not whether the block converges or where."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in Stage::iterate",
+      "line_text": "if ratio > ACCEPTED {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when a step's ratio is exactly 10^-4: a step that reduces the residual by that share of its prediction is kept by one and retried damped by the other, both of which converge."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace Stage::step -> Result<Option<Vec<f64>>, SketchError> with Ok(None)",
+      "line_text": "if lambda == 0.0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every step is None, so iterate sets λ to 10^-6 and asks again, for ever: λ never passes MOST_DAMPING. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with == in Stage::iterate",
+      "line_text": "lambda = if lambda < LEAST_DAMPING {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step at λ = 0 sets λ to 0·4 = 0 again, so the same step is rejected for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with > in Stage::iterate",
+      "line_text": "lambda = if lambda < LEAST_DAMPING {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step at λ = 0 sets λ to 0·4 = 0 again, and one above 10^-6 drops back to 10^-6, so λ never passes MOST_DAMPING and a rejected step is retried for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in Stage::iterate",
+      "line_text": "lambda = if lambda < LEAST_DAMPING {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every rejected step leaves λ at 10^-6, so it never passes MOST_DAMPING and a step rejected there is retried for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace * with / in Stage::iterate",
+      "line_text": "lambda * 4.0",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step divides λ by 4 instead of raising it, so λ never passes MOST_DAMPING and the inner loop retries for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with < in Stage::iterate",
+      "line_text": "if ratio > 0.75 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step (ratio below 10^-4) now lowers λ, so damping never rises past MOST_DAMPING and the same rejected step comes back for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with == in Stage::iterate",
+      "line_text": "} else if ratio < 0.25 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step leaves λ where it was unless its ratio is exactly 0.25, so the same step is computed and rejected for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with > in Stage::iterate",
+      "line_text": "} else if ratio < 0.25 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step, whose ratio is below 10^-4, no longer raises λ, so the same step is computed and rejected for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with == in Stage::iterate",
+      "line_text": "if ratio > ACCEPTED {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a step is kept only at a ratio of exactly 10^-4, so good steps are undone and, with λ falling on each, retried for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with < in Stage::iterate",
+      "line_text": "if ratio > ACCEPTED {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: only steps that fail are kept and good ones undone, so the residual never falls below the tolerance and the good step is retried with ever less damping. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in continue_to",
+      "line_text": "while done < 1.0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: at the end of the path done is exactly 1, so the loop steps to 1 again and again for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace + with - in continue_to",
+      "line_text": "let ahead = done + size;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: short of the end each step goes back by its size instead of on, so done never reaches 1. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace + with * in continue_to",
+      "line_text": "let ahead = done + size;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: short of the end the next place is done·size, at most done, so a path that has to halve never moves on from where it is. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace *= with /= in continue_to",
+      "line_text": "size *= 2.0;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: each success after a halving halves the step again, so the steps shrink geometrically and their sum stops short of the end of the path. It is a hang the tests catch; kept so that the judge counts it as one."
     }
   ],
   "coverage_off": [

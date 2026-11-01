@@ -740,7 +740,8 @@ pub fn continue_to(
     // take ever smaller steps that each succeed, and never end.
     let (mut done, mut size, mut depth) = (0.0_f64, 1.0_f64, 0_u32);
     while done < 1.0 {
-        let next = if done + size >= 1.0 { 1.0 } else { done + size };
+        let ahead = done + size;
+        let next = if ahead >= 1.0 { 1.0 } else { ahead };
         plan.assembly.move_along(&old, &new, next, &x)?;
         let mut y = x.clone();
         let reached = match plan.run(&mut y, &mut report, meter) {

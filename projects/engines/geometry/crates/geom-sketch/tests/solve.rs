@@ -563,3 +563,280 @@ fn solved_values_are_the_same_on_every_target() {
         panic!("{e}. A changed digest is a bug, or a definition changed in place (chapter 26.2)")
     });
 }
+
+// What the mutation run of piece G222 found untested: a variable whose scale is not 1, the sense
+// a rule keeps along a path when no determinant is watched, the side a nudge takes, which of two
+// tied rules is named, and what a solve costs.
+
+#[test]
+fn a_variables_scale_changes_nothing_but_its_rounding() {
+    // The solver's variable is the value over its scale, and Gauss-Newton's step does not depend on
+    // how a variable is scaled: a scalar the distance between two fixed points 3000 apart reaches
+    // 3000 from 0.5 in as many iterations whatever its size.
+    let reach = |size: &str| {
+        let done = solved(&format!(
+            "entity 1.0 point 0 0
+entity 1.1 point 3000 0
+entity 5.0 scalar 0.5 {size}
+constraint 3.0 driving 0 fix 1.0 0 0
+constraint 3.1 driving 0 fix 1.0 1 0
+constraint 3.2 driving 0 fix 1.1 0 3000
+constraint 3.3 driving 0 fix 1.1 1 0
+constraint 3.4 driving 0 distance 1.0 1.1 @5.0
+"
+        ));
+        let text = geom_sketch::text::write(&done.sketch).unwrap();
+        let value: f64 = text
+            .lines()
+            .find(|l| l.starts_with("entity 5.0 scalar"))
+            .unwrap()
+            .split(' ')
+            .nth(3)
+            .unwrap()
+            .parse()
+            .unwrap();
+        (done.report.iterations, value)
+    };
+    let (iterations, value) = reach("1");
+    assert!((value - 3000.0).abs() <= TOLERANCE, "{value}");
+    assert!(iterations > 1, "{iterations}");
+    for size in ["64", "0.015625", "1024"] {
+        let (n, v) = reach(size);
+        assert_eq!(n, iterations, "size {size}");
+        assert!((v - 3000.0).abs() <= TOLERANCE, "size {size}: {v}");
+    }
+}
+
+/// A line from a fixed point (0, 0) to a free one drawn at `drawn` half-turns, 1000 long, with a
+/// heading of `angle` and nothing on its length: a stage of two variables and one rule, whose
+/// determinant is never watched.
+fn pointer(drawn: f64, angle: f64) -> Sketch {
+    let (s, c) = (
+        (drawn * core::f64::consts::PI).sin() * 1000.0,
+        (drawn * core::f64::consts::PI).cos() * 1000.0,
+    );
+    sketch(&format!(
+        "entity 1.0 point 0 0
+entity 1.1 point {c} {s}
+entity 2.0 line 1.0 1.1 segment
+constraint 3.0 driving 0 fix 1.0 0 0
+constraint 3.1 driving 0 fix 1.0 1 0
+constraint 3.2 driving 0 heading 2.0 {angle}
+"
+    ))
+}
+
+/// Where the end of `s`'s line `line` points along the direction `angle` half-turns: positive
+/// with it, negative against it.
+fn along(s: &Sketch, from: ItemId, to: ItemId, angle: f64) -> f64 {
+    let [ax, ay] = s.point(from).unwrap();
+    let [bx, by] = s.point(to).unwrap();
+    let t = angle * core::f64::consts::PI;
+    (bx - ax) * t.cos() + (by - ay) * t.sin()
+}
+
+#[test]
+fn a_heading_keeps_its_sense_along_a_path_in_an_open_stage() {
+    // Drawn along its heading, and drawn against it: from 0.1 to 0.9 in one jump, the least change
+    // lands on the other sense, which only the rule's sense, watched, turns back.
+    for (drawn, sense) in [(0.1, 1.0), (1.1, -1.0)] {
+        let from = solve(&pointer(drawn, 0.1), &mut meter()).unwrap().sketch;
+        let to = pointer(drawn, 0.9);
+        let jumped = solve(&to, &mut meter()).unwrap().sketch;
+        assert!(
+            along(&jumped, id(1, 0), id(1, 1), 0.9) * sense < 0.0,
+            "the plain solve keeps the sense: the test shows nothing"
+        );
+        let done = continue_to(&from, &to, &mut meter()).unwrap();
+        assert!(done.report.steps > 1);
+        assert!(
+            along(&done.sketch, id(1, 0), id(1, 1), 0.9) * sense > 0.0,
+            "drawn at {drawn}: {:?}",
+            done.sketch.point(id(1, 1))
+        );
+    }
+}
+
+/// [`hand`] with nothing on the turned line's length, drawn at `drawn` half-turns.
+fn open_hand(drawn: f64, angle: f64) -> Sketch {
+    let (s, c) = (
+        (drawn * core::f64::consts::PI).sin() * 1000.0,
+        (drawn * core::f64::consts::PI).cos() * 1000.0,
+    );
+    sketch(&format!(
+        "entity 1.0 point 0 0
+entity 1.1 point 1000 0
+entity 1.2 point {c} {s}
+entity 2.0 line 1.0 1.1 segment
+entity 2.1 line 1.0 1.2 segment
+constraint 3.0 driving 0 fix 1.0 0 0
+constraint 3.1 driving 0 fix 1.0 1 0
+constraint 3.2 driving 0 fix 1.1 0 1000
+constraint 3.3 driving 0 fix 1.1 1 0
+constraint 3.4 driving 0 turned 2.0 2.1 {angle}
+"
+    ))
+}
+
+#[test]
+fn a_turn_keeps_its_sense_along_a_path_in_an_open_stage() {
+    for (drawn, sense) in [(0.1, 1.0), (1.1, -1.0)] {
+        let from = solve(&open_hand(drawn, 0.1), &mut meter()).unwrap().sketch;
+        let to = with_angle(&from, 0.9);
+        let jumped = solve(&to, &mut meter()).unwrap().sketch;
+        assert!(
+            along(&jumped, id(1, 0), id(1, 2), 0.9) * sense < 0.0,
+            "the plain solve keeps the sense: the test shows nothing"
+        );
+        let done = continue_to(&from, &to, &mut meter()).unwrap();
+        assert!(
+            along(&done.sketch, id(1, 0), id(1, 2), 0.9) * sense > 0.0,
+            "drawn at {drawn}: {:?}",
+            done.sketch.point(id(1, 2))
+        );
+    }
+}
+
+#[test]
+fn a_rule_that_chose_a_root_is_another_sketch_when_it_chooses_the_other() {
+    let circles = "entity 1.0 point 0 0
+entity 1.1 point 30 0
+entity 1.2 point 50 0
+entity 3.0 circle 1.0 10
+entity 3.1 circle 1.1 10
+entity 3.2 circle 1.0 14
+";
+    for (one, other) in [
+        (
+            "constraint 4.0 driving 0 point-circle 1.2 3.0 5 outside\n",
+            "constraint 4.0 driving 0 point-circle 1.2 3.0 5 inside\n",
+        ),
+        (
+            "constraint 4.0 driving 0 tangent-circles 3.0 3.1 outside\n",
+            "constraint 4.0 driving 0 tangent-circles 3.0 3.1 inside\n",
+        ),
+        (
+            "constraint 4.0 driving 0 offset 3.0 3.2 4 grows\n",
+            "constraint 4.0 driving 0 offset 3.0 3.2 4 shrinks\n",
+        ),
+    ] {
+        let (a, b) = (
+            sketch(&format!("{circles}{one}")),
+            sketch(&format!("{circles}{other}")),
+        );
+        assert_eq!(
+            continue_to(&a, &b, &mut meter()),
+            Err(SketchError::NotTheSameSketch),
+            "{one}"
+        );
+    }
+}
+
+/// A line from a fixed point to one drawn on it, at a heading of an eighth of a turn and 100 long:
+/// the free end is nudged off the fixed one by the heading's id alone.
+fn nudged_line(rule: u64) -> Sketch {
+    sketch(&format!(
+        "entity 1.0 point 100 200
+entity 1.1 point 100 200
+entity 2.0 line 1.0 1.1 segment
+constraint 3.20 driving 0 fix 1.0 0 100
+constraint 3.21 driving 0 fix 1.0 1 200
+constraint 3.{rule} driving 0 heading 2.0 0.25
+constraint 3.22 driving 0 length 2.0 100
+"
+    ))
+}
+
+#[test]
+fn a_nudge_goes_either_way_by_its_id() {
+    // Each input's nudge takes its sign from the id, so over a handful of ids the free end leaves
+    // the fixed one both ways along the heading.
+    let mut ways = std::collections::BTreeSet::new();
+    for rule in 0..16 {
+        let done = solve(&nudged_line(rule), &mut meter()).unwrap();
+        assert_eq!(done.report.nudged, [id(3, rule)]);
+        ways.insert(along(&done.sketch, id(1, 0), id(1, 1), 0.25) > 0.0);
+    }
+    assert_eq!(ways.len(), 2, "{ways:?}");
+}
+
+#[test]
+fn of_two_rules_missed_alike_the_first_is_named() {
+    // One coordinate fixed at 0 and at 10: the least-squares answer, 5, misses both by 5.
+    let lines = "entity 1.0 point 3 0
+constraint 3.0 driving 0 fix 1.0 0 0
+constraint 3.1 driving 0 fix 1.0 0 10
+constraint 3.2 driving 0 fix 1.0 1 0
+";
+    assert_eq!(
+        solve(&sketch(lines), &mut meter()),
+        Err(SketchError::Unsolved(id(3, 0)))
+    );
+}
+
+#[test]
+fn a_solve_costs_the_same_work_every_time() {
+    const TRIANGLE_WORK: u128 = 138;
+    const BIG_WORK: u128 = 23_390;
+    // The meter's charges are the solver's contract (chapter 23.10): each iteration its block's
+    // rows and its factorisation's work, the plan its analyses. Measured; a change to what the
+    // solver charges, or how it orders a block's columns, shows here.
+    let cost = |lines: &str| {
+        let mut m = meter();
+        solve(&sketch(lines), &mut m).unwrap();
+        m.used().work
+    };
+    assert_eq!(cost(TRIANGLE), TRIANGLE_WORK);
+    let (_, big) = cases()
+        .into_iter()
+        .find(|(name, _)| name.contains("massive_parallel_system"))
+        .unwrap();
+    let mut m = meter();
+    solve(&big, &mut m).unwrap();
+    assert_eq!(m.used().work, BIG_WORK);
+}
+
+#[test]
+fn a_rule_on_fixed_points_alone_is_held_to_at_the_end() {
+    // Two references 3000 apart, and a distance of 2000 between them: the rule has no variable, so
+    // no block holds it, and only the last check sees it missed.
+    let lines = "entity 1.0 reference 0 0
+entity 1.1 reference 3000 0
+entity 1.2 point 5 5
+constraint 3.0 driving 0 distance 1.0 1.1 2000
+constraint 3.1 driving 0 fix 1.2 0 5
+";
+    assert_eq!(
+        solve(&sketch(lines), &mut meter()),
+        Err(SketchError::Unsolved(id(3, 0)))
+    );
+    // Met, it passes.
+    assert!(solve(&sketch(&lines.replace("2000", "3000")), &mut meter()).is_ok());
+}
+
+#[test]
+fn a_block_that_starts_nearly_singular_is_not_watched() {
+    // Two distances barely longer than half the base: the apex sits a fraction of a unit above it,
+    // the block's smallest pivot below the independence threshold, so its determinant's sign is no
+    // guide and the path runs unwatched.
+    let lines = |d: f64| {
+        format!(
+            "entity 1.0 point 0 0
+entity 1.1 point 3000 0
+entity 1.2 point 1500 1
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 fix 1.1 0 3000
+constraint 2.3 driving 0 fix 1.1 1 0
+constraint 2.4 driving 0 distance 1.0 1.2 {d}
+constraint 2.5 driving 0 distance 1.1 1.2 {d}
+"
+        )
+    };
+    let done = continue_to(
+        &sketch(&lines(1_500.000_05)),
+        &sketch(&lines(1_500.000_1)),
+        &mut meter(),
+    );
+    assert!(done.is_ok(), "{done:?}");
+}
