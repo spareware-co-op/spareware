@@ -425,6 +425,10 @@ pub static OPS: &[Op] = &[
     // of a sphere.
     Op { group: "intersect", name: "project_arc", measures: "geom_intersect::project::project_curve", classes: T, prepare: |c| bind(inputs::intersect::arcs(c), kernels::intersect::on_arcs) },
     Op { group: "intersect", name: "project_sphere", measures: "geom_intersect::project::project_surface", classes: T, prepare: |c| bind(inputs::intersect::spheres(c), kernels::intersect::on_spheres) },
+    // The tracer (piece G168; decision 32.44): a sphere through a plane patch, and a torus's
+    // silhouette.
+    Op { group: "intersect", name: "trace_patch", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::patches(c), kernels::intersect::cut_patches) },
+    Op { group: "intersect", name: "trace_silhouette", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::tori(c), kernels::intersect::silhouettes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },

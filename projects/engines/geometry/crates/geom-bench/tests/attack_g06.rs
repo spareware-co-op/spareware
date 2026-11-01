@@ -1269,6 +1269,25 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 )
             }))
         }
+        ("intersect", "trace_patch") => fold(inputs::intersect::patches(class).iter().map(
+            |(surface, centre)| {
+                let frame = geom_curve::Frame::standard().unwrap();
+                let domain = ((0.0, 2.0), (-0.5, 0.5));
+                let sphere = geom_surface::Sphere::new(*centre, 5.0, frame, domain)?;
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let level = geom_intersect::OnImplicit(&sphere);
+                geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
+            },
+        )),
+        ("intersect", "trace_silhouette") => fold(inputs::intersect::tori(class).iter().map(
+            |(surface, direction)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let level = geom_intersect::Silhouette {
+                    direction: *direction,
+                };
+                geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
+            },
+        )),
         ("intersect", "project_arc") => {
             fold(inputs::intersect::arcs(class).iter().map(|(curve, p)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

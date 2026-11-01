@@ -2387,4 +2387,6 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("pair_lines", k::paired, &m::lines(Typical));
     all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
     all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
+    all_ok("trace_patch", k::cut_patches, &m::patches(Typical));
+    all_ok("trace_silhouette", k::silhouettes, &m::tori(Typical));
 }

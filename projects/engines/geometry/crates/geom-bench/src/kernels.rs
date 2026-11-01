@@ -2026,22 +2026,30 @@ pub mod roots {
     }
 }
 
-/// `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): items put in canonical
-/// order, a key read, a pair put in order, and a point projected, under an unlimited budget.
+/// `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.44): items put in
+/// canonical order, a key read, a pair put in order, a point projected and a level curve traced,
+/// under an unlimited budget.
 pub mod intersect {
     use geom_curve::CurveKind;
     use geom_intersect::{
-        CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, Projection,
-        pair, project_curve, project_surface,
+        CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, LevelCurves, OnImplicit,
+        Operand, Projection, Silhouette, pair, project_curve, project_surface, trace,
     };
     use geom_num::Steps;
     use geom_run::{Budget, WorkMeter};
-    use geom_surface::SurfaceKind;
+    use geom_surface::{Sphere, SurfaceKind};
 
     use super::run;
 
     /// The floor of a projection: a micrometre, in metres.
     const FLOOR: f64 = 1e-6;
+
+    /// The floor of a trace. A trace reads a function thousands of times, so a benchmark keeps it
+    /// coarse: the path is the same at any floor.
+    const COARSE: f64 = 1e-3;
+
+    /// The ceiling of a trace.
+    const CEILING: f64 = 1e-1;
 
     /// A meter of its own, under no limit.
     fn meter() -> WorkMeter<'static> {
@@ -2108,6 +2116,34 @@ pub mod intersect {
     ) {
         run(batch, out, |(curve, p)| {
             project_curve(curve, p, FLOOR, &mut meter())
+        });
+    }
+
+    /// `trace` of a sphere of radius 5 about each centre on its plane patch.
+    #[inline(never)]
+    pub fn cut_patches(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<LevelCurves, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, centre)| {
+            let frame = geom_curve::Frame::standard().map_err(|_| IntersectError::Internal)?;
+            let domain = ((0.0, 2.0), (-0.5, 0.5));
+            let sphere = Sphere::new(*centre, 5.0, frame, domain)?;
+            trace(surface, &OnImplicit(&sphere), COARSE, CEILING, &mut meter())
+        });
+    }
+
+    /// `trace` of each torus's silhouette along its direction.
+    #[inline(never)]
+    pub fn silhouettes(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<LevelCurves, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, direction)| {
+            let level = Silhouette {
+                direction: *direction,
+            };
+            trace(surface, &level, COARSE, CEILING, &mut meter())
         });
     }
 
