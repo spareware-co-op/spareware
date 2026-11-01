@@ -331,18 +331,14 @@ fn plane_plane(a: &Plane, b: &Plane) -> Result<Option<Vec<Piece>>, IntersectErro
         }
         _ => None,
     };
-    let flat = exact.map_or(d.iter().all(|c| c.lo() == 0.0 && c.hi() == 0.0), |(x, _)| x);
-    if flat {
-        let inside = exact.is_some_and(|(_, y)| y);
-        if inside {
-            return Ok(Some(alloc::vec![Piece::Same]));
-        }
-        let gap = dot(p.normal, minus(q.at, p.at)?)?;
-        return Ok(if exact.is_some() || !gap.contains(0.0) {
-            Some(Vec::new())
+    // Parallel, and one plane, only from the exact signs: every operation rounds outward, so an
+    // enclosure of the normals' cross product is never the one point zero.
+    if let Some((true, inside)) = exact {
+        return Ok(Some(if inside {
+            alloc::vec![Piece::Same]
         } else {
-            None
-        });
+            Vec::new()
+        }));
     }
     if d.iter().all(|c| c.contains(0.0)) {
         return Ok(None);
@@ -1234,22 +1230,23 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
     let mut out = Vec::new();
     match surface {
         SurfaceKind::Plane(p) => {
+            // Each finite side of the domain is an edge, along the other vector over the other
+            // parameter's range: a segment, a ray, or a whole line where the plane runs on.
             let (c, a, b) = p.vectors();
             let ((u0, u1), (v0, v1)) = ParamSurface::domain(p);
-            if u0.is_finite() && u1.is_finite() && v0.is_finite() && v1.is_finite() {
-                let at = |u: f64, v: f64| {
-                    let [x, y, z] = c;
-                    let [e, f, g] = a;
-                    let [h, i, j] = b;
-                    [x + u * e + v * h, y + u * f + v * i, z + u * g + v * j]
-                };
-                for (s, t) in [
-                    (at(u0, v0), at(u1, v0)),
-                    (at(u1, v0), at(u1, v1)),
-                    (at(u1, v1), at(u0, v1)),
-                    (at(u0, v1), at(u0, v0)),
-                ] {
-                    out.push(CurveKind::Line(Line::segment(s, t)?.value));
+            let shifted = |t: f64, w: [f64; 3]| {
+                let [x, y, z] = c;
+                let [e, f, g] = w;
+                [x + t * e, y + t * f, z + t * g]
+            };
+            for u in [u0, u1] {
+                if u.is_finite() {
+                    out.push(CurveKind::Line(Line::new(shifted(u, a), b, (v0, v1))?));
+                }
+            }
+            for v in [v0, v1] {
+                if v.is_finite() {
+                    out.push(CurveKind::Line(Line::new(shifted(v, b), a, (u0, u1))?));
                 }
             }
         }
