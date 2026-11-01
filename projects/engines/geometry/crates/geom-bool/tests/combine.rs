@@ -837,6 +837,7 @@ fn shape(body: &Body) -> (Vec<[i64; 3]>, [u32; 3]) {
 }
 
 #[test]
+#[ignore = "a benchmark's shape, far too long for every mutant: G140 runs and times it"]
 fn a_thousand_operands_unite_in_one_arrangement() {
     let mut boxes = Vec::new();
     for i in 0..10 {
