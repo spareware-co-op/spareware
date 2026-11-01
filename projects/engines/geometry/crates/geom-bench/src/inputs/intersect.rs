@@ -2,8 +2,8 @@
 //! 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in
 //! canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that
 //! meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a
-//! sphere and seen in silhouette, planes through a whole sphere's poles, and sheets tangent to a
-//! plane along a known line (G174).
+//! sphere and seen in silhouette, planes through a whole sphere's poles, sheets tangent to a plane
+//! along a known line (G174), and marched crossings to fit as intersection curves (G175).
 //!
 //! Class `typical` only: each list is [`ITEMS`] disjoint points in a shuffled order, each circle,
 //! line, sphere and point within ±2^20 grid steps of the origin, so every call succeeds. Refusals are tested in
@@ -20,12 +20,15 @@
 //! Cost: a few draws of [`SplitMix64`] per input, outside every measured run.
 
 use geom_curve::{Circle, CurveKind, Frame, Line};
+use geom_intersect::general::subdivide;
 use geom_intersect::known::{Known, KnownContact};
+use geom_intersect::march::{Branch, march};
 use geom_intersect::{Item, ParamBox, PointContact};
 use geom_math::Box3;
 use geom_num::Exactness;
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve, Surface};
+use geom_run::{Budget, WorkMeter};
 use geom_surface::{Plane, Sphere, SurfaceKind, Torus};
 
 use super::{Class, batch_of, p3, rng, within};
@@ -272,6 +275,42 @@ pub fn tangents(class: Class) -> Vec<(SurfaceKind, Known)> {
             contact: KnownContact::Tangent,
         };
         Some((SurfaceKind::Nurbs(sheet), known))
+    })
+}
+
+/// A sheet z = v − k·u² for a dyadic k, crossing the ground along a parabola, with that crossing
+/// marched (outside every measured run), for `fit` (piece G175).
+#[must_use]
+pub fn crossings(class: Class) -> Vec<(SurfaceKind, Branch)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("intersect::crossings", class);
+    batch_of(|_| {
+        let ground = SurfaceKind::Plane(
+            Plane::new(
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                ((-4.0, 4.0), (-4.0, 4.0)),
+            )
+            .ok()?,
+        );
+        let k = f64::from(i32::try_from(g.range(1, 7)).ok()?) / 8.0;
+        let along = Basis::new(2, vec![-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]).ok()?;
+        let across = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).ok()?;
+        let mut net = Vec::new();
+        for (x, square) in [(-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)] {
+            for y in [-1.0, 1.0] {
+                net.push([x, y, y - k * square]);
+            }
+        }
+        let sheet = SurfaceKind::Nurbs(Surface::new(along, across, &net).ok()?);
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let found = subdivide(&sheet, &ground, 1.0 / 128.0, &mut meter).ok()?;
+        let traced = march(&sheet, &ground, &found, 1.0 / 128.0, 1.0 / 16.0, &mut meter).ok()?;
+        let branch = traced.branches.into_iter().next()?;
+        Some((sheet, branch))
     })
 }
 

@@ -290,9 +290,15 @@
               "kind": "corpus",
               "piece": "G174",
               "why": "1 new count benchmark on geom-intersect's known curves (decision 32.44): sheets tangent to a plane along a known line, the tube about it proven and taken out of the search; no existing digest moved"
+            },
+            {
+              "sha256": "74f4b0821f7623cd24e3982a083eccbaddc428179fb74b0afa6ab03dfb56c8ec",
+              "kind": "corpus",
+              "piece": "G175",
+              "why": "1 new count benchmark on geom-intersect's intersection curve (decision 32.44): marched crossings fitted, every span certified; no existing digest moved"
             }
           ],
-          "sha256": "74f4b0821f7623cd24e3982a083eccbaddc428179fb74b0afa6ab03dfb56c8ec"
+          "sha256": "eab36255cde3250b2d2f76318cc94a9c94075e6c3b84e179672b0cb39ff4ecb4"
         },
         {
           "id": "geom-nurbs/operations",

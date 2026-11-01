@@ -454,6 +454,8 @@ pub static OPS: &[Op] = &[
     // Known curves (piece G174; decision 32.44): sheets tangent to a plane along a known line,
     // the tube about it proven and taken out of the search.
     Op { group: "intersect", name: "known_tangent", measures: "geom_intersect::known::subdivide_known", classes: T, prepare: |c| bind(inputs::intersect::tangents(c), kernels::intersect::known_cut) },
+    // The intersection curve (piece G175; decision 32.44): marched crossings fitted, every span certified.
+    Op { group: "intersect", name: "fit_curve", measures: "geom_intersect::fit::fit", classes: T, prepare: |c| bind(inputs::intersect::crossings(c), kernels::intersect::fit_curve) },
     // Contact analysis (piece G171; decision 32.44): a sphere resting on a plane patch.
     Op { group: "intersect", name: "analyse_rest", measures: "geom_intersect::contact::analyse", classes: T, prepare: |c| bind(inputs::intersect::rests(c), kernels::intersect::touched) },
     Op { group: "intersect", name: "trace_silhouette", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::tori(c), kernels::intersect::silhouettes) },
