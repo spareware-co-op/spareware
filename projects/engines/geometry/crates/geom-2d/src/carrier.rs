@@ -8,11 +8,10 @@
 //!
 //! Guarantees:
 //!
-//! - **Budgets are geom-num's.** A [`Line2`] is a [`Carrier`] and stays within 15.10's budget; a
-//!   constructed line keeps it, because a rational direction is the normal of a [`Carrier`] and an
-//!   offset by whole steps only moves c. A circle is a grid centre with a whole radius, or a
-//!   rational centre through a grid point; an ellipse is 32.25's. So every predicate on them has
-//!   the fixed width its module derives, and nothing here widens one.
+//! - **Budgets are geom-num's.** A [`Line2`] is a [`Carrier`], within 15.10's budget. A circle is a
+//!   grid centre with a whole radius, or a rational centre through a grid point; an ellipse is
+//!   32.25's. So every predicate on them has the fixed width its module derives, and nothing here
+//!   widens one.
 //! - **Exact.** [`Curve2::side`] is the sign of a predicate of `geom-num`, zero exactly on the curve.
 //! - **Stable names.** A [`CurveIx`] is a place in the table, which only grows, and never a memory
 //!   address.

@@ -7,7 +7,8 @@
 //! - **The rounding** is held to whole-number arithmetic: nearest step, ties to even, at and past the
 //!   frame's edge.
 //! - **Keeping implicit**: off a carrier, flipping a decision, and a root of a quartic.
-//! - **Accepting**: each class against each acceptance, across grid steps.
+//! - **Accepting**: each class against each acceptance, across grid steps, and what an operation
+//!   reports when it is refused.
 //!
 //! Seeds: each randomised test prints `seed: <hex>` and runs from a fixed default;
 //! `SPAREKIT_SEED=<hex>` replays another (chapter 28.17). Case counts are a twentieth in debug
@@ -39,6 +40,7 @@ use geom_num::ladder::{ANGULAR, FIT};
 use geom_num::one_root::Root;
 use geom_num::real::Real;
 use geom_num::{Exactness, NumError, Sign};
+use geom_op::{ErrorKind, OpErrorDetail};
 
 const M: i64 = COORD_MAX;
 
@@ -640,6 +642,27 @@ fn an_acceptance_admits_its_class_and_what_is_better() {
         gap: gap(1.0),
     });
     assert!(wide.admit(top, Real::ZERO).is_err());
+}
+
+#[test]
+fn an_operation_reports_each_failure_by_its_meaning() {
+    let kind = |e: PointError| OpErrorDetail::from(e).kind();
+    let refused = PointError::ExactnessNotAccepted {
+        would_reach: Exactness::Exact,
+        accepted: Accept::Exact,
+    };
+    assert_eq!(kind(refused), ErrorKind::ExactnessNotAccepted);
+    let name = table(&[line(p2(0, 0), p2(1, 0))]).1[0];
+    for e in [
+        PointError::NoCarrier(name),
+        PointError::WrongClass,
+        PointError::NoSuchRoot(1),
+        PointError::Num(NumError::Degenerate),
+    ] {
+        assert_eq!(kind(e), ErrorKind::Degenerate);
+    }
+    let outside = PointError::Num(NumError::OutOfRange { value: 1 << 41 });
+    assert_eq!(kind(outside), ErrorKind::FrameRangeExceeded);
 }
 
 #[test]

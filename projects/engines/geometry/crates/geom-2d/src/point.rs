@@ -33,6 +33,7 @@ use geom_num::grid::P2;
 use geom_num::one_root::{Crossing2, Root};
 use geom_num::quartic::{Quartic, RealRoot, compare};
 use geom_num::{NumError, Sign};
+use geom_op::{NumDetail, OpErrorDetail};
 
 use crate::accept::Accept;
 use crate::carrier::{Carriers, Circle2, Curve2, CurveIx};
@@ -81,6 +82,20 @@ impl fmt::Display for PointError {
 }
 
 impl core::error::Error for PointError {}
+
+impl From<PointError> for OpErrorDetail {
+    /// What an operation reports: chapter 22's kind by meaning. A name or a class that does not fit
+    /// is a degenerate input.
+    fn from(e: PointError) -> OpErrorDetail {
+        match e {
+            PointError::Num(e) => e.into(),
+            PointError::ExactnessNotAccepted { .. } => NumDetail::BoundOverCeiling.into(),
+            PointError::NoCarrier(_) | PointError::WrongClass | PointError::NoSuchRoot(_) => {
+                NumError::Degenerate.into()
+            }
+        }
+    }
+}
 
 /// A point of the plane, as chapter 14.2 stores it. Two of these are one place or not by what they
 /// say, which takes the exact questions below, so they have no `==`.
