@@ -22,15 +22,17 @@
 //!
 //! Cost: what [`prepare`], [`arrange`] and [`rebuild`] cost, and the checker per result.
 
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use geom_check::{Level, check};
 use geom_num::ladder::FIT;
+use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Sign};
 use geom_op::{
     Charge, Class, CombineDetail, Diagnostic, DiagnosticSpec, ErrorKind, ErrorSpec, Family, Field,
-    OpContext, OpError, OpOutput, OpSchema, RoleSpec, RunDetail, Unit,
+    History, OpContext, OpError, OpOutput, OpPath, OpSchema, RoleSpec, RunDetail, Unit,
 };
 use geom_poly::convex::Piece;
 use geom_poly::merge::{
@@ -43,10 +45,11 @@ use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
 use geom_topo::Body;
 
 use crate::certificate::{Fault, certify, labelled};
+use crate::names::{Named, Naming, NamingError, Sources, name};
 use crate::operand::{
     BooleanInput, Operand, OperandKey, PrepareError, Prepared, Selection, prepare,
 };
-use crate::rebuild::{RebuildError, rebuild, rebuild_with, wire};
+use crate::rebuild::{Carrier, RebuildError, publish, wire};
 
 /// The arrangement's phase.
 const ARRANGEMENT: Phase = Phase::new("arrangement");
@@ -130,14 +133,50 @@ pub const COMBINE: OpSchema = OpSchema {
     example: "a 4 m cube less a 2 m cube at its corner: a cube with a corner notch",
 };
 
+/// A result: its body and, when every operand had names to start from, its history.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Combined {
+    /// The body.
+    pub body: Body,
+    /// How its entities relate to the operands' (11.9).
+    pub history: Option<History>,
+}
+
 /// One arrangement, for the selections to read.
 struct Scene<'a> {
+    /// The step that names the results.
+    op: &'a OpPath,
+    /// The operands, in key order.
+    operands: Vec<&'a Operand<'a>>,
+    /// Each polygon's plane.
+    planes: Vec<Plane>,
     /// The operands, ready.
     ready: &'a Prepared,
     /// Every piece, with its vectors.
     classified: &'a [Classified],
     /// What merges.
     merge: Merge,
+}
+
+/// What one result of a selection is told.
+#[derive(Clone, Copy)]
+struct Job<'j> {
+    /// The operand that keeps its names, if not all do.
+    target: Option<usize>,
+    /// Whether it is a sheet.
+    open: bool,
+    /// The input faces that other results of this selection hold pieces of.
+    split: &'j BTreeSet<(usize, u32)>,
+}
+
+/// What a selection gives.
+struct Picked {
+    /// The results.
+    results: Vec<Combined>,
+    /// Whether anything separated the target, for a split.
+    separated: bool,
+    /// Whether two operands brought one name.
+    qualified: bool,
 }
 
 /// Why a selection gave no body.
@@ -149,6 +188,14 @@ enum Refused {
     Detail(CombineDetail),
     /// The certificate did.
     Fault(Fault),
+    /// The names could not be formed.
+    Naming(NamingError),
+}
+
+impl From<NamingError> for Refused {
+    fn from(e: NamingError) -> Self {
+        Refused::Naming(e)
+    }
 }
 
 impl From<Fault> for Refused {
@@ -223,6 +270,7 @@ fn refused(ctx: &OpContext<'_>, error: Refused, meter: &mut WorkMeter<'_>) -> Op
         Refused::Fault(fault) => {
             fail(ctx, CombineDetail::ResultInvalid).with_message(fault.to_string())
         }
+        Refused::Naming(e) => fail(ctx, CombineDetail::ResultInvalid).with_message(e.to_string()),
     }
 }
 
@@ -256,7 +304,7 @@ fn accepted(would: Exactness, accept: Option<Exactness>) -> bool {
     }
 }
 
-impl Scene<'_> {
+impl<'a> Scene<'a> {
     /// `pieces`, each knowing the face it came from.
     fn sourced(&self, mut pieces: Vec<Outward>) -> Vec<Outward> {
         for piece in &mut pieces {
@@ -280,18 +328,80 @@ impl Scene<'_> {
         others.map(|c| c.piece.clone()).collect()
     }
 
+    /// The operands with their names, each keeping them if it is `target` or nothing is, or
+    /// `None` if one has none.
+    fn named(&self, target: Option<usize>) -> Option<Vec<Named<'a>>> {
+        let mut out = Vec::with_capacity(self.operands.len());
+        for (at, operand) in self.operands.iter().enumerate() {
+            out.push(Named {
+                key: operand.key,
+                body: operand.body,
+                names: operand.body.names()?,
+                keeps: target.is_none_or(|place| place == at),
+            });
+        }
+        Some(out)
+    }
+
+    /// `merged`, named and published, its faces split among other results where `split` says.
+    fn finished(
+        &self,
+        merged: &Merged,
+        job: Job<'_>,
+        pieces: &[Outward],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<(Combined, bool), Refused> {
+        let carriers: &[Carrier] = &self.ready.carriers;
+        let Some(named) = self.named(job.target) else {
+            let body = publish(merged, carriers, job.open, None, meter)?;
+            return Ok((
+                Combined {
+                    body,
+                    history: None,
+                },
+                false,
+            ));
+        };
+        let sources = Sources {
+            operands: &named,
+            owners: &self.ready.owners,
+            rows: &self.ready.rows,
+            planes: &self.planes,
+            split: job.split,
+        };
+        let Naming {
+            names,
+            history,
+            qualified,
+        } = name(self.op, merged, pieces, &sources)?;
+        let body = publish(merged, carriers, job.open, Some(&names), meter)?;
+        let history = Some(history);
+        Ok((Combined { body, history }, qualified))
+    }
+
     /// What `test` keeps, its seams held where `cuts` lie.
     fn kept(
         &self,
         test: &WindingTest,
         cuts: &[Piece],
+        target: Option<usize>,
         meter: &mut WorkMeter<'_>,
-    ) -> Result<Vec<Body>, Refused> {
+    ) -> Result<Picked, Refused> {
         let kept = self.sourced(select(test, self.classified)?);
         labelled(&kept, test, meter)?;
         let rules = Rules { cuts, open: false };
-        let body = rebuild_with(&kept, &self.ready.carriers, self.merge, rules, meter)?;
-        Ok(alloc::vec![body])
+        let merged = merge_with(&kept, self.merge, rules, meter)?;
+        let job = Job {
+            target,
+            open: false,
+            split: &BTreeSet::new(),
+        };
+        let (result, qualified) = self.finished(&merged, job, &kept, meter)?;
+        Ok(Picked {
+            results: alloc::vec![result],
+            separated: true,
+            qualified,
+        })
     }
 
     /// The target of `test` cut into one body per cell by the pieces inside it, and whether any
@@ -299,8 +409,9 @@ impl Scene<'_> {
     fn split(
         &self,
         test: &WindingTest,
+        target: Option<usize>,
         meter: &mut WorkMeter<'_>,
-    ) -> Result<(Vec<Body>, bool), Refused> {
+    ) -> Result<Picked, Refused> {
         let outer = self.sourced(select(test, self.classified)?);
         let mut walls: Vec<&Classified> = self
             .classified
@@ -327,8 +438,7 @@ impl Scene<'_> {
             walls = standing;
             (pieces, merged) = self.cells(&outer, &walls, meter)?;
         }
-        let mut lists: alloc::collections::BTreeMap<usize, Vec<Outward>> =
-            alloc::collections::BTreeMap::new();
+        let mut lists: BTreeMap<usize, Vec<Outward>> = BTreeMap::new();
         for (at, piece) in pieces.into_iter().enumerate() {
             let shell = shell_of(&merged, at).ok_or(RebuildError::Broken)?;
             let held = merged.shells.get(shell).ok_or(RebuildError::Broken)?;
@@ -337,12 +447,38 @@ impl Scene<'_> {
                 .or_default()
                 .push(piece);
         }
-        let mut bodies = Vec::with_capacity(lists.len());
-        for list in lists.values() {
-            let carriers = &self.ready.carriers;
-            bodies.push(rebuild(list, carriers, Merge::RemoveRedundant, meter)?);
+        // A face in several cells is split, though each cell holds only one piece of it.
+        let mut cells_of: BTreeMap<(usize, u32), BTreeSet<usize>> = BTreeMap::new();
+        for (cell, list) in &lists {
+            for piece in list {
+                let owner = self.ready.owners.get(piece.polygon).copied();
+                let row = self.ready.rows.get(piece.polygon).copied();
+                let source = owner.zip(row).ok_or(RebuildError::Broken)?;
+                cells_of.entry(source).or_default().insert(*cell);
+            }
         }
-        Ok((bodies, !walls.is_empty()))
+        let split: BTreeSet<(usize, u32)> = cells_of
+            .iter()
+            .filter(|(_, cells)| cells.len() > 1)
+            .map(|(source, _)| *source)
+            .collect();
+        let mut picked = Picked {
+            results: Vec::with_capacity(lists.len()),
+            separated: !walls.is_empty(),
+            qualified: false,
+        };
+        for list in lists.values() {
+            let merged = merge_with(list, Merge::RemoveRedundant, Rules::default(), meter)?;
+            let job = Job {
+                target,
+                open: false,
+                split: &split,
+            };
+            let (result, qualified) = self.finished(&merged, job, list, meter)?;
+            picked.results.push(result);
+            picked.qualified = picked.qualified || qualified;
+        }
+        Ok(picked)
     }
 
     /// `outer` and `walls` merged, each wall twice, back to back, a seam held along it.
@@ -371,7 +507,7 @@ impl Scene<'_> {
         test: &WindingTest,
         target: Option<usize>,
         meter: &mut WorkMeter<'_>,
-    ) -> Result<Vec<Body>, Refused> {
+    ) -> Result<Picked, Refused> {
         let pieces: Vec<Outward> = self
             .classified
             .iter()
@@ -379,13 +515,32 @@ impl Scene<'_> {
             .filter(|c| test.holds(&c.front) || test.holds(&c.back))
             .map(as_kept)
             .collect();
-        let pieces = self.sourced(pieces);
+        self.sheet(&self.sourced(pieces), target, meter)
+    }
+
+    /// `pieces` of the sheet at `target`, as a sheet.
+    fn sheet(
+        &self,
+        pieces: &[Outward],
+        target: Option<usize>,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Picked, Refused> {
         let rules = Rules {
             cuts: &[],
             open: true,
         };
-        let body = rebuild_with(&pieces, &self.ready.carriers, self.merge, rules, meter)?;
-        Ok(alloc::vec![body])
+        let merged = merge_with(pieces, self.merge, rules, meter)?;
+        let job = Job {
+            target,
+            open: true,
+            split: &BTreeSet::new(),
+        };
+        let (result, qualified) = self.finished(&merged, job, pieces, meter)?;
+        Ok(Picked {
+            results: alloc::vec![result],
+            separated: true,
+            qualified,
+        })
     }
 
     /// The pieces of the sheet at `target`, cut by the others, that hold `seeds`.
@@ -394,7 +549,7 @@ impl Scene<'_> {
         target: Option<usize>,
         seeds: &[P3],
         meter: &mut WorkMeter<'_>,
-    ) -> Result<Vec<Body>, Refused> {
+    ) -> Result<Picked, Refused> {
         let of_target = self
             .classified
             .iter()
@@ -428,23 +583,25 @@ impl Scene<'_> {
             .filter(|(_, face)| chosen.contains(face))
             .map(|(piece, _)| piece.clone())
             .collect();
-        let rules = Rules {
-            cuts: &[],
-            open: true,
-        };
-        let body = rebuild_with(&kept, &self.ready.carriers, self.merge, rules, meter)?;
-        Ok(alloc::vec![body])
+        self.sheet(&kept, target, meter)
     }
 
     /// The curves where operands meet.
-    fn section(&self, meter: &mut WorkMeter<'_>) -> Result<Vec<Body>, Refused> {
+    fn section(&self, meter: &mut WorkMeter<'_>) -> Result<Picked, Refused> {
         let mut pieces = Vec::with_capacity(self.classified.len());
         for c in self.classified {
             let owner = self.ready.owners.get(c.polygon);
             pieces.push((c.piece.clone(), owner.copied().ok_or(RebuildError::Broken)?));
         }
         let curves = section(&pieces, meter)?;
-        Ok(alloc::vec![wire(&curves, meter)?])
+        Ok(Picked {
+            results: alloc::vec![Combined {
+                body: wire(&curves, meter)?,
+                history: None,
+            }],
+            separated: true,
+            qualified: false,
+        })
     }
 }
 
@@ -471,7 +628,7 @@ pub fn combine(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
     input: &BooleanInput<'_>,
-) -> Result<OpOutput<Vec<Vec<Body>>>, OpError> {
+) -> Result<OpOutput<Vec<Vec<Combined>>>, OpError> {
     let mut meter = ctx.meter();
     let ready = prepare(input, &mut meter).map_err(|e| prepared(ctx, e, &meter))?;
     let mut exactness = Exactness::Exact;
@@ -494,7 +651,12 @@ pub fn combine(
         &mut meter,
     )
     .map_err(|e| arranged(ctx, e, &meter))?;
+    let mut operands: Vec<&Operand<'_>> = input.operands.iter().collect();
+    operands.sort_by_key(|operand| operand.key);
     let scene = Scene {
+        op: ctx.path(),
+        operands,
+        planes: ready.polygons.iter().map(|p| p.piece.face).collect(),
         ready: &ready,
         classified: &classified,
         merge: input.merge,
@@ -504,26 +666,33 @@ pub fn combine(
     let jobs = input.select.iter().zip(&ready.tests).zip(&ready.targets);
     for ((selection, test), target) in jobs {
         let found = match selection {
-            Selection::Imprint { .. } => scene.kept(test, &scene.others(*target), &mut meter),
-            Selection::Split { .. } => scene.split(test, &mut meter).map(|(bodies, walls)| {
-                if !walls {
-                    notes.extend(Diagnostic::new(
-                        "bool.cutter_does_not_separate",
-                        "nothing cuts the target right through",
-                    ));
-                }
-                bodies
-            }),
+            Selection::Imprint { .. } => {
+                scene.kept(test, &scene.others(*target), *target, &mut meter)
+            }
+            Selection::Split { .. } => scene.split(test, *target, &mut meter),
             Selection::Keep { .. } => scene.keep(test, *target, &mut meter),
             Selection::Trim { seeds, .. } => scene.trim(*target, seeds, &mut meter),
             Selection::Section => scene.section(&mut meter),
             Selection::Unite
             | Selection::Subtract { .. }
             | Selection::Intersect
-            | Selection::Where(_) => scene.kept(test, &[], &mut meter),
+            | Selection::Where(_) => scene.kept(test, &[], *target, &mut meter),
         };
-        let bodies = found.map_err(|e| refused(ctx, e, &mut meter))?;
-        for body in &bodies {
+        let picked = found.map_err(|e| refused(ctx, e, &mut meter))?;
+        if !picked.separated {
+            notes.extend(Diagnostic::new(
+                "bool.cutter_does_not_separate",
+                "nothing cuts the target right through",
+            ));
+        }
+        if picked.qualified {
+            notes.extend(Diagnostic::new(
+                "bool.names_qualified",
+                "two operands brought one name, so each face is qualified by its operand's key",
+            ));
+        }
+        let results = picked.results;
+        for body in results.iter().map(|result| &result.body) {
             let report = check(body, exactness, Level::Cheap, &mut meter)
                 .map_err(|stopped: Stopped| ctx.stopped(&meter, stopped, REBUILD))?;
             if !report.passed() {
@@ -531,13 +700,16 @@ pub fn combine(
             }
             certify(body, &mut meter).map_err(|e| refused(ctx, e.into(), &mut meter))?;
         }
-        if bodies.iter().all(|body| body.arenas().edges.is_empty()) {
+        if results
+            .iter()
+            .all(|result| result.body.arenas().edges.is_empty())
+        {
             notes.extend(Diagnostic::new(
                 "bool.empty_result",
                 "the selection keeps nothing",
             ));
         }
-        lists.push(bodies);
+        lists.push(results);
     }
     let mut out = OpOutput::new(lists, exactness);
     out.diagnostics = notes;
@@ -550,7 +722,7 @@ fn one(
     exec: &Exec<'_>,
     operands: &[Operand<'_>],
     selection: Selection,
-) -> Result<OpOutput<Body>, OpError> {
+) -> Result<OpOutput<Combined>, OpError> {
     let input = BooleanInput {
         operands: operands.to_vec(),
         select: alloc::vec![selection],
@@ -581,7 +753,7 @@ pub fn unite(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
     operands: &[Operand<'_>],
-) -> Result<OpOutput<Body>, OpError> {
+) -> Result<OpOutput<Combined>, OpError> {
     one(ctx, exec, operands, Selection::Unite)
 }
 
@@ -596,7 +768,7 @@ pub fn subtract(
     exec: &Exec<'_>,
     target: OperandKey,
     operands: &[Operand<'_>],
-) -> Result<OpOutput<Body>, OpError> {
+) -> Result<OpOutput<Combined>, OpError> {
     one(ctx, exec, operands, Selection::Subtract { target })
 }
 
@@ -609,6 +781,6 @@ pub fn intersect(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
     operands: &[Operand<'_>],
-) -> Result<OpOutput<Body>, OpError> {
+) -> Result<OpOutput<Combined>, OpError> {
     one(ctx, exec, operands, Selection::Intersect)
 }

@@ -33,6 +33,7 @@ use geom_poly::merge::{Curves, Merge, MergeError, Merged, Outward, Rules, merge_
 use geom_poly::order::normals_det;
 use geom_run::WorkMeter;
 use geom_topo::Line as Shadow;
+use geom_topo::order::Names;
 use geom_topo::{
     Body, BodyKind, Box3, Builder, CurveKind, Edge, Face, Fin, Ix, Loop, PointKind, Region,
     RegionKind, Sense, Shell, SurfaceKind, TopoError, Vertex,
@@ -440,15 +441,34 @@ pub fn rebuild_with(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, RebuildError> {
     let merged = merge_with(pieces, mode, rules, meter)?;
-    let (builder, outside) = arenas(&merged, carriers, rules.open)?;
-    let kind = if rules.open {
+    publish(&merged, carriers, rules.open, None, meter)
+}
+
+/// `merged` written into arenas and published, in the order of `names` if it has any: an open
+/// merge is a sheet, and a closed one a solid unless some edge has more than two fins.
+///
+/// # Errors
+///
+/// A [`RebuildError`]: what the arenas refuse.
+pub fn publish(
+    merged: &Merged,
+    carriers: &[Carrier],
+    open: bool,
+    names: Option<&Names>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, RebuildError> {
+    let (builder, outside) = arenas(merged, carriers, open)?;
+    let kind = if open {
         BodyKind::Sheet
     } else if merged.edges.iter().all(|e| e.fins.len() == 2) {
         BodyKind::Solid
     } else {
         BodyKind::General
     };
-    Ok(builder.publish(kind, outside, meter)?)
+    Ok(match names {
+        Some(names) => builder.publish_named(names, kind, outside, meter)?,
+        None => builder.publish(kind, outside, meter)?,
+    })
 }
 
 /// The wire body of `curves`: edges with no fins, each vertex a grid point or its own meeting.

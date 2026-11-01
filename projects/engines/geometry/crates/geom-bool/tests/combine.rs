@@ -13,7 +13,7 @@
     reason = "tests: native arithmetic, and a failure stops the test"
 )]
 
-use geom_bool::combine::{COMBINE, combine, intersect, subtract, unite};
+use geom_bool::combine::{COMBINE, Combined, combine, intersect, subtract, unite};
 use geom_bool::half_space::half_space;
 use geom_bool::operand::{
     BooleanInput, Operand, OperandKey, OperandKind, PrepareError, Selection, Term,
@@ -98,14 +98,14 @@ fn two_boxes_unite_cut_and_meet() {
     let both = [solid(1, &a), solid(2, &b)];
     let u = unite(&ctx(), &SERIAL, &both).unwrap();
     assert_eq!(u.exactness, Exactness::Exact);
-    assert_eq!(sixfold(&u.result), 6 * (2 * 64_000 - 8_000));
-    checked(&u.result);
+    assert_eq!(sixfold(&u.result.body), 6 * (2 * 64_000 - 8_000));
+    checked(&u.result.body);
     let s = subtract(&ctx(), &SERIAL, key(1), &both).unwrap();
-    assert_eq!(sixfold(&s.result), 6 * (64_000 - 8_000));
-    checked(&s.result);
+    assert_eq!(sixfold(&s.result.body), 6 * (64_000 - 8_000));
+    checked(&s.result.body);
     let i = intersect(&ctx(), &SERIAL, &both).unwrap();
-    assert_eq!(sixfold(&i.result), 6 * 8_000);
-    checked(&i.result);
+    assert_eq!(sixfold(&i.result.body), 6 * 8_000);
+    checked(&i.result.body);
 }
 
 #[test]
@@ -129,7 +129,12 @@ fn one_arrangement_gives_every_selection() {
         accept: None,
     };
     let out = combine(&ctx(), &SERIAL, &input).unwrap();
-    let volumes: Vec<i128> = out.result.iter().flatten().map(sixfold).collect();
+    let volumes: Vec<i128> = out
+        .result
+        .iter()
+        .flatten()
+        .map(|c| sixfold(&c.body))
+        .collect();
     assert_eq!(volumes, [6 * 120_000, 6 * 8_000, 6 * 56_000, 6 * 56_000]);
 }
 
@@ -138,8 +143,11 @@ fn a_door_through_a_wall_leaves_an_opening() {
     let wall = cuboid([0, 0, 0], [100, 10, 60]);
     let door = cuboid([40, -5, 0], [20, 20, 40]);
     let out = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &wall), solid(2, &door)]).unwrap();
-    assert_eq!(sixfold(&out.result), 6 * (100 * 10 * 60 - 20 * 10 * 40));
-    checked(&out.result);
+    assert_eq!(
+        sixfold(&out.result.body),
+        6 * (100 * 10 * 60 - 20 * 10 * 40)
+    );
+    checked(&out.result.body);
 }
 
 #[test]
@@ -153,8 +161,11 @@ fn many_tools_cut_in_one_call() {
         operands.push(solid(i as u8 + 1, tool));
     }
     let out = subtract(&ctx(), &SERIAL, key(0), &operands).unwrap();
-    assert_eq!(sixfold(&out.result), 6 * (300 * 10 * 60 - 6 * 20 * 10 * 30));
-    checked(&out.result);
+    assert_eq!(
+        sixfold(&out.result.body),
+        6 * (300 * 10 * 60 - 6 * 20 * 10 * 30)
+    );
+    checked(&out.result.body);
 }
 
 #[test]
@@ -166,9 +177,9 @@ fn a_result_goes_straight_back_in() {
         let tool = cuboid([5 + 19 * i, -5, 10], [10, 50, 20]);
         let out = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &body), solid(2, &tool)]).unwrap();
         left -= 10 * 40 * 20;
-        assert_eq!(sixfold(&out.result), 6 * left, "cut {i}");
-        checked(&out.result);
-        body = out.result;
+        assert_eq!(sixfold(&out.result.body), 6 * left, "cut {i}");
+        checked(&out.result.body);
+        body = out.result.body;
     }
 }
 
@@ -189,11 +200,16 @@ fn a_tilted_prism_cuts_and_comes_back() {
     )
     .unwrap();
     // The triangle's area is 700, through all 60 of the block.
-    assert_eq!(sixfold(&out.result), 6 * (216_000 - 700 * 60));
-    checked(&out.result);
+    assert_eq!(sixfold(&out.result.body), 6 * (216_000 - 700 * 60));
+    checked(&out.result.body);
     let again = cuboid([20, 20, 20], [60, 60, 60]);
-    let more = unite(&ctx(), &SERIAL, &[solid(1, &out.result), solid(2, &again)]).unwrap();
-    checked(&more.result);
+    let more = unite(
+        &ctx(),
+        &SERIAL,
+        &[solid(1, &out.result.body), solid(2, &again)],
+    )
+    .unwrap();
+    checked(&more.result.body);
 }
 
 #[test]
@@ -202,7 +218,7 @@ fn the_order_of_the_operands_does_not_count() {
     let b = cuboid([20, 20, 20], [40, 40, 40]);
     let forward = unite(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &b)]).unwrap();
     let backward = unite(&ctx(), &SERIAL, &[solid(2, &b), solid(1, &a)]).unwrap();
-    assert_eq!(forward.result, backward.result);
+    assert_eq!(forward.result.body, backward.result.body);
 }
 
 #[test]
@@ -219,7 +235,8 @@ fn seams_stay_and_come_back_in() {
         .unwrap()
         .result
         .remove(0)
-        .remove(0);
+        .remove(0)
+        .body;
     checked(&seamed);
     let tool = cuboid([30, 10, 10], [20, 20, 40]);
     let out = subtract(
@@ -229,8 +246,8 @@ fn seams_stay_and_come_back_in() {
         &[solid(1, &seamed), solid(2, &tool)],
     )
     .unwrap();
-    assert_eq!(sixfold(&out.result), 6 * (128_000 - 20 * 20 * 30));
-    checked(&out.result);
+    assert_eq!(sixfold(&out.result.body), 6 * (128_000 - 20 * 20 * 30));
+    checked(&out.result.body);
 }
 
 #[test]
@@ -242,7 +259,7 @@ fn a_cutter_cuts_and_counts_nothing() {
         ..solid(2, &other)
     };
     let out = unite(&ctx(), &SERIAL, &[solid(1, &block), cutter]).unwrap();
-    assert_eq!(sixfold(&out.result), 6 * 64_000);
+    assert_eq!(sixfold(&out.result.body), 6 * 64_000);
 }
 
 #[test]
@@ -286,8 +303,8 @@ fn a_half_space_clips_a_block_under_a_roof() {
     let roof = half_space([p(60, 0, 0), p(60, 60, 0), p(0, 0, 60)], &mut meter()).unwrap();
     checked(&roof);
     let out = intersect(&ctx(), &SERIAL, &[solid(1, &block), solid(2, &roof)]).unwrap();
-    assert_eq!(sixfold(&out.result), 6 * 108_000);
-    checked(&out.result);
+    assert_eq!(sixfold(&out.result.body), 6 * 108_000);
+    checked(&out.result.body);
 }
 
 #[test]
@@ -308,8 +325,8 @@ fn half_spaces_face_every_way_and_steep_ones_too() {
     for (points, want) in cases {
         let space = half_space(points, &mut meter()).unwrap();
         let out = intersect(&ctx(), &SERIAL, &[solid(1, &block), solid(2, &space)]).unwrap();
-        assert_eq!(sixfold(&out.result), 6 * want, "{points:?}");
-        checked(&out.result);
+        assert_eq!(sixfold(&out.result.body), 6 * want, "{points:?}");
+        checked(&out.result.body);
     }
 }
 
@@ -441,7 +458,10 @@ fn cutter(n: u8, body: &Body) -> Operand<'_> {
 }
 
 /// `selection` of `operands`, in one call.
-fn picked(operands: Vec<Operand<'_>>, selection: Selection) -> geom_op::OpOutput<Vec<Vec<Body>>> {
+fn picked(
+    operands: Vec<Operand<'_>>,
+    selection: Selection,
+) -> geom_op::OpOutput<Vec<Vec<Combined>>> {
     let input = BooleanInput {
         operands,
         select: vec![selection],
@@ -457,13 +477,13 @@ fn an_imprint_splits_faces_and_changes_no_shape() {
     let column = cuboid([40, 40, 20], [20, 20, 50]);
     let selection = Selection::Imprint { target: key(1) };
     let out = picked(vec![solid(1, &slab), solid(2, &column)], selection.clone());
-    let body = &out.result[0][0];
+    let body = &out.result[0][0].body;
     assert_eq!(sixfold(body), 6 * 200_000);
     assert_eq!(body.arenas().faces.len(), 7);
     checked(body);
     let line = sheet(0, 30, [-10, -10], [110, 110]);
     let cut = picked(vec![solid(1, &slab), cutter(2, &line)], selection.clone());
-    let body = &cut.result[0][0];
+    let body = &cut.result[0][0].body;
     assert_eq!(sixfold(body), 6 * 200_000);
     // Top, bottom and the two long sides each in two.
     assert_eq!(body.arenas().faces.len(), 10);
@@ -471,7 +491,7 @@ fn an_imprint_splits_faces_and_changes_no_shape() {
     // A line that stops inside a face leaves the face whole.
     let short = sheet(0, 30, [10, -10], [50, 110]);
     let cut = picked(vec![solid(1, &slab), cutter(2, &short)], selection);
-    let body = &cut.result[0][0];
+    let body = &cut.result[0][0].body;
     assert_eq!(body.arenas().faces.len(), 6);
     checked(body);
 }
@@ -482,26 +502,26 @@ fn a_split_gives_one_body_per_cell() {
     let tool = cuboid([40, -5, -5], [20, 20, 70]);
     let selection = Selection::Split { target: key(1) };
     let out = picked(vec![solid(1, &wall), solid(2, &tool)], selection.clone());
-    let mut volumes: Vec<i128> = out.result[0].iter().map(sixfold).collect();
+    let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
     volumes.sort_unstable();
     assert_eq!(
         volumes,
         [6 * 12_000, 6 * 24_000, 6 * 24_000],
         "both ends and the middle"
     );
-    out.result[0].iter().for_each(checked);
+    out.result[0].iter().for_each(|c| checked(&c.body));
     let line = sheet(0, 30, [-10, -10], [20, 70]);
     let out = picked(vec![solid(1, &wall), cutter(2, &line)], selection.clone());
-    let mut volumes: Vec<i128> = out.result[0].iter().map(sixfold).collect();
+    let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
     volumes.sort_unstable();
     assert_eq!(volumes, [6 * 18_000, 6 * 42_000]);
-    out.result[0].iter().for_each(checked);
+    out.result[0].iter().for_each(|c| checked(&c.body));
     let inside = cuboid([10, 2, 10], [20, 6, 20]);
     let out = picked(vec![solid(1, &wall), solid(2, &inside)], selection);
-    let mut volumes: Vec<i128> = out.result[0].iter().map(sixfold).collect();
+    let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
     volumes.sort_unstable();
     assert_eq!(volumes, [6 * 2_400, 6 * (60_000 - 2_400)]);
-    out.result[0].iter().for_each(checked);
+    out.result[0].iter().for_each(|c| checked(&c.body));
 }
 
 #[test]
@@ -511,8 +531,8 @@ fn a_cutter_that_stops_short_leaves_the_target_whole_and_says_so() {
     let selection = Selection::Split { target: key(1) };
     let out = picked(vec![solid(1, &wall), cutter(2, &short)], selection);
     assert_eq!(out.result[0].len(), 1);
-    assert_eq!(sixfold(&out.result[0][0]), 6 * 60_000);
-    assert_eq!(out.result[0][0].arenas().faces.len(), 6);
+    assert_eq!(sixfold(&out.result[0][0].body), 6 * 60_000);
+    assert_eq!(out.result[0][0].body.arenas().faces.len(), 6);
     assert!(
         out.diagnostics
             .iter()
@@ -529,7 +549,7 @@ fn keep_clips_a_sheet_to_a_solid() {
         test: vec![Term::Inside(key(1))],
     };
     let out = picked(vec![solid(1, &block), cutter(2, &facade)], selection);
-    let kept = &out.result[0][0];
+    let kept = &out.result[0][0].body;
     assert_eq!(kept.kind(), BodyKind::Sheet);
     assert_eq!(kept.arenas().faces.len(), 1);
     assert_eq!(kept.arenas().edges.len(), 4);
@@ -546,7 +566,7 @@ fn trim_keeps_the_pieces_that_hold_the_seeds() {
         seeds: vec![seed],
     };
     let out = picked(operands(), trim(p(0, 10, 10)));
-    let kept = &out.result[0][0];
+    let kept = &out.result[0][0].body;
     assert_eq!(kept.kind(), BodyKind::Sheet);
     assert_eq!(kept.arenas().faces.len(), 1);
     checked(kept);
@@ -575,19 +595,19 @@ fn a_section_is_the_curve_where_operands_meet() {
     let a = cuboid([0, 0, 0], [40, 40, 40]);
     let b = cuboid([20, 20, 20], [40, 40, 40]);
     let out = picked(vec![solid(1, &a), solid(2, &b)], Selection::Section);
-    let curves = &out.result[0][0];
+    let curves = &out.result[0][0].body;
     assert_eq!(curves.kind(), BodyKind::Wire);
     assert_eq!(curves.arenas().edges.len(), 6);
     assert_eq!(curves.arenas().vertices.len(), 6);
     checked(curves);
     let plan = sheet(2, 20, [-10, -10], [50, 50]);
     let out = picked(vec![solid(1, &a), cutter(2, &plan)], Selection::Section);
-    let curves = &out.result[0][0];
+    let curves = &out.result[0][0].body;
     assert_eq!(curves.arenas().edges.len(), 4);
     checked(curves);
     let apart = cuboid([100, 0, 0], [10, 10, 10]);
     let out = picked(vec![solid(1, &a), solid(2, &apart)], Selection::Section);
-    assert_eq!(out.result[0][0].arenas().edges.len(), 0);
+    assert_eq!(out.result[0][0].body.arenas().edges.len(), 0);
     assert!(
         out.diagnostics
             .iter()
@@ -712,7 +732,7 @@ fn keep_takes_a_sheet_that_lies_on_a_solids_face() {
         test: vec![Term::Inside(key(1))],
     };
     let out = picked(vec![solid(1, &block), cutter(2, &on_face)], selection);
-    assert_eq!(out.result[0][0].arenas().faces.len(), 1);
+    assert_eq!(out.result[0][0].body.arenas().faces.len(), 1);
 }
 
 #[test]
@@ -738,7 +758,8 @@ fn a_seam_that_ends_off_the_grid_comes_back_in() {
         .unwrap()
         .result
         .remove(0)
-        .remove(0);
+        .remove(0)
+        .body;
     // 3y + z = 101 meets the seam on top at y = 61/3.
     let tilt = half_space([p(0, 30, 11), p(1, 30, 11), p(0, 31, 8)], &mut meter()).unwrap();
     let meeting = call(
@@ -749,7 +770,8 @@ fn a_seam_that_ends_off_the_grid_comes_back_in() {
         .unwrap()
         .result
         .remove(0)
-        .remove(0);
+        .remove(0)
+        .body;
     checked(&cut);
     let off_grid = (0..cut.arenas().points.len()).any(|at| {
         matches!(
@@ -760,7 +782,7 @@ fn a_seam_that_ends_off_the_grid_comes_back_in() {
     assert!(off_grid);
     let tool = cuboid([30, 5, 5], [20, 5, 5]);
     let again = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &cut), solid(2, &tool)]).unwrap();
-    checked(&again.result);
+    checked(&again.result.body);
 }
 
 #[test]
@@ -770,7 +792,7 @@ fn a_loop_may_start_anywhere_along_a_side() {
     let line = sheet(0, 30, [-10, 20], [110, 110]);
     let selection = Selection::Imprint { target: key(1) };
     let mut out = picked(vec![solid(1, &slab), cutter(2, &line)], selection);
-    let body = out.result.remove(0).remove(0);
+    let body = out.result.remove(0).remove(0).body;
     assert_eq!(body.arenas().faces.len(), 7);
     let tool = cuboid([40, 40, -5], [20, 20, 40]);
     let want = 6 * (200_000 - 20 * 20 * 20);
@@ -787,7 +809,7 @@ fn a_loop_may_start_anywhere_along_a_side() {
             let turned = turned.unwrap();
             let pair = [solid(1, &turned), solid(2, &tool)];
             let cut = subtract(&ctx(), &SERIAL, key(1), &pair).unwrap();
-            assert_eq!(sixfold(&cut.result), want);
+            assert_eq!(sixfold(&cut.result.body), want);
             turns += 1;
             at = arenas.fins.get(at).unwrap().next;
         }
@@ -805,7 +827,7 @@ fn a_section_through_a_tilted_face_meets_off_the_grid() {
     };
     let tool = prism(&ctx(), &input).unwrap().result.body;
     let out = picked(vec![solid(1, &block), solid(2, &tool)], Selection::Section);
-    let curves = &out.result[0][0];
+    let curves = &out.result[0][0].body;
     assert_eq!(curves.kind(), BodyKind::Wire);
     let off_grid = (0..curves.arenas().points.len()).any(|at| {
         matches!(
@@ -883,8 +905,8 @@ fn a_thousand_operands_unite_in_one_arrangement() {
         })
         .collect();
     let out = unite(&ctx(), &SERIAL, &operands).unwrap();
-    assert_eq!(out.result.arenas().shells.len(), 1000);
-    assert_eq!(sixfold(&out.result), 6 * 8 * 1000);
+    assert_eq!(out.result.body.arenas().shells.len(), 1000);
+    assert_eq!(sixfold(&out.result.body), 6 * 8 * 1000);
 }
 
 proptest! {
@@ -907,19 +929,19 @@ proptest! {
         let mut shuffled = operands.clone();
         let spin = turn % shuffled.len();
         shuffled.rotate_left(spin);
-        let whole = unite(&ctx(), &SERIAL, &shuffled).unwrap().result;
-        prop_assert_eq!(&whole, &unite(&ctx(), &SERIAL, &operands).unwrap().result);
+        let whole = unite(&ctx(), &SERIAL, &shuffled).unwrap().result.body;
+        prop_assert_eq!(&whole, &unite(&ctx(), &SERIAL, &operands).unwrap().result.body);
         let mut held = bodies[0].clone();
         for (i, body) in bodies.iter().enumerate().skip(1) {
             let pair = [solid(0, &held), solid(i as u8, body)];
-            held = unite(&ctx(), &SERIAL, &pair).unwrap().result;
+            held = unite(&ctx(), &SERIAL, &pair).unwrap().result.body;
         }
         prop_assert_eq!(shape(&whole), shape(&held));
-        let cut = subtract(&ctx(), &SERIAL, key(0), &shuffled).unwrap().result;
+        let cut = subtract(&ctx(), &SERIAL, key(0), &shuffled).unwrap().result.body;
         let mut left = bodies[0].clone();
         for (i, body) in bodies.iter().enumerate().skip(1) {
             let pair = [solid(0, &left), solid(i as u8, body)];
-            left = subtract(&ctx(), &SERIAL, key(0), &pair).unwrap().result;
+            left = subtract(&ctx(), &SERIAL, key(0), &pair).unwrap().result.body;
         }
         prop_assert_eq!(shape(&cut), shape(&left));
     }
@@ -956,9 +978,9 @@ proptest! {
             }
         }
         let out = unite(&ctx(), &SERIAL, &operands).unwrap();
-        if out.result.kind() == BodyKind::Solid {
-            prop_assert_eq!(sixfold(&out.result), 6 * count);
-            checked(&out.result);
+        if out.result.body.kind() == BodyKind::Solid {
+            prop_assert_eq!(sixfold(&out.result.body), 6 * count);
+            checked(&out.result.body);
         }
     }
 }
