@@ -14,9 +14,10 @@
 //!   reads through checked lookups.
 //! - **The first fault is named.** The tests run in a fixed order over the arrays in order, so one
 //!   mesh gives one [`MeshFault`] on every target.
-//! - **What is only partly tested off the grid.** A face with a corner off the grid has its turn
-//!   and area tested through its planes alone: the sum of its corners' cross products would need
-//!   rationals. An edge with an end off the grid is tested only for lying on both planes.
+//! - **Off the grid too.** A face with a corner off the grid has its turn tested through its planes:
+//!   the sum of its corners' cross products would need rationals, so each edge's two ends are
+//!   ordered along the line of its two planes, and each loop's lowest corner, which a loop can only
+//!   pass one way, says which way the loop goes round.
 //!
 //! Method: the closure certificate of csgrs's hypermesh
 //! (<https://github.com/timschmidt/csgrs/blob/1bd74092cad1d8a52b2a4dc4fa1fae2bcc605586/crates/hypermesh/src/surface_arrangement.rs>),
@@ -38,14 +39,13 @@
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
-use geom_num::Sign;
 use geom_num::grid::{GridStep, Steps};
 use geom_num::plane::{Plane, Tpi};
-use geom_num::{Exactness, NumError};
-use geom_poly::order::same_point;
+use geom_num::{Exactness, I256, I320, NumError, Sign, Wide};
+use geom_poly::order::{Line, along, same_point};
 use geom_run::{Exec, Phase, RunError, WorkMeter};
 
-use super::build::{ends, faces_of, grouped, next_group, radial, span};
+use super::build::{crossing, ends, faces_of, grouped, next_group, radial, span};
 use super::{
     Facing, MeshError, MeshFault, MeshKind, NONE, PLAN, Parts, Vertex, at, gcd, morton, plane_key,
 };
@@ -359,6 +359,7 @@ fn face_corners(p: &Parts, face: u32) -> Result<(), MeshError> {
             }
             let (&Vertex::Grid(c), &Vertex::Grid(d)) = (a, b) else {
                 on_grid = false;
+                runs_its_way(p, (facing, edge), (u, v), h)?;
                 continue;
             };
             let run = [
@@ -383,6 +384,11 @@ fn face_corners(p: &Parts, face: u32) -> Result<(), MeshError> {
             );
             // Each term is below 2^83, and 2^32 corners keep the sum below 2^115.
             area = area.wrapping_add(x0.wrapping_mul(y1).wrapping_sub(x1.wrapping_mul(y0)));
+        }
+    }
+    if !on_grid {
+        for looped in first..last {
+            turns_its_way(p, looped, looped == first, face)?;
         }
     }
     if on_grid {
@@ -416,6 +422,137 @@ fn coordinate(p: geom_num::grid::P3, k: usize) -> i128 {
         1 => p.y.get(),
         _ => p.z.get(),
     })
+}
+
+/// `facing`'s plane, turned the way it faces.
+fn turned(p: &Parts, facing: Facing) -> Result<Plane, MeshError> {
+    let plane = at(&p.planes, facing.row)?;
+    if facing.flipped {
+        Ok(Plane::new(
+            plane.n().map(i128::wrapping_neg),
+            plane.d().wrapping_neg(),
+        )?)
+    } else {
+        Ok(*plane)
+    }
+}
+
+/// The half-edge `h`, from `u` to `v`, runs along m × n for its plane's normal m and its face's n,
+/// so `v` comes first on the line of the two planes, which runs along n × m.
+fn runs_its_way(
+    p: &Parts,
+    (face, edge): (Facing, Facing),
+    (u, v): (u32, u32),
+    h: u32,
+) -> Result<(), MeshError> {
+    let line = Line::new(turned(p, face)?, turned(p, edge)?)?;
+    let order = along(&line, &crossing(p, &line, u)?, &crossing(p, &line, v)?)?;
+    if order == Ordering::Greater {
+        Ok(())
+    } else {
+        Err(MeshFault::EdgePlaneFacing { half_edge: h }.into())
+    }
+}
+
+/// A vertex's coordinates over a positive weight.
+fn place(p: &Parts, v: u32) -> Result<([I320; 3], I256), MeshError> {
+    match *at(&p.verts, v)? {
+        Vertex::Grid(c) => {
+            let part = |k: i64| I320::from_i64(k);
+            let at_grid = [part(c.x.get()), part(c.y.get()), part(c.z.get())];
+            Ok((at_grid, I256::from_i64(1)))
+        }
+        Vertex::Planes([a, b, c]) => {
+            let row = |r: u32| at(&p.planes, r).copied();
+            let (x, w) = Tpi::new(row(a)?, row(b)?, row(c)?)?.homogeneous()?;
+            if !w.is_negative() {
+                return Ok((x, w));
+            }
+            let [i, j, k] = x;
+            let flip = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
+            let w = w.checked_neg().ok_or(NumError::BudgetExceeded)?;
+            Ok(([flip(&i)?, flip(&j)?, flip(&k)?], w))
+        }
+    }
+}
+
+/// Whether `a` sorts before `b` by x, then y, then z: at most 2^294 · 2^252, in 576 bits.
+fn lower(a: &([I320; 3], I256), b: &([I320; 3], I256)) -> Result<bool, NumError> {
+    let (x, w) = a;
+    let (y, v) = b;
+    let wide =
+        |c: &I320, d: &I256| -> Option<Wide<9>> { c.resize::<9>()?.checked_mul(&d.resize::<9>()?) };
+    for (c, d) in x.iter().zip(y) {
+        let gap = wide(c, v)
+            .zip(wide(d, w))
+            .and_then(|(left, right)| left.checked_sub(&right))
+            .ok_or(NumError::BudgetExceeded)?;
+        match gap.signum() {
+            Sign::Negative => return Ok(true),
+            Sign::Positive => return Ok(false),
+            Sign::Zero => {}
+        }
+    }
+    Ok(false)
+}
+
+/// Which side of `plane` vertex `v` is on.
+fn side(p: &Parts, plane: &Plane, v: u32) -> Result<Sign, MeshError> {
+    Ok(match *at(&p.verts, v)? {
+        Vertex::Grid(c) => plane.side(c)?,
+        Vertex::Planes([a, b, c]) => {
+            let row = |r: u32| at(&p.planes, r).copied();
+            plane.side_of_tpi(&Tpi::new(row(a)?, row(b)?, row(c)?)?)?
+        }
+    })
+}
+
+/// Loop `looped` of `face` goes round the way it should. Its lowest corner is an extreme of the
+/// loop, so a loop round the face turns left there, and a hole right: the corner before is on the
+/// inner side of the next edge's plane, or the outer side. A loop that touches itself at that corner
+/// passes it more than once, turning one way only at the pass that goes round the outside.
+fn turns_its_way(p: &Parts, looped: u32, outer: bool, face: u32) -> Result<(), MeshError> {
+    let (start, end) = span(&p.loop_start, looped)?;
+    let mut lowest = None;
+    for h in start..end {
+        let v = *at(&p.he_vert, h)?;
+        let here = place(p, v)?;
+        let better = match &lowest {
+            Some((_, held)) => lower(&here, held)?,
+            None => true,
+        };
+        if better {
+            lowest = Some((v, here));
+        }
+    }
+    let (corner, _) = lowest.ok_or(MeshFault::Shape)?;
+    let want = if outer {
+        Sign::Positive
+    } else {
+        Sign::Negative
+    };
+    let mut flat = true;
+    for h in start..end {
+        if *at(&p.he_vert, h)? != corner {
+            continue;
+        }
+        let before = if h == start {
+            end.saturating_sub(1)
+        } else {
+            h.saturating_sub(1)
+        };
+        let edge = turned(p, *at(&p.he_plane, h)?)?;
+        let turn = side(p, &edge, *at(&p.he_vert, before)?)?;
+        if turn == want {
+            return Ok(());
+        }
+        flat &= turn == Sign::Zero;
+    }
+    if flat {
+        Err(MeshFault::DegenerateFace { face }.into())
+    } else {
+        Err(MeshFault::WrongWayRound { face }.into())
+    }
 }
 
 /// Every half-edge's pair is its opposite, every edge is used evenly, an edge of more than two is
