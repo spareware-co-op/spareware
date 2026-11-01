@@ -174,8 +174,9 @@ pub struct Parts {
 }
 
 /// An exact polygon mesh: every face flat, every vertex a grid point or a meeting of three planes.
-/// Two meshes of the same arrays are equal, whether or not either is known to be a solid.
-#[derive(Clone, Debug)]
+/// Two meshes of the same arrays are equal, whether or not either is known to be a solid, and
+/// print the same: the flag is what is known of a mesh, not part of it.
+#[derive(Clone)]
 pub struct ExactMesh {
     parts: Parts,
     /// Whether it is known to bound a solid ([`ExactMesh::is_solid`]).
@@ -185,6 +186,18 @@ pub struct ExactMesh {
 impl PartialEq for ExactMesh {
     fn eq(&self, other: &Self) -> bool {
         self.parts == other.parts
+    }
+}
+
+#[allow(
+    clippy::missing_fields_in_debug,
+    reason = "the solid flag is what is known of a mesh, not part of it, as PartialEq has it"
+)]
+impl fmt::Debug for ExactMesh {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExactMesh")
+            .field("parts", &self.parts)
+            .finish()
     }
 }
 
