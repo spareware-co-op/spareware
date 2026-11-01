@@ -22,6 +22,10 @@
     reason = "oracles and generators; the rules are for kernel code"
 )]
 #![allow(
+    clippy::many_single_char_names,
+    reason = "a, b, p, q and the like are the geometry's"
+)]
+#![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
@@ -442,9 +446,8 @@ fn nearest(n: i128, d: i128) -> i128 {
     let (q, r) = (n.div_euclid(d), n.rem_euclid(d));
     match (2 * r).cmp(&d) {
         std::cmp::Ordering::Less => q,
-        std::cmp::Ordering::Greater => q + 1,
         std::cmp::Ordering::Equal if q.rem_euclid(2) == 0 => q,
-        std::cmp::Ordering::Equal => q + 1,
+        std::cmp::Ordering::Greater | std::cmp::Ordering::Equal => q + 1,
     }
 }
 
