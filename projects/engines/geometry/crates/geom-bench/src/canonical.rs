@@ -901,6 +901,12 @@ impl Canonical for geom_num::sturm::Roots {
     }
 }
 
+impl Canonical for geom_num::pencil::Topology {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 // `geom-intersect`'s results (decision 32.44's count benchmarks for piece G158), each through its
 // debug text: their fields are public only as far as the kernel needs, and a double's debug text
 // is the same on every target.

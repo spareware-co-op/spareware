@@ -2033,11 +2033,13 @@ pub mod intersect {
     use geom_intersect::curve::{curves, self_crossings};
     use geom_intersect::curve_surface::curve_surface;
     use geom_intersect::quadrics::natural;
+    use geom_intersect::quartic::meet;
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, Projection,
         pair, project_curve, project_surface,
     };
     use geom_num::Steps;
+    use geom_num::pencil::Topology;
     use geom_run::{Budget, WorkMeter};
     use geom_surface::SurfaceKind;
 
@@ -2081,6 +2083,21 @@ pub mod intersect {
         out: &mut Vec<Result<Intersection, IntersectError>>,
     ) {
         run(batch, out, |(a, b)| closed_form(a, b));
+    }
+
+    /// What `meet` says of one pair, `Internal` for a pair it cannot read.
+    fn walk(a: &SurfaceKind, b: &SurfaceKind) -> Result<Topology, IntersectError> {
+        let found = meet(a, b, &mut meter())?.ok_or(IntersectError::Internal)?;
+        Ok(found.topology)
+    }
+
+    /// `meet` on each pair.
+    #[inline(never)]
+    pub fn walked(
+        batch: &[(SurfaceKind, SurfaceKind)],
+        out: &mut Vec<Result<Topology, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| walk(a, b));
     }
 
     /// `self_crossings` on each curve.
@@ -2167,6 +2184,7 @@ pub mod intersect {
 /// The exact decisions on lines and quadrics (piece G159, decision 32.44): each discriminant through
 /// its filter, a torus's roots, and the tangent sphere of a cylinder and a cone.
 pub mod quadric {
+    use geom_num::pencil::{Entry, Form, Topology, classify};
     use geom_num::quadric::{
         Cone, Cylinder, Line, Sphere, Surface, Torus, axis_gap, line_cone, line_cylinder,
         line_sphere, parallel, roots, tangent_cylinder_cone,
@@ -2175,6 +2193,20 @@ pub mod quadric {
     use geom_num::{NumError, Sign};
 
     use super::run;
+
+    /// `classify` on one pair, as what they share.
+    fn classified(a: &Form<Entry>, b: &Form<Entry>) -> Result<Topology, NumError> {
+        Ok(classify(a, b)?.topology)
+    }
+
+    /// `classify` on each pair of forms.
+    #[inline(never)]
+    pub fn pencils(
+        batch: &[(Form<Entry>, Form<Entry>)],
+        out: &mut Vec<Result<Topology, NumError>>,
+    ) {
+        run(batch, out, |(a, b)| classified(a, b));
+    }
 
     /// `line_sphere` on each pair.
     #[inline(never)]
