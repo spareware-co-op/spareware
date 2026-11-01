@@ -29,7 +29,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 96] = [
+pub const GENERATORS: [Generator; 99] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -443,6 +443,24 @@ pub const GENERATORS: [Generator; 96] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/gappa-rational-orient.g",
         about: "rational_orient's f64 filter for Gappa, whose proof of its error bound Rocq checks",
         generate: Generate::Plain(predicates::generate_gappa_rational_orient),
+    },
+    Generator {
+        name: "gappa-circle-gap-x-x",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-circle-gap-x-x.g",
+        about: "circle_gap's f64 filter for Gappa, one case of three, whose proof Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_circle_gap_x_x),
+    },
+    Generator {
+        name: "gappa-circle-gap-y-y",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-circle-gap-y-y.g",
+        about: "circle_gap's f64 filter for Gappa, one case of three, whose proof Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_circle_gap_y_y),
+    },
+    Generator {
+        name: "gappa-circle-gap-t-t",
+        output: "projects/engines/geometry/crates/geom-gen/generated/gappa-circle-gap-t-t.g",
+        about: "circle_gap's f64 filter for Gappa, one case of three, whose proof Rocq checks",
+        generate: Generate::Plain(predicates::generate_gappa_circle_gap_t_t),
     },
     Generator {
         name: "gappa-lpi-weight-z-n",

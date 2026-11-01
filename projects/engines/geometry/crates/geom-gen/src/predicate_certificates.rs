@@ -86,7 +86,7 @@ pub const PROBLEMS_DIR: &str = "projects/engines/geometry/crates/geom-gen/genera
 /// `n4x * mx_x`), so no hypothesis on the inputs, or on products of two, bounds it by the case's
 /// S; Gappa's `LIN` rules relate scales only through products of maxima, and the ratio of two
 /// such terms needs a division by a maximum that may be zero. The issue sets out the way through.
-pub const UNPROVEN: [(&str, u32); 10] = [
+pub const UNPROVEN: [(&str, u32); 9] = [
     ("tpi_side", 292),
     ("lpi_side", 292),
     ("round_grid", 292),
@@ -96,7 +96,6 @@ pub const UNPROVEN: [(&str, u32); 10] = [
     ("circle_line", 292),
     ("ellipse_side", 292),
     ("ellipse_line", 292),
-    ("circle_gap", 292),
 ];
 
 /// The filters whose `FPTaylor` problem bounds the sum of its error terms at once (`opt-exact`),
@@ -623,11 +622,14 @@ pub fn gappa_cases(d: &Derivation) -> Result<Vec<String>, EmitError> {
 }
 
 /// Whether the cases of the largest group maximum state a scale set: its monomials have one
-/// degree, and for each group the monomial [`dominant`] gives is one of them. Otherwise (a
-/// plane's normal beside the axes, whose largest maximum makes no monomial the largest) each
-/// monomial is a case of its own.
+/// degree, each holds every group, so that a case's hypotheses can put every maximum at 1 or more
+/// (a zero one makes S zero), and for each group the monomial [`dominant`] gives is one of them.
+/// Otherwise (a plane's normal beside the axes, whose largest maximum makes no monomial the
+/// largest, or squares of different groups) each monomial is a case of its own.
 fn group_cases(set: &BTreeSet<Monomial>, groups: usize) -> bool {
-    one_degree(set) && (0..groups).all(|g| dominant(set, g).is_some_and(|m| set.contains(&m)))
+    one_degree(set)
+        && set.iter().all(|m| m.iter().all(|e| *e > 0))
+        && (0..groups).all(|g| dominant(set, g).is_some_and(|m| set.contains(&m)))
 }
 
 /// Whether every monomial of `set` has one degree.

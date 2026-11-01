@@ -171,6 +171,10 @@ pub fn sign_of_two_roots<const L: usize>(
     two_roots_sign(&[big(a)?, big(b)?, big(c)?, big(d)?], &big(k1)?, &big(k2)?)
 }
 
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a to d, p and q are the formula's"
+)]
 fn two_roots_sign(terms: &[Big; 4], k1: &Big, k2: &Big) -> Result<Sign, NumError> {
     let [a, b, c, d] = terms;
     let p = root_sign(a, b, k1)?;
@@ -635,6 +639,10 @@ impl Crossing2 {
     /// # Errors
     ///
     /// As for [`Crossing2::of_round`].
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a, b, c, e, h, k, l, p and q are the formula's"
+    )]
     pub fn of_ellipse(l: &Carrier, ellipse: &Ellipse2, root: Root) -> Result<Crossing2, NumError> {
         let ([a, b], c) = l.coefficients();
         let (a, b, c) = (Big::from_i128(a), Big::from_i128(b), Big::from_i128(c));
