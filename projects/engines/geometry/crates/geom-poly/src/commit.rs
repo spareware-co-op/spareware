@@ -298,12 +298,8 @@ fn moved_by(normal: &[i128; 3], distance: i64) -> Option<i128> {
     let odd = I256::from_i128(root.checked_mul(2)?.checked_add(1)?);
     let four = product.checked_mul(&I256::from_i128(4))?;
     let up = !four.checked_sub(&square(&odd)?)?.is_negative();
-    let nearest = root.checked_add(i128::from(up))?;
-    if distance < 0 {
-        nearest.checked_neg()
-    } else {
-        Some(nearest)
-    }
+    root.checked_add(i128::from(up))?
+        .checked_mul(i128::from(distance.signum()))
 }
 
 /// The most `plane` strays from `ideal` over the convex hull of `extent`, in grid steps. On
