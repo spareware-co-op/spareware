@@ -744,11 +744,11 @@ const CUT: usize = usize::MAX;
 type Holding<'s> = (i32, Option<&'s Side>, Option<&'s Side>);
 
 /// The stretches of one line between the ends of `sides`, each with the sides along all of it.
-fn stretches(sides: &[Side]) -> Vec<(usize, usize, Vec<&Side>)> {
+fn stretches<'s>(sides: &[&'s Side]) -> Vec<(usize, usize, Vec<&'s Side>)> {
     let mut marks: Vec<usize> = sides.iter().flat_map(|s| [s.low, s.high]).collect();
     marks.sort_unstable();
     marks.dedup();
-    let mut waiting: Vec<&Side> = sides.iter().collect();
+    let mut waiting: Vec<&Side> = sides.to_vec();
     waiting.sort_by_key(|s| Reverse(s.low));
     let mut active: Vec<&Side> = Vec::new();
     let mut out = Vec::with_capacity(marks.len());
@@ -766,7 +766,7 @@ fn stretches(sides: &[Side]) -> Vec<(usize, usize, Vec<&Side>)> {
 /// lies along it, and the rest are runs.
 fn sweep(
     line: usize,
-    sides: &[Side],
+    sides: &[&Side],
     sheets: &[Sheet],
     parents: &mut [usize],
     runs: &mut Vec<Run>,
@@ -1011,7 +1011,7 @@ fn sides_of(
     number: &[usize],
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<Side>, MergeError> {
+) -> Result<(Vec<Side>, Vec<usize>), MergeError> {
     // Each piece's first corner's place in `number`.
     let mut bases = Vec::with_capacity(held.len());
     let mut base = 0usize;
@@ -1042,7 +1042,7 @@ fn sides_of(
         Ok::<_, MergeError>(out)
     });
     let made = made.map_err(|e| phase_error(e, meter))?;
-    let mut sides: Vec<Side> = made.into_iter().flatten().collect();
+    let sides: Vec<Side> = made.into_iter().flatten().collect();
     let keys: Option<Vec<(usize, &[Cell; 6])>> = sides
         .iter()
         .map(|s| s.key.cells.as_ref().map(|cells| (s.key.first, cells)))
@@ -1053,16 +1053,25 @@ fn sides_of(
             (*first, CellKey(cells))
         });
         let order = sorted.map_err(|e| phase_error(e, meter))?;
-        let mut slots: Vec<Option<Side>> = sides.into_iter().map(Some).collect();
-        let taken = order
-            .iter()
-            .map(|i| slots.get_mut(*i).and_then(Option::take));
-        return taken.map(|side| side.ok_or(MergeError::Open)).collect();
+        return Ok((sides, order));
     }
+    let mut order: Vec<usize> = (0..sides.len()).collect();
     let mut failed = false;
-    sides.sort_by(|a, b| noted(line_order(&a.key, &b.key), &mut failed));
+    let key = |i: &usize| sides.get(*i).map(|side| &side.key);
+    order.sort_by(|a, b| {
+        let found = key(a).zip(key(b)).and_then(|(p, q)| line_order(p, q));
+        noted(found, &mut failed)
+    });
     (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
-    Ok(sides)
+    Ok((sides, order))
+}
+
+/// The sides in `order`, as references, so that sorting them moves none.
+fn in_order<'s>(sides: &'s [Side], order: &[usize]) -> Result<Vec<&'s Side>, MergeError> {
+    order
+        .iter()
+        .map(|at| sides.get(*at).ok_or(MergeError::Open))
+        .collect()
 }
 
 /// `runs` without seams that have one face on both sides: a cut that ends inside a face leaves it
@@ -1399,7 +1408,7 @@ pub struct Curves {
 /// The stretches of one line where pieces of two owners on different planes both have a side.
 fn meetings(
     line: usize,
-    sides: &[Side],
+    sides: &[&Side],
     held: &[Held<'_>],
     runs: &mut Vec<Run>,
 ) -> Result<(), MergeError> {
@@ -1461,7 +1470,8 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
         })
         .collect();
     let (number, points) = numbered(&held, &Exec::serial(), meter)?;
-    let sides = sides_of(&held, &number, &Exec::serial(), meter)?;
+    let (each_side, by_line) = sides_of(&held, &number, &Exec::serial(), meter)?;
+    let sides = in_order(&each_side, &by_line)?;
     let mut runs: Vec<Run> = Vec::new();
     let mut start = 0usize;
     for end in 1..=sides.len() {
@@ -1549,7 +1559,8 @@ pub fn merge_on(
         given: CUT,
     }));
     let (number, points) = numbered(&held, exec, meter)?;
-    let sides = sides_of(&held, &number, exec, meter)?;
+    let (each_side, by_line) = sides_of(&held, &number, exec, meter)?;
+    let sides = in_order(&each_side, &by_line)?;
     held.truncate(kept);
 
     // Each line's runs, and which pieces join across them.
