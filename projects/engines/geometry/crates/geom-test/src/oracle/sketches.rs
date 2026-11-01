@@ -16,6 +16,11 @@
 //! - **Each oracle sees only what it can state.** fiksi has no midpoint and no mirror rule, so its
 //!   sketches are drawn from the other kinds; level and plumb lines its harness states as parallel to
 //!   a fixed axis.
+//! - **Grouped by what the oracle did.** Where the kernel is on the truth and the oracle is not,
+//!   the difference's family says how: `another-root` when the oracle's answer meets every rule
+//!   within its tolerance (a sketch has other solutions than the drawn one), `unmet` when it does
+//!   not, `refused` when it gave none, `short` when it gave too few points. Where the kernel is off
+//!   the truth, the family is the job's kinds of rule, the kernel's to fix.
 //! - **Within a tolerance, never bits** (15.16): the kernel's points and ezpz's agree within a grid
 //!   step of the truth. fiksi stops once its residuals' sum of squares is below 1e-8 in a system
 //!   divided by the root mean square of its coordinates and lengths (`solve/lm.rs`,
@@ -620,6 +625,90 @@ fn on_truth(solved: Option<&[P]>, truth: &[P], near: f64) -> bool {
     })
 }
 
+/// How far `points` are from meeting `rule`, in units: a distance in every case, so that one
+/// tolerance reads them all. An angle is the distance the second line's far end is from where the
+/// angle puts it.
+fn missed(rule: &Rule, points: &[P], starts: &[P]) -> f64 {
+    let p = |i: usize| at(points, i);
+    let turn = |u: P, half_turns: f64| {
+        let (c, s) = (
+            math::cospi(half_turns).map_or(1.0, Real::get),
+            math::sinpi(half_turns).map_or(0.0, Real::get),
+        );
+        [u[0] * c - u[1] * s, u[0] * s + u[1] * c]
+    };
+    let across = |l: [usize; 4], half_turns: f64| {
+        let (u, v) = (minus(p(l[1]), p(l[0])), minus(p(l[3]), p(l[2])));
+        let w = turn(u, half_turns);
+        let length = size(w);
+        if length == 0.0 {
+            size(v)
+        } else {
+            cross(w, v).abs() / length
+        }
+    };
+    match rule {
+        Rule::Fix { point } => size(minus(p(*point), at(starts, *point))),
+        Rule::Distance { a, b, value } => {
+            (size(minus(p(*b), p(*a))) - read_float(value).unwrap_or(f64::NAN)).abs()
+        }
+        Rule::Level { a, b } => (p(*b)[1] - p(*a)[1]).abs(),
+        Rule::Plumb { a, b } => (p(*b)[0] - p(*a)[0]).abs(),
+        Rule::Parallel { lines } => across(*lines, 0.0),
+        Rule::Perpendicular { lines } => across(*lines, 0.5),
+        Rule::Angle { lines, half_turns } => {
+            across(*lines, read_float(half_turns).unwrap_or(f64::NAN))
+        }
+        Rule::FromLine {
+            point,
+            line,
+            signed,
+        } => {
+            let u = minus(p(line[1]), p(line[0]));
+            let length = size(u);
+            let off = if length == 0.0 {
+                f64::NAN
+            } else {
+                cross(u, minus(p(*point), p(line[0]))) / length
+            };
+            (off - read_float(signed).unwrap_or(f64::NAN)).abs()
+        }
+        Rule::Midpoint { point, a, b } => {
+            let (pa, pb) = (p(*a), p(*b));
+            size(minus(
+                p(*point),
+                [f64::midpoint(pa[0], pb[0]), f64::midpoint(pa[1], pb[1])],
+            ))
+        }
+        Rule::Mirror { a, b, line } => {
+            let (o, u) = (p(line[0]), minus(p(line[1]), p(line[0])));
+            let (pa, uu) = (p(*a), dot(u, u));
+            if uu == 0.0 {
+                return f64::NAN;
+            }
+            let t = dot(minus(pa, o), u) / uu;
+            let foot = [o[0] + t * u[0], o[1] + t * u[1]];
+            size(minus(p(*b), [2.0 * foot[0] - pa[0], 2.0 * foot[1] - pa[1]]))
+        }
+        Rule::EqualLength { lines } => {
+            (size(minus(p(lines[1]), p(lines[0]))) - size(minus(p(lines[3]), p(lines[2])))).abs()
+        }
+    }
+}
+
+/// What an oracle that is off the truth did: [`judge`]'s family for it.
+fn how_off(job: &Job, theirs: Option<&[P]>, starts: &[P], near: f64) -> &'static str {
+    match theirs {
+        None => "refused",
+        Some(points) if points.len() != starts.len() => "short",
+        // A NaN miss (a line of no length) is not met.
+        Some(points) if job.rules.iter().all(|r| missed(r, points, starts) <= near) => {
+            "another-root"
+        }
+        Some(_) => "unmet",
+    }
+}
+
 /// Judges `oracle`'s answer to `job` against the kernel's and the truth.
 ///
 /// # Errors
@@ -636,10 +725,17 @@ pub fn judge(oracle: &str, job: &Job, answer: &Answer) -> Result<Compared, Strin
         .as_ref()
         .map(|p| pairs(p, job.id))
         .transpose()?;
+    let reach = near(oracle, job)?;
     let (good_ours, good_theirs) = (
         on_truth(ours.as_deref(), &truth, NEAR),
-        on_truth(theirs.as_deref(), &truth, near(oracle, job)?),
+        on_truth(theirs.as_deref(), &truth, reach),
     );
+    let starts = pairs(&job.points, job.id)?;
+    let family = if good_ours {
+        how_off(job, theirs.as_deref(), &starts, reach).to_owned()
+    } else {
+        job.family.clone()
+    };
     let (kind, settled) = match (good_ours, good_theirs) {
         (true, true) => return Ok(Compared::Agree),
         (true, false) => (
@@ -657,7 +753,7 @@ pub fn judge(oracle: &str, job: &Job, answer: &Answer) -> Result<Compared, Strin
             operation: "solve".to_owned(),
             oracle: oracle.to_owned(),
             kind: kind.to_owned(),
-            family: job.family.clone(),
+            family,
         },
         settled: settled.to_owned(),
     })

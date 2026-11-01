@@ -12961,6 +12961,7 @@
           "guarantees": [
             "**Drawn from a truth.** Every value is measured on a known configuration, so a difference is settled on the spot: the truth says which side is off.",
             "**Each oracle sees only what it can state.** fiksi has no midpoint and no mirror rule, so its sketches are drawn from the other kinds; level and plumb lines its harness states as parallel to a fixed axis.",
+            "**Grouped by what the oracle did.** Where the kernel is on the truth and the oracle is not, the difference's family says how: `another-root` when the oracle's answer meets every rule within its tolerance (a sketch has other solutions than the drawn one), `unmet` when it does not, `refused` when it gave none, `short` when it gave too few points. Where the kernel is off the truth, the family is the job's kinds of rule, the kernel's to fix.",
             "**Within a tolerance, never bits** (15.16): the kernel's points and ezpz's agree within a grid step of the truth. fiksi stops once its residuals' sum of squares is below 1e-8 in a system divided by the root mean square of its coordinates and lengths (`solve/lm.rs`, `assemble/mod.rs` at the pinned commit), so its points are only as near as that: its answer agrees within [`FIKSI_SLACK`] times 1e-4 of the job's scale ([`near`]), still far inside the two units that separate a sketch's branches.",
             "**Deterministic.** A seed gives the same jobs on every target."
           ],

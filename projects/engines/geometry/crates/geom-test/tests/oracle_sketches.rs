@@ -115,28 +115,28 @@ fn an_answer_off_the_truth_or_missing_is_the_oracles() {
         Compared::Differ { signature, .. } => {
             assert_eq!(signature.oracle, EZPZ);
             assert_eq!(signature.operation, "solve");
-            assert_eq!(signature.family, job.family);
-            signature.kind
+            (signature.kind, signature.family)
         }
-        Compared::Agree => "agree".to_owned(),
+        Compared::Agree => ("agree".to_owned(), String::new()),
     };
-    // Two grid steps off on one point is off; a hundredth of one is on.
+    let oracle = |family: &str| ("oracle".to_owned(), family.to_owned());
+    // Two grid steps off on one point is off, and misses its rules; a hundredth of one is on.
     let mut moved = truth(job);
     let x: f64 = moved.points.as_ref().unwrap()[1][0].parse().unwrap();
     moved.points.as_mut().unwrap()[1][0] = format!("{:e}", x + 2.0 / 1024.0);
-    assert_eq!(differs(&moved), "oracle");
+    assert_eq!(differs(&moved), oracle("unmet"));
     moved.points.as_mut().unwrap()[1][0] = format!("{:e}", x + 0.01 / 1024.0);
-    assert_eq!(differs(&moved), "agree");
+    assert_eq!(differs(&moved).0, "agree");
     let refused = Answer {
         id: job.id,
         points: None,
     };
-    assert_eq!(differs(&refused), "oracle");
+    assert_eq!(differs(&refused), oracle("refused"));
     let short = Answer {
         id: job.id,
         points: Some(job.truth[..1].to_vec()),
     };
-    assert_eq!(differs(&short), "oracle");
+    assert_eq!(differs(&short), oracle("short"));
     // An answer to another job, or one that cannot be read, is the harness's fault.
     let other = Answer {
         id: job.id + 1,
@@ -148,6 +148,63 @@ fn an_answer_off_the_truth_or_missing_is_the_oracles() {
         points: Some(vec![["x".to_owned(), "1".to_owned()]; job.truth.len()]),
     };
     assert!(judge(EZPZ, job, &unreadable).is_err());
+}
+
+#[test]
+fn another_root_of_the_rules_is_told_from_an_answer_that_misses_them() {
+    // A triangle on a level base: the apex mirrored in the base meets every rule as well.
+    let text = |v: f64| format!("{v:e}");
+    let job = Job {
+        id: 0,
+        family: "distance+fix+level".to_owned(),
+        points: [[0.0, 0.0], [10.0, 0.02], [4.0, 3.03]]
+            .map(|[x, y]| [text(x), text(y)])
+            .to_vec(),
+        rules: vec![
+            Rule::Fix { point: 0 },
+            Rule::Level { a: 0, b: 1 },
+            Rule::Distance {
+                a: 0,
+                b: 1,
+                value: text(10.0),
+            },
+            Rule::Distance {
+                a: 0,
+                b: 2,
+                value: text(5.0),
+            },
+            Rule::Distance {
+                a: 1,
+                b: 2,
+                value: text(45.0_f64.sqrt()),
+            },
+        ],
+        truth: [[0.0, 0.0], [10.0, 0.0], [4.0, 3.0]]
+            .map(|[x, y]| [text(x), text(y)])
+            .to_vec(),
+    };
+    let family = |points: [[f64; 2]; 3]| match judge(
+        EZPZ,
+        &job,
+        &Answer {
+            id: 0,
+            points: Some(points.map(|[x, y]| [text(x), text(y)]).to_vec()),
+        },
+    )
+    .unwrap()
+    {
+        Compared::Differ { signature, .. } => (signature.kind, signature.family),
+        Compared::Agree => ("agree".to_owned(), String::new()),
+    };
+    assert_eq!(family([[0.0, 0.0], [10.0, 0.0], [4.0, 3.0]]).0, "agree");
+    assert_eq!(
+        family([[0.0, 0.0], [10.0, 0.0], [4.0, -3.0]]),
+        ("oracle".to_owned(), "another-root".to_owned())
+    );
+    assert_eq!(
+        family([[0.0, 0.0], [10.0, 0.0], [4.0, 3.5]]),
+        ("oracle".to_owned(), "unmet".to_owned())
+    );
 }
 
 #[test]
