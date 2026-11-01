@@ -1,21 +1,25 @@
 //! Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`),
-//! [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`]
-//! (`Plane::side_of_tpi`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a
-//! plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`]
-//! (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).
+//! [`tpi_new`] (`Tpi::new`), [`tpi_meeting`] (`Tpi::meeting`), [`normals_sign`] and
+//! [`normals_sign_faces`] (`plane::normals_sign`), [`tpi_homogeneous`] (`Tpi::homogeneous`),
+//! [`side_of_tpi`] (`Plane::side_of_tpi`), [`determinant_sign`] and [`determinant_sign_faces`]
+//! (`plane::determinant_sign`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets
+//! a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`),
+//! [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).
 //!
 //! Classes:
 //!
 //! - `typical`: planes through random points within ±2^30 steps; for `to_grid`, only points that
 //!   land inside the frame.
-//! - `degenerate`: collinear points (no plane); a point on the plane; for `Tpi::new`, each way three
-//!   planes fail to meet in one point, in rotation (two parallel planes with equal normals, two
-//!   with parallel but unequal normals, three planes through one line, a plane given twice); a
-//!   meeting point on the fourth plane.
+//! - `degenerate`: collinear points (no plane); a point on the plane; for `Tpi::new`,
+//!   `Tpi::meeting` and `normals_sign`, each way three planes fail to meet in one point, in
+//!   rotation (two parallel planes with equal normals, two with parallel but unequal normals,
+//!   three planes through one line, a plane given twice); a meeting point on the fourth plane, and
+//!   for `determinant_sign` four planes through one grid point, so the determinant is zero.
 //! - `nearly_degenerate`: a point, or a meeting point, exactly one unit of n · p + d off the plane,
 //!   the closest a grid point off it can be: the plane is spanned by two vectors of a unimodular
 //!   lattice basis and the point lies one third basis vector away, so n · p + d = ±1 next to terms
-//!   above 2^100.
+//!   above 2^100. For `determinant_sign`, the same four planes: the determinant is n · X + d · w
+//!   at the meeting point X / w (`plane::determinant_sign`), so it is ±w.
 //! - `extreme`: planes through points within 2^10 steps of ±(2^40 − 1) that span the frame, so
 //!   coefficients come close to their bounds (a normal component of at least 2^80, against 2^83).
 //!   The first `through` input is three corners of the bounding cube, whose normal components are
@@ -26,6 +30,24 @@
 //! - `overflow`: three planes that meet beyond the frame, more than 2^40 − 1 steps from the origin
 //!   but less than 2^60, which takes `to_grid`'s longest path: 127 steps of long division.
 //!
+//! The routes of `determinant_sign` and `normals_sign` (piece G138) start with a rung in checked
+//! machine words, which decides when every coefficient and every step fits an `i64`. The classes
+//! above never reach a decision there: a plane through random points, and the classifying plane
+//! of the nearly degenerate class, has an offset past a machine word, and the degenerate four
+//! planes of `determinant_sign`, which pass through one grid point with normal components of at
+//! most 2^21, still have a term d · m (an offset times the determinant of the other three normals)
+//! past one. So those benchmarks measure the rung's refusal and the route behind it: for
+//! `determinant_sign` the generated `tpi_side` filter, which decides every typical input and most
+//! extreme ones, and its exact path, which decides the rest and every degenerate and nearly
+//! degenerate one; for `normals_sign` and `Tpi::meeting` the exact cross and dot product.
+//! [`determinant_sign_faces`] and [`normals_sign_faces`] measure the rung deciding, on the planes
+//! of a building's faces: short normals, as a face's reduced plane has (every component within
+//! ±[`FACE`], or twice that for the sum or difference of two), through typical grid points, where
+//! every step fits a machine word (|`n_i`| ≤ 2^4 and |d| < 2^36, so a determinant of three normals
+//! is below 2^15 and each of the four terms below 2^51). Their classes are `typical` (a nonzero
+//! sign) and `degenerate` (zero: four faces through one grid point, or a third normal the sum or
+//! difference of the first two), which the rung decides alike.
+//!
 //! Method: the degenerate cases of plane-based geometry as `Tpi::new` documents them (after Campen
 //! and Kobbelt 2010, <https://doi.org/10.1111/j.1467-8659.2009.01609.x>), with Shewchuk's input classes
 //! (<https://doi.org/10.1007/PL00009321>, section 6) and unimodular bases (Knuth, volume 2,
@@ -33,7 +55,7 @@
 //!
 //! Guarantees: every batch is full, the same on every target, and its classes are what they
 //! claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's
-//! rule and exact rounding by `tests/attack_g06.rs`.
+//! rule, exact determinants and exact rounding by `tests/attack_g06.rs`.
 //!
 //! Cost: a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every
 //! measured run.
@@ -48,6 +70,10 @@ use crate::rng::SplitMix64;
 
 /// Largest component of a direction or spanning vector in degenerate inputs.
 const STEP: i64 = 1 << 10;
+
+/// Largest normal component of a face plane drawn on its own; the sum or difference of two, the
+/// third normal of three dependent faces, reaches twice this, 2^4.
+pub const FACE: i64 = 1 << 3;
 
 /// The plane through three points, if they are not collinear.
 fn plane([a, b, c]: [P3; 3]) -> Option<Plane> {
@@ -201,10 +227,87 @@ pub(crate) fn side_from(op: &str, class: Class) -> Vec<(Plane, P3)> {
     }
 }
 
+/// A face plane through the grid point `at` with the normal `n`, if `n` is not zero.
+fn face_with(n: [i64; 3], at: P3) -> Option<Plane> {
+    let ([nx, ny, nz], [x, y, z]) = (n.map(i128::from), raw(at).map(i128::from));
+    Plane::new([nx, ny, nz], -(nx * x + ny * y + nz * z)).ok()
+}
+
+/// A short normal: every component within ±[`FACE`].
+fn face_normal(g: &mut SplitMix64) -> [i64; 3] {
+    [0; 3].map(|_| within(g, FACE))
+}
+
+/// A face plane through the grid point `at`: a short normal, as a face's reduced plane has.
+fn face_at(g: &mut SplitMix64, at: P3) -> Option<Plane> {
+    face_with(face_normal(g), at)
+}
+
+/// A face plane through a typical grid point.
+fn typical_face(g: &mut SplitMix64) -> Option<Plane> {
+    let at = typical3(g);
+    face_at(g, at)
+}
+
 /// Plane triples for [`Tpi::new`].
 #[must_use]
 pub fn tpi_new(class: Class) -> Vec<[Plane; 3]> {
-    let mut g = rng("plane::tpi_new", class);
+    tpi_new_from("plane::tpi_new", class)
+}
+
+/// Plane triples for [`Tpi::meeting`]: [`tpi_new`]'s classes on a batch of their own, so the two
+/// ways to make a point are measured on inputs of the same kind.
+#[must_use]
+pub fn tpi_meeting(class: Class) -> Vec<[Plane; 3]> {
+    tpi_new_from("plane::tpi_meeting", class)
+}
+
+/// Plane triples for [`normals_sign`](geom_num::plane::normals_sign): [`tpi_new`]'s classes on a
+/// batch of their own, so the sign is that of the weight of a point that exists, or zero for
+/// planes that meet in no single point. Every triple has an offset past a machine word, so the
+/// exact cross and dot product decides (module documentation).
+#[must_use]
+pub fn normals_sign(class: Class) -> Vec<[Plane; 3]> {
+    tpi_new_from("plane::normals_sign", class)
+}
+
+/// Face triples for [`normals_sign`](geom_num::plane::normals_sign), which its machine-word rung
+/// decides: three typical faces whose normals are independent, or (degenerate) a third face whose
+/// normal is the sum or the difference of the first two, so the three are parallel to one line,
+/// as two slopes of a roof and a face through their ridge are.
+#[must_use]
+pub fn normals_sign_faces(class: Class) -> Vec<[Plane; 3]> {
+    let mut g = rng("plane::normals_sign_faces", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let faces @ [a, b, c] = [
+                typical_face(&mut g)?,
+                typical_face(&mut g)?,
+                typical_face(&mut g)?,
+            ];
+            off_plane(geom_num::plane::normals_sign(&a, &b, &c)).then_some(faces)
+        }),
+        Class::Degenerate => batch_of(|_| {
+            let ([ax, ay, az], [bx, by, bz]) = (face_normal(&mut g), face_normal(&mut g));
+            let k = g.sign();
+            let third = [ax + k * bx, ay + k * by, az + k * bz];
+            Some([
+                face_with([ax, ay, az], typical3(&mut g))?,
+                face_with([bx, by, bz], typical3(&mut g))?,
+                face_with(third, typical3(&mut g))?,
+            ])
+        }),
+        Class::NearlyDegenerate
+        | Class::Extreme
+        | Class::Overflow
+        | Class::OnGrid
+        | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// [`tpi_new`]'s classes drawn from the seed of `op`.
+fn tpi_new_from(op: &str, class: Class) -> Vec<[Plane; 3]> {
+    let mut g = rng(op, class);
     match class {
         Class::Typical => batch_of(|_| {
             let planes = [
@@ -303,6 +406,54 @@ pub(crate) fn side_of_tpi_from(op: &str, class: Class) -> Vec<(Plane, Tpi)> {
         }),
         Class::Extreme => batch_of(|_| Some((extreme_plane(&mut g)?, extreme_tpi(&mut g)?))),
         Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// Four planes for [`determinant_sign`](geom_num::plane::determinant_sign): [`side_of_tpi`]'s
+/// classes on a batch of their own, the meeting point's three planes and then the classifying
+/// plane, so the determinant is n · X + d · w for that point and plane. Past the machine-word
+/// rung in every class (module documentation).
+#[must_use]
+pub fn determinant_sign(class: Class) -> Vec<[Plane; 4]> {
+    side_of_tpi_from("plane::determinant_sign", class)
+        .into_iter()
+        .map(|(s, t)| {
+            let [p, q, r] = *t.planes();
+            [p, q, r, s]
+        })
+        .collect()
+}
+
+/// Four face planes for [`determinant_sign`](geom_num::plane::determinant_sign), which its
+/// machine-word rung decides: four typical faces with a nonzero determinant, or (degenerate) four
+/// faces through one typical grid point, so the determinant is zero.
+#[must_use]
+pub fn determinant_sign_faces(class: Class) -> Vec<[Plane; 4]> {
+    let mut g = rng("plane::determinant_sign_faces", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let faces @ [p, q, r, s] = [
+                typical_face(&mut g)?,
+                typical_face(&mut g)?,
+                typical_face(&mut g)?,
+                typical_face(&mut g)?,
+            ];
+            off_plane(geom_num::plane::determinant_sign(&p, &q, &r, &s)).then_some(faces)
+        }),
+        Class::Degenerate => batch_of(|_| {
+            let at = typical3(&mut g);
+            Some([
+                face_at(&mut g, at)?,
+                face_at(&mut g, at)?,
+                face_at(&mut g, at)?,
+                face_at(&mut g, at)?,
+            ])
+        }),
+        Class::NearlyDegenerate
+        | Class::Extreme
+        | Class::Overflow
+        | Class::OnGrid
+        | Class::WrongDirection => Vec::new(),
     }
 }
 

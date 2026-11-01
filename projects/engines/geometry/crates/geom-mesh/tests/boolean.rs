@@ -16,12 +16,13 @@
 
 use std::num::{NonZeroU64, NonZeroUsize};
 
-use geom_mesh::boolean::{Outcome, boolean};
+use geom_mesh::boolean::{Outcome, boolean, soup as kept_pieces};
 use geom_mesh::exact::build::{Corner, Polygons, build};
 use geom_mesh::exact::mass::Volume;
 use geom_mesh::exact::{ExactMesh, MeshError, MeshKind};
 use geom_num::wide::I256;
 use geom_op::{NameId, NameSet, OpId, OpPath, Origin, PieceKey, Side, TopoName};
+use geom_poly::merge::{Merge, Rules, merge_on};
 use geom_poly::winding::{Term, WindingTest};
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
@@ -227,6 +228,138 @@ fn holds_up(a: &ExactMesh, b: &ExactMesh) {
         low <= over + 1e-6 && under - met <= high + 1e-6,
         "{low} {high} {under} {over}"
     );
+}
+
+/// A boolean's result is a solid, and booleans of solids give what the same arrays give, not known
+/// to be solids: a solid's boxes away from the others are solved without cuts or tracing (11.3
+/// step 4), whatever the test and the threads.
+#[test]
+fn the_soup_is_what_the_merge_takes() {
+    // Two overlapping boxes and a wedge: for each test, the soup's pieces merged are the result's
+    // faces, and every piece faces out of a non-empty result.
+    let a = solid([0, 0, 0], [10, 10, 10], 1);
+    let b = solid([5, 3, 2], [15, 8, 12], 2);
+    let c = wedge(4, [20, 31, 27, 29], 3);
+    let tests = [
+        WindingTest::unite(),
+        WindingTest::intersect(3),
+        WindingTest::subtract(0),
+    ];
+    let operands = [&a, &b, &c];
+    let soups = kept_pieces(&operands, &tests, &Exec::serial(), &mut meter()).unwrap();
+    let whole = boolean(&operands, &tests, &step(), &Exec::serial(), &mut meter()).unwrap();
+    assert_eq!(soups.len(), tests.len());
+    for (kept, outcome) in soups.iter().zip(&whole) {
+        let merged = merge_on(
+            &Exec::serial(),
+            kept,
+            (Merge::RemoveRedundant, Rules::default()),
+            &mut meter(),
+        )
+        .unwrap();
+        assert_eq!(merged.faces.len(), outcome.mesh.faces());
+        assert!(kept.len() >= outcome.mesh.faces());
+    }
+    // A test that keeps nothing has an empty soup.
+    let apart = solid([40, 40, 40], [41, 41, 41], 4);
+    let none = kept_pieces(
+        &[&a, &apart],
+        &[WindingTest::intersect(2)],
+        &Exec::serial(),
+        &mut meter(),
+    );
+    assert!(none.unwrap()[0].is_empty());
+}
+
+#[test]
+fn solids_give_what_their_arrays_give() {
+    let a = one(&[&wedge(0, [20, 31, 27, 29], 1)], WindingTest::unite()).mesh;
+    let b = one(&[&wedge(8, [25, 25, 28, 26], 2)], WindingTest::unite()).mesh;
+    let c = one(&[&solid([30, 2, 2], [40, 9, 9], 3)], WindingTest::unite()).mesh;
+    assert!(a.is_solid() && b.is_solid() && c.is_solid());
+    let plain = |m: &ExactMesh| {
+        let made = ExactMesh::new(m.parts().clone(), &Exec::serial(), &mut meter()).unwrap();
+        assert!(!made.is_solid());
+        assert_eq!(&made, m);
+        made
+    };
+    let (pa, pb, pc) = (plain(&a), plain(&b), plain(&c));
+    let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
+    for test in [
+        WindingTest::unite(),
+        WindingTest::intersect(2),
+        WindingTest::subtract(0),
+    ] {
+        for exec in [Exec::serial(), Exec::with_pool(&pool)] {
+            let run = |operands: &[&ExactMesh]| {
+                boolean(
+                    operands,
+                    std::slice::from_ref(&test),
+                    &step(),
+                    &exec,
+                    &mut meter(),
+                )
+                .unwrap()
+            };
+            assert_eq!(run(&[&a, &b, &c]), run(&[&pa, &pb, &pc]));
+        }
+    }
+    assert!(!wedge(0, [20, 31, 27, 29], 1).is_solid());
+}
+
+/// Two rough fields of 120 faces each, the second moved along x by `x`: more faces than a leaf
+/// holds, so their boxes split.
+fn fields(x: i64) -> [ExactMesh; 2] {
+    let seed = resolve("geom-mesh boolean fields", Seed(0x1481)).unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let up = NonZeroU64::new(40).unwrap();
+    [(0, 1), (x, 2)].map(|(moved, name)| {
+        let heights: Vec<Vec<i64>> = (0..6)
+            .map(|_| (0..6).map(|_| 20 + rng.below(up) as i64).collect())
+            .collect();
+        let (mut input, _) = shapes::prism(&heights, 16);
+        for corner in &mut input.vertices {
+            if let Corner::Grid(p) = corner {
+                *corner = g(p.x.get() + moved, p.y.get(), p.z.get());
+            }
+        }
+        input.runs = vec![source(name)];
+        build(&input, &Exec::serial(), &mut meter()).unwrap()
+    })
+}
+
+#[test]
+fn solids_of_many_faces_give_what_their_arrays_give() {
+    // Overlapping in a strip a fifth of their width, as the benchmark's pair: most boxes hold one
+    // solid's faces only, and stop there.
+    let [a, b] = fields(64);
+    let (sa, sb) = (
+        one(&[&a], WindingTest::unite()).mesh,
+        one(&[&b], WindingTest::unite()).mesh,
+    );
+    assert!(sa.is_solid() && sb.is_solid());
+    let plain = |m: &ExactMesh| ExactMesh::new(m.parts().clone(), &Exec::serial(), &mut meter());
+    let (pa, pb) = (plain(&sa).unwrap(), plain(&sb).unwrap());
+    let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
+    for test in [
+        WindingTest::unite(),
+        WindingTest::intersect(2),
+        WindingTest::subtract(0),
+    ] {
+        for exec in [Exec::serial(), Exec::with_pool(&pool)] {
+            let run = |operands: &[&ExactMesh]| {
+                boolean(
+                    operands,
+                    std::slice::from_ref(&test),
+                    &step(),
+                    &exec,
+                    &mut meter(),
+                )
+                .unwrap()
+            };
+            assert_eq!(run(&[&sa, &sb]), run(&[&pa, &pb]));
+        }
+    }
 }
 
 #[test]

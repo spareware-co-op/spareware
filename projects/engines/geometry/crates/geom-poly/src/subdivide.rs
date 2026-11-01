@@ -5,7 +5,11 @@
 //! split are clipped exactly, and the upper box's reference point is walked up from the lower's,
 //! adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then
 //! [`classify`]. A box whose every test is settled by its reference vector alone, whatever the
-//! polygons in it do, is dropped (step 4).
+//! polygons in it do, is dropped (step 4). [`arrange_with`] is also told which entries are solids:
+//! no two of their faces cross, and their winding is 1 just behind every face and 0 just in front,
+//! EMBER's no-self-intersection and no-nested-parts flags (its section 4.5.1, 11.3 step 4). A box
+//! whose polygons all bound one solid entry is a leaf at once, however many it holds, and is
+//! solved without cuts or tracing.
 //!
 //! Boxes split on odd half steps. Every polygon that comes from grid data lies on a whole step or
 //! is tilted, so no polygon lies in a split plane, and every polygon ending on a piece reaches it
@@ -23,6 +27,13 @@
 //! - **Early outs are mechanical.** A box is dropped only when every test takes the same answer
 //!   for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it
 //!   is kept, and with no tests nothing is dropped.
+//! - **A solid's leaf is what tracing would give.** In a leaf whose polygons all bound one solid
+//!   entry, no polygon crosses another, so each is one piece; the solid's count is 0 in front of
+//!   each and 1 behind, and every other entry's is the reference's, as nothing of theirs is in
+//!   the box. Each piece is the first of its plane, as no face of a solid overlaps another. Such a
+//!   box is not split, so its pieces are fewer than tracing's leaves give, with the same vectors
+//!   at every point (tested against the traced arrangement and the blocks' own counts). The caller
+//!   vouches for the flag: a wrong one gives wrong pieces.
 //!
 //! Method: chapter 11.3's five steps (`projects/engines/geometry/architecture/11-booleans.md`),
 //! after EMBER's sections 4.1, 4.2 and 4.5 (Trettner, Nehring-Wirxel and Kobbelt 2022,
@@ -31,18 +42,21 @@
 //!
 //! Cost: O(n) clips per level for n polygons across the level's boxes, and at most 123 levels:
 //! a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and
-//! [`classify`] cost on its polygons. Charges the meter one unit per polygon a split clips.
+//! [`classify`] cost on its polygons, and a solid's leaf one copy of each. Charges the meter one
+//! unit per polygon a split clips, and one per polygon of a solid's leaf.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cmp::Reverse;
 
-use geom_num::NumError;
+use geom_num::grid::Coord;
 use geom_num::plane::{Plane, Tpi};
+use geom_num::{NumError, Sign};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::convex::Piece;
 use crate::cut::{Clipped, clip, local_cuts};
+use crate::order::Meeting;
 use crate::trace::{Cell, Classified, Polygon, TraceError, classify, reference_above};
 use crate::winding::{Entry, Winding, WindingTest};
 
@@ -97,8 +111,7 @@ pub fn around(polygons: &[Polygon]) -> Result<Cell, NumError> {
         let Piece { face, bounds } = &polygon.piece;
         let after = bounds.iter().cycle().skip(1);
         for (bound, next) in bounds.iter().zip(after) {
-            let at = Tpi::meeting(*face, *bound, *next)?.to_grid()?.value();
-            let coordinates = [at.x.get(), at.y.get(), at.z.get()];
+            let coordinates = nearest(face, bound, next)?;
             for ((l, h), v) in low.iter_mut().zip(&mut high).zip(coordinates) {
                 *l = (*l).min(v);
                 *h = (*h).max(v);
@@ -116,6 +129,23 @@ pub fn around(polygons: &[Polygon]) -> Result<Cell, NumError> {
         low: low.map(|v| half(v, -3)),
         high: high.map(|v| half(v, 3)),
     })
+}
+
+/// The grid point nearest where `face`, `bound` and `next` meet, as `Tpi::to_grid` gives it, in
+/// machine words where the point fits them, and refused as it refuses.
+fn nearest(face: &Plane, bound: &Plane, next: &Plane) -> Result<[i64; 3], NumError> {
+    let words = Meeting::new(face, bound, next)
+        .filter(|point| point.weight() != Sign::Zero)
+        .and_then(|point| point.rounded());
+    if let Some([x, y, z]) = words {
+        return Ok([
+            Coord::from_i128(x)?.get(),
+            Coord::from_i128(y)?.get(),
+            Coord::from_i128(z)?.get(),
+        ]);
+    }
+    let at = Tpi::meeting(*face, *bound, *next)?.to_grid()?.value();
+    Ok([at.x.get(), at.y.get(), at.z.get()])
 }
 
 /// The odd half steps to try splitting `cell` at, as (axis, half step), the longest axis first.
@@ -151,10 +181,17 @@ fn settled(node: &Node, tests: &[WindingTest]) -> bool {
         .all(|test| test.decided(&node.reference, &open).is_some())
 }
 
-/// What this level does to `node`.
+/// The solid entry every polygon of `node` bounds, if there is one.
+fn one_solid(node: &Node, solids: &[Entry]) -> Option<Entry> {
+    let only = node.polygons.first().and_then(|p| p.entry)?;
+    (solids.contains(&only) && node.polygons.iter().all(|p| p.entry == Some(only))).then_some(only)
+}
+
+/// What this level does to `node`. A box whose polygons all bound one solid is a leaf at once:
+/// solving it costs one copy of each polygon, so splitting it only makes more pieces to merge.
 fn divide(
     node: &Node,
-    leaf: usize,
+    (leaf, solids): (usize, &[Entry]),
     tests: &[WindingTest],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Outcome, TraceError> {
@@ -162,7 +199,7 @@ fn divide(
         return Ok(Outcome::Dropped);
     }
     let count = node.polygons.len();
-    if count <= leaf {
+    if count <= leaf || one_solid(node, solids).is_some() {
         return Ok(Outcome::Leaf);
     }
     // Faces that span every split are not separated by more of them.
@@ -249,7 +286,14 @@ fn divide(
 }
 
 /// A leaf's pieces, each naming its polygon in the input.
-fn solve(node: &Node, meter: &mut WorkMeter<'_>) -> Result<Vec<Classified>, TraceError> {
+fn solve(
+    node: &Node,
+    solids: &[Entry],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Classified>, TraceError> {
+    if let Some(entry) = one_solid(node, solids) {
+        return solid_leaf(node, entry, meter);
+    }
     let pieces: Vec<Piece> = node.polygons.iter().map(|p| p.piece.clone()).collect();
     let cuts = local_cuts(&pieces, meter)?;
     let mut classified = classify(&node.cell, &node.reference, &node.polygons, &cuts, meter)?;
@@ -261,6 +305,31 @@ fn solve(node: &Node, meter: &mut WorkMeter<'_>) -> Result<Vec<Classified>, Trac
             .unwrap_or(piece.polygon);
     }
     Ok(classified)
+}
+
+/// The pieces of a leaf whose polygons all bound the solid `entry`: each polygon whole, with the
+/// reference's vector, the solid's count 0 in front and 1 behind.
+fn solid_leaf(
+    node: &Node,
+    entry: Entry,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Classified>, TraceError> {
+    let mut front = node.reference.clone();
+    front.add(entry, front.count(entry).saturating_neg())?;
+    let mut back = front.clone();
+    back.add(entry, 1)?;
+    let mut out = Vec::with_capacity(node.polygons.len());
+    for (at, polygon) in node.polygons.iter().enumerate() {
+        meter.charge(1)?;
+        out.push(Classified {
+            polygon: node.sources.get(at).copied().unwrap_or(at),
+            piece: polygon.piece.clone(),
+            front: front.clone(),
+            back: back.clone(),
+            first: true,
+        });
+    }
+    Ok(out)
 }
 
 /// Every piece of `polygons` with its vectors, in tree order, from the box `cell` whose reference
@@ -280,6 +349,25 @@ pub fn arrange(
     tests: &[WindingTest],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, RunError<TraceError>> {
+    arrange_with(exec, (cell, reference), polygons, (leaf, tests), &[], meter)
+}
+
+/// [`arrange`], told that the entries `solids` are solids: no two of their faces cross, and their
+/// winding is 1 just behind every face and 0 just in front. A box whose polygons all bound one of
+/// them is a leaf, solved without cuts or tracing: fewer pieces, with the same vectors at every
+/// point.
+///
+/// # Errors
+///
+/// As [`arrange`].
+pub fn arrange_with(
+    exec: &Exec<'_>,
+    (cell, reference): (Cell, Winding),
+    polygons: &[Polygon],
+    (leaf, tests): (usize, &[WindingTest]),
+    solids: &[Entry],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Classified>, RunError<TraceError>> {
     let mut level = alloc::vec![Node {
         key: 0,
         depth: 0,
@@ -291,7 +379,7 @@ pub fn arrange(
     let mut leaves = Vec::new();
     while !level.is_empty() {
         let outcomes = exec.try_map(meter, SPLITS, ONE_BOX, &level, |_, node, m| {
-            divide(node, leaf, tests, m)
+            divide(node, (leaf, solids), tests, m)
         })?;
         let mut next = Vec::new();
         for (node, outcome) in level.into_iter().zip(outcomes) {
@@ -308,6 +396,8 @@ pub fn arrange(
         level = next;
     }
     leaves.sort_unstable_by_key(|node| node.key);
-    let solved = exec.try_map(meter, LEAVES, ONE_BOX, &leaves, |_, node, m| solve(node, m))?;
+    let solved = exec.try_map(meter, LEAVES, ONE_BOX, &leaves, |_, node, m| {
+        solve(node, solids, m)
+    })?;
     Ok(solved.into_iter().flatten().collect())
 }

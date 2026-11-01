@@ -17,7 +17,9 @@
 //!
 //! - **Exact, within 6.2's budget.** Every sign is a 4 × 4 determinant of plane coefficients, at
 //!   most 384 bits, or a 3 × 3 determinant of normals, at most 252. Nothing is rounded, and the
-//!   path's points are never computed.
+//!   path's points are never computed for a sign. A segment and a polygon whose grid cells, the
+//!   floors of their corners a step wider each way, do not meet share no point, so the segment
+//!   cannot cross it, and the pair is passed over: a filter that never decides a crossing.
 //! - **Ties are settled by moving the path, never by a tolerance.** Every plane of the path is
 //!   moved by its own infinitesimal, in a fixed order, so the path misses every edge and corner of
 //!   every polygon, and each sign that would be zero is decided by the determinant's first term in
@@ -39,8 +41,8 @@
 //! Cost: at most five segments per piece, each testing each polygon: one or two sign evaluations,
 //! and one per bound of a polygon the segment's line crosses. The last three run along the box's
 //! edges and are the same for every piece of a polygon that leaves the box by the same faces, so
-//! they are walked once for each. Charges the meter one unit per polygon a segment tests, walked
-//! or not.
+//! they are walked once for each. A pair whose spans miss costs a few comparisons. Charges the
+//! meter one unit per polygon a segment tests, walked, passed over or not.
 
 use alloc::vec::Vec;
 use core::fmt;
@@ -50,7 +52,7 @@ use geom_num::{NumError, Sign};
 use geom_run::{Stopped, WorkMeter};
 
 use crate::convex::{ConvexError, Piece};
-use crate::order::normals_det;
+use crate::order::{Meeting, Span, normals_det};
 use crate::plane::{Canonical, canonical};
 use crate::winding::{Entry, Winding, WindingError};
 
@@ -176,14 +178,22 @@ impl Moved {
 /// The sign of the 4 × 4 determinant of the four planes' coefficients, each moved. The determinant
 /// is linear in each offset, and the moves are of different orders, so its sign is that of the
 /// unmoved determinant, or failing that of the largest move with a non-zero cofactor. A plane's
-/// reading of `by` ε subtracts `by` ε from its offset.
+/// reading of `by` ε subtracts `by` ε from its offset. `at`, where `p`, `q` and `r` meet in
+/// machine words, reads the unmoved determinant in four products if it has it.
 #[allow(
     clippy::many_single_char_names,
     reason = "p, q, r and s are the moved planes, and a, b, c and d the same planes unmoved"
 )]
-fn moved_determinant(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign, NumError> {
+fn moved_determinant(
+    (p, q, r): (&Moved, &Moved, &Moved),
+    s: &Moved,
+    at: Option<&Meeting>,
+) -> Result<Sign, NumError> {
     let [a, b, c, d] = [&p.plane, &q.plane, &r.plane, &s.plane];
-    let base = determinant_sign(a, b, c, d)?;
+    let base = match at.and_then(|point| point.reading(d)) {
+        Some(sign) => sign,
+        None => determinant_sign(a, b, c, d)?,
+    };
     if base != Sign::Zero {
         return Ok(base);
     }
@@ -206,57 +216,112 @@ fn moved_determinant(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign,
 /// The reading of a homogeneous point is n · X + d · w over w, and n · X + d · w is the determinant
 /// (6.3).
 fn read(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign, NumError> {
-    let weight = normals_det(&p.plane, &q.plane, &r.plane)?;
-    Ok(moved_determinant(p, q, r, s)?.mul(weight))
+    let end = End::new(p, q, r)?;
+    Ok(moved_determinant((p, q, r), s, end.at.as_ref())?.mul(end.weight))
 }
 
-/// A stretch of the line where `p` and `q` meet, from plane `from` to plane `to`, with the signs
-/// of the weights of its two ends, which every polygon's test of it reads.
+/// The point where three planes meet, for reading against many: the sign of its weight, and the
+/// point in machine words where it fits.
+#[derive(Clone, Copy)]
+struct End {
+    weight: Sign,
+    at: Option<Meeting>,
+}
+
+impl End {
+    fn new(p: &Moved, q: &Moved, r: &Moved) -> Result<Self, NumError> {
+        let at = Meeting::new(&p.plane, &q.plane, &r.plane);
+        let weight = match &at {
+            Some(point) => point.weight(),
+            None => normals_det(&p.plane, &q.plane, &r.plane)?,
+        };
+        Ok(End { weight, at })
+    }
+}
+
+/// The span of `piece`'s corners.
+fn piece_span(piece: &Piece) -> Option<Span> {
+    let after = piece.bounds.iter().cycle().skip(1);
+    Span::of(
+        piece
+            .bounds
+            .iter()
+            .zip(after)
+            .map(|(bound, next)| Meeting::new(&piece.face, bound, next)),
+    )
+}
+
+/// A stretch of the line where `p` and `q` meet, from plane `from` to plane `to`, with its two
+/// ends, which every polygon's test of it reads, and the span of those ends.
 struct Segment {
     p: Moved,
     q: Moved,
     from: Moved,
     to: Moved,
-    weights: (Sign, Sign),
+    ends: (End, End),
+    span: Option<Span>,
 }
 
 impl Segment {
     fn new(p: Moved, q: Moved, from: Moved, to: Moved) -> Result<Self, NumError> {
-        let weights = (
-            normals_det(&p.plane, &q.plane, &from.plane)?,
-            normals_det(&p.plane, &q.plane, &to.plane)?,
-        );
+        let ends = (End::new(&p, &q, &from)?, End::new(&p, &q, &to)?);
         Ok(Segment {
             p,
             q,
             from,
             to,
-            weights,
+            span: Span::of([ends.0.at, ends.1.at]),
+            ends,
         })
     }
 }
 
+/// What `face`, unmoved, reads at the end of a segment where `p`, `q` and `r` meet, as [`read`]
+/// gives it: from the end's meeting where that settles it, with a sign not zero, else by the moved
+/// determinant, which a reading of zero needs.
+fn end_reading(
+    (p, q, r): (&Moved, &Moved, &Moved),
+    end: &End,
+    face: &Plane,
+) -> Result<Sign, NumError> {
+    let quick = end
+        .at
+        .and_then(|point| point.reading(face))
+        .filter(|sign| *sign != Sign::Zero);
+    let base = match quick {
+        Some(sign) => sign,
+        None => moved_determinant((p, q, r), &Moved::fixed(*face), end.at.as_ref())?,
+    };
+    Ok(base.mul(end.weight))
+}
+
 /// Counts `polygon`'s crossing by `segment`, if it has one, into `winding`: walking back along a
-/// path, a crossing toward the front of a face leaves its material.
+/// path, a crossing toward the front of a face leaves its material. A polygon whose `span` the
+/// segment's misses cannot be crossed, as a crossing is a point of both, and is not read.
 fn count_crossing(
     segment: &Segment,
-    polygon: &Polygon,
+    (polygon, span): (&Polygon, Option<&Span>),
     winding: &mut Winding,
 ) -> Result<(), TraceError> {
     let Some(entry) = polygon.entry else {
         return Ok(());
     };
+    if let (Some(own), Some(other)) = (&segment.span, span)
+        && own.misses(other)
+    {
+        return Ok(());
+    }
     let Segment {
         p,
         q,
         from,
         to,
-        weights: (at_from, at_to),
+        ends: (at_from, at_to),
+        span: _,
     } = segment;
-    let face = Moved::fixed(polygon.piece.face);
-    let start = moved_determinant(p, q, from, &face)?.mul(*at_from);
-    let end = moved_determinant(p, q, to, &face)?.mul(*at_to);
-    if start == end || !covers(polygon, p, q, &face)? {
+    let start = end_reading((p, q, from), at_from, &polygon.piece.face)?;
+    let end = end_reading((p, q, to), at_to, &polygon.piece.face)?;
+    if start == end || !covers(polygon, p, q, &Moved::fixed(polygon.piece.face))? {
         return Ok(());
     }
     let by = if end == Sign::Positive { 1 } else { -1 };
@@ -404,9 +469,10 @@ struct Walked {
 
 /// Whether `polygon` covers the point where `p`, `q` and `r` meet.
 fn covers(polygon: &Polygon, p: &Moved, q: &Moved, r: &Moved) -> Result<bool, NumError> {
-    let weight = normals_det(&p.plane, &q.plane, &r.plane)?;
+    let end = End::new(p, q, r)?;
     for bound in &polygon.piece.bounds {
-        if moved_determinant(p, q, r, &Moved::fixed(*bound))?.mul(weight) != Sign::Positive {
+        let reading = moved_determinant((p, q, r), &Moved::fixed(*bound), end.at.as_ref())?;
+        if reading.mul(end.weight) != Sign::Positive {
             return Ok(false);
         }
     }
@@ -429,7 +495,7 @@ fn inward(own: &Canonical, boxes: &[Canonical]) -> Sign {
 /// and the meter is charged as if it had walked them, so the work counted is the same.
 fn vectors(
     (piece, index): (&Piece, usize),
-    polygons: &[(&Polygon, Canonical)],
+    polygons: &[(&Polygon, Canonical, Option<Span>)],
     (faces, boxes): (&[[Moved; 2]; 3], &[Canonical]),
     reference: &Winding,
     walked: &mut Vec<Walked>,
@@ -439,7 +505,11 @@ fn vectors(
     else {
         return Err(NumError::Degenerate.into());
     };
-    let own = canonical(&piece.face)?;
+    // A piece lies on its polygon's face, whose canonical form is held.
+    let own = match polygons.get(index) {
+        Some((polygon, held, _)) if polygon.piece.face == piece.face => *held,
+        _ => canonical(&piece.face)?,
+    };
     let near = inward(&own, boxes);
     let face = Moved {
         plane: piece.face,
@@ -459,9 +529,9 @@ fn vectors(
     let exits = exits(&face, &first, faces)?;
     let mut near_side = reference.clone();
     for segment in &opening(face, (first, second), exits, faces)? {
-        for (polygon, _) in polygons {
+        for (polygon, _, span) in polygons {
             meter.charge(1)?;
-            count_crossing(segment, polygon, &mut near_side)?;
+            count_crossing(segment, (polygon, span.as_ref()), &mut near_side)?;
         }
     }
     let seen = walked
@@ -476,9 +546,9 @@ fn vectors(
         let mut crossed = Winding::new();
         let segments = legs(face, exits, faces)?;
         for segment in &segments {
-            for (polygon, _) in polygons {
+            for (polygon, _, span) in polygons {
                 meter.charge(1)?;
-                count_crossing(segment, polygon, &mut crossed)?;
+                count_crossing(segment, (polygon, span.as_ref()), &mut crossed)?;
             }
         }
         walked.push(Walked {
@@ -498,7 +568,7 @@ fn vectors(
     // Across the piece: every polygon on its plane that covers it, the piece's own among them.
     let mut far_side = near_side.clone();
     let mut is_first = true;
-    for (at, (polygon, held)) in polygons.iter().enumerate() {
+    for (at, (polygon, held, _)) in polygons.iter().enumerate() {
         meter.charge(1)?;
         if held.plane != own.plane || !covers(polygon, &face, &first, &second)? {
             continue;
@@ -550,7 +620,7 @@ pub fn reference_above(
     let mut above = reference.clone();
     for polygon in polygons {
         meter.charge(1)?;
-        count_crossing(&segment, polygon, &mut above)?;
+        count_crossing(&segment, (polygon, None), &mut above)?;
     }
     Ok(above)
 }
@@ -584,7 +654,7 @@ pub fn winding_at(
     for segment in path(face, first, second, &faces)? {
         for polygon in polygons {
             meter.charge(1)?;
-            count_crossing(&segment, polygon, &mut here)?;
+            count_crossing(&segment, (polygon, None), &mut here)?;
         }
     }
     Ok(here)
@@ -612,7 +682,8 @@ pub fn classify(
     }
     let mut held = Vec::with_capacity(polygons.len());
     for polygon in polygons {
-        held.push((polygon, canonical(&polygon.piece.face)?));
+        let span = piece_span(&polygon.piece);
+        held.push((polygon, canonical(&polygon.piece.face)?, span));
     }
     let mut out = Vec::new();
     for (index, list) in pieces.iter().enumerate() {

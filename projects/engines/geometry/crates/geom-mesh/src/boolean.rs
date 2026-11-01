@@ -3,12 +3,16 @@
 //! What it does: [`boolean`] hands the faces of closed meshes and their planes to `geom-poly`'s
 //! arrangement, and for each [`WindingTest`] keeps the pieces its indicator keeps, merges them into
 //! maximal faces with `geom-poly`'s merge, and builds an [`ExactMesh`] with the history of its runs.
-//! Cutting 300 openings is one call, and several results share one arrangement.
+//! Cutting 300 openings is one call, and several results share one arrangement. [`soup`] stops
+//! after the selection, with the kept pieces as a polygon soup, the stage EMBER times.
 //!
 //! Guarantees:
 //!
 //! - **Closed inputs only.** The arrangement needs a whole winding number everywhere, so an open
 //!   mesh is [`MeshError::NotClosed`], whose remedy is healing. Self-intersections are fine.
+//! - **A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no
+//!   two of its faces cross. A solid operand's boxes away from the others are solved without
+//!   cuts or tracing (11.3 step 4): fewer pieces, the same vectors, the same mesh.
 //! - **Bounded results only.** A test the outside passes, such as "not A", has no finite boundary:
 //!   [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.
 //! - **Conforming and exact.** The merge gives maximal faces and edges that end where other edges
@@ -29,7 +33,10 @@
 //! over their winding numbers, rewritten from 19.5's description.
 //!
 //! Cost: the arrangement's, in `geom-poly`, then the merge's O(n log n) exact comparisons for n
-//! sides of kept pieces, for each test, and the mesh's build.
+//! sides of kept pieces, for each test, and the mesh's build. G148's budgets, timed apart: the
+//! soup within 3 times EMBER's 1.6 ms on `Thingi10K` pairs, and the merge and build within 0.5 µs
+//! for each kept piece and each result face, two of G146's builds, whose done-when is a million
+//! faces built and checked in 0.5 s (`projects/kit/notes/G148-stage-budgets.md`).
 
 #![allow(
     clippy::many_single_char_names,
@@ -44,12 +51,12 @@ use geom_num::plane::{Plane, Tpi};
 use geom_op::{
     History, NameId, NameSet, OpPath, Ordinal, Origin, PieceKey, Record, Side, TopoName,
 };
-use geom_poly::merge::{Merge, Merged, Outward, merge, select};
+use geom_poly::merge::{Merge, Merged, Outward, Rules, merge_on, select};
 use geom_poly::order::normals_det;
 use geom_poly::plane::canonical;
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
+use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange_with};
 use geom_poly::trace::{Classified, Polygon, TraceError};
-use geom_poly::winding::{Winding, WindingTest};
+use geom_poly::winding::{Entry, Winding, WindingTest};
 use geom_run::{Exec, RunError, Stop, WorkMeter};
 
 use crate::classify::{pieces_of, trace_error};
@@ -525,18 +532,24 @@ fn outcome(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Outcome, MeshError> {
     let kept = select(test, classified)?;
-    let merged = merge(&kept, Merge::RemoveRedundant, meter)?;
+    let merged = merge_on(
+        exec,
+        &kept,
+        (Merge::RemoveRedundant, Rules::default()),
+        meter,
+    )?;
     let (history, face_run, runs) = account(&merged, &kept, gathered, op)?;
     let polygons = polygons_of(&merged, face_run, runs)?;
     Ok(Outcome {
-        mesh: build(&polygons, exec, meter)?,
+        // A result's winding is its test's, 0 or 1, and no two of its faces cross.
+        mesh: build(&polygons, exec, meter)?.proven_solid(),
         history,
     })
 }
 
 /// Every piece of `operands` for `tests`, from one arrangement.
 fn arranged(
-    gathered: &Gathered,
+    (gathered, solids): (&Gathered, &[Entry]),
     tests: &[WindingTest],
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
@@ -545,13 +558,12 @@ fn arranged(
         return Ok(Vec::new());
     }
     let cell = around(&gathered.polygons)?;
-    arrange(
+    arrange_with(
         exec,
-        cell,
-        Winding::new(),
+        (cell, Winding::new()),
         &gathered.polygons,
-        LEAF_POLYGONS,
-        tests,
+        (LEAF_POLYGONS, tests),
+        solids,
         meter,
     )
     .map_err(run_error)
@@ -566,16 +578,18 @@ pub(crate) fn boolean_into(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<ExactMesh, MeshError> {
-    let gathered = gather(operands, meter)?;
-    let classified = arranged(&gathered, core::slice::from_ref(test), exec, meter)?;
+    let (_, classified) = classified(operands, core::slice::from_ref(test), exec, meter)?;
     let kept = select(test, &classified)?;
-    let merged = merge(&kept, Merge::RemoveRedundant, meter)?;
-    let face_run = alloc::vec![0; merged.faces.len()];
-    build(
-        &polygons_of(&merged, face_run, alloc::vec![source])?,
+    let merged = merge_on(
         exec,
+        &kept,
+        (Merge::RemoveRedundant, Rules::default()),
         meter,
-    )
+    )?;
+    let face_run = alloc::vec![0; merged.faces.len()];
+    let polygons = polygons_of(&merged, face_run, alloc::vec![source])?;
+    // A boolean's result: its winding is its test's, 0 or 1, and no two of its faces cross.
+    Ok(build(&polygons, exec, meter)?.proven_solid())
 }
 
 /// The arrangement's errors as a mesh's.
@@ -605,15 +619,56 @@ pub fn boolean(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Outcome>, MeshError> {
+    let (gathered, classified) = classified(operands, tests, exec, meter)?;
+    let mut out = Vec::with_capacity(tests.len());
+    for test in tests {
+        out.push(outcome(&gathered, &classified, test, (op, exec), meter)?);
+    }
+    Ok(out)
+}
+
+/// The operands gathered, and every piece of one arrangement for `tests`.
+fn classified(
+    operands: &[&ExactMesh],
+    tests: &[WindingTest],
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Gathered, Vec<Classified>), MeshError> {
     let outside = Winding::new();
     if let Some(test) = tests.iter().position(|t| t.holds(&outside)) {
         return Err(MeshError::UnboundedResult { test: index(test)? });
     }
     let gathered = gather(operands, meter)?;
-    let classified = arranged(&gathered, tests, exec, meter)?;
+    // A solid operand's leaves away from the others need no cuts and no tracing (11.3 step 4).
+    let solids: Vec<Entry> = (0..)
+        .zip(operands)
+        .filter(|(_, mesh)| mesh.is_solid())
+        .map(|(entry, _)| entry)
+        .collect();
+    let classified = arranged((&gathered, &solids), tests, exec, meter)?;
+    Ok((gathered, classified))
+}
+
+/// [`boolean`]'s first stage alone: for each of `tests`, the pieces it keeps, each a convex part
+/// of an input face turned to face out of the result, with nothing merged and no mesh built. This
+/// is the output EMBER gives, a polygon soup whose every polygon is part of an input polygon, so
+/// timing it against EMBER's 1.6 ms compares like with like (G148's stage budgets,
+/// `projects/kit/notes/G148-stage-budgets.md`). [`boolean`] merges the same pieces into maximal
+/// faces and builds each result.
+///
+/// # Errors
+///
+/// As [`boolean`], short of the merge's and the mesh build's.
+pub fn soup(
+    operands: &[&ExactMesh],
+    tests: &[WindingTest],
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Vec<Outward>>, MeshError> {
+    let (_, classified) = classified(operands, tests, exec, meter)?;
     let mut out = Vec::with_capacity(tests.len());
     for test in tests {
-        out.push(outcome(&gathered, &classified, test, (op, exec), meter)?);
+        out.push(select(test, &classified)?);
     }
     Ok(out)
 }
