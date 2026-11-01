@@ -18,7 +18,9 @@
 use geom_curve::{CurveKind, Frame, ParamCurve};
 use geom_intersect::IntersectError;
 use geom_intersect::quadrics::natural;
-use geom_intersect::result::{Coincidence, CurveContact, Intersection, Item, PointContact};
+use geom_intersect::result::{
+    Coincidence, CurveContact, CurveEnd, Intersection, Item, PointContact,
+};
 use geom_nurbs::Limit;
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_surface::{Cone, Cylinder, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind};
@@ -31,8 +33,101 @@ fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
 
+/// The meeting of `a` and `b`, checked on the way out: every curve lies on both surfaces by
+/// their own equations, no two are one, and one that does not close ends on an edge of a domain.
 fn meet(a: &SurfaceKind, b: &SurfaceKind) -> Intersection {
-    natural(a, b, &mut meter()).unwrap().unwrap()
+    let r = natural(a, b, &mut meter()).unwrap().unwrap();
+    holds(&r, a, b);
+    r
+}
+
+fn cross3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn scale3(a: [f64; 3], k: f64) -> [f64; 3] {
+    [a[0] * k, a[1] * k, a[2] * k]
+}
+
+/// How far `p` stands off `s`, by its implicit equation.
+fn off(s: &SurfaceKind, p: [f64; 3]) -> f64 {
+    let radial = |w: [f64; 3], n: [f64; 3]| {
+        let n = scale3(n, 1.0 / length(n));
+        (length(sub(w, scale3(n, dot3(w, n)))), dot3(w, n))
+    };
+    match s {
+        SurfaceKind::Plane(plane) => {
+            let (c, a, b) = plane.vectors();
+            let n = cross3(a, b);
+            (dot3(sub(p, c), n) / length(n)).abs()
+        }
+        SurfaceKind::Sphere(x) => (length(sub(p, x.center())) - x.radius()).abs(),
+        SurfaceKind::Cylinder(x) => {
+            let (rho, _) = radial(sub(p, x.center()), x.frame().normal());
+            (rho - x.radius()).abs()
+        }
+        SurfaceKind::Cone(x) => {
+            let (r0, k) = x.radius_and_slope();
+            let (rho, z) = radial(sub(p, x.center()), x.frame().normal());
+            (rho - (r0 + k * z * x.axial_sign()).abs()).abs()
+        }
+        _ => 0.0,
+    }
+}
+
+/// How far `p` stands from the polyline through `line`.
+fn from_polyline(p: [f64; 3], line: &[[f64; 3]]) -> f64 {
+    line.windows(2)
+        .map(|w| {
+            let d = sub(w[1], w[0]);
+            let t = (dot3(sub(p, w[0]), d) / dot3(d, d).max(1e-300)).clamp(0.0, 1.0);
+            length(sub(
+                p,
+                [w[0][0] + t * d[0], w[0][1] + t * d[1], w[0][2] + t * d[2]],
+            ))
+        })
+        .fold(f64::INFINITY, f64::min)
+}
+
+fn holds(r: &Intersection, a: &SurfaceKind, b: &SurfaceKind) {
+    let all = samples(r, 200);
+    for (i, c) in all.iter().enumerate() {
+        for p in c {
+            for s in [a, b] {
+                let gap = off(s, *p);
+                assert!(
+                    gap < 1e-6 * (1.0 + length(*p)),
+                    "curve {i} at {p:?} stands {gap} off {s:?}"
+                );
+            }
+        }
+        for (j, d) in all.iter().enumerate().skip(i + 1) {
+            let one = [c[50], c[150]]
+                .iter()
+                .all(|p| from_polyline(*p, d) < 1e-6 * (1.0 + length(*p)));
+            assert!(!one, "curves {i} and {j} are one: {:?}", r.items());
+        }
+    }
+    for item in r.items() {
+        if let Item::Curve { curve, ends, .. } = item {
+            if ends[0] == CurveEnd::Closed {
+                continue;
+            }
+            let (lo, hi) = curve.domain();
+            for (t, side) in [(lo, Limit::FromRight), (hi, Limit::FromLeft)] {
+                let p = curve.point(t, side).unwrap();
+                assert!(
+                    inside(a, p).is_none() || inside(b, p).is_none(),
+                    "a piece ends at {p:?}, inside both domains: {:?}",
+                    r.items()
+                );
+            }
+        }
+    }
 }
 
 fn frame_along(n: [f64; 3]) -> Frame<3> {
