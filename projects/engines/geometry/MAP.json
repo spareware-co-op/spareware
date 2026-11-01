@@ -13798,6 +13798,28 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the rows, with a quadratic search for each vertex's faces and each edge. No recursion.",
+          "does": "a [`Spec`] is a polyhedron by its corners and, for each solid region, its shells, faces and loops. [`meeting`] builds it with every vertex the meeting of its three faces' planes, each plane through three corners of its face moved by a [`Jog`], and [`grid`] with every vertex a grid point. [`CORPUS`] holds a box, an L, a wall with a window, two lumps, a cavity and a lump floating in a cavity; [`scaled_jog`] picks moves for a seed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/plane_bodies.rs",
+          "guarantees": [
+            "**Valid by construction.** A move of a step or so on shapes hundreds of steps across changes no shape, so every body of the corpus is a valid body, by geometry rather than by the checker.",
+            "**Deterministic.** A body is a function of its spec and its moves.",
+            "**Refuses what it cannot build.** A vertex without exactly three faces has no one meeting: [`meeting`] returns `None`."
+          ],
+          "job": "Plane-based bodies for the checkers to stand on (chapters 8.3 and 28.4; piece G135): polyhedra with three faces at every vertex, whose planes can be moved a step off their grid points, so that every vertex is the meeting of three planes at a place no grid point holds.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "the bodies of chapter 11.3 and 19.2 (`projects/engines/geometry/architecture/11-booleans.md`): each vertex the meeting of three of the body's planes, each edge's line on two."
+          },
+          "path": "geom_test::plane_bodies",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one run of the property per case, plus shrinking after a failure, at most about 41 property runs per coordinate (a binary search over at most 2^40 magnitudes). One read of proptest's process-wide configuration per [`run`] or [`first_value`].",
           "does": "[`run`] runs a proptest property from a [`Seed`] resolved and printed by [`crate::seed::resolve`], so a property test has the same seed rules as every other seeded test. [`config`] builds the proptest configuration it uses. [`first_value`] draws one case from a seed. [`coord`], [`p2`] and [`p3`] are proptest strategies for grid coordinates and points.",
           "family": [],
@@ -14347,6 +14369,30 @@
             "text": "the same walk as the map's ([`crate::map::repo`]): sorted listings, no recursion, links reported; the scope is the code chapter 29.20's rule 7 covers, every crate of the kernel (`projects/engines/geometry/architecture/29-sources-licences.md`)."
           },
           "path": "geom_test::scan::repo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "rationals grow with the depth of the sums, and each pair of faces costs the product of their edges. This checker accepts that, because it runs on tests only. No recursion.",
+          "does": "[`check`] reads a body's rows into rationals: each vertex a point, each face its rings of corners and the plane its surface gives. Then it tests the rules one by one, in the most direct way there is, and lists a [`Finding`] for each one broken.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/second_check.rs",
+          "guarantees": [
+            "**Exact.** Every value is a rational and every comparison a comparison of rationals, with no width to overflow and no tolerance but the bound the body is recorded with.",
+            "**Independent.** A different method wherever one exists: points listed and located, where `geom-check` compares stretches of a line by the signs of planes; Cramer's rule, where it never leaves the planes; crossing numbers, where it counts by moved lines.",
+            "**Says what it cannot judge.** A curved face or edge, or a face whose corners leave one plane, is [`Finding::Unjudged`], never a pass (flat bodies and meshes are what 28.4 asks of it)."
+          ],
+          "job": "The second checker for flat bodies (chapter 28.4; piece G135): chapter 8.3's rules, written again from their definitions in exact rationals, sharing no code with `geom-check`, to stand behind it.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "doi:10.1016/B978-0-12-336156-1.50013-6",
+              "doi:10.1016/B978-0-08-050754-5.50043-8"
+            ],
+            "text": "chapter 8.3's rules (`projects/engines/geometry/architecture/08-topology.md`); the crossing number for a point in a polygon (Haines, \"Point in polygon strategies\", Graphics Gems IV, 1994, doi:10.1016/B978-0-12-336156-1.50013-6); Cramer's rule for three planes; the divergence theorem for a polyhedron's volume (Goldman, Graphics Gems II, 1991, doi:10.1016/B978-0-08-050754-5.50043-8)."
+          },
+          "path": "geom_test::second_check",
           "provenance": [],
           "spdx": null,
           "target": "lib"
