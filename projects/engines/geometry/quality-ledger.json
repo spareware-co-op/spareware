@@ -5459,6 +5459,30 @@
       "reason": "small_first only says which circle Crossing::of measures the crossings from. Swapped, its height is the same: Kahan's Heron area (d + l + s)(l + s - d)(d - (l - s))(d + (l - s)) has the same factors with l - s negated, multiplied in another order. So the tangent, merged and two-crossing decisions and the count are the same, and the points, reached from the other centre by the foot, are the same up to the rounding of their enclosures. That rounding is all the smaller circle's side improves, which the crate does not promise."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if start > end {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "start equals end only when an end of the enclosure of where b's ends fall on a, computed by geom_num::interval and widened outward by a step, is exactly an end of a's domain. Where two collinear segments truly share an end, the enclosure strictly holds it and start < end. Equality needs b to start past a's end by under a step, a miss, where the original reports the zero-length overlap its enclosure cannot rule out and the mutant reports nothing, which is the truth of the inputs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_line",
+      "line_text": "if s.hi() < s_lo || s.lo() > s_hi || t.hi() < t_lo || t.lo() > t_hi {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either mutant differs only when an upper bound of s or t equals the start of its domain. s and t are the crossing's parameters on each line, computed by geom_num::interval, which widens every bound outward by a step: where the lines truly meet at an end of a domain, the enclosure strictly holds that end. A bound equal to an end needs the crossing to lie past it by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if s.hi() < s_lo || s.lo() > s_hi || t.hi() < t_lo || t.lo() > t_hi {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either mutant differs only when a lower bound of s or t equals the end of its domain. s and t are the crossing's parameters on each line, computed by geom_num::interval, which widens every bound outward by a step: where the lines truly meet at an end of a domain, the enclosure strictly holds that end. A bound equal to an end needs the crossing to lie past it by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
       "mutant": "replace > with >= in halves",
       "line_text": "let share = if whole > 0.0 {",
