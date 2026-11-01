@@ -87,7 +87,11 @@ impl Rng {
 /// `v`, near enough, as a double.
 fn real<const L: usize>(v: &Wide<L>) -> f64 {
     let negative = v.is_negative();
-    let m = if negative { v.checked_neg().unwrap() } else { *v };
+    let m = if negative {
+        v.checked_neg().unwrap()
+    } else {
+        *v
+    };
     let mut out = 0.0_f64;
     for limb in m.to_le_limbs().iter().rev() {
         out = out * 18_446_744_073_709_551_616.0 + *limb as f64;
@@ -184,7 +188,13 @@ fn evaluated(terms: &[(String, Vec<String>)], m: &BTreeMap<&'static str, f64>) -
 
 /// `inputs` with `name` moved until the value is near `target`, by Newton's steps: `None` if it will
 /// not come, or leaves its budget.
-fn placed(spec: &Spec, inputs: &Inputs, name: &'static str, target: f64, near: f64) -> Option<Inputs> {
+fn placed(
+    spec: &Spec,
+    inputs: &Inputs,
+    name: &'static str,
+    target: f64,
+    near: f64,
+) -> Option<Inputs> {
     let bits = spec.inputs.iter().find(|(n, ..)| *n == name)?.2;
     let top = (1_i128 << bits) - 1;
     let mut at = inputs.clone();
@@ -343,9 +353,19 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             Some(_) => leaked[leader] += 1,
         }
         // Past the whole bound, it answers, and rightly.
-        if let Some(outside) = placed(spec, &first, name, sign * 2.5 * error * held, 0.25 * error * held) {
+        if let Some(outside) = placed(
+            spec,
+            &first,
+            name,
+            sign * 2.5 * error * held,
+            0.25 * error * held,
+        ) {
             let v = (spec.value)(&outside);
-            let expected = if v > 0.0 { Sign::Positive } else { Sign::Negative };
+            let expected = if v > 0.0 {
+                Sign::Positive
+            } else {
+                Sign::Negative
+            };
             if (spec.filter)(&outside) == Some(expected) {
                 answered[leader] += 1;
             }
@@ -678,7 +698,11 @@ fn each_term_of_each_scale_counts() {
         .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok())
         .unwrap_or(DEFAULT_SEED);
     println!("seed: {seed:x}");
-    let cases = if cfg!(debug_assertions) { 20_000 } else { 400_000 };
+    let cases = if cfg!(debug_assertions) {
+        20_000
+    } else {
+        400_000
+    };
     let mut rng = Rng(seed);
     let mut problems = Vec::new();
     for spec in SPECS {
