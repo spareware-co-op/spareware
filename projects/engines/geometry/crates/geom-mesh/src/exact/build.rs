@@ -928,14 +928,11 @@ fn emit(
         for &(looped, from) in outer.iter().chain(&ordered) {
             let corners = span(&input.loop_start, looped)?;
             let mut corner = from;
-            loop {
+            for _ in corners.0..corners.1 {
                 parts.he_vert.push(*at(corner_vertex, corner)?);
                 parts.he_plane.push(edges.facing(corner)?);
                 parts.he_prop.push(prop_of(corner));
                 corner = next_corner(corner, corners);
-                if corner == from {
-                    break;
-                }
             }
             parts.loop_start.push(index(parts.he_vert.len())?);
         }
