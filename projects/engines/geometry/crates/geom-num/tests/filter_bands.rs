@@ -12,8 +12,10 @@
 //! evaluated from the inputs' own group maxima, and the error constant from the module's `ERROR`.
 //! The exact value is the module's `value`, which `geom-num`'s other tests hold to big integers.
 //!
-//! A term no input can make the largest by the margin is named in its [`Spec`], with why: there the
-//! filter's decision is the same with it or without it.
+//! A term no input can make the largest by the margin is named in its [`Spec`], with why. Such a
+//! term is not what decides, but a filter whose scale grew past the true one would still refuse what
+//! it should answer: so each filter is also asked with some groups at 0, 1 or 2, where a sum or a
+//! quotient in place of a product shows, and must answer what lies past its bound.
 //!
 //! Seeds: the test prints `seed: <hex>` and runs from a fixed default; `SPAREKIT_SEED=<hex>` replays
 //! another (chapter 28.17). Case counts are a twentieth in debug builds.
@@ -45,6 +47,13 @@ use geom_num::wide::Wide;
 
 /// The default seed (G187).
 const DEFAULT_SEED: u64 = 0x6718_7000_5eed_b0b0;
+
+/// Why a mixed term never leads: `x · y` is at most the larger of `x²` and `y²`.
+const MEAN: &str = "the geometric mean of two other terms, so never the largest of them";
+
+/// Why `circle_gap`'s squares of differences never lead where it matters: with x² above t², the
+/// value is at least 2x − 1, far past the bound.
+const SQUARE: &str = "above t^2 it leaves the value past the bound whatever the scale";
 
 /// A term must lead the next by this much for the two bounds to leave room between them.
 const MARGIN: f64 = 1.25;
@@ -201,6 +210,66 @@ fn placed(spec: &Spec, inputs: &Inputs, name: &'static str, target: f64, near: f
     None
 }
 
+/// Draws with some groups at 0, 1 or 2 and the rest of any size, with the value past the bound, or
+/// as it falls: how many the filter did not answer, of how many it should have.
+fn with_small_groups(
+    spec: &Spec,
+    rng: &mut Rng,
+    cases: u64,
+    error: f64,
+    terms: &[(String, Vec<String>)],
+    groups: &[(&str, u32)],
+) -> (u64, u64) {
+    let (mut missed, mut past_bound) = (0, 0);
+    for _ in 0..cases {
+        let sizes: BTreeMap<&str, Option<u32>> = groups
+            .iter()
+            .map(|(g, bits)| {
+                let small = rng.next() % 2 == 0;
+                (*g, (!small).then(|| 1 + (rng.next() % u64::from(*bits)) as u32))
+            })
+            .collect();
+        let mut inputs = Inputs::new();
+        for (name, group, bits) in spec.inputs {
+            let v = match sizes[group] {
+                Some(size) => rng.with_bits(size.min(*bits)),
+                None => i128::from((rng.next() % 3) as u8) * if rng.next() & 1 == 0 { 1 } else { -1 },
+            };
+            inputs.insert(name, v);
+        }
+        let top = |at: &Inputs| {
+            evaluated(terms, &maxima(spec, at))
+                .into_iter()
+                .fold(0.0, f64::max)
+        };
+        let bound = error * top(&inputs);
+        if bound == 0.0 {
+            continue;
+        }
+        let v = (spec.value)(&inputs);
+        // Past twice the bound nothing the filter's rounding does can stop it answering.
+        if v.abs() > 2.1 * bound {
+            past_bound += 1;
+            if (spec.filter)(&inputs).is_none() {
+                missed += 1;
+            }
+        }
+        let which = (rng.next() % spec.moved.len() as u64) as usize;
+        let sign = if rng.next() & 1 == 0 { 1.0 } else { -1.0 };
+        let Some(at) = placed(spec, &inputs, spec.moved[which], sign * 1.5 * bound, 0.1 * bound)
+        else {
+            continue;
+        };
+        if ((top(&at) * error) / bound - 1.0).abs() < 0.01 {
+            past_bound += 1;
+            if (spec.filter)(&at).is_none() {
+                missed += 1;
+            }
+        }
+    }
+    (missed, past_bound)
+}
+
 /// Runs `spec`, and says what is wrong with each term not excused that was not tested, or with one
 /// excused that was.
 fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
@@ -282,7 +351,15 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             }
         }
     }
+    let (missed, past_bound) = with_small_groups(spec, rng, cases, error, &terms, &groups);
     let mut problems = Vec::new();
+    println!("{}: {missed} of {past_bound} past the bound not answered", spec.name);
+    if past_bound == 0 || missed * 50 > past_bound {
+        problems.push(format!(
+            "{}: {missed} of {past_bound} past the bound not answered",
+            spec.name
+        ));
+    }
     for (k, (term, _)) in terms.iter().enumerate() {
         let idle = spec.idle.iter().any(|(t, _)| t == term);
         let name = spec.name;
@@ -478,7 +555,10 @@ const SPECS: &[Spec] = &[
             round_rational::filter(x, y, v, q, cx, cy, w)
         },
         variables: |_, _| {},
-        idle: &[],
+        idle: &[
+            ("y·p·v·w", MEAN),
+            ("x·p·v·w", MEAN),
+        ],
     },
     Spec {
         name: "round_line",
@@ -505,7 +585,11 @@ const SPECS: &[Spec] = &[
             round_line::filter(a, b, d, p, cx, cy, w)
         },
         variables: |_, _| {},
-        idle: &[],
+        idle: &[
+            ("n·d·c·w", MEAN),
+            ("y·n^2·c·w", MEAN),
+            ("x·n^2·c·w", MEAN),
+        ],
     },
     Spec {
         name: "circle_side",
@@ -528,7 +612,10 @@ const SPECS: &[Spec] = &[
             circle_side::filter(x, y, v, grid(i, "k_x", "k_y"), r)
         },
         variables: |_, _| {},
-        idle: &[],
+        idle: &[
+            ("y·p·v", MEAN),
+            ("x·p·v", MEAN),
+        ],
     },
     Spec {
         name: "circle_line",
@@ -551,7 +638,11 @@ const SPECS: &[Spec] = &[
             circle_line::filter(a, b, d, grid(i, "k_x", "k_y"), r)
         },
         variables: |_, _| {},
-        idle: &[],
+        idle: &[
+            ("y·n·d", MEAN),
+            ("x·n·d", MEAN),
+            ("x·y·n^2", MEAN),
+        ],
     },
     Spec {
         name: "circle_gap",
@@ -576,7 +667,7 @@ const SPECS: &[Spec] = &[
             widen(m, "x", i["a_x"] - i["b_x"]);
             widen(m, "y", i["a_y"] - i["b_y"]);
         },
-        idle: &[],
+        idle: &[("t^2", "circle_gap_answers_only_past_t_squared"), ("y^2", SQUARE), ("x^2", SQUARE)],
     },
 ];
 
@@ -594,4 +685,38 @@ fn each_term_of_each_scale_counts() {
         problems.extend(run(spec, &mut rng, cases));
     }
     assert_eq!(problems, Vec::<String>::new());
+}
+
+/// `circle_gap`'s value moves by 2t for a step of t, far more than its bound, so no input can be
+/// moved into the band: a right triangle's sides, nearly, are drawn until one falls in it. With
+/// x = y neither x² nor y² is more than half of t², so the bound is t²'s and nothing else's.
+#[test]
+fn circle_gap_answers_only_past_t_squared() {
+    let module = include_str!("../src/generated/circle_gap.rs");
+    let error = error_of(module);
+    let mut rng = Rng(DEFAULT_SEED);
+    let (mut refused, mut answered) = (0, 0);
+    let origin = P2::new(0, 0).unwrap();
+    for _ in 0..if cfg!(debug_assertions) { 2_000_000 } else { 20_000_000 } {
+        let d = (1 << 39) + (rng.next() >> 26) as i64 % (1 << 38);
+        let t = (d as f64 * core::f64::consts::SQRT_2).round() as i128;
+        let square = t * t;
+        let v = 2 * i128::from(d) * i128::from(d) - square;
+        let share = v.abs() as f64 / (error * square as f64);
+        if !(0.6..0.9).contains(&share) && !(1.5..3.0).contains(&share) {
+            continue;
+        }
+        let far = P2::new(d, d).unwrap();
+        let answer = circle_gap::filter(far, origin, t);
+        if share < 1.0 {
+            assert_eq!(answer, None, "{d} {t}");
+            refused += 1;
+        } else if share > 2.1 {
+            let sign = if v > 0 { Sign::Positive } else { Sign::Negative };
+            assert_eq!(answer, Some(sign), "{d} {t}");
+            answered += 1;
+        }
+    }
+    println!("circle_gap: refused {refused}, answered {answered}");
+    assert!(refused > 0 && answered > 0, "{refused} {answered}");
 }
