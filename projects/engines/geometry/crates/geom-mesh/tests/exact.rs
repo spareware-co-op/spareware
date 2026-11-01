@@ -22,9 +22,9 @@ use geom_mesh::exact::{
     ExactMesh, MeshError, MeshFault, MeshKind, NONE, Parts, PropTable, Vertex, morton,
 };
 use geom_num::grid::{GridStep, P3, Steps};
-use geom_num::plane::Plane;
+use geom_num::plane::{Plane, Tpi};
 use geom_num::wide::I256;
-use geom_num::{Exactness, NumError};
+use geom_num::{Exactness, NumError, Sign};
 use geom_op::NameId;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::seed::resolve;
@@ -869,6 +869,37 @@ fn a_notch_off_the_grid_is_no_wrong_turn() {
 #[test]
 fn corners_on_and_off_the_grid_sort_together() {
     let m = mesh(&dart([(-1, -7), (13, 0), (-1, 7), (5, 0)], &[0, 1, 2]));
+    assert!(matches!(
+        turned_over(m),
+        MeshError::Fault(MeshFault::WrongWayRound { face: 0 })
+    ));
+}
+
+/// A dart whose loop is stored from its notch: the notch's walls reduce to normals (2, ±1, 0), and
+/// sort just after the face's plane, ahead of the long walls (6, ±11, 0), so the notch has the lowest
+/// key and the loop starts there. The checker must still find the corner lowest in x, y and z.
+#[test]
+fn a_loop_stored_from_its_notch_turns_at_its_lowest_corner() {
+    let outline = [(0, -6), (11, 0), (0, 6), (3, 0)];
+    let m = mesh(&dart(outline, &[]));
+    let parts = m.parts();
+    let first = parts.verts[parts.he_vert[parts.loop_start[0] as usize] as usize];
+    let Vertex::Planes(rows) = first else {
+        panic!("the dart is off the grid");
+    };
+    let notch: Vec<Plane> = [(0, 6), (3, 0), (0, -6)]
+        .windows(2)
+        .map(|w| {
+            let ((px, py), (qx, qy)) = (w[0], w[1]);
+            let n = [py - qy, qx - px, 0];
+            Plane::new(n, -(n[0] * px + n[1] * py)).unwrap()
+        })
+        .collect();
+    let [a, b, c] = rows.map(|r| parts.planes[r as usize]);
+    let point = Tpi::new(a, b, c).unwrap();
+    for wall in &notch {
+        assert_eq!(wall.side_of_tpi(&point).unwrap(), Sign::Zero);
+    }
     assert!(matches!(
         turned_over(m),
         MeshError::Fault(MeshFault::WrongWayRound { face: 0 })
