@@ -78,21 +78,21 @@ fn carrier(parts: &Parts, face: u32) -> Result<Carrier, MeshError> {
     let part = |axis: usize| n.get(axis).copied().map_or(0.0, double);
     // In the axes i, j, k, a right-handed turn: (n_k, 0, −n_i) and (0, n_k, −n_j) lie in the plane,
     // and their cross product is n_k · n.
-    let mut a = [0.0; 3];
-    let mut b = [0.0; 3];
+    let mut first = [0.0; 3];
+    let mut second = [0.0; 3];
     let (on_i, on_j, on_k) = (part(i), part(j), part(k));
-    let mut put = |v: &mut [f64; 3], axis: usize, value: f64| {
+    let put = |v: &mut [f64; 3], axis: usize, value: f64| {
         if let Some(slot) = v.get_mut(axis) {
             *slot = value;
         }
     };
-    put(&mut a, i, on_k);
-    put(&mut a, k, -on_i);
-    put(&mut b, j, on_k);
-    put(&mut b, k, -on_j);
+    put(&mut first, i, on_k);
+    put(&mut first, k, -on_i);
+    put(&mut second, j, on_k);
+    put(&mut second, k, -on_j);
     let wide = (f64::NEG_INFINITY, f64::INFINITY);
-    let plane =
-        Flat::new(anchor(parts, face)?, a, b, (wide, wide)).map_err(|_| MeshError::Defect)?;
+    let plane = Flat::new(anchor(parts, face)?, first, second, (wide, wide))
+        .map_err(|_| MeshError::Defect)?;
     Ok(Carrier {
         surface: SurfaceKind::Plane(plane),
         sense: if up { Sense::Forward } else { Sense::Reversed },
