@@ -131,7 +131,7 @@ impl<const N: usize, const D: usize> Projection<N, D> {
 }
 
 /// A box from a kind's bounds.
-fn boxed<const D: usize>(bounds: &Bounds<D>) -> Result<[Interval; D], IntersectError> {
+pub(crate) fn boxed<const D: usize>(bounds: &Bounds<D>) -> Result<[Interval; D], IntersectError> {
     let mut out = [Interval::point(0.0)?; D];
     for ((o, lo), hi) in out.iter_mut().zip(bounds.lo).zip(bounds.hi) {
         *o = Interval::new(lo, hi)?;
@@ -140,7 +140,10 @@ fn boxed<const D: usize>(bounds: &Bounds<D>) -> Result<[Interval; D], IntersectE
 }
 
 /// `x − p`, coordinate by coordinate.
-fn minus<const D: usize>(x: &[Interval; D], p: &[f64; D]) -> Result<[Interval; D], IntersectError> {
+pub(crate) fn minus<const D: usize>(
+    x: &[Interval; D],
+    p: &[f64; D],
+) -> Result<[Interval; D], IntersectError> {
     let mut out = *x;
     for (o, c) in out.iter_mut().zip(p) {
         *o = o.sub(Interval::point(*c)?)?;
@@ -165,7 +168,7 @@ fn square<const D: usize>(a: &[Interval; D]) -> Result<Interval, NumError> {
 }
 
 /// The widest side of a box.
-fn image<const D: usize>(x: &[Interval; D]) -> f64 {
+pub(crate) fn image<const D: usize>(x: &[Interval; D]) -> f64 {
     x.iter().map(|i| i.hi() - i.lo()).fold(0.0, larger)
 }
 

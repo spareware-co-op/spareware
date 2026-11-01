@@ -248,9 +248,15 @@
               "kind": "corpus",
               "piece": "G168",
               "why": "2 new count benchmarks on geom-intersect's tracer (decision 32.44): a sphere through a plane patch and a torus's silhouette; no existing digest moved"
+            },
+            {
+              "sha256": "b30b5a738b930b272752097bc44c67634cf3181d585ca879bc769e685c11538d",
+              "kind": "corpus",
+              "piece": "G169",
+              "why": "1 new count benchmark on geom-intersect's subdivision (decision 32.44): a sphere through a plane patch; no existing digest moved"
             }
           ],
-          "sha256": "b30b5a738b930b272752097bc44c67634cf3181d585ca879bc769e685c11538d"
+          "sha256": "60b0840aa61cec883d6ecbff43b6bb7b99425aedc55ca9af929de7799f856957"
         },
         {
           "id": "geom-nurbs/operations",

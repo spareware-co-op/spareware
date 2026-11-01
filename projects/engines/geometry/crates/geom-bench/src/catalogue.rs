@@ -428,6 +428,8 @@ pub static OPS: &[Op] = &[
     // The tracer (piece G168; decision 32.44): a sphere through a plane patch, and a torus's
     // silhouette.
     Op { group: "intersect", name: "trace_patch", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::patches(c), kernels::intersect::cut_patches) },
+    // Subdivision (piece G169; decision 32.44): a sphere through a plane patch.
+    Op { group: "intersect", name: "subdivide_patch", measures: "geom_intersect::general::subdivide", classes: T, prepare: |c| bind(inputs::intersect::sheets(c), kernels::intersect::subdivided) },
     Op { group: "intersect", name: "trace_silhouette", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::tori(c), kernels::intersect::silhouettes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
@@ -617,6 +619,7 @@ pub fn prepare_named(name: &str) -> Option<Prepared> {
 /// `tests/coverage.rs` checks that each constant still refuses, so its entry cannot outlive it.
 #[rustfmt::skip]
 pub static UNMEASURED: &[(&str, &str)] = &[
+    ("newton::inverse", "the small inverse a Krawczyk step takes, measured through `newton::krawczyk`"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),

@@ -1279,6 +1279,17 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
             },
         )),
+        ("intersect", "subdivide_patch") => fold(inputs::intersect::sheets(class).iter().map(
+            |(surface, centre)| {
+                let frame = geom_curve::Frame::standard().unwrap();
+                let domain = ((0.0, 1.875), (-0.45, 0.45));
+                let sphere = geom_surface::SurfaceKind::Sphere(geom_surface::Sphere::new(
+                    *centre, 5.0, frame, domain,
+                )?);
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::general::subdivide(surface, &sphere, 1.0, &mut meter)
+            },
+        )),
         ("intersect", "trace_silhouette") => fold(inputs::intersect::tori(class).iter().map(
             |(surface, direction)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

@@ -2726,7 +2726,7 @@ pub mod quadrature {
     );
 }
 
-/// geom-intersect's hot paths (pieces G158, G162 and G168; decision 32.44).
+/// geom-intersect's hot paths (pieces G158, G162, G168 and G169; decision 32.44).
 pub mod intersect {
     use super::*;
 
@@ -2779,9 +2779,16 @@ pub mod intersect {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/subdivide_patch/typical"))]
+    fn subdivide_patch(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = intersect;
         benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, trace_patch,
-            trace_silhouette
+            subdivide_patch, trace_silhouette
     );
 }

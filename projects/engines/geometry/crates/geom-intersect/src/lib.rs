@@ -31,10 +31,12 @@
 //! - [`error`]: why an intersection could not be computed.
 //! - [`project`]: nearest points and inversion (G162).
 //! - [`level`]: the implicit-parametric tracer and level curves (G168).
+//! - [`general`]: general surface with surface, subdivision and start points (G169).
+//! - [`solve`]: the interval engine for small systems (G163).
 //!
 //! Status: the result types and canonical order built by piece G158, projection and inversion by
-//! G162, the implicit tracer and level curves by G168; the other methods come with G159,
-//! G163, G164, G165, G166, G167, G169, G170, G171, G172, G173, G174, G175, G176, G292,
+//! G162, the implicit tracer and level curves by G168, subdivision by G169; the other methods come
+//! with G159, G163, G164, G165, G166, G167, G170, G171, G172, G173, G174, G175, G176, G292,
 //! G320, G321, G372, G390, G392, G393, G466, G467, G468.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
@@ -42,10 +44,12 @@
 extern crate alloc;
 
 pub mod error;
+pub mod general;
 pub mod level;
 pub mod order;
 pub mod project;
 pub mod result;
+pub mod solve;
 
 pub use error::IntersectError;
 pub use level::{
