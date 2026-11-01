@@ -1587,6 +1587,58 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     }),
             )
         }
+        ("mesh", "point_point") => fold(
+            inputs::mesh::point_point(class)
+                .iter()
+                .map(|&([p, q], c)| geom_num::distance::point_point(p, q, c)),
+        ),
+        ("mesh", "point_line") => fold(
+            inputs::mesh::point_line(class)
+                .iter()
+                .map(|&([a, b, p], c)| geom_num::distance::point_line(a, b, p, c)),
+        ),
+        ("mesh", "point_plane") => fold(
+            inputs::mesh::point_plane(class)
+                .iter()
+                .map(|&([a, b, d, p], c)| geom_num::distance::point_plane(a, b, d, p, c)),
+        ),
+        ("mesh", "line_line") => fold(
+            inputs::mesh::line_line(class)
+                .iter()
+                .map(|&([a, b, d, p], c)| geom_num::distance::line_line(a, b, d, p, c)),
+        ),
+        ("mesh", "closest_dots") => {
+            use geom_num::distance::{dot_from, product_difference};
+            fold(
+                inputs::mesh::closest_dots(class)
+                    .iter()
+                    .map(|&[a, b, d, p]| {
+                        let (x, y) = (dot_from(a, b, p), dot_from(b, d, p));
+                        product_difference(x, y, dot_from(d, a, p), dot_from(a, d, p))
+                    }),
+            )
+        }
+        ("mesh", "triangles") => fold(inputs::mesh::triangles(class).iter().map(|&[a, b]| {
+            geom_mesh::contact::triangles(a, b).map(|c| match c {
+                geom_mesh::contact::Contact::Apart => geom_num::Sign::Negative,
+                geom_mesh::contact::Contact::Touch => geom_num::Sign::Zero,
+                geom_mesh::contact::Contact::Cross => geom_num::Sign::Positive,
+            })
+        })),
+        ("mesh", "locate") => fold(inputs::mesh::locate(class).iter().map(|probe| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let exec = geom_run::Exec::serial();
+            geom_mesh::classify::Classifier::new(&probe.solid, &exec, &mut meter)?.locate_all(
+                &probe.points,
+                &exec,
+                &mut meter,
+            )
+        })),
+        ("mesh", "envelope") => fold(
+            inputs::mesh::envelope(class)
+                .iter()
+                .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
+        ),
         ("mesh", "exact_build") => fold(inputs::mesh::exact_build(class).iter().map(|p| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::exact::build::build(p, &geom_run::Exec::serial(), &mut meter)

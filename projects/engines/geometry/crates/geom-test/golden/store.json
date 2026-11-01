@@ -248,9 +248,15 @@
               "kind": "corpus",
               "piece": "G146",
               "why": "the phase 4 integration train: piece/G146's count benchmarks on the exact mesh and G153's on the triangulation, merged; no existing digest moved"
+            },
+            {
+              "sha256": "147817a90a09679487ffa70173c81a2dd286f52abf776aeb91ba6c76839b038c",
+              "kind": "corpus",
+              "piece": "G147",
+              "why": "the phase 4 integration train: piece/G147's count benchmark on point location, with G151's and G152's, merged; no existing digest moved"
             }
           ],
-          "sha256": "147817a90a09679487ffa70173c81a2dd286f52abf776aeb91ba6c76839b038c"
+          "sha256": "54ca7f29da99fd041340b96768061ae7fd7934c8cf5641b6fdd7aaaec4922a91"
         },
         {
           "id": "geom-nurbs/operations",

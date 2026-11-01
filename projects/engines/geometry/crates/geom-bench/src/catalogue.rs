@@ -408,6 +408,14 @@ pub static OPS: &[Op] = &[
     // The triangulation's hot path (piece G153; decision 32.44).
     Op { group: "mesh", name: "cdt", measures: "geom_mesh::cdt::triangulate", classes: T, prepare: |c| bind(inputs::mesh::cdt(c), kernels::mesh::cdt) },
     Op { group: "mesh", name: "exact_build", measures: "geom_mesh::exact::build::build", classes: T, prepare: |c| bind(inputs::mesh::exact_build(c), kernels::mesh::exact_build) },
+    Op { group: "mesh", name: "locate", measures: "geom_mesh::Classifier::locate_all", classes: T, prepare: |c| bind(inputs::mesh::locate(c), kernels::mesh::locate) },
+    Op { group: "mesh", name: "point_point", measures: "distance::point_point", classes: T, prepare: |c| bind(inputs::mesh::point_point(c), kernels::mesh::point_point) },
+    Op { group: "mesh", name: "point_line", measures: "distance::point_line", classes: T, prepare: |c| bind(inputs::mesh::point_line(c), kernels::mesh::point_line) },
+    Op { group: "mesh", name: "point_plane", measures: "distance::point_plane", classes: T, prepare: |c| bind(inputs::mesh::point_plane(c), kernels::mesh::point_plane) },
+    Op { group: "mesh", name: "line_line", measures: "distance::line_line", classes: T, prepare: |c| bind(inputs::mesh::line_line(c), kernels::mesh::line_line) },
+    Op { group: "mesh", name: "closest_dots", measures: "distance::product_difference", classes: T, prepare: |c| bind(inputs::mesh::closest_dots(c), kernels::mesh::closest_dots) },
+    Op { group: "mesh", name: "triangles", measures: "geom_mesh::contact::triangles", classes: T, prepare: |c| bind(inputs::mesh::triangles(c), kernels::mesh::triangles) },
+    Op { group: "mesh", name: "envelope", measures: "geom_mesh::TriangleEnvelope::contains", classes: T, prepare: |c| bind(inputs::mesh::envelope(c), kernels::mesh::envelope) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -645,6 +653,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Plane::side_of_tpi_step", "Plane::side_of_tpi's path, with its step beside the sign"),
     ("Step::name", "a table of names"),
     ("Step::route", "a table of the steps, for the twins that count"),
+    ("distance::dot_from", "one dot product of differences, inside mesh/closest_dots"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),

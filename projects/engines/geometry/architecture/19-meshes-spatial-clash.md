@@ -199,6 +199,7 @@ fast-envelope is MIT at `f50eb6c1`, but its `indirectPredicates/` folder has no 
 - **Grid vertices.** Tet vertices are grid points, so "is this tet inverted?" is an exact `i128` orientation test.
 - **Insertion.** A triangle is cut into the tets it crosses. Each cut point is rounded to the grid, and the cut is accepted only if no tet inverts, checked exactly. Otherwise the triangle stays uninserted, as in fTetWild, and is retried after the mesh improves. Any left at the end are checked with the exact envelope test, roles swapped, for being covered by the inserted surface. The rest are listed with their locations. With `RequireAllInserted`, a leftover is an error.
 - **An envelope with integer corners.** This is the polyhedral envelope of Wang et al. ([2020, doi:10.1145/3386569.3392426](https://doi.org/10.1145/3386569.3392426)). Each input triangle's envelope is a convex polyhedron whose corners are grid points, inscribed in the ε-offset of the triangle, so "inside the envelope" proves "within ε". Every envelope predicate is then a grid point against a plane through grid points (`i128`), a line-plane point against a plane, or a three-plane point against a plane, section 6.2's deepest test at 379 bits. The predicates are re-derived in our own code, with no rounding modes. The width is absolute, in grid steps.
+- **As built (G152).** `geom-mesh::envelope`: the triangle swept by a cube of half side h, the largest whole number with 3h² ≤ ε², so its corners are grid points within ε of the triangle. It is the paper's inscribed body in a closed form: 26 facets at most, their normals the cube's, the triangle's, and each edge crossed with each axis, so no hull is built. A point within h is always inside.
 - **The grid is fine enough.** Rounding rejections become common only where tets are a few hundred grid steps across. A part with features below about 0.1 mm sitting in a q0 frame is meshed in a q1 frame, an exact conversion (multiply by 25).
 - **Improvement.** Split, collapse, swap and smooth, as in fTetWild, built as local operations with invariant checks and rollback after wildmeshing-toolkit's architecture. Priority ties break by key, and maths functions come from the kernel's deterministic module.
 - **Order.** Input order is a fixed sort, and parallel steps run in fixed chunks merged in order.
@@ -254,6 +255,8 @@ Distance is the gap between two shapes. Clearance asks whether that gap is at le
 | Are two edges within c, with closest points inside both? | (w·(u × v))² against c²·\|u × v\|² | 256 bits |
 
 Triangle-to-triangle distance derivations are ported from GeometricTools (Boost licence, [10](../../../kit/notes/G01-evidence/10-github-sweep.md)) and re-certified with our predicates. Distances are reported as outward-rounded `f64` intervals; the decisions behind them are exact.
+
+As built (G151): `geom_num::distance` holds the 256-bit comparisons and `geom-mesh::contact` the triangle test and closest features. A contact with any zero sign is reported as `Touch`, and `Cross` only when every sign was strict.
 
 **Implicit vertices.** Touch and cross tests on plane-based polygons need only "which side of this plane is this point", exact within 384 bits. Distance comparisons on implicit vertices would need wider integers than section 6.2 allows. So, for distance only, such vertices are committed to the grid, widening the interval by at most (√3/2)·q per body.
 
@@ -320,6 +323,8 @@ pub enum Contact {
 - **Swept volumes.** A door swing, a crane's reach, a vehicle's swept path or a cutting tool's path becomes a swept volume (section 13) and is clashed the same way.
 - **Time of first contact.** For moving bodies, `geom-spatial` finds when a moving vertex first meets a moving triangle, or two moving edges meet, by the Tight Inclusion method (Wang et al. 2021, [doi:10.1145/3460775](https://doi.org/10.1145/3460775); MIT code at [6f84001a](https://github.com/Continuous-Collision-Detection/Tight-Inclusion/tree/6f84001a790a9d3362b7c13d410037140d83fa2c)). It subdivides time and space with inclusion tests that never miss a contact. Our port runs on linear motions between grid positions with outward-rounded inclusion tests. It reports the first contact time as an interval: Certified, never missing a contact, possibly reporting one within its stated bound. Its tests use the authors' Apache-2.0 time-of-impact sample and our own exact cases; the 2021 benchmark carries no licence, so it waits until the authors clear it (owner action G285, 32.31).
 - **Scan against model.** Comparing a laser scan with the model (as built against as designed) uses the same distance query, point by point, from `geom-cloud` (section 17).
+
+**As built (G147).** `geom-mesh::classify`: a ray up z from a grid point, its start moved by (ε², ε), so the mesh never moves. A three-plane point takes `beside`: a grid corner off the surface, then one exact trace with `geom-poly`, the point's wedge as the cutter.
 
 ## 19.12 Instancing for huge assemblies
 

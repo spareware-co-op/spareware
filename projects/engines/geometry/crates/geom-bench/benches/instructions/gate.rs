@@ -2661,9 +2661,66 @@ pub mod mesh {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/point_point/typical"))]
+    fn point_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/point_line/typical"))]
+    fn point_line(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/point_plane/typical"))]
+    fn point_plane(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/line_line/typical"))]
+    fn line_line(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/closest_dots/typical"))]
+    fn closest_dots(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/triangles/typical"))]
+    fn triangles(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/locate/typical"))]
+    fn locate(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("mesh/envelope/typical"))]
+    fn envelope(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = mesh;
-        benchmarks = cdt, exact_build
+        benchmarks = cdt, exact_build, locate, point_point, point_line, point_plane, line_line,
+            closest_dots, triangles, envelope
     );
 }
 

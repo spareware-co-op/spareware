@@ -1922,13 +1922,77 @@ pub mod batch {
 
 /// The triangulation's hot path (piece G153, decision 32.44).
 pub mod mesh {
+    use geom_mesh::classify::{Classifier, Located};
+    use geom_mesh::envelope::TriangleEnvelope;
     use geom_mesh::exact::build::{Polygons, build};
     use geom_mesh::exact::{ExactMesh, MeshError};
-    use geom_mesh::{Cdt, CdtError, triangulate};
+    use geom_mesh::{Cdt, CdtError, contact, triangulate};
+    use geom_num::grid::P3;
+    use geom_num::{NumError, Sign, distance};
     use geom_run::{Budget, Exec, WorkMeter};
 
     use super::run;
     use crate::inputs::mesh::Terrain;
+
+    /// `geom_num::distance::point_point` on each pair and clearance.
+    #[inline(never)]
+    pub fn point_point(batch: &[([P3; 2], u64)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&([p, q], c)| distance::point_point(p, q, c));
+    }
+
+    /// `geom_num::distance::point_line` on each line, point and clearance.
+    #[inline(never)]
+    pub fn point_line(batch: &[([P3; 3], u64)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&([a, b, p], c)| {
+            distance::point_line(a, b, p, c)
+        });
+    }
+
+    /// `geom_num::distance::point_plane` on each plane, point and clearance.
+    #[inline(never)]
+    pub fn point_plane(batch: &[([P3; 4], u64)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&([a, b, d, p], c)| {
+            distance::point_plane(a, b, d, p, c)
+        });
+    }
+
+    /// `geom_num::distance::line_line` on each two lines and clearance.
+    #[inline(never)]
+    pub fn line_line(batch: &[([P3; 4], u64)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&([a, b, d, p], c)| {
+            distance::line_line(a, b, d, p, c)
+        });
+    }
+
+    /// The two products of dots a closest-feature test compares.
+    #[inline(never)]
+    pub fn closest_dots(batch: &[[P3; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&[a, b, d, p]| {
+            let (x, y) = (distance::dot_from(a, b, p), distance::dot_from(b, d, p));
+            let (u, v) = (distance::dot_from(d, a, p), distance::dot_from(a, d, p));
+            distance::product_difference(x, y, u, v)
+        });
+    }
+
+    /// `geom_mesh::envelope::TriangleEnvelope`: one built and asked about each point.
+    #[inline(never)]
+    pub fn envelope(batch: &[([P3; 3], P3)], out: &mut Vec<Result<bool, NumError>>) {
+        run(batch, out, |&(t, p)| {
+            TriangleEnvelope::new(t, 1 << 16)?.contains(p)
+        });
+    }
+
+    /// `geom_mesh::contact::triangles` on each pair.
+    #[inline(never)]
+    pub fn triangles(batch: &[[[P3; 3]; 2]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |&[a, b]| {
+            contact::triangles(a, b).map(|c| match c {
+                contact::Contact::Apart => Sign::Negative,
+                contact::Contact::Touch => Sign::Zero,
+                contact::Contact::Cross => Sign::Positive,
+            })
+        });
+    }
 
     /// `geom_mesh::exact::build::build` on each set of polygons, serially, under an unlimited
     /// budget.
@@ -1937,6 +2001,24 @@ pub mod mesh {
         run(batch, out, |polygons| {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
             build(polygons, &Exec::serial(), &mut meter)
+        });
+    }
+
+    /// `geom_mesh::classify::Classifier::locate_all` on each solid's points, its tree built first,
+    /// serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn locate(
+        batch: &[crate::inputs::mesh::Probe],
+        out: &mut Vec<Result<Vec<Located>, MeshError>>,
+    ) {
+        run(batch, out, |probe| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let exec = Exec::serial();
+            Classifier::new(&probe.solid, &exec, &mut meter)?.locate_all(
+                &probe.points,
+                &exec,
+                &mut meter,
+            )
         });
     }
 

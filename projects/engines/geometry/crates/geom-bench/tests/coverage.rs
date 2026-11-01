@@ -58,7 +58,8 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 29] = [
+const GEOM_NUM: [(&str, &str); 30] = [
+    ("distance", include_str!("../../geom-num/src/distance.rs")),
     ("ball", include_str!("../../geom-num/src/ball.rs")),
     ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
@@ -557,6 +558,9 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_mesh",
         &[
             ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),
+            ("classify", include_str!("../../geom-mesh/src/classify.rs")),
+            ("contact", include_str!("../../geom-mesh/src/contact.rs")),
+            ("envelope", include_str!("../../geom-mesh/src/envelope.rs")),
             (
                 "exact::build",
                 include_str!("../../geom-mesh/src/exact/build.rs"),
