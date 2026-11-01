@@ -760,8 +760,11 @@ fn a_crossing_before_a_graze_is_kept() {
     assert_eq!(contacts(&r), [PointContact::Crossing]);
     let p = points(&r);
     assert!((p[0][0] - 0.25).abs() < 1e-3, "{p:?}");
-    assert!(
-        matches!(flagged(&r)[..], [Unresolved::TangentBand { .. }]),
+    // The band is as wide as the run of t the touch stands for, 105 steps: the second-order bound
+    // on its own, the square root of 2·floor over the curvatures' gap, is far narrower.
+    assert_eq!(
+        flagged(&r),
+        [Unresolved::TangentBand { width: Steps(105) }],
         "{:?}",
         r.items()
     );
@@ -902,4 +905,27 @@ fn a_leaning_axis_is_read_on_all_its_coordinates() {
         "{:?}",
         r.items()
     );
+}
+
+#[test]
+fn a_segment_through_a_flat_patch_is_found_where_the_clip_pins_it() {
+    // A flat bilinear patch z = 0 over [−1000, 1000]² and a segment straight down through it: the
+    // patch's fat plane has no thickness and the segment's slabs none either, so each clip pins
+    // its parameter to a single value, and the box of one point must stand.
+    let net = [
+        [-1000.0, -1000.0, 0.0],
+        [-1000.0, 1000.0, 0.0],
+        [1000.0, -1000.0, 0.0],
+        [1000.0, 1000.0, 0.0],
+    ];
+    let flat = SurfaceKind::Nurbs(Surface::new(basis(1), basis(1), &net).unwrap());
+    let r = meet(
+        &bezier(&[[250.0, -500.0, 1000.0], [250.0, -500.0, -1000.0]]),
+        &flat,
+    );
+    assert_eq!(contacts(&r), [PointContact::Crossing]);
+    let p = points(&r);
+    for (got, want) in p[0].iter().zip([0.5, 0.625, 0.25]) {
+        assert!((got - want).abs() < 1e-9, "{p:?}");
+    }
 }
