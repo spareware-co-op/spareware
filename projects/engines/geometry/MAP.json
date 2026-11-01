@@ -7415,7 +7415,47 @@
         22
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a sketch plane or a map could not be made.",
+          "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+          "kinds": [
+            {
+              "doc": "The vectors do not span a plane, or the normal is zero.",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
+              "doc": "u and v do not reach every grid point of their plane: their cross product is not primitive.",
+              "name": "NotPrimitive",
+              "shape": "unit"
+            },
+            {
+              "doc": "The cell's longer diagonal passes [`LATTICE_CELL`]; its square in steps is given.",
+              "name": "CellTooLarge",
+              "shape": "struct"
+            },
+            {
+              "doc": "The point is not on the plane.",
+              "name": "OffPlane",
+              "shape": "unit"
+            },
+            {
+              "doc": "A rotated frame's axes are not orthonormal, or not finite.",
+              "name": "NotOrthonormal",
+              "shape": "unit"
+            },
+            {
+              "doc": "A value leaves the grid's range or the arithmetic's.",
+              "name": "OutOfRange",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_sketch::plane",
+          "name": "PlaneError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Sketch"
       ],
@@ -7431,12 +7471,38 @@
       "job": "The constraint solver, in 2D and 3D.",
       "kind": "kernel",
       "layer": "10",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "a lattice's construction takes O(log n) divisions and O(log n) reduction steps; every map is constant time. No allocation; no recursion.",
+          "does": "a [`SketchPlane`] holds a [`PlaneFrame`]. A [`Lattice`] frame is exact both ways: a sketch point (s, t) is origin + s·u + t·v, whole numbers throughout, and every grid point of the plane is one (s, t). Axis-aligned planes have unit vectors for u and v. A plane with a small whole-number normal, such as a 5-in-12 roof, takes the two shortest vectors of its grid ([`Lattice::of_normal`]), and the sketch measures through their Gram matrix, so a rafter measures its true length ([`Lattice::length_squared`]). A [`Rotated`] frame serves every other plane: its axes are orthonormal doubles, and placing a point in 3D rounds it to the grid.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
+          "guarantees": [
+            "**The class is stated.** [`SketchPlane::place`] gives the point and its class: `Exact` on a lattice, `Certified` to one step on a rotated frame, where the rounding is at most √3/2 of a step and the arithmetic adds under 2^−11 of one.",
+            "**Exact both ways on a lattice.** [`Lattice::locate`] returns the (s, t) of a grid point of the plane, the inverse of [`Lattice::place`], and refuses a point off the plane. u and v must be a basis of the plane's whole grid, which their cross product being primitive says, so no grid point of the plane falls between lattice points.",
+            "**A cell of at most 16 steps.** A lattice whose cell's longer diagonal passes [`LATTICE_CELL`] is refused: the commit rung section 15.1 proposes. Above it, the plane takes a rotated frame.",
+            "**Orthonormal or refused.** A rotated frame's axes must be unit and at right angles to within 2^−40.",
+            "**Checked.** Every integer step is checked; a point outside the grid's range is refused."
+          ],
+          "job": "Sketch planes: how 2D sketch coordinates map into the 3D frame, and how lengths are measured on a plane whose grid is not square.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "doi:10.1145/1597036.1597050"
+            ],
+            "text": "sections 15.1 and 6.1 (`projects/engines/geometry/architecture/15-sketches.md`). The grid of a plane n·x = d from Bézout's identity on n (D. E. Knuth, *The Art of Computer Programming* vol. 2, 3rd ed., section 4.5.2, algorithm X), and its two shortest vectors by Lagrange's reduction (P. Q. Nguyen and D. Stehlé, \"Low-dimensional lattice basis reduction revisited\", ACM Trans. Algorithms 5(4) (2009), doi:10.1145/1597036.1597050). The extended Euclidean step is written here since a kernel crate takes no integer library (chapter 27)."
+          },
+          "path": "geom_sketch::plane",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-sketch",
       "provenance": [],
       "sections": "15, and 22 for its errors, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478.",
+      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216 is done.",
       "summary": "Spare Kit geometry kernel: the constraint solver."
     },
     {

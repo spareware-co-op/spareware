@@ -37,6 +37,8 @@ enum PlaneFrame {
 
 The choice between these two kinds is a section 6 decision (open question).
 
+As built (G216, `geom_sketch::plane`): a lattice frame's u and v must be a basis of the plane's whole grid, so their cross product must be primitive, and its cell's longer diagonal at most 16 steps (`LATTICE_CELL`, this section's proposed rung, kept there until 6.5 adopts it). `Lattice::of_normal` finds the two shortest vectors by Lagrange's reduction. A rotated frame's axes are doubles, unit and at right angles to 2^−40; a placed point states `Certified` to one step, the √3/2 of this section rounded up. A sketch's commit, and with it the lattice-commit class, is G225's.
+
 ## 15.2 Entities and their variables
 
 A variable is one unknown number the solver may change. Each entity owns a few.
