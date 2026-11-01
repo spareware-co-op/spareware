@@ -477,11 +477,15 @@ fn strip(long: f64, wide: f64) -> SurfaceKind {
     SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap())
 }
 
-/// The floor is a length in space, along whichever parameter runs faster.
+/// The floor is a length in space, along whichever parameter runs faster: a box is flagged at the
+/// first cut that brings it within the floor, never before and never long after. Its parent was
+/// wider than the floor along its longer side in space, and a cut keeps at least 7/16 of that side,
+/// so a flagged box reaches more than 7/16 of the floor. Speeds below one in either parameter tell
+/// a length in space from a width in parameters, which speeds of one cannot.
 #[test]
 fn a_flagged_box_stops_at_the_floor_in_space_along_both_parameters() {
     let floor = 1e-2;
-    for (long, wide) in [(64.0, 1.0), (1.0, 64.0)] {
+    for (long, wide) in [(64.0, 1.0), (1.0, 64.0), (0.25, 4.0), (4.0, 0.25)] {
         let centre = [long / 2.0 + 0.0625, wide / 2.0 + 0.03125, 1.0];
         let sphere = Sphere::new(centre, 1.0, frame(), ((0.0, TURN), (-0.5, 0.5))).unwrap();
         let surface = strip(long, wide);
@@ -490,7 +494,8 @@ fn a_flagged_box_stops_at_the_floor_in_space_along_both_parameters() {
         for flagged in &found.flagged {
             let [u, v] = flagged.at;
             let reach = ((u.hi() - u.lo()) * long).max((v.hi() - v.lo()) * wide);
-            assert!(reach <= 8.0 * floor, "{flagged:?}");
+            assert!(reach <= 8.0 * floor, "{long} {wide}: {flagged:?}");
+            assert!(reach > 7.0 / 16.0 * floor, "{long} {wide}: {flagged:?}");
         }
     }
 }
