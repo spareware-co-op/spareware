@@ -312,7 +312,7 @@ fn vertices(input: &Polygons, meter: &mut WorkMeter<'_>) -> Result<Vertices, Mes
 }
 
 /// The offsets `array[i]..array[i + 1]` of item `i`.
-pub(super) fn span(array: &[u32], i: u32) -> Result<(u32, u32), MeshFault> {
+pub(crate) fn span(array: &[u32], i: u32) -> Result<(u32, u32), MeshFault> {
     let start = *at(array, i)?;
     let end = *at(array, i.checked_add(1).ok_or(MeshFault::Shape)?)?;
     Ok((start, end))

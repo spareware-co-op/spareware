@@ -43,6 +43,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::Range;
 
+use geom_bvh::BvhError;
 use geom_num::grid::{P3, Steps};
 use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError};
@@ -59,7 +60,7 @@ pub const NONE: u32 = u32::MAX;
 
 /// Faces and planes to a chunk of the parallel helper: enough that a chunk outweighs its handling,
 /// few enough that a million faces share out over any number of threads.
-const PLAN: ChunkPlan = ChunkPlan::fixed::<1024>();
+pub(crate) const PLAN: ChunkPlan = ChunkPlan::fixed::<1024>();
 
 /// A vertex: a grid point, or the meeting of three planes of the pool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -363,6 +364,10 @@ pub enum MeshError {
     },
     /// More items than 32-bit indices can name.
     Full,
+    /// Inside and outside are undefined for an open mesh.
+    NotClosed,
+    /// The box tree refused.
+    Bvh(BvhError),
     /// The numbers layer refused: a plane over budget, or a fault of its own.
     Num(NumError),
     /// The meter stopped: its budget ran out, the caller cancelled, or memory was refused.
@@ -386,6 +391,8 @@ impl fmt::Display for MeshError {
                 write!(f, "corner {corner} needs its edge plane")
             }
             MeshError::Full => f.write_str("more items than 32-bit indices can name"),
+            MeshError::NotClosed => f.write_str("an open mesh has no inside"),
+            MeshError::Bvh(e) => write!(f, "{e}"),
             MeshError::Num(e) => write!(f, "{e}"),
             MeshError::Stopped(e) => write!(f, "the mesh stopped: {e}"),
             MeshError::BudgetExceeded(e) => write!(f, "the mesh: {e}"),
@@ -400,6 +407,12 @@ impl core::error::Error for MeshError {}
 impl From<MeshFault> for MeshError {
     fn from(e: MeshFault) -> MeshError {
         MeshError::Fault(e)
+    }
+}
+
+impl From<BvhError> for MeshError {
+    fn from(e: BvhError) -> Self {
+        MeshError::Bvh(e)
     }
 }
 
@@ -447,12 +460,12 @@ fn gcd(a: u128, b: u128) -> u128 {
 }
 
 /// A count as a 32-bit index.
-fn index(n: usize) -> Result<u32, MeshError> {
+pub(crate) fn index(n: usize) -> Result<u32, MeshError> {
     u32::try_from(n).map_err(|_| MeshError::Full)
 }
 
 /// A slice's item at a 32-bit index; the arrays not fitting together if it is not there.
-fn at<T>(items: &[T], i: u32) -> Result<&T, MeshFault> {
+pub(crate) fn at<T>(items: &[T], i: u32) -> Result<&T, MeshFault> {
     items.get(i as usize).ok_or(MeshFault::Shape)
 }
 

@@ -213,7 +213,7 @@ pub fn slab(x: i64) -> Polygons {
 
 /// A solid of six faces on these outward planes (under, over, then its four sides in turn), from its
 /// corners, the four under it in turn and then the four over them.
-fn hexahedron(vertices: Vec<Corner>, planes: &[Plane; 6]) -> Polygons {
+pub fn hexahedron(vertices: Vec<Corner>, planes: &[Plane; 6]) -> Polygons {
     let &[base, top, s, e, n, w] = planes;
     let faces: [&[u32]; 6] = [
         &[0, 3, 2, 1],
