@@ -1669,6 +1669,10 @@ fn perturbed(
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one row per public predicate, a table written out"
+)]
 fn matrix() -> Vec<Row> {
     use Class::*;
     use Where::{NotApplicable, Test};

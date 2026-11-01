@@ -166,13 +166,18 @@ fn terms_of(module: &str) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
+/// The larger of two finite doubles.
+fn larger(a: f64, b: f64) -> f64 {
+    if a < b { b } else { a }
+}
+
 /// The largest |v| of each group.
 fn maxima(spec: &Spec, inputs: &Inputs) -> BTreeMap<&'static str, f64> {
     let mut out: BTreeMap<&'static str, f64> = BTreeMap::new();
     for (name, group, _) in spec.inputs {
         let v = (inputs[name] as f64).abs();
         let m = out.entry(group).or_insert(0.0);
-        *m = m.max(v);
+        *m = larger(*m, v);
     }
     (spec.variables)(inputs, &mut out);
     out
@@ -182,7 +187,7 @@ fn maxima(spec: &Spec, inputs: &Inputs) -> BTreeMap<&'static str, f64> {
 fn evaluated(terms: &[(String, Vec<String>)], m: &BTreeMap<&'static str, f64>) -> Vec<f64> {
     terms
         .iter()
-        .map(|(_, groups)| groups.iter().map(|g| m[g.as_str()]).product())
+        .map(|(_, groups)| groups.iter().fold(1.0, |p, g| p * m[g.as_str()]))
         .collect()
 }
 
@@ -316,7 +321,7 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
         let name = spec.moved[which];
         let at = maxima(spec, &inputs);
         let values = evaluated(&terms, &at);
-        let top = values.iter().copied().fold(0.0, f64::max);
+        let top = values.iter().copied().fold(0.0, larger);
         if top == 0.0 {
             continue;
         }
@@ -327,14 +332,14 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             continue;
         };
         let values = evaluated(&terms, &maxima(spec, &first));
-        let top = values.iter().copied().fold(0.0, f64::max);
+        let top = values.iter().copied().fold(0.0, larger);
         let leader = values.iter().position(|v| *v == top).unwrap();
         let next = values
             .iter()
             .enumerate()
             .filter(|(k, _)| *k != leader)
             .map(|(_, v)| *v)
-            .fold(0.0, f64::max);
+            .fold(0.0, larger);
         if top < MARGIN * next {
             continue;
         }
@@ -344,7 +349,7 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             continue;
         };
         let values = evaluated(&terms, &maxima(spec, &inside));
-        let held = values.iter().copied().fold(0.0, f64::max);
+        let held = values.iter().copied().fold(0.0, larger);
         if values[leader] != held || held < MARGIN * next {
             continue;
         }
