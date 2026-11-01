@@ -603,12 +603,6 @@ fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     x * u + y * v + z * w
 }
 
-fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    let [x, y, z] = a;
-    let [u, v, w] = b;
-    [y * w - z * v, z * u - x * w, x * v - y * u]
-}
-
 fn along(a: [f64; 3], b: [f64; 3], t: f64) -> [f64; 3] {
     let [x, y, z] = a;
     let [u, v, w] = b;
