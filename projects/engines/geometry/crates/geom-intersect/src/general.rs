@@ -106,7 +106,7 @@ pub struct Subdivided {
 }
 
 /// `a × b`.
-fn cross(a: &[Interval; 3], b: &[Interval; 3]) -> Result<[Interval; 3], NumError> {
+pub(crate) fn cross(a: &[Interval; 3], b: &[Interval; 3]) -> Result<[Interval; 3], NumError> {
     let [a0, a1, a2] = *a;
     let [b0, b1, b2] = *b;
     Ok([
@@ -117,12 +117,12 @@ fn cross(a: &[Interval; 3], b: &[Interval; 3]) -> Result<[Interval; 3], NumError
 }
 
 /// A span as an interval.
-fn span((a, b): (f64, f64)) -> Result<Interval, NumError> {
+pub(crate) fn span((a, b): (f64, f64)) -> Result<Interval, NumError> {
     Interval::new(a, b)
 }
 
 /// An interval's ends as a span.
-const fn ends(x: Interval) -> (f64, f64) {
+pub(crate) const fn ends(x: Interval) -> (f64, f64) {
     (x.lo(), x.hi())
 }
 
@@ -136,7 +136,7 @@ fn inward(at: f64, (_, hi): (f64, f64)) -> Limit {
 }
 
 /// The partials of `surface` to `order` over `region`, or `None` where they cannot be bounded.
-fn partials(
+pub(crate) fn partials(
     surface: &SurfaceKind,
     region: Region,
     order: usize,
@@ -197,7 +197,7 @@ fn around(
 }
 
 /// A box around a patch's normals.
-fn normals(
+pub(crate) fn normals(
     surface: &SurfaceKind,
     region: Region,
     meter: &mut WorkMeter<'_>,
@@ -207,7 +207,7 @@ fn normals(
 }
 
 /// Whether the normals over two patches may be parallel: no coordinate of n₁ × n₂ keeps its sign.
-fn may_be_parallel(a: &[Interval; 3], b: &[Interval; 3]) -> Result<bool, NumError> {
+pub(crate) fn may_be_parallel(a: &[Interval; 3], b: &[Interval; 3]) -> Result<bool, NumError> {
     let tangent = cross(a, b)?;
     Ok(!tangent.iter().any(|&x| positive(x) || negative(x)))
 }
@@ -223,7 +223,7 @@ fn minus_box(a: &[Interval; 3], b: &[Interval; 3]) -> Result<[Interval; 3], NumE
 }
 
 /// A point as a box of one point.
-fn point(x: f64) -> Result<Interval, NumError> {
+pub(crate) fn point(x: f64) -> Result<Interval, NumError> {
     Interval::point(x)
 }
 

@@ -17,8 +17,9 @@
 //! from; [`project`] (G162), a nearest point is never beaten by a sample of the kind; [`crossings`]
 //! (G163), every point of any two curves lies on both, and two cubic graphs that change sides have
 //! an item between them; [`piercing`] (G164), every point of a curve and a surface lies on both;
-//! [`level`] (G168), a level curve misses nothing a dense grid can see; and [`general`] (G169),
-//! subdivision leaves no crossing outside its settled or flagged pairs. Gate 2 (32.44) adds
+//! [`level`] (G168), a level curve misses nothing a dense grid can see; and [`general`] (G169, G170),
+//! subdivision leaves no crossing outside its settled or flagged pairs, and marching stays on both
+//! surfaces. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the

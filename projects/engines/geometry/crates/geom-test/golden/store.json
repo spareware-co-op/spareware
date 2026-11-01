@@ -266,9 +266,15 @@
               "kind": "corpus",
               "piece": "G169",
               "why": "1 new count benchmark on geom-intersect's subdivision (decision 32.44): a sphere through a plane patch; no existing digest moved"
+            },
+            {
+              "sha256": "9fa3a5cb5a890b07c73fb90432b035c17901a9dc19d0318a45830de510df1a3b",
+              "kind": "corpus",
+              "piece": "G170",
+              "why": "1 new count benchmark on geom-intersect's marching (decision 32.44): the branches of a sphere through a plane patch; no existing digest moved"
             }
           ],
-          "sha256": "9fa3a5cb5a890b07c73fb90432b035c17901a9dc19d0318a45830de510df1a3b"
+          "sha256": "9c0f3d471e31b39dc2a038e37205a513ea11aa4fc0d57eecd0a05282ca194d9e"
         },
         {
           "id": "geom-nurbs/operations",

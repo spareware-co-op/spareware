@@ -19,7 +19,8 @@ by a sample of the kind; `crossings` (`src/crossings.rs`, G163), every point of 
 on both, and two cubic graphs that change sides have an item between them; `piercing`
 (`src/piercing.rs`, G164), every point of a curve and a surface lies on both; `level`
 (`src/level.rs`, G168), a level curve misses nothing a dense grid can see; `general`
-(`src/general.rs`, G169), subdivision leaves no crossing outside its settled or flagged pairs; and,
+(`src/general.rs`, G169, G170), subdivision leaves no crossing outside its settled or flagged pairs,
+and marching stays on both surfaces; and,
 for Gate 2 (decision 32.44: a target per phase-2 code piece), `curves` (`src/curves.rs`) and
 `surfaces` (`src/surfaces.rs`), every curve and surface kind built from any bytes keeps the kind
 contract kit (`geom_curve::contract`, `geom_surface::contract`) under any typed transform.

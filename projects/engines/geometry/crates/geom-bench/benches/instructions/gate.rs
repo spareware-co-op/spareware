@@ -2726,7 +2726,7 @@ pub mod quadrature {
     );
 }
 
-/// geom-intersect's hot paths (pieces G158, G162, G168 and G169; decision 32.44).
+/// geom-intersect's hot paths (pieces G158, G162, G168, G169 and G170; decision 32.44).
 pub mod intersect {
     use super::*;
 
@@ -2775,6 +2775,13 @@ pub mod intersect {
     #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("intersect/trace_silhouette/typical"))]
     fn trace_silhouette(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/march_plate/typical"))]
+    fn march_plate(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
         run
     }
@@ -2844,7 +2851,7 @@ pub mod intersect {
 
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, trace_patch, subdivide_patch, trace_silhouette, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, trace_patch, subdivide_patch, march_plate, trace_silhouette, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch
     );
 }
 
