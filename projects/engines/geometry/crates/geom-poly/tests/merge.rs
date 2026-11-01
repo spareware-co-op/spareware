@@ -12,7 +12,7 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
-use geom_num::plane::Plane;
+use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::merge::{
@@ -860,6 +860,76 @@ fn a_point_on_a_split_is_not_named_by_it() {
     for leaf in [1, 2, 4, 8] {
         let m = tilted(&[wide, spike], &test, leaf).unwrap();
         assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+    }
+}
+
+/// `polygons` with every plane's coefficients multiplied by `k`: the same planes, written longer.
+fn scaled(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
+    let times = |p: &Plane| Plane::new(p.n().map(|v| v * k), p.d() * k).unwrap();
+    polygons
+        .iter()
+        .map(|polygon| Polygon {
+            piece: Piece {
+                face: times(&polygon.piece.face),
+                bounds: polygon.piece.bounds.iter().map(times).collect(),
+            },
+            entry: polygon.entry,
+        })
+        .collect()
+}
+
+/// The name of the grid point `at` among `pieces`: of the planes of every corner there (a piece's
+/// face and two bounds in turn), the first three in plane order that meet in one point.
+fn first_three(pieces: &[Outward], at: P3) -> Tpi {
+    let mut through = Vec::new();
+    for outward in pieces {
+        let Piece { face, bounds } = &outward.piece;
+        let after = bounds.iter().cycle().skip(1);
+        for (bound, next) in bounds.iter().zip(after) {
+            let near = Tpi::meeting(*face, *bound, *next)
+                .unwrap()
+                .to_grid()
+                .unwrap();
+            if near.is_exact() && near.value() == at {
+                through.extend([*face, *bound, *next]);
+            }
+        }
+    }
+    through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    through.dedup();
+    for (i, a) in through.iter().enumerate() {
+        for (j, b) in through.iter().enumerate().skip(i + 1) {
+            for c in through.iter().skip(j + 1) {
+                if normals_sign(a, b, c).unwrap() != Sign::Zero {
+                    return Tpi::meeting(*a, *b, *c).unwrap();
+                }
+            }
+        }
+    }
+    panic!("no three planes meet at {at:?}")
+}
+
+#[test]
+fn a_point_is_named_by_the_first_three_planes_through_it_however_they_are_written() {
+    // Faces on odd whole steps, written with normals one long, and the same faces written with
+    // normals two long and even offsets. Neither is a split of the boxes, 2x = odd, though the one
+    // shares its odd offset with them and the other its normal; and no split passes through a grid
+    // point, so any plane through a vertex here may name it.
+    let blocks = [block([1, 1, 1], [5, 7, 9]), block([3, 3, 3], [11, 13, 7])];
+    for k in [1, 2] {
+        let polygons = scaled(&scene(&blocks), k);
+        for leaf in [1, 2, 4, 1000] {
+            let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            assert!(m.vertices.len() > 8, "two blocks crossing");
+            for (at, point) in m.vertices.iter().enumerate() {
+                let near = point.to_grid().unwrap();
+                assert!(near.is_exact());
+                let name = first_three(&pieces, near.value());
+                assert_eq!(*point, name, "k {k}, leaf {leaf}, vertex {at}");
+            }
+        }
     }
 }
 
