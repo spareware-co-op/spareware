@@ -19,10 +19,10 @@
 //!
 //! Cost: constant and no allocation.
 
+use geom_num::Exactness;
 use geom_num::grid::{GridStep, Steps};
 use geom_num::ladder::quarter_nm;
 use geom_num::real::Real;
-use geom_num::Exactness;
 
 use crate::point::PointError;
 
@@ -69,13 +69,20 @@ impl Accept {
         let admitted = match (*self, reached) {
             (_, Exactness::Exact) => true,
             (
-                Accept::Certified { pos, step, gap: most },
+                Accept::Certified {
+                    pos,
+                    step,
+                    gap: most,
+                },
                 Exactness::Certified { bound, step: of },
             ) => within(bound, of, pos, step) && gap.get() <= most.get(),
             (
                 Accept::Approximate { pos, step },
                 Exactness::Certified { bound: d, step: of }
-                | Exactness::Approximate { deviation: d, step: of },
+                | Exactness::Approximate {
+                    deviation: d,
+                    step: of,
+                },
             ) => within(d, of, pos, step),
             _ => false,
         };

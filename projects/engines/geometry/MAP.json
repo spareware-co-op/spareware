@@ -37,7 +37,42 @@
         17
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a point could not be read, or a result could not be given.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/point.rs",
+          "kinds": [
+            {
+              "doc": "A step of the numbers layer failed: curves that do not meet are [`NumError::Degenerate`].",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The table holds no carrier at this place.",
+              "name": "NoCarrier",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A crossing of these two kinds of curve is not this class of point: an ellipse with a circle or an ellipse is a conic root, and a conic root's first carrier is an ellipse.",
+              "name": "WrongClass",
+              "shape": "unit"
+            },
+            {
+              "doc": "The conic has fewer real roots along the ellipse than this one names.",
+              "name": "NoSuchRoot",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The result would be less exact than the caller accepted: what it would reach, and what was accepted.",
+              "name": "ExactnessNotAccepted",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_2d::point",
+          "name": "PointError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "2D"
       ],
@@ -53,12 +88,106 @@
       "job": "Drafting entities, the 2D arrangement, regions, hatches, 2D booleans and offsets, edits, snaps and references, 2D distance and clearance, survey linework and COGO.",
       "kind": "kernel",
       "layer": "6",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant and no allocation.",
+          "does": "every operation states the classes it can return, and every input states the least exact result the caller takes (chapter 14.3). [`Accept`] is that statement. A result below it is refused with [`PointError::ExactnessNotAccepted`], carrying the class and bound it would reach, so nothing is lowered without being asked (chapter 9). Interactive drafting passes `Certified` with the ladder's own bounds, on record in the operation log.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/accept.rs",
+          "guarantees": [
+            "**Never assumed.** [`Accept::Exact`] admits only an exact result, and a bound is compared by exact integers in quarter nanometres, whatever grid step each side counts in.",
+            "**Ordered.** A class is admitted only by an acceptance of its class or a looser one, and a bound only by a larger or equal one."
+          ],
+          "job": "What a caller accepts: how exact a result must be, stated on the input.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "projects/engines/geometry/architecture/09-representations.md"
+            ],
+            "text": "chapter 14.3's acceptance (`projects/engines/geometry/architecture/14-2d-drafting.md`) and chapter 9's rule that an operation never lowers the class unasked (`projects/engines/geometry/architecture/09-representations.md`)."
+          },
+          "path": "geom_2d::accept",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time per question, as `geom-num`'s predicates are; the table is a `Vec`, one `push` for each carrier.",
+          "does": "a carrier is the whole curve under an entity, the infinite line under a segment or the full circle under an arc (chapter 14.2). [`Curve2`] is the closed list of the kinds this layer decides on exactly: a [`Line2`], a [`Circle2`] and an [`Ellipse2`], each the form `geom-num` holds, so that this crate adds no number type of its own (principle 8). A point made from carriers names them by their [`CurveIx`] in a [`Carriers`] table.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/carrier.rs",
+          "guarantees": [
+            "**Budgets are geom-num's.** A [`Line2`] is a [`Carrier`], within 15.10's budget. A circle is a grid centre with a whole radius, or a rational centre through a grid point; an ellipse is 32.25's. So every predicate on them has the fixed width its module derives, and nothing here widens one.",
+            "**Exact.** [`Curve2::side`] is the sign of a predicate of `geom-num`, zero exactly on the curve.",
+            "**Stable names.** A [`CurveIx`] is a place in the table, which only grows, and never a memory address."
+          ],
+          "job": "Carriers: the whole unbounded curves 2D geometry lies on, and the table that names them.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "the carriers and point classes of chapter 14.2 (`projects/engines/geometry/architecture/14-2d-drafting.md`) and the integer forms of 15.10 (`projects/engines/geometry/architecture/15-sketches.md`), adopted as owner actions G185 and G186 (`projects/engines/geometry/architecture/32-decisions.md`, sections 32.25 and 32.26)."
+          },
+          "path": "geom_2d::carrier",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "about 41 exact comparisons per coordinate, by bisection of the frame, most settled by a `Crossing2` filter, then one exact sign per carrier and per decision. No allocation.",
+          "does": "a constructed point stays its definition until it must become explicit (chapter 6.3). [`commit`] rounds each coordinate to the nearest step, ties to even, decided exactly, and then asks the rounded point every question the implicit one answered: its own carriers, and each [`Decision`] the caller names. If every answer stands the point is [`Commit::Grid`]. If any would change, [`Commit::Kept`] says which, and the definition stays. So a committed point is exactly on its carriers, which is what makes a join one shared point.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/commit.rs",
+          "guarantees": [
+            "**Exactly on its carriers.** [`Commit::Grid`] is returned only after an exact test puts the grid point on both of the point's carriers; there is no tolerance.",
+            "**Flips nothing.** Each [`Decision`] has the same sign on the committed point as was asked.",
+            "**Rounds as 6.3 does.** Each coordinate goes to the nearest step, ties to even, by exact comparison with half steps, never by a floating-point round. A coordinate that rounds outside the frame is [`NumError::OutOfRange`], which is `FrameRangeExceeded`.",
+            "**The definition survives.** Nothing is changed by a commit: [`Commit::Kept`] hands back the point it was given. A root of a quartic is always kept, its place needing no grid (14.2)."
+          ],
+          "job": "Commits: an implicit point to the grid, only where that changes nothing.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/06-numbers.md",
+              "projects/engines/geometry/architecture/14-2d-drafting.md"
+            ],
+            "text": "the commit of chapter 6.3 (`projects/engines/geometry/architecture/06-numbers.md`) and 14.3's budgets and commits (`projects/engines/geometry/architecture/14-2d-drafting.md`)."
+          },
+          "path": "geom_2d::commit",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "reading a one-root point is one `Crossing2` construction, a few dozen products; reading a conic root is a quartic and its roots, as [`geom_num::quartic`] says. No allocation.",
+          "does": "a [`Pt2`] is one of chapter 14.2's four classes. A grid point is whole steps and a rational point homogeneous integers. The other two are implicit: where two carriers cross, stored as the carriers and which crossing, or where an ellipse meets another conic, stored as the two and which root. [`Pt2::place`] reads a point's definition into exact numbers each time it is asked, and every question is asked of those: a rounded copy is never kept, so nothing decided here can differ from what the definition says (chapter 6.3).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/point.rs",
+          "guarantees": [
+            "**Exact.** [`Pt2::on`] is `true` exactly when the point is on the curve: an exact sign, or for a root of a quartic an exact test for a common root.",
+            "**Closed.** Every carrier has rational coefficients, so a crossing of a line or circle with a circle, or of a line with an ellipse, is a one-root point, and every budget is [`geom_num::one_root`]'s; an ellipse with a circle or another ellipse is a conic root, within [`geom_num::quartic`]'s. No line is built through a one-root point (14.2).",
+            "**Typed failure.** Curves that do not meet, a name the table does not hold and a pair of kinds a point class does not cover are each a [`PointError`], never a guess."
+          ],
+          "job": "Points in 2D: grid points, fractions, and points stored as their definitions.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "projects/engines/geometry/architecture/06-numbers.md"
+            ],
+            "text": "the point classes and implicit points of chapter 14.2 (`projects/engines/geometry/architecture/14-2d-drafting.md`) and 6.3 (`projects/engines/geometry/architecture/06-numbers.md`)."
+          },
+          "path": "geom_2d::point",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-2d",
       "provenance": [],
       "sections": "14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G192, G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
+      "status": "carriers, points and commits (G192); built on by pieces G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
       "summary": "Spare Kit geometry kernel: 2D drafting."
     },
     {

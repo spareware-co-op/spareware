@@ -107,10 +107,7 @@ fn circle(c: P2, r: i128) -> Curve2 {
 
 fn table(curves: &[Curve2]) -> (Carriers, Vec<CurveIx>) {
     let mut carriers = Carriers::new();
-    let names = curves
-        .iter()
-        .map(|c| carriers.push(*c).unwrap())
-        .collect();
+    let names = curves.iter().map(|c| carriers.push(*c).unwrap()).collect();
     (carriers, names)
 }
 
@@ -157,10 +154,7 @@ fn the_table_names_what_it_holds() {
         b: a,
         root: Root::First,
     };
-    assert_eq!(
-        point.place(&other).err(),
-        Some(PointError::NoCarrier(a))
-    );
+    assert_eq!(point.place(&other).err(), Some(PointError::NoCarrier(a)));
 }
 
 #[test]
@@ -332,7 +326,10 @@ fn a_point_on_the_grid_commits_and_one_off_it_stays_implicit() {
         b: names[1],
         root: Root::First,
     };
-    assert_eq!(why(commit(&point, &carriers, &[])), Some(Kept::OffCarrier(names[0])));
+    assert_eq!(
+        why(commit(&point, &carriers, &[])),
+        Some(Kept::OffCarrier(names[0]))
+    );
     // One carrier holds the rounded point and the other does not.
     let (carriers, names) = table(&[line(p2(0, 0), p2(10, 0)), line(p2(5, -1), p2(6, 2))]);
     let point = Pt2::Crossing {
@@ -340,7 +337,10 @@ fn a_point_on_the_grid_commits_and_one_off_it_stays_implicit() {
         b: names[1],
         root: Root::First,
     };
-    assert_eq!(why(commit(&point, &carriers, &[])), Some(Kept::OffCarrier(names[1])));
+    assert_eq!(
+        why(commit(&point, &carriers, &[])),
+        Some(Kept::OffCarrier(names[1]))
+    );
     // A line through (3, 4) on the circle of radius 5, and the crossing with no grid form.
     let on_circle = [line(p2(0, 4), p2(1, 4)), circle(p2(0, 0), 5)];
     assert_eq!(at(committed(&on_circle, Root::Second)), Some(p2(3, 4)));
@@ -405,7 +405,11 @@ fn every_committed_point_is_exactly_on_its_carriers() {
         let on = rng.grid();
         let (a, b) = (rng.grid(), rng.grid());
         let through = rng.next() & 1 == 0;
-        let (p, q) = if through { (on, on) } else { (rng.grid(), rng.grid()) };
+        let (p, q) = if through {
+            (on, on)
+        } else {
+            (rng.grid(), rng.grid())
+        };
         let (Ok(l), Ok(m)) = (Line2::through(a, p), Line2::through(b, q)) else {
             continue;
         };
@@ -636,11 +640,14 @@ fn an_acceptance_admits_its_class_and_what_is_better() {
     }
     // The most steps of the coarser grid are past the most of the finer one: counts alone would
     // call them equal.
-    let (top, wide) = (certified(u64::MAX, q0), Accept::Certified {
-        pos: Steps(u64::MAX),
-        step: q1,
-        gap: gap(1.0),
-    });
+    let (top, wide) = (
+        certified(u64::MAX, q0),
+        Accept::Certified {
+            pos: Steps(u64::MAX),
+            step: q1,
+            gap: gap(1.0),
+        },
+    );
     assert!(wide.admit(top, Real::ZERO).is_err());
 }
 
