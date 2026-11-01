@@ -77,6 +77,75 @@ pub fn normals_det(a: &Plane, b: &Plane, c: &Plane) -> Result<Sign, NumError> {
     normals_sign(a, b, c)
 }
 
+/// `a` × `b` in `i128`, if every step fits.
+fn cross_in_words(a: [i128; 3], b: [i128; 3]) -> Option<[i128; 3]> {
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    let minor =
+        |s: i128, t: i128, u: i128, v: i128| s.checked_mul(t)?.checked_sub(u.checked_mul(v)?);
+    Some([
+        minor(ay, bz, az, by)?,
+        minor(az, bx, ax, bz)?,
+        minor(ax, by, ay, bx)?,
+    ])
+}
+
+/// `a` · `b` in `i128`, if every step fits.
+fn dot_in_words(a: [i128; 3], b: [i128; 3]) -> Option<i128> {
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    ax.checked_mul(bx)?
+        .checked_add(ay.checked_mul(by)?)?
+        .checked_add(az.checked_mul(bz)?)
+}
+
+/// The point where three planes meet, as X and w in `i128`, for a point read against many planes,
+/// as a segment's ends and a polygon's corners are. The 4 × 4 determinant of its three planes and
+/// a fourth, s, expands along the offsets to `n_s` · X + `d_s` · w (6.3), so a reading is four
+/// products where the generated predicate redoes the whole determinant. Every step is checked, so
+/// a reading is exact or `None`, and the caller falls back to the predicate.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Meeting {
+    x: [i128; 3],
+    w: i128,
+}
+
+impl Meeting {
+    /// The point where `p`, `q` and `r` meet: X = −`d_p` (`n_q` × `n_r`) + `d_q` (`n_p` × `n_r`) −
+    /// `d_r` (`n_p` × `n_q`) and w = det(`n_p`, `n_q`, `n_r`), the cofactors of the offsets' column;
+    /// `None` if a step leaves `i128`, as for planes near the budget's edge.
+    pub(crate) fn new(p: &Plane, q: &Plane, r: &Plane) -> Option<Self> {
+        let (n_p, n_q, n_r) = (p.n(), q.n(), r.n());
+        let (qr, pr, pq) = (
+            cross_in_words(n_q, n_r)?,
+            cross_in_words(n_p, n_r)?,
+            cross_in_words(n_p, n_q)?,
+        );
+        let mut x = [0; 3];
+        for (slot, ((a, b), c)) in x.iter_mut().zip(qr.iter().zip(&pr).zip(&pq)) {
+            *slot = q
+                .d()
+                .checked_mul(*b)?
+                .checked_sub(p.d().checked_mul(*a)?)?
+                .checked_sub(r.d().checked_mul(*c)?)?;
+        }
+        Some(Meeting {
+            x,
+            w: dot_in_words(n_p, qr)?,
+        })
+    }
+
+    /// The sign of the 4 × 4 determinant of the three planes and `s`, rows in that order: `n_s` · X
+    /// + `d_s` · w, or `None` if a step leaves `i128`.
+    pub(crate) fn reading(&self, s: &Plane) -> Option<Sign> {
+        let value = dot_in_words(s.n(), self.x)?.checked_add(s.d().checked_mul(self.w)?)?;
+        Some(Sign::of_i128(value))
+    }
+
+    /// The sign of w, det(`n_p`, `n_q`, `n_r`): zero when the three planes do not meet in a point.
+    pub(crate) const fn weight(&self) -> Sign {
+        Sign::of_i128(self.w)
+    }
+}
+
 /// p · s − q · r, within 2^167 in magnitude for normal components below 2^83.
 fn minor(p: i128, q: i128, r: i128, s: i128) -> Result<I256, NumError> {
     let product = |a: i128, b: i128| I256::from_i128(a).checked_mul(&I256::from_i128(b));
@@ -290,5 +359,80 @@ pub fn about(line: &Line, first: &Flap, a: &Flap, b: &Flap) -> Result<Ordering, 
         Ok(within(x, turn_about(line, a, b)?))
     } else {
         Ok(x.cmp(&y))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::arithmetic_side_effects,
+        clippy::indexing_slicing,
+        clippy::many_single_char_names,
+        clippy::unwrap_used,
+        reason = "tests: native arithmetic, planes named as in 6.3, and a failure stops the test"
+    )]
+
+    use geom_num::Sign;
+    use geom_num::plane::{Plane, determinant_sign, normals_sign};
+    use proptest::prelude::*;
+
+    use super::Meeting;
+
+    /// Planes with small coefficients, so that ties and parallel normals come often, or with
+    /// normals below 2^24 and offsets below 2^44, where every step stays below 2^122.
+    fn planes(normal: i128, offset: i128) -> impl Strategy<Value = Vec<Plane>> {
+        let one = (prop::array::uniform3(-normal..=normal), -offset..=offset)
+            .prop_filter_map("a zero normal", |(n, d)| Plane::new(n, d).ok());
+        prop::collection::vec(one, 4)
+    }
+
+    fn agrees(rows: &[Plane]) {
+        let [p, q, r, s] = [rows[0], rows[1], rows[2], rows[3]];
+        let at = Meeting::new(&p, &q, &r).unwrap();
+        assert_eq!(at.weight(), normals_sign(&p, &q, &r).unwrap());
+        assert_eq!(
+            at.reading(&s),
+            Some(determinant_sign(&p, &q, &r, &s).unwrap())
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn a_reading_is_the_determinant_when_ties_are_common(rows in planes(2, 3)) {
+            agrees(&rows);
+        }
+
+        #[test]
+        fn a_reading_is_the_determinant_for_a_building(rows in planes(1 << 24, 1 << 44)) {
+            agrees(&rows);
+        }
+    }
+
+    #[test]
+    fn a_meeting_too_wide_for_words_is_none() {
+        let big = 1i128 << 80;
+        let p = Plane::new([big, 1, 0], 0).unwrap();
+        let q = Plane::new([0, big, 1], 0).unwrap();
+        let r = Plane::new([1, 0, big], 0).unwrap();
+        assert!(Meeting::new(&p, &q, &r).is_none());
+        // Normals that fit, offsets that do not: X leaves `i128` though w does not.
+        let far = 1i128 << 124;
+        let [a, b, c] = [[1, 2, 3], [3, -1, 2], [2, 3, -5]].map(|n| Plane::new(n, far).unwrap());
+        assert!(Meeting::new(&a, &b, &c).is_none());
+    }
+
+    #[test]
+    fn a_reading_too_wide_for_words_is_none() {
+        let [p, q, r] =
+            [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(|n| Plane::new(n, -(1i128 << 60)).unwrap());
+        let at = Meeting::new(&p, &q, &r).unwrap();
+        let s = Plane::new([1i128 << 70, 0, 0], 0).unwrap();
+        assert_eq!(at.reading(&s), None);
+        let t = Plane::new([1, 1, 1], 1i128 << 124).unwrap();
+        assert_eq!(at.weight(), Sign::Positive);
+        assert_eq!(
+            at.reading(&t),
+            Some(determinant_sign(&p, &q, &r, &t).unwrap())
+        );
     }
 }

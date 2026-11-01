@@ -50,7 +50,7 @@ use geom_num::{NumError, Sign};
 use geom_run::{Stopped, WorkMeter};
 
 use crate::convex::{ConvexError, Piece};
-use crate::order::normals_det;
+use crate::order::{Meeting, normals_det};
 use crate::plane::{Canonical, canonical};
 use crate::winding::{Entry, Winding, WindingError};
 
@@ -176,14 +176,22 @@ impl Moved {
 /// The sign of the 4 × 4 determinant of the four planes' coefficients, each moved. The determinant
 /// is linear in each offset, and the moves are of different orders, so its sign is that of the
 /// unmoved determinant, or failing that of the largest move with a non-zero cofactor. A plane's
-/// reading of `by` ε subtracts `by` ε from its offset.
+/// reading of `by` ε subtracts `by` ε from its offset. `at`, where `p`, `q` and `r` meet in
+/// machine words, reads the unmoved determinant in four products if it has it.
 #[allow(
     clippy::many_single_char_names,
     reason = "p, q, r and s are the moved planes, and a, b, c and d the same planes unmoved"
 )]
-fn moved_determinant(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign, NumError> {
+fn moved_determinant(
+    (p, q, r): (&Moved, &Moved, &Moved),
+    s: &Moved,
+    at: Option<&Meeting>,
+) -> Result<Sign, NumError> {
     let [a, b, c, d] = [&p.plane, &q.plane, &r.plane, &s.plane];
-    let base = determinant_sign(a, b, c, d)?;
+    let base = match at.and_then(|point| point.reading(d)) {
+        Some(sign) => sign,
+        None => determinant_sign(a, b, c, d)?,
+    };
     if base != Sign::Zero {
         return Ok(base);
     }
@@ -206,32 +214,48 @@ fn moved_determinant(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign,
 /// The reading of a homogeneous point is n · X + d · w over w, and n · X + d · w is the determinant
 /// (6.3).
 fn read(p: &Moved, q: &Moved, r: &Moved, s: &Moved) -> Result<Sign, NumError> {
-    let weight = normals_det(&p.plane, &q.plane, &r.plane)?;
-    Ok(moved_determinant(p, q, r, s)?.mul(weight))
+    let end = End::new(p, q, r)?;
+    Ok(moved_determinant((p, q, r), s, end.at.as_ref())?.mul(end.weight))
 }
 
-/// A stretch of the line where `p` and `q` meet, from plane `from` to plane `to`, with the signs
-/// of the weights of its two ends, which every polygon's test of it reads.
+/// The point where three planes meet, for reading against many: the sign of its weight, and the
+/// point in machine words where it fits.
+#[derive(Clone, Copy)]
+struct End {
+    weight: Sign,
+    at: Option<Meeting>,
+}
+
+impl End {
+    fn new(p: &Moved, q: &Moved, r: &Moved) -> Result<Self, NumError> {
+        let at = Meeting::new(&p.plane, &q.plane, &r.plane);
+        let weight = match &at {
+            Some(point) => point.weight(),
+            None => normals_det(&p.plane, &q.plane, &r.plane)?,
+        };
+        Ok(End { weight, at })
+    }
+}
+
+/// A stretch of the line where `p` and `q` meet, from plane `from` to plane `to`, with its two
+/// ends, which every polygon's test of it reads.
 struct Segment {
     p: Moved,
     q: Moved,
     from: Moved,
     to: Moved,
-    weights: (Sign, Sign),
+    ends: (End, End),
 }
 
 impl Segment {
     fn new(p: Moved, q: Moved, from: Moved, to: Moved) -> Result<Self, NumError> {
-        let weights = (
-            normals_det(&p.plane, &q.plane, &from.plane)?,
-            normals_det(&p.plane, &q.plane, &to.plane)?,
-        );
+        let ends = (End::new(&p, &q, &from)?, End::new(&p, &q, &to)?);
         Ok(Segment {
             p,
             q,
             from,
             to,
-            weights,
+            ends,
         })
     }
 }
@@ -251,11 +275,11 @@ fn count_crossing(
         q,
         from,
         to,
-        weights: (at_from, at_to),
+        ends: (at_from, at_to),
     } = segment;
     let face = Moved::fixed(polygon.piece.face);
-    let start = moved_determinant(p, q, from, &face)?.mul(*at_from);
-    let end = moved_determinant(p, q, to, &face)?.mul(*at_to);
+    let start = moved_determinant((p, q, from), &face, at_from.at.as_ref())?.mul(at_from.weight);
+    let end = moved_determinant((p, q, to), &face, at_to.at.as_ref())?.mul(at_to.weight);
     if start == end || !covers(polygon, p, q, &face)? {
         return Ok(());
     }
@@ -404,9 +428,10 @@ struct Walked {
 
 /// Whether `polygon` covers the point where `p`, `q` and `r` meet.
 fn covers(polygon: &Polygon, p: &Moved, q: &Moved, r: &Moved) -> Result<bool, NumError> {
-    let weight = normals_det(&p.plane, &q.plane, &r.plane)?;
+    let end = End::new(p, q, r)?;
     for bound in &polygon.piece.bounds {
-        if moved_determinant(p, q, r, &Moved::fixed(*bound))?.mul(weight) != Sign::Positive {
+        let reading = moved_determinant((p, q, r), &Moved::fixed(*bound), end.at.as_ref())?;
+        if reading.mul(end.weight) != Sign::Positive {
             return Ok(false);
         }
     }

@@ -44,7 +44,7 @@ use geom_num::{NumError, Sign};
 use geom_run::WorkMeter;
 
 use crate::convex::{ConvexError, Piece, opposite};
-use crate::order::{Line, along, normals_det};
+use crate::order::{Line, Meeting, along, normals_det};
 use crate::plane::canonical;
 
 /// What a plane does to a piece.
@@ -202,17 +202,58 @@ fn reaches(piece: &Piece, other: &Piece) -> Result<bool, NumError> {
         && along(&line, &b_in, &a_out)? == Ordering::Less)
 }
 
-/// Whether `other`, on another plane, can cut any piece of `polygon`: `polygon` has corners on both
-/// sides of `other`'s plane, and `other` crosses `polygon`'s plane or ends on it. A piece lies in
-/// its polygon, so where the first fails [`clip`] splits no piece, and where the second fails
-/// [`reaches`] holds for none, whatever the piece.
-fn can_cut(polygon: &Piece, other: &Piece) -> Result<bool, NumError> {
-    let signs = corners(polygon, &other.face)?;
-    if !signs.contains(&Sign::Positive) || !signs.contains(&Sign::Negative) {
+/// The points of `piece`'s corners, corner i where bounds i and i + 1 meet, in machine words where
+/// they fit, for reading against many planes.
+fn meetings(piece: &Piece) -> Vec<Option<Meeting>> {
+    let after = piece.bounds.iter().cycle().skip(1);
+    piece
+        .bounds
+        .iter()
+        .zip(after)
+        .map(|(bound, next)| Meeting::new(&piece.face, bound, next))
+        .collect()
+}
+
+/// Which signs `plane` takes at the corners of `piece`, whose points are `at`, as whether it is
+/// positive, negative and zero at any: [`corners`]'s signs, each read from its point where that
+/// fits, else by the predicate as [`corners`] does.
+fn signs_seen(piece: &Piece, at: &[Option<Meeting>], plane: &Plane) -> Result<[bool; 3], NumError> {
+    let mut seen = [false; 3];
+    let after = piece.bounds.iter().cycle().skip(1);
+    for ((bound, next), point) in piece.bounds.iter().zip(after).zip(at) {
+        let read = point
+            .filter(|p| p.weight() != Sign::Zero)
+            .and_then(|p| Some(p.reading(plane)?.mul(p.weight())));
+        let sign = match read {
+            Some(sign) => sign,
+            None => plane.side_of_tpi(&Tpi::meeting(piece.face, *bound, *next)?)?,
+        };
+        let at = match sign {
+            Sign::Positive => 0,
+            Sign::Negative => 1,
+            Sign::Zero => 2,
+        };
+        if let Some(slot) = seen.get_mut(at) {
+            *slot = true;
+        }
+    }
+    Ok(seen)
+}
+
+/// Whether `other`, on another plane, can cut any piece of `polygon`, whose corners' points are
+/// `at`: `polygon` has corners on both sides of `other`'s plane, and `other` crosses `polygon`'s
+/// plane or ends on it. A piece lies in its polygon, so where the first fails [`clip`] splits no
+/// piece, and where the second fails [`reaches`] holds for none, whatever the piece.
+fn can_cut(
+    (polygon, other): (&Piece, &Piece),
+    at: (&[Option<Meeting>], &[Option<Meeting>]),
+) -> Result<bool, NumError> {
+    let [positive, negative, _] = signs_seen(polygon, at.0, &other.face)?;
+    if !positive || !negative {
         return Ok(false);
     }
-    let on = corners(other, &polygon.face)?;
-    Ok(on.contains(&Sign::Zero) || (on.contains(&Sign::Positive) && on.contains(&Sign::Negative)))
+    let [positive, negative, zero] = signs_seen(other, at.1, &polygon.face)?;
+    Ok(zero || (positive && negative))
 }
 
 /// `piece`, cut by the bounds of `other`, on its plane, where the two overlap: the parts beyond each
@@ -248,15 +289,18 @@ pub fn local_cuts(
     for polygon in polygons {
         planes.push(canonical(&polygon.face)?.plane);
     }
+    let points: Vec<Vec<Option<Meeting>>> = polygons.iter().map(meetings).collect();
     let mut out: Vec<Vec<Piece>> = Vec::with_capacity(polygons.len());
-    for ((at, polygon), own) in polygons.iter().enumerate().zip(&planes) {
+    for (((at, polygon), own), own_points) in polygons.iter().enumerate().zip(&planes).zip(&points)
+    {
         let mut pieces = alloc::vec![polygon.clone()];
-        for ((other_at, other), plane) in polygons.iter().enumerate().zip(&planes) {
+        let others = polygons.iter().enumerate().zip(&planes).zip(&points);
+        for (((other_at, other), plane), other_points) in others {
             if other_at == at {
                 continue;
             }
             let coplanar = own == plane;
-            if !coplanar && !can_cut(polygon, other)? {
+            if !coplanar && !can_cut((polygon, other), (own_points, other_points))? {
                 // Charged as if each piece had been compared, so the work counted is the same.
                 meter.charge(u64::try_from(pieces.len()).unwrap_or(u64::MAX))?;
                 continue;
