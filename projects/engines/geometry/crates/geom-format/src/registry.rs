@@ -514,7 +514,9 @@ pub const TABLES: &[(u64, &str, &str)] = &[
     (
         body::table::POINTS,
         "points",
-        "x, y, z in grid steps (an `i64` column of three per point)",
+        "x, y, z in grid steps (an `i64` column of three per point); in a chunk holding a \
+         meeting, first a kind per row (0 grid point, 1 meeting), then x, y, z for the grid points \
+         only, then three plane references per meeting",
     ),
     (
         body::table::SURFACES,
@@ -542,6 +544,12 @@ pub const TABLES: &[(u64, &str, &str)] = &[
         body::table::VERTEX_NAMES,
         "vertex names",
         "16 bytes per vertex, one byte string",
+    ),
+    (
+        body::table::PLANES,
+        "planes",
+        "n_x, n_y, n_z and d of each plane, reduced: four integers per plane, one array; listed \
+         only when the body has a meeting",
     ),
 ];
 

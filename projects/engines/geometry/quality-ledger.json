@@ -6281,7 +6281,48 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "A mesh that was built has rows that fit and corners inside the frame, so drawing it cannot end here, and the arm left in its place refuses as well."
-    }
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
+      "mutant": "replace < with <= in arenas",
+      "line_text": "sense: if fin.from < fin.to {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rising is only compared with rising of another fin of the same edge, and a fin's ends differ, so turning every answer over leaves every comparison as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in radial",
+      "line_text": "reversed: rising(&fin) == rising(&start),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant turns every flap about the line by half a turn, the reference with the rest. about orders flaps by their angle from the reference, and that does not change when all of them turn together."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
+      "mutant": "replace + with * in check",
+      "line_text": "let outside = beyond + 1.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
+    },
+    {}
   ],
   "coverage_off": [
     {

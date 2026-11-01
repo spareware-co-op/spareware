@@ -68,7 +68,7 @@ pub enum Item {
     Make {
         /// The primitive.
         shape: Shape,
-        /// Which of the taken result's points to start on, and how far from it.
+        /// Which of the taken result's grid points to start on, and how far from it.
         at: Option<(u8, [i64; 3])>,
     },
     /// A transform or a pattern of an earlier result.
@@ -418,7 +418,7 @@ fn run(case: &Case) -> Result<Run, Finding> {
         let (call, input) = match &entry.item {
             Item::Make { shape, at } => {
                 let point = at.and_then(|(which, near)| {
-                    // Phase-4 train: the grid points only (G129's meetings of planes have none).
+                    // Grid points only: a meeting of planes has no grid place of its own.
                     let points: Vec<P3> = taken?
                         .body
                         .arenas()

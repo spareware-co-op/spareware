@@ -14,6 +14,7 @@
 //! solids agree with counted cells; [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
 //! mesh and gives one mesh in any input order; [`cdt`] (G153), `geom-mesh`'s triangulation is a true constrained
 //! Delaunay triangulation and one answer in any input order; [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has twenty targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -36,7 +37,8 @@
 //! (G101), the primitives and transforms return only what the full checker passes, keep their
 //! laws, and refuse with a typed error; [`sequence`] (G116), whole operation logs replay to the
 //! same hash and keep every law at every step; [`cbor`] (G91), `geom-format`'s strict CBOR decoder
-//! and its text form never panic, refuse inside their input and convert both ways bit for bit; and
+//! and its text form never panic, refuse inside their input and convert both ways bit for bit; [`planes`] (G123), `geom-poly`'s canonical planes and
+//! arrangement predicates give one entry to one plane and one order to any points or rays; and
 //! [`variants`] (G42), every variant of every generated exact path returns the exact value of its
 //! description, evaluated in big integers. [`adversarial`] holds the generators aimed at chapter
 //! 28.5's hard cases, and [`robustness`] counts how many plain designs succeed. The layout every

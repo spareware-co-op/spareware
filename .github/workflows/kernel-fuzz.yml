@@ -33,8 +33,10 @@ name: Kernel fuzzing and proofs
 # geom-math, geom-name, geom-num, geom-nurbs, geom-op, geom-run, geom-surface, geom-test and
 # geom-topo today;
 # every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
-# geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-name, geom-num, geom-nurbs, geom-op,
-# geom-poly, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with engine-geometry and
+# geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-mesh, geom-name, geom-num,
+# geom-nurbs, geom-op, geom-poly, geom-pool, geom-run, geom-sketch, geom-spatial, geom-subd,
+# geom-surface, geom-test and geom-topo today, with engine-geometry and kit-core through geom-gen's
+# facade generators;
 # kit-core through geom-gen's facade generators;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
 # its job kani-op, geom-format for kani-format, the workspace
@@ -61,6 +63,13 @@ name: Kernel fuzzing and proofs
 on:
   pull_request:
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - ".clusterfuzzlite/**"
+      - ".github/workflows/kernel-fuzz.yml"
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
@@ -92,16 +101,16 @@ on:
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
       - "projects/kit/crates/kit-core/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".cargo/**"
-      - "rust-toolchain.toml"
-      - "rust-toolchain"
-      - ".clusterfuzzlite/**"
-      - ".github/workflows/kernel-fuzz.yml"
   push:
     branches: [main]
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".cargo/**"
+      - "rust-toolchain.toml"
+      - "rust-toolchain"
+      - ".clusterfuzzlite/**"
+      - ".github/workflows/kernel-fuzz.yml"
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
@@ -133,13 +142,6 @@ on:
       - "projects/engines/geometry/crates/geom-test/**"
       - "projects/engines/geometry/crates/geom-topo/**"
       - "projects/kit/crates/kit-core/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".cargo/**"
-      - "rust-toolchain.toml"
-      - "rust-toolchain"
-      - ".clusterfuzzlite/**"
-      - ".github/workflows/kernel-fuzz.yml"
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
 

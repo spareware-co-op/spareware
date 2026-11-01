@@ -442,6 +442,7 @@ fn vertex_off_surface(body: &Body, exactness: Exactness) -> Option<Broken> {
     let by = past(exactness)?;
     same(body, exactness, |a| {
         let (row, normal) = on_flat(a)?;
+        // A meeting of planes is exact and is not moved: the fault is built on a grid vertex.
         let moved = along(a.points.get(row)?.grid()?, normal, by)?;
         a.points.set(row, moved.into()).ok()
     })
@@ -548,7 +549,8 @@ fn quarter_size(a: &Arenas) -> Option<[i64; 3]> {
 
 /// Two crossing faces: a flat body's solid gains a second shell, a copy of its own moved a quarter
 /// of its size along each axis, so faces of the two cross away from any shared edge. Half its size
-/// would seat an L's copy in the L's notch, touching and not crossing.
+/// would seat an L's copy in the L's notch, touching and not crossing. Built on a body of grid
+/// points only: a meeting of planes would need its planes moved too.
 #[allow(
     clippy::too_many_lines,
     reason = "one pass copies every arena's rows; split, each piece would carry the same counts"

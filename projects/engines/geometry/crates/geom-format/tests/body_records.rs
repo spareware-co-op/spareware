@@ -18,6 +18,7 @@ mod topo;
 
 use std::collections::BTreeSet;
 
+use geom_curve::{CurveKind, Line};
 use geom_format::body::{
     BODY_TAG, BodyError, CHUNK_ROWS, CHUNK_TAG, SCHEMA, StoredBody, chunk_ids, read_body,
     write_body,
@@ -26,10 +27,17 @@ use geom_format::cbor::{Decoder, Item};
 use geom_format::content::ContentId;
 use geom_format::kinds::{KindError, write_curve, write_surface};
 use geom_format::record::{COPY_ALWAYS, REQUIRED, Record};
+use geom_math::Box3;
 use geom_math::{Axis, Transform, TypedTransform};
+use geom_num::grid::P3;
+use geom_num::plane::Plane;
 use geom_op::cbor::Encoder;
+use geom_surface::{Plane as Flat, SurfaceKind};
 use geom_topo::order::{NameKey, Names};
-use geom_topo::{Body, BodyKind, Builder};
+use geom_topo::{
+    Body, BodyKind, Builder, Edge, Face, Fin, Loop, PointKind, Region, RegionKind, Sense, Shell,
+    Vertex,
+};
 
 use topo::{ix, many_faces, meter, wall, wall_builder, wall_outside, wall_rows};
 
@@ -521,4 +529,383 @@ fn an_index_lists_its_chunks_in_the_writers_order() {
         chunk_ids(&short, &mut meter()),
         Err(BodyError::Cbor(_))
     ));
+}
+
+// Meeting points (G129): a vertex where three planes of the body's plane pool meet.
+
+/// The plane where coordinate `k` is `at`, its normal along that axis.
+fn axis(k: usize, at: i128) -> Plane {
+    let mut n = [0; 3];
+    n[k] = 1;
+    Plane::new(n, -at).unwrap()
+}
+
+/// The corners of a box, by bits, x first.
+const CORNERS: [[u32; 4]; 6] = [
+    [0, 2, 3, 1],
+    [4, 5, 7, 6],
+    [0, 1, 5, 4],
+    [2, 6, 7, 3],
+    [0, 4, 6, 2],
+    [1, 3, 7, 5],
+];
+
+/// Corner `bits` of the box from 0 of side 10.
+fn corner(bits: u32) -> [i64; 3] {
+    [0, 1, 2].map(|k| 10 * i64::from(bits >> k & 1))
+}
+
+/// A box from 0 of side 10: the corners whose x bit is 0 meet three of the pool's six axis planes,
+/// the others are grid points. `extra` planes follow the six in the pool, and corner 0 meets the
+/// first of them in place of its x plane when there is one.
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    reason = "one block per arena, as geom-topo's own meeting box; corners of ten steps are exact"
+)]
+fn mixed_box(extra: &[Plane]) -> Builder {
+    let mut b = Builder::new();
+    let a = &mut b.arenas;
+    a.regions
+        .extend(&[
+            Region {
+                kind: RegionKind::Solid,
+                first_shell: Some(ix(0)),
+            },
+            Region {
+                kind: RegionKind::Void,
+                first_shell: None,
+            },
+        ])
+        .unwrap();
+    a.shells
+        .extend(&[Shell {
+            region: ix(0),
+            next: None,
+            first_face: Some(ix(0)),
+        }])
+        .unwrap();
+    for k in 0..3 {
+        for at in [0, 10] {
+            a.planes.push(axis(k, at)).unwrap();
+        }
+    }
+    for plane in extra {
+        a.planes.push(*plane).unwrap();
+    }
+    for bits in 0..8 {
+        let point = if bits & 1 == 0 {
+            let mut place = [0, 1, 2].map(|k| ix(k * 2 + (bits >> k & 1)));
+            if bits == 0 && !extra.is_empty() {
+                place[0] = ix(6);
+            }
+            PointKind::Meet(place)
+        } else {
+            let [x, y, z] = corner(bits);
+            PointKind::Grid(P3::new(x, y, z).unwrap())
+        };
+        a.points.push(point).unwrap();
+        a.vertices.push(Vertex { point: ix(bits) }).unwrap();
+    }
+    let flat = Flat::new(
+        [0.0; 3],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        ((0.0, 1.0), (0.0, 1.0)),
+    )
+    .unwrap();
+    a.surfaces.push(SurfaceKind::Plane(flat)).unwrap();
+    let bound = Box3::new(P3::new(0, 0, 0).unwrap(), P3::new(10, 10, 10).unwrap()).unwrap();
+    let mut pairs: Vec<(u32, u32)> = Vec::new();
+    for (f, ring) in CORNERS.iter().enumerate() {
+        let f = f as u32;
+        a.faces
+            .push(Face {
+                shell: ix(0),
+                next: (f < 5).then(|| ix(f + 1)),
+                surface: ix(0),
+                sense: Sense::Forward,
+                first_loop: Some(ix(f)),
+                bound,
+            })
+            .unwrap();
+        a.loops
+            .push(Loop {
+                face: ix(f),
+                next: None,
+                first_fin: Some(ix(f * 4)),
+            })
+            .unwrap();
+        for k in 0..4_u32 {
+            let (s, t) = (ring[k as usize], ring[((k + 1) % 4) as usize]);
+            let key = (s.min(t), s.max(t));
+            let e = pairs.iter().position(|&q| q == key).map_or_else(
+                || {
+                    pairs.push(key);
+                    pairs.len() as u32 - 1
+                },
+                |e| e as u32,
+            );
+            a.fins
+                .push(Fin {
+                    loop_: ix(f),
+                    next: ix(f * 4 + (k + 1) % 4),
+                    prev: ix(f * 4 + (k + 3) % 4),
+                    edge: ix(e),
+                    sense: if s < t {
+                        Sense::Forward
+                    } else {
+                        Sense::Reversed
+                    },
+                    radial: ix(f * 4 + k),
+                    pcurve: None,
+                })
+                .unwrap();
+        }
+    }
+    for (e, &(s, t)) in pairs.iter().enumerate() {
+        let (from, to) = (corner(s).map(|x| x as f64), corner(t).map(|x| x as f64));
+        let d = [0, 1, 2].map(|k| to[k] - from[k]);
+        a.curves
+            .push(CurveKind::Line(Line::new(from, d, (0.0, 1.0)).unwrap()))
+            .unwrap();
+        a.edges
+            .push(Edge {
+                first_fin: None,
+                start: Some(ix(s)),
+                end: Some(ix(t)),
+                curve: ix(e as u32),
+            })
+            .unwrap();
+    }
+    b
+}
+
+/// [`mixed_box`], published.
+fn mixed(extra: &[Plane]) -> Body {
+    mixed_box(extra)
+        .publish(BodyKind::Solid, ix(1), &mut meter())
+        .unwrap()
+}
+
+/// The index's tables: code and rows, in order.
+fn listed(s: &StoredBody) -> Vec<(u64, u64)> {
+    let mut d = Decoder::new(&s.index.payload, 8);
+    let mut m = meter();
+    let mut next = || d.next(&mut m).unwrap().unwrap();
+    let uint = |item: Item| match item {
+        Item::Uint(n) => n,
+        other => panic!("{other:?}"),
+    };
+    for _ in 0..3 {
+        next();
+    }
+    let Item::Array(count) = next() else {
+        panic!("the tables")
+    };
+    let mut out = Vec::new();
+    for _ in 0..count {
+        next();
+        let code = uint(next());
+        let rows = uint(next());
+        let Item::Array(chunks) = next() else {
+            panic!("the chunks")
+        };
+        for _ in 0..chunks * 3 {
+            next();
+        }
+        out.push((code, rows));
+    }
+    out
+}
+
+/// The number of columns of a chunk.
+fn columns(r: &Record) -> u64 {
+    let mut d = Decoder::new(&r.payload, 4);
+    let mut m = meter();
+    for _ in 0..4 {
+        d.next(&mut m).unwrap();
+    }
+    match d.next(&mut m).unwrap() {
+        Some(Item::Array(n)) => n,
+        other => panic!("{other:?}"),
+    }
+}
+
+/// A chunk of table `code` at place 0 with `rows` rows and the `width` columns `write` encodes.
+fn chunk(code: u64, rows: u64, width: u64, write: impl FnOnce(&mut Encoder)) -> Record {
+    let mut e = Encoder::new();
+    e.array(4).unwrap();
+    e.uint(code).unwrap();
+    e.uint(0).unwrap();
+    e.uint(rows).unwrap();
+    e.array(width).unwrap();
+    write(&mut e);
+    Record {
+        tag: CHUNK_TAG,
+        flags: REQUIRED,
+        schema: SCHEMA,
+        depends: Vec::new(),
+        payload: e.finish().unwrap().into_bytes(),
+    }
+}
+
+/// `s` with table `code`'s chunks replaced by `with`, listed with `rows` rows, or not listed.
+fn swap(s: &StoredBody, code: u64, rows: Option<u64>, with: Vec<Record>) -> StoredBody {
+    let mut tables: Vec<(u64, u64, Vec<Record>)> = listed(s)
+        .into_iter()
+        .filter(|&(c, _)| c != code)
+        .map(|(c, n)| (c, n, table(s, c)))
+        .collect();
+    if let Some(rows) = rows {
+        tables.push((code, rows, with));
+        tables.sort_by_key(|t| t.0);
+    }
+    forge(0, 2, &tables, 0, false)
+}
+
+/// The mixed box's planes chunk with `list` in place of its planes.
+fn planes(list: &[[i128; 4]]) -> Record {
+    let rows = list.len() as u64;
+    chunk(16, rows, 1, |e| {
+        e.array(rows * 4).unwrap();
+        for v in list.iter().flatten() {
+            e.int(*v).unwrap();
+        }
+    })
+}
+
+/// The mixed box's six axis planes as four integers each, the first replaced by `first`.
+fn six(first: [i128; 4]) -> Vec<[i128; 4]> {
+    let mut list = vec![first];
+    for (k, at) in [(0, 10), (1, 0), (1, 10), (2, 0), (2, 10)] {
+        let mut n = [0; 4];
+        n[k] = 1;
+        n[3] = -at;
+        list.push(n);
+    }
+    list
+}
+
+/// The mixed box's points chunk written by hand: each row's kind, then the grid points' x, y and
+/// z, then the meetings' plane references.
+fn points(kinds: &[u64], xyz: &[i64], refs: &[u64]) -> Record {
+    chunk(8, kinds.len() as u64, 3, |e| {
+        e.array(kinds.len() as u64).unwrap();
+        for k in kinds {
+            e.uint(*k).unwrap();
+        }
+        e.i64_column(xyz).unwrap();
+        e.array(refs.len() as u64).unwrap();
+        for r in refs {
+            e.uint(*r).unwrap();
+        }
+    })
+}
+
+#[test]
+fn a_body_with_meetings_reads_back_index_for_index() {
+    let body = mixed(&[]);
+    let stored = store(&body);
+    let back = read_body(&stored, &mut meter()).unwrap();
+    assert_eq!(back, body);
+    assert_eq!(store(&back), stored);
+    // The plane pool is table 16, after the rest, its six planes in one chunk.
+    let tables = listed(&stored);
+    assert_eq!(tables.last(), Some(&(16, 6)));
+    assert_eq!(tables.len(), 12);
+    // The points chunk holds meetings, so it has its three columns.
+    assert_eq!(columns(&table(&stored, 8)[0]), 3);
+    assert_eq!(forge(0, 2, &tables_of(&stored, &tables), 0, false), stored);
+    // The writer's chunks, written by hand from 24.3's rule, are the same bytes.
+    let mut kinds = Vec::new();
+    let (mut xyz, mut refs) = (Vec::new(), Vec::new());
+    for bits in 0..8_u32 {
+        kinds.push(u64::from(bits & 1 == 0));
+        if bits & 1 == 0 {
+            refs.extend([0, 1, 2].map(|k| u64::from(k * 2 + (bits >> k & 1)) + 1));
+        } else {
+            xyz.extend(corner(bits));
+        }
+    }
+    assert_eq!(table(&stored, 8), vec![points(&kinds, &xyz, &refs)]);
+    assert_eq!(table(&stored, 16), vec![planes(&six([1, 0, 0, 0]))]);
+}
+
+#[test]
+fn a_body_of_grid_points_alone_is_stored_as_before_meetings() {
+    let stored = store(&wall());
+    assert!(listed(&stored).iter().all(|&(code, _)| code <= 11));
+    assert!(table(&stored, 8).iter().all(|c| columns(c) == 1));
+    assert_eq!(table(&stored, 16), Vec::new());
+}
+
+#[test]
+fn a_plane_past_64_bits_reads_back_as_a_bignum() {
+    // Reduced, its normal past 2^64 and its offset past 2^100, and meeting the y and z planes of
+    // corner 0 in one point.
+    let big = Plane::new([(1 << 70) + 1, 3, 0], -((1 << 100) + 7)).unwrap();
+    let body = mixed(&[big]);
+    let stored = store(&body);
+    assert_eq!(read_body(&stored, &mut meter()).unwrap(), body);
+    assert_eq!(listed(&stored).last(), Some(&(16, 7)));
+    // Negative as well as positive.
+    let below = Plane::new([-(1 << 82), 1, 0], (1 << 124) - 1).unwrap();
+    let body = mixed(&[below]);
+    assert_eq!(read_body(&store(&body), &mut meter()).unwrap(), body);
+}
+
+#[test]
+fn the_writer_refuses_a_plane_that_is_not_reduced() {
+    let twice = Plane::new([2, 0, 0], -4).unwrap();
+    assert!(matches!(
+        write_body(&mixed(&[twice]), &mut meter()),
+        Err(BodyError::Shape(_))
+    ));
+}
+
+#[test]
+fn planes_that_break_the_rules_are_refused() {
+    let stored = store(&mixed(&[]));
+    let shape = |s: &StoredBody| matches!(read_body(s, &mut meter()), Err(BodyError::Shape(_)));
+    let with = |list: Vec<[i128; 4]>| swap(&stored, 16, Some(6), vec![planes(&list)]);
+    // The writer's planes, written by hand, read back.
+    assert!(read_body(&with(six([1, 0, 0, 0])), &mut meter()).is_ok());
+    // A plane not reduced; a normal past 83 bits; an offset past 125; a zero normal.
+    assert!(shape(&with(six([2, 0, 0, 0]))));
+    assert!(shape(&with(six([1 << 84, 1, 0, 0]))));
+    assert!(shape(&with(six([1, 0, 0, 1 << 126]))));
+    assert!(shape(&with(six([0, 0, 0, 1]))));
+    // Where corner 0 meets: x = 0 made parallel to its y plane, so the three meet in no point.
+    let mut parallel = six([1, 0, 0, 0]);
+    parallel[0] = [0, 1, 0, -5];
+    assert!(shape(&with(parallel)));
+    // A plane table listed empty, or missing while meetings name its planes.
+    assert!(shape(&swap(&stored, 16, Some(0), Vec::new())));
+    assert!(read_body(&swap(&stored, 16, None, Vec::new()), &mut meter()).is_err());
+}
+
+#[test]
+fn points_that_break_the_rules_are_refused() {
+    let stored = store(&mixed(&[]));
+    let shape = |s: &StoredBody| matches!(read_body(s, &mut meter()), Err(BodyError::Shape(_)));
+    let all: Vec<i64> = (0..8).flat_map(corner).collect();
+    let with = |chunk: Record| swap(&stored, 8, Some(8), vec![chunk]);
+    // Every corner a grid point, with a kind column: grid points alone have one column.
+    assert!(shape(&swap(
+        &with(points(&[0; 8], &all, &[])),
+        16,
+        None,
+        Vec::new()
+    )));
+    // A kind of 2.
+    let mut kinds = [0; 8];
+    kinds[0] = 2;
+    assert!(shape(&with(points(&kinds, &all[3..], &[1, 3, 5]))));
+    // A meeting with two plane references, or with a reference of 0.
+    kinds[0] = 1;
+    assert!(shape(&with(points(&kinds, &all[3..], &[1, 3]))));
+    assert!(shape(&with(points(&kinds, &all[3..], &[0, 3, 5]))));
+    // A grid point short of a coordinate.
+    assert!(shape(&with(points(&kinds, &all[4..], &[1, 3, 5]))));
 }
