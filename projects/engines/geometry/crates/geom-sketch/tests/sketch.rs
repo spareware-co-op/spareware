@@ -541,13 +541,17 @@ fn references_must_resolve_and_values_be_sound() {
         })),
         Err(SketchError::NotFinite)
     );
+    // A reference has no variable to fix.
+    let anchor = id(2, 1);
+    s.add_entity(entity(anchor, EntityKind::Reference { x: 0.0, y: 0.0 }))
+        .unwrap();
     assert_eq!(
         s.add_constraint(c(ConstraintKind::Fix {
-            entity: r,
+            entity: anchor,
             slot: 0,
             value: 0.0
         })),
-        Err(SketchError::WrongKind(r))
+        Err(SketchError::WrongKind(anchor))
     );
     let reference = Constraint {
         standing: Standing::Reference,
