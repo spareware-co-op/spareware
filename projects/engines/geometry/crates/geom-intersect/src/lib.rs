@@ -33,14 +33,17 @@
 //! - [`level`]: the implicit-parametric tracer and level curves (G168).
 //! - [`general`]: general surface with surface, subdivision and start points (G169).
 //! - [`march`]: certified marching between start points (G170).
+//! - [`seam`]: seams, poles and knot lines, read exactly from each kind, and where a branch passes
+//!   them (G173).
 //! - [`solve`] and [`curve`] (piece G163): the interval engine, and where two curves meet.
 //! - [`curve_surface`] (piece G164): where a curve meets a surface.
 //! - [`closed`] (piece G159): exact decisions for a line with a quadric or torus, and the special
 //!   positions of two quadrics.
 //!
 //! Status: the result types and canonical order built by piece G158, projection and inversion by
-//! G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170; the other methods come
-//! with G159, G163, G164, G165, G166, G167, G170, G171, G172, G173, G174, G175, G176, G292,
+//! G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170, seams,
+//! poles and knot lines by G173; the other methods come
+//! with G159, G163, G164, G165, G166, G167, G170, G171, G172, G174, G175, G176, G292,
 //! G320, G321, G372, G390, G392, G393, G466, G467, G468.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
@@ -59,6 +62,7 @@ pub mod march;
 pub mod order;
 pub mod project;
 pub mod result;
+pub mod seam;
 pub mod solve;
 
 pub use error::IntersectError;
@@ -75,3 +79,4 @@ pub use result::{
     Coincidence, Coverage, CurveContact, CurveEnd, Degeneracy, Diag, Intersection, Item,
     OverlapRegion, ParamBox, PointContact, StepsInterval, Test, Unresolved,
 };
+pub use seam::{Charts, Pass, Passing, charts};

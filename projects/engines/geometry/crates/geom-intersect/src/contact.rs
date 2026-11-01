@@ -49,7 +49,7 @@
 //! form is as likely a pair of near crossings, so it stays flagged.
 //!
 //! What this piece leaves: a tangent curve is reported as a band over its cluster, and its curve is
-//! G175's. A contact on a domain's edge is G173's. The half-branches at a crossing are what
+//! G175's. A contact at a pole stays undecided (G173's `seam` says why). The half-branches at a crossing are what
 //! [`crate::march`] traces to the cluster's edge.
 //!
 //! Cost: each cluster is one run of [`crate::solve`] on the collinear-normal system, boxes in four
@@ -78,6 +78,7 @@ use crate::general::{
 };
 use crate::project::{dot, image, negative, positive};
 use crate::result::{Coincidence, CurveContact, PointContact, StepsInterval, Test, Unresolved};
+use crate::seam::{Charts, charts};
 use crate::solve::{Field, Solved, Zero, refined, solve};
 
 /// Why a pair is flagged when subdivision ran out of room with its normals still unparted.
@@ -135,6 +136,8 @@ struct Collinear<'a> {
     floor: f64,
     /// Each parameter's speed: a surface's run in a unit's worth of parameter, a plane's in steps.
     weights: [f64; 4],
+    /// What each surface's data proves of its seams and poles (12.10).
+    seams: (Charts, Charts),
 }
 
 /// Both surfaces read to the second order.
@@ -741,6 +744,7 @@ fn look(
             second,
             (pair.first, pair.second),
             system.floor,
+            [&system.seams.0, &system.seams.1],
             meter,
         )? {
             Some(starts) if starts.len().is_multiple_of(2) => {
@@ -829,6 +833,7 @@ pub fn analyse(
         second,
         floor,
         weights: [a, b, c, d],
+        seams: (charts(first), charts(second)),
     };
     let mut out = Vec::new();
     let mut settled = found.settled.clone();

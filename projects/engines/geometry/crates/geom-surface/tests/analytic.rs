@@ -215,6 +215,22 @@ fn spheres_keep_their_normals_at_the_poles_and_tori_their_forms() {
     check(&lemon, &params(lemon.domain()), &transforms()[3], m).unwrap();
 }
 
+/// A patch that reaches a cone's apex only at its edge keeps its nappe's normals there, the limit
+/// from inside (12.10); one across the apex holds both nappes' and so both signs.
+#[test]
+fn a_cone_keeps_its_normals_up_to_its_apex() {
+    let m = &mut meter();
+    let f = Frame::standard().unwrap();
+    // r₀ = 0, k = 1: the normal's direction is e(u) − n̂, so its z is −1 on the nappe v > 0.
+    let tip = Cone::new([0.0; 3], 0.0, 1.0, f, ((0.0, 2.0), (-4.0, 4.0))).unwrap();
+    let up = tip.normal_bound(((0.25, 0.5), (0.0, 0.25)), m).unwrap();
+    assert!(up.hi[2] < 0.0, "{up:?}");
+    let down = tip.normal_bound(((0.25, 0.5), (-0.25, 0.0)), m).unwrap();
+    assert!(down.lo[2] > 0.0, "{down:?}");
+    let across = tip.normal_bound(((0.25, 0.5), (-0.25, 0.25)), m).unwrap();
+    assert!(across.lo[2] < 0.0 && across.hi[2] > 0.0, "{across:?}");
+}
+
 #[test]
 fn split_and_reverse_are_exact_and_refusals_typed() {
     let m = &mut meter();

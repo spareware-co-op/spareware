@@ -42,8 +42,13 @@
 //! moves to another share. Every corner is the end of some cut, so only the domain's own corners
 //! can sit on the curve, and those are flagged.
 //!
-//! What this piece leaves: a branch that reaches a seam ends there as [`CurveEnd::Boundary`] or
-//! [`CurveEnd::Seam`], and G173 joins it across. Flagged boxes go to 12.9's analysis (G171). The
+//! Across a seam (G173): where the domain's two ends in a parameter are one curve
+//! ([`crate::seam`]), their two lines are stitched as one, so a branch goes on across; a crossing
+//! of a closing end or of a knot line not proven tangent-continuous is kept once and named in
+//! [`Branch::passes`]. A branch whose crossing has no partner across an inner break still ends as
+//! [`CurveEnd::Seam`].
+//!
+//! What this piece leaves: flagged boxes go to 12.9's analysis (G171). The
 //! implicit surface is taken whole: an [`OnImplicit`] on a trimmed kind finds the kind's untrimmed
 //! equation, and whoever pairs the two operands trims the answer to the other domain.
 //!
@@ -69,6 +74,7 @@ use geom_surface::{ImplicitBound, ParamBox as Region, ParamSurface, SurfaceKind}
 use crate::IntersectError;
 use crate::project::{dot, exact, halfway, negative, positive};
 use crate::result::{CurveEnd, Degeneracy, Test, Unresolved};
+use crate::seam::{Charts, Pass, Passing, charts};
 
 /// What a read costs the meter, besides the surface's own charges.
 const STEP: u64 = 1;
@@ -299,6 +305,9 @@ pub struct Branch {
     /// A bound, in space, on how far the exact branch is from the surface's image of the straight
     /// parameter chords through the vertices.
     pub deviation: f64,
+    /// Where it passes a closing seam or a knot line, each point recorded once (12.10), in order
+    /// along it.
+    pub passes: Vec<Pass>,
 }
 
 /// A box of parameters where the trace could not decide.
@@ -815,12 +824,17 @@ fn vertex(entries: &[Entry], k: usize) -> Result<[Interval; 2], IntersectError> 
 }
 
 /// Follows a branch from entry `start`, crossing box after box, until it ends or closes.
-fn follow(entries: &mut [Entry], start: usize) -> Result<Branch, IntersectError> {
+fn follow(
+    entries: &mut [Entry],
+    start: usize,
+    lines: &Lines<'_>,
+) -> Result<Branch, IntersectError> {
     let first_end = match entries.get(start).ok_or(IntersectError::Internal)?.across {
         Across::End(end) => end,
         Across::Met(_) | Across::Unknown => CurveEnd::Closed,
     };
     let mut vertices = alloc::vec![vertex(entries, start)?];
+    let mut passes = Vec::new();
     let mut deviation = 0.0;
     let mut k = start;
     // Each round takes an entry for good, so a branch that runs out of them has lost its way.
@@ -831,24 +845,37 @@ fn follow(entries: &mut [Entry], start: usize) -> Result<Branch, IntersectError>
         deviation = larger(deviation, sag);
         let other = entries.get_mut(mate).ok_or(IntersectError::Internal)?;
         other.taken = true;
-        match other.across {
+        let (across, line) = (other.across, other.crossing.line);
+        match across {
             Across::End(end) => {
                 vertices.push(vertex(entries, mate)?);
                 return Ok(Branch {
                     vertices,
                     ends: [first_end, end],
                     deviation,
+                    passes,
                 });
             }
             Across::Met(next) if next == start => {
+                // The loop closes on its first vertex, which stands for this crossing too.
+                if let Some(passing) = lines.passing(line) {
+                    passes.insert(0, Pass { at: 0, passing });
+                }
                 return Ok(Branch {
                     vertices,
                     ends: [CurveEnd::Closed, CurveEnd::Closed],
                     deviation,
+                    passes,
                 });
             }
             Across::Met(next) => {
                 vertices.push(vertex(entries, mate)?);
+                if let Some(passing) = lines.passing(line) {
+                    passes.push(Pass {
+                        at: vertices.len().saturating_sub(1),
+                        passing,
+                    });
+                }
                 k = next;
             }
             Across::Unknown => return Err(IntersectError::Internal),
@@ -857,13 +884,54 @@ fn follow(entries: &mut [Entry], start: usize) -> Result<Branch, IntersectError>
     Err(IntersectError::Internal)
 }
 
+/// A domain's lines as the stitching reads them (12.10).
+struct Lines<'a> {
+    domain: Region,
+    seams: &'a Charts,
+}
+
+impl Lines<'_> {
+    /// The key a line is stitched under: the two ends of a closing parameter are one line, so
+    /// the far end is keyed as the near.
+    fn key(&self, line: Line) -> (usize, u64) {
+        let ((u0, u1), (v0, v1)) = self.domain;
+        let [cu, cv] = self.seams.closes;
+        match line.axis {
+            0 if cu && line.at == u1 => Line { axis: 0, at: u0 }.key(),
+            1 if cv && line.at == v1 => Line { axis: 1, at: v0 }.key(),
+            _ => line.key(),
+        }
+    }
+
+    /// What a branch passes where it crosses `line` into another box: a closing end, a knot line
+    /// not proven tangent-continuous, or nothing to name.
+    fn passing(&self, line: Line) -> Option<Passing> {
+        let ((u0, u1), (v0, v1)) = self.domain;
+        let [cu, cv] = self.seams.closes;
+        let (closes, (lo, hi), creases) = if line.axis == 0 {
+            (cu, (u0, u1), &self.seams.creases.0)
+        } else {
+            (cv, (v0, v1), &self.seams.creases.1)
+        };
+        if closes && (line.at == lo || line.at == hi) {
+            Some(Passing::Seam)
+        } else if creases.contains(&line.at) {
+            Some(Passing::KnotLine)
+        } else {
+            None
+        }
+    }
+}
+
 /// Joins settled boxes across their shared sides into branches.
 fn stitch(
     leaves: &[Leaf],
     flagged: &[FlaggedBox],
     domain: Region,
     breaks: (&[f64], &[f64]),
+    seams: &Charts,
 ) -> Result<Vec<Branch>, IntersectError> {
+    let read = Lines { domain, seams };
     let mut entries: Vec<Entry> = Vec::new();
     for leaf in leaves {
         for pair in leaf.crossings.chunks(2) {
@@ -885,7 +953,7 @@ fn stitch(
     // Each line's crossings, from the boxes below it and above it.
     let mut lines: BTreeMap<(usize, u64), [Vec<usize>; 2]> = BTreeMap::new();
     for (k, entry) in entries.iter().enumerate() {
-        let [below, above] = lines.entry(entry.crossing.line.key()).or_default();
+        let [below, above] = lines.entry(read.key(entry.crossing.line)).or_default();
         if entry.crossing.above {
             above.push(k);
         } else {
@@ -935,7 +1003,7 @@ fn stitch(
         for &k in &order {
             let entry = entries.get(k).ok_or(IntersectError::Internal)?;
             if !entry.taken && matches!(entry.across, Across::End(_)) == ended {
-                branches.push(follow(&mut entries, k)?);
+                branches.push(follow(&mut entries, k, &read)?);
             }
         }
     }
@@ -1021,6 +1089,6 @@ pub fn trace(
             }
         }
     }
-    let branches = stitch(&leaves, &flagged, domain, breaks)?;
+    let branches = stitch(&leaves, &flagged, domain, breaks, &charts(surface))?;
     Ok(LevelCurves { branches, flagged })
 }

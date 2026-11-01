@@ -16,6 +16,7 @@
 
 use geom_curve::{CurveError, Frame};
 use geom_intersect::result::CurveEnd;
+use geom_intersect::seam::Passing;
 use geom_intersect::{
     Branch, Envelope, IntersectError, Isocline, LevelCurves, OnImplicit, Perspective, Silhouette,
     trace,
@@ -172,18 +173,22 @@ fn a_plane_cuts_a_cylinder_along_its_known_curve() {
     .unwrap();
     let found = trace(&cylinder, &OnImplicit(&plane), FLOOR, CEILING, &mut meter()).unwrap();
     let branch = only(&found);
-    assert_eq!(branch.ends, [CurveEnd::Boundary, CurveEnd::Boundary]);
-    let (first, last) = (branch.vertices[0], *branch.vertices.last().unwrap());
-    assert!(
-        first[0].contains(0.0) && last[0].contains(TURN),
-        "{branch:?}"
-    );
+    // The domain is one whole turn, so its two ends are one line and the curve one loop across
+    // it (G173), the seam's point kept once.
+    assert_eq!(branch.ends, [CurveEnd::Closed, CurveEnd::Closed]);
+    assert_eq!(branch.passes.len(), 1, "{branch:?}");
+    assert_eq!(branch.passes[0].passing, Passing::Seam);
+    let seam = branch.vertices[branch.passes[0].at][0];
+    assert!(seam.contains(0.0) || seam.contains(TURN), "{branch:?}");
     for [u, v] in &branch.vertices {
         assert!(holds(*v, 3.0 * (PI * mid(*u)).sin(), 2e-6), "{u:?} {v:?}");
     }
-    for pair in branch.vertices.windows(2) {
-        assert!(pair[0][0].lo() < pair[1][0].hi(), "{pair:?}");
-    }
+    // u runs one way round: every step but the seam's moves it the same way.
+    let n = branch.vertices.len();
+    let back = (0..n)
+        .filter(|&k| branch.vertices[(k + 1) % n][0].hi() < branch.vertices[k][0].lo())
+        .count();
+    assert!(back == 1 || back == n - 1, "{back} of {n}");
 }
 
 #[test]
@@ -203,7 +208,10 @@ fn a_plane_through_a_torus_axis_cuts_two_closed_circles() {
     assert_eq!(found.branches.len(), 2, "{found:?}");
     assert!(found.flagged.is_empty(), "{:?}", found.flagged);
     for (branch, u) in found.branches.iter().zip([0.0, 1.0]) {
-        assert_eq!(branch.ends, [CurveEnd::Boundary, CurveEnd::Boundary]);
+        // v spans a whole turn too, so each circle is one loop across v's seam (G173).
+        assert_eq!(branch.ends, [CurveEnd::Closed, CurveEnd::Closed]);
+        assert_eq!(branch.passes.len(), 1, "{branch:?}");
+        assert_eq!(branch.passes[0].passing, Passing::Seam);
         for [x, _] in &branch.vertices {
             assert!(holds(*x, u, 1e-6), "{x:?}");
         }
@@ -220,7 +228,9 @@ fn a_parallel_silhouette_of_a_sphere_is_its_equator() {
     };
     let found = trace(&sphere, &level, FLOOR, CEILING, &mut meter()).unwrap();
     let branch = only(&found);
-    assert_eq!(branch.ends, [CurveEnd::Boundary, CurveEnd::Boundary]);
+    // A whole turn in u: the equator is one loop across the seam (G173).
+    assert_eq!(branch.ends, [CurveEnd::Closed, CurveEnd::Closed]);
+    assert_eq!(branch.passes.len(), 1, "{branch:?}");
     for [_, v] in &branch.vertices {
         assert!(holds(*v, 0.0, 1e-7), "{v:?}");
     }
@@ -1001,12 +1011,13 @@ fn each_trace_takes_the_work_it_always_took() {
         u64,
     ); 6] = [
         (&flat, &circle, 1e-2, 27_162, 131, 4_576_741_634_584_209_240),
+        // The whole turn closes (G173): the loop keeps its seam's point once, a vertex fewer.
         (
             &cylinder,
             &ellipse,
             1e-2,
             34_293,
-            166,
+            165,
             4_576_905_993_249_919_340,
         ),
         (
