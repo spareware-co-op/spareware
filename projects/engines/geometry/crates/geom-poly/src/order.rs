@@ -46,7 +46,7 @@
 
 use core::cmp::Ordering;
 
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::wide::I256;
 use geom_num::{NumError, Sign};
 
@@ -74,11 +74,7 @@ const fn turned(s: Sign, reversed: bool) -> Sign {
 ///
 /// [`NumError::BudgetExceeded`], which planes within budget cannot reach.
 pub fn normals_det(a: &Plane, b: &Plane, c: &Plane) -> Result<Sign, NumError> {
-    match Tpi::new(*a, *b, *c) {
-        Ok(point) => Ok(point.weight()),
-        Err(NumError::Degenerate) => Ok(Sign::Zero),
-        Err(e) => Err(e),
-    }
+    normals_sign(a, b, c)
 }
 
 /// p · s − q · r, within 2^167 in magnitude for normal components below 2^83.
@@ -141,7 +137,7 @@ impl Line {
     ///
     /// [`NumError::Degenerate`] for a plane parallel to the line.
     pub fn point(&self, plane: &Plane) -> Result<Tpi, NumError> {
-        Tpi::new(self.p, self.q, *plane)
+        Tpi::meeting(self.p, self.q, *plane)
     }
 }
 

@@ -21,6 +21,8 @@ geom-poly = { path = "../geom-poly" }
 geom-topo = { path = "../geom-topo" }
 
 [dev-dependencies]
+# Real bodies for the tests (ours, MPL-2.0).
+geom-make = { path = "../geom-make" }
 # Surfaces for the tests' faces (ours, MPL-2.0).
 geom-surface = { path = "../geom-surface" }
 # Property tests only, never linked into the kernel. MIT OR Apache-2.0.

@@ -4,6 +4,8 @@
 //! What it does: [`publish`] writes what [`merge`](crate::merge::merge) made into arenas: every face
 //! on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its
 //! planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.
+//! [`publish_with`] also writes an open merge as a sheet and publishes in the order of names given,
+//! and [`wire`] writes a section's curves as edges with no fins.
 //!
 //! Guarantees:
 //!
@@ -29,12 +31,13 @@ use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_run::WorkMeter;
 use geom_topo::Line as Shadow;
+use geom_topo::order::Names;
 use geom_topo::{
     Body, BodyKind, Box3, Builder, CurveKind, Edge, Face, Fin, Ix, Loop, PointKind, Region,
     RegionKind, Sense, Shell, SurfaceKind, TopoError, Vertex,
 };
 
-use crate::merge::Merged;
+use crate::merge::{Curves, Merged};
 use crate::order::normals_det;
 
 /// The surface an input face lies on, and which way its polygon's normal runs on it.
@@ -181,13 +184,18 @@ fn planes_around(merged: &Merged) -> Vec<Vec<usize>> {
     clippy::too_many_lines,
     reason = "one pass over the arenas in their order, each short, sharing the rows they fill"
 )]
-fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>), PublishError> {
+fn arenas(
+    merged: &Merged,
+    carriers: &[Carrier],
+    open: bool,
+) -> Result<(Builder, Ix<Region>), PublishError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
 
-    // Solid regions, one per outer shell, then the outside.
+    // Solid regions, one per outer shell, then the outside. A sheet bounds nothing, so all its
+    // shells lie in the outside.
     let outers: Vec<usize> = (0..merged.shells.len())
-        .filter(|s| merged.shells.get(*s).is_some_and(|shell| shell.outer))
+        .filter(|s| !open && merged.shells.get(*s).is_some_and(|shell| shell.outer))
         .collect();
     let region_of: Vec<usize> = merged
         .shells
@@ -195,7 +203,10 @@ fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>)
         .enumerate()
         .map(|(s, shell)| {
             let held = shell.holder.unwrap_or(s);
-            outers.iter().position(|o| *o == held).unwrap_or(0)
+            outers
+                .iter()
+                .position(|o| *o == held)
+                .unwrap_or(outers.len())
         })
         .collect();
     for region in 0..outers.len() {
@@ -207,7 +218,9 @@ fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>)
     }
     let outside = a.regions.push(Region {
         kind: RegionKind::Void,
-        first_shell: None,
+        first_shell: (open && !merged.shells.is_empty())
+            .then(|| row(0))
+            .transpose()?,
     })?;
     for (s, region) in region_of.iter().enumerate() {
         let next =
@@ -403,11 +416,92 @@ pub fn publish(
     carriers: &[Carrier],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, PublishError> {
-    let (builder, outside) = arenas(merged, carriers)?;
-    let kind = if merged.edges.iter().all(|e| e.fins.len() == 2) {
+    publish_with(merged, carriers, false, None, meter)
+}
+
+/// [`publish`], in the order of `names` if it has any: an open merge is a sheet, and a closed one
+/// a solid unless some edge has more than two fins.
+///
+/// # Errors
+///
+/// As [`publish`].
+pub fn publish_with(
+    merged: &Merged,
+    carriers: &[Carrier],
+    open: bool,
+    names: Option<&Names>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, PublishError> {
+    let (builder, outside) = arenas(merged, carriers, open)?;
+    // A solid body has material, so a selection that keeps nothing is a general one.
+    let kind = if open {
+        BodyKind::Sheet
+    } else if merged.edges.is_empty() {
+        BodyKind::General
+    } else if merged.edges.iter().all(|e| e.fins.len() == 2) {
         BodyKind::Solid
     } else {
         BodyKind::General
     };
-    Ok(builder.publish(kind, outside, meter)?)
+    Ok(match names {
+        Some(names) => builder.publish_named(names, kind, outside, meter)?,
+        None => builder.publish(kind, outside, meter)?,
+    })
+}
+
+/// The wire body of `curves`: edges with no fins, each vertex a grid point or its own meeting.
+///
+/// # Errors
+///
+/// A [`PublishError`]: what the arenas refuse.
+pub fn wire(
+    curves: &Curves,
+    names: Option<&Names>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, PublishError> {
+    let mut builder = Builder::new();
+    let a = &mut builder.arenas;
+    let outside = a.regions.push(Region {
+        kind: RegionKind::Void,
+        first_shell: None,
+    })?;
+    let mut rounded = Vec::with_capacity(curves.vertices.len());
+    let mut stored: Vec<Plane> = Vec::new();
+    for point in &curves.vertices {
+        let near = point.to_grid()?;
+        rounded.push((near.value(), near.is_exact()));
+        let kind = if near.is_exact() {
+            PointKind::Grid(near.value())
+        } else {
+            let mut rows = [row(0)?, row(0)?, row(0)?];
+            for (slot, plane) in rows.iter_mut().zip(point.planes()) {
+                let at = stored.iter().position(|held| held == plane);
+                let at = at.unwrap_or_else(|| {
+                    stored.push(*plane);
+                    stored.len().saturating_sub(1)
+                });
+                *slot = row(at)?;
+            }
+            PointKind::Meet(rows)
+        };
+        let point = a.points.push(kind)?;
+        a.vertices.push(Vertex { point })?;
+    }
+    for plane in &stored {
+        a.planes.push(*plane)?;
+    }
+    for (low, high) in &curves.edges {
+        let end = |at: usize| rounded.get(at).copied().ok_or(PublishError::Broken);
+        let curve = a.curves.push(shadow(end(*low)?, end(*high)?)?)?;
+        a.edges.push(Edge {
+            first_fin: None,
+            start: Some(row(*low)?),
+            end: Some(row(*high)?),
+            curve,
+        })?;
+    }
+    Ok(match names {
+        Some(names) => builder.publish_named(names, BodyKind::Wire, outside, meter)?,
+        None => builder.publish(BodyKind::Wire, outside, meter)?,
+    })
 }
