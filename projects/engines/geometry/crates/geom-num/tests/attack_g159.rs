@@ -29,7 +29,9 @@ use geom_num::quadric::{
     line_cylinder, line_sphere, parallel, polar, polynomial, roots, roots_between,
     tangent_cone_cone, tangent_cylinder_cone,
 };
-use geom_num::sturm::{Big, Chain, MAX_COEFFICIENT_BITS, Point, Roots, div_exact, filtered};
+use geom_num::sturm::{
+    Big, Chain, MAX_COEFFICIENT_BITS, Point, Roots, div_exact, filtered, filtered_between,
+};
 use geom_num::wide::{I320, Wide};
 use num_bigint::BigInt;
 
@@ -738,4 +740,39 @@ fn a_bound_no_double_holds_goes_to_the_exact_chain() {
     let wrong = Point { num: 1, den: -1 };
     let refused = roots_between(&line, &sphere, wrong, Point::whole(1));
     assert_eq!(refused, Err(geom_num::NumError::Degenerate));
+}
+
+fn enclosed(terms: [i32; 5]) -> [Interval; 5] {
+    terms.map(|t| Interval::point(f64::from(t)).unwrap())
+}
+
+#[test]
+fn the_filters_answer_where_intervals_can_and_stand_aside_elsewhere() {
+    let four = |distinct, repeated| Some(Roots { distinct, repeated });
+    // (t − 1)(t − 2)(t − 3)(t − 4), t³ − t, and t² + 1.
+    let quartic = enclosed([24, -50, 35, -10, 1]);
+    assert_eq!(filtered(&quartic, 4), four(4, false));
+    assert_eq!(filtered(&enclosed([0, -1, 0, 1, 0]), 3), four(3, false));
+    assert_eq!(filtered(&enclosed([1, 0, 1, 0, 0]), 2), four(0, false));
+    // A repeated root has a chain that ends in a zero no interval can tell, and a zero lead has no
+    // degree.
+    assert_eq!(filtered(&enclosed([1, -2, 1, 0, 0]), 2), None);
+    assert_eq!(filtered(&enclosed([1, 1, 0, 0, 0]), 2), None);
+    // Between bounds the doubles hold, whole or not.
+    let whole = Point::whole;
+    assert_eq!(filtered_between(&quartic, 4, whole(0), whole(5)), Some(4));
+    assert_eq!(filtered_between(&quartic, 4, whole(-9), whole(0)), Some(0));
+    let half = |num| Point { num, den: 2 };
+    assert_eq!(filtered_between(&quartic, 4, half(3), half(7)), Some(2));
+    // Past them, or with no positive denominator, the exact chain must judge.
+    let far = (1_i64 << 53) + 1;
+    assert_eq!(filtered_between(&quartic, 4, whole(-far), whole(5)), None);
+    assert_eq!(filtered_between(&quartic, 4, whole(0), whole(far)), None);
+    let tiny = Point { num: 1, den: far };
+    assert_eq!(filtered_between(&quartic, 4, tiny, whole(5)), None);
+    let wrong = Point { num: 1, den: -1 };
+    assert_eq!(filtered_between(&quartic, 4, wrong, whole(5)), None);
+    assert_eq!(filtered_between(&quartic, 4, whole(0), wrong), None);
+    // A bound on a root leaves a sign no interval can give.
+    assert_eq!(filtered_between(&quartic, 4, whole(1), whole(5)), None);
 }
