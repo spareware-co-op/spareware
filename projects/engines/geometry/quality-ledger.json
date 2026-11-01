@@ -6322,7 +6322,23 @@
       "kind": "harmless",
       "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
     },
-    {}
+    {},
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace next_group -> Option<&'a[Use]> with Some(Vec::leak(Vec::new()))",
+      "line_text": "let head = rest.first()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every call then gives an empty group and leaves the rest as it was, so the loops that take groups until none is left never end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace == with != in next_group",
+      "line_text": "let same = rest.iter().take_while(|u| u.high == head.high).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The first use always has its own end, so nothing is taken: an empty group, the rest unchanged, and the loops that take groups never end."
+    }
   ],
   "coverage_off": [
     {

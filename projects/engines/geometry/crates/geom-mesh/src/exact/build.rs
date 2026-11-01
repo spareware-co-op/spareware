@@ -54,6 +54,7 @@ use super::{
     at, gcd, index, morton,
 };
 
+const ROUND_VERTICES: Phase = Phase::new("exact mesh: round vertices");
 const SORT_VERTICES: Phase = Phase::new("exact mesh: sort vertices");
 /// Items a block of [`map_blocks`] holds.
 const BLOCK: usize = 1024;
@@ -312,34 +313,44 @@ fn vertices(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vertices, MeshError> {
+    // Each vertex on its own, a block at a time: its grid point where it rounds exactly, else its
+    // three planes in canonical form.
+    let made = map_blocks(
+        exec,
+        (meter, ROUND_VERTICES, 1),
+        &input.vertices,
+        |_, corner| match corner {
+            Corner::Grid(p) => Ok((Some(*p), None)),
+            Corner::Planes([p, q, r]) => {
+                let rounded = Tpi::meeting(*p, *q, *r)?.to_grid()?;
+                if rounded.is_exact() {
+                    return Ok((Some(rounded.value()), None));
+                }
+                let planes = [
+                    canonical(p)?.plane,
+                    canonical(q)?.plane,
+                    canonical(r)?.plane,
+                ];
+                Ok((None, Some(planes)))
+            }
+        },
+    );
     let mut keyed = Vec::with_capacity(input.vertices.len());
     let mut implicit = Vec::new();
     let mut point = Vec::with_capacity(input.vertices.len());
     let mut sides: Vec<Option<u32>> = Vec::with_capacity(input.vertices.len());
-    for (v, corner) in (0_u32..).zip(&input.vertices) {
-        meter.charge(1)?;
-        let on_grid = match corner {
-            Corner::Grid(p) => Some(*p),
-            Corner::Planes([p, q, r]) => {
-                let rounded = Tpi::meeting(*p, *q, *r)?.to_grid()?;
-                rounded.is_exact().then(|| rounded.value())
-            }
-        };
+    for (v, (on_grid, planes)) in (0_u32..).zip(phase(made)?) {
         point.push(on_grid);
-        match (on_grid, corner) {
+        match (on_grid, planes) {
             (Some(p), _) => {
                 keyed.push((morton(p), v));
                 sides.push(None);
             }
-            (None, Corner::Planes([p, q, r])) => {
+            (None, Some(planes)) => {
                 sides.push(Some(index(implicit.len())?));
-                implicit.push([
-                    canonical(p)?.plane,
-                    canonical(q)?.plane,
-                    canonical(r)?.plane,
-                ]);
+                implicit.push(planes);
             }
-            (None, Corner::Grid(_)) => return Err(MeshFault::Shape.into()),
+            (None, None) => return Err(MeshFault::Shape.into()),
         }
     }
     let order: Result<Vec<usize>, RunError<MeshError>> =
