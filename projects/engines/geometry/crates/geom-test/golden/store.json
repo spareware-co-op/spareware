@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G111",
               "why": "the phase 3 integration train: every piece's count benchmarks together, no existing digest moved"
+            },
+            {
+              "sha256": "c2c5ed32a0431e2eaf5d9f1e791d6d9d11f5cfb28e88cd5acc8454160c92e50e",
+              "kind": "corpus",
+              "piece": "G129",
+              "why": "G129's arena points are PointKind, and geom-bench hashes a topology builder by its Debug text, which now prints each point as Grid(..); so topo/publish/typical's input digest moved from 19b37a1a... to 202114d1..., the same builders, and its result digest de024522... did not move (as the phase 4 integration train's 8fae2e9f)."
             }
           ],
-          "sha256": "c2c5ed32a0431e2eaf5d9f1e791d6d9d11f5cfb28e88cd5acc8454160c92e50e"
+          "sha256": "8e5e201640d2e755a544c699ef4004a64dfdb960ff4f0e27f37cee7a3e0f0140"
         },
         {
           "id": "geom-nurbs/operations",
