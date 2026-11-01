@@ -495,6 +495,26 @@
           "cost": "a batch of up to 64 inputs, built once per benchmark run.",
           "does": null,
           "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/conic.rs",
+          "guarantees": [
+            "each class's batch is deterministic (its seed is the operation and class name) and its inputs take the path its class names, which `tests/inputs.rs` checks."
+          ],
+          "job": "Inputs for conics (G190): [`side`] (`Ellipse2::side`), [`meets`] (`Ellipse2::meets`), [`of_ellipse`] (`Crossing2::of_ellipse`), [`against_ellipse`] (`Crossing2::against_ellipse`), [`meeting`] (`Ellipse2::meeting`) and [`compare`] (`quartic::compare`).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "Shewchuk's input classes (<https://doi.org/10.1007/PL00009321>, section 6), built from the shared draws of `inputs` as the crossing inputs are."
+          },
+          "path": "geom_bench::inputs::conic",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a batch of up to 64 inputs, built once per benchmark run.",
+          "does": null,
+          "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/inputs/crossing.rs",
           "guarantees": [
             "each class's batch is deterministic (its seed is the operation and class name) and its inputs take the path its class names, which `tests/inputs.rs` checks."
@@ -3014,15 +3034,15 @@
           "target": "lib"
         },
         {
-          "cost": "each generator derives one predicate, or all twenty-one for the parent module and each variant: a few hundred exact operations each.",
-          "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane (or, in 2D, of a line) each lies on; and of the predicates on 2D carriers and rational points (chapters 14.2 and 15.10, piece G187), in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] and [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane ones, `crossing.rs` the 2D crossing ones, `carrier.rs` the carrier and rational-point ones and `arc.rs` the circle and arc ones.",
+          "cost": "each generator derives one predicate, or all twenty-three for the parent module and each variant: a few hundred exact operations each.",
+          "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane (or, in 2D, of a line) each lies on; and of the predicates on 2D carriers and rational points (chapters 14.2 and 15.10, piece G187), in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] and [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane ones, `crossing.rs` the 2D crossing ones, `carrier.rs` the carrier and rational-point ones and `arc.rs` the circle and arc ones and `conic.rs` the ellipse ones.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicates.rs",
           "guarantees": [
             "**The same formulas as `predicate.rs`, `plane.rs` and `crossing.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term; `tpi_weight` and `tpi_side` evaluate the three-plane point's weight and its classification as `Tpi::homogeneous` and `Plane::side_of_tpi` do, except that the classification subtracts n · (−X) where `plane.rs` adds n · X, the same value; and the line-plane and crossing descriptions evaluate what `plane.rs` and `crossing.rs` document for them, step for step.",
             "**Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every target."
           ],
-          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-carrier-side`, `predicate-carrier-order`, `predicate-rational-cmp`, `predicate-rational-orient`, `predicate-round-grid`, `predicate-round-rational`, `predicate-round-line`, `predicate-circle-side`, `predicate-circle-line`, `predicate-circle-gap`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight`, `verus-ssi-side`, `verus-carrier-side`, `verus-carrier-order`, `verus-rational-cmp`, `verus-rational-orient`, `verus-round-grid`, `verus-round-rational`, `verus-round-line`, `verus-circle-side`, `verus-circle-line` and `verus-circle-gap`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`, `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`, `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`, `gappa-carrier-side-n-p`, `gappa-carrier-side-d-w`, `gappa-carrier-order`, `gappa-rational-cmp`, `gappa-rational-orient`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`, `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`, `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-carrier-side`, `fptaylor-carrier-order`, `fptaylor-rational-cmp`, `fptaylor-rational-orient`, `fptaylor-round-grid`, `fptaylor-round-rational`, `fptaylor-round-line`, `fptaylor-circle-side`, `fptaylor-circle-line` and `fptaylor-circle-gap`, the problems that machine-check the filters' error bounds ([`crate::predicate_certificates`]).",
+          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-carrier-side`, `predicate-carrier-order`, `predicate-rational-cmp`, `predicate-rational-orient`, `predicate-round-grid`, `predicate-round-rational`, `predicate-round-line`, `predicate-circle-side`, `predicate-circle-line`, `predicate-circle-gap`, `predicate-ellipse-side`, `predicate-ellipse-line`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight`, `verus-ssi-side`, `verus-carrier-side`, `verus-carrier-order`, `verus-rational-cmp`, `verus-rational-orient`, `verus-round-grid`, `verus-round-rational`, `verus-round-line`, `verus-circle-side`, `verus-circle-line`, `verus-circle-gap`, `verus-ellipse-side` and `verus-ellipse-line`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`, `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`, `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`, `gappa-carrier-side-n-p`, `gappa-carrier-side-d-w`, `gappa-carrier-order`, `gappa-rational-cmp`, `gappa-rational-orient`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`, `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`, `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-carrier-side`, `fptaylor-carrier-order`, `fptaylor-rational-cmp`, `fptaylor-rational-orient`, `fptaylor-round-grid`, `fptaylor-round-rational`, `fptaylor-round-line`, `fptaylor-circle-side`, `fptaylor-circle-line`, `fptaylor-circle-gap`, `fptaylor-ellipse-side` and `fptaylor-ellipse-line`, the problems that machine-check the filters' error bounds ([`crate::predicate_certificates`]).",
           "method": {
             "links": [
               "https://doi.org/10.1016/j.cad.2015.10.004",
@@ -4459,6 +4479,31 @@
           "target": "lib"
         },
         {
+          "cost": "constant time and no allocation; [`Ellipse2::meeting`] is a few dozen products and then [`crate::quartic`]'s costs.",
+          "does": "with a line an ellipse meets at a one-root point, [`Crossing2::of_ellipse`] ([`crate::one_root`]). With another conic it meets where a quartic has its roots: writing a point of the ellipse by the tangent of half its parameter, t = tan(θ / 2), and putting that into the other's equation gives a polynomial of degree four in t with whole-number coefficients, each of whose real roots is one point of the ellipse, its multiplicity the order of contact there and its place in t the point's place along the ellipse from θ = −π. So there is one quartic and no second variable, and no two points can share a root. [`Ellipse2::meeting`] returns it and its roots ([`crate::quartic`]); order along the other curve is the same question asked of it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/conic.rs",
+          "guarantees": [
+            "Every result is exact, or an error. A sign comes from a generated filter and exact path, or from [`crate::quartic`]; nothing is sampled, flattened or rounded.",
+            "No root is lost, doubled or misnamed: a tangency is a root of even multiplicity, exactly, and the ellipse's own point θ = π is the root t = ∞.",
+            "Within the budget. An ellipse's major axis is below 2^41 in each part, its q at most 2^21, and its quartic against a [`Conic`] of this module has coefficients within [`crate::quartic::COEFFICIENT_BITS`], asserted when the crate compiles.",
+            "Deterministic: integers only, except the generated filters; no platform maths and no allocation."
+          ],
+          "job": "Ellipses in 2D, exact: inside or outside, how a line meets one, and how two meet.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/800205.806346",
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "the rational parametrisation of a conic by the tangent of half its angle, with chapter 14.2's real-root isolation (Collins and Akritas 1976, <https://doi.org/10.1145/800205.806346>) and exact common-root tests (`projects/engines/geometry/architecture/14-2d-drafting.md`, section 14.2). The bound on q and the stored form are 32.25's (`projects/engines/geometry/architecture/32-decisions.md`)."
+          },
+          "path": "geom_num::conic",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant time and no allocation: a few `i128` products for the weight and the numerators, two products in [`I256`] for a side, and one restoring long division per coordinate to commit, as in [`crate::plane`].",
           "does": null,
           "family": [],
@@ -4713,6 +4758,46 @@
             "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
           },
           "path": "geom_num::generated::circle_side",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 18 `f64` operations, after 7 rounded input(s) converted to `f64`, then 9 magnitudes and their maxima and the bound's 20 multiplication(s); the exact path, run only when the filter cannot decide, is 18 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/ellipse_line.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-ellipse-line.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-ellipse-line` (seed: none, it uses no randomness), from the description `ELLIPSE_LINE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::ellipse_line",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 22 `f64` operations, after 7 rounded input(s) converted to `f64`, then 9 magnitudes and their maxima and the bound's 22 multiplication(s); the exact path, run only when the filter cannot decide, is 22 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/ellipse_side.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-ellipse-side.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-ellipse-side` (seed: none, it uses no randomness), from the description `ELLIPSE_SIDE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::ellipse_side",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5525,7 +5610,7 @@
           "guarantees": [
             "Every result is exact, or an error. [`sign_of_root`] and [`sign_of_two_roots`] square only when the terms' signs differ, and read off what squaring leaves in integers; nothing rounds.",
             "Filter first, certified. Each crossing keeps its coordinates as [`Interval`]s, rounded outward from its integers and an outward-rounded root, so a comparison whose intervals are apart costs two subtractions; the filter's answer is the exact sign or no answer.",
-            "Nothing overflows silently. Every step is a checked operation in [`Wide`], and a step that did not fit would be [`NumError::BudgetExceeded`], never an answer. The widths below follow from [`crate::carrier`]'s budgets and are asserted when the crate compiles; every width is reached at the extreme values in `tests/attack_g189.rs`. | Quantity | Carrier and circle | Two circles | Where | | --- | --- | --- | --- | | a, of a crossing | 209 | 628 | cx · N + a · h; 2D · x₁ · w₂ + h · Aₓ | | b, of a crossing | 42 | 209 | the carrier's own coefficients; A, turned | | k, of a crossing | 336 | 837 | rr · N − h²; 4D · ρ₁ · w₂² − h² | | w, of a crossing | 166 | 585 | cw · N; 2D · w₁ · w₂ | | Side of a carrier | 505 | 1,343 | E² − F²k, E = a · x + b · y − c · w | | Against a circle | 1,010 | 2,689 | E² − F²k, E and F from (Z − P) · (Z + P − 2C) | | Two crossings' coordinates | 1,506 | 4,857 | A² − B²k₁, A and B from the first squaring | | The turn of a grid point and two crossings | 1,688 | 5,041 | the same, with the fourth term | The last sets [`BIG_LIMBS`]. Rendering these by the description language of `geom-gen` would take inputs wider than its `i128`, and a filter of `f64`s past 2^1023, which is why this one module's exact paths are written out, each step named by its derivation, as `plane.rs`'s are.",
+            "Nothing overflows silently. Every step is a checked operation in [`Wide`], and a step that did not fit would be [`NumError::BudgetExceeded`], never an answer. The widths below follow from [`crate::carrier`]'s budgets and are asserted when the crate compiles; every width is reached at the extreme values in `tests/attack_g189.rs`. | Quantity | Carrier and circle | Carrier and ellipse | Two circles | Where | | --- | --- | --- | --- | --- | | a, of a crossing | 209 | 252 | 628 | cx · N + a · h; 2D · x₁ · w₂ + h · Aₓ | | b, of a crossing | 42 | 147 | 209 | the carrier's own coefficients; A, turned | | k, of a crossing | 336 | 209 | 837 | rr · N − h²; 4D · ρ₁ · w₂² − h² | | w, of a crossing | 166 | 209 | 585 | cw · N; 2D · w₁ · w₂ | | Side of a carrier | 505 | 505 | 1,343 | E² − F²k, E = a · x + b · y − c · w | | Against a circle | 1,010 | 1,264 | 2,689 | E² − F²k, E and F from (Z − P) · (Z + P − 2C) | | Two crossings' coordinates | 1,506 | 1,850 | 4,857 | A² − B²k₁, A, B from the first squaring | | The turn of a grid point and two | 1,688 | 2,024 | 5,041 | the same, with the fourth term | The last sets [`BIG_LIMBS`]. Rendering these by the description language of `geom-gen` would take inputs wider than its `i128`, and a filter of `f64`s past 2^1023, which is why this one module's exact paths are written out, each step named by its derivation, as `plane.rs`'s are.",
             "Deterministic: integers only, except the certified filter, whose answers are exact; no platform maths and no allocation."
           ],
           "job": "One-root numbers in 2D, exact: where a line meets a circle or two circles meet, and every question about such points.",
@@ -5683,6 +5768,31 @@
             "text": "Golub and Welsch's eigenvalue method for the Gauss rules, with Sturm-count bisection (G. H. Golub and J. H. Welsch, Mathematics of Computation 23 (1969), doi:10.1090/S0025-5718-69-99647-1), and Kronrod's extension from its definition, the zeros of the Stieltjes polynomial with interpolatory weights (A. S. Kronrod 1965; G. Szegő 1935, doi:10.1007/BF01448041); the generator's header gives the details."
           },
           "path": "geom_num::quadrature_rules",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few hundred products of 64 limbs for simple, well-separated roots. A multiple root adds a few hundred more of 160 limbs, about ten exact divisions, each a bit at a time, and the binary gcds of the content. [`compare`] of roots a long way apart is a few subtractions; of near ones, three signs at each level it must narrow them. No allocation; no recursion.",
+          "does": "[`Quartic::roots`] lists the real roots of a quartic in increasing order on the real projective line, so that t = ∞ is a root when the leading coefficient vanishes. The line is cut at −1, 0, 1 and ∞, which are tested exactly. Each of the four open pieces maps onto (0, 1), where Descartes' rule bounds the roots by the sign variations of the Möbius image, and bisection brings that bound to 0 or 1. A count that stays above 1 past [`FAST_DEPTH`] means a multiple root or two very near: the quartic is then split by subresultant gcds into square-free factors, one for each multiplicity, and each isolated apart, so that a root's multiplicity is the factor it came from. [`compare`] orders two roots of two quartics.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+          "guarantees": [
+            "Every result is exact, or an error. Nothing here is a floating-point number; a root is two whole numbers and a power of two, and a sign is a sign of a whole number.",
+            "Every root is found, once, with its multiplicity. Descartes' rule over-counts only, so a stretch whose count is 0 holds no root, and one whose count is 1 holds exactly one, simple.",
+            "Nothing overflows silently. Every step is a checked operation in [`Big`] or the wider integers of the exact paths; a step that did not fit, or a bisection past its limit, is [`NumError::BudgetExceeded`], never an answer. For coefficients below 2^[`COEFFICIENT_BITS`] no input reaches either, by the bounds below and the module's asserts: | Quantity | Bound | Where | | --- | --- | --- | | A factor's coefficients | 2^299 | Mignotte's bound, 2^4 · ‖c‖₂ | | Two roots of one factor, apart | 2^−909 | Davenport (1985) and Mahler (1964) | | Roots of two quartics, apart if not one | 2^−2,410 | their resultant, a whole number | | A polynomial bisected s times | 2^(4s + 303) | the terms of 2^(4s) · c((x + a) / 2^s) |",
+            "Bounded work. Live stretches each count at least two, and Descartes' counts of disjoint stretches sum to at most four, so at most two are live at once and the frontier is a fixed array of three nodes."
+          ],
+          "job": "The real roots of a quartic with whole-number coefficients, exact: how many, how multiple, and in what order.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/800205.806346",
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "https://doi.org/10.1145/321662.321664"
+            ],
+            "text": "Descartes' rule of signs by bisection, Collins and Akritas 1976 (<https://doi.org/10.1145/800205.806346>), the method chapter 14.2 names (`projects/engines/geometry/architecture/14-2d-drafting.md`); subresultant remainder sequences for the gcds (Brown and Traub 1971, <https://doi.org/10.1145/321662.321664>); square-free factors by repeated gcds (Musser 1971, as Knuth sets it out, volume 2, section 4.6.3); Stein's binary gcd for a polynomial's content; the root separation bound of Davenport (1985) and Mahler (1964)."
+          },
+          "path": "geom_num::quartic",
           "provenance": [],
           "spdx": null,
           "target": "lib"

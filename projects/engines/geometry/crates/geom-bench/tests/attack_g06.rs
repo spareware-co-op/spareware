@@ -65,8 +65,8 @@ use geom_bench::kernels;
 use geom_bench::rng::{SplitMix64, fnv1a, seed_for};
 use geom_bench::sha256::{Digest, Sha256};
 use geom_num::carrier::Rational2;
-use geom_num::crossing::Ssi;
 use geom_num::conic::Conic;
+use geom_num::crossing::Ssi;
 use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
@@ -1126,16 +1126,12 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|(arc, a, b)| arc.order_crossings(a, b)),
         ),
-        ("crossing", "ellipse_side") => fold(
-            inputs::conic::side(class)
-                .iter()
-                .map(|(e, z)| e.side(z)),
-        ),
-        ("crossing", "ellipse_meets") => fold(
-            inputs::conic::meets(class)
-                .iter()
-                .map(|(e, l)| e.meets(l)),
-        ),
+        ("crossing", "ellipse_side") => {
+            fold(inputs::conic::side(class).iter().map(|(e, z)| e.side(z)))
+        }
+        ("crossing", "ellipse_meets") => {
+            fold(inputs::conic::meets(class).iter().map(|(e, l)| e.meets(l)))
+        }
         ("crossing", "crossing_of_ellipse") => fold(
             inputs::conic::of_ellipse(class)
                 .iter()
@@ -1871,26 +1867,18 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
         ),
-        "ellipse_side_filter" => fold(
-            i::ellipse_side_filter(class)
-                .into_iter()
-                .map(|([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::filter(x, y, w, k, mx, my, p, q)),
-        ),
-        "ellipse_side_value" => fold(
-            i::ellipse_side_value(class)
-                .into_iter()
-                .map(|([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q)),
-        ),
-        "ellipse_line_filter" => fold(
-            i::ellipse_line_filter(class)
-                .into_iter()
-                .map(|([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::filter(a, b, d, k, mx, my, p, q)),
-        ),
-        "ellipse_line_value" => fold(
-            i::ellipse_line_value(class)
-                .into_iter()
-                .map(|([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q)),
-        ),
+        "ellipse_side_filter" => fold(i::ellipse_side_filter(class).into_iter().map(
+            |([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::filter(x, y, w, k, mx, my, p, q),
+        )),
+        "ellipse_side_value" => fold(i::ellipse_side_value(class).into_iter().map(
+            |([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q),
+        )),
+        "ellipse_line_filter" => fold(i::ellipse_line_filter(class).into_iter().map(
+            |([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::filter(a, b, d, k, mx, my, p, q),
+        )),
+        "ellipse_line_value" => fold(i::ellipse_line_value(class).into_iter().map(
+            |([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q),
+        )),
         "ssi_side_filter" => fold(
             i::ssi_side_filter(class)
                 .into_iter()
@@ -2044,16 +2032,12 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
         ),
-        "ellipse_side_value_plain" => fold(
-            i::ellipse_side_value_plain(class)
-                .into_iter()
-                .map(|([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q)),
-        ),
-        "ellipse_line_value_plain" => fold(
-            i::ellipse_line_value_plain(class)
-                .into_iter()
-                .map(|([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q)),
-        ),
+        "ellipse_side_value_plain" => fold(i::ellipse_side_value_plain(class).into_iter().map(
+            |([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q),
+        )),
+        "ellipse_line_value_plain" => fold(i::ellipse_line_value_plain(class).into_iter().map(
+            |([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q),
+        )),
         "ssi_side_value_plain" => fold(
             i::ssi_side_value_plain(class)
                 .into_iter()
@@ -2181,16 +2165,12 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
         ),
-        "ellipse_side_value_limbs" => fold(
-            i::ellipse_side_value_limbs(class)
-                .into_iter()
-                .map(|([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q)),
-        ),
-        "ellipse_line_value_limbs" => fold(
-            i::ellipse_line_value_limbs(class)
-                .into_iter()
-                .map(|([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q)),
-        ),
+        "ellipse_side_value_limbs" => fold(i::ellipse_side_value_limbs(class).into_iter().map(
+            |([x, y, w], k, [mx, my, p, q])| gp::ellipse_side::value(x, y, w, k, mx, my, p, q),
+        )),
+        "ellipse_line_value_limbs" => fold(i::ellipse_line_value_limbs(class).into_iter().map(
+            |([a, b, d], k, [mx, my, p, q])| gp::ellipse_line::value(a, b, d, k, mx, my, p, q),
+        )),
         "ssi_side_value_limbs" => fold(
             i::ssi_side_value_limbs(class)
                 .into_iter()

@@ -59,11 +59,7 @@ fn extreme(g: &mut SplitMix64) -> Option<Ellipse2> {
 }
 
 /// An ellipse along a Pythagorean axis, of `k` times it, about `centre`: with the axis and vertex.
-fn along(
-    g: &mut SplitMix64,
-    centre: P2,
-    k: i64,
-) -> Option<(Ellipse2, (i128, i128), (i128, i128))> {
+fn along(g: &mut SplitMix64, centre: P2, k: i64) -> Option<(Ellipse2, (i128, i128), (i128, i128))> {
     let (a, b) = pick(g, TRIPLES)?;
     let (p, q) = pick(g, RATIOS)?;
     let e = Ellipse2::new(centre, [a * k, b * k], p, q).ok()?;

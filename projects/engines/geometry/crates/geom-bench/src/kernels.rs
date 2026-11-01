@@ -472,7 +472,9 @@ pub mod conic {
     /// `Crossing2::of_ellipse` on each pair.
     #[inline(never)]
     pub fn of_ellipse(batch: &[(Carrier, Ellipse2)], out: &mut Vec<Result<Crossing2, NumError>>) {
-        run(batch, out, |(l, e)| Crossing2::of_ellipse(l, e, Root::First));
+        run(batch, out, |(l, e)| {
+            Crossing2::of_ellipse(l, e, Root::First)
+        });
     }
 
     /// `Crossing2::against_ellipse` on each pair.
@@ -1145,9 +1147,9 @@ pub mod generated {
     use geom_num::Sign;
     use geom_num::generated::{
         carrier_order, carrier_side, circle_gap, circle_line, circle_side, ellipse_line,
-        ellipse_side, incircle, insphere,
-        lpi_side, lpi_weight, orient2d, orient3d, plane_side, rational_cmp, rational_orient,
-        round_grid, round_line, round_rational, ssi_side, ssi_weight, tpi_side, tpi_weight,
+        ellipse_side, incircle, insphere, lpi_side, lpi_weight, orient2d, orient3d, plane_side,
+        rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side,
+        ssi_weight, tpi_side, tpi_weight,
     };
     use geom_num::grid::{P2, P3};
     use geom_num::wide::{I256, I384};
