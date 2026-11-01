@@ -402,7 +402,7 @@ fn run(spec: &Spec, rng: &mut Rng, cases: u64) -> Vec<String> {
             }
         }
     }
-    let (sure, tally) = with_small_groups(spec, rng, cases, error, &terms, &groups);
+    let (sure, tally) = with_small_groups(spec, rng, 16 * cases, error, &terms, &groups);
     let mut problems = Vec::new();
     let past_bound = tally.values().fold(0, |all, (_, past)| all + past);
     println!("{}: {past_bound} past the bound, {sure} refused", spec.name);
