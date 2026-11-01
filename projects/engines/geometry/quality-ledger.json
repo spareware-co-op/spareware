@@ -5913,6 +5913,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "One cut left is under three either way, and the contour is dropped on the next line."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace < with <= in on_lattice",
+      "line_text": "Ok(if top < 0 { units.wrapping_neg() } else { units })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At a top of 0 there are 0 units, and the negative of 0 is 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace > with >= in half_unit",
+      "line_text": "let half = if halves > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At 0 halves the shift is 0, so dividing by one and shifting by none agree."
     }
   ],
   "coverage_off": [
