@@ -571,22 +571,6 @@
       "reason": "The search runs forward through the pieces. The two differ only from the left at t == a of a piece after the first, and there the piece before, which ends at t and comes earlier, already matched (a' < t and t <= b'), so the same piece is returned."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
-      "mutant": "replace > with >= in Round::radius_sign",
-      "line_text": "Ok(if rho.lo() > 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "They differ only when the radius's enclosure ends exactly at 0: the radius is then of one sign over the span and 0 at most at that end, where the normal vanishes, so the definite sign bounds every normal direction as the undecided one does, only tighter; a torus's form is then the part that reaches the axis at its domain's edge."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
-      "mutant": "replace < with <= in Round::radius_sign",
-      "line_text": "} else if rho.hi() < 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "They differ only when the radius's enclosure ends exactly at 0: the radius is then of one sign over the span and 0 at most at that end, where the normal vanishes, so the definite sign bounds every normal direction as the undecided one does, only tighter; a torus's form is then the part that reaches the axis at its domain's edge."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-surface/src/terms.rs",
       "mutant": "replace || with && in Terms::to_nurbs",
       "line_text": "if eps.is_nan() || eps >= 0.5 {",
