@@ -518,11 +518,19 @@ impl Inputs<'_> {
     }
 
     /// The point `id`'s y, or its x.
+    /// A point's x or y. A reference has no variables, so one search of the variables finds every
+    /// other point, and only a reference is looked up as an entity.
     fn coordinate(&mut self, id: ItemId, y: bool) -> Result<(), SketchError> {
+        if let Ok(i) = self
+            .variables
+            .binary_search_by_key(&(id, u8::from(y)), |v| (v.owner, v.slot))
+        {
+            return self.add(Slot::Variable(i));
+        }
         if let EntityKind::Reference { x, y: up } = self.sketch.entity(id)?.kind {
             return self.constant(if y { up } else { x });
         }
-        self.variable(id, u8::from(y))
+        Err(SketchError::WrongKind(id))
     }
 
     /// A curve's centre and radius.
