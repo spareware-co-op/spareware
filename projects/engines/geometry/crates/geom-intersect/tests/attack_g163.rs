@@ -1454,3 +1454,24 @@ fn a_tangency_too_sharp_to_read_at_one_step_is_higher_order() {
         );
     }
 }
+
+#[test]
+fn parallel_lines_in_space_apart_stay_apart_in_the_plane_they_are_read_in() {
+    // Two parallel lines are read in the plane across picks from n = d × w, w the step between
+    // their origins. In these pairs, chosen by a search over whole d and w in [-3, 3]³, the plane
+    // must not drop y or x: along it the two lines would be one.
+    for (d, w) in [
+        ([-3.0, -3.0, 1.0], [-3.0, -1.0, 1.0]),
+        ([-3.0, -3.0, 2.0], [-3.0, -2.0, 2.0]),
+        ([-3.0, -2.0, 0.0], [-1.0, -1.0, 0.0]),
+        ([-3.0, -2.0, 3.0], [-2.0, -2.0, 2.0]),
+        ([-3.0, -3.0, 1.0], [-1.0, -3.0, 1.0]),
+    ] {
+        is_empty(&meet(&infinite([0.0; 3], d), &infinite(w, d)));
+        let far = |o: [f64; 3]| [o[0] + 5.0 * d[0], o[1] + 5.0 * d[1], o[2] + 5.0 * d[2]];
+        is_empty(&meet(
+            &segment([0.0; 3], far([0.0; 3])),
+            &segment(w, far(w)),
+        ));
+    }
+}

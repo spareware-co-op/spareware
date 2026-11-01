@@ -5507,6 +5507,38 @@
       "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate), so 2 x 1 and 2 / 1 are the same double. The floor is named, not an accepted rung (6.5), and a change to it would be a decision with its own tests."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in lines_in_space",
+      "line_text": "let [wx, wy, wz] = w.map(|c| c.lo() * 0.5 + c.hi() * 0.5);",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "The midpoint of w, the step from one line's origin to the other's, is used only for parallel lines, to orient the plane they are read in: n = d x w, and across drops the coordinate where n is largest. This branch is reached only on whole-number data (grid_line), so w's enclosures are whole numbers widened by a step. Either mutant gives 2 lo + hi / 2 or lo / 2 + 2 hi, which is 2.5 w to within a few steps of a double, so n becomes 2.5 n to within those steps. The largest of n's components is at least 1, on whole data, and only components of that size can be the largest after so small a change. None of them is 0, the case where dropping that coordinate would read the two lines as one. So the plane keeps them apart, as the original's does, and line_line gives the same answer. (The other mutants of this line are killed by parallel_lines_in_space_apart_stay_apart_in_the_plane_they_are_read_in.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in lines_in_space",
+      "line_text": "n = if r <= p && r <= q {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in lines_in_space",
+      "line_text": "n = if r <= p && r <= q {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in lines_in_space",
+      "line_text": "} else if q <= p {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
       "mutant": "replace > with >= in halves",
       "line_text": "let share = if whole > 0.0 {",
