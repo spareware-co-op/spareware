@@ -241,14 +241,15 @@ pub(crate) struct Funnel {
 pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
     let line = axis(cone.center(), &cone.frame(), cone.axial_sign())?;
     let (r0, k) = cone.radius_and_slope();
-    // Exact where the data are: a grid apex is what makes the exact decisions possible.
-    let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;
-    let [a, b, c] = line.at;
-    let [x, y, z] = line.along;
-    // A cone with its apex at its centre has it exactly, whatever enclosure its axis needs.
+    // Exact where the data are: a grid apex is what makes the exact decisions possible. A cone
+    // stored by its apex has it as its centre, exactly, whatever its axis; any other is reached
+    // along the unit axis, exact only where that is.
     let apex = if r0 == 0.0 {
         line.at
     } else {
+        let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;
+        let [a, b, c] = line.at;
+        let [x, y, z] = line.along;
         [
             tight::add(a, tight::mul(x, v)?)?,
             tight::add(b, tight::mul(y, v)?)?,
@@ -334,18 +335,14 @@ fn plane_plane(a: &Plane, b: &Plane) -> Result<Option<Vec<Piece>>, IntersectErro
         }
         _ => None,
     };
-    let flat = exact.map_or(d.iter().all(|c| c.lo() == 0.0 && c.hi() == 0.0), |(x, _)| x);
-    if flat {
-        let inside = exact.is_some_and(|(_, y)| y);
-        if inside {
-            return Ok(Some(alloc::vec![Piece::Same]));
-        }
-        let gap = dot(p.normal, minus(q.at, p.at)?)?;
-        return Ok(if exact.is_some() || !gap.contains(0.0) {
-            Some(Vec::new())
+    // Parallel, and one plane, only from the exact signs: every operation rounds outward, so an
+    // enclosure of the normals' cross product is never the one point zero.
+    if let Some((true, inside)) = exact {
+        return Ok(Some(if inside {
+            alloc::vec![Piece::Same]
         } else {
-            None
-        });
+            Vec::new()
+        }));
     }
     if d.iter().all(|c| c.contains(0.0)) {
         return Ok(None);
@@ -1275,22 +1272,23 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
     let mut out = Vec::new();
     match surface {
         SurfaceKind::Plane(p) => {
+            // Each finite side of the domain is an edge, along the other vector over the other
+            // parameter's range: a segment, a ray, or a whole line where the plane runs on.
             let (c, a, b) = p.vectors();
             let ((u0, u1), (v0, v1)) = ParamSurface::domain(p);
-            if u0.is_finite() && u1.is_finite() && v0.is_finite() && v1.is_finite() {
-                let at = |u: f64, v: f64| {
-                    let [x, y, z] = c;
-                    let [e, f, g] = a;
-                    let [h, i, j] = b;
-                    [x + u * e + v * h, y + u * f + v * i, z + u * g + v * j]
-                };
-                for (s, t) in [
-                    (at(u0, v0), at(u1, v0)),
-                    (at(u1, v0), at(u1, v1)),
-                    (at(u1, v1), at(u0, v1)),
-                    (at(u0, v1), at(u0, v0)),
-                ] {
-                    out.push(CurveKind::Line(Line::segment(s, t)?.value));
+            let shifted = |t: f64, w: [f64; 3]| {
+                let [x, y, z] = c;
+                let [e, f, g] = w;
+                [x + t * e, y + t * f, z + t * g]
+            };
+            for u in [u0, u1] {
+                if u.is_finite() {
+                    out.push(CurveKind::Line(Line::new(shifted(u, a), b, (v0, v1))?));
+                }
+            }
+            for v in [v0, v1] {
+                if v.is_finite() {
+                    out.push(CurveKind::Line(Line::new(shifted(v, b), a, (u0, u1))?));
                 }
             }
         }
@@ -1311,10 +1309,13 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
             let ((u0, u1), (v0, v1)) = ParamSurface::domain(c);
             let on = axis(c.center(), &c.frame(), c.axial_sign())?;
             for v in [v0, v1] {
-                let radius = (r0 + k * v).abs();
+                let signed = r0 + k * v;
+                let radius = signed.abs();
                 if radius > 0.0 {
+                    // Past the apex the radius is negative: the point at u is half a turn round.
+                    let turn = if signed < 0.0 { 1.0 } else { 0.0 };
                     let at = plus(on.at, scale(on.along, point(v)?)?)?;
-                    let curve = Circle::new(middle(at), radius, c.frame(), (u0, u1))?;
+                    let curve = Circle::new(middle(at), radius, c.frame(), (u0 + turn, u1 + turn))?;
                     out.push(CurveKind::Circle(curve));
                 }
             }
@@ -1492,6 +1493,56 @@ fn on_both(
     Ok(on_surface(a, at)?.is_some() && on_surface(b, at)?.is_some())
 }
 
+/// Where `curve` passes through `at`, a point of an edge: its parameter there, or `None` if `at`
+/// lies off it.
+fn cut_at(
+    curve: &CurveKind<3>,
+    at: Vector,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<f64>, IntersectError> {
+    // A point of another piece of this pair projects onto this curve too: only one that lies on
+    // the curve cuts it.
+    let Some(s) = along_curve(curve, at)? else {
+        return Ok(None);
+    };
+    let (lo, hi) = crate::curve::finite(curve)?;
+    let mut t = tight::middle(s);
+    // On a loop the turns wrap.
+    if closed(curve) {
+        let period = hi - lo;
+        while t < lo {
+            t += period;
+        }
+        while t >= hi {
+            t -= period;
+        }
+    }
+    if t < lo || t > hi {
+        return Ok(None);
+    }
+    let gap = minus(at_parameter(curve, t, meter)?, at)?;
+    Ok(gap
+        .iter()
+        .all(|c| c.lo() <= STEP && c.hi() >= -STEP)
+        .then_some(t))
+}
+
+/// The apex of a cone whose domain ends there: an edge of one point, where the edge circles of
+/// [`edges`] have no radius.
+fn apex_ends(surface: &SurfaceKind) -> Result<Vec<Vector>, IntersectError> {
+    let SurfaceKind::Cone(c) = surface else {
+        return Ok(Vec::new());
+    };
+    let (r0, k) = c.radius_and_slope();
+    let (_, (v0, v1)) = ParamSurface::domain(c);
+    let ends = [v0, v1].iter().filter(|v| r0 + k * **v == 0.0).count();
+    Ok(if ends > 0 {
+        alloc::vec![funnel(c)?.apex]
+    } else {
+        Vec::new()
+    })
+}
+
 /// Where the curve's stretches on both domains end: the parameters at which an edge of either surface
 /// meets the other, sorted.
 fn cuts(
@@ -1509,31 +1560,15 @@ fn cuts(
                     continue;
                 };
                 let box_of = edge.bound((t.lo(), t.hi()), meter)?;
-                let at = sides(&box_of)?;
-                // A point of another piece of this pair projects onto this curve too: only one
-                // that lies on the curve cuts it.
-                let Some(s) = along_curve(curve, at)? else {
-                    continue;
-                };
-                let (lo, hi) = crate::curve::finite(curve)?;
-                let mut t = tight::middle(s);
-                // On a loop the turns wrap.
-                if closed(curve) {
-                    let period = hi - lo;
-                    while t < lo {
-                        t += period;
-                    }
-                    while t >= hi {
-                        t -= period;
-                    }
-                }
-                if t < lo || t > hi {
-                    continue;
-                }
-                let gap = minus(at_parameter(curve, t, meter)?, at)?;
-                if gap.iter().all(|c| c.lo() <= STEP && c.hi() >= -STEP) {
+                if let Some(t) = cut_at(curve, sides(&box_of)?, meter)? {
                     out.push(t);
                 }
+            }
+        }
+        // A curve through an apex the domain ends at leaves the domain there.
+        for at in apex_ends(surface)? {
+            if let Some(t) = cut_at(curve, at, meter)? {
+                out.push(t);
             }
         }
     }
@@ -1571,16 +1606,17 @@ fn trimmed(
     let mut ends: Vec<f64> = Vec::new();
     let (mut start, stop) = if loops {
         let base = *cut.first().ok_or(IntersectError::Internal)?;
-        let stop = base + period;
-        // A whole turn stays one, however the sum rounds.
-        (
-            base,
-            if stop - base > period {
-                stop.next_down()
-            } else {
-                stop
-            },
-        )
+        // A whole turn stays one, however the sum rounds: its length is decided exactly, as a loop's
+        // kind checks it, and the sum is off by at most a step, so a step or two back is enough.
+        let mut stop = base + period;
+        for _ in 0..4 {
+            let (length, error) = geom_num::eft::two_sum(stop, -base);
+            if length < period || (length == period && error <= 0.0) {
+                break;
+            }
+            stop = stop.next_down();
+        }
+        (base, stop)
     } else {
         (lo, hi)
     };
