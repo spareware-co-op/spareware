@@ -1049,6 +1049,19 @@ fn the_engine_takes_only_its_work() {
     };
     let wave = [[0.0, 0.0], [1.0, 3.0], [2.0, -2.0], [3.0, 1.0]];
     let other = [[0.0, 1.0], [1.0, -1.0], [2.0, 2.0], [3.0, 0.0]];
+    let two = CurveKind::Nurbs(
+        Curve::new(
+            Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]).unwrap(),
+            &[
+                [0.0, -1000.0],
+                [1000.0, 1000.0],
+                [2000.0, -1000.0],
+                [3000.0, 1000.0],
+            ],
+        )
+        .unwrap(),
+    );
+    let axis = bezier(&[[-1000.0, 0.0], [1500.0, 0.0], [4000.0, 0.0]]);
     let got = [
         work(&bezier(&wave), &bezier(&other)),
         work(&shifted(&wave), &bezier(&other)),
@@ -1061,8 +1074,12 @@ fn the_engine_takes_only_its_work() {
             &bezier(&[[0.0, 0.0], [1.0, 2.0], [2.0, 0.0]]),
             &bezier(&[[0.0, 1.01], [2.0, 1.01]]),
         ),
+        work(&two, &axis),
     ];
-    assert_eq!(got, [(3, 3589), (3, 3589), (3, 3589), (2, 507), (0, 254)]);
+    assert_eq!(
+        got,
+        [(3, 3589), (3, 3589), (3, 3589), (2, 507), (0, 254), (3, 3880)]
+    );
 }
 
 #[test]
@@ -1634,4 +1651,71 @@ fn a_whole_circle_s_search_takes_only_its_work() {
         work(&bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]])),
     ];
     assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1313)]);
+}
+
+#[test]
+fn circles_on_later_turns_cross_on_their_own_domains() {
+    // The circle about (6, 0) on whole turns from 8 or from -6 (half-turns): its two crossings with
+    // the circle about the origin are at the same points, at parameters moved by those turns.
+    let on = |d: (f64, f64)| {
+        CurveKind::Circle(Circle::new([6.0, 0.0], 5.0, Frame::standard().unwrap(), d).unwrap())
+    };
+    let first = 0.704_832_764_699_133;
+    // From 9 the first crossing falls in the next turn: 9.295 and 10.705.
+    for (d, want) in [
+        ((8.0, 10.0), [8.0 + first, 10.0 - first]),
+        ((-6.0, -4.0), [-6.0 + first, -4.0 - first]),
+        ((9.0, 11.0), [10.0 - first, 10.0 + first]),
+    ] {
+        let r = meet(&circle([0.0, 0.0], 5.0), &on(d));
+        let mut t: Vec<f64> = r
+            .items()
+            .iter()
+            .map(|i| {
+                let s = i.at().spans()[1];
+                s.lo() * 0.5 + s.hi() * 0.5
+            })
+            .collect();
+        t.sort_by(f64::total_cmp);
+        assert_eq!(t.len(), 2, "{:?}", r.items());
+        assert!(
+            (t[0] - want[0]).abs() < 1e-9 && (t[1] - want[1]).abs() < 1e-9,
+            "{t:?}"
+        );
+    }
+}
+
+#[test]
+fn a_curve_of_two_spans_crossing_in_each_keeps_every_crossing() {
+    // A quadratic B-spline of two spans zigzags across the x axis three times: in its first span,
+    // at the knot between them and in its second. A box over both spans is clipped by neither.
+    let two = CurveKind::Nurbs(
+        Curve::new(
+            Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]).unwrap(),
+            &[
+                [0.0, -1000.0],
+                [1000.0, 1000.0],
+                [2000.0, -1000.0],
+                [3000.0, 1000.0],
+            ],
+        )
+        .unwrap(),
+    );
+    let r = meet(
+        &two,
+        &bezier(&[[-1000.0, 0.0], [1500.0, 0.0], [4000.0, 0.0]]),
+    );
+    let mut s: Vec<f64> = r
+        .items()
+        .iter()
+        .map(|i| {
+            let s = i.at().spans()[0];
+            s.lo() * 0.5 + s.hi() * 0.5
+        })
+        .collect();
+    s.sort_by(f64::total_cmp);
+    assert_eq!(s.len(), 3, "{:?}", r.items());
+    for (got, want) in s.iter().zip([1.0 / 3.0, 1.0, 5.0 / 3.0]) {
+        assert!((got - want).abs() < 1e-4, "{s:?}");
+    }
 }
