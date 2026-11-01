@@ -269,12 +269,18 @@
             },
             {
               "sha256": "9fa3a5cb5a890b07c73fb90432b035c17901a9dc19d0318a45830de510df1a3b",
+              "kind": "bug",
+              "piece": "G164",
+              "why": "intersect/surface_torus's result digest moved from 76a47ad1... to 764d5d58..., inputs unchanged (3c7d9153...): a line along a torus's equator crosses it four times, and the three crossings on a seam of the closed torus were BoundaryTouch; a join is no boundary (12.6), so they are Crossing now, at the same 256 points of the 64 inputs; no other digest moved"
+            },
+            {
+              "sha256": "d4e034c4c1b1a3cf8e3334bb49b626025e358895882b5c6abf024bd2e8638839",
               "kind": "corpus",
               "piece": "G170",
               "why": "1 new count benchmark on geom-intersect's marching (decision 32.44): the branches of a sphere through a plane patch; no existing digest moved"
             }
           ],
-          "sha256": "9c0f3d471e31b39dc2a038e37205a513ea11aa4fc0d57eecd0a05282ca194d9e"
+          "sha256": "9b05d1f92fc7c31e7fdcb969965ce415da2905a76a69b53b69e6ea2022bdb7bd"
         },
         {
           "id": "geom-nurbs/operations",
