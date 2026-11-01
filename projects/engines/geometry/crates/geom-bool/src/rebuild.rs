@@ -34,6 +34,8 @@ use geom_poly::order::normals_det;
 use geom_run::WorkMeter;
 use geom_topo::Line as Shadow;
 use geom_topo::order::Names;
+
+use crate::names::NamingError;
 use geom_topo::{
     Body, BodyKind, Box3, Builder, CurveKind, Edge, Face, Fin, Ix, Loop, PointKind, Region,
     RegionKind, Sense, Shell, SurfaceKind, TopoError, Vertex,
@@ -57,6 +59,8 @@ pub enum RebuildError {
     Num(NumError),
     /// The topology refused.
     Topo(TopoError),
+    /// A name could not be formed.
+    Naming(NamingError),
     /// A row past the end of a list: a defect, reported instead of a wrong body.
     Broken,
 }
@@ -67,6 +71,7 @@ impl fmt::Display for RebuildError {
             RebuildError::Merge(e) => write!(f, "{e}"),
             RebuildError::Num(e) => write!(f, "pieces that cannot be rebuilt: {e:?}"),
             RebuildError::Topo(e) => write!(f, "a rebuilt body refused: {e:?}"),
+            RebuildError::Naming(e) => write!(f, "{e}"),
             RebuildError::Broken => f.write_str("a rebuild lost a row"),
         }
     }
@@ -476,7 +481,11 @@ pub fn publish(
 /// # Errors
 ///
 /// A [`RebuildError`]: what the arenas refuse.
-pub fn wire(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Body, RebuildError> {
+pub fn wire(
+    curves: &Curves,
+    names: Option<&Names>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, RebuildError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
     let outside = a.regions.push(Region {
@@ -518,5 +527,8 @@ pub fn wire(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Body, RebuildE
             curve,
         })?;
     }
-    Ok(builder.publish(BodyKind::Wire, outside, meter)?)
+    Ok(match names {
+        Some(names) => builder.publish_named(names, BodyKind::Wire, outside, meter)?,
+        None => builder.publish(BodyKind::Wire, outside, meter)?,
+    })
 }

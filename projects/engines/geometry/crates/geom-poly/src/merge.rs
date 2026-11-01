@@ -51,7 +51,7 @@ use crate::order::{Flap, Line, Ray, about, around};
 use crate::plane::canonical;
 use crate::subdivide::around as box_around;
 use crate::trace::{Classified, Polygon, TraceError, classify};
-use crate::winding::{Kept, Winding, WindingTest, kept};
+use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
 
 /// What merges (11.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -850,78 +850,101 @@ fn radial(
     Ok(order)
 }
 
-/// Which shells face out, by the winding, over the shells, of a point in front of each, and the
-/// outer shell around each cavity, by that of a point behind it: behind a cavity lies the material
-/// it is a cavity of, even where another cell fills it back to back.
+/// `pieces` as polygons of one shell, each with `entry`.
+fn polygons_of(pieces: &[&Piece], entry: Option<Entry>) -> Vec<Polygon> {
+    pieces
+        .iter()
+        .map(|piece| Polygon {
+            piece: (*piece).clone(),
+            entry,
+        })
+        .collect()
+}
+
+/// The vectors in front of and behind the first of `polygons`, traced through all of them.
+fn sides_of_first(
+    polygons: &[Polygon],
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Winding, Winding), MergeError> {
+    let cell = box_around(polygons)?;
+    let lists: Vec<Vec<Piece>> = polygons
+        .iter()
+        .take(1)
+        .map(|polygon| alloc::vec![polygon.piece.clone()])
+        .collect();
+    let found = classify(&cell, &Winding::new(), polygons, &lists, meter)?;
+    let first = found.into_iter().next();
+    Ok(first.map_or_else(|| (Winding::new(), Winding::new()), |c| (c.front, c.back)))
+}
+
+/// Which of the shells `among` lie around a point behind shell `at`.
+fn around_shell(
+    of_shell: &[Vec<&Piece>],
+    at: usize,
+    among: &[usize],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<usize>, MergeError> {
+    let number = |shell: usize| u32::try_from(shell).unwrap_or(u32::MAX);
+    let list = of_shell.get(at).ok_or(MergeError::Open)?;
+    let mut polygons = polygons_of(list, None);
+    for shell in among.iter().filter(|shell| **shell != at) {
+        let others = of_shell.get(*shell).ok_or(MergeError::Open)?;
+        polygons.extend(polygons_of(others, Some(number(*shell))));
+    }
+    let (_, back) = sides_of_first(&polygons, meter)?;
+    Ok(among
+        .iter()
+        .copied()
+        .filter(|shell| *shell != at && back.count(number(*shell)) > 0)
+        .collect())
+}
+
+/// Which shells face out, and the outer shell around each cavity. A shell faces out if the point in
+/// front of it is outside it, which takes only its own pieces, so this is linear in the pieces
+/// when there are no cavities. A cavity is held by the innermost outer shell around a point behind
+/// it: behind a cavity lies the material it is a cavity of, even where another cell fills it back
+/// to back.
 fn nest(
     held: &[Held<'_>],
     shell_of_piece: &[usize],
     shells: usize,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<(bool, Option<usize>)>, MergeError> {
-    let polygons: Vec<Polygon> = held
-        .iter()
-        .zip(shell_of_piece)
-        .map(|(entry, shell)| Polygon {
-            piece: entry.piece.clone(),
-            entry: u32::try_from(*shell).ok(),
-        })
-        .collect();
-    let cell = box_around(&polygons)?;
-    let mut fronts = Vec::with_capacity(shells);
-    let mut backs = Vec::with_capacity(shells);
-    for shell in 0..shells {
-        meter.charge(1)?;
-        let chosen = shell_of_piece.iter().position(|s| *s == shell);
-        let lists: Vec<Vec<Piece>> = polygons
-            .iter()
-            .enumerate()
-            .map(|(at, p)| {
-                (Some(at) == chosen)
-                    .then(|| p.piece.clone())
-                    .into_iter()
-                    .collect::<Vec<Piece>>()
-            })
-            .collect();
-        let found = classify(&cell, &Winding::new(), &polygons, &lists, meter)?;
-        let (front, back) = found
-            .into_iter()
-            .next()
-            .map_or_else(|| (Winding::new(), Winding::new()), |c| (c.front, c.back));
-        fronts.push(front);
-        backs.push(back);
+    let mut of_shell: Vec<Vec<&Piece>> = alloc::vec![Vec::new(); shells];
+    for (entry, shell) in held.iter().zip(shell_of_piece) {
+        of_shell
+            .iter_mut()
+            .skip(*shell)
+            .take(1)
+            .for_each(|list| list.push(entry.piece));
     }
-    let number = |at: usize| u32::try_from(at).unwrap_or(u32::MAX);
-    let outer: Vec<bool> = fronts
-        .iter()
-        .enumerate()
-        .map(|(at, front)| front.count(number(at)) == 0)
+    let mut outer = Vec::with_capacity(shells);
+    for list in &of_shell {
+        meter.charge(1)?;
+        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), meter)?;
+        outer.push(front.count(0) == 0);
+    }
+    let outers: Vec<usize> = (0..shells)
+        .filter(|at| outer.get(*at) == Some(&true))
         .collect();
-    let holders = |at: usize| -> Vec<usize> {
-        (0..shells)
-            .filter(|t| {
-                *t != at
-                    && outer.get(*t) == Some(&true)
-                    && backs.get(at).is_some_and(|b| b.count(number(*t)) > 0)
-            })
-            .collect()
-    };
     let mut out = Vec::with_capacity(shells);
     for (at, is_outer) in outer.iter().enumerate() {
-        out.push((
-            *is_outer,
-            if *is_outer {
-                None
-            } else {
-                Some(
-                    holders(at)
-                        .iter()
-                        .copied()
-                        .max_by_key(|t| holders(*t).len())
-                        .ok_or(MergeError::Inside)?,
-                )
-            },
-        ));
+        if *is_outer {
+            out.push((true, None));
+            continue;
+        }
+        meter.charge(1)?;
+        let candidates = around_shell(&of_shell, at, &outers, meter)?;
+        // The innermost of those around it lies inside all the others.
+        let mut best = None;
+        for shell in &candidates {
+            let depth = around_shell(&of_shell, *shell, &candidates, meter)?.len();
+            if best.is_none_or(|(most, _)| depth >= most) {
+                best = Some((depth, *shell));
+            }
+        }
+        let (_, holder) = best.ok_or(MergeError::Inside)?;
+        out.push((false, Some(holder)));
     }
     Ok(out)
 }
@@ -933,6 +956,8 @@ pub struct Curves {
     pub vertices: Vec<Tpi>,
     /// The straight edges, each from its lower vertex to its higher.
     pub edges: Vec<(usize, usize)>,
+    /// Each edge's pieces, as places in the list given.
+    pub meets: Vec<Vec<usize>>,
 }
 
 /// The stretches of one line where pieces of two owners on different planes both have a side.
@@ -959,13 +984,22 @@ fn meetings(
         let Some(on) = meeting else {
             continue;
         };
+        let fins = active.iter().map(|side| RunFin {
+            sheet: side.sheet,
+            rising: side.rising,
+            held: side.held,
+            bound: side.bound,
+        });
         match runs.get_mut(opening..).and_then(<[Run]>::last_mut) {
-            Some(run) if run.high == low => run.high = high,
+            Some(run) if run.high == low => {
+                run.high = high;
+                run.fins.extend(fins);
+            }
             _ => runs.push(Run {
                 line,
                 low,
                 high,
-                fins: Vec::new(),
+                fins: fins.collect(),
                 on,
             }),
         }
@@ -1008,14 +1042,20 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
     used.dedup();
     let vertex = |id: usize| used.binary_search(&id).map_err(|_| MergeError::Open);
     let mut edges = Vec::with_capacity(runs.len());
+    let mut meets = Vec::with_capacity(runs.len());
     for run in &runs {
         edges.push((vertex(run.low)?, vertex(run.high)?));
+        meets.push(run.fins.iter().map(|fin| fin.held).collect());
     }
     let mut vertices = Vec::with_capacity(used.len());
     for id in &used {
         vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
     }
-    Ok(Curves { vertices, edges })
+    Ok(Curves {
+        vertices,
+        edges,
+        meets,
+    })
 }
 
 /// What numbers a face: its sheet, then its lowest fin's edge and way.

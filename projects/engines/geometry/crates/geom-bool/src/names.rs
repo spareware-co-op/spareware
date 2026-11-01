@@ -39,7 +39,7 @@ use geom_op::{
     EdgeOrVertex, History, HistoryError, NameError, NameId, NameList, NameSet, OpPath, Origin,
     PieceKey, Record, Role, RoleArg, Side, TopoName,
 };
-use geom_poly::merge::{Fin as Fin_, Merged, Outward};
+use geom_poly::merge::{Curves, Fin as Fin_, Merged, Outward};
 use geom_poly::plane::canonical;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{Arenas, Body, Edge, Face, Fin, Ix, PointKind, Vertex};
@@ -72,6 +72,8 @@ pub struct Sources<'a> {
     pub planes: &'a [Plane],
     /// The input faces that other results of this selection hold pieces of.
     pub split: &'a BTreeSet<(usize, u32)>,
+    /// The seed that names this cell's region.
+    pub seed: Option<OperandKey>,
 }
 
 /// A result's names and history.
@@ -154,9 +156,10 @@ fn keyed_role(name: &str, key: OperandKey) -> Result<Role, NameError> {
 }
 
 /// A rank for 20.2's order: an entity's vertex numbers, the lowest first, which follow the exact
-/// lexicographic order of the points.
+/// lexicographic order of the points, then its row, which only two faces back to back need: the
+/// row follows the sheet, and the sheet the plane and which way it faces.
 #[derive(Clone, Debug)]
-struct Rank(Vec<usize>);
+struct Rank(Vec<usize>, usize);
 
 impl WeakOrder for Rank {
     fn least_point(&self, other: &Self) -> Option<Ordering> {
@@ -167,8 +170,8 @@ impl WeakOrder for Rank {
         Some(self.0.cmp(&other.0))
     }
 
-    fn direction(&self, _: &Self) -> Option<Ordering> {
-        Some(Ordering::Equal)
+    fn direction(&self, other: &Self) -> Option<Ordering> {
+        Some(self.1.cmp(&other.1))
     }
 }
 
@@ -557,7 +560,7 @@ fn face_ranks(merged: &Merged) -> Vec<Rank> {
         .map(|at| {
             let mut list: Vec<usize> = fins_of(merged, at).map(|fin| fin.from).collect();
             list.sort_unstable();
-            Rank(list)
+            Rank(list, at)
         })
         .collect()
 }
@@ -752,7 +755,8 @@ fn name_edges(
         };
         rows.names.push(name);
         rows.origins.push(origin);
-        rows.ranks.push(Rank(alloc::vec![edge.low, edge.high]));
+        rows.ranks
+            .push(Rank(alloc::vec![edge.low, edge.high], rows.names.len()));
     }
     Ok(rows)
 }
@@ -815,16 +819,18 @@ fn name_vertices(
         };
         rows.names.push(name);
         rows.origins.push(origin);
-        rows.ranks.push(Rank(alloc::vec![at]));
+        rows.ranks.push(Rank(alloc::vec![at], at));
     }
     Ok(rows)
 }
 
-/// The regions of `merged`: one per outer shell, by its least face name, then the outside.
+/// The regions of `merged`: one per outer shell, by its seed or its least face name, then the
+/// outside.
 fn name_regions(
     op: &OpPath,
     merged: &Merged,
     faces: &[NameId],
+    seed: Option<OperandKey>,
     records: &mut Vec<Record>,
 ) -> Result<Vec<NameId>, NamingError> {
     let mut regions = Vec::new();
@@ -849,7 +855,10 @@ fn name_regions(
         // The least name, which depends on no coordinate: a face's number does.
         let names = shell.faces.iter().filter_map(|face| faces.get(*face));
         let least = names.min().ok_or(NamingError::Broken)?;
-        add(Role::new("region.solid", [RoleArg::Name(*least)])?)?;
+        add(match seed {
+            Some(key) => keyed_role("seed", key)?,
+            None => Role::new("region.solid", [RoleArg::Name(*least)])?,
+        })?;
     }
     add(Role::new("region.outside", [])?)?;
     Ok(regions)
@@ -925,7 +934,7 @@ pub fn name(
     let edges = name_edges(merged, &faces, &inputs, sources, &mut alive)?.finished(&mut records)?;
     let vertices =
         name_vertices(merged, &faces, &inputs, sources, &mut alive)?.finished(&mut records)?;
-    let regions = name_regions(op, merged, &faces.names, &mut records)?;
+    let regions = name_regions(op, merged, &faces.names, sources.seed, &mut records)?;
     let deleted = deleted_names(sources, &records, &alive, &faces.deleted)?;
     let history = History::new(records, deleted, [])?;
     Ok(Naming {
@@ -937,5 +946,169 @@ pub fn name(
         },
         history,
         qualified: faces.qualified,
+    })
+}
+
+/// The names and history of `curves`, whose pieces came from `polygons` by place in the list given
+/// to the section: each edge and vertex `Bounded` by the input faces that meet there.
+///
+/// # Errors
+///
+/// A [`NamingError`]: a defect.
+pub fn name_curves(
+    op: &OpPath,
+    curves: &Curves,
+    polygons: &[usize],
+    sources: &Sources<'_>,
+) -> Result<Naming, NamingError> {
+    let face_at = |piece: usize| -> Result<NameId, NamingError> {
+        let polygon = *polygons.get(piece).ok_or(NamingError::Broken)?;
+        let owner = sources.owners.get(polygon).ok_or(NamingError::Broken)?;
+        let row = sources.rows.get(polygon).ok_or(NamingError::Broken)?;
+        let operand = sources.operands.get(*owner).ok_or(NamingError::Broken)?;
+        name_at(&operand.names.faces, *row)
+    };
+    let mut records = Vec::new();
+    let mut edges = Rows::default();
+    let mut at_vertex: Vec<BTreeSet<NameId>> = alloc::vec![BTreeSet::new(); curves.vertices.len()];
+    for ((low, high), pieces) in curves.edges.iter().zip(&curves.meets) {
+        let mut by = BTreeSet::new();
+        for piece in pieces {
+            by.insert(face_at(*piece)?);
+        }
+        for at in [*low, *high] {
+            at_vertex.iter_mut().skip(at).take(1).for_each(|set| {
+                set.extend(by.iter().copied());
+            });
+        }
+        let set = NameSet::new(by)?;
+        let name = TopoName::Bounded {
+            kind: EdgeOrVertex::Edge,
+            by: set.clone(),
+            ends: NameSet::new([])?,
+        };
+        edges.names.push(name.id()?);
+        edges.origins.push(Origin::Generated {
+            from: set,
+            role: Role::new("section", [])?,
+        });
+        edges
+            .ranks
+            .push(Rank(alloc::vec![*low, *high], edges.names.len()));
+    }
+    let mut vertices = Rows::default();
+    for (at, by) in at_vertex.into_iter().enumerate() {
+        let set = NameSet::new(by)?;
+        let name = TopoName::Bounded {
+            kind: EdgeOrVertex::Vertex,
+            by: set.clone(),
+            ends: NameSet::new([])?,
+        };
+        vertices.names.push(name.id()?);
+        vertices.origins.push(Origin::Generated {
+            from: set,
+            role: Role::new("section", [])?,
+        });
+        vertices.ranks.push(Rank(alloc::vec![at], at));
+    }
+    let edges = edges.finished(&mut records)?;
+    let vertices = vertices.finished(&mut records)?;
+    let outside = TopoName::Created {
+        op: op.clone(),
+        role: Role::new("region.outside", [])?,
+        from: NameList::new([]),
+    }
+    .id()?;
+    records.push(Record {
+        output: outside,
+        origin: Origin::Generated {
+            from: NameSet::new([])?,
+            role: Role::new("region.outside", [])?,
+        },
+    });
+    let deleted = deleted_names(sources, &records, &BTreeSet::new(), &BTreeSet::new())?;
+    Ok(Naming {
+        names: Names {
+            regions: alloc::vec![key_of(outside)],
+            faces: Vec::new(),
+            edges: edges.into_iter().map(key_of).collect(),
+            vertices: vertices.into_iter().map(key_of).collect(),
+        },
+        history: History::new(records, deleted, [])?,
+        qualified: false,
+    })
+}
+
+/// The names and history of `merged`, made from nothing: each face named by `op` and its role, by
+/// polygon, and the edges and vertices `Bounded` by those.
+///
+/// # Errors
+///
+/// A [`NamingError`]: a defect.
+pub fn name_fresh(
+    op: &OpPath,
+    merged: &Merged,
+    pieces: &[Outward],
+    roles: &[Role],
+) -> Result<Naming, NamingError> {
+    let mut role_of: Vec<Option<&Role>> = alloc::vec![None; merged.faces.len()];
+    for (piece, face) in pieces.iter().zip(&merged.piece_face) {
+        let role = roles.get(piece.polygon).ok_or(NamingError::Broken)?;
+        role_of
+            .iter_mut()
+            .skip(*face)
+            .take(1)
+            .for_each(|slot| *slot = Some(role));
+    }
+    let mut faces = FacesDone {
+        names: Vec::with_capacity(merged.faces.len()),
+        records: Vec::with_capacity(merged.faces.len()),
+        sources: alloc::vec![Vec::new(); merged.faces.len()],
+        inputs: alloc::vec![Vec::new(); merged.faces.len()],
+        deleted: BTreeSet::new(),
+        qualified: false,
+    };
+    for role in role_of {
+        let role = role.ok_or(NamingError::Broken)?;
+        let name = TopoName::Created {
+            op: op.clone(),
+            role: role.clone(),
+            from: NameList::new([]),
+        }
+        .id()?;
+        faces.names.push(name);
+        faces.records.push(Record {
+            output: name,
+            origin: Origin::Generated {
+                from: NameSet::new([])?,
+                role: role.clone(),
+            },
+        });
+    }
+    let operands: [Named<'_>; 0] = [];
+    let split = BTreeSet::new();
+    let sources = Sources {
+        operands: &operands,
+        owners: &[],
+        rows: &[],
+        planes: &[],
+        split: &split,
+        seed: None,
+    };
+    let mut records = core::mem::take(&mut faces.records);
+    let mut alive = BTreeSet::new();
+    let edges = name_edges(merged, &faces, &[], &sources, &mut alive)?.finished(&mut records)?;
+    let vertices =
+        name_vertices(merged, &faces, &[], &sources, &mut alive)?.finished(&mut records)?;
+    let regions = name_regions(op, merged, &faces.names, None, &mut records)?;
+    Ok(Naming {
+        names: Names {
+            regions: regions.into_iter().map(key_of).collect(),
+            faces: faces.names.iter().copied().map(key_of).collect(),
+            edges: edges.into_iter().map(key_of).collect(),
+            vertices: vertices.into_iter().map(key_of).collect(),
+        },
+        history: History::new(records, NameSet::new([])?, [])?,
+        qualified: false,
     })
 }

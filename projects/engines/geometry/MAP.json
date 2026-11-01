@@ -1546,6 +1546,11 @@
               "shape": "tuple"
             },
             {
+              "doc": "A name could not be formed.",
+              "name": "Naming",
+              "shape": "tuple"
+            },
+            {
               "doc": "A row past the end of a list: a defect, reported instead of a wrong body.",
               "name": "Broken",
               "shape": "unit"
@@ -1682,6 +1687,29 @@
             "text": "chapter 11.1 and 11.3's \"How faces enter\" (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's section 3.2 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
           },
           "path": "geom_bool::operand",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(b log b) over the b blocks walked, each traced through every polygon. Charges the meter one unit per polygon per path segment.",
+          "does": "two seeds in one cell mean the rooms they name leak into each other. [`narrowest`] finds the path between them whose narrowest point is widest, and reports that point and its width, so a gap of 0.003 mm where two walls fail to meet shows up at once, in its place.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+          "guarantees": [
+            "**A measurement for people, not a decision.** Nothing here changes a result. On walls square to the axes the blocks fit the cell and the width is exact; on slanted walls a block is judged by its centre, so the width is approximate, and it is labelled so (11.7).",
+            "**Exact where it decides, deterministic everywhere.** Each block is placed by exact winding numbers; ties fall to the lowest block.",
+            "**The gap is in the grid.** Every corner's coordinates are grid lines, so a gap of any width between two walls is a row of blocks of that width."
+          ],
+          "job": "The narrowest passage between two seeds of one cell (11.7).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1287/opre.8.5.733"
+            ],
+            "text": "chapter 11.7 (`projects/engines/geometry/architecture/11-booleans.md`); the widest path is the maximum bottleneck path of Pollack, \"The maximum capacity route through a network\", Operations Research 8, 1960, <https://doi.org/10.1287/opre.8.5.733>, here over Dijkstra's walk."
+          },
+          "path": "geom_bool::passage",
           "provenance": [],
           "spdx": null,
           "target": "lib"

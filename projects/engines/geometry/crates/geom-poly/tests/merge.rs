@@ -261,6 +261,47 @@ fn a_cavity_is_held_by_the_innermost_shell_around_it() {
 }
 
 #[test]
+fn a_cavity_is_held_by_the_innermost_shell_whatever_their_numbers() {
+    // A tilted solid's first face sorts before a block's, so the inner solid is numbered first.
+    let mut polygons = scene(&[
+        block([0, 0, 0], [100, 100, 100]),
+        block([10, 10, 10], [90, 90, 90]),
+    ]);
+    let solid = [[20, 20, 20], [80, 20, 21], [20, 80, 22], [21, 22, 80]];
+    let cavity = [[30, 30, 30], [50, 30, 31], [30, 50, 32], [31, 32, 50]];
+    for (entry, corners) in [(2, solid), (3, cavity)] {
+        let turned = [corners[1], corners[0], corners[2], corners[3]];
+        tetrahedron(corners, entry, &mut polygons)
+            .or_else(|| tetrahedron(turned, entry, &mut polygons))
+            .unwrap();
+    }
+    let test = WindingTest::new(vec![
+        Term::Inside(0),
+        Term::Inside(1),
+        Term::Not,
+        Term::And,
+        Term::Inside(2),
+        Term::Inside(3),
+        Term::Not,
+        Term::And,
+        Term::Or,
+    ])
+    .unwrap();
+    let pieces = kept(&polygons, &test, LEAF_POLYGONS);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&m, &pieces);
+    assert_eq!(m.shells.len(), 4);
+    let find = |outer: bool, sides: usize| {
+        (0..4)
+            .find(|s| m.shells[*s].outer == outer && m.shells[*s].faces.len() == sides)
+            .unwrap()
+    };
+    assert!(find(true, 4) < find(true, 6));
+    assert_eq!(m.shells[find(false, 4)].holder, Some(find(true, 4)));
+    assert_eq!(m.shells[find(false, 6)].holder, Some(find(true, 6)));
+}
+
+#[test]
 fn blocks_apart_make_two_outer_shells() {
     let far = block([9, 0, 0], [12, 4, 4]);
     let m = merged(&[A, far], &WindingTest::unite(), LEAF_POLYGONS);

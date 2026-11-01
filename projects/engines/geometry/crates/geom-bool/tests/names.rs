@@ -322,9 +322,32 @@ fn every_selection_of_one_call_has_its_history() {
 }
 
 #[test]
+fn a_half_space_has_names_and_a_section_has_a_history() {
+    let a = cuboid(1, [0, 0, 0], [40, 40, 40]);
+    let b = cuboid(2, [20, 20, 20], [40, 40, 40]);
+    let out = combine(
+        &ctx(),
+        &SERIAL,
+        &BooleanInput {
+            operands: vec![solid(1, &a), solid(2, &b)],
+            select: vec![Selection::Section],
+            merge: Merge::RemoveRedundant,
+            accept: None,
+        },
+    )
+    .unwrap();
+    let curves = &out.result[0][0];
+    let history = curves.history.as_ref().unwrap();
+    assert_eq!(history.records().len(), 6 + 6 + 1);
+    let inputs: BTreeSet<NameId> = all_names(&a).union(&all_names(&b)).copied().collect();
+    history.check(&NameSet::new(inputs).unwrap()).unwrap();
+}
+
+#[test]
 fn an_operand_without_names_gives_a_body_without_history() {
     let a = cuboid(1, [0, 0, 0], [40, 40, 40]);
-    let b = geom_bool::half_space::half_space(
+    let plain = geom_bool::half_space::half_space(
+        ctx().path(),
         [
             P3::new(20, 0, 0).unwrap(),
             P3::new(20, 1, 0).unwrap(),
@@ -333,6 +356,16 @@ fn an_operand_without_names_gives_a_body_without_history() {
         &mut meter(),
     )
     .unwrap();
-    let out = unite(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &b)]).unwrap();
+    let named = plain;
+    let out = unite(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &named)]).unwrap();
+    assert!(
+        out.result.history.is_some(),
+        "a half-space has names of its own"
+    );
+    let bare = geom_topo::Builder::edit(&named);
+    let bare = bare
+        .publish(named.kind(), named.outside(), &mut meter())
+        .unwrap();
+    let out = unite(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &bare)]).unwrap();
     assert!(out.result.history.is_none());
 }

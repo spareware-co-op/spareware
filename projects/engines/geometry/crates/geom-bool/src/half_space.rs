@@ -27,14 +27,16 @@ use alloc::vec::Vec;
 use geom_num::grid::COORD_MAX;
 use geom_num::plane::Plane;
 use geom_num::{NumError, P3};
+use geom_op::{OpPath, Role, RoleArg};
 use geom_poly::convex::Piece;
 use geom_poly::cut::{Clipped, clip};
-use geom_poly::merge::{Merge, Outward};
+use geom_poly::merge::{Merge, Outward, merge};
 use geom_poly::winding::Winding;
 use geom_run::WorkMeter;
 use geom_topo::{Body, FlatSurface as Flat, Sense, SurfaceKind};
 
-use crate::rebuild::{Carrier, RebuildError, rebuild};
+use crate::names::{NamingError, name_fresh};
+use crate::rebuild::{Carrier, RebuildError, publish};
 
 /// The widest domain a flat carrier in the range box needs: past the box's diagonal on any axis.
 const DOMAIN: (f64, f64) = (-1e13, 1e13);
@@ -144,7 +146,11 @@ fn cap(plane: &Plane) -> Result<Option<Piece>, NumError> {
 /// # Errors
 ///
 /// [`RebuildError::Num`] for three points on one line.
-pub fn half_space(points: [P3; 3], meter: &mut WorkMeter<'_>) -> Result<Body, RebuildError> {
+pub fn half_space(
+    op: &OpPath,
+    points: [P3; 3],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, RebuildError> {
     let [a, b, c] = points;
     let plane = Plane::through(a, b, c)?;
     let behind = Plane::new(
@@ -153,7 +159,10 @@ pub fn half_space(points: [P3; 3], meter: &mut WorkMeter<'_>) -> Result<Body, Re
     )?;
     let mut carriers = Vec::with_capacity(7);
     let mut pieces = Vec::with_capacity(7);
-    let mut keep = |piece: Piece, carrier: Carrier| {
+    let mut roles = Vec::with_capacity(7);
+    let side_role = |at: u64| Role::new("half_space.side", [RoleArg::Count(at)]);
+    let named = |e: geom_op::NameError| RebuildError::Naming(NamingError::Name(e));
+    let mut keep = |piece: Piece, carrier: Carrier, role: Role| {
         pieces.push(Outward {
             piece,
             polygon: carriers.len(),
@@ -163,8 +172,9 @@ pub fn half_space(points: [P3; 3], meter: &mut WorkMeter<'_>) -> Result<Body, Re
             back: Winding::new(),
         });
         carriers.push(carrier);
+        roles.push(role);
     };
-    for axis in 0..3 {
+    for (axis, first) in (0usize..3).zip([0u64, 2, 4]) {
         for upward in [true, false] {
             let mut bounds = around_axis(axis)?.to_vec();
             if !upward {
@@ -176,12 +186,20 @@ pub fn half_space(points: [P3; 3], meter: &mut WorkMeter<'_>) -> Result<Body, Re
                 bounds,
             };
             if let Some(kept) = kept_of(side, &behind, false)? {
-                keep(kept, side_carrier(axis, upward)?);
+                let at = first.saturating_add(u64::from(upward));
+                keep(
+                    kept,
+                    side_carrier(axis, upward)?,
+                    side_role(at).map_err(named)?,
+                );
             }
         }
     }
     if let Some(kept) = cap(&plane)? {
-        keep(kept, cap_carrier(points)?);
+        let role = Role::new("half_space.cap", []).map_err(named)?;
+        keep(kept, cap_carrier(points)?, role);
     }
-    rebuild(&pieces, &carriers, Merge::RemoveRedundant, meter)
+    let merged = merge(&pieces, Merge::RemoveRedundant, meter)?;
+    let naming = name_fresh(op, &merged, &pieces, &roles).map_err(RebuildError::Naming)?;
+    publish(&merged, &carriers, false, Some(&naming.names), meter)
 }

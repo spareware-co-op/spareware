@@ -300,7 +300,12 @@ fn refusals_name_what_is_wrong() {
 #[test]
 fn a_half_space_clips_a_block_under_a_roof() {
     let block = cuboid([0, 0, 0], [60, 60, 60]);
-    let roof = half_space([p(60, 0, 0), p(60, 60, 0), p(0, 0, 60)], &mut meter()).unwrap();
+    let roof = half_space(
+        ctx().path(),
+        [p(60, 0, 0), p(60, 60, 0), p(0, 0, 60)],
+        &mut meter(),
+    )
+    .unwrap();
     checked(&roof);
     let out = intersect(&ctx(), &SERIAL, &[solid(1, &block), solid(2, &roof)]).unwrap();
     assert_eq!(sixfold(&out.result.body), 6 * 108_000);
@@ -323,7 +328,7 @@ fn half_spaces_face_every_way_and_steep_ones_too() {
         ([p(60, 0, 0), p(60, 0, 1), p(0, 60, 0)], 108_000),
     ];
     for (points, want) in cases {
-        let space = half_space(points, &mut meter()).unwrap();
+        let space = half_space(ctx().path(), points, &mut meter()).unwrap();
         let out = intersect(&ctx(), &SERIAL, &[solid(1, &block), solid(2, &space)]).unwrap();
         assert_eq!(sixfold(&out.result.body), 6 * want, "{points:?}");
         checked(&out.result.body);
@@ -334,7 +339,7 @@ fn half_spaces_face_every_way_and_steep_ones_too() {
 fn a_half_space_needs_three_points_that_make_a_plane() {
     let line = [p(0, 0, 0), p(1, 1, 1), p(2, 2, 2)];
     assert!(matches!(
-        half_space(line, &mut meter()),
+        half_space(ctx().path(), line, &mut meter()),
         Err(RebuildError::Num(_))
     ));
 }
@@ -738,7 +743,12 @@ fn keep_takes_a_sheet_that_lies_on_a_solids_face() {
 #[test]
 fn a_half_space_on_a_side_of_the_range_box_is_the_whole_box() {
     let m = geom_num::grid::COORD_MAX;
-    let whole = half_space([p(m, 0, 0), p(m, 1, 0), p(m, 0, 1)], &mut meter()).unwrap();
+    let whole = half_space(
+        ctx().path(),
+        [p(m, 0, 0), p(m, 1, 0), p(m, 0, 1)],
+        &mut meter(),
+    )
+    .unwrap();
     assert_eq!(whole.arenas().faces.len(), 6);
     checked(&whole);
 }
@@ -761,7 +771,12 @@ fn a_seam_that_ends_off_the_grid_comes_back_in() {
         .remove(0)
         .body;
     // 3y + z = 101 meets the seam on top at y = 61/3.
-    let tilt = half_space([p(0, 30, 11), p(1, 30, 11), p(0, 31, 8)], &mut meter()).unwrap();
+    let tilt = half_space(
+        ctx().path(),
+        [p(0, 30, 11), p(1, 30, 11), p(0, 31, 8)],
+        &mut meter(),
+    )
+    .unwrap();
     let meeting = call(
         vec![solid(1, &seamed), solid(2, &tilt)],
         Selection::Intersect,
