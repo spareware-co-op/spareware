@@ -739,6 +739,83 @@ fn the_budget_stops_a_build() {
     ));
 }
 
+/// A face on a leaning plane, with a square hole, every corner off the grid. With `wrong`, the hole
+/// goes round the way its face does, its edges' planes turned to suit.
+fn holed(wrong: bool) -> Polygons {
+    let top = Plane::new([-1, 0, 7], -1).unwrap();
+    let wall = |n: [i128; 3], d: i128| Plane::new(n, d).unwrap();
+    let (south, east) = (wall([0, 1, 0], 0), wall([-1, 0, 0], 7));
+    let (north, west) = (wall([0, -1, 0], 7), wall([1, 0, 0], 0));
+    let (left, far) = (wall([-1, 0, 0], 2), wall([0, 1, 0], -4));
+    let (right, near) = (wall([1, 0, 0], -4), wall([0, -1, 0], 2));
+    let vertices = vec![
+        Corner::Planes([top, south, west]),
+        Corner::Planes([top, south, east]),
+        Corner::Planes([top, north, east]),
+        Corner::Planes([top, north, west]),
+        Corner::Planes([top, near, left]),
+        Corner::Planes([top, far, left]),
+        Corner::Planes([top, far, right]),
+        Corner::Planes([top, near, right]),
+    ];
+    let mut input = soup(vertices, &[&[0, 1, 2, 3]]);
+    let turn = |p: Plane| Plane::new(p.n().map(|c| -c), -p.d()).unwrap();
+    let mut planes = vec![south, east, north, west];
+    if wrong {
+        input.corners.extend([4, 7, 6, 5]);
+        planes.extend([turn(near), turn(right), turn(far), turn(left)]);
+    } else {
+        input.corners.extend([4, 5, 6, 7]);
+        planes.extend([left, far, right, near]);
+    }
+    input.loop_start.push(8);
+    input.face_loops = vec![0, 2];
+    input.face_plane = vec![Some(top)];
+    input.edge_plane = planes.into_iter().map(Some).collect();
+    input
+}
+
+#[test]
+fn a_face_off_the_grid_turns_the_way_it_faces() {
+    let parts = mesh(&slab(1 << 10)).into_parts();
+    let refused = |p: Parts| ExactMesh::new(p, &Exec::serial(), &mut meter()).unwrap_err();
+    // The face alone turned over: its edges no longer run the way their planes say.
+    let mut one = parts.clone();
+    one.face_plane[0].flipped ^= true;
+    assert!(matches!(
+        refused(one),
+        MeshError::Fault(MeshFault::EdgePlaneFacing { .. })
+    ));
+    // One edge's plane turned over.
+    let mut edge = parts.clone();
+    edge.he_plane[0].flipped ^= true;
+    assert!(matches!(
+        refused(edge),
+        MeshError::Fault(MeshFault::EdgePlaneFacing { half_edge: 0 })
+    ));
+    // The face and all its edges together: every line runs as it did, and only the turn tells.
+    let mut all = parts.clone();
+    all.face_plane[0].flipped ^= true;
+    let end = all.loop_start[1] as usize;
+    for facing in &mut all.he_plane[..end] {
+        facing.flipped ^= true;
+    }
+    assert!(matches!(
+        refused(all),
+        MeshError::Fault(MeshFault::WrongWayRound { face: 0 })
+    ));
+}
+
+#[test]
+fn a_hole_off_the_grid_goes_the_other_way_round() {
+    let m = mesh(&holed(false));
+    assert_eq!(m.parts().loop_start.len(), 3);
+    assert!(matches!(
+        build(&holed(true), &Exec::serial(), &mut meter()),
+        Err(MeshError::Fault(MeshFault::WrongWayRound { face: 0 }))
+    ));
+}
+
 #[test]
 fn a_loop_no_face_holds_is_refused() {
     let mut input = cuboid(2, 3, 4);

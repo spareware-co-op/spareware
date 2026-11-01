@@ -718,7 +718,7 @@ pub(super) fn grouped(
 }
 
 /// A plane through `v` that crosses `line`.
-fn crossing(parts: &Parts, line: &Line, v: u32) -> Result<Plane, MeshError> {
+pub(super) fn crossing(parts: &Parts, line: &Line, v: u32) -> Result<Plane, MeshError> {
     let [p, q] = line.planes();
     let candidates: [Option<Plane>; 3] = match *at(&parts.verts, v)? {
         Vertex::Grid(c) => [
