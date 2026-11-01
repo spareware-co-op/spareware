@@ -1028,3 +1028,37 @@ fn arcs_end_to_end_on_one_circle_touch_at_both_shared_ends() {
         &[(false, [0.0, 0.0, 2.0, 2.0]), (false, [1.0, 1.0, 1.0, 1.0])],
     );
 }
+
+#[test]
+fn the_engine_takes_only_its_work() {
+    // Pairs with no closed form go to the subdivision engine; what it charges is a deterministic
+    // function of the input, so each count pins the order it cuts boxes in, which boxes its range
+    // and clipping tests drop, and how far it refines each zero.
+    let work = |a: &CurveKind<2>, b: &CurveKind<2>| {
+        let mut m = meter();
+        let r = curves(a, b, &mut m).unwrap();
+        (r.items().len(), m.used().work)
+    };
+    let shifted = |points: &[[f64; 2]]| {
+        let p = points.len() - 1;
+        let mut knots = vec![1.0; p + 1];
+        knots.extend(vec![2.0; p + 1]);
+        CurveKind::Nurbs(Curve::new(Basis::new(p, knots).unwrap(), points).unwrap())
+    };
+    let wave = [[0.0, 0.0], [1.0, 3.0], [2.0, -2.0], [3.0, 1.0]];
+    let other = [[0.0, 1.0], [1.0, -1.0], [2.0, 2.0], [3.0, 0.0]];
+    let got = [
+        work(&bezier(&wave), &bezier(&other)),
+        work(&shifted(&wave), &bezier(&other)),
+        work(&bezier(&wave), &shifted(&other)),
+        work(
+            &bezier(&[[0.0, 0.0], [1.0, 2.0], [2.0, 0.0]]),
+            &bezier(&[[0.0, 0.9], [2.0, 0.9]]),
+        ),
+        work(
+            &bezier(&[[0.0, 0.0], [1.0, 2.0], [2.0, 0.0]]),
+            &bezier(&[[0.0, 1.01], [2.0, 1.01]]),
+        ),
+    ];
+    assert_eq!(got, [(3, 3589), (3, 3589), (3, 3589), (2, 507), (0, 254)]);
+}
