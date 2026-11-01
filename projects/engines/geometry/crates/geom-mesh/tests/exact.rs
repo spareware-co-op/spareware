@@ -22,11 +22,11 @@ use geom_mesh::exact::{
     ExactMesh, MeshError, MeshFault, MeshKind, NONE, Parts, PropTable, Vertex, morton,
 };
 use geom_num::grid::{GridStep, P3, Steps};
-use geom_num::plane::Plane;
+use geom_num::plane::{Plane, Tpi};
 use geom_num::wide::I256;
-use geom_num::{Exactness, NumError};
+use geom_num::{Exactness, NumError, Sign};
 use geom_op::NameId;
-use geom_run::{Budget, Exec, WorkMeter};
+use geom_run::{Budget, BudgetKind, Exec, WorkMeter};
 use geom_test::seed::resolve;
 use geom_test::{Seed, SplitMix64};
 
@@ -729,13 +729,15 @@ fn a_pool_changes_nothing() {
     }
 }
 
+/// A budget that runs out stops the build: as the meter's stop where a serial step meets it, or as
+/// the phase over budget where the parallel helper does.
 #[test]
 fn the_budget_stops_a_build() {
     let input = cuboid(2, 3, 4);
     let mut small = WorkMeter::new(Budget::of_work(3));
     assert!(matches!(
         build(&input, &Exec::serial(), &mut small),
-        Err(MeshError::Stopped(_))
+        Err(MeshError::Stopped(_) | MeshError::BudgetExceeded(_))
     ));
 }
 
@@ -869,6 +871,108 @@ fn a_notch_off_the_grid_is_no_wrong_turn() {
 #[test]
 fn corners_on_and_off_the_grid_sort_together() {
     let m = mesh(&dart([(-1, -7), (13, 0), (-1, 7), (5, 0)], &[0, 1, 2]));
+    assert!(matches!(
+        turned_over(m),
+        MeshError::Fault(MeshFault::WrongWayRound { face: 0 })
+    ));
+}
+
+/// A dart whose loop is stored from its notch: the notch's walls reduce to normals (2, ±1, 0), and
+/// sort just after the face's plane, ahead of the long walls (6, ±11, 0), so the notch has the lowest
+/// key and the loop starts there. The checker must still find the corner lowest in x, y and z.
+/// The work `build` charges is part of what it does: a budget stops it at the same item every
+/// time (23.10). One unit per input vertex, per corner, per edge and twice per face, and the
+/// checker's own, pinned for two shapes; a change to the schedule changes these numbers.
+#[test]
+fn the_build_charges_its_light_phases_too() {
+    let charged = |input: &Polygons| {
+        let mut meter = meter();
+        build(input, &Exec::serial(), &mut meter).unwrap();
+        meter.used().get(BudgetKind::Work)
+    };
+    assert_eq!(charged(&cuboid(3, 4, 5)), 94);
+    let field = prism(&[vec![5, 6, 7], vec![6, 8, 6], vec![5, 7, 9]], 4).0;
+    assert_eq!(charged(&field), 313);
+}
+
+/// Two faces on one dominant axis share their edge's plane only where `build` makes it: an edge
+/// whose planes are given keeps each half-edge's own, even where the two differ.
+#[test]
+fn given_edge_planes_are_never_shared() {
+    // One cell of a height field: two top triangles, a b c and a c d, meet on the diagonal a c.
+    let (mut input, _) = prism(&[vec![5, 6], vec![7, 6]], 4);
+    let corner = |k: usize| match input.vertices[input.corners[k] as usize] {
+        Corner::Grid(p) => p,
+        Corner::Planes(_) => panic!("a prism's corners are grid points"),
+    };
+    let (a, c) = (corner(0), corner(2));
+    assert_eq!((corner(3), corner(4)), (a, c));
+    // The diagonal's half-edges: c to a in the first triangle, a to c in the second.
+    let (b, d) = (corner(1), corner(5));
+    let tilted = |start: P3, off: [i64; 3], inside: P3| {
+        let lift = g(
+            start.x.get() + off[0],
+            start.y.get() + off[1],
+            start.z.get() + off[2],
+        );
+        let Corner::Grid(lift) = lift else {
+            panic!("a grid point")
+        };
+        let plane = Plane::through(a, c, lift).unwrap();
+        // Positive toward the face's own third corner.
+        let [x, y, z] = plane.n();
+        let at = |p: P3| {
+            x * i128::from(p.x.get())
+                + y * i128::from(p.y.get())
+                + z * i128::from(p.z.get())
+                + plane.d()
+        };
+        if at(inside) > 0 {
+            plane
+        } else {
+            Plane::new([-x, -y, -z], -plane.d()).unwrap()
+        }
+    };
+    let first = tilted(a, [1, -2, 3], b);
+    let second = tilted(a, [-2, 1, 5], d);
+    let mut given = vec![None; input.corners.len()];
+    given[2] = Some(first);
+    given[3] = Some(second);
+    input.edge_plane = given;
+    let mesh = build(&input, &Exec::serial(), &mut meter()).unwrap();
+    let pooled = |plane: &Plane| {
+        let [x, y, z] = plane.n();
+        let turned = Plane::new([-x, -y, -z], -plane.d()).unwrap();
+        mesh.parts()
+            .planes
+            .iter()
+            .any(|q| q == plane || *q == turned)
+    };
+    assert!(pooled(&first) && pooled(&second));
+}
+
+#[test]
+fn a_loop_stored_from_its_notch_turns_at_its_lowest_corner() {
+    let outline = [(0, -6), (11, 0), (0, 6), (3, 0)];
+    let m = mesh(&dart(outline, &[]));
+    let parts = m.parts();
+    let first = parts.verts[parts.he_vert[parts.loop_start[0] as usize] as usize];
+    let Vertex::Planes(rows) = first else {
+        panic!("the dart is off the grid");
+    };
+    let notch: Vec<Plane> = [(0, 6), (3, 0), (0, -6)]
+        .windows(2)
+        .map(|w| {
+            let ((px, py), (qx, qy)) = (w[0], w[1]);
+            let n = [py - qy, qx - px, 0];
+            Plane::new(n, -(n[0] * px + n[1] * py)).unwrap()
+        })
+        .collect();
+    let [a, b, c] = rows.map(|r| parts.planes[r as usize]);
+    let point = Tpi::new(a, b, c).unwrap();
+    for wall in &notch {
+        assert_eq!(wall.side_of_tpi(&point).unwrap(), Sign::Zero);
+    }
     assert!(matches!(
         turned_over(m),
         MeshError::Fault(MeshFault::WrongWayRound { face: 0 })

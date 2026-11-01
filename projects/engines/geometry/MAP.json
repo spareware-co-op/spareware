@@ -5324,8 +5324,8 @@
           "target": "lib"
         },
         {
-          "cost": "O(n log n) in the half-edges for the sorts of the planes and faces, with a few allocations per array and none per face but for faces with holes. A face's plane takes up to three greatest common divisors, an edge plane's one or two.",
-          "does": "[`build`] takes [`Polygons`], whose vertices are grid points or three planes and whose faces are loops of vertices, and works out what the mesh stores. A face made from grid points gets its plane from its area vector; each edge between grid points gets the plane through it that holds the face's dominant axis. Faces and edges off the grid bring their planes with them. The planes go into one sorted pool, the vertices and faces into canonical order, and each half-edge finds its opposite, in exact radial order where more than two meet.",
+          "cost": "O(n log n) in the half-edges for the sorts of the planes and faces, with a few allocations per array and none per face but for faces with holes. A face's plane takes up to three greatest common divisors, an edge plane's one or two, made once for an edge whose two faces share an axis; finding those edges is one more counting sort of the half-edges.",
+          "does": "[`build`] takes [`Polygons`], whose vertices are grid points or three planes and whose faces are loops of vertices, and works out what the mesh stores. A face made from grid points gets its plane from its area vector; each edge between grid points gets the plane through it that holds the face's dominant axis; where the faces on both sides share that axis, the plane is made once for both half-edges, which differ only in facing. Faces and edges off the grid bring their planes with them. The planes go into one sorted pool, the vertices and faces into canonical order, and each half-edge finds its opposite, in exact radial order where more than two meet.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
           "guarantees": [
