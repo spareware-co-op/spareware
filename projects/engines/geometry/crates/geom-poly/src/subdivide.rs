@@ -68,6 +68,12 @@ pub const LEAF_POLYGONS: usize = 32;
 /// One box at a time: a box's cost varies too much for a chunk of them to mean anything.
 const ONE_BOX: ChunkPlan = ChunkPlan::fixed::<1>();
 
+/// The box around the polygons.
+const AROUND: Phase = Phase::new("arrangement: the box around");
+
+/// Polygons, a few hundred a task: a corner's rounding is a few dozen instructions.
+const CORNER_PLAN: ChunkPlan = ChunkPlan::fixed::<256>();
+
 /// One level of the tree.
 const SPLITS: Phase = Phase::new("arrangement: split boxes");
 
@@ -109,30 +115,67 @@ enum Outcome {
 /// [`NumError::Degenerate`] for a piece whose adjacent bounds do not meet, [`NumError::OutOfRange`]
 /// for a corner outside the frame.
 pub fn around(polygons: &[Polygon]) -> Result<Cell, NumError> {
+    let mut ranges = Vec::with_capacity(polygons.len());
+    for polygon in polygons {
+        ranges.push(range_of(polygon)?);
+    }
+    Ok(cell_around(&ranges))
+}
+
+/// [`around`] on `exec`'s pool: each polygon's corners' range in parallel chunks, then the ranges
+/// together, so the same box.
+///
+/// # Errors
+///
+/// As [`around`], as a [`RunError`] of a [`TraceError`].
+pub fn around_on(
+    exec: &Exec<'_>,
+    polygons: &[Polygon],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Cell, RunError<TraceError>> {
+    let ranges = exec.try_map(meter, AROUND, CORNER_PLAN, polygons, |_, polygon, _| {
+        range_of(polygon).map_err(TraceError::from)
+    })?;
+    Ok(cell_around(&ranges))
+}
+
+/// The grid range of `polygon`'s corners, each the point [`nearest`] gives.
+fn range_of(polygon: &Polygon) -> Result<([i64; 3], [i64; 3]), NumError> {
     let mut low = [i64::MAX; 3];
     let mut high = [i64::MIN; 3];
-    for polygon in polygons {
-        let Piece { face, bounds } = &polygon.piece;
-        let after = bounds.iter().cycle().skip(1);
-        for (bound, next) in bounds.iter().zip(after) {
-            let coordinates = nearest(face, bound, next)?;
-            for ((l, h), v) in low.iter_mut().zip(&mut high).zip(coordinates) {
-                *l = (*l).min(v);
-                *h = (*h).max(v);
-            }
+    let Piece { face, bounds } = &polygon.piece;
+    let after = bounds.iter().cycle().skip(1);
+    for (bound, next) in bounds.iter().zip(after) {
+        let coordinates = nearest(face, bound, next)?;
+        for ((l, h), v) in low.iter_mut().zip(&mut high).zip(coordinates) {
+            *l = (*l).min(v);
+            *h = (*h).max(v);
+        }
+    }
+    Ok((low, high))
+}
+
+/// The box around the corner ranges, in half steps, a step clear with its faces on odd half steps.
+fn cell_around(ranges: &[([i64; 3], [i64; 3])]) -> Cell {
+    if ranges.is_empty() {
+        return Cell {
+            low: [-1; 3],
+            high: [1; 3],
+        };
+    }
+    let mut low = [i64::MAX; 3];
+    let mut high = [i64::MIN; 3];
+    for (l, h) in ranges {
+        for ((low, high), (l, h)) in low.iter_mut().zip(&mut high).zip(l.iter().zip(h)) {
+            *low = (*low).min(*l);
+            *high = (*high).max(*h);
         }
     }
     let half = |v: i64, by: i64| v.saturating_mul(2).saturating_add(by);
-    if polygons.is_empty() {
-        return Ok(Cell {
-            low: [-1; 3],
-            high: [1; 3],
-        });
-    }
-    Ok(Cell {
+    Cell {
         low: low.map(|v| half(v, -3)),
         high: high.map(|v| half(v, 3)),
-    })
+    }
 }
 
 /// The grid point nearest where `face`, `bound` and `next` meet, as `Tpi::to_grid` gives it, in

@@ -54,7 +54,7 @@ use geom_op::{
 use geom_poly::merge::{Merge, Merged, Outward, Rules, merge_on, select};
 use geom_poly::order::normals_det;
 use geom_poly::plane::canonical;
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange_with};
+use geom_poly::subdivide::{LEAF_POLYGONS, around_on, arrange_with};
 use geom_poly::trace::{Classified, Polygon, TraceError};
 use geom_poly::winding::{Entry, Winding, WindingTest};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, Stop, WorkMeter};
@@ -582,7 +582,7 @@ fn arranged(
     if gathered.polygons.is_empty() {
         return Ok(Vec::new());
     }
-    let cell = around(&gathered.polygons)?;
+    let cell = around_on(exec, &gathered.polygons, meter).map_err(run_error)?;
     arrange_with(
         exec,
         (cell, Winding::new()),
