@@ -1267,6 +1267,7 @@ version = "0.0.0"
 dependencies = [
  "geom-2d",
  "geom-bvh",
+ "geom-check",
  "geom-curve",
  "geom-intersect",
  "geom-linalg",
@@ -1408,6 +1409,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-surface",
  "geom-test",
  "geom-topo",
  "num-bigint",

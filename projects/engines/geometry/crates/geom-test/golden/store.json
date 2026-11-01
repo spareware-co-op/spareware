@@ -260,9 +260,15 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "the phase 4 integration train: piece/G148's count benchmarks of Tpi::meeting, plane::normals_sign and plane::determinant_sign merged; no existing digest moved"
+            },
+            {
+              "sha256": "e0c594dd4130745d206a03badec8796ab1bf0af81f5d5809deb49a10cf837fca",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "the phase 4 integration train: piece/G149's count benchmarks mesh/hull and mesh/slice merged; no existing digest moved"
             }
           ],
-          "sha256": "e0c594dd4130745d206a03badec8796ab1bf0af81f5d5809deb49a10cf837fca"
+          "sha256": "9af601fb857736eccc342e23f263128804af2456c8a7994dc088e25a55d32d7e"
         },
         {
           "id": "geom-nurbs/operations",

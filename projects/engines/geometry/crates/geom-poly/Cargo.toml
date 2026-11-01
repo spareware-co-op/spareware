@@ -19,6 +19,8 @@ geom-topo = { path = "../geom-topo" }
 [dev-dependencies]
 # The golden store and the thread counts of tests/commit_determinism.rs (ours, MPL-2.0).
 geom-test = { path = "../geom-test" }
+# The surfaces of the bodies tests/publish.rs publishes. Ours, MPL-2.0.
+geom-surface = { path = "../geom-surface" }
 # The big-integer oracle of the arrangement predicates, the one chapter 29.3 names. MIT OR
 # Apache-2.0.
 num-bigint = "0.4.8"
