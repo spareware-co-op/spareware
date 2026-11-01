@@ -5316,22 +5316,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
-      "mutant": "replace next_corner -> u32 with 0",
-      "line_text": "let next = corner.saturating_add(1);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A walk round a loop never comes back to its start."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
-      "mutant": "replace == with != in next_corner",
-      "line_text": "if next == end { start } else { next }",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A walk round a loop never comes back to its start."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
       "mutant": "replace | with ^ in rank",
       "line_text": "let key = (u64::from(width) << 56) | top;",
       "occurrences": 1,
@@ -5345,38 +5329,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "A plane coefficient is below 2^127, so its width is at most 127 and key is below 2^63."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
-      "mutant": "replace lowest_corner -> Result<(u32, u32), MeshFault> with Ok((0, 0))",
-      "line_text": "let run = cut(vertex, (start, end))?;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A corner outside the loop is never reached again by the walk round it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
-      "mutant": "replace lowest_corner -> Result<(u32, u32), MeshFault> with Ok((0, 1))",
-      "line_text": "let run = cut(vertex, (start, end))?;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A corner outside the loop is never reached again by the walk round it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
-      "mutant": "replace lowest_corner -> Result<(u32, u32), MeshFault> with Ok((1, 0))",
-      "line_text": "let run = cut(vertex, (start, end))?;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A corner outside the loop is never reached again by the walk round it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
-      "mutant": "replace lowest_corner -> Result<(u32, u32), MeshFault> with Ok((1, 1))",
-      "line_text": "let run = cut(vertex, (start, end))?;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A corner outside the loop is never reached again by the walk round it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
@@ -5441,14 +5393,6 @@
       "occurrences": 2,
       "kind": "equivalent",
       "reason": "Spread coordinates hold every third bit, and the shifts by 1 and 2 keep them apart."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
-      "mutant": "replace next_corner -> u32 with 1",
-      "line_text": "let next = corner.saturating_add(1);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A walk round a loop that does not hold corner 1 never comes back to its start."
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
