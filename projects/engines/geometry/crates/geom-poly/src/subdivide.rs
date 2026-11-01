@@ -68,6 +68,9 @@ pub const LEAF_POLYGONS: usize = 32;
 /// One box at a time: a box's cost varies too much for a chunk of them to mean anything.
 const ONE_BOX: ChunkPlan = ChunkPlan::fixed::<1>();
 
+/// Every polygon's corner points, once.
+const POINTS: Phase = Phase::new("arrangement: corner points");
+
 /// The box around the polygons.
 const AROUND: Phase = Phase::new("arrangement: the box around");
 
@@ -422,6 +425,9 @@ pub fn arrange_with(
     solids: &[Entry],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, RunError<TraceError>> {
+    let points = exec.try_map(meter, POINTS, CORNER_PLAN, polygons, |_, polygon, _| {
+        Ok::<_, TraceError>(meetings(&polygon.piece))
+    })?;
     let mut level = alloc::vec![Node {
         key: 0,
         depth: 0,
@@ -429,7 +435,7 @@ pub fn arrange_with(
         reference,
         polygons: polygons.to_vec(),
         sources: (0..polygons.len()).collect(),
-        points: polygons.iter().map(|p| meetings(&p.piece)).collect(),
+        points,
     }];
     let mut leaves = Vec::new();
     while !level.is_empty() {
