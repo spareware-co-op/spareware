@@ -112,9 +112,15 @@
               "kind": "corpus",
               "piece": "G149",
               "why": "Count benchmarks of two stacks joined; no existing digest moved"
+            },
+            {
+              "sha256": "321bdd4d60033e76b0849a442959aa5f13525845e39ca2fb4f3dbf42d2ba8e36",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "The boolean's count benchmark on small prisms: mesh/boolean; no existing digest moved"
             }
           ],
-          "sha256": "321bdd4d60033e76b0849a442959aa5f13525845e39ca2fb4f3dbf42d2ba8e36"
+          "sha256": "0ce76ad6f0c6b5d5bb00ef5fef6259f0710f137fc3cce180ba3a56e8b3628871"
         },
         {
           "id": "geom-bvh/cells",
