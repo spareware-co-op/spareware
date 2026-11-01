@@ -98,17 +98,23 @@
             {
               "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4",
               "kind": "corpus",
+              "piece": "G149",
+              "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull, mesh/slice; no existing digest moved"
+            },
+            {
+              "sha256": "34578be2ad605ad7842a25d149edfcf271c21d869c257e8e4fdc00a19738e3b8",
+              "kind": "corpus",
               "piece": "G148",
               "why": "Count benchmarks of two stacks joined, and 1 new on mesh booleans (decision 32.44): mesh/boolean; no existing digest moved"
             },
             {
-              "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4",
+              "sha256": "ceb24eae92c96874d12498f59b4b59878a426492bfbabbb4d4886226fd108d91",
               "kind": "corpus",
               "piece": "G149",
-              "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull, mesh/slice; no existing digest moved"
+              "why": "Count benchmarks of two stacks joined; no existing digest moved"
             }
           ],
-          "sha256": "34578be2ad605ad7842a25d149edfcf271c21d869c257e8e4fdc00a19738e3b8"
+          "sha256": "321bdd4d60033e76b0849a442959aa5f13525845e39ca2fb4f3dbf42d2ba8e36"
         },
         {
           "id": "geom-bvh/cells",
