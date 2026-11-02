@@ -51,12 +51,44 @@
       "reason": "The radial walk stops when it comes back to the fin it started from. The mutant skips the walk at once for that fin and for every other one walks past it for ever, or until the same fin comes round, so the tests stop it by their timeout. It hangs; it never returns a wrong side."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace > with < in narrowest",
+      "line_text": "if best.get(&block).is_some_and(|held| *held > reach) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A block's best is never below the reach it was queued with, so the mutant never skips: it walks stale entries too. A stale entry comes off the queue after the block's best one (widest first), whose portals already gave every neighbour a way at least as wide, so the stale one changes no best and no pinch; and its neighbours' traces are held, so it charges the meter nothing more."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace < with == in narrowest",
+      "line_text": "if best.get(&next).is_none_or(|held| *held < wide) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant queues a block again whenever a way as wide as its best reaches it, so two open blocks side by side queue each other again for ever, and nothing in the walk charges the meter once their traces are held. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace < with <= in narrowest",
+      "line_text": "if best.get(&next).is_none_or(|held| *held < wide) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant queues a block again whenever a way at least as wide as its best reaches it, so two open blocks side by side queue each other again for ever, and nothing in the walk charges the meter once their traces are held. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
       "mutant": "replace < with <= in arenas",
       "line_text": "sense: if fin.from < fin.to {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/self_intersection.rs",
+      "mutant": "replace == with != in runs",
+      "line_text": "out.push((fin.edge.row(), fin.sense == Sense::Forward));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "runs is read only by back_to_back, which compares f's sorted runs with g's turned over: they are equal exactly where, edge by edge, g's fins all run one way and f's as many run the other. The mutant turns every way over in both lists, and that holds of the turned lists exactly when it holds of the first."
     },
     {
       "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
