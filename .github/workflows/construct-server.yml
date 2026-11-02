@@ -142,7 +142,7 @@ jobs:
           git archive HEAD Cargo.toml rust-toolchain.toml projects/spare-construct/server \
             projects/spare-construct/app projects/spare-construct/crates \
             projects/spare-construct/demo/index.html projects/kit/crates projects/kit/services \
-            projects/engines/crates design/ribbon \
+            projects/engines/crates projects/engines/geometry/crates design/ribbon \
             | sudo tar -x -C /opt/spare-stack/src
           sudo tee /etc/spare-stack/owner.env <<'EOF'
           STACK_PUBLIC_URL=http://localhost:8088
