@@ -390,38 +390,46 @@ fn a_split_passes_over_a_plane_that_holds_a_polygon() {
 }
 
 #[test]
-fn every_split_is_on_an_odd_half_step() {
-    // So a piece is bounded only by planes of the polygons, its own and those that cut it, and by
-    // sides of boxes, each on an odd half step, where no polygon of grid data lies.
-    let blocks = [
-        A,
-        B,
-        Block {
-            low: [1, -2, 1],
-            high: [3, 9, 3],
-        },
-    ];
+fn a_box_a_multiple_of_four_half_steps_wide_splits_between_the_whole_steps() {
+    // A block from 1 to 6 sits in a box from -1/2 to 15/2, sixteen half steps wide on every axis,
+    // so each middle, 7, is already odd: the split falls at 3 1/2, between the whole steps where
+    // faces end and meet, never at 3. Every bound a split gives a piece is then 2x = odd, the form
+    // by which the merge leaves the boxes' own planes out of a point's name; the others are the
+    // input's planes, either way round.
+    let blocks = [Block {
+        low: [1, 1, 1],
+        high: [6, 6, 6],
+    }];
     let list = polygons(&blocks);
-    let planes: Vec<Plane> = list
-        .iter()
-        .flat_map(|p| std::iter::once(p.piece.face).chain(p.piece.bounds.iter().copied()))
-        .collect();
-    let given = |q: &Plane| {
-        let turned = Plane::new(q.n().map(|v| -v), -q.d()).unwrap();
-        planes.iter().any(|p| *p == *q || *p == turned)
+    let cell = around(&list).unwrap();
+    assert_eq!((cell.low, cell.high), ([-1; 3], [15; 3]));
+    let mut planes = Vec::new();
+    for polygon in &list {
+        planes.push(polygon.piece.face);
+        planes.extend(polygon.piece.bounds.iter().copied());
+    }
+    let input = |p: &Plane| {
+        planes
+            .iter()
+            .any(|q| q == p || (q.n().map(|v| -v) == p.n() && -q.d() == p.d()))
     };
-    let half_step = |q: &Plane| {
-        let n = q.n();
+    let split = |p: &Plane| {
+        let n = p.n();
         n.iter().filter(|v| **v != 0).count() == 1
             && n.iter().any(|v| v.abs() == 2)
-            && q.d() % 2 != 0
+            && p.d() % 2 != 0
     };
     for leaf in [1, 2, 4] {
-        let found = run(&blocks, leaf, &[]);
-        assert!(found.iter().any(|c| c.piece.bounds.iter().any(half_step)));
-        for c in &found {
+        let got = run(&blocks, leaf, &[]);
+        agrees(&blocks, &got);
+        assert!(got.len() > list.len(), "leaf {leaf}: the box split");
+        for c in &got {
             for bound in &c.piece.bounds {
-                assert!(given(bound) || half_step(bound), "{bound:?} at leaf {leaf}");
+                assert!(
+                    input(bound) || split(bound),
+                    "leaf {leaf}: {bound:?} bounds {:?}",
+                    c.piece
+                );
             }
         }
     }

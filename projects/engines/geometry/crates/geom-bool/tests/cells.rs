@@ -196,6 +196,34 @@ fn a_leak_is_reported_where_it_is_narrowest() {
 }
 
 #[test]
+fn a_leak_is_reported_where_its_way_first_narrows() {
+    // A gap 3 steps wide between y 40 and 43, and seeds in blocks 15 steps or more across: the
+    // widest way narrows to 3 entering the gap at the near jamb, and stays 3 through it.
+    let envelope = cuboid(1, [0, 0, 0], [100, 100, 30]);
+    let lower = cuboid(2, [48, 0, 0], [4, 40, 30]);
+    let upper = cuboid(3, [48, 43, 0], [4, 57, 30]);
+    let selection = Selection::Cells {
+        test: room_test(&[2, 3]),
+        seeds: vec![seed(50, p(20, 20, 15)), seed(51, p(80, 20, 15))],
+    };
+    let out = picked(
+        vec![solid(1, &envelope), solid(2, &lower), solid(3, &upper)],
+        selection,
+    );
+    let note = out
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "bool.seeds_share_cell")
+        .unwrap();
+    assert!(
+        note.message
+            .ends_with(": narrowest 3 steps, near [48, 40, 15], approximately"),
+        "{}",
+        note.message
+    );
+}
+
+#[test]
 fn seeds_must_lie_in_a_cell_and_on_no_face() {
     let envelope = cuboid(1, [0, 0, 0], [100, 100, 30]);
     let wall = cuboid(2, [48, 0, 0], [4, 100, 30]);
