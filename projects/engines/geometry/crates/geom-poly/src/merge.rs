@@ -289,6 +289,8 @@ struct Corner {
     point: Tpi,
     x: [I320; 3],
     w: I256,
+    /// The planes of every corner at this point: its own, until [`numbered`] joins them.
+    through: Vec<Plane>,
 }
 
 /// The sign of a / b − c / d for b and d positive, in `Wide<M>`.
@@ -322,13 +324,20 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
     let (x, w) = point.homogeneous()?;
     let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
     let [a, b, c] = &x;
+    let through = alloc::vec![face, p, q];
     Ok(match point.weight() {
         Sign::Negative => Corner {
             point,
             x: [turn(a)?, turn(b)?, turn(c)?],
             w: w.checked_neg().ok_or(NumError::BudgetExceeded)?,
+            through,
         },
-        Sign::Positive | Sign::Zero => Corner { point, x, w },
+        Sign::Positive | Sign::Zero => Corner {
+            point,
+            x,
+            w,
+            through,
+        },
     })
 }
 
@@ -638,9 +647,11 @@ fn numbered(
     for i in order {
         let held = corners.get_mut(i).and_then(Option::take);
         let held = held.ok_or(MergeError::Open)?;
-        let same = places.last().and_then(|last| point_order(last, &held));
-        if same != Some(Ordering::Equal) {
-            places.push(held);
+        match places.last_mut() {
+            Some(last) if point_order(last, &held) == Some(Ordering::Equal) => {
+                last.through.extend(held.through);
+            }
+            _ => places.push(held),
         }
         number
             .iter_mut()
@@ -649,6 +660,54 @@ fn numbered(
             .for_each(|slot| *slot = places.len().saturating_sub(1));
     }
     Ok((number, places))
+}
+
+/// Whether `plane` is a split of [`crate::subdivide`]'s, on an odd half step.
+fn splits_boxes(plane: &Plane) -> bool {
+    let n = plane.n();
+    n.iter().filter(|v| **v != 0).count() == 1
+        && n.iter().any(|v| v.unsigned_abs() == 2)
+        && plane.d() & 1 != 0
+}
+
+/// `corner`'s point under a name the boxes cannot change. A grid point is named by its three axis
+/// planes: which corners it has, and so which planes reach it, depends on how far each box's
+/// cuts run (a face that only touches a corner of another solid is cut there in one box and not
+/// in a smaller one). A point off the grid takes the first three planes through it, in plane
+/// order and leaving out the boxes' own, that meet in one point; one with no such three, which
+/// only a seam has, keeps its corner's.
+fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
+    let near = corner.point.to_grid()?;
+    if near.is_exact() {
+        let at = near.value();
+        let axis = |n: [i128; 3], v: i64| Plane::new(n, i128::from(v).saturating_neg());
+        return Ok(Tpi::new(
+            axis([1, 0, 0], at.x.get())?,
+            axis([0, 1, 0], at.y.get())?,
+            axis([0, 0, 1], at.z.get())?,
+        )?);
+    }
+    let mut list: Vec<Plane> = corner
+        .through
+        .iter()
+        .filter(|plane| !splits_boxes(plane))
+        .copied()
+        .collect();
+    list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    list.dedup();
+    for (i, a) in list.iter().enumerate() {
+        for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
+            for c in list.iter().skip(j.saturating_add(1)) {
+                meter.charge(1)?;
+                match Tpi::new(*a, *b, *c) {
+                    Ok(point) => return Ok(point),
+                    Err(NumError::Degenerate) => {}
+                    Err(e) => return Err(e.into()),
+                }
+            }
+        }
+    }
+    Ok(corner.point)
 }
 
 /// Every side of `held`, sorted by line.
@@ -1204,7 +1263,7 @@ pub fn merge_with(
     }
     let mut vertices = Vec::with_capacity(used.len());
     for id in &used {
-        vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
     }
     Ok(Merged {
         sheets,
