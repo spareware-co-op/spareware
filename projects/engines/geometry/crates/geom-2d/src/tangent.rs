@@ -493,13 +493,13 @@ fn circle_meet(other: &Disc, disc: &Disc, toward: bool) -> Result<Meet, PointErr
     })
 }
 
-/// The largest angle with a sine in `sine`, positive and at most `sine.hi()`.
-fn angle_of_sine(sine: Interval) -> Result<f64, NumError> {
-    let top = larger(sine.hi(), sine.neg().hi());
-    let factor = if top < 1.0 / 1_024.0 { 1.000_001 } else { 1.6 };
-    Interval::point(top)?
-        .mul(Interval::point(factor)?)
-        .map(Interval::hi)
+/// The largest angle between two ways whose sine is in `sine` and cosine in `cosine`, the cosine
+/// positive: the angle grows with the sine's magnitude and falls with the cosine, so it is the
+/// atan2 of the sine's largest magnitude over the cosine's least, rounded outward
+/// ([`Interval::atan2`]).
+fn angle_of(sine: Interval, cosine: Interval) -> Result<f64, NumError> {
+    let top = Interval::point(larger(sine.hi(), sine.neg().hi()))?;
+    Ok(top.atan2(Interval::point(cosine.lo())?)?.hi())
 }
 
 /// The larger of two doubles.
@@ -623,10 +623,11 @@ fn ellipse_meet(
     };
     let [c1, s1] = at(earlier)?;
     let [c2, s2] = at(later)?;
-    let swept = angle_of_sine(c1.mul(s2)?.sub(s1.mul(c2)?)?)?;
-    if c1.mul(c2)?.add(s1.mul(s2)?)?.lo() <= 0.0 {
+    let cosine = c1.mul(c2)?.add(s1.mul(s2)?)?;
+    if cosine.lo() <= 0.0 {
         return Err(NumError::Degenerate.into());
     }
+    let swept = angle_of(c1.mul(s2)?.sub(s1.mul(c2)?)?, cosine)?;
     let swept = Interval::point(swept)?;
     let bent = major
         .div(radius_of(disc)?)?
@@ -1452,18 +1453,19 @@ mod tests {
     }
 
     #[test]
-    fn an_angle_is_at_least_the_one_its_sine_says() {
-        let angle = |s: f64| angle_of_sine(Interval::point(s).unwrap()).unwrap();
-        // Below 2^−10 the angle is within a millionth of its sine; from there up, 1.6 bounds
-        // arcsin x / x on all of (0, 1].
-        let tiny = angle(1e-12);
-        assert!((1e-12..=1.000_002e-12).contains(&tiny), "{tiny}");
-        assert_eq!(angle(-1e-12), tiny);
-        let edge = angle(1.0 / 1_024.0);
-        assert!(edge >= 1.6 / 1_024.0, "{edge}");
-        let half = angle(0.5);
-        assert!(half >= 0.8, "{half}");
-        assert!(angle(1.0) >= core::f64::consts::FRAC_PI_2);
+    fn an_angle_is_at_least_the_one_its_sine_and_cosine_say() {
+        let angle = |s: f64, c: f64| {
+            angle_of(Interval::point(s).unwrap(), Interval::point(c).unwrap()).unwrap()
+        };
+        // asin 1e-12 is 1e-12 to a double; the bound is no less, and a step at most above.
+        let tiny = angle(1e-12, 1.0);
+        assert!((1e-12..=1.000_000_000_000_1e-12).contains(&tiny), "{tiny}");
+        assert_eq!(angle(-1e-12, 1.0), tiny);
+        // 30 and 60 degrees, and a cosine's least end making the angle larger.
+        assert!(angle(0.5, 0.866_025_403_784_438_6) >= core::f64::consts::FRAC_PI_6);
+        assert!(angle(0.866_025_403_784_438_6, 0.5) >= core::f64::consts::FRAC_PI_3);
+        assert!(angle(0.5, 0.5) >= core::f64::consts::FRAC_PI_4);
+        assert_eq!(angle(0.0, 1.0), 0.0);
     }
 
     #[test]

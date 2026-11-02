@@ -952,10 +952,21 @@ fn made(
     gap: f64,
     exactness: Exactness,
 ) -> String {
+    made_within(carriers, circle, joins, (gap, ANGULAR.get()), exactness)
+}
+
+/// As [`made`], the gap within `within`, what the construction accepted.
+fn made_within(
+    carriers: &Carriers,
+    circle: CurveIx,
+    joins: &[(&Pt2, CurveIx)],
+    (gap, within): (f64, f64),
+    exactness: Exactness,
+) -> String {
     for (point, curve) in joins {
         joined(carriers, point, *curve, circle);
     }
-    assert!(gap <= ANGULAR.get(), "{gap}");
+    assert!(gap <= within, "{gap}");
     match exactness {
         Exactness::Certified { .. } => assert!(gap > 0.0, "{exactness:?}"),
         _ => assert_eq!(gap, 0.0),
@@ -980,6 +991,7 @@ fn made(
 )]
 fn every_construction_makes_what_it_made() {
     type Wedge = (P2, [P2; 4], [P2; 2]);
+    type Pair2 = ([P2; 2], [P2; 2], [P2; 2]);
     let mut out: Vec<String> = Vec::new();
     let touch = |curve, side, near| Touch { curve, side, near };
     // Two lines whose normals have no whole length, at a sharp corner and an open one.
@@ -1285,6 +1297,112 @@ fn every_construction_makes_what_it_made() {
             }
         }
     }
+    // Circles touching the ellipse at an end of an axis from inside, flatter than it there, between
+    // two lines: each crosses it again far off, four crossings in all, the two at the touch the
+    // nearest. A wider gap is accepted: a bound by an ellipse's curvature is looser.
+    let flat_accept = Accept::Certified {
+        pos: Steps(16),
+        step: GridStep::Q0,
+        gap: geom_num::Real::new(1e-9).unwrap(),
+    };
+    let flatter: [(P2, Pair2, Sign); 4] = [
+        // Between y = ±8,646: it touches at +30° and, by symmetry, near −30° too, where it crosses
+        // as well; the nearest pair are the target's.
+        (
+            p2(17_320, 6_000),
+            (
+                [p2(-50_000, 8_646), p2(50_000, 8_646)],
+                [p2(-50_000, -8_646), p2(50_000, -8_646)],
+                [p2(11_095, 8_646), p2(11_095, -8_646)],
+            ),
+            Sign::Negative,
+        ),
+        (
+            p2(17_320, 6_000),
+            (
+                [p2(-50_000, -27_880), p2(50_000, -27_880)],
+                [p2(-17_080, -50_000), p2(-17_080, 50_000)],
+                [p2(2_920, -27_880), p2(-17_080, -7_880)],
+            ),
+            Sign::Positive,
+        ),
+        (
+            p2(20_000, 0),
+            (
+                [p2(-50_000, 10_000), p2(50_000, 10_000)],
+                [p2(-50_000, -10_000), p2(50_000, -10_000)],
+                [p2(10_000, 10_000), p2(10_000, -10_000)],
+            ),
+            Sign::Negative,
+        ),
+        (
+            p2(0, 12_000),
+            (
+                [p2(40_000, -50_000), p2(40_000, 50_000)],
+                [p2(-40_000, -50_000), p2(-40_000, 50_000)],
+                [p2(40_000, -28_000), p2(-40_000, -28_000)],
+            ),
+            Sign::Positive,
+        ),
+    ];
+    for (end, ([a, b], [cc, d], [one, two]), first_side) in flatter {
+        let (mut carriers, [oval, upper, lower]) = table([
+            Curve2::Ellipse(Ellipse2::new(p2(0, 0), [20_000, 0], 3, 5).unwrap()),
+            line(a, b),
+            line(cc, d),
+        ]);
+        let touches = [
+            touch(oval, Sign::Negative, end),
+            touch(upper, first_side, one),
+            touch(lower, first_side.negate(), two),
+        ];
+        match tangent_circle(&mut carriers, &touches, GridStep::Q0, &flat_accept) {
+            Ok(c) => {
+                let joins: Vec<(&Pt2, CurveIx)> = c
+                    .joins
+                    .iter()
+                    .zip([oval, upper, lower])
+                    .flat_map(|(j, k)| [(&j.leaving, k), (&j.arriving, k)])
+                    .collect();
+                out.push(made_within(
+                    &carriers,
+                    c.circle,
+                    &joins,
+                    (c.gap.get(), 1e-9),
+                    c.exactness,
+                ));
+            }
+            Err(e) => out.push(format!("refused {e:?}")),
+        }
+    }
+    // An ellipse of semi-axes 3 and 2 steps and a line beside it: a fillet's two crossings of it
+    // are tenths of a radian apart in its angle, where the angle a sine gives needs the wider
+    // factor, and the gap is accepted as it comes.
+    let loose = Accept::Certified {
+        pos: Steps(1 << 20),
+        step: GridStep::Q0,
+        gap: geom_num::Real::new(1.0).unwrap(),
+    };
+    let (mut carriers, [ground, oval]) = table([
+        line(p2(-100, -2), p2(100, -2)),
+        Curve2::Ellipse(Ellipse2::new(p2(0, 1), [3, 0], 2, 3).unwrap()),
+    ]);
+    for r in [5, 8] {
+        let (over, beside) = (
+            touch(ground, Sign::Positive, p2(4, -2)),
+            touch(oval, Sign::Positive, p2(3, -1)),
+        );
+        match fillet(&mut carriers, &over, &beside, r, GridStep::Q0, &loose) {
+            Ok(f) => out.push(made_within(
+                &carriers,
+                f.circle,
+                &[(&f.start, over.curve), (&f.end, beside.curve)],
+                (f.gap.get(), 1.0),
+                f.exactness,
+            )),
+            Err(e) => out.push(format!("refused {e:?}")),
+        }
+    }
     for (k, line) in out.iter().enumerate() {
         println!("{k}: {line}");
     }
@@ -1316,7 +1434,7 @@ const PINNED: &[&str] = &[
     "Circle(Disc(Disc { centre: Rational2 { x: -61816579797430146198986414, y: 0, w: 2361183241434822606848 }, rr: Wide<4>(0x000000000000000000000091b55e48002c1a968e362766a06753533f5c9f7c40) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dc6667a93e6e584 Certified { bound: Steps(1), step: Q0 }",
     "Circle(Disc(Disc { centre: Rational2 { x: -2254729361403633001601097, y: 0, w: 590295810358705651712 }, rr: Wide<4>(0x00000000000000000000003e6b361b7ffd3e569ac480ccd95ff2ea6568248584) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 3 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dc6665f719c4c40 Certified { bound: Steps(1), step: Q0 }",
     "Circle(Disc(Disc { centre: Rational2 { x: 0, y: 23611832414348226068484342, w: 1180591620717411303424 }, rr: Wide<4>(0x00000000000000000000003d09000000000000010a8a6000000000000122fee1) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dc6669ff9026b08 Certified { bound: Steps(1), step: Q0 }",
-    "Circle(Disc(Disc { centre: Rational2 { x: 0, y: -8854437155380584775724249, w: 147573952589676412928 }, rr: Wide<4>(0x00000000000000000000004d3f6400000000000bdc471c0000000000748bd099) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dcaf3ecaa98ba3f Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 0, y: -8854437155380584775724249, w: 147573952589676412928 }, rr: Wide<4>(0x00000000000000000000004d3f6400000000000bdc471c0000000000748bd099) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dcaf3eae66751f8 Certified { bound: Steps(1), step: Q0 }",
     "Line(Carrier { a: -9652409441, b: 49084602782, c: 53499529714000 }) [Grid(P2 { x: Coord(-3000), y: Coord(500) }), Crossing { a: CurveIx(1), b: CurveIx(0), root: Second }] 0x3dc2e7a0bdb10117 Certified { bound: Steps(1), step: Q0 }",
     "Line(Carrier { a: -39226815521, b: 67978666024, c: 151669779575000 }) [Grid(P2 { x: Coord(-3000), y: Coord(500) }), Crossing { a: CurveIx(2), b: CurveIx(0), root: Second }] 0x3dc4d28a9fea362a Certified { bound: Steps(1), step: Q0 }",
     "Fine(FineLine { a: -3027466529831649280, b: 13330033756296183808, c: -12302554058484350975984 }) [Crossing { a: CurveIx(2), b: CurveIx(0), root: First }, Crossing { a: CurveIx(2), b: CurveIx(1), root: Second }] 0x3dc61427d2ca09b3 Certified { bound: Steps(1), step: Q0 }",
@@ -1330,6 +1448,12 @@ const PINNED: &[&str] = &[
     "Fine(FineLine { a: 1079398053227347477417, b: 809548539920510608063, c: 1349247566534184346770280 }) [Crossing { a: CurveIx(3), b: CurveIx(0), root: First }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }] 0x3dcb6f2f0632d03d Certified { bound: Steps(1), step: Q0 }",
     "Line(Carrier { a: -8, b: 1466015503700, c: -25185954573082844725238 }) [Crossing { a: CurveIx(2), b: CurveIx(0), root: First }, Crossing { a: CurveIx(2), b: CurveIx(1), root: Second }] 0x3dc292fe559a3eb7 Certified { bound: Steps(1), step: Q0 }",
     "Line(Carrier { a: 122587691236, b: 1957568446192, c: 2936352669289 }) [Crossing { a: CurveIx(3), b: CurveIx(0), root: First }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }] 0x3dc106c2848fc817 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 3274748353062125966755632, y: 0, w: 295147905179352825856 }, rr: Wide<4>(0x00000000000000000000000474a524000000000022ed84800000000000447324) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 3 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 2 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }] 0x3dcc16a912be1738 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 430961019624251413844834, y: -1162837668344253845777566, w: 147573952589676412928 }, rr: Wide<4>(0x000000000000000000000005f5eceea1b3d796aceca0c382dd7b24397c484890) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 2 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dc82004a036d2ee Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 2951479051793528258557525, y: 0, w: 295147905179352825856 }, rr: Wide<4>(0x000000000000000000000005f5e10000000000002ebae40000000000005b9744) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 2 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }] 0x3dcd2ea5c7990822 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 0, y: -1033017668127734890497249, w: 36893488147419103232 }, rr: Wide<4>(0x0000000000000000000000017d784000000000000baeb900000000000016e5d1) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3de735c3078c36d8 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 37123487012449465311826796, y: 14507109835375550096454042, w: 4835703278458516698824704 }, rr: Wide<4>(0x0000000000000000000001900000000000000000000000000000000000000000) })) [Crossing { a: CurveIx(0), b: CurveIx(2), root: Second }, ConicRoot { a: CurveIx(1), b: CurveIx(2), k: 1 }] 0x3dc666592bdd0d4c Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 46224361726227351199436738, y: 29014219670751100192916111, w: 4835703278458516698824704 }, rr: Wide<4>(0x0000000000000000000004000000000000000000000000000000000000000000) })) [Crossing { a: CurveIx(0), b: CurveIx(3), root: Second }, ConicRoot { a: CurveIx(1), b: CurveIx(3), k: 1 }] 0x3dc66670074f75ce Certified { bound: Steps(1), step: Q0 }",
 ];
 
 /// The touches of `c`, each join on its curve and the circle.
