@@ -87,7 +87,8 @@ pub struct Sources<'a> {
 /// the grid is a function of the point, so a vertex named again takes its key from here.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NameIds {
-    ids: BTreeMap<TopoName, NameId>,
+    /// By name.
+    ids: Vec<(TopoName, NameId)>,
     keys: BTreeMap<PointKey, Near>,
 }
 
@@ -204,6 +205,10 @@ struct Mint<'k> {
     names: Vec<(NameId, TopoName)>,
     seen: BTreeSet<NameId>,
     known: Option<&'k NameIds>,
+    /// Which of `known`'s ids it took, by place.
+    taken: Vec<bool>,
+    /// Which of `names` it took from `known`.
+    from_known: Vec<bool>,
 }
 
 impl<'k> Mint<'k> {
@@ -211,30 +216,62 @@ impl<'k> Mint<'k> {
     fn new(known: Option<&'k NameIds>) -> Self {
         Mint {
             known,
+            taken: alloc::vec![false; known.map_or(0, |k| k.ids.len())],
             ..Mint::default()
         }
     }
 
     /// `name`'s id, `name` kept the first time it is made.
     fn id(&mut self, name: TopoName) -> Result<NameId, NameError> {
-        let id = match self.known.and_then(|known| known.ids.get(&name)) {
-            Some(id) => *id,
-            None => name.id()?,
+        let ids = self.known.map_or(&[][..], |known| known.ids.as_slice());
+        let (id, from_known) = match ids.binary_search_by(|(held, _)| held.cmp(&name)) {
+            Ok(at) => {
+                if let Some(slot) = self.taken.get_mut(at) {
+                    *slot = true;
+                }
+                (
+                    ids.get(at).map_or_else(|| name.id(), |(_, id)| Ok(*id))?,
+                    true,
+                )
+            }
+            Err(_) => (name.id()?, false),
         };
         if self.seen.insert(id) {
             self.names.push((id, name));
+            self.from_known.push(from_known);
         }
         Ok(id)
     }
 
-    /// Every name made, with its id, and the merged vertices' grid keys.
+    /// Every name made, with its id, by name, and the merged vertices' grid keys. The names taken
+    /// from `known` are in its order already; only the names hashed here are sorted, and the two
+    /// lists are merged.
     fn ids(&self, merged: &Merged, keys: &[Near]) -> NameIds {
+        let mut hashed: Vec<(TopoName, NameId)> = self
+            .names
+            .iter()
+            .zip(&self.from_known)
+            .filter(|(_, from_known)| !**from_known)
+            .map(|((id, name), _)| (name.clone(), *id))
+            .collect();
+        hashed.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        let known = self.known.map_or(&[][..], |known| known.ids.as_slice());
+        let mut taken = known
+            .iter()
+            .zip(&self.taken)
+            .filter(|(_, taken)| **taken)
+            .map(|(entry, _)| entry)
+            .peekable();
+        let mut ids = Vec::with_capacity(self.names.len());
+        for entry in hashed {
+            while let Some(first) = taken.next_if(|held| held.0 < entry.0) {
+                ids.push(first.clone());
+            }
+            ids.push(entry);
+        }
+        ids.extend(taken.cloned());
         NameIds {
-            ids: self
-                .names
-                .iter()
-                .map(|(id, name)| (name.clone(), *id))
-                .collect(),
+            ids,
             keys: merged
                 .vertices
                 .iter()
