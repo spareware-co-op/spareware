@@ -540,6 +540,18 @@ fn items_of<const D: usize>(
     }
     for ([s, t], why) in runs {
         let (a, b) = (gap.a.bound(span(s), meter)?, gap.b.bound(span(t), meter)?);
+        // As for a zero: in 3D a run in the shadow is a meeting only if the third coordinate can
+        // agree somewhere on it.
+        let mut apart = false;
+        for k in &others {
+            let [x, _] = picked(&a, [*k, *k])?;
+            let [y, _] = picked(&b, [*k, *k])?;
+            let difference = x.sub(y)?;
+            apart |= difference.lo() > 0.0 || difference.hi() < 0.0;
+        }
+        if apart {
+            continue;
+        }
         let width = Steps(exact_steps(widest(&a)));
         let why = match why {
             Reason::Singular => second_order(gap, [s, t], width, meter)?,

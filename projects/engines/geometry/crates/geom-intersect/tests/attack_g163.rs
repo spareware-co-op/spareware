@@ -1726,3 +1726,154 @@ fn a_curve_of_two_spans_crossing_in_each_keeps_every_crossing() {
         assert!((got - want).abs() < 1e-4, "{s:?}");
     }
 }
+
+#[test]
+fn a_conic_in_the_plane_z_equals_y_meets_a_line_in_it_as_crossings() {
+    // The plane z = y fixes y, so the corner the shared plane is proven from must keep its y.
+    let axes = Axes::Vectors {
+        u: [2.0, 1.0, 1.0],
+        v: [0.0, 1.0, 1.0],
+    };
+    let e = CurveKind::Ellipse(Ellipse::new([1.0, 2.0, 2.0], axes, (0.0, 2.0)).unwrap());
+    let line = bezier(&[[-3.0, 2.0, 2.0], [1.0, 2.0, 2.0], [5.0, 2.0, 2.0]]);
+    let r = meet(&e, &line);
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    assert!(
+        r.items().iter().all(|i| matches!(
+            i,
+            Item::Point {
+                contact: PointContact::Crossing,
+                ..
+            }
+        )),
+        "{:?}",
+        r.items()
+    );
+}
+
+#[test]
+fn curves_apart_in_space_whose_shadows_meet_do_not_meet() {
+    // A line along (1, 1, 1) and a curve at height -10 whose shadow on z = 0 crosses the line's
+    // at (2, 2): 12 apart there. A line along (0, 1, 1) and a curve 5 off it in x whose end lies on
+    // its shadow on x = 0: a run at the end, apart in x. Neither meets, either way round.
+    for (a, b) in [
+        (
+            infinite([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
+            bezier(&[[0.0, 4.0, -10.0], [2.0, 2.0, -10.0], [4.0, 0.0, -10.0]]),
+        ),
+        (
+            infinite([0.0, 0.0, 0.0], [0.0, 1.0, 1.0]),
+            bezier(&[[5.0, -5.0, 5.0], [5.0, 0.0, 5.0], [5.0, 5.0, 5.0]]),
+        ),
+    ] {
+        is_empty(&meet(&a, &b));
+        is_empty(&meet(&b, &a));
+    }
+}
+
+#[test]
+fn a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide() {
+    // 12.7: a pair with a closed form that sent it on to the engine says so; a pair the engine
+    // takes from the start, or one a closed form decides, does not.
+    let routed = |a: &CurveKind<2>, b: &CurveKind<2>| {
+        meet(a, b)
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "closed-form-to-engine")
+    };
+    let k = 2.0_f64.powi(20);
+    assert!(routed(
+        &infinite([k, 0.0], [k, 1.0]),
+        &circle([0.0, 0.0], 1.0)
+    ));
+    let hump = bezier(&[[0.0, -1.0], [2.0, 3.0], [4.0, -1.0]]);
+    let level = infinite([0.0, 0.0], [1.0, 0.0]);
+    let off_grid = [
+        segment([0.5, 0.0], [2.5, 2.0]),
+        segment([0.5, 2.0], [2.5, 0.0]),
+    ];
+    for (a, b) in [
+        (&hump, &level),
+        (&level, &hump),
+        (&circle([2.0, 0.0], 1.0), &hump),
+        (&off_grid[0], &off_grid[1]),
+    ] {
+        assert!(!routed(a, b));
+        assert_ne!(meet(a, b).items().len(), 0);
+    }
+}
+
+#[test]
+fn circles_in_space_are_read_in_their_own_plane() {
+    let frame = |x: [f64; 3], n: [f64; 3]| Frame::new(x, n).unwrap();
+    let ring = |c: [f64; 3], r: f64, f: Frame<3>| CurveKind::Circle(Circle::full(c, r, f).unwrap());
+    // Two circles of radius 5 about the origin, one flat and one standing in the plane y = 0: they
+    // cross at (5, 0, 0) and (-5, 0, 0), though their centres are level in z.
+    let flat = ring([0.0; 3], 5.0, frame([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]));
+    let standing = ring([0.0; 3], 5.0, frame([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]));
+    let r = meet(&flat, &standing);
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    // Two in the plane y = 1, centres 6 apart: they cross twice there.
+    let a = ring(
+        [0.0, 1.0, 0.0],
+        5.0,
+        frame([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+    );
+    let b = ring(
+        [6.0, 1.0, 0.0],
+        5.0,
+        frame([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+    );
+    let r = meet(&a, &b);
+    assert!(
+        r.items().len() == 2
+            && r.items().iter().all(|i| matches!(
+                i,
+                Item::Point {
+                    contact: PointContact::Crossing,
+                    ..
+                }
+            )),
+        "{:?}",
+        r.items()
+    );
+}
+
+#[test]
+fn curves_in_a_plane_off_the_grid_are_read_in_that_plane() {
+    // Both in the plane x = 0.5, off the grid, so no plane is proven: the engine reads them in the
+    // two coordinates they spread over, y and z, never along x, where they are a line.
+    let hump = bezier(&[[0.5, 0.0, 0.0], [0.5, 0.5, 8.0], [0.5, 1.0, 0.0]]);
+    let level = bezier(&[[0.5, 0.0, 2.0], [0.5, 0.5, 2.0], [0.5, 1.0, 2.0]]);
+    // Equal in x but off the grid, so each meeting is a near miss in x the doubles cannot rule
+    // out, at s = t = (1 ± √½) / 2: the level line runs with the hump in y.
+    let r = meet(&hump, &level);
+    let mut s: Vec<(f64, f64)> = r
+        .items()
+        .iter()
+        .map(|i| {
+            let [s, t] = [i.at().spans()[0], i.at().spans()[1]];
+            (s.lo() * 0.5 + s.hi() * 0.5, t.lo() * 0.5 + t.hi() * 0.5)
+        })
+        .collect();
+    s.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let half = 0.5_f64.sqrt();
+    assert_eq!(s.len(), 2, "{:?}", r.items());
+    assert!(
+        [s[0].0, s[0].1, s[1].0, s[1].1]
+            .iter()
+            .zip([1.0 - half, 1.0 - half, 1.0 + half, 1.0 + half])
+            .all(|(got, want)| (got - want / 2.0).abs() < 0.01),
+        "{s:?}"
+    );
+}
+
+#[test]
+fn a_ray_meets_what_lies_ahead_of_it() {
+    // A ray from the origin along x and a hump crossing it at x = 1 and x = 3: the engine cuts the
+    // ray to the grid's reach, as it does a whole line.
+    let ray = CurveKind::Line(Line::ray([0.0, 0.0], [1.0, 0.0]).unwrap());
+    let hump = bezier(&[[1.0, -1.0], [2.0, 3.0], [3.0, -1.0]]);
+    assert_eq!(meet(&ray, &hump).items().len(), 2);
+    assert_eq!(meet(&hump, &ray).items().len(), 2);
+}

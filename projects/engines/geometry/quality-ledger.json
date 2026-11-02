@@ -5523,6 +5523,118 @@
       "reason": "The mutant moves a box ending exactly at lo a turn on, where it ends at hi. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in widest",
+      "line_text": "if w > out {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in <impl Field<2> for Gap<'_, D>>::reach",
+      "line_text": "Ok(if a > b { a } else { b })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in held",
+      "line_text": "if x.lo() < lo { lo } else { x.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in held",
+      "line_text": "if x.hi() > hi { hi } else { x.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Crossing::of",
+      "line_text": "let area = Interval::new(if area.lo() < 0.0 { 0.0 } else { area.lo() }, area.hi())?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where area.lo() equals 0.0 both branches give 0.0, so the area is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in length",
+      "line_text": "let zero = |v: Interval| v.lo() == 0.0 && v.hi() == 0.0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant takes an interval with either bound 0.0 for zero, the original only one with both. length is called only by Crossing::of, on dx and dy, each geom_curve::tight::sub of two doubles: the exact difference as a point where it is a double, else geom_num's interval widened outward by a step. A difference of doubles small enough to round to 0 is itself a double (subnormals are exact), so a bound of exactly 0.0 occurs only on [0, 0], the two coordinates equal. So both read zero exactly on [0, 0]."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in length",
+      "line_text": "let size = |v: Interval| if v.lo() < 0.0 { v.neg() } else { v };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when v.lo() is exactly 0.0. length is called only by Crossing::of, on dx and dy, each geom_curve::tight::sub of two doubles: the exact difference as a point where it is a double, else geom_num's interval widened outward by a step. A difference of doubles small enough to round to 0 is itself a double (subnormals are exact), so a bound of exactly 0.0 occurs only on [0, 0], the two coordinates equal. There v is [0, 0], and its negation is the same interval."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in turn_of",
+      "line_text": "if alpha.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when alpha's upper bound is exactly 0.0, which geom_num::interval's outward widening gives only by coincidence. There the mutant reads the turn as atan2(-beta, -alpha) + 1 and the original as atan2(beta, alpha): the same angle, one written a whole turn from the other where beta is negative. Every caller moves the turn onto its domain by whole turns (onto, one_circle), so the parameter reported is the same, up to rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in runs_along",
+      "line_text": "Ok(along.lo() > 0.0)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when along's lower bound is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of 2^-1074, the least subnormal: a derivative bound within about 10^-308 of perpendicular to the heading. Only there would the mutant prune a stretch whose heading may stop turning forward."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_span",
+      "line_text": "let (first, last) = if u.lo() < v.lo() { (u, v) } else { (v, u) };",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "u and v are the parameters where the line meets the grid's faces at -REACH and REACH along one axis, 2 REACH / |d| apart. Their lower bounds are equal only where that gap is below the doubles' step at those values, an origin so far beyond the grid that the line's span there is wider than the grid itself. There the mutant takes the two in the other order, and the span's ends move by the rounding of u and v; every line on the grid has u and v far apart, where < and <= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_span",
+      "line_text": "lo = if first.lo() > lo { first.lo() } else { lo };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_span",
+      "line_text": "hi = if last.hi() < hi { last.hi() } else { hi };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where the two values compared are equal both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace + with * in plane",
+      "line_text": "Ok(across(widths.map(|w| 1.0 / (1.0 + w))))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "across drops the coordinate where its argument is largest, so only the order of the three matters. 1 / w orders non-negative widths as 1 / (1 + w) does: both fall as the width grows, and two widths tie under one exactly when they tie under the other (a zero width is infinite under 1 / w, and still the largest). So the same coordinate is dropped."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in curves",
+      "line_text": "let turned = matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_));",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "turned only says the closed forms take the pair as (b, a), the answer swapped back. The mutant also turns pairs with no line, or two lines, and every closed form answers the pair one way round as it answers the other, swapped: the same items, up to the order the closed form computed them in and the rounding of their enclosures. The tests' pairs in either order give the same answers."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
       "mutant": "replace > with >= in halves",
       "line_text": "let share = if whole > 0.0 {",
