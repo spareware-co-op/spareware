@@ -84,6 +84,47 @@ tested on every scenario of G140's harness (the wall's openings, the moved door,
 holes, the union of many boxes, the storey) and on random sequences of moves, additions and
 removals of tools, from a fresh cache, a stale one and a foreign one.
 
+## As built
+
+Instructions for three door moves in the 300-opening wall (Callgrind on D03, around the re-cut
+alone); the gate is about 94 million a move (N42 runs about 5.9 billion a second on this work).
+
+| Commit | What it keeps or stops redoing | Three moves |
+| --- | --- | --- |
+| 22120f47 | Solved boxes, keyed by what they depend on | 6.134G |
+| a70362bb | The merge's sorts compare lazily, in machine words where they fit | 4.969G |
+| 6e07979b | Each unchanged operand's preparation and rounded bounds (items 1, 2) | 4.295G |
+| 1ab76935, b465f32e | Nesting's shell boxes from six roundings a shell; a name hashed once | 3.424G |
+| 9f401556 | Each merged vertex rounded to the grid once for all lookups | 3.341G |
+| c04c5c87 | The merge's memo: each piece's corners and lines, and the sorts' orders (item 4, part) | 2.488G |
+| adb2d160 to ef8b6806 | Names' ids kept (item 5, part); corners and lines in machine words, taken once; the names a result reaches found in one sweep, and vertices' grid keys kept; the arrangement's tree of divided boxes kept, so a held box is neither clipped nor hashed again (item 3, by another road) | 1.758G |
+| d42c8995 | The merge's union-find keeps its paths short; runs are cut only at ends between their own | 1.569G |
+| 3eb52ca0 | Publishing takes each vertex's grid rounding from naming | 1.478G |
+| 1970a163 | The names' ids a list by name, merged rather than sorted again | 1.439G |
+
+Tried and dropped: sorting on reduced planes (3.496G against 3.424G).
+
+Item 4 as built: the merge keeps each piece's corners and line keys by the piece's planes, and the
+two sorts' orders by piece and place. A re-cut starts each sort from the old order, the new
+pieces' entries after it, and the sorts break ties by place, so they end in the one total order a
+fresh sort gives. Rust's stable sort finds the old order as one run and merges the new entries
+in, which is linear in the comparisons rather than the binary insertion first planned; it needs no
+second code path to keep equal. A piece held twice starts the sorts from no order, as its one
+place in the old orders would stand for two.
+
+What is left at 480 million a move (1970a163): the merge's passes over the whole wall (40%: nesting's
+outer test traces every polygon of the wall's shell, radial orders, the sorts' merging, numbering,
+rings), naming per entity (29%: edges, vertices, the names a result reaches), publishing the body
+(11%, about 51 million a move), the arrangement along the moved door's path (9%), and allocation.
+Publishing alone is over half the gate, which is why the gate needs bodies that share their
+unchanged parts, a geom-topo change outside this piece.
+
+Item 3 as built: rather than per-polygon digests, the arrangement keeps the tree it divided. A box
+at the same place in the next tree with the same bounds, vector and polygons divides as it did, so
+the boxes below it are the last tree's boxes, their keys and answers taken as they were; only the
+boxes on the path from the root to the moved door are clipped and hashed again. A tree divided for
+other tests or another leaf size is not taken.
+
 ## Evidence
 
 - The profile above, and G139's earlier timings: in the 300-opening wall 127 of 128 boxes are
