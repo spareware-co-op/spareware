@@ -44,3 +44,4 @@ pub mod combine;
 pub mod half_space;
 pub mod operand;
 pub mod rebuild;
+mod wires;

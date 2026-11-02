@@ -506,6 +506,41 @@ pub fn reference_above(
     Ok(above)
 }
 
+/// The vector at the point where `planes` meet, reached from `cell`'s corner, whose vector is
+/// `reference`. The point must lie in `cell` and on no polygon.
+///
+/// # Errors
+///
+/// A [`TraceError`]: a stopped meter, or what the numbers layer refuses.
+pub fn winding_at(
+    cell: &Cell,
+    reference: &Winding,
+    polygons: &[Polygon],
+    planes: [Plane; 3],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Winding, TraceError> {
+    let faces = faces(cell)?;
+    let [a, b, c] = planes;
+    let moved = |plane, rank| Moved {
+        plane,
+        rank,
+        by: Sign::Positive,
+    };
+    let (face, first, second) = (
+        moved(a, Rank::Face),
+        moved(b, Rank::First),
+        moved(c, Rank::Second),
+    );
+    let mut here = reference.clone();
+    for segment in path(face, first, second, &faces)? {
+        for polygon in polygons {
+            meter.charge(1)?;
+            count_crossing(&segment, polygon, &mut here)?;
+        }
+    }
+    Ok(here)
+}
+
 /// Every piece of `pieces`, `pieces[i]` being polygon `i`'s as [`crate::cut::local_cuts`] left it,
 /// with its vectors, in the order given. `reference` is the vector at `cell`'s low corner, moved
 /// just inside the box along each axis.
