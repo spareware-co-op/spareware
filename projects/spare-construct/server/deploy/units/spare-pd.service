@@ -1,0 +1,14 @@
+[Unit]
+Description=PD, TiKV's coordinator
+After=network.target
+
+[Service]
+User=spare
+ExecStart=/opt/spare-stack/bin/pd-server --name=pd1 --data-dir=/opt/spare-stack/data/pd1 \
+  --config=/opt/spare-stack/config/pd.toml --client-urls=http://127.0.0.1:2379 \
+  --peer-urls=http://127.0.0.1:2380 --log-file=/opt/spare-stack/log/pd.log
+Restart=always
+LimitNOFILE=1000000
+
+[Install]
+WantedBy=multi-user.target
