@@ -260,6 +260,9 @@ fn nothing_kept_is_an_empty_body() {
     let b = body(&[A, far], &WindingTest::intersect(2), LEAF_POLYGONS);
     assert_eq!(counts(&b), [0, 0, 0, 0, 0]);
     assert_eq!(b.arenas().regions.len(), 1);
+    // It bounds no volume, so it is no solid, and it is valid.
+    assert_eq!(b.kind(), BodyKind::General);
+    checked(&b);
 }
 
 #[test]

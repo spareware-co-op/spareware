@@ -16,7 +16,7 @@ use geom_bool::half_space::half_space;
 use geom_bool::names::NamingError;
 use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection};
 use geom_check::{Level, check};
-use geom_make::{BoxInput, make_box};
+use geom_make::{BoxInput, PrismInput, make_box, prism};
 use geom_name::OrderError;
 use geom_num::{Exactness, NumError, P3, Steps};
 use geom_op::{
@@ -217,6 +217,18 @@ fn bounded_edges(body: &Body) -> Vec<NameId> {
 fn behind(op: u8, points: [[i64; 3]; 3]) -> Body {
     let points = points.map(|p| P3::new(p[0], p[1], p[2]).unwrap());
     half_space(ctx_of(op).path(), points, &mut meter()).unwrap()
+}
+
+/// The upright prism over the triangle `corners`, from z = −5 to 35, made by operation `op`.
+fn wedge(op: u8, corners: [[i64; 2]; 3]) -> Body {
+    let input = PrismInput {
+        base: corners
+            .iter()
+            .map(|[x, y]| P3::new(*x, *y, -5).unwrap())
+            .collect(),
+        height: Steps(40),
+    };
+    prism(&ctx_of(op), &input).unwrap().result.body
 }
 
 #[test]
@@ -773,4 +785,149 @@ fn two_doors_of_one_type_rename_none_of_the_walls_own_edges_and_corners() {
     // The doors' own edges, brought by both, are not kept by either.
     let (door_edges, _) = names(&one);
     assert!(door_edges.is_disjoint(&both_edges));
+}
+
+fn split_of(operands: Vec<Operand<'_>>) -> OpOutput<Vec<Vec<Combined>>> {
+    let input = BooleanInput {
+        operands,
+        select: vec![Selection::Split { target: key(1) }],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    combine(&ctx(), &SERIAL, &input).unwrap()
+}
+
+#[test]
+fn a_split_names_only_the_faces_it_cuts_across_cells_by_their_pieces() {
+    // A beam split by a column through its middle: its front, back, top and bottom run through
+    // every cell, and each piece is named as a split of its face; its two ends lie in one cell
+    // each and keep their names.
+    let beam = cuboid(1, [0, 0, 0], [100, 10, 60]);
+    let column = cuboid(2, [40, -5, -5], [20, 20, 70]);
+    let out = split_of(vec![solid(1, &beam), solid(2, &column)]);
+    let cells = &out.result[0];
+    assert_eq!(cells.len(), 3);
+    let ends: BTreeSet<NameId> = faces(&beam)
+        .into_iter()
+        .filter(|name| {
+            cells
+                .iter()
+                .filter(|cell| faces(&cell.body).contains(name))
+                .count()
+                == 1
+        })
+        .collect();
+    assert_eq!(
+        ends.len(),
+        2,
+        "the two ends keep their names, in one cell each"
+    );
+    let mut split = 0;
+    for cell in cells {
+        let history = lawful(cell, &[&beam, &column]);
+        for name in faces(&cell.body) {
+            match origin_of(history, name) {
+                Origin::Unchanged => assert!(ends.contains(&name)),
+                Origin::Split { of, .. } => {
+                    assert!(faces(&beam).contains(of) && !ends.contains(of));
+                    split += 1;
+                }
+                _ => {}
+            }
+        }
+    }
+    // Front, back, top and bottom, each in three.
+    assert_eq!(split, 12);
+}
+
+#[test]
+fn a_split_by_a_copy_of_its_target_qualifies_the_names_and_says_so() {
+    // The second box is made by the same operation, so it brings the same names.
+    let one = cuboid(1, [0, 0, 0], [100, 10, 60]);
+    let copy = cuboid(1, [40, -5, -5], [20, 20, 70]);
+    let out = split_of(vec![solid(1, &one), solid(2, &copy)]);
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "bool.names_qualified")
+    );
+}
+
+#[test]
+fn a_naming_failure_says_what_failed() {
+    assert_eq!(NamingError::Broken.to_string(), "naming lost a row");
+    assert!(
+        NamingError::Num(geom_num::NumError::Degenerate)
+            .to_string()
+            .starts_with("naming met ")
+    );
+}
+
+#[test]
+fn a_vertex_a_wedge_makes_where_three_planes_meet_keeps_its_name_through_a_later_cut() {
+    // x + 3y = 119 takes the block's corner column off, and meets its top and bottom edges along y
+    // at y = 89/3, off the grid.
+    let block = cuboid(1, [0, 0, 0], [30, 30, 30]);
+    let corner = wedge(5, [[29, 30], [32, 29], [40, 40]]);
+    let operands = [solid(1, &block), solid(2, &corner)];
+    let cut = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
+    lawful(&cut, &[&block, &corner]);
+    let met = meetings(&cut.body);
+    assert_eq!(met.len(), 2);
+    // A hole far from that corner.
+    let hole = cuboid(6, [5, -5, 5], [5, 40, 5]);
+    let operands = [solid(1, &cut.body), solid(2, &hole)];
+    let again = subtract(&ctx_of(8), &SERIAL, key(1), &operands)
+        .unwrap()
+        .result;
+    let history = lawful(&again, &[&cut.body, &hole]);
+    assert_eq!(meetings(&again.body), met);
+    for (_, name) in vertices(&cut.body) {
+        assert!(vertices(&again.body).iter().any(|(_, n)| *n == name));
+        assert_eq!(origin_of(history, name), &Origin::Unchanged);
+    }
+}
+
+#[test]
+fn a_new_vertex_a_wedge_makes_half_a_step_from_old_ones_takes_a_name_of_its_own() {
+    // y = 89/3 rounds to the corners (30, 30, 0) and (30, 30, 30) that the cut takes away, but is
+    // neither of them.
+    let block = cuboid(1, [0, 0, 0], [30, 30, 30]);
+    let corner = wedge(5, [[29, 30], [32, 29], [40, 40]]);
+    let operands = [solid(1, &block), solid(2, &corner)];
+    let cut = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
+    let history = lawful(&cut, &[&block, &corner]);
+    for at in [[30, 30, 0], [30, 30, 30]] {
+        let gone = vertex_at(&block, at).unwrap();
+        assert!(vertices(&cut.body).iter().all(|(_, n)| *n != gone));
+        assert!(history.deleted().names().contains(&gone));
+    }
+    let met = meetings(&cut.body);
+    assert_eq!(met.len(), 2);
+    for name in &met {
+        assert!(matches!(
+            origin_of(history, *name),
+            Origin::Generated { .. }
+        ));
+    }
+    // x + 7y = 237 takes those points off in turn, and meets the same edges at y = 207/7, which
+    // rounds to the same grid points but lies on another plane.
+    let more = wedge(7, [[27, 30], [34, 29], [40, 40]]);
+    let operands = [solid(1, &cut.body), solid(2, &more)];
+    let again = subtract(&ctx_of(8), &SERIAL, key(1), &operands)
+        .unwrap()
+        .result;
+    let history = lawful(&again, &[&cut.body, &more]);
+    for name in &met {
+        assert!(vertices(&again.body).iter().all(|(_, n)| n != name));
+        assert!(history.deleted().names().contains(name));
+    }
+    let now = meetings(&again.body);
+    assert_eq!(now.len(), 2);
+    for name in &now {
+        assert!(matches!(
+            origin_of(history, *name),
+            Origin::Generated { .. }
+        ));
+    }
 }

@@ -36,7 +36,8 @@ use geom_op::{
 };
 use geom_poly::convex::Piece;
 use geom_poly::merge::{
-    Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with, section, select,
+    Curves, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with, section,
+    select,
 };
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon, TraceError, winding_at};
@@ -51,6 +52,7 @@ use crate::operand::{
 };
 use crate::passage::{Passage, narrowest};
 use crate::rebuild::{Carrier, RebuildError, publish, wire};
+use crate::wires::{self, Run, WireError};
 
 /// The arrangement's phase.
 const ARRANGEMENT: Phase = Phase::new("arrangement");
@@ -127,6 +129,10 @@ pub const COMBINE: OpSchema = OpSchema {
             code: "bool.empty_result",
             doc: "A selection keeps nothing.",
         },
+        DiagnosticSpec {
+            code: "bool.touching_only",
+            doc: "An intersection keeps nothing, and two of its operands touch at a face.",
+        },
     ],
     classes: &[Class::Exact, Class::Certified],
     charges: &[Charge::new(ARRANGEMENT, "polygon a split clips", 1)],
@@ -171,6 +177,25 @@ pub struct CellReport {
     pub elements: Vec<OperandKey>,
     /// Each face, by its row before naming, with what lies beyond it.
     pub boundaries: Vec<(usize, Beyond)>,
+}
+
+/// A wire target's pieces, and the other operands' polygons that cut it.
+type WireRuns<'a> = (Vec<Run>, Vec<&'a Polygon>);
+
+/// `curves` as a wire, a selection's one result, with no history: a wire target's pieces carry no
+/// names yet, though a section's curves do.
+fn wire_picked(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Picked, Refused> {
+    Ok(Picked {
+        results: alloc::vec![Combined {
+            body: wire(curves, None, meter)?,
+            history: None,
+            names: Vec::new(),
+            cell: None,
+        }],
+        separated: true,
+        qualified: false,
+        leaks: Vec::new(),
+    })
 }
 
 /// One arrangement, for the selections to read.
@@ -234,6 +259,38 @@ struct Picked {
     leaks: Vec<Option<Passage>>,
 }
 
+impl Picked {
+    /// What it says beside its results: a split that separated nothing, each leak where it is
+    /// narrowest, and names qualified by their operands' keys.
+    fn note(&self, notes: &mut Vec<Diagnostic>) {
+        if !self.separated {
+            notes.extend(Diagnostic::new(
+                "bool.cutter_does_not_separate",
+                "nothing cuts the target right through",
+            ));
+        }
+        for leak in &self.leaks {
+            let at = leak.map_or_else(String::new, |passage| {
+                alloc::format!(
+                    ": narrowest {} steps, near {:?}, approximately",
+                    passage.width,
+                    passage.at
+                )
+            });
+            notes.extend(Diagnostic::new(
+                "bool.seeds_share_cell",
+                alloc::format!("two seeds lie in one cell{at}"),
+            ));
+        }
+        if self.qualified {
+            notes.extend(Diagnostic::new(
+                "bool.names_qualified",
+                "two operands brought one name, so each face is qualified by its operand's key",
+            ));
+        }
+    }
+}
+
 /// Why a selection gave no body.
 #[derive(Clone, Copy)]
 enum Refused {
@@ -282,6 +339,16 @@ impl From<MergeError> for Refused {
 impl From<NumError> for Refused {
     fn from(e: NumError) -> Self {
         Refused::Rebuild(e.into())
+    }
+}
+
+impl From<WireError> for Refused {
+    fn from(e: WireError) -> Self {
+        match e {
+            WireError::Num(e) => e.into(),
+            WireError::Trace(e) => MergeError::Trace(e).into(),
+            WireError::Detail(detail) => Refused::Detail(detail),
+        }
     }
 }
 
@@ -384,6 +451,20 @@ impl<'a> Scene<'a> {
     /// Whether `polygon` belongs to the operand at `owner`.
     fn owned(&self, polygon: usize, owner: Option<usize>) -> bool {
         self.ready.owners.get(polygon).copied() == owner
+    }
+
+    /// Whether two operands touch at a face: a piece with one's material in front and another's
+    /// behind, each on its side alone (11.5). Contact along an edge or at a corner alone has no
+    /// such piece, and is not found here.
+    fn touching(&self) -> bool {
+        let alone = |here: &Winding, there: &Winding| {
+            here.pairs()
+                .iter()
+                .any(|(entry, count)| *count > 0 && there.count(*entry) <= 0)
+        };
+        self.classified
+            .iter()
+            .any(|c| alone(&c.front, &c.back) && alone(&c.back, &c.front))
     }
 
     /// Every piece of the operands other than the one at `target`.
@@ -775,13 +856,48 @@ impl<'a> Scene<'a> {
         Ok((pieces, merged))
     }
 
-    /// The pieces of the sheet at `target`, either side of each passing `test`.
+    /// The pieces of the wire at `target`, cut by the other operands' polygons, each with its
+    /// vector, and those polygons; `None` for a target that is not a wire.
+    fn wire_runs(
+        &self,
+        target: Option<usize>,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<WireRuns<'_>>, Refused> {
+        let ours = |owner: &usize| Some(*owner) == target;
+        let segments: Vec<[P3; 2]> = self
+            .ready
+            .segments
+            .iter()
+            .filter(|(owner, _)| ours(owner))
+            .map(|(_, ends)| *ends)
+            .collect();
+        if segments.is_empty() {
+            return Ok(None);
+        }
+        let others: Vec<&Polygon> = self
+            .ready
+            .polygons
+            .iter()
+            .zip(&self.ready.owners)
+            .filter(|(_, owner)| !ours(owner))
+            .map(|(polygon, _)| polygon)
+            .collect();
+        let cell = around(&self.ready.polygons)?;
+        let runs = wires::runs(&segments, &others, &self.ready.polygons, cell, meter)?;
+        Ok(Some((runs, others)))
+    }
+
+    /// The pieces of the sheet or wire at `target`, a sheet's either side of each passing `test`,
+    /// a wire's along it.
     fn keep(
         &self,
         test: &WindingTest,
         target: Option<usize>,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Picked, Refused> {
+        if let Some((runs, _)) = self.wire_runs(target, meter)? {
+            return wire_picked(&wires::kept(test, &runs), meter);
+        }
         let pieces: Vec<Outward> = self
             .classified
             .iter()
@@ -819,13 +935,16 @@ impl<'a> Scene<'a> {
         })
     }
 
-    /// The pieces of the sheet at `target`, cut by the others, that hold `seeds`.
+    /// The pieces of the sheet or wire at `target`, cut by the others, that hold `seeds`.
     fn trim(
         &self,
         target: Option<usize>,
         seeds: &[P3],
         meter: &mut WorkMeter<'_>,
     ) -> Result<Picked, Refused> {
+        if let Some((runs, others)) = self.wire_runs(target, meter)? {
+            return wire_picked(&wires::trimmed(&runs, &others, seeds)?, meter);
+        }
         let of_target = self
             .classified
             .iter()
@@ -1011,31 +1130,7 @@ pub(crate) fn selected(
             | Selection::Where(_) => scene.kept(test, &[], *target, meter),
         };
         let picked = found.map_err(|e| refused(ctx, e, meter))?;
-        if !picked.separated {
-            notes.extend(Diagnostic::new(
-                "bool.cutter_does_not_separate",
-                "nothing cuts the target right through",
-            ));
-        }
-        for leak in &picked.leaks {
-            let at = leak.map_or_else(String::new, |passage| {
-                alloc::format!(
-                    ": narrowest {} steps, near {:?}, approximately",
-                    passage.width,
-                    passage.at
-                )
-            });
-            notes.extend(Diagnostic::new(
-                "bool.seeds_share_cell",
-                alloc::format!("two seeds lie in one cell{at}"),
-            ));
-        }
-        if picked.qualified {
-            notes.extend(Diagnostic::new(
-                "bool.names_qualified",
-                "two operands brought one name, so each face is qualified by its operand's key",
-            ));
-        }
+        picked.note(&mut notes);
         let results = picked.results;
         for body in results.iter().map(|result| &result.body) {
             let report = check(body, exactness, Level::Cheap, meter)
@@ -1053,6 +1148,12 @@ pub(crate) fn selected(
                 "bool.empty_result",
                 "the selection keeps nothing",
             ));
+            if matches!(selection, Selection::Intersect) && scene.touching() {
+                notes.extend(Diagnostic::new(
+                    "bool.touching_only",
+                    "the operands touch at a face and share no volume",
+                ));
+            }
         }
         lists.push(results);
     }
