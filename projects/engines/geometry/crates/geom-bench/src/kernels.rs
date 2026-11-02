@@ -276,6 +276,28 @@ pub mod plane {
         run(batch, out, |&[p, q, r]| Tpi::new(p, q, r));
     }
 
+    /// `Tpi::meeting` on each plane triple.
+    #[inline(never)]
+    pub fn tpi_meeting(batch: &[[Plane; 3]], out: &mut Vec<Result<Tpi, NumError>>) {
+        run(batch, out, |&[p, q, r]| Tpi::meeting(p, q, r));
+    }
+
+    /// `plane::normals_sign` on each plane triple.
+    #[inline(never)]
+    pub fn normals_sign(batch: &[[Plane; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| {
+            geom_num::plane::normals_sign(p, q, r)
+        });
+    }
+
+    /// `plane::normals_sign` on each face triple.
+    #[inline(never)]
+    pub fn normals_sign_faces(batch: &[[Plane; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| {
+            geom_num::plane::normals_sign(p, q, r)
+        });
+    }
+
     /// `Tpi::homogeneous` on each meeting point.
     #[inline(never)]
     pub fn tpi_homogeneous(batch: &[Tpi], out: &mut Vec<Result<([I320; 3], I256), NumError>>) {
@@ -286,6 +308,22 @@ pub mod plane {
     #[inline(never)]
     pub fn side_of_tpi(batch: &[(Plane, Tpi)], out: &mut Vec<Result<Sign, NumError>>) {
         run(batch, out, |(p, t)| p.side_of_tpi(t));
+    }
+
+    /// `plane::determinant_sign` on each four planes.
+    #[inline(never)]
+    pub fn determinant_sign(batch: &[[Plane; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r, s]| {
+            geom_num::plane::determinant_sign(p, q, r, s)
+        });
+    }
+
+    /// `plane::determinant_sign` on each four face planes.
+    #[inline(never)]
+    pub fn determinant_sign_faces(batch: &[[Plane; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r, s]| {
+            geom_num::plane::determinant_sign(p, q, r, s)
+        });
     }
 
     /// `Tpi::to_grid` on each meeting point.

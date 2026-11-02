@@ -18,7 +18,9 @@ covers the stored run; `arenas` (`src/arenas.rs`, G80), `geom-topo` publishes ex
 rules allow, and a body's versions never see each other's edits; and `make` (`src/make.rs`, G101),
 the primitives and transforms return only what the full checker passes, keep their laws, and refuse
 with a typed error; and `sequence` (`src/sequence.rs`, G116), whole operation logs replay to the same
-hash and keep every law at every step. `src/adversarial.rs` holds the generators aimed at the hard
+hash and keep every law at every step. For Gate 2 (decision 32.44: a target per phase-2 code piece), `curves` (`src/curves.rs`) and
+`surfaces` (`src/surfaces.rs`), every curve and surface kind built from any bytes keeps the kind
+contract kit (`geom_curve::contract`, `geom_surface::contract`) under any typed transform. `src/adversarial.rs` holds the generators aimed at the hard
 cases, and `src/robustness.rs` counts how many plain designs succeed per family: `src/robustness.txt`
 records it, and a count may not fall.
 

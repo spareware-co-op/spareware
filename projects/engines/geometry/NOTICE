@@ -585,6 +585,13 @@ libmalloc's xzone malloc
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       with `src/xzone_malloc/xzone_malloc.h` (MIT) at the same commit, for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists, its four pools per size class and its keyed choice of pool), to explain what CI measured. No code copied.
 
+LLVM's llvm-cov
+  Licence:      Apache-2.0 WITH LLVM-exception
+  Link:         https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/coverage.rs
+      with `CoverageSummaryInfo.cpp` and `CodeCoverage.cpp` beside it at the same commit (the LLVM 23.1.1 the pinned nightly ships), for how its LCOV export counts `BRF` and writes `BRDA`. No code copied.
+
 Manifold
   Licence:      Apache-2.0
   Link:         https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/shared.h
@@ -655,6 +662,13 @@ rayon
       for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.
     projects/engines/geometry/crates/geom-run/src/phase.rs
       for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.
+
+rustc
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/coverage.rs
+      with `compiler/rustc_mir_transform/src/coverage/mappings.rs` and `compiler/rustc_codegen_llvm/src/coverageinfo/mapgen/covfun.rs` at the same commit (the pinned nightly), for which branch regions it writes and where. No code copied.
 
 rustc's tidy
   Licence:      MIT OR Apache-2.0

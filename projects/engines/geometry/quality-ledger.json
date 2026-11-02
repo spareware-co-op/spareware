@@ -603,14 +603,6 @@
       "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "let outside = beyond + 1.0;",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
       "mutant": "replace <= with > in check",
       "line_text": "let side = if t <= mid {",
@@ -697,30 +689,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The search keeps a piece only if it also holds t (`inside && a <= t && t <= b`), so the side test only chooses among pieces holding t: inside a piece there is one, and at a break the piece ending at t comes first in the search and passes the original test from the left (a < t, t <= b), as it passes the mutant's."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "past_end + 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace - with + in check",
-      "line_text": "before_start - 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace - with / in check",
-      "line_text": "before_start - 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
     },
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/polynomial.rs",
@@ -2372,14 +2340,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace | with ^ in ln",
-      "line_text": "let v = f64::from_bits((0x3ff << 52) | (bits & MANTISSA));",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
       "mutant": "replace | with ^ in Dint::from_f64",
       "line_text": "let m = (bits & MANTISSA) | if biased != 0 { 1u64 << 52 } else { 0 };",
       "occurrences": 1,
@@ -2613,22 +2573,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant halves v below sqrt 2 instead of from sqrt 2 up. For v in [1, 1.4140625) (at every exponent) i = m >> 44 is 256 to 361 and i - 362 fails: the NaN pair sends x to log_accurate. For v in [1.4140625, sqrt 2) i = m >> 44 is 362 (0x16_a09e_667f_3bcd >> 44 = 362): the fast path runs with e + 1 and y = v/2 in [0.70703125, 0.7071068), interval 362's own range (k = 0), where z = r·y - 1 lies in [-0.0016, -0.0014]. From sqrt 2 up it does not halve, so i = m >> 43 >= 724, in range only at i = 724 (v below 725/512), the entry the original uses for v in [724/512, sqrt 2), where z lies in [-0.00011, 0.00117]; above 725/512 the index is past the table and the NaN poison sends x to log_accurate. In each case the reduction ln x = e ln 2 - ln r + ln(1 + z) uses an interval of F1 with y inside it, z stays inside the polynomial's fitted interval [-0.00203, 0.00212] and e·LOG2_H + l1 stays exact, so the fast path's proof covers it: it returns the correctly rounded value or defers to log_accurate. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace + with * in ln",
-      "line_text": "let left = h + (l - ERR);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutated bound h·(l - ERR) is below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while the other bound, h + (l + ERR), is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two always differ, the fast path never returns and every input goes on to log_accurate, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace - with / in ln",
-      "line_text": "let left = h + (l - ERR);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -3853,7 +3797,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "mutant": "replace tpi_routed -> Option<Sign> with None",
-      "line_text": "let [p, q, r] = t.planes;",
+      "line_text": "let [p, q, r] = &t.planes;",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
@@ -4617,14 +4561,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Two + on this line share the key. The second, (r + er) * sh, makes ub = (r + er)·sh while lb = (r - er) + sh: r is the table point's low part plus the reduced argument's terms, below 2^-10 in magnitude (|z| is at most half a table step, pi/4096 < 2^-10), and er < 2^-59.99 (|z| <= 2^63). Where sh != 0 it is at least sin(pi/2048) > 2^-10 in magnitude, so |ub| < 2^-9·|sh| while lb is within 2^-10 of sh: they differ. Where sh = 0 (x within 2^-12 of a half-integer, so ulp(x) >= 2^-54) ub = 0 and lb = r - er, with |r| at least pi·ulp(x)·(1 - 2^-9) > 2^-53 > er: they differ too. So cospi's fast path never returns and refine gives the same correctly rounded value; only the time changes. The first, r * er, is caught by gate1_libm.rs's COSPI_TROUGH."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace + with * in ln",
-      "line_text": "let right = h + (l + ERR);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR), below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while left = h + (l - ERR) is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -6257,6 +6193,102 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "It moves the ray infinitely little to the other side of y, in every face at once. That is another ray from a point infinitely near the first, which orientation's precondition keeps off the shell, so it lies on the same side of it, and the parity of a ray that meets no edge is that side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace > with >= in map_blocks",
+      "line_text": "if charge > 0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With a charge of 0 the mutant calls charge(0), which adds no work and only counts toward the meter's next cancellation poll: every result and every budget stop is the same, and a cancellation is noticed a few items sooner."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace || with && in edge_leaders",
+      "line_text": "if given || !grid(c)? || !grid(*at(after, c)?)? {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Read as given || (!grid(c) && !grid(after)), it lets an edge with one end off the grid and no given plane share; corner_plane refuses such an edge as EdgePlaneNeeded at its lower half-edge, which the leader is, so the same error comes first either way. (The other || on this line is caught by given_edge_planes_are_never_shared.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "delete ! in edge_leaders",
+      "line_text": "if given || !grid(c)? || !grid(*at(after, c)?)? {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either deletion stops grid edges from sharing, so each half-edge makes its own plane, the same plane its twin would have given it; and it lets only one half of an edge with an end off the grid ask to share, while its twin's axis stays None, so no pair shares. The mesh is the same; only more planes are made and pooled."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace != with == in edge_leaders",
+      "line_text": "if p.forward != q.forward && axis(a)?.is_some() && axis(a)? == axis(b)? {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant never pairs twins, so each half-edge makes its own plane, the same one; and it pairs two half-edges running one way, which make the same plane from the same ends and which the build refuses as UnevenEdge either way. The mesh or the error is the same; only more planes are made."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace next_group -> Option<&'a[Use]> with Some(Vec::leak(Vec::new()))",
+      "line_text": "let head = rest.first()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every call then gives an empty group and leaves the rest as it was, so the loops that take groups until none is left never end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace == with != in next_group",
+      "line_text": "let same = rest.iter().take_while(|u| u.high == head.high).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The first use always has its own end, so nothing is taken: an empty group, the rest unchanged, and the loops that take groups never end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/rotation.rs",
+      "mutant": "replace < with <= in givens",
+      "line_text": "if y.abs() < TINY && z.abs() < TINY {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either < becomes <=: the forms differ only when that input is exactly 2^-1021. The pair is then scaled by 2^100 and r scaled back, both exact there since r is at least 2^-1021, a normal number, and y/r and z/r are unchanged by a common power of two: the same c, s and r either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace < with <= in Svd::jacobi",
+      "line_text": "let (up, length) = if sigma < TINY {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when sigma is exactly 2^-1021, a normal number. UP is a power of two and x*UP is exact, so norm takes the same ratios, the same sum and the same root, and its product rounds to 53 bits on both paths: length is exactly sigma*UP, and x*UP/length rounds the same quotient as x/sigma. The column comes out the same to the bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in ln_checked",
+      "line_text": "let v = f64::from_bits((0x3ff << 52) | (bits & MANTISSA));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace + with * in ln_checked",
+      "line_text": "let left = h + (l - ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound h·(l - ERR) is below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while the other bound, h + (l + ERR), is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two always differ, the fast path never returns and every input goes on to log_accurate, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace - with / in ln_checked",
+      "line_text": "let left = h + (l - ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace + with * in ln_checked",
+      "line_text": "let right = h + (l + ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR), below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while left = h + (l - ERR) is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
     }
   ],
   "coverage_off": [
