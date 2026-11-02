@@ -17,6 +17,10 @@
 //! - **Plane coefficients within 2^126.** [`Plane`] holds |`n_i`| < 2^83 and |d| < 2^125 (checked at
 //!   construction). Each |`n_i`·`x_i`| < 2^83·2^40 = 2^123, the sum of three below 3·2^123 < 2^125,
 //!   and with d below 2^126: in `i128` (limit 2^127), every step checked.
+//! - **Quadric coefficients within 2^305.** [`geom_num::quadric::polar`] holds |Q| below 2^249, and
+//!   Σ C(p, i)·C(p, j) over i + j = k is C(2p, k), at most 2^(2p) ≤ 2^56 for p ≤ 28
+//!   ([`crate::MAX_DEGREE`]): in [`I320`] (limit 2^319), every step checked. The sign of a scaled
+//!   coefficient is the sign of the true one, since the binomial C(2p, k) it is scaled by is positive.
 //! - **Normal coefficients within 2^193.** In scaled form the partial derivatives' coefficients
 //!   are C(p − 1, i)·C(q, j)·(`P_(i+1,j)` − `P_ij`) and C(p, i)·C(q − 1, j)·(`P_(i,j+1)` − `P_ij`),
 //!   differences of at most 2M < 2^41. Products of scaled forms are plain convolutions (the
@@ -50,7 +54,9 @@ use alloc::vec::Vec;
 
 use geom_num::grid::P3;
 use geom_num::plane::Plane;
-use geom_num::wide::I256;
+use geom_num::quadric::{Surface, polar};
+use geom_num::sturm::div_exact;
+use geom_num::wide::{I256, I320};
 use geom_run::WorkMeter;
 
 use crate::NurbsError;
@@ -98,6 +104,71 @@ pub fn signs(coefficients: &[i128]) -> Signs {
         let _ = s.count(c.cmp(&0));
     }
     s
+}
+
+/// The signs of wide integer coefficients.
+#[must_use]
+pub fn signs_of(coefficients: &[I320]) -> Signs {
+    let mut s = Signs::default();
+    for c in coefficients {
+        // At most usize::MAX coefficients exist, so the count cannot overflow.
+        let _ = s.count(c.cmp(&I320::ZERO));
+    }
+    s
+}
+
+/// The coefficients of `surface`'s equation over the nonrational grid Bezier curve with control
+/// points `points`, in the scaled basis t^k·(1 − t)^(2p − k), where the equation has degree 2p:
+/// each is Σ C(p, i)·C(p, j)·Q(`P_i`, `P_j`) over i + j = k, for the polar form Q, so it has the sign
+/// of the true Bernstein coefficient (chapter 12.3's exact path).
+///
+/// Comparing whole numbers on `I320` costs about what an interval would, and the loop has no fixed
+/// shape for `geom-gen`, so it has no filter.
+///
+/// # Errors
+///
+/// [`NurbsError::Defect`] if a step exceeded its bit budget, which the module header rules out, or
+/// for a torus, whose equation is not quadratic; [`NurbsError::Stopped`].
+pub fn quadric_coefficients(
+    points: &[P3],
+    surface: &Surface,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<I320>, NurbsError> {
+    let width = points.len();
+    let degree = width.checked_sub(1).ok_or(NurbsError::Defect)?;
+    if degree > MAX_DEGREE {
+        return Err(NurbsError::Defect);
+    }
+    meter.charge(u64::try_from(mul(width, width)?).map_err(|_| NurbsError::Defect)?)?;
+    let small = |n: usize| {
+        i64::try_from(n)
+            .map(I320::from_i64)
+            .map_err(|_| NurbsError::Defect)
+    };
+    let mut row = vec_for::<I320>(meter, width)?;
+    let mut binomial = I320::one();
+    for i in 0..width {
+        row.push(binomial);
+        // C(p, i + 1) = C(p, i)·(p − i)/(i + 1), exactly, and at most C(28, 14) < 2^27.
+        let top = binomial
+            .checked_mul(&small(sub(degree, i)?)?)
+            .ok_or(NurbsError::Defect)?;
+        binomial = div_exact(&top, &small(add(i, 1)?)?).ok_or(NurbsError::Defect)?;
+    }
+    let mut out = vec_for::<I320>(meter, mul(degree, 2)?.saturating_add(1))?;
+    out.resize(mul(degree, 2)?.saturating_add(1), I320::ZERO);
+    for (i, x) in points.iter().enumerate() {
+        for (j, y) in points.iter().enumerate() {
+            let (a, b) = (get(&row, i)?, get(&row, j)?);
+            let term = polar(surface, *x, *y)
+                .and_then(|q| q.checked_mul(&a))
+                .and_then(|q| q.checked_mul(&b))
+                .ok_or(NurbsError::Defect)?;
+            let slot = out.get_mut(add(i, j)?).ok_or(NurbsError::Defect)?;
+            *slot = slot.checked_add(&term).ok_or(NurbsError::Defect)?;
+        }
+    }
+    Ok(out)
 }
 
 /// The Bernstein coefficients of n·x + d over the Bezier piece (curve or patch, nonrational or with
