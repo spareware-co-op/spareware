@@ -25,9 +25,11 @@
 //!   its worst rule, and running out of budget is [`SketchError::Stopped`]; neither returns a sketch.
 //! - **A singular start is nudged once.** A rule on its singular set has its points moved by small
 //!   amounts derived from its id alone, which the report records; a rule still on it is
-//!   [`SketchError::Degenerate`] (chapter 15.4). A square block whose Jacobian is singular at its
-//!   start, though no rule of it is on its own singular set, is started again with every rule's
-//!   inputs nudged if it does not converge: no step leaves such a start.
+//!   [`SketchError::Degenerate`] (chapter 15.4). A block whose Jacobian is singular at its start,
+//!   though no rule of it is on its own singular set, is started again with every rule's inputs
+//!   nudged if it does not converge: no step leaves such a start. Square or not, as 15.4 asks of
+//!   every singular start: a point drawn on the reference it must be a distance from has no step
+//!   out whether or not anything else holds it.
 //! - **The branch is followed.** Each stored sense is checked after each step of a path with interval
 //!   arithmetic, and a sign that cannot be certified counts as at risk; the smallest pivot of each
 //!   square block is held at or above [`INDEPENDENT`], and the sign of its determinant is kept: a
@@ -112,7 +114,7 @@ pub struct Report {
     pub freedoms: usize,
     /// The largest residual at the answer, in steps.
     pub largest: f64,
-    /// The rules whose start was nudged off a singular set, and those of a square block that started
+    /// The rules whose start was nudged off a singular set, and those of a block that started
     /// singular and did not converge from there.
     pub nudged: Vec<ItemId>,
 }
@@ -411,7 +413,7 @@ impl Stage {
         assembly.name_of_row(at(&self.rows, i)?)
     }
 
-    /// Solves this stage from `x`, holding everything else fixed. A square block that does not
+    /// Solves this stage from `x`, holding everything else fixed. A stage that does not
     /// converge from a start where its Jacobian is singular is started once more, from there with
     /// its rules' inputs moved by their nudges, which the report records (chapter 15.4): from such
     /// a start no step leaves the singular place, as a point straight above the end of a level line
@@ -428,7 +430,7 @@ impl Stage {
             push(&mut from, *x.get(column).ok_or(SketchError::Internal)?)?;
         }
         let failed = match self.iterate(assembly, x, report, meter) {
-            Err(SketchError::Unsolved(id)) if self.square => id,
+            Err(SketchError::Unsolved(id)) => id,
             other => return other,
         };
         for (&column, &value) in self.columns.iter().zip(&from) {

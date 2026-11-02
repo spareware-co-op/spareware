@@ -816,14 +816,15 @@ constraint 3.1 driving 0 fix 1.2 0 5
 
 #[test]
 fn a_block_that_starts_nearly_singular_is_not_watched() {
-    // Two distances barely longer than half the base: the apex sits a fraction of a unit above it,
-    // the block's smallest pivot below the independence threshold, so its determinant's sign is no
-    // guide and the path runs unwatched.
+    // Two distances barely longer than half the base, the apex drawn a tenth of a unit above it:
+    // within the tolerance already, and the block's smallest pivot, √2 · 0.1 / 1500, below the
+    // independence threshold, so its determinant's sign is no guide and the path runs unwatched,
+    // on or in place.
     let lines = |d: f64| {
         format!(
             "entity 1.0 point 0 0
 entity 1.1 point 3000 0
-entity 1.2 point 1500 1
+entity 1.2 point 1500 0.1
 constraint 2.0 driving 0 fix 1.0 0 0
 constraint 2.1 driving 0 fix 1.0 1 0
 constraint 2.2 driving 0 fix 1.1 0 3000
@@ -833,10 +834,127 @@ constraint 2.5 driving 0 distance 1.1 1.2 {d}
 "
         )
     };
-    let done = continue_to(
-        &sketch(&lines(1_500.000_05)),
-        &sketch(&lines(1_500.000_1)),
-        &mut meter(),
+    let start = sketch(&lines(1_500.000_01));
+    for d in [1_500.000_02, 1_500.000_01] {
+        let done = continue_to(&start, &sketch(&lines(d)), &mut meter());
+        assert!(done.is_ok(), "{d}: {done:?}");
+    }
+}
+
+#[test]
+fn a_rule_missed_by_the_tolerance_itself_is_met() {
+    // A horizontal line between two references a tolerance apart in height: its residual is
+    // TOLERANCE exactly, which is met; a millionth more is not.
+    let lines = |dy: &str| {
+        format!(
+            "entity 1.0 reference 0 0
+entity 1.1 reference 100 {dy}
+entity 1.2 point 5 5
+entity 2.0 line 1.0 1.1 segment
+constraint 3.0 driving 0 horizontal 2.0
+constraint 3.1 driving 0 fix 1.2 0 5
+"
+        )
+    };
+    let done = solve(&sketch(&lines("0.015625")), &mut meter()).unwrap();
+    assert_eq!(done.report.largest, TOLERANCE);
+    assert_eq!(
+        solve(&sketch(&lines("0.015626")), &mut meter()),
+        Err(SketchError::Unsolved(id(3, 0)))
     );
-    assert!(done.is_ok(), "{done:?}");
+}
+
+#[test]
+fn a_path_into_a_near_fold_is_lost_before_it() {
+    // Two sides of 10^7 · √2 across a base of 2 · 10^7, closed towards 10^7 and a thousandth. So near
+    // the fold the tolerance leaves the apex a few hundred steps above the base, where the block's
+    // smallest pivot is below the independence threshold: the path is lost short of its end.
+    // Stopping well short, it gets there.
+    let lines = |d: f64| {
+        format!(
+            "entity 1.0 point 0 0
+entity 1.1 point 20000000 0
+entity 1.2 point 10000000 10000000
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 fix 1.1 0 20000000
+constraint 2.3 driving 0 fix 1.1 1 0
+constraint 2.4 driving 0 distance 1.0 1.2 {d}
+constraint 2.5 driving 0 distance 1.1 1.2 {d}
+"
+        )
+    };
+    let from = solve(&sketch(&lines(14_142_135.623_730_951)), &mut meter())
+        .unwrap()
+        .sketch;
+    let Err(SketchError::BranchLost { constraint, along }) =
+        continue_to(&from, &sketch(&lines(10_000_000.001)), &mut meter())
+    else {
+        panic!("the path reached the fold");
+    };
+    assert_eq!(constraint, id(2, 4));
+    assert!((0.99..1.0).contains(&along), "{along}");
+    let short = continue_to(&from, &sketch(&lines(10_001_000.0)), &mut meter());
+    assert!(short.is_ok(), "{short:?}");
+}
+
+#[test]
+fn a_step_halved_at_a_failure_is_doubled_back_after_a_success() {
+    // From 0.1 to 1.5 half-turns the whole jump and its first halves land on the other branch.
+    // Measured, four steps: the schedule is the path's contract (15.7), and a path that never
+    // doubled its step back, or that jumped back to the whole, takes another number.
+    let from = solve(&hand(0.1), &mut meter()).unwrap().sketch;
+    let done = continue_to(&from, &with_angle(&from, 1.5), &mut meter()).unwrap();
+    assert_eq!(done.report.steps, 4);
+    let angle = 1.5 * core::f64::consts::PI;
+    near(
+        &done.sketch,
+        id(1, 2),
+        angle.cos() * 1000.0,
+        angle.sin() * 1000.0,
+    );
+}
+
+#[test]
+fn a_point_drawn_on_its_reference_is_nudged_off_it_whatever_holds_it() {
+    // At the reference itself a distance's gradient vanishes, so no step leaves it: the block is
+    // started again from its nudge (15.4), square (the point's height fixed) or not.
+    let free = "entity 1.0 reference 0 0
+entity 1.1 point 0 0
+constraint 2.0 driving 0 distance 1.0 1.1 100
+";
+    for lines in [
+        free.to_owned(),
+        format!(
+            "{free}constraint 2.1 driving 0 fix 1.1 1 0
+"
+        ),
+    ] {
+        let done = solved(&lines);
+        assert_eq!(done.report.nudged, [id(2, 0)], "{lines}");
+        let [x, y] = done.sketch.point(id(1, 1)).unwrap();
+        assert!((x.hypot(y) - 100.0).abs() < 1.0, "{x} {y}");
+    }
+}
+
+#[test]
+fn what_cannot_be_met_is_refused_once_no_step_lowers_it() {
+    // A triangle with one side longer than the other two together: refused as soon as no step can
+    // lower its residual by a share of |r|² (the flat-step test), within a thousand units of work,
+    // not after every iteration the solver allows.
+    let lines = "entity 1.0 point 0 0
+entity 1.1 point 1000 0
+entity 1.2 point 500 100
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 fix 1.1 0 1000
+constraint 2.3 driving 0 fix 1.1 1 0
+constraint 2.4 driving 0 distance 1.0 1.2 200
+constraint 2.5 driving 0 distance 1.1 1.2 200
+";
+    let mut thousand = WorkMeter::new(Budget::of_work(1000));
+    assert!(matches!(
+        solve(&sketch(lines), &mut thousand),
+        Err(SketchError::Unsolved(_))
+    ));
 }

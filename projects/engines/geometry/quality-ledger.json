@@ -5268,22 +5268,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
-      "mutant": "replace greedy -> Result<(), SketchError> with Ok(())",
-      "line_text": "for e in 0..graph.equations() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "greedy only seeds the matching. Hopcroft and Karp's phases find a largest matching from an empty one too, and nothing the analysis returns depends on which largest matching it found: the Dulmage-Mendelsohn parts and the square blocks are fixed by the graph alone, their members are listed ascending, and the solve order is chosen by each block's lowest equation."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
-      "mutant": "replace == with != in greedy",
-      "line_text": "if get(&matching.of_variable, v)? == NONE {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Every variable starts unmatched and greedy is the first to match any, so `!= NONE` never holds and greedy matches nothing: the same as greedy doing nothing, whose entry says why the result is unchanged."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
       "mutant": "replace layers -> Result<bool, SketchError> with Ok(true)",
       "line_text": "queue.clear();",
       "occurrences": 1,
@@ -5345,6 +5329,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when the values are equal, and then both keep the same low link."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in blocks_of",
+      "line_text": "if place == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every equation of the square part reads the variable it determines, so the walk meets its own equation as a next one; the mutant numbers an equation only after its first visit, so there it is still unnumbered and is walked into again, for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in blocks_of",
+      "line_text": "if get(&order, w)? == NONE {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every equation of the square part reads the variable it determines, so the walk meets its own equation as a next one; the mutant walks only into equations already numbered, so it walks into that one again, renumbering it each time, for ever. It is a hang the tests catch; kept so that the judge counts it as one."
     },
     {
       "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
@@ -5929,6 +5929,38 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The tests stop it by their timeout: each success after a halving halves the step again, so the steps shrink geometrically and their sum stops short of the end of the path. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace square -> Result<f64, SketchError> with Ok(-1.0)",
+      "line_text": "let mut sum = Real::ZERO;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: with every |v|² read as −1, every predicted reduction is 0 and every ratio 0/0, a NaN that passes none of the damping's tests, so λ never moves and the same step is tried and refused for ever (the tests' meters have no budget). It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace <= with > in Stage::iterate",
+      "line_text": "if predicted <= FLAT * square(&r)? {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant refuses every step that predicts a reduction and takes only one that predicts none: at a block whose step is zero the trial is the point itself, the ratio 0/0 is a NaN that passes none of the damping's tests, and the same step is tried and refused for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in continue_to",
+      "line_text": "if depth > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "depth is unsigned, so the mutant also doubles the step after a success at depth 0. At depth 0 the step is the whole path, so that success reaches 1 and the loop ends: the doubled step is never used."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with == in Stage::iterate",
+      "line_text": "if lambda > MOST_DAMPING {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The damping runs out only if every damped step up to 10^12 is refused. Every residual is a length with a gradient near one (equation.rs), so once λ passes the Jacobian's scale the step shrinks as 1/λ and the linear model predicts it ever better: no test, and no sketch tried, runs out (replacing the return with another error fails no test). Were one to, the mutant would keep raising λ, and end at the flat-step test with the same Unsolved, at λ's overflow with Numeric, or with a step taken whose result finish still holds to the tolerance: an error or a checked answer, never a wrong one."
     }
   ],
   "coverage_off": [
