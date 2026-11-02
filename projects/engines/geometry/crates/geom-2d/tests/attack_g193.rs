@@ -1233,6 +1233,58 @@ fn every_construction_makes_what_it_made() {
             t.exactness,
         ));
     }
+    let wide = Accept::Certified {
+        pos: Steps(16),
+        step: GridStep::Q0,
+        gap: ANGULAR,
+    };
+    // A circle about three circles, from outside each.
+    let (mut carriers, [one, two, three]) = table([
+        circle(p2(0, 0), 1_000),
+        circle(p2(9_000, 0), 3_000),
+        circle(p2(3_000, 8_000), 2_000),
+    ]);
+    let touches = [
+        touch(one, Sign::Positive, p2(1_000, 1_000)),
+        touch(two, Sign::Positive, p2(6_000, 1_500)),
+        touch(three, Sign::Positive, p2(3_500, 6_000)),
+    ];
+    match tangent_circle(&mut carriers, &touches, GridStep::Q0, &certified()) {
+        Ok(c) => {
+            let joins: Vec<(&Pt2, CurveIx)> = c
+                .joins
+                .iter()
+                .zip([one, two, three])
+                .flat_map(|(j, k)| [(&j.leaving, k), (&j.arriving, k)])
+                .collect();
+            out.push(made(&carriers, c.circle, &joins, c.gap.get(), c.exactness));
+        }
+        Err(e) => out.push(format!("refused {e:?}")),
+    }
+    // The common tangents of equal circles on a diagonal, square to it and along it, and of two
+    // circles of radius 2^34 far apart.
+    for (p, q, r) in [
+        (p2(0, 0), p2(10_000, 10_000), 1_000),
+        (p2(0, 0), p2(10_000, -10_000), 1_000),
+        (p2(-(1 << 38), 0), p2(1 << 38, 3), 1 << 34),
+    ] {
+        let (mut carriers, [first, second]) = table([circle(p, r), circle(q, r)]);
+        for sides in [
+            [Sign::Positive, Sign::Positive],
+            [Sign::Negative, Sign::Positive],
+        ] {
+            match common_tangent(&mut carriers, first, second, sides, GridStep::Q0, &wide) {
+                Ok(t) => out.push(made(
+                    &carriers,
+                    t.line,
+                    &[(&t.start, first), (&t.end, second)],
+                    t.gap.get(),
+                    t.exactness,
+                )),
+                Err(e) => out.push(format!("refused {e:?}")),
+            }
+        }
+    }
     for (k, line) in out.iter().enumerate() {
         println!("{k}: {line}");
     }
@@ -1271,6 +1323,13 @@ const PINNED: &[&str] = &[
     "Fine(FineLine { a: -4779958608018276352, b: 13807551382837788672, c: 13150366853517803519990 }) [Crossing { a: CurveIx(3), b: CurveIx(0), root: First }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }] 0x3dc5e18ee717eac2 Certified { bound: Steps(1), step: Q0 }",
     "Fine(FineLine { a: -5985699785787572224, b: 9031490230007365632, c: -9751466471112930397092 }) [Crossing { a: CurveIx(4), b: CurveIx(0), root: First }, Crossing { a: CurveIx(4), b: CurveIx(1), root: Second }] 0x3dc859fa20fe48ed Certified { bound: Steps(1), step: Q0 }",
     "Fine(FineLine { a: 357239489107591168, b: 12447001810340675584, c: 11206914563632291095270 }) [Crossing { a: CurveIx(5), b: CurveIx(0), root: First }, Crossing { a: CurveIx(5), b: CurveIx(1), root: Second }] 0x3dc662d5ad36ac2c Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 122626144637966242522073, y: 100238142928277417864889, w: 36893488147419103232 }, rr: Wide<4>(0x0000000000000000000000000295d64360359d5d323a169797b741ab03d055e4) })) [Crossing { a: CurveIx(3), b: CurveIx(0), root: First }, Crossing { a: CurveIx(3), b: CurveIx(0), root: Second }, Crossing { a: CurveIx(3), b: CurveIx(1), root: First }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }, Crossing { a: CurveIx(3), b: CurveIx(2), root: First }, Crossing { a: CurveIx(3), b: CurveIx(2), root: Second }] 0x3dc68471afa35943 Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: -9223372036854775808, b: 9223372036854775808, c: -13043817825332782212339 }) [Crossing { a: CurveIx(2), b: CurveIx(0), root: First }, Crossing { a: CurveIx(2), b: CurveIx(1), root: Second }] 0x3dc62245b76439ca Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: -809548539920510608063, b: 1079398053227347477417, c: 1349247566534184346770280 }) [Crossing { a: CurveIx(3), b: CurveIx(0), root: First }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }] 0x3dcb6f2f0632d03d Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: 9223372036854775808, b: 9223372036854775808, c: -13043817825332782212339 }) [Crossing { a: CurveIx(2), b: CurveIx(0), root: First }, Crossing { a: CurveIx(2), b: CurveIx(1), root: Second }] 0x3dc62245b76439ca Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: 1079398053227347477417, b: 809548539920510608063, c: 1349247566534184346770280 }) [Crossing { a: CurveIx(3), b: CurveIx(0), root: First }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }] 0x3dcb6f2f0632d03d Certified { bound: Steps(1), step: Q0 }",
+    "Line(Carrier { a: -8, b: 1466015503700, c: -25185954573082844725238 }) [Crossing { a: CurveIx(2), b: CurveIx(0), root: First }, Crossing { a: CurveIx(2), b: CurveIx(1), root: Second }] 0x3dc292fe559a3eb7 Certified { bound: Steps(1), step: Q0 }",
+    "Line(Carrier { a: 122587691236, b: 1957568446192, c: 2936352669289 }) [Crossing { a: CurveIx(3), b: CurveIx(0), root: First }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }] 0x3dc106c2848fc817 Certified { bound: Steps(1), step: Q0 }",
 ];
 
 /// The touches of `c`, each join on its curve and the circle.
@@ -1611,3 +1670,43 @@ const WIDE_TANGENTS: &[&str] = &[
     "Certified { bound: Steps(3), step: Q0 } 0x3dc2198386defd1e",
     "Certified { bound: Steps(4), step: Q0 } 0x3dc664231d3c4a22",
 ];
+
+#[test]
+fn a_small_fillet_at_an_ellipse_is_made_down_to_its_budget() {
+    // Fillets of 2 to 6 steps in the corner of a line and an ellipse: the two crossings of each cap
+    // are some 10^-15 of a turn apart along the ellipse, too near for their angles to order them,
+    // and their places in its order do. At 2 steps the centre's fraction takes 82 bits, the most a
+    // rational point holds; at 1 it would take 83, and the fillet is refused, adding nothing.
+    let touch = |curve, side, near| Touch { curve, side, near };
+    let (mut carriers, [ground, oval]) = table([
+        line(p2(-100_000, -2_000), p2(100_000, -2_000)),
+        Curve2::Ellipse(Ellipse2::new(p2(0, 4_000), [20_000, 0], 3, 5).unwrap()),
+    ]);
+    for r in [2_i64, 3, 4, 6] {
+        let (over, beside) = (
+            touch(ground, Sign::Positive, p2(17_321 + 3 * r, -2_000)),
+            touch(oval, Sign::Positive, p2(17_321 + r, -2_000 - 2 * r)),
+        );
+        let done = fillet(
+            &mut carriers,
+            &over,
+            &beside,
+            i128::from(r),
+            GridStep::Q0,
+            &certified(),
+        )
+        .unwrap_or_else(|e| panic!("{r}: {e:?}"));
+        sound(&carriers, &done, ground, oval);
+        assert!(matches!(done.end, Pt2::ConicRoot { .. }), "{:?}", done.end);
+    }
+    let before = carriers.len();
+    let (over, beside) = (
+        touch(ground, Sign::Positive, p2(17_324, -2_000)),
+        touch(oval, Sign::Positive, p2(17_322, -2_002)),
+    );
+    assert_eq!(
+        fillet(&mut carriers, &over, &beside, 1, GridStep::Q0, &certified()).err(),
+        Some(PointError::Num(NumError::BudgetExceeded))
+    );
+    assert_eq!(carriers.len(), before);
+}

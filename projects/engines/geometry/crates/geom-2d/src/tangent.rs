@@ -53,6 +53,7 @@ use geom_num::conic::{Conic, Ellipse2, Meeting};
 use geom_num::grid::P2;
 use geom_num::interval::Interval;
 use geom_num::one_root::{Root, enclose};
+use geom_num::quartic::Piece;
 use geom_num::{DD, Exactness, GridStep, I256, NumError, Real, Sign, Steps};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 
@@ -596,17 +597,24 @@ fn ellipse_meet(
     if high != low.saturating_add(1) && (low != 0 || high != last) {
         return Err(NumError::Degenerate.into());
     }
-    // Neighbours along the ellipse, either way round its −π: the one the other follows
-    // counter-clockwise, the short way, is the earlier.
-    let ([c1, s1], [c2, s2]) = (at(low)?, at(high)?);
-    let turn = c1.mul(s2)?.sub(s1.mul(c2)?)?;
-    let (earlier, later) = if turn.lo() > 0.0 {
-        (low, high)
-    } else if turn.hi() < 0.0 {
-        (high, low)
-    } else {
-        return Err(NumError::Degenerate.into());
+    // Neighbours along the ellipse, in its order from θ = −π: the higher comes first only where
+    // the two are that order's ends, either side of θ = ±π. Three or more crossings say so by
+    // their places. Two are both neighbours and ends, and the stretches of t they lie in tell:
+    // one below t = −1 and the other past t = 1 are either side of t = ∞. Exact however near the
+    // two are, where their angles' cross product needs them some ulps apart.
+    let piece = |k: usize| {
+        roots
+            .iter()
+            .nth(k)
+            .map(geom_num::quartic::RealRoot::piece)
+            .ok_or(NumError::Degenerate)
     };
+    let wraps = if count > 2 {
+        high != low.saturating_add(1)
+    } else {
+        piece(low)? == Piece::FarBelow && matches!(piece(high)?, Piece::FarAbove | Piece::Infinity)
+    };
+    let (earlier, later) = if wraps { (high, low) } else { (low, high) };
     let (e, l) = (name(earlier)?, name(later)?);
     let (leaving, arriving) = if side == Sign::Negative {
         (l, e)
