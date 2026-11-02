@@ -134,10 +134,12 @@ fn primitives(at: P3, size: i64) -> Vec<(String, OpOutput<Made>)> {
     ]
 }
 
-/// Each primitive as made and under each transform of the Make family: a move, mirrors, quarter
-/// turns about each axis and a doubling; a box also turned to the direction (3, 4) about z and x,
-/// which rounds. The Make family refuses such a turn of a curved body until `geom-check` can
-/// certify its pairs of faces, so it is no curved fixture yet.
+/// Each primitive as made and under each transform of the Make family: a move, mirrors, and
+/// quarter turns about each axis; a box also doubled, and turned to the direction (3, 4) about z
+/// and x, which rounds. The Make family refuses such a turn of a curved body until `geom-check` can
+/// certify its pairs of faces, and states a bound of about twice the radius for a doubled one
+/// (162 steps for a cylinder of radius 80), past which a crossing near an edge cannot be told from
+/// a crease; so neither is a curved fixture yet.
 fn transformed(name: &str, out: &OpOutput<Made>) -> Vec<(String, Body, Exactness)> {
     let c = ctx();
     let moved = Moved {
@@ -171,7 +173,7 @@ fn transformed(name: &str, out: &OpOutput<Made>) -> Vec<(String, Body, Exactness
         ("turned about z", rotate(&c, moved, Axis::Z, turned, at)),
         ("turned about x", rotate(&c, moved, Axis::X, turned, at)),
     ] {
-        if how.starts_with("turned") && !name.starts_with("box") {
+        if (how.starts_with("turned") || how == "doubled") && !name.starts_with("box") {
             continue;
         }
         // A debug build takes a cut of the transforms, as the law catalogue takes an eighth of
