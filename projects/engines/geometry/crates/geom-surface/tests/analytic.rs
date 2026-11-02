@@ -1,7 +1,9 @@
 //! The analytic surface kinds (piece G65) under the kind contract, and their own claims: every
 //! plane, cylinder, cone, sphere and torus keeps every law under exact, rational, certified,
 //! non-uniform and mirroring transforms; a whole cylinder converts exactly; a non-uniform scale
-//! changes a kind to NURBS explicitly; a sphere's pole keeps its normal; a torus knows its form.
+//! changes a kind to NURBS explicitly; a uniform whole-number scale moves every round kind exactly,
+//! a cylinder's and a cone's axial term with it; a sphere's pole keeps its normal; a torus knows
+//! its form.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -188,6 +190,85 @@ fn transforms_change_kinds_explicitly() {
         panic!("a mirror keeps a cylinder")
     };
     assert_eq!(r.axial_sign(), -1.0);
+}
+
+#[test]
+fn a_uniform_whole_scale_moves_every_round_kind_exactly() {
+    // m·p + t for whole m and t: twice and three times about points off the origin, and three times
+    // with a mirror. The image of each (u, v) is the moved kind's point there, so the deviation is
+    // the map's, 0, and not the distance a kept parameter would make: (m − 1)·v along the axis of a
+    // cylinder or a cone, and for a cone the slope too.
+    let m = &mut meter();
+    // On the standard frame every double is exact, and so is the image: 0. On a turned one the
+    // frame's own doubles round, a few ulps of the lengths.
+    for (f, within) in [
+        (Frame::standard().unwrap(), 0.0),
+        (Frame::new([0.6, 0.8, 0.0], [0.0, 0.0, 1.0]).unwrap(), 1e-12),
+    ] {
+        let grid = |k: i64, mirrored: bool, t: [i128; 3]| {
+            let x = if mirrored { -k } else { k };
+            TypedTransform::from(
+                RationalTransform::new([[x, 0, 0], [0, k, 0], [0, 0, k]], t, 1).unwrap(),
+            )
+        };
+        let scales = [
+            (grid(2, false, [5, -7, 11]), 2.0),
+            (grid(3, false, [0, 0, 0]), 3.0),
+            (grid(3, true, [-4, 9, 2]), -3.0),
+        ];
+        let kinds: Vec<SurfaceKind> = vec![
+            SurfaceKind::Cylinder(
+                Cylinder::new([1.0, 2.0, 3.0], 5.0, f, ((0.0, 2.0), (-1.0, 10.0))).unwrap(),
+            ),
+            SurfaceKind::Cone(
+                Cone::new([1.0, 2.0, 3.0], 6.0, -0.5, f, ((0.0, 2.0), (0.0, 12.0))).unwrap(),
+            ),
+            SurfaceKind::Sphere(
+                Sphere::new([1.0, 2.0, 3.0], 5.0, f, ((0.0, 2.0), (-0.5, 0.5))).unwrap(),
+            ),
+            SurfaceKind::Torus(
+                Torus::new([1.0, 2.0, 3.0], 7.0, 2.0, f, ((0.0, 2.0), (-1.0, 1.0))).unwrap(),
+            ),
+        ];
+        for k in &kinds {
+            for (t, factor) in scales.iter().map(|(t, f): &(TypedTransform, f64)| (t, *f)) {
+                let moved = k.transformed(t, m).unwrap();
+                assert!(
+                    moved.deviation <= within,
+                    "{k:?} under {t:?}: {}",
+                    moved.deviation
+                );
+                check(k, &params(k.domain()), t, m)
+                    .unwrap_or_else(|e| panic!("{k:?} under {t:?}: {e}"));
+                // The axial factor takes the scale where the axial term is a length.
+                let axial = match (&moved.value, k) {
+                    (SurfaceKind::Cylinder(c), SurfaceKind::Cylinder(_)) => c.axial_sign(),
+                    (SurfaceKind::Cone(c), SurfaceKind::Cone(o)) => {
+                        let ((r, slope), (r0, k0)) = (c.radius_and_slope(), o.radius_and_slope());
+                        assert_eq!((r, slope), (factor.abs() * r0, factor.abs() * k0));
+                        c.axial_sign()
+                    }
+                    // A sphere's and a torus's is r·sin πv: the radius carries the scale, a mirror
+                    // the sign.
+                    (SurfaceKind::Sphere(c), SurfaceKind::Sphere(_)) => {
+                        c.axial_sign() * factor.abs()
+                    }
+                    (SurfaceKind::Torus(c), SurfaceKind::Torus(_)) => c.axial_sign() * factor.abs(),
+                    other => panic!("a similarity keeps the kind: {other:?}"),
+                };
+                assert_eq!(axial, factor, "{k:?} under {t:?}");
+            }
+        }
+        // A scale that is not uniform still gives the moved NURBS form, certified.
+        let squash = TypedTransform::from(
+            RationalTransform::new([[2, 0, 0], [0, 1, 0], [0, 0, 1]], [0; 3], 1).unwrap(),
+        );
+        for k in &kinds {
+            let moved = k.transformed(&squash, m).unwrap();
+            assert!(matches!(moved.value, SurfaceKind::Affine(_)), "{k:?}");
+            check(k, &params(k.domain()), &squash, m).unwrap_or_else(|e| panic!("{k:?}: {e}"));
+        }
+    }
 }
 
 #[test]

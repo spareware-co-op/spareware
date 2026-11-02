@@ -7553,14 +7553,14 @@
       "modules": [
         {
           "cost": "constant per evaluation; a bound O(1) per piece (at most 64 pieces); a conversion O(m·n) for its control net.",
-          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a sign s = ±1 on its axial term so that reversing either parameter is exact:",
+          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a factor s on its axial term, ±1 as built, so that reversing either parameter is exact:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
           "guarantees": [
             "**Stored as themselves.** Centres, radii, slopes and frames are the stored doubles, exactly.",
             "**Certified, or refused.** Enclosures and bounds are the terms' closed forms in interval arithmetic; the normal bound is the closed-form direction, which survives the poles of a sphere and the apex of a cone (where its sign may be either: then both).",
             "**Exact NURBS forms.** Each converts to a tensor-product rational surface (a circle in each angular direction, a line in each linear one) with a parameter map per direction, its deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).",
-            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, the frame carried, a mirror flipping the axial sign); any other transform gives the moved NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).",
+            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, a cylinder's and a cone's axial factor too, the frame carried, a mirror flipping the axial factor's sign), so its image at each (u, v) is the moved point there: a uniform whole-number scale is exact, deviation 0. Any other transform gives the moved NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Exact split and reversal.**"
           ],
           "job": "The analytic surface kinds: plane, cylinder, cone, sphere and torus, each stored as itself.",
