@@ -564,9 +564,10 @@ fn corner(bits: u32) -> [i64; 3] {
     reason = "one block per arena, as geom-topo's own meeting box; corners of ten steps are exact"
 )]
 fn mixed_box(extra: &[Plane]) -> Builder {
-    let mut b = Builder::new();
-    let a = &mut b.arenas;
-    a.regions
+    let mut builder = Builder::new();
+    let arenas = &mut builder.arenas;
+    arenas
+        .regions
         .extend(&[
             Region {
                 kind: RegionKind::Solid,
@@ -578,7 +579,8 @@ fn mixed_box(extra: &[Plane]) -> Builder {
             },
         ])
         .unwrap();
-    a.shells
+    arenas
+        .shells
         .extend(&[Shell {
             region: ix(0),
             next: None,
@@ -587,11 +589,11 @@ fn mixed_box(extra: &[Plane]) -> Builder {
         .unwrap();
     for k in 0..3 {
         for at in [0, 10] {
-            a.planes.push(axis(k, at)).unwrap();
+            arenas.planes.push(axis(k, at)).unwrap();
         }
     }
     for plane in extra {
-        a.planes.push(*plane).unwrap();
+        arenas.planes.push(*plane).unwrap();
     }
     for bits in 0..8 {
         let point = if bits & 1 == 0 {
@@ -604,8 +606,8 @@ fn mixed_box(extra: &[Plane]) -> Builder {
             let [x, y, z] = corner(bits);
             PointKind::Grid(P3::new(x, y, z).unwrap())
         };
-        a.points.push(point).unwrap();
-        a.vertices.push(Vertex { point: ix(bits) }).unwrap();
+        arenas.points.push(point).unwrap();
+        arenas.vertices.push(Vertex { point: ix(bits) }).unwrap();
     }
     let flat = Flat::new(
         [0.0; 3],
@@ -614,71 +616,76 @@ fn mixed_box(extra: &[Plane]) -> Builder {
         ((0.0, 1.0), (0.0, 1.0)),
     )
     .unwrap();
-    a.surfaces.push(SurfaceKind::Plane(flat)).unwrap();
+    arenas.surfaces.push(SurfaceKind::Plane(flat)).unwrap();
     let bound = Box3::new(P3::new(0, 0, 0).unwrap(), P3::new(10, 10, 10).unwrap()).unwrap();
     let mut pairs: Vec<(u32, u32)> = Vec::new();
-    for (f, ring) in CORNERS.iter().enumerate() {
-        let f = f as u32;
-        a.faces
+    for (face, ring) in CORNERS.iter().enumerate() {
+        let face = face as u32;
+        arenas
+            .faces
             .push(Face {
                 shell: ix(0),
-                next: (f < 5).then(|| ix(f + 1)),
+                next: (face < 5).then(|| ix(face + 1)),
                 surface: ix(0),
                 sense: Sense::Forward,
-                first_loop: Some(ix(f)),
+                first_loop: Some(ix(face)),
                 bound,
             })
             .unwrap();
-        a.loops
+        arenas
+            .loops
             .push(Loop {
-                face: ix(f),
+                face: ix(face),
                 next: None,
-                first_fin: Some(ix(f * 4)),
+                first_fin: Some(ix(face * 4)),
             })
             .unwrap();
         for k in 0..4_u32 {
             let (s, t) = (ring[k as usize], ring[((k + 1) % 4) as usize]);
             let key = (s.min(t), s.max(t));
-            let e = pairs.iter().position(|&q| q == key).map_or_else(
+            let edge = pairs.iter().position(|&q| q == key).map_or_else(
                 || {
                     pairs.push(key);
                     pairs.len() as u32 - 1
                 },
-                |e| e as u32,
+                |edge| edge as u32,
             );
-            a.fins
+            arenas
+                .fins
                 .push(Fin {
-                    loop_: ix(f),
-                    next: ix(f * 4 + (k + 1) % 4),
-                    prev: ix(f * 4 + (k + 3) % 4),
-                    edge: ix(e),
+                    loop_: ix(face),
+                    next: ix(face * 4 + (k + 1) % 4),
+                    prev: ix(face * 4 + (k + 3) % 4),
+                    edge: ix(edge),
                     sense: if s < t {
                         Sense::Forward
                     } else {
                         Sense::Reversed
                     },
-                    radial: ix(f * 4 + k),
+                    radial: ix(face * 4 + k),
                     pcurve: None,
                 })
                 .unwrap();
         }
     }
-    for (e, &(s, t)) in pairs.iter().enumerate() {
+    for (edge, &(s, t)) in pairs.iter().enumerate() {
         let (from, to) = (corner(s).map(|x| x as f64), corner(t).map(|x| x as f64));
         let d = [0, 1, 2].map(|k| to[k] - from[k]);
-        a.curves
+        arenas
+            .curves
             .push(CurveKind::Line(Line::new(from, d, (0.0, 1.0)).unwrap()))
             .unwrap();
-        a.edges
+        arenas
+            .edges
             .push(Edge {
                 first_fin: None,
                 start: Some(ix(s)),
                 end: Some(ix(t)),
-                curve: ix(e as u32),
+                curve: ix(edge as u32),
             })
             .unwrap();
     }
-    b
+    builder
 }
 
 /// [`mixed_box`], published.
