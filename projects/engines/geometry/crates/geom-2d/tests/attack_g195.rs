@@ -12,6 +12,7 @@
 )]
 
 use geom_2d::contact::{Contact, Kind, Why, contacts};
+use geom_curve::transition::{CurvatureLaw, Transition};
 use geom_curve::{Circle, CurveKind, Frame, Line};
 use geom_intersect::result::Unresolved;
 use geom_num::interval::Interval;
@@ -135,6 +136,21 @@ fn a_circle_tangent_to_a_line_touches_it_and_a_spline_ending_on_it_is_undecided(
             .all(|c| matches!(c.kind, Kind::Undecided(_)) && c.cuts().is_none()),
         "{found:?}"
     );
+}
+
+#[test]
+fn a_spiral_crossed_by_a_line_is_one_crossing() {
+    // A clothoid leaving the origin along x, its curvature rising from 0 to 1/20 over 20 steps:
+    // it bends up and stays left of x = 20, so the line x = 10 crosses it once.
+    let law = CurvatureLaw::Clothoid {
+        start: 0.0,
+        end: 0.05,
+    };
+    let spiral = Transition::new([0.0, 0.0], [1.0, 0.0], 20.0, law, &mut meter()).unwrap();
+    let post = CurveKind::Line(Line::new([10.0, -5.0], [0.0, 1.0], (0.0, 20.0)).unwrap());
+    let found = contacts(&CurveKind::Transition(spiral), &post, &mut meter()).unwrap();
+    assert_eq!(kinds(&found), [Kind::Crossing], "{found:?}");
+    assert!(found[0].cuts().is_some());
 }
 
 #[test]
