@@ -21,7 +21,8 @@
     clippy::many_single_char_names,
     clippy::format_push_string,
     clippy::format_collect,
-    reason = "tests, written as the definitions read"
+    clippy::disallowed_methods,
+    reason = "tests, written as the definitions read; the Simpson oracle uses the platform's sine and               cosine so that it shares nothing with the kernel's quadrature"
 )]
 
 use geom_sketch::equation::{Assembly, measure};
