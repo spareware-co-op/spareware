@@ -492,7 +492,12 @@ fn clean(
         ) else {
             return Ok(false);
         };
-        seen.splice(i..=i, [p, q]);
+        // The stretch becomes its two halves, in its place.
+        let Some(slot) = seen.get_mut(i) else {
+            return Err(IntersectError::Internal);
+        };
+        *slot = p;
+        seen.insert(i.saturating_add(1), q);
     }
 }
 
