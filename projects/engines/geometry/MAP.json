@@ -635,6 +635,26 @@
           "target": "lib"
         },
         {
+          "cost": "[`LIST`] draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/helper.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-run`'s parallel helper (decision 32.44): lists of [`LIST`] words, each one call of `Exec::map` whose items fit a single chunk, so its one wave is a lone task.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the shape of the kernel's own calls that fit one chunk (a mesh's handful of faces, a sort of a few keys): one map over a short list, under an unlimited budget, on the serial executor and on a pool. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::helper",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -7300,12 +7320,12 @@
           "target": "lib"
         },
         {
-          "cost": "a phase of c chunks runs in at most 7 + ⌈c / `WAVE_MAX`⌉ waves (six doublings from `WAVE_FIRST` reach `WAVE_MAX`). Each wave of w chunks costs two lists of w entries (the tasks and the handles passed to the pool) and one barrier; the slots of the current wave, each a chunk's payload and output, are the only other storage. With no pool there is no list and no barrier: each chunk runs just before it is read.",
+          "cost": "a phase of c chunks runs in at most 7 + ⌈c / `WAVE_MAX`⌉ waves (six doublings from `WAVE_FIRST` reach `WAVE_MAX`). Each wave of w > 1 chunks costs two lists of w entries (the tasks and the handles passed to the pool) and one barrier, and a wave of one task neither. The slots of the current wave, each a chunk's payload and output, are the only other storage. With no pool there is no list and no barrier: each chunk runs just before it is read.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-run/src/pool.rs",
           "guarantees": [
-            "Whatever a pool does, the answer is right. A task run twice writes its slot once (a filled slot is skipped); a task never run is run on the calling thread when its result is read. Only a panic inside the pool escapes, and pools must not panic.",
+            "Whatever a pool does, the answer is right. A task run twice writes its slot once (a filled slot is skipped); a task never run, as a wave's only task never is, runs on the calling thread when its result is read, with the same payload and so the same meter. Only a panic inside the pool escapes, and pools must not panic.",
             "Results are read in index order, never in the order tasks finished."
           ],
           "job": "Threads come from the caller: the [`Pool`] trait, and how the helper hands a pool its work.",
