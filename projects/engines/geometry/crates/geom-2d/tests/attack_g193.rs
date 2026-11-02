@@ -974,7 +974,12 @@ fn made(
 /// (every join on both its carriers, every gap within the ladder's angle, every cap off the arc), so
 /// a change to any of them is a change to what is made.
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one record per construction, in the order of the pins"
+)]
 fn every_construction_makes_what_it_made() {
+    type Wedge = (P2, [P2; 4], [P2; 2]);
     let mut out: Vec<String> = Vec::new();
     let touch = |curve, side, near| Touch { curve, side, near };
     // Two lines whose normals have no whole length, at a sharp corner and an open one.
@@ -1152,7 +1157,6 @@ fn every_construction_makes_what_it_made() {
         .flat_map(|(j, k)| [(&j.leaving, k), (&j.arriving, k)])
         .collect();
     out.push(made(&carriers, c.circle, &joins, c.gap.get(), c.exactness));
-    type Wedge = (P2, [P2; 4], [P2; 2]);
     let wedges: [Wedge; 2] = [
         (
             p2(-20_000, 0),
