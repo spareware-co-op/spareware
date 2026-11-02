@@ -4,8 +4,8 @@
 //! converts to NURBS exactly; a non-uniform scale turns a circle into an ellipse, explicitly; a
 //! ray cannot drift; and every refusal is typed.
 //!
-//! Covers: CurveKind::Line, CurveKind::Circle, CurveKind::Ellipse, CurveKind::Hyperbola,
-//! CurveKind::Parabola, CurveKind::Helix, CurveKind::Polynomial, CurveKind::Involute.
+//! Covers: `CurveKind::Line`, `CurveKind::Circle`, `CurveKind::Ellipse`, `CurveKind::Hyperbola`,
+//! `CurveKind::Parabola`, `CurveKind::Helix`, `CurveKind::Polynomial`, `CurveKind::Involute`.
 
 #![allow(
     clippy::arithmetic_side_effects,

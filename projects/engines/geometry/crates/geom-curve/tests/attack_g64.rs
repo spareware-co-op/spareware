@@ -8,7 +8,7 @@
 //! curve within its deviation of the exact image of the truth. A call may refuse an attack; it
 //! may never return a result outside its stated error.
 //!
-//! Covers: CurveKind::Transition.
+//! Covers: `CurveKind::Transition`.
 
 #![allow(
     clippy::arithmetic_side_effects,
