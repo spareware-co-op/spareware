@@ -31,6 +31,7 @@
 //! - [`error`]: why an intersection could not be computed.
 //! - [`solve`] and [`curve`] (piece G163): the interval engine, and where two curves meet.
 //! - [`curve_surface`] (piece G164): where a curve meets a surface.
+//! - [`quadrics`] (piece G165): where two natural quadrics meet, in closed form.
 //! - [`closed`] (piece G159): exact decisions for a line with a quadric or torus, and the special
 //!   positions of two quadrics.
 //!
@@ -49,6 +50,7 @@ pub mod curve_surface;
 pub mod error;
 pub mod order;
 pub mod project;
+pub mod quadrics;
 pub mod result;
 pub mod solve;
 
