@@ -48,3 +48,4 @@ pub mod half_space;
 pub mod names;
 pub mod operand;
 pub mod rebuild;
+mod wires;
