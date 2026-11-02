@@ -46,6 +46,9 @@
 //!   code with `geom-check` (chapter 28.4; G135).
 //! - [`plane_bodies`]: polyhedra whose every vertex is the meeting of three planes, moved a step off
 //!   the grid (G135).
+//! - [`refute`]: the refutation checker for curved bodies (chapter 28.4; G178): curves, pcurves
+//!   and surfaces sampled densely in fixed point and exact rationals, sharing no code with
+//!   `geom-intersect` or `geom-check`, which can only ever say "found invalid".
 //! - [`faults`]: checker fault injection (chapter 28.4; G110): valid bodies broken one fault at a
 //!   time, each caught with the right kind, and every valid body passed.
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
@@ -235,6 +238,7 @@ pub mod plane_bodies;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;
+pub mod refute;
 pub mod rng;
 pub mod rust_source;
 pub mod scan;

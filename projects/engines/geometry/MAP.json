@@ -12008,6 +12008,31 @@
           "target": "lib"
         },
         {
+          "cost": "per edge, [`SAMPLES`] + 1 evaluations and a distance to each face's surface; per fin with a pcurve, as many surface evaluations; per pair of faces whose stored boxes meet, 2·[`ISO`] lines of [`ALONG`] + 1 points each way, an equation per point, and [`BISECT`] steps at each sign change. Sines and cosines are kept by their argument. No recursion.",
+          "does": "[`refute`] reads each curve, pcurve and surface of a body into its definition as its kind's documentation states it, from the doubles the kind stores, and evaluates it in [`crate::fixed`]'s fixed point, NURBS exactly by [`crate::nurbs_reference`]. Then it looks for what chapter 28.4 names, each against the bound the body is recorded with:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/refute.rs",
+          "guarantees": [
+            "**Only ever \"found invalid\".** Each find is proven of the stored doubles. A distance is a lower bound, the surface's whole closed form, of which a face is a part, compared with the bound plus [`MARGIN_BITS`], which is far above the fixed point's error. A crossing is a sign change of a continuous function at two samples clear of [`LEVEL_BITS`], at a point shown inside both faces by the regions above. An empty list says nothing was found, never that the body is valid.",
+            "**Independent.** No call into `geom-intersect` or `geom-check`, and no kind's own evaluation: every definition is written from its kind's documentation and read from the doubles it stores, as the law catalogue's truths are (`tests/truth`); a face's inside is decided from its own loops.",
+            "**Deterministic.** Integer arithmetic, fixed samples, no clock and no random number."
+          ],
+          "job": "The refutation checker for curved bodies (chapter 28.4, the third check behind `geom-check`; piece G178): a body's curves, pcurves and surfaces sampled densely in 400-bit fixed point and exact rationals, looking for a fault, sharing no code with `geom-intersect` or `geom-check`.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://geomalgorithms.com/a03-_inclusion.html",
+              "https://doi.org/10.1007/978-1-4612-6333-3"
+            ],
+            "text": "chapter 28.4's refutation checker (`projects/engines/geometry/architecture/28-testing.md`), on chapter 8.3's rules (`projects/engines/geometry/architecture/08-topology.md`) and the kinds' definitions of chapter 7 (`geom_curve::conic`, `geom_curve::line`, `geom_surface::analytic`); the winding number by Sunday's crossing rule (D. Sunday, \"Practical Geometry Algorithms\", 2021, chapter 5, <https://geomalgorithms.com/a03-_inclusion.html>); the chord error of linear interpolation, at most h²/8 · max|C''| (de Boor, *A Practical Guide to Splines*, 2001, chapter II, <https://doi.org/10.1007/978-1-4612-6333-3>); the distance to a surface of revolution in the meridian plane through the point."
+          },
+          "path": "geom_test::refute",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a handful of integer operations per word. [`SplitMix64::below`] draws one word, and draws again with probability below `n / 2^64`, so fewer than two words on average.",
           "does": "[`SplitMix64`] turns a [`Seed`] into a stream of 64-bit words. [`ByteSource`] turns a fuzzer's bytes into the same kind of stream. Both implement [`Entropy`], so one builder (for example [`crate::grid::GridSampler`]) makes test data from a seed in a property test and from coverage-guided bytes in a fuzz target.",
           "family": [],

@@ -136,11 +136,28 @@ pub fn attack_with<C>(
 where
     C: Fn(&Body, Exactness) -> Result<Vec<FaultKind>, Stopped>,
 {
+    attack_from(CATALOGUE, body, exactness, checker)
+}
+
+/// [`attack_with`] on the injections of `catalogue`: [`CATALOGUE`], or [`CURVED`] (piece G178).
+///
+/// # Errors
+///
+/// As for [`attack`].
+pub fn attack_from<C>(
+    catalogue: &[Injection],
+    body: &Body,
+    exactness: Exactness,
+    checker: C,
+) -> Result<Vec<Outcome>, AttackError>
+where
+    C: Fn(&Body, Exactness) -> Result<Vec<FaultKind>, Stopped>,
+{
     let valid = checker(body, exactness).map_err(AttackError::Stopped)?;
     if !valid.is_empty() {
         return Err(AttackError::NotValid(valid));
     }
-    CATALOGUE
+    catalogue
         .iter()
         .map(|injection| {
             let Some(broken) = (injection.inject)(body, exactness) else {
@@ -549,13 +566,35 @@ fn quarter_size(a: &Arenas) -> Option<[i64; 3]> {
 /// Two crossing faces: a flat body's solid gains a second shell, a copy of its own moved a quarter
 /// of its size along each axis, so faces of the two cross away from any shared edge. Half its size
 /// would seat an L's copy in the L's notch, touching and not crossing.
+fn crossing_faces(body: &Body, exactness: Exactness) -> Option<Broken> {
+    if exactness != Exactness::Exact {
+        return None;
+    }
+    copied_shell(body, exactness)
+}
+
+/// Two crossing curved faces (piece G178): as [`crossing_faces`], for a body recorded with a bound
+/// that has a face on a surface other than a plane.
+fn crossing_curved(body: &Body, exactness: Exactness) -> Option<Broken> {
+    let a = body.arenas();
+    let curved = (0..a.rows(Arena::Face))
+        .filter_map(Ix::<Face>::new)
+        .filter_map(|f| a.faces.surface.get(f).and_then(|s| a.surfaces.get(*s)))
+        .any(|s| !matches!(s, SurfaceKind::Plane(_)));
+    if exactness == Exactness::Exact || !curved {
+        return None;
+    }
+    copied_shell(body, exactness)
+}
+
+/// A copy of the body's one shell in its solid, moved a quarter of its size along each axis.
 #[allow(
     clippy::too_many_lines,
     reason = "one pass copies every arena's rows; split, each piece would carry the same counts"
 )]
-fn crossing_faces(body: &Body, exactness: Exactness) -> Option<Broken> {
+fn copied_shell(body: &Body, exactness: Exactness) -> Option<Broken> {
     let a = body.arenas();
-    if exactness != Exactness::Exact || a.rows(Arena::Shell) != 1 {
+    if a.rows(Arena::Shell) != 1 {
         return None;
     }
     let offset = quarter_size(a)?;
@@ -889,5 +928,170 @@ pub const CATALOGUE: &[Injection] = &[
         name: "a face turned the wrong way",
         kinds: &[FaultKind::LoopSense],
         inject: turned_face,
+    },
+];
+
+/// The unit normal of a round surface at x, from its centre, frame and radii (piece G178): along
+/// x's offset from the axis for a cylinder, from the centre for a sphere, from the core circle
+/// for a torus; `None` for other kinds, or on the axis.
+fn round_normal(surface: &SurfaceKind, x: [f64; 3]) -> Option<[f64; 3]> {
+    let (center, frame) = match surface {
+        SurfaceKind::Cylinder(s) => (s.center(), s.frame()),
+        SurfaceKind::Sphere(s) => (s.center(), s.frame()),
+        SurfaceKind::Torus(s) => (s.center(), s.frame()),
+        _ => return None,
+    };
+    let ([_, _, [nx, ny, nz]], _) = frame.unit_vectors().ok()?;
+    let ([px, py, pz], [cx, cy, cz]) = (x, center);
+    let w = [px - cx, py - cy, pz - cz];
+    let [wx, wy, wz] = w;
+    let h = wx * nx + wy * ny + wz * nz;
+    let radial = [wx - h * nx, wy - h * ny, wz - h * nz];
+    let unit = |[a, b, c]: [f64; 3]| -> Option<[f64; 3]> {
+        let l = geom_num::math::sqrt(a * a + b * b + c * c).ok()?.get();
+        (l > 0.0).then(|| [a / l, b / l, c / l])
+    };
+    match surface {
+        SurfaceKind::Cylinder(_) => unit(radial),
+        SurfaceKind::Sphere(_) => unit(w),
+        SurfaceKind::Torus(t) => {
+            let (major, _) = t.radii();
+            let [rx, ry, rz] = unit(radial)?;
+            unit([wx - major * rx, wy - major * ry, wz - major * rz])
+        }
+        _ => None,
+    }
+}
+
+/// `body`'s first vertex on a round face (cylinder, sphere or torus), with that face's unit
+/// normal there (piece G178).
+fn on_round(a: &Arenas) -> Option<(PointIx, [f64; 3])> {
+    for f in (0..a.rows(Arena::Face)).filter_map(Ix::<Face>::new) {
+        let surface = a.surfaces.get(*a.faces.surface.get(f)?)?;
+        let Some(first_loop) = *a.faces.first_loop.get(f)? else {
+            continue;
+        };
+        let Some(fin) = *a.loops.first_fin.get(first_loop)? else {
+            continue;
+        };
+        let edge = *a.fins.edge.get(fin)?;
+        let Some(vertex) = *a.edges.start.get(edge)? else {
+            continue;
+        };
+        let row = *a.vertices.point.get(vertex)?;
+        let corner = a.points.get(row)?.grid()?;
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "a grid coordinate, read as the double the kinds are stored in"
+        )]
+        let x = [
+            corner.x.get() as f64,
+            corner.y.get() as f64,
+            corner.z.get() as f64,
+        ];
+        if let Some(n) = round_normal(surface, x) {
+            return Some((row, n));
+        }
+    }
+    None
+}
+
+/// A vertex off its curved surface by just more than the bound (piece G178): moved along the
+/// surface's normal, which takes it off its curves too.
+fn vertex_off_curved(body: &Body, exactness: Exactness) -> Option<Broken> {
+    let by = past(exactness)?;
+    same(body, exactness, |a| {
+        let (row, normal) = on_round(a)?;
+        let moved = along(a.points.get(row)?.grid()?, normal, by)?;
+        a.points.set(row, moved.into()).ok()
+    })
+}
+
+/// A stated bound lowered below the real error on a curved surface (piece G178): a vertex moved
+/// eight steps along its round face's normal, at a record of six.
+fn lowered_curved(body: &Body, _exactness: Exactness) -> Option<Broken> {
+    let broken = edited(body, |a| {
+        let (row, normal) = on_round(a)?;
+        let moved = along(a.points.get(row)?.grid()?, normal, 8)?;
+        a.points.set(row, moved.into()).ok()
+    })?;
+    Some(Broken {
+        body: broken,
+        exactness: Exactness::Certified {
+            bound: Steps(6),
+            step: GridStep::Q0,
+        },
+    })
+}
+
+/// A pcurve off its 3D curve by just more than the bound (piece G178): the first line or circle
+/// pcurve on a planar face, moved along the plane's first direction a by the bound's steps over
+/// |a|, so its image moves that many steps in the plane.
+fn pcurve_off_curve(body: &Body, exactness: Exactness) -> Option<Broken> {
+    let by = past(exactness)?;
+    same(body, exactness, |a| {
+        for n in (0..a.rows(Arena::Fin)).filter_map(Ix::<Fin>::new) {
+            let Some(row) = *a.fins.pcurve.get(n)? else {
+                continue;
+            };
+            let face = *a.loops.face.get(*a.fins.loop_.get(n)?)?;
+            let Some(SurfaceKind::Plane(plane)) = a.surfaces.get(*a.faces.surface.get(face)?)
+            else {
+                continue;
+            };
+            let (_, [ax, ay, az], _) = plane.vectors();
+            let length = geom_num::math::sqrt(ax * ax + ay * ay + az * az)
+                .ok()?
+                .get();
+            #[allow(clippy::cast_precision_loss, reason = "by is a small count of steps")]
+            let du = by as f64 / length;
+            let moved = match a.pcurves.get(row)? {
+                CurveKind::Line(l) => {
+                    let [u, v] = l.origin();
+                    CurveKind::Line(Line::new([u + du, v], l.direction(), l.domain()).ok()?)
+                }
+                CurveKind::Circle(c) => {
+                    let [u, v] = c.center();
+                    CurveKind::Circle(
+                        Circle::new([u + du, v], c.radius(), c.frame(), c.domain()).ok()?,
+                    )
+                }
+                _ => continue,
+            };
+            return a.pcurves.set(row, moved).ok();
+        }
+        None
+    })
+}
+
+/// The curved faults of chapter 28.4 beyond [`CATALOGUE`] (piece G178): on the round faces,
+/// pcurves and crossings of curved bodies, which the refutation checker (`crate::refute`) must
+/// find. They are a list apart because `geom-check` does not yet name each with its kind (its
+/// curved crossings stay unchecked, G177); `tests/attack_g178.rs` records what it names.
+pub const CURVED: &[Injection] = &[
+    Injection {
+        name: "a vertex off its curved surface by just more than its bound",
+        kinds: &[FaultKind::VertexOffSurface, FaultKind::VertexOffCurve],
+        inject: vertex_off_curved,
+    },
+    Injection {
+        name: "a stated bound lowered below the real error on a curved surface",
+        kinds: &[FaultKind::VertexOffSurface, FaultKind::VertexOffCurve],
+        inject: lowered_curved,
+    },
+    Injection {
+        name: "an edge off its surface by just more than its bound",
+        kinds: &[FaultKind::EdgeOffSurface],
+        inject: edge_off_surface,
+    },
+    Injection {
+        name: "a pcurve off its curve by just more than its bound",
+        kinds: &[FaultKind::PcurveOffCurve],
+        inject: pcurve_off_curve,
+    },
+    Injection {
+        name: "two crossing curved faces",
+        kinds: &[FaultKind::FacesCross],
+        inject: crossing_curved,
     },
 ];
