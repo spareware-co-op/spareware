@@ -287,12 +287,33 @@ impl<'k> Mint<'k> {
     /// sweep from the last made back finds them: a name is needed when an output or a needed name
     /// made after it refers to it.
     fn reached(self, outputs: impl IntoIterator<Item = NameId>) -> Vec<TopoName> {
-        let mut needed: BTreeSet<NameId> = outputs.into_iter().collect();
+        // Each name made, by id, to its place: only those can be kept.
+        let mut place: Vec<(NameId, usize)> = self
+            .names
+            .iter()
+            .enumerate()
+            .map(|(at, (id, _))| (*id, at))
+            .collect();
+        place.sort_unstable();
         let mut kept = alloc::vec![false; self.names.len()];
-        for ((id, name), keep) in self.names.iter().zip(&mut kept).rev() {
-            if needed.contains(id) {
-                *keep = true;
-                needed.extend(geom_name::graph::parents(name));
+        let mark = |id: NameId, kept: &mut [bool]| {
+            if let Ok(found) = place.binary_search_by(|(held, _)| held.cmp(&id))
+                && let Some((_, at)) = place.get(found)
+                && let Some(slot) = kept.get_mut(*at)
+            {
+                *slot = true;
+            }
+        };
+        for id in outputs {
+            mark(id, &mut kept);
+        }
+        for at in (0..self.names.len()).rev() {
+            if kept.get(at) == Some(&true)
+                && let Some((_, name)) = self.names.get(at)
+            {
+                for parent in geom_name::graph::parents(name) {
+                    mark(parent, &mut kept);
+                }
             }
         }
         let mut out = Vec::with_capacity(self.names.len());
