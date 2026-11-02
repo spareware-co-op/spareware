@@ -76,12 +76,15 @@ pub struct Case {
 #[must_use]
 #[allow(
     clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    reason = "a byte modulo the table's length indexes [`SCALES`], and cells below [`SIDE`] + 1 add nothing near the range of `i64`"
+    reason = "cells below [`SIDE`] + 1 add nothing near the range of `i64`"
 )]
 pub fn decode(data: &[u8]) -> (Case, usize) {
     let mut src = ByteSource::new(data);
-    let scale = SCALES[usize::from(src.byte()) % SCALES.len()];
+    let [first, ..] = SCALES;
+    let scale = SCALES
+        .get(usize::from(src.byte()) % SCALES.len())
+        .copied()
+        .unwrap_or(first);
     let count = 1 + src.byte() % MAX_BOXES;
     let mut boxes = Vec::with_capacity(usize::from(count));
     for _ in 0..count {
@@ -304,9 +307,8 @@ fn check_slices(case: &Case, union: &ExactMesh) -> Result<(), Finding> {
 /// Every corner on or under every face of the hull of the boxes.
 #[allow(
     clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
     clippy::many_single_char_names,
-    reason = "corners are below 2^40, and a hull's rings index its own points; a and d are a box's low and high x, b and e its y, c and f its z"
+    reason = "corners are below 2^40; a and d are a box's low and high x, b and e its y, c and f its z"
 )]
 fn check_hull(case: &Case) -> Result<(), Finding> {
     let mut points = Vec::new();
@@ -322,9 +324,19 @@ fn check_hull(case: &Case) -> Result<(), Finding> {
     let hull = Hull::of(&points, &mut meter())
         .map_err(|e| Finding::new("corners have a hull", || format!("{case:?}: {e:?}")))?;
     for ring in hull.faces() {
-        let corner = |k: usize| hull.points()[ring[k] as usize];
+        let corner = |k: usize| {
+            ring.get(k)
+                .and_then(|i| hull.points().get(*i as usize))
+                .copied()
+                .ok_or_else(|| {
+                    Finding::new("a hull's rings name its points", || {
+                        format!("{case:?}: {ring:?}")
+                    })
+                })
+        };
+        let (a, b, c) = (corner(0)?, corner(1)?, corner(2)?);
         for q in &points {
-            let side = orient3d(corner(0), corner(1), corner(2), *q);
+            let side = orient3d(a, b, c, *q);
             if side.is_err() || side == Ok(Sign::Positive) {
                 return Err(Finding::new(
                     "every point is on or under every face",
@@ -340,8 +352,7 @@ fn check_hull(case: &Case) -> Result<(), Finding> {
 /// with nothing rounded; and two boxes sum to the box of their sides.
 #[allow(
     clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    reason = "triangles index their own vertices, and a box's sides are below twice [`SIDE`] cells"
+    reason = "a box's sides are below twice [`SIDE`] cells"
 )]
 fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<(), Finding> {
     let written = export(
@@ -361,8 +372,7 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
     };
     let pieces = split(first, &mut meter())
         .map_err(|e| Finding::new("a box splits", || format!("{case:?}: {e:?}")))?;
-    let triangle = |c: [u32; 3]| c.map(|v| pieces.vertices[v as usize]);
-    let list: Vec<[P3; 3]> = pieces.corners.iter().map(|c| triangle(*c)).collect();
+    let list = triangles_of(&pieces.vertices, &pieces.corners, case)?;
     let envelope = Envelope::new(&list, 8, &Exec::serial(), &mut meter())
         .map_err(|e| Finding::new("a box has an envelope", || format!("{case:?}: {e:?}")))?;
     for p in &pieces.vertices {
@@ -379,10 +389,10 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
             || low_b.iter().zip(high_a).any(|(l, h)| *l > h);
         let others = split(second, &mut meter())
             .map_err(|e| Finding::new("a box splits", || format!("{case:?}: {e:?}")))?;
+        let theirs = triangles_of(&others.vertices, &others.corners, case)?;
         for x in &list {
-            for corner in &others.corners {
-                let y = corner.map(|v| others.vertices[v as usize]);
-                if apart && triangles(*x, y) != Ok(Contact::Apart) {
+            for y in &theirs {
+                if apart && triangles(*x, *y) != Ok(Contact::Apart) {
                     return Err(Finding::new("boxes a cell apart do not touch", || {
                         format!("{case:?}")
                     }));
@@ -403,8 +413,8 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
                 &mut meter(),
             )
             .map_err(|e| Finding::new("two boxes sum", || format!("{case:?}: {e:?}")))?;
-            let side = |k: usize| (high_a[k] - low_a[k]) + (high_b[k] - low_b[k]);
-            let count = side(0) * side(1) * side(2);
+            let sides = low_a.iter().zip(high_a).zip(low_b.iter().zip(high_b));
+            let count = sides.fold(1, |n, ((la, ha), (lb, hb))| n * ((ha - la) + (hb - lb)));
             holds_cells(
                 "a sum of boxes adds their sides",
                 &sum.mesh,
@@ -414,6 +424,24 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
         }
     }
     Ok(())
+}
+
+/// The corners of each triangle of a split, or a [`Finding`] if one names a vertex it lacks.
+fn triangles_of(
+    vertices: &[P3],
+    corners: &[[u32; 3]],
+    case: &Case,
+) -> Result<Vec<[P3; 3]>, Finding> {
+    let corner = |v: u32| vertices.get(v as usize).copied();
+    corners
+        .iter()
+        .map(|&[a, b, c]| Some([corner(a)?, corner(b)?, corner(c)?]))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| {
+            Finding::new("a split's triangles name its vertices", || {
+                format!("{case:?}")
+            })
+        })
 }
 
 /// Holds the operations to the case's cells.
