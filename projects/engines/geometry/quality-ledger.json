@@ -4668,14 +4668,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
-      "mutant": "replace > with >= in clipped_span",
-      "line_text": "if t0 > t1 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only at t0 == t1. The curve's clip and the patch's (on the largest coefficient of each row and column) both come here with ranges from nonnegative_range, whose every end is an outward-rounded interval end strictly beyond the exact one (each i/p is a widened quotient), or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one, nor do attack_g164's slabs touching a patch's edge or a curve's end, which keep a range ending exactly there."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
       "mutant": "replace || with && in BernsteinCurve<D>::minus",
       "line_text": "if self.degree() != other.degree() || self.domain != other.domain {",
       "occurrences": 1,
@@ -5115,6 +5107,134 @@
       "reason": "eps is the largest relative error of the stored weights, each the middle double of its own enclosure: a few units in the last place, never NaN and never near 0.5, so both operands are false and && gives false as || does."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "replace || with && in sign_with_root",
+      "line_text": "if sy == Sign::Zero || d.is_zero() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when exactly one of sy == 0 and d == 0 holds. d is never zero at a call: sign_with_root's only caller is sign_on_quadratic, whose only caller is two_doubles' test of the members between two double roots, reached after two_doubles has returned on a negative discriminant, and classify sends a zero one to triple instead; and d is that discriminant. With sy zero and d positive the code below returns sx as well: sx zero returns sy, which is zero, and otherwise the gap x^2 - 0 * d is positive and returns sx."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "replace == with != in kernel",
+      "line_text": "*slot = if j % 2 == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant negates every part of the kernel vector, so kernel returns -v for v. Its only use is singular: holds tests form * v for zero, the same for -v, and on_base builds each axis as lead * e_j - v_j * e_pivot, so every axis changes sign with v and the base forms, x^T F y over pairs of axes, are the same. No result of classify can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "delete - in singular",
+      "line_text": "for k in [0, 1, -1, 2, -2] {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either mutant tries four distinct members of 0, 1, -1, 2 and -2 instead of five. Every member here is singular, so rank three is the pencil's rank wherever a member has it, and a member falls below it only where every 3 x 3 minor of a + k b, each a cubic in k, vanishes: at three values at most, or at every k, when both lists find nothing. So either list finds a member of rank three when any member has one. Its kernel is the shared apex whenever one exists (a vector both forms send to zero lies in every member's kernel) and is not shared otherwise, so holds, one_apex and the touching cones come out the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "replace > with >= in scaled",
+      "line_text": "top = if end > top { end } else { top };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when end == top, and then both branches are the same double, so the largest bound, and the scaled form, are the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace != with == in square_root",
+      "line_text": "let used = limbs.iter().rposition(|l| *l != 0)?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With == the highest limb found is the highest zero one, so for a value of a few limbs in pencil's 184-limb Big Newton's iteration starts at 2^5856 whatever the value: about 5,800 steps, each a division of 11,776-bit integers, for every square root two_doubles takes. attack_g166's double roots then run for far past cargo-mutants' timeout, which is how the tests catch it; whole_numbers_divide_down's root of a value using every limb, where the mutant finds no zero limb and returns None, fails at once but waits for that binary's other tests."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with < in diagonal",
+      "line_text": "if pair.2 > best.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The test only picks which pivot elimination of Lagrange takes next: the largest diagonal entry, or a sum of two rows. Any pivot that is not zero gives another congruence T^T m T = D of the same member, and one that cannot be told from zero returns None, after which ruled tries the next member. The ruling parameterised is then another basis of the same ruled quadric, so the curve, its topology and its arcs' sign changes are the same; only the enclosures' rounding differs, which the crate does not promise."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in diagonal",
+      "line_text": "if pair.2 > best.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "On a tie of the largest off-diagonal and diagonal sizes the mutant takes the sum of two rows instead of the diagonal pivot. Either is a valid pivot of elimination of Lagrange, or a refusal ruled moves past, so the diagonal form is another congruence of the same ruled member and the curve, its topology and its arcs are the same; only the enclosures' rounding differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace == with != in normalised",
+      "line_text": "if top == 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With != every matrix that is not zero comes back unscaled. normalised only divides the quadratic's coefficients by their largest bound so they stand near one: s/t = (-beta +- sqrt(Delta)) / 2 alpha and the sign of Delta do not change under a positive scale, so the curve and its arcs are the same, and only the doubles' range in use differs. A zero matrix, where the mutant would divide by zero, needs the other quadric to vanish on every ruling of the ruled member, which two distinct quadrics never do."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in ruled",
+      "line_text": "if size.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a diagonal entry's lower bound is exactly 0.0. geom_num::interval widens every bound of every operation outward by a step, so a lower bound of 0.0 comes only from a rounded bound of 2^-1074, the least subnormal: a pivot of a member of quadrics whose entries are below about 10^-160, nowhere near a model's coordinates. Only there would the mutant take an entry that may be zero as positive, and the square root of its column then refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace < with <= in ruled",
+      "line_text": "} else if size.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a diagonal entry's upper bound is exactly 0.0. geom_num::interval widens every bound outward by a step and writes -0.0 as 0.0, so an upper bound of 0.0 comes only from a rounded bound of -2^-1074, the least subnormal: quadrics whose entries are below about 10^-160, nowhere near a model's coordinates. Only there would the mutant take an entry that may be zero as negative."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace == with != in ruled",
+      "line_text": "let other = if q == 0 { b } else { a };",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "q is never 0 here: the member at q = 0 is a itself, and a sphere, cylinder or cone never has inertia (2, 2), so ruled has passed it by. The mutant then takes b as the other quadric instead of a. Both are members of the pencil other than the ruled one, and on its rulings any other member is the same quadratic times a nonzero factor (it differs by a multiple of the ruled member, which vanishes there), so alpha, beta and gamma scale together and s/t and the sign of Delta are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in refined",
+      "line_text": "Ok(if d.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's lower bound is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of 2^-1074, the least subnormal. Only there would the bisection read a value that may be zero as positive, and only in which half it keeps of a bracket whose ends already differ in sign."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace < with <= in refined",
+      "line_text": "} else if d.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's upper bound is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of -2^-1074, the least subnormal. Only there would the bisection read a value that may be zero as negative, and only in which half it keeps of a bracket whose ends already differ in sign."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in walked_arcs",
+      "line_text": "if d.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's lower bound at a step of the walk is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of 2^-1074, the least subnormal. Only there would the walk count a value that may be zero as positive; counts and the bisection's brackets would then refuse or refine the arcs as for any other step."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace < with <= in walked_arcs",
+      "line_text": "} else if d.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's upper bound at a step of the walk is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of -2^-1074, the least subnormal. Only there would the walk count a value that may be zero as negative."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+      "mutant": "replace > with >= in clipped_span",
+      "line_text": "if t0 > t1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only at t0 == t1. The curve's clip and the patch's (on the largest coefficient of each row and column) both come here with ranges from nonnegative_range, whose every end is an outward-rounded interval end strictly beyond the exact one (each i/p is a widened quotient), or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one, nor do attack_g164's slabs touching a patch's edge or a curve's end, which keep a range ending exactly there."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
       "mutant": "replace < with <= in line_cone",
       "line_text": "let flip = if rho.hi() < 0.0 { -1.0 } else { 1.0 };",
@@ -5265,6 +5385,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate: Real::ONE), so 2.0 * 1.0 and 2.0 / 1.0 are the same double and the band is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+      "mutant": "replace || with && in definite_filtered",
+      "line_text": "} else if upward || downward {",
+      "occurrences": 1,
+      "kind": "proved",
+      "reason": "Caught by pencil::proofs::the_filter_s_definite_test_answers_only_what_its_signs_prove, a proof of definite_filtered's own contract: for every way each of its four sums can read (certainly positive, certainly negative, or holding zero), it answers yes exactly when every sign is certain and they make a definite member (all positive, or alternating from a negative), nothing when a value the intervals allow could still make one, and no otherwise. With && it answers no where exactly one of the two patterns is still possible, which is a guess. With this change applied the harness fails on its assertion (Kani 0.68, CBMC 6.11); as written it passes, 0 of 528 checks failed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",

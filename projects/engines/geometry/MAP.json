@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G165, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, and natural quadrics, four rows of 12.7.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158 and G162 to G166, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, natural quadrics, four rows of 12.7, and a sphere and a cylinder in general position, whose curve is walked.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -887,7 +887,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for the exact decisions on lines and quadrics (piece G159, decision 32.44): lines against a sphere, a cylinder, a cone and a torus, parallel axes, and pairs whose axes meet.",
+          "job": "Inputs for the exact decisions on lines and quadrics (pieces G159 and G166, decision 32.44): lines against a sphere, a cylinder, a cone and a torus, parallel axes, pairs whose axes meet, and the pencils of a sphere and a cylinder, in general position and touching inside.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2613,6 +2613,29 @@
           "target": "lib"
         },
         {
+          "cost": "a pencil's arithmetic, and a walk of up to [`WORK`] steps; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: two surfaces, each a sphere, cylinder or cone, on a coarse lattice with axes from a short list, so that tangency, shared rulings and special positions are common. [`check`] asks where they meet and holds the answer to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/pencils.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: an answer that changes between two runs, with the order of the pair, or when both surfaces move by a whole vector; nothing shared where a sphere has points on both sides of the other surface; a curve's point off either surface by the surface's own equation; or a smaller budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: what the pencil of two curved quadrics says they share is so.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.7 (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): each surface's equation is written here from the drawn numbers, sharing nothing with the pencil it judges."
+          },
+          "path": "geom_fuzz::pencils",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve, a segment or cubic, and a surface, a plane, sphere, cylinder, cone, torus or biquadratic graph, on a coarse lattice so that tangencies and lines lying in surfaces are common. [`check`] asks where they meet and holds the answer to the laws below. [`harness`] is `decode` then `check`.",
           "family": [],
@@ -3503,6 +3526,28 @@
             "text": "Goldman and Miller, SMA '91 (<https://doi.org/10.1145/112515.112545>) and GMIP 57(1), 1995 (<https://doi.org/10.1006/gmip.1995.1006>); the table of chapter 12.7 (`projects/engines/geometry/architecture/12-intersections.md`). Two surfaces of revolution tangent to one sphere S along planes P and Q are S − k·P² and S − l·Q², so their difference factors as (√l·Q − √k·P)(√l·Q + √k·P), two planes."
           },
           "path": "geom_intersect::quadrics",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few hundred interval operations to set up, and one quartic per step of the walk, charged to the meter. Recursion: none.",
+          "does": "[`meet`] asks `geom_num::pencil` what a sphere, cylinder or cone shares with another, exactly on whole-number data and in intervals otherwise, and where that is a quartic or a cubic writes the curve as [`Parameterised`]: Dupont, Lazard, Lazard and Petitjean's parameterisation over a ruled member of the pencil. It is this curve's definition, which chapter 12.12's procedural kind holds; conics and lines are [`crate::quadrics::natural`]'s.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+          "guarantees": [
+            "**Exact topology on exact data.** On whole-number data the number of branches and singular points comes from exact signs, within `geom_num::pencil`'s budget. Off the grid intervals decide a smooth quartic or nothing at all, and a pair they cannot tell is `None`.",
+            "**Every point on both.** [`Parameterised::point`] encloses a point of both surfaces: the ruled quadric holds it by construction, and the sheet solves the other exactly, each step rounded outward, so no marching and no tolerance is involved.",
+            "**The arcs agree with the topology.** [`Meeting::arcs`] are found by the sign of a quartic form on a walk around its line, and given only when they count what the exact answer says; otherwise there is no curve, never a wrong one."
+          ],
+          "job": "Where two quadrics in general position meet, and the curve they share (chapter 12.7).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/j.jsc.2007.10.006"
+            ],
+            "text": "Dupont, Lazard, Lazard and Petitjean, J. Symbolic Computation 43(3), 2008, part I (<https://doi.org/10.1016/j.jsc.2007.10.006>), from the paper alone: a member of inertia (2, 2) is ruled, so a point of it is (u : v) and (s : t) in X = s(uP₁ + vP₂) + t(uR₁ + vR₂). The other quadric is then α(u, v)s² + β(u, v)st + γ(u, v)t² = 0, each of α, β and γ quadratic in (u, v), so s/t = (−β ± √Δ)/2α where Δ = β² − 4αγ is a quartic form. Its real roots bound the branches. The paper's care over which radicals are needed does not arise, since every value here is an enclosure."
+          },
+          "path": "geom_intersect::quartic",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5759,6 +5804,32 @@
             "text": "the Krawczyk operator (R. Krawczyk, \"Newton-Algorithmen zur Bestimmung von Nullstellen mit Fehlerschranken\", *Computing* 4, 1969, doi:10.1007/BF02234767), as a test of existence (R. E. Moore, \"A test for existence of solutions to nonlinear systems\", *SIAM J. Numer. Anal.* 14, 1977, doi:10.1137/0714044) and of uniqueness (S. M. Rump, \"Solving algebraic problems with high accuracy\", in *A New Approach to Scientific Computation*, Academic Press, 1983, doi:10.1016/B978-0-12-428660-3.50010-0; P. Breiding, K. Rose and S. Timme, \"Certifying zeros of polynomial systems using interval arithmetic\", *ACM Trans. Math. Softw.* 49, 2023, theorem 3.6, <https://arxiv.org/abs/2011.05000>). The Hansen-Sengupta operator (E. Hansen and S. Sengupta, \"Bounding solutions of systems of equations using interval analysis\", *BIT* 21, 1981, doi:10.1007/BF01933165), in the form of A. Neumaier, *Interval Methods for Systems of Equations*, Cambridge University Press, 1990, chapter 5, doi:10.1017/CBO9780511526473, as A. Goldsztejn states it (\"Sensitivity analysis using a fixed point interval iteration\", 2008, section 1, <https://arxiv.org/abs/0811.2984>). The preconditioner's inverse by Gaussian elimination with partial pivoting and the triangular solves of G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013, algorithm 3.4.1 and section 3.1, <https://jhupbooks.press.jhu.edu/title/matrix-computations>, as chapter 12.4 asks. Written for this kernel: the operators must run on its own interval type and maths functions (chapter 21), which no published interval library offers without changing the rounding mode."
           },
           "path": "geom_num::newton",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a determinant and the sums of principal minors are a few hundred products of 16-limb integers; a chain is [`crate::sturm`]'s, at [`LIMBS`] limbs; each sample takes a bisection, up to 2638 evaluations of a chain, and in practice a few dozen. Stack: about 150 kB. Recursion: none.",
+          "does": "two quadrics are two symmetric 4 × 4 matrices A and B, and [`classify`] reads the family tA + B, the pencil, exactly. The roots of det(tA + B), how often each repeats and the rank of the member there are the pencil's Segre symbol, and the signature of the members around them says which of that symbol's real forms this is. Together they give [`Topology`]: how many curves of each kind the two quadrics share, in real projective space, how many isolated points and how many points where the parts meet, with no curve computed. [`filtered`] gives the same answer in `f64` intervals where those decide. [`revolution`] writes a sphere, cylinder or cone as a matrix.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/pencil.rs",
+          "guarantees": [
+            "**Every pencil.** A pencil whose determinant is not zero has one of the fourteen symbols of [`Segre`]. One whose determinant is zero, every member singular, is two cones over one apex, read as the pencil of their base conics, or two cones that share a line and touch along it.",
+            "**Empty is decided.** Two real quadrics share no real point exactly when some member is definite (Finsler and Calabi), and a member is definite on a whole gap between roots, so a sample of each gap decides it.",
+            "**The budget.** A sphere, cylinder or cone of 40-bit coordinates, 53-bit radius and slope, has entries below 2^192 in the 3 × 3 block, 2^234 beside it and 2^276 in the corner; a determinant's products weigh 852 bits whichever entries they take, and 24 terms over 16 choices of row, with a basis of members up to `b + 8a` adding 13 bits, make B = 876. A Sturm chain's values stay below 2^(13B + 50) = 2^11438 (`crate::sturm`), and two roots stand at least 2^(−3B − 9) apart, by Mahler's bound with a discriminant of at least 1, so a dyadic sample of 2638 bits lands in any gap; the largest sign read is then below 2^(852 + 23 + 4·2638) = 2^11427. [`Big`], 11776 bits, holds them all, and every step is checked, so a broken budget is an error, never a wrong answer.",
+            "**Off the budget, an error.** [`classify`] takes any integer matrices, and refuses a pair whose values do not fit.",
+            "**The filter never guesses.** [`filtered`] answers only where every sign it reads is certain."
+          ],
+          "job": "What two quadrics make of each other, read from the pencil of their matrices.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/j.jsc.2007.10.006",
+              "https://doi.org/10.1016/j.jsc.2007.10.012",
+              "https://doi.org/10.1016/0024-3795(76"
+            ],
+            "text": "Dupont, Lazard, Lazard and Petitjean, J. Symbolic Computation 43(3), 2008, parts I and II (<https://doi.org/10.1016/j.jsc.2007.10.006>, <https://doi.org/10.1016/j.jsc.2007.10.012>), taken from the papers alone: the classification of real pencils by Segre symbol and inertia. Each row of [`Segre`] is derived in chapter 12.7 from Uhlig's canonical pairs (Linear Algebra Appl. 14, 1976, <https://doi.org/10.1016/0024-3795(76)90066-3>), with Finsler's theorem for emptiness. Inertia by Descartes' rule on the characteristic polynomial, which is exact for a real-rooted polynomial."
+          },
+          "path": "geom_num::pencil",
           "provenance": [],
           "spdx": null,
           "target": "lib"

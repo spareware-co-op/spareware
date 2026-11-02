@@ -200,13 +200,13 @@ fn sheet(plane: &Plane) -> Result<Sheet, IntersectError> {
 
 /// An axis: a point on it, its unit direction, and two grid points on it if the data allow.
 #[derive(Clone, Copy)]
-struct Axis {
-    at: Vector,
-    along: Vector,
-    exact: Option<(P3, P3)>,
+pub(crate) struct Axis {
+    pub(crate) at: Vector,
+    pub(crate) along: Vector,
+    pub(crate) exact: Option<(P3, P3)>,
 }
 
-fn axis(center: [f64; 3], frame: &Frame<3>, sign: f64) -> Result<Axis, IntersectError> {
+pub(crate) fn axis(center: [f64; 3], frame: &Frame<3>, sign: f64) -> Result<Axis, IntersectError> {
     let (_, [_, _, n]) = frame.unit_vectors()?;
     let stored = frame.normal();
     let [a, b, c] = center;
@@ -227,15 +227,15 @@ fn axis(center: [f64; 3], frame: &Frame<3>, sign: f64) -> Result<Axis, Intersect
 
 /// A cone by its apex, its unit axis, and the tangent of its half-angle.
 #[derive(Clone, Copy)]
-struct Funnel {
-    apex: Vector,
-    along: Vector,
-    slope: Interval,
+pub(crate) struct Funnel {
+    pub(crate) apex: Vector,
+    pub(crate) along: Vector,
+    pub(crate) slope: Interval,
     extent: f64,
-    exact: Option<quadric::Cone>,
+    pub(crate) exact: Option<quadric::Cone>,
 }
 
-fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
+pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
     let line = axis(cone.center(), &cone.frame(), cone.axial_sign())?;
     let (r0, k) = cone.radius_and_slope();
     // Exact where the data are: a grid apex is what makes the exact decisions possible. A cone
