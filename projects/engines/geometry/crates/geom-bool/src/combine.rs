@@ -429,7 +429,7 @@ impl<'a> Scene<'a> {
     ) -> Result<(Combined, bool, NameIds), Refused> {
         let carriers: &[Carrier] = &self.ready.carriers;
         let Some(named) = self.named(job.target) else {
-            let body = publish(merged, carriers, job.open, None, meter)?;
+            let body = publish(merged, carriers, job.open, (None, None), meter)?;
             return Ok((
                 Combined {
                     body,
@@ -456,8 +456,10 @@ impl<'a> Scene<'a> {
             history,
             qualified,
             ids,
+            rounded,
         } = name(self.op, merged, pieces, &sources)?;
-        let body = publish(merged, carriers, job.open, Some(&names), meter)?;
+        let given = (Some(&names), Some(rounded.as_slice()));
+        let body = publish(merged, carriers, job.open, given, meter)?;
         let history = Some(history);
         Ok((
             Combined {

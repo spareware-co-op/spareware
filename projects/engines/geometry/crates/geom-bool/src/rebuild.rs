@@ -35,7 +35,7 @@ use geom_run::WorkMeter;
 use geom_topo::Line as Shadow;
 use geom_topo::order::Names;
 
-use crate::names::NamingError;
+use crate::names::{NamingError, Near};
 use geom_topo::{
     Body, BodyKind, Box3, Builder, CurveKind, Edge, Face, Fin, Ix, Loop, PointKind, Region,
     RegionKind, Sense, Shell, SurfaceKind, TopoError, Vertex,
@@ -201,6 +201,7 @@ fn arenas(
     merged: &Merged,
     carriers: &[Carrier],
     open: bool,
+    given: Option<&[Near]>,
 ) -> Result<(Builder, Ix<Region>), RebuildError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
@@ -261,8 +262,11 @@ fn arenas(
     let mut pool: Vec<([i128; 4], Plane)> = Vec::new();
     let mut triples: Vec<Option<[Plane; 3]>> = Vec::with_capacity(merged.vertices.len());
     let mut rounded = Vec::with_capacity(merged.vertices.len());
-    for (point, list) in merged.vertices.iter().zip(&around) {
-        let near = point.to_grid()?;
+    for (at, (point, list)) in merged.vertices.iter().zip(&around).enumerate() {
+        let near = match given.and_then(|all| all.get(at)) {
+            Some(near) => (*near)?,
+            None => point.to_grid()?,
+        };
         rounded.push((near.value(), near.is_exact()));
         if near.is_exact() {
             triples.push(None);
@@ -446,7 +450,7 @@ pub fn rebuild_with(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, RebuildError> {
     let merged = merge_with(pieces, mode, rules, meter)?;
-    publish(&merged, carriers, rules.open, None, meter)
+    publish(&merged, carriers, rules.open, (None, None), meter)
 }
 
 /// `merged` written into arenas and published, in the order of `names` if it has any: an open
@@ -459,10 +463,10 @@ pub fn publish(
     merged: &Merged,
     carriers: &[Carrier],
     open: bool,
-    names: Option<&Names>,
+    (names, rounded): (Option<&Names>, Option<&[Near]>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, RebuildError> {
-    let (builder, outside) = arenas(merged, carriers, open)?;
+    let (builder, outside) = arenas(merged, carriers, open, rounded)?;
     // A solid body has material, so a selection that keeps nothing is a general one.
     let kind = if open {
         BodyKind::Sheet

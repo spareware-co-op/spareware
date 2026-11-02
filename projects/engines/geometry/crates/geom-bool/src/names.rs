@@ -33,6 +33,7 @@ use core::cmp::Ordering;
 use core::fmt;
 
 use geom_name::{OrderError, WeakOrder, weak_names};
+use geom_num::grid::Rounded;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_op::{
@@ -87,7 +88,7 @@ pub struct Sources<'a> {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NameIds {
     ids: BTreeMap<TopoName, NameId>,
-    keys: BTreeMap<PointKey, Result<GridKey, NumError>>,
+    keys: BTreeMap<PointKey, Near>,
 }
 
 /// A point by its three planes' coefficients.
@@ -127,6 +128,9 @@ pub struct Naming {
     pub qualified: bool,
     /// Every name [`name`] made, with its id, for a later naming to take; none from the others.
     pub ids: NameIds,
+    /// Each merged vertex rounded to the grid, as [`name`] rounded it, for the publication to
+    /// take; none from the others.
+    pub rounded: Vec<Near>,
 }
 
 /// Why a result could not be named: a defect, or a name the scheme refuses.
@@ -224,7 +228,7 @@ impl<'k> Mint<'k> {
     }
 
     /// Every name made, with its id, and the merged vertices' grid keys.
-    fn ids(&self, merged: &Merged, keys: &[Result<GridKey, NumError>]) -> NameIds {
+    fn ids(&self, merged: &Merged, keys: &[Near]) -> NameIds {
         NameIds {
             ids: self
                 .names
@@ -457,10 +461,14 @@ fn input(a: &Arenas) -> Result<Input<'_>, NumError> {
 /// A grid key, as [`grid_key`] gives it.
 type GridKey = (i64, i64, i64);
 
-/// Each merged vertex's grid key, rounded once for the lookups in every operand: a vertex rounds
-/// the same whichever operand it is looked for in. A vertex `known` holds takes its key from there.
-fn grid_keys(merged: &Merged, known: Option<&NameIds>) -> Vec<Result<GridKey, NumError>> {
-    let rounded = |point: &Tpi| Ok(grid_key(point.to_grid()?.value()));
+/// A point rounded to the grid, or why it could not be.
+pub type Near = Result<Rounded<P3>, NumError>;
+
+/// Each merged vertex rounded to the grid, once for the lookups in every operand and for the
+/// publication: a vertex rounds the same whichever operand it is looked for in. A vertex `known`
+/// holds takes its rounding from there.
+fn grid_keys(merged: &Merged, known: Option<&NameIds>) -> Vec<Near> {
+    let rounded = |point: &Tpi| point.to_grid();
     merged
         .vertices
         .iter()
@@ -474,8 +482,13 @@ fn grid_keys(merged: &Merged, known: Option<&NameIds>) -> Vec<Result<GridKey, Nu
 }
 
 /// The grid key of merged vertex `at`.
-fn key_at(keys: &[Result<GridKey, NumError>], at: usize) -> Result<GridKey, NumError> {
-    keys.get(at).copied().ok_or(NumError::BudgetExceeded)?
+fn key_at(keys: &[Near], at: usize) -> Result<GridKey, NumError> {
+    Ok(grid_key(
+        keys.get(at)
+            .copied()
+            .ok_or(NumError::BudgetExceeded)??
+            .value(),
+    ))
 }
 
 /// The input vertex of `one` exactly at `point`, whose grid key is `key`.
@@ -727,7 +740,7 @@ fn face_ranks(merged: &Merged) -> Vec<Rank> {
 /// fin starting at one of the input face's own vertices.
 fn untouched(
     merged: &Merged,
-    keys: &[Result<GridKey, NumError>],
+    keys: &[Near],
     face: usize,
     source: (usize, u32),
     inputs: &[Input<'_>],
@@ -805,7 +818,7 @@ impl Rows {
 /// its operand and row, and whether its ends are the input's own.
 fn edge_sources(
     merged: &Merged,
-    keys: &[Result<GridKey, NumError>],
+    keys: &[Near],
     faces: &FacesDone,
     inputs: &[Input<'_>],
 ) -> Result<Vec<Option<EdgeSource>>, NamingError> {
@@ -854,7 +867,7 @@ fn edge_sources(
 /// Every edge of `merged`, kept or `Bounded`.
 fn name_edges(
     merged: &Merged,
-    keys: &[Result<GridKey, NumError>],
+    keys: &[Near],
     faces: &FacesDone,
     inputs: &[Input<'_>],
     sources: &Sources<'_>,
@@ -939,7 +952,7 @@ fn name_edges(
 /// `Bounded` by the faces around it.
 fn name_vertices(
     merged: &Merged,
-    keys: &[Result<GridKey, NumError>],
+    keys: &[Near],
     faces: &FacesDone,
     inputs: &[Input<'_>],
     sources: &Sources<'_>,
@@ -1150,6 +1163,7 @@ pub fn name(
         history,
         qualified: faces.qualified,
         ids,
+        rounded: keys,
     })
 }
 
@@ -1249,6 +1263,7 @@ pub fn name_curves(
         history: History::new(records, deleted, [])?,
         qualified: false,
         ids: NameIds::default(),
+        rounded: Vec::new(),
     })
 }
 
@@ -1334,5 +1349,6 @@ pub fn name_fresh(
         history: History::new(records, NameSet::new([])?, [])?,
         qualified: false,
         ids: NameIds::default(),
+        rounded: Vec::new(),
     })
 }
