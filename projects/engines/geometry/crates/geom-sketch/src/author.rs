@@ -75,6 +75,14 @@ fn parts(sketch: &Sketch, id: ItemId) -> Result<Vec<ItemId>, SketchError> {
         EntityKind::Arc {
             centre, start, end, ..
         } => add(&[id, *centre, *start, *end])?,
+        EntityKind::EllipticalArc {
+            centre,
+            start,
+            end,
+            from,
+            to,
+            ..
+        } => add(&[id, *centre, *start, *end, *from, *to])?,
         EntityKind::Spline { points, .. } => add(points)?,
         EntityKind::Parameter { curve, .. } => add(&[id, *curve])?,
         _ => add(&[id])?,
