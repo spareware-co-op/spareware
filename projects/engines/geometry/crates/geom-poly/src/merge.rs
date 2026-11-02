@@ -1006,17 +1006,19 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
         .collect();
     list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
     list.dedup();
-    for (i, a) in list.iter().enumerate() {
+    let mut found = None;
+    'search: for (i, a) in list.iter().enumerate() {
         for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
             for c in list.iter().skip(j.saturating_add(1)) {
                 meter.charge(1)?;
                 if normals_sign(a, b, c)? != Sign::Zero {
-                    return Ok(Tpi::meeting(*a, *b, *c)?);
+                    found = Some(Tpi::meeting(*a, *b, *c)?);
+                    break 'search;
                 }
             }
         }
     }
-    Ok(corner.point)
+    Ok(found.unwrap_or(corner.point))
 }
 
 /// A corner's point named by its three axis planes, when it is a grid point: read from its cells,
@@ -1038,11 +1040,12 @@ fn grid_point(corner: &Corner) -> Result<Option<Tpi>, NumError> {
     let [x, y, z] = at;
     // A grid point's coordinates are within 2^40, so negating one cannot saturate.
     let axis = |n: [i128; 3], v: i128| Plane::new(n, v.saturating_neg());
-    Ok(Some(Tpi::meeting(
+    let (on_x, on_y, on_z) = (
         axis([1, 0, 0], x)?,
         axis([0, 1, 0], y)?,
         axis([0, 0, 1], z)?,
-    )?))
+    );
+    Ok(Some(Tpi::meeting(on_x, on_y, on_z)?))
 }
 
 /// Every side of `held`, sorted by line: made on `exec`'s pool, and sorted there where every side

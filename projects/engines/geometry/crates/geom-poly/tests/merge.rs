@@ -962,16 +962,18 @@ fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
     let b = far([[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]], -5);
     // And the same mirrored in x, which turns the sign of every three planes' determinant.
     let mirror = |c: [[i64; 3]; 4]| c.map(|[x, y, z]| [-x, y, z]);
-    let test = WindingTest::unite();
-    for (a, b) in [(a, b), (mirror(a), mirror(b))] {
-        let whole = tilted(&[a, b], &test, 1000).unwrap();
-        assert!(whole.vertices.iter().any(wide));
-        for leaf in [1, 4, 16] {
-            let m = tilted(&[a, b], &test, leaf).unwrap();
-            assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
-            assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+    // A union keeps every piece as it faces; a difference turns the second solid's round.
+    for test in [WindingTest::unite(), WindingTest::subtract(0)] {
+        for (a, b) in [(a, b), (mirror(a), mirror(b))] {
+            let whole = tilted(&[a, b], &test, 1000).unwrap();
+            assert!(whole.vertices.iter().any(wide));
+            for leaf in [1, 4, 16] {
+                let m = tilted(&[a, b], &test, leaf).unwrap();
+                assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+                assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+            }
+            sorted_on_the_grid(&whole);
         }
-        sorted_on_the_grid(&whole);
     }
 }
 
