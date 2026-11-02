@@ -43,7 +43,7 @@ use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange_reusing};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError, winding_at};
 use geom_poly::winding::{Entry, Winding, WindingTest};
 use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
-use geom_topo::Body;
+use geom_topo::{Body, Order};
 
 use crate::certificate::{Fault, certify, labelled};
 use crate::names::{NameIds, Named, Naming, NamingError, Sources, name, name_curves};
@@ -51,7 +51,7 @@ use crate::operand::{
     BooleanInput, CellSeed, Operand, OperandKey, PrepareError, Prepared, Selection, prepare,
 };
 use crate::passage::{Passage, narrowest};
-use crate::rebuild::{Carrier, RebuildError, publish, wire};
+use crate::rebuild::{Carrier, RebuildError, publish, publish_from, wire};
 
 /// The arrangement's phase.
 const ARRANGEMENT: Phase = Phase::new("arrangement");
@@ -194,7 +194,11 @@ struct Scene<'a> {
 }
 
 /// What an earlier merge and naming kept: the merge's memo and the names' ids (G139).
-pub(crate) type Again<'a> = (&'a Memo, &'a NameIds);
+pub(crate) type Again<'a> = (&'a Memo, &'a NameIds, Option<&'a Order>);
+
+/// What a selection's naming and publication kept for the next: the names' ids and the order the
+/// publication found (G139, G139a).
+pub(crate) type Published = (NameIds, Option<Order>);
 
 /// What one result of a selection is told.
 #[derive(Clone, Copy)]
@@ -240,7 +244,7 @@ struct Picked {
     /// One entry per cell that holds two seeds: where it is narrowest.
     leaks: Vec<Option<Passage>>,
     /// What its merge and naming kept for the next, where it merged once.
-    memo: Option<(Memo, NameIds)>,
+    memo: Option<(Memo, Published)>,
 }
 
 /// Why a selection gave no body.
@@ -426,7 +430,7 @@ impl<'a> Scene<'a> {
         job: Job<'_>,
         pieces: &[Outward],
         meter: &mut WorkMeter<'_>,
-    ) -> Result<(Combined, bool, NameIds), Refused> {
+    ) -> Result<(Combined, bool, Published), Refused> {
         let carriers: &[Carrier] = &self.ready.carriers;
         let Some(named) = self.named(job.target) else {
             let body = publish(merged, carriers, job.open, (None, None), meter)?;
@@ -438,7 +442,7 @@ impl<'a> Scene<'a> {
                     cell: None,
                 },
                 false,
-                NameIds::default(),
+                (NameIds::default(), None),
             ));
         };
         let sources = Sources {
@@ -448,7 +452,7 @@ impl<'a> Scene<'a> {
             planes: &self.planes,
             split: job.split,
             seed: job.seed,
-            known: self.reuse.map(|(_, ids)| ids),
+            known: self.reuse.map(|(_, ids, _)| ids),
         };
         let Naming {
             names,
@@ -459,7 +463,8 @@ impl<'a> Scene<'a> {
             rounded,
         } = name(self.op, merged, pieces, &sources)?;
         let given = (Some(&names), Some(rounded.as_slice()));
-        let body = publish(merged, carriers, job.open, given, meter)?;
+        let start = self.reuse.and_then(|(_, _, order)| order);
+        let (body, order) = publish_from(merged, (carriers, job.open), given, start, meter)?;
         let history = Some(history);
         Ok((
             Combined {
@@ -469,7 +474,7 @@ impl<'a> Scene<'a> {
                 cell: None,
             },
             qualified,
-            ids,
+            (ids, order),
         ))
     }
 
@@ -484,7 +489,7 @@ impl<'a> Scene<'a> {
         let kept = self.sourced(select(test, self.classified)?);
         labelled(&kept, test, meter)?;
         let rules = Rules { cuts, open: false };
-        let reuse = self.reuse.map(|(memo, _)| memo);
+        let reuse = self.reuse.map(|(memo, _, _)| memo);
         let (merged, memo) = merge_with_reusing(&kept, self.merge, rules, reuse, meter)?;
         let job = Job {
             target,
@@ -1028,7 +1033,7 @@ pub(crate) fn arranged_input(
 
 /// Each selection's bodies, and what the last selection that merged once kept for the next merge
 /// and naming.
-pub(crate) type Selected = (OpOutput<Vec<Vec<Combined>>>, Option<(Memo, NameIds)>);
+pub(crate) type Selected = (OpOutput<Vec<Vec<Combined>>>, Option<(Memo, Published)>);
 
 /// `input`'s selections, read from one arrangement, a merge and naming starting from `reuse` where
 /// given.

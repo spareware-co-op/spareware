@@ -31,6 +31,7 @@ use geom_poly::merge::{Memo, Merge};
 use geom_poly::subdivide::Solved;
 use geom_poly::trace::Classified;
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
+use geom_topo::Order;
 
 use crate::combine::{Combined, arranged_input, fail, prepared, selected};
 use crate::names::NameIds;
@@ -68,13 +69,15 @@ pub struct Cut<'b> {
 }
 
 /// What a cut keeps for the next cut of its host (G139): each operand's preparation and the boxes
-/// it solved, each keyed by what it was made from, what its merge kept, and its names' ids.
+/// it solved, each keyed by what it was made from, what its merge kept, its names' ids, and the
+/// order its publication put the rows in (G139a).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Recut {
     operands: Operands,
     boxes: Solved,
     merge: Memo,
     names: NameIds,
+    order: Option<Order>,
 }
 
 impl Recut {
@@ -100,6 +103,12 @@ impl Recut {
     #[must_use]
     pub const fn names(&self) -> &NameIds {
         &self.names
+    }
+
+    /// The order the publication put the rows in, when the body has names.
+    #[must_use]
+    pub const fn order(&self) -> Option<&Order> {
+        self.order.as_ref()
     }
 }
 
@@ -183,7 +192,9 @@ fn one_cut(
         cut.reuse.map(Recut::boxes),
         meter,
     )?;
-    let again = cut.reuse.map(|last| (&last.merge, &last.names));
+    let again = cut
+        .reuse
+        .map(|last| (&last.merge, &last.names, last.order.as_ref()));
     let (mut out, kept) = selected(
         ctx,
         &input,
@@ -191,12 +202,13 @@ fn one_cut(
         exactness,
         meter,
     )?;
-    let (merge, names) = kept.unwrap_or_default();
+    let (merge, (names, order)) = kept.unwrap_or_default();
     let cache = Recut {
         operands,
         boxes,
         merge,
         names,
+        order,
     };
     let result = out
         .result

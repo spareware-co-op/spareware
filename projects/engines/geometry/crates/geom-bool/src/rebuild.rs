@@ -33,6 +33,7 @@ use geom_poly::merge::{Curves, Merge, MergeError, Merged, Outward, Rules, merge_
 use geom_poly::order::normals_det;
 use geom_run::WorkMeter;
 use geom_topo::Line as Shadow;
+use geom_topo::Order;
 use geom_topo::order::Names;
 
 use crate::names::{NamingError, Near};
@@ -463,9 +464,26 @@ pub fn publish(
     merged: &Merged,
     carriers: &[Carrier],
     open: bool,
-    (names, rounded): (Option<&Names>, Option<&[Near]>),
+    given: (Option<&Names>, Option<&[Near]>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, RebuildError> {
+    publish_from(merged, (carriers, open), given, None, meter).map(|(body, _)| body)
+}
+
+/// [`publish`], its sorts into name order starting from `start`, the order the last cut's
+/// publication found (G139a), and giving back the order this one found when it has names. The
+/// body is the one [`publish`] gives, whatever `start` is.
+///
+/// # Errors
+///
+/// As [`publish`].
+pub fn publish_from(
+    merged: &Merged,
+    (carriers, open): (&[Carrier], bool),
+    (names, rounded): (Option<&Names>, Option<&[Near]>),
+    start: Option<&Order>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Body, Option<Order>), RebuildError> {
     let (builder, outside) = arenas(merged, carriers, open, rounded)?;
     // A solid body has material, so a selection that keeps nothing is a general one.
     let kind = if open {
@@ -478,8 +496,11 @@ pub fn publish(
         BodyKind::General
     };
     Ok(match names {
-        Some(names) => builder.publish_named(names, kind, outside, meter)?,
-        None => builder.publish(kind, outside, meter)?,
+        Some(names) => {
+            let (body, order) = builder.publish_named_from(names, (kind, outside), start, meter)?;
+            (body, Some(order))
+        }
+        None => (builder.publish(kind, outside, meter)?, None),
     })
 }
 

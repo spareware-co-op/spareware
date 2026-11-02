@@ -351,6 +351,7 @@ fn a_moved_door_is_cut_again_from_the_last_cut_as_a_fresh_cut_would_be() {
     let names = local.result[0].cache.names();
     assert!(names.len() > 1 && !names.is_empty());
     assert!(Recut::default().names().is_empty());
+    assert!(local.result[0].cache.order().is_some() && Recut::default().order().is_none());
     assert_eq!(least(&again), least(&cut_of(&wall, &doors)));
 }
 
