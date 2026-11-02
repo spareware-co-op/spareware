@@ -5788,14 +5788,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
-      "mutant": "replace > with >= in Plan::finish",
-      "line_text": "if largest > TOLERANCE {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "They differ only when the largest residual is exactly 1/64, the tolerance. Every block stops at most <= TOLERANCE, so a residual at exactly the tolerance is one the method accepts; refusing it too is the same rule read strictly at its edge."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
       "mutant": "replace > with >= in Stage::iterate",
       "line_text": "if ratio > 0.75 {",
       "occurrences": 1,
