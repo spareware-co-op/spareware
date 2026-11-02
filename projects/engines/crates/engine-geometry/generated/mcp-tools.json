@@ -1110,7 +1110,7 @@
             "Certified",
             "Approximate"
           ],
-          "example": "query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, and a report that passed.",
+          "example": "query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, a report that passed, and Certified within 1 step.",
           "family": "Query",
           "roles": [],
           "tier": "Preview since 2026-10-31",
@@ -1199,7 +1199,7 @@
             "Certified",
             "Approximate"
           ],
-          "example": "query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z.",
+          "example": "query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z, and Exact.",
           "family": "Query",
           "roles": [],
           "tier": "Preview since 2026-10-31",
@@ -1287,7 +1287,7 @@
             "Certified",
             "Approximate"
           ],
-          "example": "query.validity { body: a box, exactness: Exact, level: Full } gives a report with no faults, all four groups run and nothing deferred.",
+          "example": "query.validity { body: a box, exactness: Exact, level: Full } gives a report with no faults, all four groups run and nothing deferred, and Exact.",
           "family": "Query",
           "roles": [],
           "tier": "Preview since 2026-10-31",

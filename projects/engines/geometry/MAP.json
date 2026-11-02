@@ -14794,90 +14794,120 @@
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-topo/tests/query_ops.rs"
+        ]
+      },
       "family": "Query",
       "missing": [
         "benchmark",
-        "contract",
         "family_laws",
         "fuzz",
-        "property",
-        "unit"
+        "property"
       ],
       "name": "query.area",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-topo/tests/query_ops.rs"
+        ]
+      },
       "family": "Query",
       "missing": [
         "benchmark",
-        "contract",
         "family_laws",
         "fuzz",
-        "property",
-        "unit"
+        "property"
       ],
       "name": "query.bounding_box",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-check/tests/query.rs"
+        ]
+      },
       "family": "Query",
       "missing": [
         "benchmark",
-        "contract",
         "family_laws",
         "fuzz",
-        "property",
-        "unit"
+        "property"
       ],
       "name": "query.exactness",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-name/tests/faces.rs"
+        ]
+      },
       "family": "Query",
       "missing": [
         "benchmark",
-        "contract",
         "family_laws",
         "fuzz",
-        "property",
-        "unit"
+        "property"
       ],
       "name": "query.faces",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-check/tests/query.rs"
+        ]
+      },
       "family": "Query",
       "missing": [
         "benchmark",
-        "contract",
         "family_laws",
         "fuzz",
-        "property",
-        "unit"
+        "property"
       ],
       "name": "query.validity",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/geometry/crates/geom-topo/tests/query_ops.rs"
+        ]
+      },
       "family": "Query",
       "missing": [
         "benchmark",
-        "contract",
         "family_laws",
         "fuzz",
-        "property",
-        "unit"
+        "property"
       ],
       "name": "query.volume",
       "tier": "Preview since 2026-10-31",

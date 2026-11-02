@@ -470,7 +470,7 @@ A body's exactness report: its recorded class and bound, how many faces lie on p
 **Example**
 
 ```text
-query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, and a report that passed.
+query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, a report that passed, and Certified within 1 step.
 ```
 
 ## `query.faces`
@@ -515,7 +515,7 @@ Every face of a body in arena order, with its shell, surface, sense and loops, i
 **Example**
 
 ```text
-query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z.
+query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z, and Exact.
 ```
 
 ## `query.validity`
@@ -557,7 +557,7 @@ A body's validity report: chapter 8.3's checks at the level asked, each fault wi
 **Example**
 
 ```text
-query.validity { body: a box, exactness: Exact, level: Full } gives a report with no faults, all four groups run and nothing deferred.
+query.validity { body: a box, exactness: Exact, level: Full } gives a report with no faults, all four groups run and nothing deferred, and Exact.
 ```
 
 ## `query.volume`

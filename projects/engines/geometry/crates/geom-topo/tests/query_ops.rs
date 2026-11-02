@@ -1,5 +1,7 @@
 //! The core queries as operations (22; piece G102): the contract's answer with the body's class,
 //! each query failure as a typed error with its base kind, and a stop as the context's error.
+//!
+//! Covers: `query.area`, `query.bounding_box`, `query.volume`.
 
 #![allow(
     clippy::unwrap_used,

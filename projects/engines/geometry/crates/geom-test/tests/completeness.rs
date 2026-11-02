@@ -66,7 +66,8 @@ fn one(tier: &str, evidence: Value, missing: Value) -> (Value, Value) {
 fn the_real_tree_passes_and_lists_everything() {
     let (map, tools) = (map(), tools());
     assert_eq!(problems(&map, &tools), Vec::<String>::new());
-    assert_eq!(map["operations"].as_array().unwrap().len(), 11);
+    // Eleven Make and Transform operations, and G102's six queries.
+    assert_eq!(map["operations"].as_array().unwrap().len(), 17);
     // Fifteen curve kinds and eleven surface kinds (chapter 7).
     assert_eq!(map["kinds"].as_array().unwrap().len(), 26);
 }
