@@ -546,17 +546,19 @@ fn endless(p: &Plane, at: [f64; 3]) -> Result<SurfaceKind, IntersectError> {
     Ok(SurfaceKind::Plane(Plane::new(at, u, v, (span, span))?))
 }
 
-/// `from + d·s` for s over `span`, as a line.
+/// `from + d·s` for s over `span`, as a line, its data reaching as far as `from`'s enclosure or
+/// `spread`, the width of what set its span.
 fn along(
     from: Vector,
     d: [f64; 3],
     span: (f64, f64),
     tangent: bool,
+    spread: f64,
 ) -> Result<Piece, IntersectError> {
     Ok(Piece::Curve {
         curve: Box::new(CurveKind::Line(Line::new(middle(from), d, span)?)),
         tangent,
-        reach: wide(from),
+        reach: tight::larger(wide(from), spread),
     })
 }
 
@@ -588,7 +590,7 @@ fn plane_along(
                     Interval::new(z0, z1)?,
                 ];
                 let tangent = !matches!(contact, PointContact::Crossing);
-                out.push(along(from, d, span, tangent)?);
+                out.push(along(from, d, span, tangent, 0.0)?);
             }
             Item::Overlap { .. } => return Ok(Some(alloc::vec![Piece::Same])),
             Item::Flagged { .. } => return Ok(None),
@@ -702,10 +704,60 @@ fn sign_of_triple(
     ))
 }
 
-/// A sweep along one direction: its cross-section, and how far it runs along the unit direction.
+/// A sweep along one direction: its cross-section, where along the unit direction each point of it
+/// starts, and how far past that it runs.
 struct Sweep {
     section: CurveKind<2>,
-    reach: (f64, f64),
+    /// The swept curve, on the section's parameters: where it stands along the direction is where
+    /// the sweep starts there. `None` for a cylinder, whose every point starts at `from`.
+    profile: Option<CurveKind<3>>,
+    from: f64,
+    run: (f64, f64),
+}
+
+impl Sweep {
+    /// How far along the unit direction `d` the sweep's points over `t` start, enclosed.
+    fn height(
+        &self,
+        t: (f64, f64),
+        d: Vector,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Interval, IntersectError> {
+        let Some(profile) = &self.profile else {
+            return point(self.from);
+        };
+        let b = profile.bound(t, meter)?;
+        let ([x0, y0, z0], [x1, y1, z1]) = (b.lo, b.hi);
+        let at = [
+            Interval::new(x0, x1)?,
+            Interval::new(y0, y1)?,
+            Interval::new(z0, z1)?,
+        ];
+        dot(at, d)
+    }
+
+    /// How far along `d` the sweep reaches at its points over `t`: from the middle of their start,
+    /// and how wide that start is.
+    fn reach(
+        &self,
+        t: (f64, f64),
+        d: Vector,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<((f64, f64), f64), IntersectError> {
+        let h = self.height(t, d, meter)?;
+        let at = tight::middle(h);
+        Ok(((at + self.run.0, at + self.run.1), h.hi() - h.lo()))
+    }
+
+    /// Every height the sweep reaches, enclosed.
+    fn whole(&self, d: Vector, meter: &mut WorkMeter<'_>) -> Result<(f64, f64), IntersectError> {
+        let span = match &self.profile {
+            Some(profile) => finite(profile)?,
+            None => (0.0, 0.0),
+        };
+        let h = self.height(span, d, meter)?;
+        Ok((h.lo() + self.run.0, h.hi() + self.run.1))
+    }
 }
 
 /// The cross-section of `s` on `map`, if it sweeps along `direction`.
@@ -729,15 +781,12 @@ fn sweep(
             };
             let (_, (v0, v1)) = ParamSurface::domain(x);
             let scale_d = tight::middle(dot(lift(d)?, unit_d)?);
-            let (lo, hi) = finite(&kind)?;
-            let from = tight::middle(dot(
-                lift(kind.point(lo * 0.5 + hi * 0.5, geom_nurbs::Limit::FromRight)?)?,
-                unit_d,
-            )?);
-            let (a, b) = (from + v0 * scale_d, from + v1 * scale_d);
+            let (a, b) = (v0 * scale_d, v1 * scale_d);
             Ok(Some(Sweep {
                 section,
-                reach: (tight::smaller(a, b), tight::larger(a, b)),
+                profile: Some(kind),
+                from: 0.0,
+                run: (tight::smaller(a, b), tight::larger(a, b)),
             }))
         }
         SurfaceKind::Cylinder(x) => {
@@ -757,10 +806,12 @@ fn sweep(
             let (_, (v0, v1)) = ParamSurface::domain(x);
             let from = tight::middle(dot(c, unit_d)?);
             let sense = tight::middle(dot(lift(e)?, unit_d)?);
-            let (a, b) = (from + v0 * sense, from + v1 * sense);
+            let (a, b) = (v0 * sense, v1 * sense);
             Ok(Some(Sweep {
                 section: CurveKind::Circle(circle),
-                reach: (tight::smaller(a, b), tight::larger(a, b)),
+                profile: None,
+                from,
+                run: (tight::smaller(a, b), tight::larger(a, b)),
             }))
         }
         _ => Ok(None),
@@ -787,18 +838,24 @@ pub(crate) fn sweeps(
     else {
         return Ok(None);
     };
-    let lo = tight::larger(first.reach.0, second.reach.0);
-    let hi = tight::smaller(first.reach.1, second.reach.1);
-    if lo >= hi {
+    let ((a0, a1), (b0, b1)) = (first.whole(d, meter)?, second.whole(d, meter)?);
+    if tight::larger(a0, b0) >= tight::smaller(a1, b1) {
         return Ok(Some(Vec::new()));
     }
     let mut out = Vec::new();
     for item in curves(&first.section, &second.section, meter)?.items() {
         match item {
             Item::Point { at, contact, .. } => {
-                let [t, ..] = at.spans() else {
+                let [t, s, ..] = at.spans() else {
                     return Err(IntersectError::Internal);
                 };
+                // Each sweep runs from where its profile stands at the crossing.
+                let ((a0, a1), wide_a) = first.reach((t.lo(), t.hi()), d, meter)?;
+                let ((b0, b1), wide_b) = second.reach((s.lo(), s.hi()), d, meter)?;
+                let (lo, hi) = (tight::larger(a0, b0), tight::smaller(a1, b1));
+                if lo >= hi {
+                    continue;
+                }
                 let box2 = first.section.bound((t.lo(), t.hi()), meter)?;
                 let ([x0, y0], [x1, y1]) = (box2.lo, box2.hi);
                 let from = plus(
@@ -806,7 +863,8 @@ pub(crate) fn sweeps(
                     scale(other, Interval::new(y0, y1)?)?,
                 )?;
                 let tangent = !matches!(contact, PointContact::Crossing);
-                out.push(along(from, middle(d), (lo, hi), tangent)?);
+                let spread = tight::larger(wide_a, wide_b);
+                out.push(along(from, middle(d), (lo, hi), tangent, spread)?);
             }
             Item::Overlap { .. } => return Ok(Some(alloc::vec![Piece::Same])),
             Item::Flagged { .. } => return Ok(None),
