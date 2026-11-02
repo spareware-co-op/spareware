@@ -3490,6 +3490,13 @@ pub mod intersect {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/contact_spline_line/typical"))]
+    fn contact_spline_line(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("intersect/curve_loop/typical"))]
     fn curve_loop(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
@@ -3498,7 +3505,7 @@ pub mod intersect {
 
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, contact_spline_line, curve_loop
     );
 }
 

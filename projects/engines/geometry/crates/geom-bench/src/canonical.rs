@@ -1044,6 +1044,13 @@ impl Canonical for geom_intersect::Intersection {
     }
 }
 
+impl Canonical for geom_2d::contact::Contact {
+    // Piece G195's contacts, by the same rule: a kind, two intervals and a box.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_intersect::CanonicalKey {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);

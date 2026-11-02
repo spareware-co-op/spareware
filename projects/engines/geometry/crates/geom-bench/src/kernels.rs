@@ -2604,6 +2604,7 @@ pub mod roots {
 /// `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): items put in canonical
 /// order, a key read, a pair put in order, and a point projected, under an unlimited budget.
 pub mod intersect {
+    use geom_2d::contact::{Contact, contacts};
     use geom_curve::CurveKind;
     use geom_intersect::curve::{curves, self_crossings};
     use geom_intersect::{
@@ -2631,6 +2632,16 @@ pub mod intersect {
         out: &mut Vec<Result<Intersection, IntersectError>>,
     ) {
         run(batch, out, |(a, b)| curves(a, b, &mut meter()));
+    }
+
+    /// `geom_2d::contact::contacts` on each pair (piece G195): `curves`, each item read as a
+    /// crossing, a touching or undecided.
+    #[inline(never)]
+    pub fn touched(
+        batch: &[(CurveKind<2>, CurveKind<2>)],
+        out: &mut Vec<Result<Vec<Contact>, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| contacts(a, b, &mut meter()));
     }
 
     /// `self_crossings` on each curve.

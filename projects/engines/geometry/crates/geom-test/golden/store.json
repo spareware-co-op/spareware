@@ -260,9 +260,15 @@
               "kind": "corpus",
               "piece": "G195",
               "why": "signed/G163's geom-intersect benchmarks merged with the 2D chain's (G187 to G192); no digest of either side moved"
+            },
+            {
+              "sha256": "929acc75086bff656939499edf94434e6f8e8037dbf8786dd199d2ecb012ff18",
+              "kind": "corpus",
+              "piece": "G195",
+              "why": "1 new benchmark: geom_2d::contact::contacts on a cubic crossed by a line; no existing digest moved"
             }
           ],
-          "sha256": "929acc75086bff656939499edf94434e6f8e8037dbf8786dd199d2ecb012ff18"
+          "sha256": "7ac8e586b02494b7ae6e5b3ff6efeeff2e36384ea7785e35a366d5fe900b0db1"
         },
         {
           "id": "geom-nurbs/operations",

@@ -503,6 +503,7 @@ pub static OPS: &[Op] = &[
     Op { group: "intersect", name: "curve_circles", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::circle_pairs(c), kernels::intersect::met) },
     Op { group: "intersect", name: "curve_line_circle", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::line_circles(c), kernels::intersect::met) },
     Op { group: "intersect", name: "curve_cubics", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::cubic_pairs(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "contact_spline_line", measures: "geom_2d::contact::contacts", classes: T, prepare: |c| bind(inputs::intersect::spline_lines(c), kernels::intersect::touched) },
     Op { group: "intersect", name: "curve_loop", measures: "geom_intersect::curve::self_crossings", classes: T, prepare: |c| bind(inputs::intersect::loops(c), kernels::intersect::crossed) },
     // geom-intersect's projection (piece G162; decision 32.44): the search on an arc and on a band
     // of a sphere.

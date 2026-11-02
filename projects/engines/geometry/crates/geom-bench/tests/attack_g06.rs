@@ -1425,6 +1425,12 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::curve::curves(a, b, &mut meter)
             }))
         }
+        ("intersect", "contact_spline_line") => {
+            fold(inputs::intersect::spline_lines(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_2d::contact::contacts(a, b, &mut meter)
+            }))
+        }
         ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_intersect::curve::self_crossings(c, &mut meter)
