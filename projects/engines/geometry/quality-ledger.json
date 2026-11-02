@@ -5345,6 +5345,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The case dx = 0 has returned above, so 0 never reaches this test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/commit.rs",
+      "mutant": "replace < with <= in nearest",
+      "line_text": "while low < high {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The bisection ends when low meets high, at the grid point whose half-past is at or above the coordinate. With <= the loop runs once more there: middle is low, its half-past is not below the coordinate, so high = middle again and nothing changes, for ever. The run's timeout catches it."
     }
   ],
   "coverage_off": [
