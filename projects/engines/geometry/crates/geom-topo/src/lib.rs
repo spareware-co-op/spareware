@@ -65,6 +65,7 @@ pub mod error;
 pub mod ix;
 pub mod mass;
 pub mod order;
+pub mod patch;
 pub mod query;
 pub mod query_ops;
 
@@ -78,6 +79,7 @@ pub use entity::{
     ShellIx, Shells, SurfaceIx, Vertex, VertexIx, Vertices,
 };
 pub use error::{Refusal, TopoError};
+pub use patch::Patch;
 // The geometry kinds a body's pools hold, for the crates above this one that read them (such as
 // geom-check's exactness record) without a direct dependency on geom-curve and geom-surface,
 // which chapter 27's crate table does not give them.

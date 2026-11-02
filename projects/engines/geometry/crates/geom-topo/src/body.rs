@@ -110,6 +110,17 @@ impl Body {
         &self.arenas
     }
 
+    /// The same body with `arenas` in place of its own; only a patch calls this, with arenas whose
+    /// links and order are this body's.
+    pub(crate) fn with_arenas(&self, arenas: Arenas) -> Body {
+        Body {
+            kind: self.kind,
+            outside: self.outside,
+            arenas,
+            names: self.names.clone(),
+        }
+    }
+
     /// The heap memory the body's chunks hold; see [`Memory`]. A measurement only.
     #[must_use]
     pub fn memory(&self) -> Memory {

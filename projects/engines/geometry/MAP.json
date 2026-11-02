@@ -12139,6 +12139,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the patch's rows, plus one chunk copy for each chunk it writes; nothing is linear in the body.",
+          "does": "[`Body::patched`] takes a [`Patch`], new values for faces' boxes and for rows of the surface, curve, pcurve and point pools, and returns the body with those values in place, sharing every chunk the patch does not write with the body it came from (8.2, 23.9). A local re-cut whose topology and names are the last cut's changes only such values: a moved door's planes, lines, corners and the boxes of the faces it passes through.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/patch.rs",
+          "guarantees": [
+            "**Only values change.** A patch holds no link of the topology and no name, so every row keeps its place and its links. Pool rows are placed by the least place of the entities that lie on them, which links decide, so the patched body is in the order a publication in name order gives it (`crate::builder::named`), and its names are the body's own, shared.",
+            "**No dangling index.** A patched row past the end of its arena is [`TopoError::NoSuchRow`], as is a patched point that meets a plane past the end of the plane pool, as publishing refuses it; the body is unchanged by a patch that fails.",
+            "**Writes copy only their chunks.** Each row written copies the chunk it lands in, once, when the body still shares it; every other chunk stays shared."
+          ],
+          "job": "A body with some rows' values replaced, every link and name kept (piece G139a).",
+          "method": {
+            "links": [
+              "https://doc.rust-lang.org/alloc/sync/struct.Arc.html#method.make_mut",
+              "projects/kit/notes/G139a-shared-bodies.md"
+            ],
+            "text": "copy on write over the arenas' `Arc` chunks ([`crate::Column::set`], `Arc::make_mut`, <https://doc.rust-lang.org/alloc/sync/struct.Arc.html#method.make_mut>), as an edit through [`crate::Builder::edit`] does, without the publication's re-placing of rows, which a patch of values cannot change; the design in `projects/kit/notes/G139a-shared-bodies.md`."
+          },
+          "path": "geom_topo::patch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the rows visited; each list is walked once per query. [`shell_side`] is one [`side_of_shell`] for each vertex of the first shell the second holds, plus one. Recursion: none.",
           "does": "[`faces`] lists every face with its shell, surface, sense, loops and name. [`loop_area`] and [`face_area`] give twice the area vector of a loop and of a face, Σ pᵢ × pᵢ₊₁ over the loop's vertices in fin order; [`shell_volume`] and [`volume`] give six times the signed volume enclosed, Σ over faces of the face's twice-area vector dotted with one of its vertices. [`bounding_box`] gives the box of every vertex, joined with the stored box of each face that is not a polygon. [`side_of_shell`] says which side of a closed flat shell a grid point lies on, and [`shell_side`] which side of one shell another lies on. A loop's vertex at each fin is where the fin starts: its edge's start for a forward fin, its end for a reversed one. A vertex where three planes meet has no grid point, so these exact sums refuse it; [`corner`] gives it as an implicit point, and [`certified_loop_area`] and [`certified_shell_volume`] measure such a loop and shell in certified intervals (`crate::mass`).",
           "family": [],
