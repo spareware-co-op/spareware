@@ -5790,7 +5790,7 @@
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace < with <= in splits",
       "line_text": "(low < odd && odd < high).then_some(odd)",
-      "occurrences": 1,
+      "occurrences": 2,
       "kind": "hangs",
       "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
     },
@@ -5809,6 +5809,526 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "Without the not, a ring's walk is offered only fins it has used, so it never runs out of a way on and the tests stop it by their timeout. It hangs; it never returns a wrong ring."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
+      "mutant": "replace != with == in whole",
+      "line_text": "if side_of(c, face, a, b)? != Sign::Positive {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole is a shortcut for a convex triangle or quadrilateral, which partition turns into the same piece: when the mutant gives None, or sends a ring the turn checks found convex on to partition, the piece is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
+      "mutant": "replace whole -> Result<Option<Piece>, ConvexError> with Ok(None)",
+      "line_text": "let ([a, b, c] | [a, b, c, _]) = ring else {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole is a shortcut for a convex triangle or quadrilateral, which partition turns into the same piece: when the mutant gives None, or sends a ring the turn checks found convex on to partition, the piece is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/cut.rs",
+      "mutant": "replace || with && in can_cut",
+      "line_text": "if !positive || !negative {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "can_cut only filters pairs before split, which cuts a piece only where it straddles the other's plane; letting more pairs through changes no piece."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace || with && in Cell::order",
+      "line_text": "if self.rest == 0 || other.rest == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With && the shortcut runs only when both rests are zero; when one is, the general comparison that follows orders 0 / over against r / o the same way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace narrow_order -> Option<Ordering> with None",
+      "line_text": "let wide = I256::from_i128;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without cells the merge compares the point or line in wide integers, the same order exactly (far_tilted_solids_merge_in_wide_integers and two_tilted_solids_moved_to_the_frame_s_far_corner reach that path); only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace cells_of -> Option<[Cell; 3]> with None",
+      "line_text": "let turn = |v: i128| {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without cells the merge compares the point or line in wide integers, the same order exactly (far_tilted_solids_merge_in_wide_integers and two_tilted_solids_moved_to_the_frame_s_far_corner reach that path); only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "delete ! in wide_of",
+      "line_text": "if !weight.is_negative() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without the not, every w is turned negative instead of positive: each X / w keeps its value, and a / b against c / d with b and d both negative has b * d positive, so every comparison is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialEq for CellKey<'_, N>>::eq -> bool with true",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sorts order CellKeys by Ord::cmp alone; PartialEq and PartialOrd exist for Ord's bounds and nothing in the crate calls them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialEq for CellKey<'_, N>>::eq -> bool with false",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sorts order CellKeys by Ord::cmp alone; PartialEq and PartialOrd exist for Ord's bounds and nothing in the crate calls them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in <impl PartialEq for CellKey<'_, N>>::eq",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sorts order CellKeys by Ord::cmp alone; PartialEq and PartialOrd exist for Ord's bounds and nothing in the crate calls them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialOrd for CellKey<'_, N>>::partial_cmp -> Option<Ordering> with None",
+      "line_text": "Some(self.cmp(other))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sorts order CellKeys by Ord::cmp alone; PartialEq and PartialOrd exist for Ord's bounds and nothing in the crate calls them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace line_in_words -> Option<([i128; 6], usize)> with None",
+      "line_text": "let (([px, py, pz], pd), ([qx, qy, qz], qd)) = (plane_words(p)?, plane_words(q)?);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without its words the line's key is made in I256 by wide_line_key, the same key, whose cells, where they fit, are the same; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace line_cells -> Option<[Cell; 6]> with None",
+      "line_text": "let mut words = [0i128; 6];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without its words the line's key is made in I256 by wide_line_key, the same key, whose cells, where they fit, are the same; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace line_cells_of -> Option<[Cell; 6]> with None",
+      "line_text": "let over = *coordinates.get(first)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without cells the merge compares the point or line in wide integers, the same order exactly (far_tilted_solids_merge_in_wide_integers and two_tilted_solids_moved_to_the_frame_s_far_corner reach that path); only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace & with | in splits_boxes",
+      "line_text": "&& plane.d() & 1 != 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "plane.d() | 1 is never 0, so the test becomes 'one non-zero normal component of size 2'. A canonical plane with such a normal has an odd offset (Plane::new divides out the common factor), so the same planes are found: the boxes' own sides."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floors -> Option<[i128; 3]> with None",
+      "line_text": "corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cut_run's floors only let it skip a place outside the run's cells. None, or one value for every place, makes no place lie beyond, so none is skipped and each run is cut at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floors -> Option<[i128; 3]> with Some([1; 3])",
+      "line_text": "corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cut_run's floors only let it skip a place outside the run's cells. None, or one value for every place, makes no place lie beyond, so none is skipped and each run is cut at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floors -> Option<[i128; 3]> with Some([0; 3])",
+      "line_text": "corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cut_run's floors only let it skip a place outside the run's cells. None, or one value for every place, makes no place lie beyond, so none is skipped and each run is cut at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floors -> Option<[i128; 3]> with Some([-1; 3])",
+      "line_text": "corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cut_run's floors only let it skip a place outside the run's cells. None, or one value for every place, makes no place lie beyond, so none is skipped and each run is cut at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace || with && in beyond",
+      "line_text": ".any(|(v, (p, q))| v < &(*p).min(*q) || v > &(*p).max(*q))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "beyond only lets cut_run skip a place outside a run's cells: never skipping, or skipping fewer, cuts each run at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace beyond -> bool with false",
+      "line_text": "at.iter()",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "beyond only lets cut_run skip a place outside a run's cells: never skipping, or skipping fewer, cuts each run at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in radial",
+      "line_text": "reversed: rising(&fin) == rising(&start),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With != every fin's sense against the start is turned over at once, the start's included, which moves each by half a circle about the edge and leaves their order round it, and so the pairs, as they were."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in join_around",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in join_around",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace plane_words -> Option<([i64; 3], i64)> with None",
+      "line_text": "let [x, y, z] = p.n();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace cross_in_words -> Option<[i128; 3]> with None",
+      "line_text": "let ([ax, ay, az], [bx, by, bz]) = (a, b);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace cross_of_words -> Option<[i64; 3]> with None",
+      "line_text": "let ([ax, ay, az], [bx, by, bz]) = (a, b);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace point_words -> Option<([i64; 3], i64)> with None",
+      "line_text": "let [first, second, third] = x;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace dot_of_words -> Option<i128> with None",
+      "line_text": "let ([ax, ay, az], [bx, by, bz]) = (a, b);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace dot_in_words -> Option<i128> with None",
+      "line_text": "let ([ax, ay, az], [bx, by, bz]) = (a, b);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::reading -> Option<Sign> with None",
+      "line_text": "if let (Some((x, w)), Some((n, d))) = (self.words, plane_words(s)) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::from_words -> Option<Self> with None",
+      "line_text": "let ((n_p, d_p), (n_q, d_q), (n_r, d_r)) =",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::from_wide -> Option<Self> with None",
+      "line_text": "let (n_p, n_q, n_r) = (p.n(), q.n(), r.n());",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::coordinates -> ([i128; 3], i128) with ([0; 3], 0)",
+      "line_text": "(self.x, self.w)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With w 0 the corner gets no cells (Cell::new refuses a denominator not above 0), so the merge compares it in wide integers, the same order; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::coordinates -> ([i128; 3], i128) with ([-1; 3], 0)",
+      "line_text": "(self.x, self.w)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With w 0 the corner gets no cells (Cell::new refuses a denominator not above 0), so the merge compares it in wide integers, the same order; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::coordinates -> ([i128; 3], i128) with ([1; 3], 0)",
+      "line_text": "(self.x, self.w)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With w 0 the corner gets no cells (Cell::new refuses a denominator not above 0), so the merge compares it in wide integers, the same order; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::rounded -> Option<[i128; 3]> with None",
+      "line_text": "let turn = self.w.is_negative();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace == with != in Meeting::rounded",
+      "line_text": "if w == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace || with && in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with == in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with >= in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace && with || in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace == with != in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with None",
+      "line_text": "if let Some((x, w)) = self.words",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([0; 3])",
+      "line_text": "if let Some((x, w)) = self.words",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([1; 3])",
+      "line_text": "if let Some((x, w)) = self.words",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([-1; 3])",
+      "line_text": "if let Some((x, w)) = self.words",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with < in Meeting::floors",
+      "line_text": "&& w > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with == in Meeting::floors",
+      "line_text": "&& w > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace == with != in Meeting::floors",
+      "line_text": "if w == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with >= in Meeting::floors",
+      "line_text": "&& w > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Span::of -> Option<Self> with None",
+      "line_text": "let mut low = [i64::MAX; 3];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Span::misses -> bool with false",
+      "line_text": "let apart = |(a, b): (&Span, &Span)| a.high.iter().zip(&b.low).any(|(h, l)| h < l);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Spans only let a pair whose spans miss skip the cut; a span runs a step below and two above its points' floors, so two polygons that share a point overlap by three cells. Reporting fewer misses skips less, and calling high equal to low a miss can only happen for polygons that share no point; either way no piece changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace < with == in Span::misses",
+      "line_text": "let apart = |(a, b): (&Span, &Span)| a.high.iter().zip(&b.low).any(|(h, l)| h < l);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Spans only let a pair whose spans miss skip the cut; a span runs a step below and two above its points' floors, so two polygons that share a point overlap by three cells. Reporting fewer misses skips less, and calling high equal to low a miss can only happen for polygons that share no point; either way no piece changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace < with <= in Span::misses",
+      "line_text": "let apart = |(a, b): (&Span, &Span)| a.high.iter().zip(&b.low).any(|(h, l)| h < l);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Spans only let a pair whose spans miss skip the cut; a span runs a step below and two above its points' floors, so two polygons that share a point overlap by three cells. Reporting fewer misses skips less, and calling high equal to low a miss can only happen for polygons that share no point; either way no piece changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace || with && in Span::misses",
+      "line_text": "apart((self, other)) || apart((other, self))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Spans only let a pair whose spans miss skip the cut; a span runs a step below and two above its points' floors, so two polygons that share a point overlap by three cells. Reporting fewer misses skips less, and calling high equal to low a miss can only happen for polygons that share no point; either way no piece changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace != with == in nearest",
+      "line_text": ".filter(|point| point.weight() != Sign::Zero)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With == every point with a weight is sent to the exact Tpi::to_grid instead, which rounds it the same; a point with none fails there as before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace <= with > in arrange_with",
+      "line_text": "let small = |node: &Node| node.polygons.len() <= SUBTREE_POLYGONS;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "small only decides whether a box is split level by level or solved as one task, its whole subtree; the leaves and their pieces are the same either way (a_box_over_the_subtree_size_splits_level_by_level)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+      "mutant": "replace piece_span -> Option<Span> with None",
+      "line_text": "let after = piece.bounds.iter().cycle().skip(1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A span only lets a segment skip a polygon it cannot reach; without one the polygon is read and the count is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+      "mutant": "replace > with == in classify",
+      "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+      "mutant": "replace > with >= in classify",
+      "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+      "mutant": "replace > with < in classify",
+      "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace || with && in divide",
+      "line_text": "if in_plane || below.0.len().saturating_add(above.0.len()) >= enough {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With && a split that separates too few polygons is taken anyway: the polygons that span it go to both halves, so each child holds about as many as the box and is split again, down to boxes a step wide, and the work grows until the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
     }
   ],
   "coverage_off": [
