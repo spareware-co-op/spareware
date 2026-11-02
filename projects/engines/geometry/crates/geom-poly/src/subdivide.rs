@@ -18,11 +18,13 @@
 //!
 //! Guarantees:
 //!
-//! - **The same pieces whatever the threads.** Each level of the tree is one phase of the parallel
-//!   helper, and the leaves are solved as another, in tree order, so the output is the same bits
-//!   on any number of threads, and a failure the one a serial walk meets first (23.4).
-//! - **No recursion.** The tree is walked level by level, so its depth never threatens a
-//!   WebAssembly stack (principle 13). A box holding polygons that a split no longer separates,
+//! - **The same pieces whatever the threads.** Each level of boxes holding many polygons is one
+//!   phase of the parallel helper; a box holding few, a fixed number, is then one task of another,
+//!   its whole subtree, as is each leaf found on the way, in tree order. So the output is the same bits
+//!   on any number of threads, and a failure the one a walk of those units in tree order meets
+//!   first (23.4).
+//! - **No recursion.** The top levels are walked level by level and each subtree on an explicit
+//!   stack, so the tree's depth never threatens a WebAssembly stack (principle 13). A box holding polygons that a split no longer separates,
 //!   such as many faces on one plane, stops as a leaf instead of dividing down to the grid.
 //! - **Early outs are mechanical.** A box is dropped only when every test takes the same answer
 //!   for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it
@@ -42,8 +44,9 @@
 //!
 //! Cost: O(n) clips per level for n polygons across the level's boxes, and at most 123 levels:
 //! a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and
-//! [`classify`] cost on its polygons, and a solid's leaf one copy of each. Charges the meter one
-//! unit per polygon a split clips, and one per polygon of a solid's leaf.
+//! [`classify`] cost on its polygons, and a solid's leaf one copy of each. A polygon's corner points
+//! are made once and carried into every box it enters whole; only a split's two parts make theirs.
+//! Charges the meter one unit per polygon a split clips, and one per polygon of a solid's leaf.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -55,7 +58,7 @@ use geom_num::{NumError, Sign};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::convex::Piece;
-use crate::cut::{Clipped, clip, local_cuts};
+use crate::cut::{Clipped, clip_at, local_cuts_at, meetings};
 use crate::order::Meeting;
 use crate::trace::{Cell, Classified, Polygon, TraceError, classify, reference_above};
 use crate::winding::{Entry, Winding, WindingTest};
@@ -67,11 +70,25 @@ pub const LEAF_POLYGONS: usize = 32;
 /// One box at a time: a box's cost varies too much for a chunk of them to mean anything.
 const ONE_BOX: ChunkPlan = ChunkPlan::fixed::<1>();
 
+/// Every polygon's corner points, once.
+const POINTS: Phase = Phase::new("arrangement: corner points");
+
+/// The box around the polygons.
+const AROUND: Phase = Phase::new("arrangement: the box around");
+
+/// Polygons, a few hundred a task: a corner's rounding is a few dozen instructions.
+const CORNER_PLAN: ChunkPlan = ChunkPlan::fixed::<256>();
+
 /// One level of the tree.
 const SPLITS: Phase = Phase::new("arrangement: split boxes");
 
-/// The leaves.
+/// The leaves, and the subtrees below the level-by-level splits.
 const LEAVES: Phase = Phase::new("arrangement: solve leaves");
+
+/// The polygons a box may hold and be one task, its whole subtree: a box holding more is split
+/// level by level, one phase a level, so the heavy boxes are shared out and the deep levels cost
+/// no phase of their own. A fixed count, so the work does not depend on the threads.
+const SUBTREE_POLYGONS: usize = 128;
 
 /// A box of the tree.
 struct Node {
@@ -85,6 +102,9 @@ struct Node {
     polygons: Vec<Polygon>,
     /// The index in the input of each polygon.
     sources: Vec<usize>,
+    /// Each polygon's corner points, as `crate::cut::meetings` makes them: made once, and kept
+    /// by every box a polygon passes into whole.
+    points: Vec<Vec<Option<Meeting>>>,
 }
 
 /// What a level does to a box.
@@ -105,30 +125,67 @@ enum Outcome {
 /// [`NumError::Degenerate`] for a piece whose adjacent bounds do not meet, [`NumError::OutOfRange`]
 /// for a corner outside the frame.
 pub fn around(polygons: &[Polygon]) -> Result<Cell, NumError> {
+    let mut ranges = Vec::with_capacity(polygons.len());
+    for polygon in polygons {
+        ranges.push(range_of(polygon)?);
+    }
+    Ok(cell_around(&ranges))
+}
+
+/// [`around`] on `exec`'s pool: each polygon's corners' range in parallel chunks, then the ranges
+/// together, so the same box.
+///
+/// # Errors
+///
+/// As [`around`], as a [`RunError`] of a [`TraceError`].
+pub fn around_on(
+    exec: &Exec<'_>,
+    polygons: &[Polygon],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Cell, RunError<TraceError>> {
+    let ranges = exec.try_map(meter, AROUND, CORNER_PLAN, polygons, |_, polygon, _| {
+        range_of(polygon).map_err(TraceError::from)
+    })?;
+    Ok(cell_around(&ranges))
+}
+
+/// The grid range of `polygon`'s corners, each the point [`nearest`] gives.
+fn range_of(polygon: &Polygon) -> Result<([i64; 3], [i64; 3]), NumError> {
     let mut low = [i64::MAX; 3];
     let mut high = [i64::MIN; 3];
-    for polygon in polygons {
-        let Piece { face, bounds } = &polygon.piece;
-        let after = bounds.iter().cycle().skip(1);
-        for (bound, next) in bounds.iter().zip(after) {
-            let coordinates = nearest(face, bound, next)?;
-            for ((l, h), v) in low.iter_mut().zip(&mut high).zip(coordinates) {
-                *l = (*l).min(v);
-                *h = (*h).max(v);
-            }
+    let Piece { face, bounds } = &polygon.piece;
+    let after = bounds.iter().cycle().skip(1);
+    for (bound, next) in bounds.iter().zip(after) {
+        let coordinates = nearest(face, bound, next)?;
+        for ((l, h), v) in low.iter_mut().zip(&mut high).zip(coordinates) {
+            *l = (*l).min(v);
+            *h = (*h).max(v);
+        }
+    }
+    Ok((low, high))
+}
+
+/// The box around the corner ranges, in half steps, a step clear with its faces on odd half steps.
+fn cell_around(ranges: &[([i64; 3], [i64; 3])]) -> Cell {
+    if ranges.is_empty() {
+        return Cell {
+            low: [-1; 3],
+            high: [1; 3],
+        };
+    }
+    let mut low = [i64::MAX; 3];
+    let mut high = [i64::MIN; 3];
+    for (l, h) in ranges {
+        for ((low, high), (l, h)) in low.iter_mut().zip(&mut high).zip(l.iter().zip(h)) {
+            *low = (*low).min(*l);
+            *high = (*high).max(*h);
         }
     }
     let half = |v: i64, by: i64| v.saturating_mul(2).saturating_add(by);
-    if polygons.is_empty() {
-        return Ok(Cell {
-            low: [-1; 3],
-            high: [1; 3],
-        });
-    }
-    Ok(Cell {
+    Cell {
         low: low.map(|v| half(v, -3)),
         high: high.map(|v| half(v, 3)),
-    })
+    }
 }
 
 /// The grid point nearest where `face`, `bound` and `next` meet, as `Tpi::to_grid` gives it, in
@@ -212,27 +269,32 @@ fn divide(
         };
         let n = [0, 1, 2].map(|i| if i == axis { 2 } else { 0 });
         let plane = Plane::new(n, i128::from(at).saturating_neg())?;
-        let mut below = (Vec::new(), Vec::new());
-        let mut above = (Vec::new(), Vec::new());
+        let mut below = (Vec::new(), Vec::new(), Vec::new());
+        let mut above = (Vec::new(), Vec::new(), Vec::new());
         let mut in_plane = false;
-        for (polygon, source) in node.polygons.iter().zip(&node.sources) {
+        let each = node.polygons.iter().zip(&node.sources).zip(&node.points);
+        for ((polygon, source), points) in each {
             meter.charge(1)?;
             let part = |piece: Piece| Polygon {
                 piece,
                 entry: polygon.entry,
             };
-            match clip(&polygon.piece, &plane)? {
+            match clip_at(&polygon.piece, points, &plane)? {
                 Clipped::Front => {
                     above.0.push(polygon.clone());
                     above.1.push(*source);
+                    above.2.push(points.clone());
                 }
                 Clipped::Back => {
                     below.0.push(polygon.clone());
                     below.1.push(*source);
+                    below.2.push(points.clone());
                 }
                 Clipped::Split(front, back) => {
+                    above.2.push(meetings(&front));
                     above.0.push(part(front));
                     above.1.push(*source);
+                    below.2.push(meetings(&back));
                     below.0.push(part(back));
                     below.1.push(*source);
                 }
@@ -271,6 +333,7 @@ fn divide(
                 reference: node.reference.clone(),
                 polygons: below.0,
                 sources: below.1,
+                points: below.2,
             },
             Node {
                 key: node.key | bit,
@@ -279,6 +342,7 @@ fn divide(
                 reference,
                 polygons: above.0,
                 sources: above.1,
+                points: above.2,
             },
         ))));
     }
@@ -295,7 +359,7 @@ fn solve(
         return solid_leaf(node, entry, meter);
     }
     let pieces: Vec<Piece> = node.polygons.iter().map(|p| p.piece.clone()).collect();
-    let cuts = local_cuts(&pieces, meter)?;
+    let cuts = local_cuts_at(&pieces, &node.points, meter)?;
     let mut classified = classify(&node.cell, &node.reference, &node.polygons, &cuts, meter)?;
     for piece in &mut classified {
         piece.polygon = node
@@ -368,15 +432,24 @@ pub fn arrange_with(
     solids: &[Entry],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, RunError<TraceError>> {
-    let mut level = alloc::vec![Node {
+    let points = exec.try_map(meter, POINTS, CORNER_PLAN, polygons, |_, polygon, _| {
+        Ok::<_, TraceError>(meetings(&polygon.piece))
+    })?;
+    let root = alloc::vec![Node {
         key: 0,
         depth: 0,
         cell,
         reference,
         polygons: polygons.to_vec(),
         sources: (0..polygons.len()).collect(),
+        points,
     }];
-    let mut leaves = Vec::new();
+    // Level by level while a box holds many polygons; a leaf found on the way, or a box small
+    // enough, is then one task, its whole subtree.
+    let mut units: Vec<(Node, bool)> = Vec::new();
+    let small = |node: &Node| node.polygons.len() <= SUBTREE_POLYGONS;
+    let (held, mut level): (Vec<Node>, Vec<Node>) = root.into_iter().partition(|n| small(n));
+    units.extend(held.into_iter().map(|node| (node, false)));
     while !level.is_empty() {
         let outcomes = exec.try_map(meter, SPLITS, ONE_BOX, &level, |_, node, m| {
             divide(node, (leaf, solids), tests, m)
@@ -385,19 +458,68 @@ pub fn arrange_with(
         for (node, outcome) in level.into_iter().zip(outcomes) {
             match outcome {
                 Outcome::Dropped => {}
-                Outcome::Leaf => leaves.push(node),
+                Outcome::Leaf => units.push((node, true)),
                 Outcome::Split(children) => {
                     let (under, over) = *children;
-                    next.push(under);
-                    next.push(over);
+                    for child in [under, over] {
+                        if small(&child) {
+                            units.push((child, false));
+                        } else {
+                            next.push(child);
+                        }
+                    }
                 }
             }
         }
         level = next;
     }
-    leaves.sort_unstable_by_key(|node| node.key);
-    let solved = exec.try_map(meter, LEAVES, ONE_BOX, &leaves, |_, node, m| {
-        solve(node, solids, m)
+    // A subtree's leaves lie between its box's key and the next unit's, so this is tree order.
+    units.sort_unstable_by_key(|(node, _)| node.key);
+    let solved = exec.try_map(meter, LEAVES, ONE_BOX, &units, |_, (node, whole), m| {
+        if *whole {
+            solve(node, solids, m)
+        } else {
+            subtree(node, (leaf, solids), tests, m)
+        }
     })?;
     Ok(solved.into_iter().flatten().collect())
+}
+
+/// Every piece of the boxes under `node`, in tree order: divided on an explicit stack, the lower box
+/// of a split taken first, and each leaf solved as it is reached.
+fn subtree(
+    node: &Node,
+    (leaf, solids): (usize, &[Entry]),
+    tests: &[WindingTest],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Classified>, TraceError> {
+    let mut out = Vec::new();
+    let mut stack: Vec<Node> = Vec::new();
+    let first = divide(node, (leaf, solids), tests, meter)?;
+    take(node, first, (solids, &mut stack, &mut out), meter)?;
+    while let Some(next) = stack.pop() {
+        let outcome = divide(&next, (leaf, solids), tests, meter)?;
+        take(&next, outcome, (solids, &mut stack, &mut out), meter)?;
+    }
+    Ok(out)
+}
+
+/// What [`subtree`] does with a box's outcome: a leaf's pieces onto `out`, a split's two boxes
+/// onto `stack`, the lower last so it comes off first.
+fn take(
+    node: &Node,
+    outcome: Outcome,
+    (solids, stack, out): (&[Entry], &mut Vec<Node>, &mut Vec<Classified>),
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), TraceError> {
+    match outcome {
+        Outcome::Dropped => {}
+        Outcome::Leaf => out.extend(solve(node, solids, meter)?),
+        Outcome::Split(children) => {
+            let (under, over) = *children;
+            stack.push(over);
+            stack.push(under);
+        }
+    }
+    Ok(())
 }

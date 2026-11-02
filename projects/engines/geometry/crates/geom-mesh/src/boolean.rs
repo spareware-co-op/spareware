@@ -54,14 +54,23 @@ use geom_op::{
 use geom_poly::merge::{Merge, Merged, Outward, Rules, merge_on, select};
 use geom_poly::order::normals_det;
 use geom_poly::plane::canonical;
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange_with};
+use geom_poly::subdivide::{LEAF_POLYGONS, around_on, arrange_with};
 use geom_poly::trace::{Classified, Polygon, TraceError};
 use geom_poly::winding::{Entry, Winding, WindingTest};
-use geom_run::{Exec, RunError, Stop, WorkMeter};
+use geom_run::{ChunkPlan, Exec, Phase, RunError, Stop, WorkMeter};
 
 use crate::classify::{pieces_of, trace_error};
 use crate::exact::build::{Corner, Polygons, Source, build};
 use crate::exact::{ExactMesh, MeshError, MeshFault, MeshKind, PropTable, Role, at, index};
+
+/// Splitting the operands' faces into convex polygons.
+const FACES: Phase = Phase::new("boolean: faces into convex polygons");
+
+/// Faces, a few dozen a task: most are triangles, which split at once.
+const FACE_PLAN: ChunkPlan = ChunkPlan::fixed::<64>();
+
+/// The result's corners: each vertex's grid point or lowest three planes.
+const CORNERS: Phase = Phase::new("boolean: the result's corners");
 
 /// One result.
 #[derive(Clone, Debug, PartialEq)]
@@ -89,19 +98,27 @@ struct Gathered {
     inputs: Vec<Input>,
 }
 
-/// Every face of `operands`, split into convex polygons.
-fn gather(operands: &[&ExactMesh], meter: &mut WorkMeter<'_>) -> Result<Gathered, MeshError> {
+/// Every face of `operands`, split into convex polygons on `exec`'s pool, in face order: the same
+/// polygons, and the same first failure, as a walk of the faces one by one.
+fn gather(
+    operands: &[&ExactMesh],
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Gathered, MeshError> {
     let mut gathered = Gathered {
         polygons: Vec::new(),
         run_of: Vec::new(),
         inputs: Vec::new(),
     };
-    for (&mesh, operand) in operands.iter().zip(0_u32..) {
-        if mesh.kind() == MeshKind::Open {
-            return Err(MeshError::NotClosed);
-        }
-        let parts = mesh.parts();
-        for run in &parts.runs {
+    // Every face up to the first open operand, which a walk would refuse once it got there.
+    let open = operands.iter().position(|m| m.kind() == MeshKind::Open);
+    let mut faces: Vec<(&ExactMesh, u32, u32, u32)> = Vec::new();
+    for (&mesh, operand) in operands
+        .iter()
+        .zip(0_u32..)
+        .take(open.unwrap_or(operands.len()))
+    {
+        for run in &mesh.parts().runs {
             let number = index(gathered.inputs.len())?;
             gathered.inputs.push(Input {
                 name: run.source,
@@ -110,16 +127,27 @@ fn gather(operands: &[&ExactMesh], meter: &mut WorkMeter<'_>) -> Result<Gathered
                 operand,
                 faces: run.faces.end.saturating_sub(run.faces.start),
             });
-            for face in run.faces.clone() {
-                for piece in pieces_of(parts, face, meter)? {
-                    gathered.polygons.push(Polygon {
-                        piece,
-                        entry: Some(operand),
-                    });
-                    gathered.run_of.push(number);
-                }
-            }
+            faces.extend(run.faces.clone().map(|face| (mesh, operand, number, face)));
         }
+    }
+    let split = exec.try_map(
+        meter,
+        FACES,
+        FACE_PLAN,
+        &faces,
+        |_, &(mesh, _, _, face), m| pieces_of(mesh.parts(), face, m),
+    );
+    for (pieces, &(_, operand, number, _)) in split?.into_iter().zip(&faces) {
+        for piece in pieces {
+            gathered.polygons.push(Polygon {
+                piece,
+                entry: Some(operand),
+            });
+            gathered.run_of.push(number);
+        }
+    }
+    if open.is_some() {
+        return Err(MeshError::NotClosed);
     }
     Ok(gathered)
 }
@@ -444,8 +472,13 @@ fn lowest_triple(mut planes: Vec<Plane>, own: &Tpi) -> Result<[Plane; 3], MeshEr
     Ok(*own.planes())
 }
 
-/// The corners of `merged`: a grid point where a vertex is one, its lowest three planes where not.
-fn corners_of(merged: &Merged) -> Result<Vec<Corner>, MeshError> {
+/// The corners of `merged`: a grid point where a vertex is one, its lowest three planes where not,
+/// each vertex on `exec`'s pool, in vertex order.
+fn corners_of(
+    merged: &Merged,
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Corner>, MeshError> {
     let mut near: Vec<Vec<Plane>> = alloc::vec![Vec::new(); merged.vertices.len()];
     for fin in &merged.fins {
         let face = merged.faces.get(fin.face).ok_or(MeshFault::Shape)?;
@@ -456,26 +489,26 @@ fn corners_of(merged: &Merged) -> Result<Vec<Corner>, MeshError> {
             list.push(fin.bound);
         }
     }
-    let mut out = Vec::with_capacity(merged.vertices.len());
-    for (t, planes) in merged.vertices.iter().zip(near) {
+    let made = exec.try_map(meter, CORNERS, FACE_PLAN, &merged.vertices, |v, t, _| {
         let rounded = t.to_grid()?;
-        out.push(if rounded.is_exact() {
-            Corner::Grid(rounded.value())
-        } else {
-            Corner::Planes(lowest_triple(planes, t)?)
-        });
-    }
-    Ok(out)
+        if rounded.is_exact() {
+            return Ok(Corner::Grid(rounded.value()));
+        }
+        let planes = near.get(v).cloned().ok_or(MeshFault::Shape)?;
+        Ok(Corner::Planes(lowest_triple(planes, t)?))
+    });
+    Ok(made?)
 }
 
 /// `merged` as polygons of the runs given. Vertices are in lexicographic order, so the ring with a
 /// face's lowest vertex is its outer ring, and it comes first.
 fn polygons_of(
     merged: &Merged,
-    face_run: Vec<u32>,
-    runs: Vec<Source>,
+    (face_run, runs): (Vec<u32>, Vec<Source>),
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
 ) -> Result<Polygons, MeshError> {
-    let vertices = corners_of(merged)?;
+    let vertices = corners_of(merged, exec, meter)?;
     let on_grid = |v: usize| matches!(vertices.get(v), Some(Corner::Grid(_)));
     let mut corners = Vec::new();
     let mut loop_start = alloc::vec![0_u32];
@@ -539,7 +572,7 @@ fn outcome(
         meter,
     )?;
     let (history, face_run, runs) = account(&merged, &kept, gathered, op)?;
-    let polygons = polygons_of(&merged, face_run, runs)?;
+    let polygons = polygons_of(&merged, (face_run, runs), exec, meter)?;
     Ok(Outcome {
         // A result's winding is its test's, 0 or 1, and no two of its faces cross.
         mesh: build(&polygons, exec, meter)?.proven_solid(),
@@ -557,7 +590,7 @@ fn arranged(
     if gathered.polygons.is_empty() {
         return Ok(Vec::new());
     }
-    let cell = around(&gathered.polygons)?;
+    let cell = around_on(exec, &gathered.polygons, meter).map_err(run_error)?;
     arrange_with(
         exec,
         (cell, Winding::new()),
@@ -615,7 +648,7 @@ fn classified(
     if let Some(test) = tests.iter().position(|t| t.holds(&outside)) {
         return Err(MeshError::UnboundedResult { test: index(test)? });
     }
-    let gathered = gather(operands, meter)?;
+    let gathered = gather(operands, exec, meter)?;
     // A solid operand's leaves away from the others need no cuts and no tracing (11.3 step 4).
     let solids: Vec<Entry> = (0..)
         .zip(operands)
