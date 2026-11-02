@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has ten targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has eleven targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -18,7 +18,8 @@
 //! (G163), every point of any two curves lies on both, and two cubic graphs that change sides have
 //! an item between them; [`piercing`] (G164), every point of a curve and a surface lies on both; and
 //! [`natural`] (G165), every curve two natural quadrics are said to share lies on each by its own
-//! equation; and [`pencils`] (G166), what a pencil says two curved quadrics share is so.
+//! equation; [`pencils`] (G166), what a pencil says two curved quadrics share is so; and
+//! [`reductions`] (G167), every curve of a torus's special position lies on it.
 //! The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
@@ -174,6 +175,7 @@ pub mod piercing;
 pub mod predicates;
 pub mod project;
 pub mod quadric;
+pub mod reductions;
 pub mod seeded;
 pub mod variants;
 pub mod wide;
