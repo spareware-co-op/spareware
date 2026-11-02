@@ -81,6 +81,12 @@ const ENDS: Phase = Phase::new("merge: cut runs at ends");
 /// Each edge's radial order.
 const RADIAL: Phase = Phase::new("merge: radial order");
 
+/// Each face's rings.
+const RINGS: Phase = Phase::new("merge: rings");
+
+/// Each vertex's name, its lowest three planes.
+const NAMES: Phase = Phase::new("merge: vertex names");
+
 /// Runs or edges, a few dozen a task.
 const RUNS: ChunkPlan = ChunkPlan::fixed::<64>();
 
@@ -1698,13 +1704,23 @@ pub fn merge_on(
             faces: Vec::new(),
         })
         .collect();
-    for (at, (((sheet, ..), _), list)) in face_list.iter().zip(&own_fins).enumerate() {
-        let plane = planes.get(at).ok_or(MergeError::Open)?;
+    // Each face's rings on the pool, each read in face order below, so a failure is the one a
+    // walk of the faces meets first.
+    let traced = exec.try_map(meter, RINGS, RUNS, &own_fins, |at, list, _| {
+        Ok::<_, MergeError>(
+            planes
+                .get(at)
+                .ok_or(MergeError::Open)
+                .and_then(|plane| rings(&fins, list, plane)),
+        )
+    });
+    let traced = traced.map_err(|e| phase_error(e, meter))?;
+    for (at, (((sheet, ..), _), ring)) in face_list.iter().zip(traced).enumerate() {
         let shell = shell_of(at)?;
         faces.push(Face {
             sheet: *sheet,
             shell,
-            rings: rings(&fins, list, plane)?,
+            rings: ring?,
         });
         shells
             .iter_mut()
@@ -1712,10 +1728,10 @@ pub fn merge_on(
             .take(1)
             .for_each(|s| s.faces.push(at));
     }
-    let mut vertices = Vec::with_capacity(used.len());
-    for id in &used {
-        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
-    }
+    let vertices = exec.try_map(meter, NAMES, RUNS, &used, |_, id, m| {
+        named(points.get(*id).ok_or(MergeError::Open)?, m)
+    });
+    let vertices = vertices.map_err(|e| phase_error(e, meter))?;
     Ok(Merged {
         sheets,
         vertices,

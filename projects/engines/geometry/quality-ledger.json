@@ -6402,6 +6402,14 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "No item ever completes and nothing is consumed, so the parse loop calls item for ever under the tests' unlimited meter. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace tpi_routed -> Option<Sign> with None",
+      "line_text": "let [p, q, r] = &t.planes;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
     }
   ],
   "coverage_off": [

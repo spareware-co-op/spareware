@@ -18,11 +18,13 @@
 //!
 //! Guarantees:
 //!
-//! - **The same pieces whatever the threads.** Each level of the tree is one phase of the parallel
-//!   helper, and the leaves are solved as another, in tree order, so the output is the same bits
-//!   on any number of threads, and a failure the one a serial walk meets first (23.4).
-//! - **No recursion.** The tree is walked level by level, so its depth never threatens a
-//!   WebAssembly stack (principle 13). A box holding polygons that a split no longer separates,
+//! - **The same pieces whatever the threads.** The top levels of the tree are one phase each of
+//!   the parallel helper, until it holds a fixed number of boxes; then each box's subtree, and each
+//!   leaf found on the way, is one task of another, in tree order. So the output is the same bits
+//!   on any number of threads, and a failure the one a walk of those units in tree order meets
+//!   first (23.4).
+//! - **No recursion.** The top levels are walked level by level and each subtree on an explicit
+//!   stack, so the tree's depth never threatens a WebAssembly stack (principle 13). A box holding polygons that a split no longer separates,
 //!   such as many faces on one plane, stops as a leaf instead of dividing down to the grid.
 //! - **Early outs are mechanical.** A box is dropped only when every test takes the same answer
 //!   for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it
@@ -68,6 +70,9 @@ pub const LEAF_POLYGONS: usize = 32;
 /// One box at a time: a box's cost varies too much for a chunk of them to mean anything.
 const ONE_BOX: ChunkPlan = ChunkPlan::fixed::<1>();
 
+/// Every polygon's corner points, once.
+const POINTS: Phase = Phase::new("arrangement: corner points");
+
 /// The box around the polygons.
 const AROUND: Phase = Phase::new("arrangement: the box around");
 
@@ -77,8 +82,13 @@ const CORNER_PLAN: ChunkPlan = ChunkPlan::fixed::<256>();
 /// One level of the tree.
 const SPLITS: Phase = Phase::new("arrangement: split boxes");
 
-/// The leaves.
+/// The leaves, and the subtrees below the level-by-level splits.
 const LEAVES: Phase = Phase::new("arrangement: solve leaves");
+
+/// Boxes enough to share among threads: the tree is split level by level, one phase a level, until
+/// it holds this many, and then each box's subtree is one task, so the deep levels cost no phase
+/// of their own. A fixed count, so the work does not depend on the threads.
+const SUBTREES: usize = 64;
 
 /// A box of the tree.
 struct Node {
@@ -422,6 +432,9 @@ pub fn arrange_with(
     solids: &[Entry],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, RunError<TraceError>> {
+    let points = exec.try_map(meter, POINTS, CORNER_PLAN, polygons, |_, polygon, _| {
+        Ok::<_, TraceError>(meetings(&polygon.piece))
+    })?;
     let mut level = alloc::vec![Node {
         key: 0,
         depth: 0,
@@ -429,10 +442,12 @@ pub fn arrange_with(
         reference,
         polygons: polygons.to_vec(),
         sources: (0..polygons.len()).collect(),
-        points: polygons.iter().map(|p| meetings(&p.piece)).collect(),
+        points,
     }];
-    let mut leaves = Vec::new();
-    while !level.is_empty() {
+    // Level by level until there are boxes enough to share, each a leaf found on the way or a
+    // box whose whole subtree is then one task.
+    let mut units: Vec<(Node, bool)> = Vec::new();
+    while !level.is_empty() && level.len() < SUBTREES {
         let outcomes = exec.try_map(meter, SPLITS, ONE_BOX, &level, |_, node, m| {
             divide(node, (leaf, solids), tests, m)
         })?;
@@ -440,7 +455,7 @@ pub fn arrange_with(
         for (node, outcome) in level.into_iter().zip(outcomes) {
             match outcome {
                 Outcome::Dropped => {}
-                Outcome::Leaf => leaves.push(node),
+                Outcome::Leaf => units.push((node, true)),
                 Outcome::Split(children) => {
                     let (under, over) = *children;
                     next.push(under);
@@ -450,9 +465,54 @@ pub fn arrange_with(
         }
         level = next;
     }
-    leaves.sort_unstable_by_key(|node| node.key);
-    let solved = exec.try_map(meter, LEAVES, ONE_BOX, &leaves, |_, node, m| {
-        solve(node, solids, m)
+    units.extend(level.into_iter().map(|node| (node, false)));
+    // A subtree's leaves lie between its box's key and the next unit's, so this is tree order.
+    units.sort_unstable_by_key(|(node, _)| node.key);
+    let solved = exec.try_map(meter, LEAVES, ONE_BOX, &units, |_, (node, whole), m| {
+        if *whole {
+            solve(node, solids, m)
+        } else {
+            subtree(node, (leaf, solids), tests, m)
+        }
     })?;
     Ok(solved.into_iter().flatten().collect())
+}
+
+/// Every piece of the boxes under `node`, in tree order: divided on an explicit stack, the lower box
+/// of a split taken first, and each leaf solved as it is reached.
+fn subtree(
+    node: &Node,
+    (leaf, solids): (usize, &[Entry]),
+    tests: &[WindingTest],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Classified>, TraceError> {
+    let mut out = Vec::new();
+    let mut stack: Vec<Node> = Vec::new();
+    let first = divide(node, (leaf, solids), tests, meter)?;
+    take(node, first, (solids, &mut stack, &mut out), meter)?;
+    while let Some(next) = stack.pop() {
+        let outcome = divide(&next, (leaf, solids), tests, meter)?;
+        take(&next, outcome, (solids, &mut stack, &mut out), meter)?;
+    }
+    Ok(out)
+}
+
+/// What [`subtree`] does with a box's outcome: a leaf's pieces onto `out`, a split's two boxes
+/// onto `stack`, the lower last so it comes off first.
+fn take(
+    node: &Node,
+    outcome: Outcome,
+    (solids, stack, out): (&[Entry], &mut Vec<Node>, &mut Vec<Classified>),
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), TraceError> {
+    match outcome {
+        Outcome::Dropped => {}
+        Outcome::Leaf => out.extend(solve(node, solids, meter)?),
+        Outcome::Split(children) => {
+            let (under, over) = *children;
+            stack.push(over);
+            stack.push(under);
+        }
+    }
+    Ok(())
 }
