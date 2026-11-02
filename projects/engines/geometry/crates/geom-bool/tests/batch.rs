@@ -315,6 +315,13 @@ fn least(one: &Cut<'_>) -> u64 {
     high
 }
 
+/// Whether every chunk of `a` is `b`'s very chunk, not a copy.
+fn all_shared<K, V>(a: &geom_topo::Column<K, V>, b: &geom_topo::Column<K, V>) -> bool {
+    a.chunks()
+        .zip(b.chunks())
+        .all(|(x, y)| x.as_ptr() == y.as_ptr())
+}
+
 #[test]
 fn a_moved_door_is_cut_again_from_the_last_cut_as_a_fresh_cut_would_be() {
     // A wall of twenty doors, and one moved along it: the boxes about its old and new places are
@@ -352,6 +359,20 @@ fn a_moved_door_is_cut_again_from_the_last_cut_as_a_fresh_cut_would_be() {
     assert!(names.len() > 1 && !names.is_empty());
     assert!(Recut::default().names().is_empty());
     assert!(local.result[0].cache.order().is_some() && Recut::default().order().is_none());
+    // The door kept every name and count, so the re-cut patched the last body: its links are the
+    // last body's very chunks, and only the moved door's values were written.
+    let (now, before) = (&local.result[0].result.body, last.body().unwrap());
+    assert_eq!(local.result[0].cache.body(), Some(now));
+    assert!(all_shared(
+        &now.arenas().fins.edge,
+        &before.arenas().fins.edge
+    ));
+    assert!(all_shared(
+        &now.arenas().edges.start,
+        &before.arenas().edges.start
+    ));
+    assert!(!all_shared(&now.arenas().points, &before.arenas().points));
+    assert!(Recut::default().body().is_none());
     assert_eq!(least(&again), least(&cut_of(&wall, &doors)));
 }
 

@@ -38,8 +38,8 @@ use geom_topo::order::Names;
 
 use crate::names::{NamingError, Near};
 use geom_topo::{
-    Body, BodyKind, Box3, Builder, CurveKind, Edge, Face, Fin, Ix, Loop, PointKind, Region,
-    RegionKind, Sense, Shell, SurfaceKind, TopoError, Vertex,
+    Arena, Body, BodyKind, Box3, Builder, CurveKind, Edge, Face, Fin, Ix, Loop, Patch, PointKind,
+    Region, RegionKind, Sense, Shell, SurfaceKind, TopoError, Vertex,
 };
 
 /// The surface an input face lies on, and which way its polygon's normal runs on it.
@@ -200,9 +200,8 @@ fn planes_around(merged: &Merged) -> Vec<Vec<usize>> {
 )]
 fn arenas(
     merged: &Merged,
-    carriers: &[Carrier],
     open: bool,
-    given: Option<&[Near]>,
+    geometry: &Geometry,
 ) -> Result<(Builder, Ix<Region>), RebuildError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
@@ -248,52 +247,16 @@ fn arenas(
         })?;
     }
 
-    // Vertices, each a grid point or its lowest meeting.
-    let planes: Vec<Plane> = merged
-        .faces
-        .iter()
-        .map(|f| merged.sheets.get(f.sheet).map(|s| s.face))
-        .collect::<Option<_>>()
-        .ok_or(RebuildError::Broken)?;
-    let around = planes_around(merged);
-    let coefficients = |plane: &Plane| {
-        let [x, y, z] = plane.n();
-        [x, y, z, plane.d()]
-    };
-    let mut pool: Vec<([i128; 4], Plane)> = Vec::new();
-    let mut triples: Vec<Option<[Plane; 3]>> = Vec::with_capacity(merged.vertices.len());
-    let mut rounded = Vec::with_capacity(merged.vertices.len());
-    for (at, (point, list)) in merged.vertices.iter().zip(&around).enumerate() {
-        let near = match given.and_then(|all| all.get(at)) {
-            Some(near) => (*near)?,
-            None => point.to_grid()?,
-        };
-        rounded.push((near.value(), near.is_exact()));
-        if near.is_exact() {
-            triples.push(None);
-        } else {
-            let triple = lowest_triple(list, &planes, point)?;
-            pool.extend(triple.iter().map(|plane| (coefficients(plane), *plane)));
-            triples.push(Some(triple));
-        }
-    }
-    pool.sort_unstable_by_key(|(key, _)| *key);
-    pool.dedup_by_key(|(key, _)| *key);
-    for (_, plane) in &pool {
+    // Vertices, each at its point; the plane pool the meetings use.
+    for plane in &geometry.planes {
         a.planes.push(*plane)?;
     }
-    let pool_row = |plane: &Plane| {
-        pool.binary_search_by_key(&coefficients(plane), |(key, _)| *key)
-            .map_err(|_| RebuildError::Broken)
-            .and_then(row)
-    };
-    for (triple, (near, _)) in triples.iter().zip(&rounded) {
-        let point = match triple {
-            Some([p, q, r]) => PointKind::Meet([pool_row(p)?, pool_row(q)?, pool_row(r)?]),
-            None => PointKind::Grid(*near),
-        };
-        let point = a.points.push(point)?;
+    for point in &geometry.points {
+        let point = a.points.push(*point)?;
         a.vertices.push(Vertex { point })?;
+    }
+    for surface in &geometry.surfaces {
+        a.surfaces.push(surface.clone())?;
     }
 
     // Faces, loops and fins, ring by ring: a fin's row is its place in the rings.
@@ -312,39 +275,19 @@ fn arenas(
         }
     }
     let row_of = |fin: usize| fin_rows.get(fin).copied().ok_or(RebuildError::Broken);
-    let mut surfaces: BTreeMap<usize, usize> = BTreeMap::new();
     let mut next_loop = 0usize;
-    for (f, face) in merged.faces.iter().enumerate() {
-        let sheet = merged.sheets.get(face.sheet).ok_or(RebuildError::Broken)?;
-        let carrier = carriers.get(sheet.polygon).ok_or(RebuildError::Broken)?;
-        let surface = if let Some(held) = surfaces.get(&sheet.polygon) {
-            *held
-        } else {
-            let new = usize::try_from(a.surfaces.len()).unwrap_or(usize::MAX);
-            a.surfaces.push(carrier.surface.clone())?;
-            surfaces.insert(sheet.polygon, new);
-            new
-        };
-        let mut corners = Vec::new();
-        for fin in face.rings.iter().flatten() {
-            let at = merged.fins.get(*fin).ok_or(RebuildError::Broken)?.from;
-            corners.push(*rounded.get(at).ok_or(RebuildError::Broken)?);
-        }
+    for ((f, face), (surface, sense, bound)) in merged.faces.iter().enumerate().zip(&geometry.faces)
+    {
         let shell = merged.shells.get(face.shell).ok_or(RebuildError::Broken)?;
         let place = shell.faces.iter().position(|g| *g == f);
         let later = place.and_then(|p| shell.faces.get(p.saturating_add(1)));
-        let turned = sheet.turned != (carrier.sense == Sense::Reversed);
         a.faces.push(Face {
             shell: row(face.shell)?,
             next: later.copied().map(row).transpose()?,
-            surface: row(surface)?,
-            sense: if turned {
-                Sense::Reversed
-            } else {
-                Sense::Forward
-            },
+            surface: row(*surface)?,
+            sense: *sense,
             first_loop: face.rings.first().map(|_| row(next_loop)).transpose()?,
-            bound: bound_of(&corners)?,
+            bound: *bound,
         })?;
         for (l, ring) in face.rings.iter().enumerate() {
             let at = next_loop.saturating_add(l);
@@ -404,9 +347,8 @@ fn arenas(
     }
 
     // Edges, with their shadows.
-    for edge in &merged.edges {
-        let end = |at: usize| rounded.get(at).copied().ok_or(RebuildError::Broken);
-        let curve = a.curves.push(shadow(end(edge.low)?, end(edge.high)?)?)?;
+    for (edge, shadow) in merged.edges.iter().zip(&geometry.curves) {
+        let curve = a.curves.push(shadow.clone())?;
         a.edges.push(Edge {
             first_fin: edge
                 .fins
@@ -422,6 +364,214 @@ fn arenas(
         })?;
     }
     Ok((builder, outside))
+}
+
+/// A merge's geometry, in the merge's order, as the arenas hold it (G139a): each vertex's point,
+/// the plane pool the meetings use, each face's surface row, sense and box, the surfaces, and each
+/// edge's shadow.
+struct Geometry {
+    points: Vec<PointKind>,
+    planes: Vec<Plane>,
+    faces: Vec<(usize, Sense, Box3)>,
+    surfaces: Vec<SurfaceKind>,
+    curves: Vec<CurveKind<3>>,
+}
+
+/// `merged`'s geometry, each surface from `carriers` by polygon index, each vertex rounded as
+/// `given` has it, or rounded here.
+fn geometry(
+    merged: &Merged,
+    carriers: &[Carrier],
+    given: Option<&[Near]>,
+) -> Result<Geometry, RebuildError> {
+    // Vertices, each a grid point or its lowest meeting.
+    let planes: Vec<Plane> = merged
+        .faces
+        .iter()
+        .map(|f| merged.sheets.get(f.sheet).map(|s| s.face))
+        .collect::<Option<_>>()
+        .ok_or(RebuildError::Broken)?;
+    let around = planes_around(merged);
+    let coefficients = |plane: &Plane| {
+        let [x, y, z] = plane.n();
+        [x, y, z, plane.d()]
+    };
+    let mut pool: Vec<([i128; 4], Plane)> = Vec::new();
+    let mut triples: Vec<Option<[Plane; 3]>> = Vec::with_capacity(merged.vertices.len());
+    let mut points = Vec::with_capacity(merged.vertices.len());
+    let mut rounded = Vec::with_capacity(merged.vertices.len());
+    for (at, (point, list)) in merged.vertices.iter().zip(&around).enumerate() {
+        let near = match given.and_then(|all| all.get(at)) {
+            Some(near) => (*near)?,
+            None => point.to_grid()?,
+        };
+        rounded.push((near.value(), near.is_exact()));
+        if near.is_exact() {
+            triples.push(None);
+        } else {
+            let triple = lowest_triple(list, &planes, point)?;
+            pool.extend(triple.iter().map(|plane| (coefficients(plane), *plane)));
+            triples.push(Some(triple));
+        }
+    }
+    pool.sort_unstable_by_key(|(key, _)| *key);
+    pool.dedup_by_key(|(key, _)| *key);
+    let pool_row = |plane: &Plane| {
+        pool.binary_search_by_key(&coefficients(plane), |(key, _)| *key)
+            .map_err(|_| RebuildError::Broken)
+            .and_then(row)
+    };
+    for (triple, (near, _)) in triples.iter().zip(&rounded) {
+        let point = match triple {
+            Some([p, q, r]) => PointKind::Meet([pool_row(p)?, pool_row(q)?, pool_row(r)?]),
+            None => PointKind::Grid(*near),
+        };
+        points.push(point);
+    }
+
+    // Each face's surface, the first face of a polygon taking a new row; its sense and box.
+    let mut rows: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut surfaces = Vec::new();
+    let mut faces = Vec::with_capacity(merged.faces.len());
+    for face in &merged.faces {
+        let sheet = merged.sheets.get(face.sheet).ok_or(RebuildError::Broken)?;
+        let carrier = carriers.get(sheet.polygon).ok_or(RebuildError::Broken)?;
+        let surface = if let Some(held) = rows.get(&sheet.polygon) {
+            *held
+        } else {
+            surfaces.push(carrier.surface.clone());
+            let new = surfaces.len().saturating_sub(1);
+            rows.insert(sheet.polygon, new);
+            new
+        };
+        let mut corners = Vec::new();
+        for fin in face.rings.iter().flatten() {
+            let at = merged.fins.get(*fin).ok_or(RebuildError::Broken)?.from;
+            corners.push(*rounded.get(at).ok_or(RebuildError::Broken)?);
+        }
+        let turned = sheet.turned != (carrier.sense == Sense::Reversed);
+        let sense = if turned {
+            Sense::Reversed
+        } else {
+            Sense::Forward
+        };
+        faces.push((surface, sense, bound_of(&corners)?));
+    }
+    let mut curves = Vec::with_capacity(merged.edges.len());
+    for edge in &merged.edges {
+        let end = |at: usize| rounded.get(at).copied().ok_or(RebuildError::Broken);
+        curves.push(shadow(end(edge.low)?, end(edge.high)?)?);
+    }
+    Ok(Geometry {
+        points,
+        planes: pool.into_iter().map(|(_, plane)| plane).collect(),
+        faces,
+        surfaces,
+        curves,
+    })
+}
+
+/// What a merge's body is besides its geometry's values (G139a): its kind, and the shells, faces,
+/// fins, edges and plane pool every link, list and place in the arenas follows from. Two merges of
+/// one shape, published under the same names, differ only in the values of points, faces' boxes,
+/// surfaces and curves.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shape {
+    kind: BodyKind,
+    open: bool,
+    shells: Vec<(bool, Option<usize>, Vec<usize>)>,
+    faces: Vec<(usize, Vec<Vec<usize>>, usize, Sense)>,
+    fins: Vec<(usize, usize, usize)>,
+    edges: Vec<(usize, usize, Vec<usize>)>,
+    vertices: usize,
+    planes: Vec<Plane>,
+}
+
+/// `merged`'s shape, as `geometry` places its surfaces and senses.
+fn shape_of(merged: &Merged, (kind, open): (BodyKind, bool), geometry: &Geometry) -> Shape {
+    Shape {
+        kind,
+        open,
+        shells: merged
+            .shells
+            .iter()
+            .map(|s| (s.outer, s.holder, s.faces.clone()))
+            .collect(),
+        faces: merged
+            .faces
+            .iter()
+            .zip(&geometry.faces)
+            .map(|(f, (surface, sense, _))| (f.shell, f.rings.clone(), *surface, *sense))
+            .collect(),
+        fins: merged.fins.iter().map(|f| (f.edge, f.from, f.to)).collect(),
+        edges: merged
+            .edges
+            .iter()
+            .map(|e| (e.low, e.high, e.fins.clone()))
+            .collect(),
+        vertices: merged.vertices.len(),
+        planes: geometry.planes.clone(),
+    }
+}
+
+/// What a publication by name keeps for the next (G139a): the body, the order its rows took, its
+/// shape, its names in the merge's order, and the work publishing charged.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Last {
+    body: Body,
+    order: Order,
+    shape: Shape,
+    names: Names,
+    work: u64,
+}
+
+impl Last {
+    /// The order the publication put the rows in.
+    #[must_use]
+    pub const fn order(&self) -> &Order {
+        &self.order
+    }
+
+    /// The body it published.
+    #[must_use]
+    pub const fn body(&self) -> &Body {
+        &self.body
+    }
+}
+
+/// The rows of `last` whose values `geometry` changes, by their places in name order.
+fn patch_of(geometry: &Geometry, last: &Body, order: &Order) -> Result<Patch, RebuildError> {
+    let place = |arena: Arena, at: usize| -> Result<u32, RebuildError> {
+        let row = u32::try_from(at).map_err(|_| RebuildError::Broken)?;
+        order.place(arena, row).ok_or(RebuildError::Broken)
+    };
+    let a = last.arenas();
+    let mut patch = Patch::default();
+    for (at, point) in geometry.points.iter().enumerate() {
+        let ix = row(usize::try_from(place(Arena::Point, at)?).unwrap_or(usize::MAX))?;
+        if a.points.get(ix) != Some(point) {
+            patch.points.push((ix, *point));
+        }
+    }
+    for (at, (_, _, bound)) in geometry.faces.iter().enumerate() {
+        let ix = row(usize::try_from(place(Arena::Face, at)?).unwrap_or(usize::MAX))?;
+        if a.faces.bound.get(ix) != Some(bound) {
+            patch.bounds.push((ix, *bound));
+        }
+    }
+    for (at, surface) in geometry.surfaces.iter().enumerate() {
+        let ix = row(usize::try_from(place(Arena::Surface, at)?).unwrap_or(usize::MAX))?;
+        if a.surfaces.get(ix) != Some(surface) {
+            patch.surfaces.push((ix, surface.clone()));
+        }
+    }
+    for (at, curve) in geometry.curves.iter().enumerate() {
+        let ix = row(usize::try_from(place(Arena::Curve, at)?).unwrap_or(usize::MAX))?;
+        if a.curves.get(ix) != Some(curve) {
+            patch.curves.push((ix, curve.clone()));
+        }
+    }
+    Ok(patch)
 }
 
 /// The body `pieces` bound, every surface from `carriers`, by polygon index.
@@ -470,9 +620,12 @@ pub fn publish(
     publish_from(merged, (carriers, open), given, None, meter).map(|(body, _)| body)
 }
 
-/// [`publish`], its sorts into name order starting from `start`, the order the last cut's
-/// publication found (G139a), and giving back the order this one found when it has names. The
-/// body is the one [`publish`] gives, whatever `start` is.
+/// [`publish`], from what the last cut's publication kept (G139a), giving back what this one
+/// keeps when it has names. When the merge has the last one's shape and the names are its names,
+/// every link and place is the last body's, so the body is the last one with the values of its
+/// points, faces' boxes, surfaces and curves that changed written in, sharing every other chunk,
+/// at the work the last publication charged. Otherwise it is published in full, its sorts into
+/// name order starting from the last order. Either way it is the body [`publish`] gives.
 ///
 /// # Errors
 ///
@@ -481,10 +634,10 @@ pub fn publish_from(
     merged: &Merged,
     (carriers, open): (&[Carrier], bool),
     (names, rounded): (Option<&Names>, Option<&[Near]>),
-    start: Option<&Order>,
+    last: Option<&Last>,
     meter: &mut WorkMeter<'_>,
-) -> Result<(Body, Option<Order>), RebuildError> {
-    let (builder, outside) = arenas(merged, carriers, open, rounded)?;
+) -> Result<(Body, Option<Last>), RebuildError> {
+    let geometry = geometry(merged, carriers, rounded)?;
     // A solid body has material, so a selection that keeps nothing is a general one.
     let kind = if open {
         BodyKind::Sheet
@@ -495,13 +648,38 @@ pub fn publish_from(
     } else {
         BodyKind::General
     };
-    Ok(match names {
-        Some(names) => {
-            let (body, order) = builder.publish_named_from(names, (kind, outside), start, meter)?;
-            (body, Some(order))
-        }
-        None => (builder.publish(kind, outside, meter)?, None),
-    })
+    let Some(names) = names else {
+        let (builder, outside) = arenas(merged, open, &geometry)?;
+        return Ok((builder.publish(kind, outside, meter)?, None));
+    };
+    let shape = shape_of(merged, (kind, open), &geometry);
+    if let Some(last) = last.filter(|last| last.shape == shape && last.names == *names) {
+        meter.charge(last.work).map_err(TopoError::from)?;
+        let body = last
+            .body
+            .patched(&patch_of(&geometry, &last.body, &last.order)?)?;
+        let kept = Last {
+            body: body.clone(),
+            shape,
+            ..last.clone()
+        };
+        return Ok((body, Some(kept)));
+    }
+    let before = meter.used().work;
+    let (builder, outside) = arenas(merged, open, &geometry)?;
+    let start = last.map(|last| &last.order);
+    let (body, order) = builder.publish_named_from(names, (kind, outside), start, meter)?;
+    // The work publishing charged, each charge a u64 the meter took: past u64 it would have
+    // stopped first.
+    let work = u64::try_from(meter.used().work.saturating_sub(before)).unwrap_or(u64::MAX);
+    let kept = Last {
+        body: body.clone(),
+        order,
+        shape,
+        names: names.clone(),
+        work,
+    };
+    Ok((body, Some(kept)))
 }
 
 /// The wire body of `curves`: edges with no fins, each vertex a grid point or its own meeting.

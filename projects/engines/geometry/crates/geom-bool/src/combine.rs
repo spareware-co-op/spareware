@@ -43,7 +43,7 @@ use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange_reusing};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError, winding_at};
 use geom_poly::winding::{Entry, Winding, WindingTest};
 use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
-use geom_topo::{Body, Order};
+use geom_topo::Body;
 
 use crate::certificate::{Fault, certify, labelled};
 use crate::names::{NameIds, Named, Naming, NamingError, Sources, name, name_curves};
@@ -51,7 +51,7 @@ use crate::operand::{
     BooleanInput, CellSeed, Operand, OperandKey, PrepareError, Prepared, Selection, prepare,
 };
 use crate::passage::{Passage, narrowest};
-use crate::rebuild::{Carrier, RebuildError, publish, publish_from, wire};
+use crate::rebuild::{Carrier, Last, RebuildError, publish, publish_from, wire};
 
 /// The arrangement's phase.
 const ARRANGEMENT: Phase = Phase::new("arrangement");
@@ -194,11 +194,11 @@ struct Scene<'a> {
 }
 
 /// What an earlier merge and naming kept: the merge's memo and the names' ids (G139).
-pub(crate) type Again<'a> = (&'a Memo, &'a NameIds, Option<&'a Order>);
+pub(crate) type Again<'a> = (&'a Memo, &'a NameIds, Option<&'a Last>);
 
-/// What a selection's naming and publication kept for the next: the names' ids and the order the
-/// publication found (G139, G139a).
-pub(crate) type Published = (NameIds, Option<Order>);
+/// What a selection's naming and publication kept for the next: the names' ids and what the
+/// publication kept (G139, G139a).
+pub(crate) type Published = (NameIds, Option<Last>);
 
 /// What one result of a selection is told.
 #[derive(Clone, Copy)]
@@ -463,8 +463,8 @@ impl<'a> Scene<'a> {
             rounded,
         } = name(self.op, merged, pieces, &sources)?;
         let given = (Some(&names), Some(rounded.as_slice()));
-        let start = self.reuse.and_then(|(_, _, order)| order);
-        let (body, order) = publish_from(merged, (carriers, job.open), given, start, meter)?;
+        let last = self.reuse.and_then(|(_, _, last)| last);
+        let (body, last) = publish_from(merged, (carriers, job.open), given, last, meter)?;
         let history = Some(history);
         Ok((
             Combined {
@@ -474,7 +474,7 @@ impl<'a> Scene<'a> {
                 cell: None,
             },
             qualified,
-            (ids, order),
+            (ids, last),
         ))
     }
 
