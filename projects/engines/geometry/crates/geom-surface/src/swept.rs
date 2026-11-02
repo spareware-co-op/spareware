@@ -45,7 +45,9 @@ use alloc::vec::Vec;
 
 use geom_curve::moved::Motion;
 use geom_curve::tight::{self, point};
-use geom_curve::{CurveError, CurveKind, DerivativeBound, Frame, ParamCurve, ParamMap, Trimmed};
+use geom_curve::{
+    CurveError, CurveKind, DerivativeBound, Frame, NurbsForm, ParamCurve, ParamMap, Trimmed,
+};
 use geom_math::TypedTransform;
 
 use geom_num::interval::Interval;
@@ -814,6 +816,14 @@ fn circle(a: f64, b: f64, meter: &mut WorkMeter<'_>) -> Result<(Form1, f64), Cur
     ))
 }
 
+/// A rail as Taylor pieces on its own parameter, cut at its breaks.
+fn between(
+    rail: &Trimmed<3>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Changed<NurbsForm<3>>, CurveError> {
+    geom_curve::taylor::same_parameter_between(rail, &rail.breaks(), 9, 0.125, meter)
+}
+
 impl Swept {
     #[allow(
         clippy::too_many_lines,
@@ -918,8 +928,8 @@ impl Swept {
                         f2.deviation,
                     )
                 } else {
-                    let g1 = geom_curve::taylor::same_parameter(first, 9, 0.125, meter)?;
-                    let g2 = geom_curve::taylor::same_parameter(second, 9, 0.125, meter)?;
+                    let g1 = between(first, meter)?;
+                    let g2 = between(second, meter)?;
                     (
                         g1.value.curve,
                         g2.value.curve,

@@ -24,6 +24,12 @@
 //!   the weight sum relative to itself because every term is positive, and the division one more.
 //!   On a clamped curve the ends are the end control points exactly (for a rational curve, the
 //!   quotient w·P / w, rounded once).
+//! - **Underflow.** The bounds here are relative, so where a product falls below 2^−1022 (gradual
+//!   underflow) a rounding may also err by up to 2^−1075 absolutely: each bound gains n·2^−1074
+//!   for its count n of roundings (7p + 1 for a point, 7p + 3 or e below for a derivative); for a
+//!   rational curve, whose weights are taken in the normal range, n·2^−1074·(1 + 1 / Σ `N_j`·`w_j`),
+//!   the roundings before the division scaled by it and the division's own not (piece G69's fuzz
+//!   target found the point bound broken without it, at results near 2^−1074).
 //! - **Derivatives.** A nonrational derivative of order k ≥ 1 is within `γ_(7p+3)` · Σ `M_j`·|`P_j`|.
 //!   A rational derivative of order k is within `γ_e` · `MC_k`, e = (k + 1)(14p + 8 + k), where
 //!   `MC_k` = (Σ `M_(k,j)`·|`w_j`·`P_j`| + `Σ_(i=1..k)` C(k, i) · (Σ `M_(i,j)`·`w_j`) · `MC_(k−i)`) / Σ `N_j`·`w_j`
