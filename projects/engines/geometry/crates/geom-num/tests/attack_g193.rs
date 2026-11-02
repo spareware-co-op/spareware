@@ -913,7 +913,7 @@ fn every_narrowed_root_holds_its_crossing_in_every_quarter() {
         assert_eq!(narrowed.count(), 4);
         // θ is within 2 · 2^−depth. The interval forms of cos θ and sin θ, a numerator over a
         // denominator that both move with x, at most double that, and round a few ulps out.
-        let within = 4.0 * 0.5_f64.powi(depth as i32) + 1e-14;
+        let within = 4.0 / (1_u128 << depth) as f64 + 1e-14;
         for (root, (x, y)) in narrowed.iter().zip(crossings) {
             let [c, s] = root.angle().unwrap();
             assert!(
