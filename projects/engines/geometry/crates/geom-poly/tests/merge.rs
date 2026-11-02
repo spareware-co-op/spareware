@@ -878,23 +878,37 @@ fn scaled(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
         .collect()
 }
 
-/// The name of the grid point `at` among `pieces`: of the planes of every corner there (a piece's
-/// face and two bounds in turn), the first three in plane order that meet in one point.
-fn first_three(pieces: &[Outward], at: P3) -> Tpi {
+/// The name the merge gives the point `at` among `pieces`: a grid point's three axis planes; for a
+/// point off the grid, of the planes of every corner there (a piece's face and two bounds in turn),
+/// the first three in plane order that meet in one point.
+fn first_three(pieces: &[Outward], at: &Tpi) -> Tpi {
+    let near = at.to_grid().unwrap();
+    if near.is_exact() {
+        let p = near.value();
+        return Tpi::meeting(up(0, p.x.get()), up(1, p.y.get()), up(2, p.z.get())).unwrap();
+    }
     let mut through = Vec::new();
     for outward in pieces {
         let Piece { face, bounds } = &outward.piece;
         let after = bounds.iter().cycle().skip(1);
         for (bound, next) in bounds.iter().zip(after) {
-            let near = Tpi::meeting(*face, *bound, *next)
-                .unwrap()
-                .to_grid()
-                .unwrap();
-            if near.is_exact() && near.value() == at {
-                through.extend([*face, *bound, *next]);
+            let corner = [*face, *bound, *next];
+            if corner
+                .iter()
+                .all(|plane| plane.side_of_tpi(at).unwrap() == Sign::Zero)
+            {
+                through.extend(corner);
             }
         }
     }
+    // The scene keeps every split of the boxes, 2x = odd on one axis, away from these points.
+    let split = |p: &Plane| {
+        let n = p.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.abs() == 2)
+            && p.d() % 2 != 0
+    };
+    assert!(!through.iter().any(split), "a split through {at:?}");
     through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
     through.dedup();
     for (i, a) in through.iter().enumerate() {
@@ -910,23 +924,33 @@ fn first_three(pieces: &[Outward], at: P3) -> Tpi {
 }
 
 #[test]
-fn a_point_is_named_by_the_first_three_planes_through_it_however_they_are_written() {
-    // Faces on odd whole steps, written with normals one long, and the same faces written with
-    // normals two long and even offsets. Neither is a split of the boxes, 2x = odd, though the one
-    // shares its odd offset with them and the other its normal; and no split passes through a grid
-    // point, so any plane through a vertex here may name it.
-    let blocks = [block([1, 1, 1], [5, 7, 9]), block([3, 3, 3], [11, 13, 7])];
+fn a_point_is_named_the_same_however_its_planes_are_written() {
+    // A block's faces on odd whole steps, written with normals one long, and the same faces written
+    // with normals two long and even offsets. Neither is a split of the boxes, 2x = odd, though the
+    // one shares its odd offset with them and the other its normal. A grid point is named by its
+    // axis planes. A spike's three edges up from (4, 4, 4) cross the block's top, z = 9, off the
+    // grid at thirds and seventeenths, never on a half step, so no split passes there, and the
+    // first three planes through each such point name it.
+    let mut polygons = scene(&[block([1, 1, 1], [9, 9, 9])]);
+    let spike = [[4, 4, 4], [6, 5, 19], [5, 7, 19], [3, 6, 21]];
+    tetrahedron(spike, 1, &mut polygons).unwrap();
     for k in [1, 2] {
-        let polygons = scaled(&scene(&blocks), k);
+        let polygons = scaled(&polygons, k);
         for leaf in [1, 2, 4, 1000] {
             let pieces = kept(&polygons, &WindingTest::unite(), leaf);
             let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
             closed(&m, &pieces);
-            assert!(m.vertices.len() > 8, "two blocks crossing");
+            let off = m
+                .vertices
+                .iter()
+                .filter(|v| !v.to_grid().unwrap().is_exact());
+            assert_eq!(
+                off.count(),
+                3,
+                "k {k}, leaf {leaf}: the spike's edges through the top"
+            );
             for (at, point) in m.vertices.iter().enumerate() {
-                let near = point.to_grid().unwrap();
-                assert!(near.is_exact());
-                let name = first_three(&pieces, near.value());
+                let name = first_three(&pieces, point);
                 assert_eq!(*point, name, "k {k}, leaf {leaf}, vertex {at}");
             }
         }
