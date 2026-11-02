@@ -50,6 +50,20 @@ A patched body equals the body a full publish gives, bit for bit: the arenas, th
 
 About 60 of the 76 million a move, by estimate from the profile above (unmeasured until built), taking the move from 432 million to about 370 million. It does not reach 16 ms alone. The rest is the merge's and naming's passes over the whole wall: the merge 160 million a move and naming 120 million, each linear in the wall. G139 keeps those open. Its as-built table records the state, and the gate stays 16 ms.
 
+## As built
+
+| Commit | What it keeps | Three door moves (Callgrind, D03) |
+| --- | --- | --- |
+| c11d6d73 (G139) | The starting point | 1.296G |
+| c1d9ac20, 035ead4c | The publication's order: each arena's sort into name order starts from the last cut's, and ends where a plain sort would (ties broken by row) | 1.267G |
+
+Swapping the last body's equal chunks into the new one saves memory but no instructions: the
+rows are still built, and the new chunks are freed instead of the old. The rest of what the note
+estimates needs the rows of unchanged entities never built: the merge would have to say which of
+its faces, edges and vertices are the last cut's, unchanged, so that only the others' rows are
+written. That is change tracking through the merge's topology (G139's item 4), not a geom-topo
+change.
+
 ## Open risks
 
 - **Moves that change names or counts.** A door pushed into another door, or one that splits a face in two, changes names or counts. It publishes in full, at today's cost.
