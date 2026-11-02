@@ -5347,6 +5347,14 @@
       "reason": "The tests stop it by their timeout: every equation of the square part reads the variable it determines, so the walk meets its own equation as a next one; the mutant walks only into equations already numbered, so it walks into that one again, renumbering it each time, for ever. It is a hang the tests catch; kept so that the judge counts it as one."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in layers",
+      "line_text": "} else if get(depth, w)? == NONE {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The breadth-first walk queues an equation the first time it is reached. The mutant queues those already reached, again each time one is seen, so on any cycle of the graph the queue never empties, and the tests stop it by their timeout."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
       "mutant": "replace match guard node.bytes == bytes with true in NameGraph::insert",
       "line_text": "Some(node) if node.bytes == bytes => Ok(id),",
@@ -5737,6 +5745,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The sign is given only at full rank, when every diagonal is a live pivot. A column is dead when what is left of it is at most tol times the largest, and tol is never negative, so a column with nothing left is dead: a live pivot is never 0, and < and <= agree on it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace SparseQr::solve_cost -> u64 with 0",
+      "line_text": "wide(self.v_rows.len())",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "solve_cost is what each solve charges the meter. The sketch solver's damping and continuation loops end on their budget where nothing else ends them (the ledger's other hangs in solve.rs); charged nothing per solve, they run until the tests' timeout. It hangs; it never returns a wrong answer."
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
