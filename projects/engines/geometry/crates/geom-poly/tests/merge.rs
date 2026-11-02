@@ -12,7 +12,7 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
-use geom_num::plane::Plane;
+use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::merge::{
@@ -758,6 +758,10 @@ fn errors_say_what_was_wrong() {
         "a shell faces inward with no shell around it"
     );
     assert_eq!(
+        MergeError::Defect.to_string(),
+        "the merge's parallel helper broke a rule"
+    );
+    assert_eq!(
         MergeError::from(stopped).to_string(),
         "the meter stopped the merge"
     );
@@ -765,6 +769,58 @@ fn errors_say_what_was_wrong() {
     assert!(num.to_string().starts_with("pieces that cannot be merged"));
     let trace = TraceError::Num(NumError::Degenerate);
     assert_eq!(MergeError::from(trace).to_string(), trace.to_string());
+}
+
+#[test]
+fn a_corner_that_is_no_point_is_reported_from_its_phase() {
+    // A side parallel to the piece's face meets it nowhere: the corner there is no point, and the
+    // merge says so with the arithmetic's own error, read from the phase that made the corners.
+    let z = |at: i128| Plane::new([0, 0, 1], -at).unwrap();
+    let piece = Piece {
+        face: z(0),
+        bounds: vec![
+            Plane::new([1, 0, 0], 0).unwrap(),
+            z(1),
+            Plane::new([0, 1, 0], 0).unwrap(),
+        ],
+    };
+    let outward = Outward {
+        piece,
+        polygon: 0,
+        turned: false,
+        source: 0,
+        front: Winding::new(),
+        back: Winding::new(),
+    };
+    assert!(matches!(
+        merge(&[outward], Merge::RemoveRedundant, &mut meter()),
+        Err(MergeError::Num(_))
+    ));
+}
+
+#[test]
+fn every_budget_stops_a_nested_merge_in_some_step_or_gives_the_same_answer() {
+    // A box with a box-shaped cavity: two shells, so the merge also nests them. Every budget up
+    // to the whole merge's, one unit apart, so each parallel step is stopped in turn.
+    let tool = block([1, 1, 1], [3, 3, 3]);
+    let pieces = kept(&scene(&[A, tool]), &WindingTest::subtract(0), LEAF_POLYGONS);
+    let mut counted = meter();
+    let whole = merge(&pieces, Merge::RemoveRedundant, &mut counted).unwrap();
+    assert_eq!(whole.shells.len(), 2);
+    let used = u64::try_from(counted.used().work).unwrap();
+    for budget in 0..=used {
+        let mut small = WorkMeter::new(Budget::new(budget, u64::MAX));
+        match merge(&pieces, Merge::RemoveRedundant, &mut small) {
+            Ok(m) => assert_eq!(m, whole, "budget {budget}"),
+            Err(e) => assert!(
+                matches!(
+                    e,
+                    MergeError::Stopped(_) | MergeError::Trace(TraceError::Stopped(_))
+                ),
+                "budget {budget}: {e:?}"
+            ),
+        }
+    }
 }
 
 #[test]
@@ -878,6 +934,48 @@ fn two_faces_that_meet_at_their_lowest_corner_keep_their_numbers() {
     assert_eq!(once.faces, again.faces);
     assert_eq!(once.edges, again.edges);
     assert_eq!(once.shells, again.shells);
+}
+
+/// Whether a point's X or w leaves `i128`: the merge then has no cells for it and compares it in
+/// wide integers.
+fn wide(point: &Tpi) -> bool {
+    let (x, w) = point.homogeneous().unwrap();
+    w.to_i128().is_none() || x.iter().any(|c| c.to_i128().is_none())
+}
+
+#[test]
+fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
+    // The corners of two tilted solids at 2^32 times their size, each moved a few steps off that
+    // grid: the planes through them then have coprime coefficients near 2^70, and the points where
+    // three of them meet have coordinates past `i128`, so every comparison of them is wide.
+    let s = 1i64 << 32;
+    let far = |c: [[i64; 3]; 4], nudge: i64| {
+        let mut k = 0;
+        c.map(|p| {
+            p.map(|v| {
+                k += 1;
+                v * s + nudge * k
+            })
+        })
+    };
+    let a = far([[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]], 3);
+    let b = far([[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]], -5);
+    let test = WindingTest::unite();
+    let whole = tilted(&[a, b], &test, 1000).unwrap();
+    assert!(whole.vertices.iter().any(wide));
+    for leaf in [1, 4, 16] {
+        let m = tilted(&[a, b], &test, leaf).unwrap();
+        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+        assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+    }
+    // The points come in lexicographic order, as the wide comparison decides it.
+    for pair in whole.vertices.windows(2) {
+        let (p, q) = (
+            pair[0].to_grid().unwrap().value(),
+            pair[1].to_grid().unwrap().value(),
+        );
+        assert!((p.x.get(), p.y.get(), p.z.get()) <= (q.x.get(), q.y.get(), q.z.get()));
+    }
 }
 
 #[test]

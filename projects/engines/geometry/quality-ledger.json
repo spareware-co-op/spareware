@@ -652,27 +652,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in splits",
-      "line_text": "let odd = middle | 1;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant moves an odd middle one half step down, onto a whole step, and leaves an even one as it was. The split is then on a plane of the grid, where a corner can lie. A polygon in that plane goes on as the in-plane test sends it, a path that meets the plane is settled by the moved planes of Simulation of Simplicity, and a box's vectors do not depend on where it was split (a_small_leaf_gives_the_vectors_a_large_one_does, and the body tests at every leaf size). Odd steps only keep those ties from arising, so no result changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace == with != in divide",
       "line_text": "corner.map(|v| if i.next() == Some(axis) { at } else { v })",
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The children's corners move on the two axes the split is not on, so a child keeps the width along the axis it was split on and splits there for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in divide",
-      "line_text": "key: node.key | bit,",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
@@ -5769,6 +5753,62 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR), below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while left = h + (l - ERR) is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace && with || in splits",
+      "line_text": "(low < odd && odd < high).then_some(odd)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace < with == in splits",
+      "line_text": "(low < odd && odd < high).then_some(odd)",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace < with <= in splits",
+      "line_text": "(low < odd && odd < high).then_some(odd)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "delete ! in arrange_with",
+      "line_text": "while !level.is_empty() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without the not, the loop runs only while the level is empty: an input small enough to be one unit leaves it empty, and an empty level stays empty, so the loop spins and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "delete ! in rings",
+      "line_text": ".filter(|o| !used.contains_key(o))",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without the not, a ring's walk is offered only fins it has used, so it never runs out of a way on and the tests stop it by their timeout. It hangs; it never returns a wrong ring."
     }
   ],
   "coverage_off": [
@@ -6677,6 +6717,5 @@
       "piece": "G41",
       "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
     }
-
   ]
 }

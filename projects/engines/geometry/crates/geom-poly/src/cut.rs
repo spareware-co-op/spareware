@@ -205,16 +205,11 @@ pub fn crosses(a: &Piece, b: &Piece) -> Result<bool, NumError> {
         && along(&line, &b_in, &a_out)? == Ordering::Less)
 }
 
-/// Whether `other`, whose plane passes through `piece`, meets the inside of `piece` along a length:
-/// it crosses `piece`'s plane or ends on it, and holds a length of the line the planes share that
-/// overlaps `piece`'s stretch by a length.
+/// Whether `other`, whose plane passes through `piece` and which crosses `piece`'s plane or ends on
+/// it (as [`can_cut`] found before this is asked), meets the inside of `piece` along a length: it
+/// holds a length of the line the planes share that overlaps `piece`'s stretch by a length.
 fn reaches(piece: &Piece, other: &Piece) -> Result<bool, NumError> {
     let line = Line::new(piece.face, other.face)?;
-    let on = corners(other, &piece.face)?;
-    if !on.contains(&Sign::Zero) && (!on.contains(&Sign::Positive) || !on.contains(&Sign::Negative))
-    {
-        return Ok(false);
-    }
     let (a_in, a_out) = stretch(piece, &line)?;
     let (b_in, b_out) = stretch(other, &line)?;
     Ok(along(&line, &b_in, &b_out)? == Ordering::Less
@@ -270,14 +265,11 @@ fn signs_seen(piece: &Piece, at: &[Option<Meeting>], plane: &Plane) -> Result<[b
     let mut seen = [false; 3];
     let after = piece.bounds.iter().cycle().skip(1);
     for ((bound, next), point) in piece.bounds.iter().zip(after).zip(at) {
-        let sign = corner_sign(piece, (bound, next), point.as_ref(), plane)?;
-        let at = match sign {
-            Sign::Positive => 0,
-            Sign::Negative => 1,
-            Sign::Zero => 2,
-        };
-        if let Some(slot) = seen.get_mut(at) {
-            *slot = true;
+        let [positive, negative, zero] = &mut seen;
+        match corner_sign(piece, (bound, next), point.as_ref(), plane)? {
+            Sign::Positive => *positive = true,
+            Sign::Negative => *negative = true,
+            Sign::Zero => *zero = true,
         }
     }
     Ok(seen)

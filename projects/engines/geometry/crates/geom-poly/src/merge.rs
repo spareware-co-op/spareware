@@ -1799,7 +1799,7 @@ mod tests {
     use geom_num::plane::Plane;
     use geom_num::wide::I256;
 
-    use super::{Cell, line_in_words, wide_line_key};
+    use super::{Cell, CellKey, line_in_words, wide_line_key};
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -1813,6 +1813,23 @@ mod tests {
             Some(exact(a, b, c, d)),
             "{a} / {b} against {c} / {d}"
         );
+    }
+
+    #[test]
+    fn a_cell_key_is_equal_and_ordered_as_its_order_says() {
+        let cells = |a: i128| {
+            [
+                Cell::new(a, 3).unwrap(),
+                Cell::new(1, 2).unwrap(),
+                Cell::new(-a, 5).unwrap(),
+            ]
+        };
+        for (a, b) in [(1, 1), (1, 2), (4, -2)] {
+            let (p, q) = (cells(a), cells(b));
+            let (one, other) = (CellKey(&p), CellKey(&q));
+            assert_eq!(one == other, one.cmp(&other) == Ordering::Equal);
+            assert_eq!(one.partial_cmp(&other), Some(one.cmp(&other)));
+        }
     }
 
     proptest! {
