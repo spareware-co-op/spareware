@@ -49,8 +49,7 @@ use geom_run::{Stopped, WorkMeter};
 use crate::convex::{Piece, opposite};
 use crate::order::{Flap, Line, Ray, about, around};
 use crate::plane::canonical;
-use crate::subdivide::around as box_around;
-use crate::trace::{Classified, Polygon, TraceError, classify};
+use crate::trace::{Cell, Classified, Polygon, TraceError, classify};
 use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
 
 /// What merges (11.5).
@@ -932,12 +931,106 @@ fn polygons_of(pieces: &[&Piece], entry: Option<Entry>) -> Vec<Polygon> {
         .collect()
 }
 
-/// The vectors in front of and behind the first of `polygons`, traced through all of them.
+/// Each shell's box, as [`crate::subdivide::around`] gives it for the shell's pieces. The merged points are those
+/// pieces' corners, exactly, and rounding to the grid keeps their order, so a shell's least and
+/// greatest point on each axis, rounded, are the least and greatest of its corners rounded: six
+/// roundings a shell where [`crate::subdivide::around`] takes one a corner.
+fn shell_cells(
+    held: &[Held<'_>],
+    shell_of_piece: &[usize],
+    number: &[usize],
+    points: &[Corner],
+    shells: usize,
+) -> Result<Vec<Cell>, MergeError> {
+    // The least and greatest point of each shell on each axis, as places in `points`.
+    let mut extremes: Vec<Option<[[usize; 2]; 3]>> = alloc::vec![None; shells];
+    let mut base = 0usize;
+    for (entry, shell) in held.iter().zip(shell_of_piece) {
+        let k = entry.piece.bounds.len();
+        let slot = extremes.get_mut(*shell).ok_or(MergeError::Open)?;
+        for id in number.iter().skip(base).take(k) {
+            let at = points.get(*id).ok_or(MergeError::Open)?;
+            let mut ends = slot.unwrap_or([[*id; 2]; 3]);
+            for (axis, [low, high]) in ends.iter_mut().enumerate() {
+                let along = |place: usize| -> Result<Ordering, MergeError> {
+                    let other = points.get(place).ok_or(MergeError::Open)?;
+                    let (p, q) = (at.x.get(axis), other.x.get(axis));
+                    let order = p
+                        .zip(q)
+                        .and_then(|(p, q)| ratio_order::<5, 4, 9>(p, &at.w, q, &other.w));
+                    Ok(order.ok_or(NumError::BudgetExceeded)?)
+                };
+                if along(*low)? == Ordering::Less {
+                    *low = *id;
+                }
+                if along(*high)? == Ordering::Greater {
+                    *high = *id;
+                }
+            }
+            *slot = Some(ends);
+        }
+        base = base.saturating_add(k);
+    }
+    let rounded = |place: usize, axis: usize| -> Result<i64, MergeError> {
+        let point = points
+            .get(place)
+            .ok_or(MergeError::Open)?
+            .point
+            .to_grid()?
+            .value();
+        let v = [point.x, point.y, point.z].get(axis).map(|c| c.get());
+        v.ok_or(MergeError::Open)
+    };
+    let half = |v: i64, by: i64| v.saturating_mul(2).saturating_add(by);
+    let mut cells = Vec::with_capacity(shells);
+    for ends in &extremes {
+        let ends = ends.ok_or(MergeError::Open)?;
+        let mut cell = Cell {
+            low: [0; 3],
+            high: [0; 3],
+        };
+        for (axis, (([low, high], l), h)) in ends
+            .iter()
+            .zip(&mut cell.low)
+            .zip(&mut cell.high)
+            .enumerate()
+        {
+            *l = half(rounded(*low, axis)?, -3);
+            *h = half(rounded(*high, axis)?, 3);
+        }
+        cells.push(cell);
+    }
+    Ok(cells)
+}
+
+/// The box around the shells `among`: the least and greatest of their boxes.
+fn cell_of(cells: &[Cell], among: impl IntoIterator<Item = usize>) -> Result<Cell, MergeError> {
+    let mut whole: Option<Cell> = None;
+    for shell in among {
+        let one = *cells.get(shell).ok_or(MergeError::Open)?;
+        whole = Some(match whole {
+            None => one,
+            Some(mut both) => {
+                for (low, v) in both.low.iter_mut().zip(one.low) {
+                    *low = (*low).min(v);
+                }
+                for (high, v) in both.high.iter_mut().zip(one.high) {
+                    *high = (*high).max(v);
+                }
+                both
+            }
+        });
+    }
+    whole.ok_or(MergeError::Open)
+}
+
+/// The vectors in front of and behind the first of `polygons`, traced through all of them from
+/// `cell`, a box around them all.
 fn sides_of_first(
     polygons: &[Polygon],
+    cell: Cell,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Winding, Winding), MergeError> {
-    let cell = box_around(polygons)?;
     let lists: Vec<Vec<Piece>> = polygons
         .iter()
         .take(1)
@@ -951,6 +1044,7 @@ fn sides_of_first(
 /// Which of the shells `among` lie around a point behind shell `at`.
 fn around_shell(
     of_shell: &[Vec<&Piece>],
+    cells: &[Cell],
     at: usize,
     among: &[usize],
     meter: &mut WorkMeter<'_>,
@@ -962,7 +1056,8 @@ fn around_shell(
         let others = of_shell.get(*shell).ok_or(MergeError::Open)?;
         polygons.extend(polygons_of(others, Some(number(*shell))));
     }
-    let (_, back) = sides_of_first(&polygons, meter)?;
+    let cell = cell_of(cells, core::iter::once(at).chain(among.iter().copied()))?;
+    let (_, back) = sides_of_first(&polygons, cell, meter)?;
     Ok(among
         .iter()
         .copied()
@@ -979,8 +1074,10 @@ fn nest(
     held: &[Held<'_>],
     shell_of_piece: &[usize],
     shells: usize,
+    (number, points): (&[usize], &[Corner]),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<(bool, Option<usize>)>, MergeError> {
+    let cells = shell_cells(held, shell_of_piece, number, points, shells)?;
     let mut of_shell: Vec<Vec<&Piece>> = alloc::vec![Vec::new(); shells];
     for (entry, shell) in held.iter().zip(shell_of_piece) {
         of_shell
@@ -990,9 +1087,10 @@ fn nest(
             .for_each(|list| list.push(entry.piece));
     }
     let mut outer = Vec::with_capacity(shells);
-    for list in &of_shell {
+    for (at, list) in of_shell.iter().enumerate() {
         meter.charge(1)?;
-        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), meter)?;
+        let cell = cell_of(&cells, core::iter::once(at))?;
+        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), cell, meter)?;
         outer.push(front.count(0) == 0);
     }
     let outers: Vec<usize> = (0..shells)
@@ -1005,11 +1103,11 @@ fn nest(
             continue;
         }
         meter.charge(1)?;
-        let candidates = around_shell(&of_shell, at, &outers, meter)?;
+        let candidates = around_shell(&of_shell, &cells, at, &outers, meter)?;
         // The innermost of those around it lies inside all the others.
         let mut best = None;
         for shell in &candidates {
-            let depth = around_shell(&of_shell, *shell, &candidates, meter)?.len();
+            let depth = around_shell(&of_shell, &cells, *shell, &candidates, meter)?.len();
             if best.is_none_or(|(most, _)| depth >= most) {
                 best = Some((depth, *shell));
             }
@@ -1278,7 +1376,13 @@ pub fn merge_with(
     } else if held.is_empty() {
         Vec::new()
     } else {
-        nest(&held, &shell_of_piece, tops.len(), meter)?
+        nest(
+            &held,
+            &shell_of_piece,
+            tops.len(),
+            (&number, &points),
+            meter,
+        )?
     };
 
     // Faces and shells.

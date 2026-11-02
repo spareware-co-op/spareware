@@ -1409,7 +1409,7 @@
           "guarantees": [
             "**Every tool is accounted for.** Each is reported, and one that touched nothing inside the host is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently.",
             "**Atomic by default.** A tool that cannot enter fails the call and names itself. Under [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools are left out depends only on the inputs.",
-            "**A cut again is a cut afresh.** A [`Cut`] may carry the last cut's [`CutResult::cache`]: boxes it holds the same polygons for are not solved again, and the result, its report and the work are what a cut without it gives (11.6; tested on a moved door).",
+            "**A cut again is a cut afresh.** A [`Cut`] may carry the last cut's [`CutResult::cache`]: operands it holds the same bodies for are not prepared again, boxes it holds the same polygons for are not solved again, and the result, its report, the cache and the work are what a cut without it gives (11.6, and G139's incremental re-cut, `projects/kit/notes/G139-incremental-rebuild.md`; tested on a moved door).",
             "**Hosts run in parallel, and the threads do not show.** Results come in input order, and one host alone has the threads for its boxes."
           ],
           "job": "Batch cutting: any number of tools through any number of hosts (11.6).",
