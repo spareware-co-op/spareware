@@ -5601,6 +5601,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "near and far are the two radii: equal, either disc gives the class the same reach, the radius times the gap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/tangent.rs",
+      "mutant": "replace > with < in ellipse_meet",
+      "line_text": "let wraps = if count > 2 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Both rules agree for the nearest pair, a cap's two crossings, at every count: with three or more, the pair is the two ends exactly when it straddles theta = +-pi, one below t = -1 and the other past t = 1, and then not neighbours by index; with two, the pieces decide either way; with one, both give the same root twice."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/tangent.rs",
+      "mutant": "replace < with <= in meet",
+      "line_text": "Curve2::Circle(c) => circle_meet(&c.disc()?, disc, side == Sign::Positive || reach < 0.0),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A depth's reach is 1 or -1 (depth() sets nothing else), never 0, so reach <= 0 is reach < 0."
     }
   ],
   "coverage_off": [
