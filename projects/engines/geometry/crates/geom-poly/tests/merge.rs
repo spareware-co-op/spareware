@@ -1011,6 +1011,77 @@ fn an_edge_breaks_where_a_corner_rests_on_it() {
     assert_eq!(counts(&m), [2, 10, 10, 19, 12]);
 }
 
+/// The name the merge gives a point off the grid: the first three planes through it, among the
+/// planes of the corners of `pieces` there, in plane order and leaving out the boxes' splits (one
+/// normal component of two and an odd offset: 2x = odd), that meet in one point.
+fn named_off_the_grid(pieces: &[Outward], at: &Tpi) -> Tpi {
+    let split = |p: &Plane| {
+        let n = p.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.unsigned_abs() == 2)
+            && p.d() % 2 != 0
+    };
+    let mut through = Vec::new();
+    for outward in pieces {
+        let Piece { face, bounds } = &outward.piece;
+        let after = bounds.iter().cycle().skip(1);
+        for (bound, next) in bounds.iter().zip(after) {
+            let three = [*face, *bound, *next];
+            if three
+                .iter()
+                .all(|plane| plane.side_of_tpi(at).unwrap() == Sign::Zero)
+            {
+                through.extend(three);
+            }
+        }
+    }
+    through.retain(|plane| !split(plane));
+    through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    through.dedup();
+    for (i, a) in through.iter().enumerate() {
+        for (j, b) in through.iter().enumerate().skip(i + 1) {
+            for c in through.iter().skip(j + 1) {
+                if let Ok(point) = Tpi::new(*a, *b, *c) {
+                    return point;
+                }
+            }
+        }
+    }
+    panic!("no three planes meet there")
+}
+
+#[test]
+fn faces_that_look_like_splits_name_the_points_on_them() {
+    // A block whose faces lie on odd whole steps, its planes written with normals one long, then
+    // two long with even offsets, and a tilted solid whose edges cross those faces off the grid.
+    // The boxes split on half steps, 2x = odd; neither way of writing a face on x = 1 is one, so
+    // the face is among the planes a point on it may be named by.
+    let turned_out = |t: [[i64; 3]; 4]| {
+        let fits = tetrahedron(t, 0, &mut Vec::new()).is_some();
+        if fits { t } else { [t[1], t[0], t[2], t[3]] }
+    };
+    let wedge = turned_out([[-4, 3, 4], [14, 5, 6], [5, 15, 3], [4, 4, 15]]);
+    for k in [1, 2] {
+        let mut polygons = scaled(&scene(&[block([1, 1, 1], [9, 9, 9])]), k);
+        tetrahedron(wedge, 1, &mut polygons).unwrap();
+        for leaf in [1, 4, 1000] {
+            let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            let mut off = 0;
+            for (at, point) in m.vertices.iter().enumerate() {
+                if point.to_grid().unwrap().is_exact() {
+                    continue;
+                }
+                off += 1;
+                let name = named_off_the_grid(&pieces, point);
+                assert_eq!(*point, name, "k {k}, leaf {leaf}, vertex {at}");
+            }
+            assert!(off > 0, "no point off the grid");
+        }
+    }
+}
+
 fn any_block() -> impl Strategy<Value = Block> {
     ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
         low,
