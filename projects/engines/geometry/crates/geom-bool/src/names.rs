@@ -1016,13 +1016,19 @@ fn name_vertices(
         }
     }
     let mut rows = Rows::default();
+    // The operands whose names are kept, in order: only they can give a vertex its name.
+    let mut keeping = Vec::new();
+    for (place, one) in inputs.iter().enumerate() {
+        let operand = sources.operands.get(place).ok_or(NamingError::Broken)?;
+        if operand.keeps {
+            keeping.push((operand, one));
+        }
+    }
     let places = merged.vertices.iter().zip(&around).zip(&made_from);
     for (at, ((point, set), from)) in places.enumerate() {
         let mut own = None;
-        for (place, one) in inputs.iter().enumerate() {
-            let operand = sources.operands.get(place).ok_or(NamingError::Broken)?;
+        for (operand, one) in &keeping {
             if own.is_none()
-                && operand.keeps
                 && let Some(row) = found_vertex(one, point, key_at(keys, at)?)?
             {
                 // Not a name two operands brought (per name, as for edges).
