@@ -824,6 +824,21 @@ fn tilted(solids: &[[[i64; 3]; 4]], test: &WindingTest, leaf: usize) -> Option<M
 }
 
 #[test]
+fn tilted_solids_near_the_edge_of_the_grid_merge_as_they_do_near_the_origin() {
+    // Scaled by 2^32, the planes' normals reach about 2^77 and the points' homogeneous coordinates
+    // pass what an i128 holds, so the merge compares them on its wide path, not in machine words.
+    let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
+    let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];
+    let scaled = |solid: [[i64; 3]; 4]| solid.map(|p| p.map(|v| v << 32));
+    let test = WindingTest::unite();
+    let near = tilted(&[a, b], &test, 1000).unwrap();
+    for leaf in [1, 1000] {
+        let far = tilted(&[scaled(a), scaled(b)], &test, leaf).unwrap();
+        assert_eq!(counts(&far), counts(&near), "leaf {leaf}");
+    }
+}
+
+#[test]
 fn tilted_solids_meet_where_three_planes_do() {
     let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
     let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];

@@ -293,25 +293,46 @@ struct Corner {
     through: Vec<Plane>,
 }
 
-/// The sign of a / b − c / d for b and d positive, in `Wide<M>`.
+/// The sign of a / b − c / d for b and d positive: in machine words when they hold it, else in
+/// `Wide<M>`.
 fn ratio_order<const A: usize, const B: usize, const M: usize>(
     a: &Wide<A>,
     b: &Wide<B>,
     c: &Wide<A>,
     d: &Wide<B>,
 ) -> Option<Ordering> {
+    if let Some(order) = ratio_in_words(a, b, c, d) {
+        return Some(order);
+    }
     let left = a.resize::<M>()?.checked_mul(&d.resize::<M>()?)?;
     let right = c.resize::<M>()?.checked_mul(&b.resize::<M>()?)?;
     Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
 }
 
-/// Points lexicographically: at most 2^294 · 2^252, in 576 bits.
+/// [`ratio_order`] in checked `i128` arithmetic: the same exact sign when a, b, c and d and both
+/// products a · d and c · b fit, and `None`, to step aside to the wide path, when one does not.
+/// Points and lines near the grid's smaller coordinates take it, as most of a building's do.
+fn ratio_in_words<const A: usize, const B: usize>(
+    a: &Wide<A>,
+    b: &Wide<B>,
+    c: &Wide<A>,
+    d: &Wide<B>,
+) -> Option<Ordering> {
+    let left = a.to_i128()?.checked_mul(d.to_i128()?)?;
+    let right = c.to_i128()?.checked_mul(b.to_i128()?)?;
+    Some(left.cmp(&right))
+}
+
+/// Points lexicographically: at most 2^294 · 2^252, in 576 bits. A coordinate is compared only
+/// while those before it are equal.
 fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
-    let mut order = Ordering::Equal;
     for (p, q) in a.x.iter().zip(&b.x) {
-        order = order.then(ratio_order::<5, 4, 9>(p, &a.w, q, &b.w)?);
+        let order = ratio_order::<5, 4, 9>(p, &a.w, q, &b.w)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
     }
-    Some(order)
+    Some(Ordering::Equal)
 }
 
 /// A corner of `face` where `p` and `q` meet.
@@ -384,16 +405,21 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
 }
 
 /// The order of two lines, equal when they are one line: by which component of the direction comes
-/// first, then every coordinate over that component, below 2^418 in 512 bits.
+/// first, then every coordinate over that component, below 2^418 in 512 bits, each compared only
+/// while those before it are equal.
 fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     let (over_a, over_b) = (a.coordinates.get(a.first)?, b.coordinates.get(b.first)?);
-    let mut order = a.first.cmp(&b.first);
-    if order == Ordering::Equal {
-        for (p, q) in a.coordinates.iter().zip(&b.coordinates) {
-            order = order.then(ratio_order::<4, 4, 8>(p, over_a, q, over_b)?);
+    let first = a.first.cmp(&b.first);
+    if first != Ordering::Equal {
+        return Some(first);
+    }
+    for (p, q) in a.coordinates.iter().zip(&b.coordinates) {
+        let order = ratio_order::<4, 4, 8>(p, over_a, q, over_b)?;
+        if order != Ordering::Equal {
+            return Some(order);
         }
     }
-    Some(order)
+    Some(Ordering::Equal)
 }
 
 /// `order`, with a failure written down: a sort's comparison cannot return one.
