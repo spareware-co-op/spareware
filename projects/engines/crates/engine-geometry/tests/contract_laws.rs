@@ -873,6 +873,28 @@ fn loopless() -> Arc<Body> {
     })
 }
 
+/// The box with its corner at the origin held as where its three face planes there meet, as the
+/// rebuild stores a point off the grid (G129): the same place, with no grid point to sum.
+fn met() -> Arc<Body> {
+    edited(geom_topo::BodyKind::Solid, |a| {
+        let corner = (0..a.points.len())
+            .map(|at| geom_topo::Ix::new(at).unwrap())
+            .find(|&at| {
+                matches!(a.points.get(at), Some(geom_topo::PointKind::Grid(q)) if *q == p(0, 0, 0))
+            })
+            .unwrap();
+        let mut plane = |n: [i128; 3]| {
+            a.planes
+                .push(geom_num::plane::Plane::new(n, 0).unwrap())
+                .unwrap()
+        };
+        let planes = [plane([1, 0, 0]), plane([0, 1, 0]), plane([0, 0, 1])];
+        a.points
+            .set(corner, geom_topo::PointKind::Meet(planes))
+            .unwrap();
+    })
+}
+
 /// The box published as a sheet.
 fn sheet() -> Arc<Body> {
     edited(geom_topo::BodyKind::Sheet, |_| {})
@@ -958,6 +980,12 @@ fn drive_area() -> Driver {
                 "NoLoops",
                 area("query.area of a face with no loop", loopless(), 0),
             ),
+            trigger(
+                "ImplicitVertex",
+                asked("query.area at a meeting of planes", met(), |c, b| {
+                    twice_area(c, b, min_z(b), Exactness::Exact)
+                }),
+            ),
         ],
         edge,
         Exactness::Exact,
@@ -1031,6 +1059,10 @@ fn drive_volume() -> Driver {
             trigger(
                 "NoLoops",
                 volume("query.volume of faces with no loop", loopless()),
+            ),
+            trigger(
+                "ImplicitVertex",
+                volume("query.volume at a meeting of planes", met()),
             ),
             trigger("NotSolid", volume("query.volume of a sheet", sheet())),
         ],
