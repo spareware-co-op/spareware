@@ -1561,6 +1561,28 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "O(e · p) plane tests for the e edges of the target and the p polygons of the others, and a trace over every polygon for each piece. Charges the meter what the traces charge.",
+          "does": "each straight edge of the target runs between grid points, on the line two planes through its ends meet in. A polygon of another operand whose plane has the edge's ends strictly on either side, and holds the meeting point within its bounds, splits the edge there: a point where three planes meet. The splits are put in order along the edge by the sign each split's plane takes at the others. Each piece between stops takes the vector just past its start, traced from the corner of a box around every polygon and the wire, with the plane it starts on facing along the edge and moved towards its end, as a piece of face takes the vector in front of it (11.2). [`kept`] keeps the pieces whose vector passes the test, a run of kept pieces along one edge as one; [`trimmed`] keeps the runs of pieces, unbroken by a split or by a wire vertex on another operand's face, that hold a seed. Both give the [`Curves`] the wire rebuild takes, their vertices in the order the wire meets them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
+          "guarantees": [
+            "**Exact.** Every stop is the meeting of three planes and every comparison a sign; nothing rounds but the published edges' shadows (8.3).",
+            "**Chosen by the others alone.** A wire has no inside and adds nothing to any vector, so a piece is never classified by its own wire (11.1).",
+            "**Refused, never guessed.** A seed on no piece is [`CombineDetail::SeedOutside`], and one on a split, on a wire vertex on another operand's face, or between pieces of two runs, is [`CombineDetail::SeedOnBoundary`]."
+          ],
+          "job": "Wire targets of Keep and Trim: a wire's edges cut where the other operands' faces cross them, each piece chosen by the others' winding numbers or by seeds (11.1).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.1's sheet and wire targets and 11.2's winding vectors (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::wires",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-bool",

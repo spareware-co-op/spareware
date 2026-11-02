@@ -50,3 +50,4 @@ pub mod names;
 pub mod operand;
 pub mod passage;
 pub mod rebuild;
+mod wires;
