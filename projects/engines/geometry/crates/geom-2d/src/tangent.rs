@@ -58,7 +58,9 @@ use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 
 use crate::accept::Accept;
 use crate::carrier::{Carriers, Circle2, Curve2, CurveIx, Line2};
-use crate::ideal::{self, Aim, Equation, Foot, Pair, Solved, dd_of, dot, minus, norm, over};
+use crate::ideal::{
+    self, Aim, Equation, Foot, Pair, Solved, dd_of, dot, minus, norm, over, scaled,
+};
 use crate::point::{PointError, Pt2};
 
 /// The phase of [`fillet_all`].
@@ -1250,10 +1252,17 @@ pub fn common_tangent(
     );
     let (a, b) = (dy.checked_neg().ok_or(fits)?, dx);
     let normal = [dd(a)?, dd(b)?];
-    let offset = dot(normal, here)?.sub(start.mul(norm(normal)?)?)?;
+    // The offset about the grid point nearest the foot of the first centre on the line, so what is
+    // rounded is under a step of the normal: about the centre itself it is the start times the
+    // normal's length, past the 2^100 a double-double rounds for a circle of radius 2^36.
+    let size = norm(normal)?;
+    let foot = minus(here, scaled(over(normal, size)?, start)?)?;
+    let about = shifted(origin, foot)?;
+    let moved = from_origin(about, origin)?;
+    let offset = dot(normal, minus(here, moved)?)?.sub(start.mul(size)?)?;
     let c = a
-        .checked_mul(i128::from(origin.x.get()))
-        .zip(b.checked_mul(i128::from(origin.y.get())))
+        .checked_mul(i128::from(about.x.get()))
+        .zip(b.checked_mul(i128::from(about.y.get())))
         .and_then(|(p, q)| p.checked_add(q))
         .zip(Some(round(offset)?))
         .and_then(|(p, q)| p.checked_add(q))

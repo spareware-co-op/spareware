@@ -1408,3 +1408,206 @@ fn a_circle_about_another_touches_it_at_its_far_side() {
         (Root::Second, Root::Second)
     );
 }
+
+/// The greatest common divisor of whole numbers' magnitudes.
+fn gcd(mut a: i128, mut b: i128) -> i128 {
+    (a, b) = (a.abs(), b.abs());
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
+}
+
+#[test]
+fn a_huge_fillet_aims_by_its_chord() {
+    // At a radius of 2^36 steps the chord's angle, 1 / (2r), is below the one aimed at, so the
+    // depth comes from it, and the join lies just over half a step along each line from the ideal
+    // touch: the class's bound of one step is the least whole one past that.
+    let k = 1_i64 << 36;
+    let (mut carriers, [a, b], [first, second]) =
+        left_corner(1 << 38, p2((1 << 38) + 2 * k, 3 * k));
+    let done = fillet(
+        &mut carriers,
+        &first,
+        &second,
+        1 << 36,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
+    sound(&carriers, &done, a, b);
+    assert_eq!(
+        done.exactness,
+        Exactness::Certified {
+            bound: Steps(1),
+            step: GridStep::Q0
+        }
+    );
+    // The angle each line crosses at is about its chord's, 2^−37.
+    let chord = 1.0 / (1_u64 << 37) as f64;
+    assert!(
+        chord < done.gap.get() && done.gap.get() < 1.1 * chord,
+        "{}",
+        done.gap.get()
+    );
+    assert_eq!(
+        format!("{:?}", carriers.get(done.circle).unwrap()),
+        HUGE_FILLET,
+        "the circle as it was read"
+    );
+    // A tangent to a circle of that radius from far away aims the same way.
+    let (mut carriers, [wheel]) = table([circle(p2(0, 0), 1 << 36)]);
+    let t = tangent_from(
+        &mut carriers,
+        p2(-(1 << 39), 1 << 37),
+        wheel,
+        Sign::Positive,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
+    joined(&carriers, &t.end, t.line, wheel);
+    assert!(t.gap.get() <= ANGULAR.get());
+    assert_eq!(
+        format!(
+            "{:?} {:?} {:#018x}",
+            carriers.get(t.line).unwrap(),
+            t.exactness,
+            t.gap.get().to_bits()
+        ),
+        HUGE_TANGENT,
+        "the line as it was read"
+    );
+}
+
+/// The circle of [`a_huge_fillet_aims_by_its_chord`]'s fillet, as it was read.
+const HUGE_FILLET: &str = "Circle(Disc(Disc { centre: Rational2 { x: 2094352907291988929982650, y: 604462909807314587353072, w: 8796093022208 }, rr: Wide<4>(0x0000000000000000000000004000000000000000000000000000000000000000) }))";
+
+/// Its tangent line, class and gap, as they were read.
+const HUGE_TANGENT: &str = "Line(Carrier { a: 267069911968, b: 695685715759, c: -51208920099628133646336 }) Certified { bound: Steps(1), step: Q0 } 0x3d9fc86bd3ce6bdd";
+
+#[test]
+fn fillet_all_starts_each_arc_where_it_turns_from() {
+    // A left turn's arc starts on the first line, a right turn's on the second, as fillet runs.
+    let left = Corner {
+        before: p2(0, 0),
+        at: p2(10_000, 0),
+        after: p2(10_301, 703),
+    };
+    let right = Corner {
+        before: p2(0, 0),
+        at: p2(10_000, 0),
+        after: p2(10_301, -703),
+    };
+    let mut carriers = Carriers::new();
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let done = fillet_all(
+        &mut carriers,
+        &[left, right],
+        900,
+        GridStep::Q0,
+        &certified(),
+        &Exec::serial(),
+        &mut meter,
+    )
+    .unwrap();
+    // Each corner adds its two lines and its circle, in corner order.
+    let name = |k: u32| {
+        let mut table = Carriers::new();
+        let mut last = None;
+        for _ in 0..=k {
+            last = Some(table.push(line(p2(0, 0), p2(1, 0))).unwrap());
+        }
+        last.unwrap()
+    };
+    let [Some(l), Some(r)] = [done[0], done[1]] else {
+        panic!("{done:?}")
+    };
+    assert!(l.start.on(&carriers, name(0)).unwrap());
+    assert!(l.end.on(&carriers, name(1)).unwrap());
+    assert!(r.start.on(&carriers, name(4)).unwrap());
+    assert!(r.end.on(&carriers, name(3)).unwrap());
+}
+
+#[test]
+fn exact_centres_and_lines_are_in_lowest_terms() {
+    // A semicircle's centre and an exact tangent's coefficients are reduced, as the grid and the
+    // exact questions read them cheapest.
+    for (b0, b1, at) in [
+        (p2(0, 100), p2(1_000, 100), p2(500, 0)),
+        (p2(0, 101), p2(1_000, 101), p2(500, 0)),
+        (p2(0, 300), p2(1_000, 300), p2(600, 0)),
+    ] {
+        let (mut carriers, [a, b]) = table([line(p2(0, 0), p2(1_000, 0)), line(b0, b1)]);
+        let done = semicircle(&mut carriers, a, b, at).unwrap();
+        let ([x, y], w) = disc_of(&carriers, done.circle).centre().coordinates();
+        assert_eq!(gcd(gcd(x, y), w), 1, "{x} {y} {w}");
+    }
+    // The tangent at (6, 8) of the circle of radius 10 about the origin: 3x + 4y = 50.
+    let (mut carriers, [wheel]) = table([circle(p2(0, 0), 10)]);
+    let done = tangent_from(
+        &mut carriers,
+        p2(6, 8),
+        wheel,
+        Sign::Positive,
+        GridStep::Q0,
+        &Accept::Exact,
+    )
+    .unwrap();
+    let Some(Curve2::Line(l)) = carriers.get(done.line) else {
+        panic!()
+    };
+    let ([a, b], c) = l.coefficients();
+    assert_eq!(gcd(gcd(a, b), c), 1, "{a} {b} {c}");
+    assert_eq!(a * a + b * b, 25, "{a} {b} {c}");
+}
+
+#[test]
+fn a_common_tangent_says_how_far_its_wider_join_may_be() {
+    // A circle of radius 2^36 and one of 1,000: a join on the large one may lie further from its
+    // touch, for the same angle, so the class is the large circle's, three or four steps, which the
+    // caller here accepts. Each kind each way round: the line's offset, which about the large
+    // circle's centre is its radius times the normal's length, past what a double-double rounds,
+    // is taken about the foot of the centre on the line.
+    let accept = Accept::Certified {
+        pos: Steps(16),
+        step: GridStep::Q0,
+        gap: ANGULAR,
+    };
+    let (mut carriers, [big, small]) = table([
+        circle(p2(0, 0), 1 << 36),
+        circle(p2(1 << 38, 1 << 37), 1_000),
+    ]);
+    let mut seen = Vec::new();
+    for sides in [
+        [Sign::Positive, Sign::Positive],
+        [Sign::Negative, Sign::Negative],
+        [Sign::Positive, Sign::Negative],
+        [Sign::Negative, Sign::Positive],
+    ] {
+        for (one, two) in [(big, small), (small, big)] {
+            match common_tangent(&mut carriers, one, two, sides, GridStep::Q0, &accept) {
+                Ok(t) => {
+                    joined(&carriers, &t.start, t.line, one);
+                    joined(&carriers, &t.end, t.line, two);
+                    seen.push(format!("{:?} {:#018x}", t.exactness, t.gap.get().to_bits()));
+                }
+                Err(e) => seen.push(format!("{sides:?} {one:?}: {e:?}")),
+            }
+        }
+    }
+    let seen: Vec<&str> = seen.iter().map(String::as_str).collect();
+    assert_eq!(seen, WIDE_TANGENTS);
+}
+
+/// The classes and gaps of [`a_common_tangent_says_how_far_its_wider_join_may_be`], as read.
+const WIDE_TANGENTS: &[&str] = &[
+    "Certified { bound: Steps(3), step: Q0 } 0x3dc13bd69f8137ff",
+    "Certified { bound: Steps(4), step: Q0 } 0x3dc6548ddc92244e",
+    "Certified { bound: Steps(3), step: Q0 } 0x3dc13bd69f8137ff",
+    "Certified { bound: Steps(4), step: Q0 } 0x3dc614aa893f22fb",
+    "Certified { bound: Steps(4), step: Q0 } 0x3dc7748b703ff7b2",
+    "Certified { bound: Steps(4), step: Q0 } 0x3dc6dcc7d5f99846",
+    "Certified { bound: Steps(3), step: Q0 } 0x3dc2198386defd1e",
+    "Certified { bound: Steps(4), step: Q0 } 0x3dc664231d3c4a22",
+];
