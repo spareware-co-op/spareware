@@ -567,6 +567,10 @@ fn the_parser_finds_every_public_function_however_it_is_written() {
 /// it measures there, by module name.
 const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
+        "geom_2d",
+        &[("contact", include_str!("../../geom-2d/src/contact.rs"))],
+    ),
+    (
         "geom_intersect",
         &[
             ("curve", include_str!("../../geom-intersect/src/curve.rs")),
