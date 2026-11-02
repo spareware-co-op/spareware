@@ -551,6 +551,10 @@ fn a_closed_form_that_cannot_decide_says_so() {
     assert_eq!(r.diagnostics()[0].code, geom_intersect::curve::ROUTE);
     let r = meet(&infinite([-9.0, 1.0], [1.0, 0.0]), &e);
     assert_eq!(r.diagnostics().len(), 0);
+    // The ellipse first: the line's closed form, asked the other way round, hands it on too.
+    let r = meet(&e, &infinite([-9.0, 7.0], [1.0, 0.0]));
+    assert_eq!(r.diagnostics().len(), 1);
+    assert_eq!(r.diagnostics()[0].code, geom_intersect::curve::ROUTE);
 }
 
 #[test]
@@ -1811,6 +1815,57 @@ fn a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide() {
     ] {
         assert!(!routed(a, b));
         assert_ne!(meet(a, b).items().len(), 0);
+    }
+    // In space: lines that cannot be told off one plane have a closed form, which hands them on;
+    // rings in two planes, and a line off a ring's plane, have none.
+    let routed = |a: &CurveKind<3>, b: &CurveKind<3>| {
+        meet(a, b)
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "closed-form-to-engine")
+    };
+    let crossed = [
+        segment([0.5, 0.0, 0.0], [2.5, 2.0, 0.0]),
+        segment([0.5, 2.0, 0.0], [2.5, 0.0, 0.0]),
+    ];
+    assert!(routed(&crossed[0], &crossed[1]));
+    let frame = |x: [f64; 3], n: [f64; 3]| Frame::new(x, n).unwrap();
+    let ring = |c: [f64; 3], f: Frame<3>| CurveKind::Circle(Circle::full(c, 2.0, f).unwrap());
+    let flat = ring([0.0, 0.0, 0.0], frame([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]));
+    let upright = ring([1.0, 0.0, 0.0], frame([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]));
+    let across = segment([0.0, -5.0, 1.0], [0.0, 5.0, 1.0]);
+    for (a, b) in [(&flat, &upright), (&across, &upright), (&upright, &across)] {
+        assert!(!routed(a, b));
+    }
+}
+
+#[test]
+fn a_touch_at_a_shared_level_is_kept() {
+    // A segment along x at z = 0 and a quadratic that leaves its start tangent to it, rising in y
+    // and z as s²: they touch at the origin, where the third coordinate of each is exactly 0 at the
+    // end of its range. That is a meeting, never two curves apart in z.
+    let a = segment([-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]);
+    let b = bezier(&[
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [2.0, 1.0, 0.0],
+        [3.0, 1.0, 1.0],
+    ]);
+    for r in [meet(&a, &b), meet(&b, &a)] {
+        let flagged: Vec<_> = r
+            .items()
+            .iter()
+            .filter(|i| {
+                matches!(
+                    i,
+                    Item::Flagged {
+                        why: Unresolved::TangentBand { .. },
+                        ..
+                    }
+                )
+            })
+            .collect();
+        assert_eq!(flagged.len(), 1, "{:?}", r.items());
     }
 }
 
