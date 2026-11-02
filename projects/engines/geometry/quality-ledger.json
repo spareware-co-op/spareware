@@ -6676,13 +6676,7 @@
       "occurrences": 2,
       "piece": "G41",
       "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
-      "line_text": "Err(e) => Err(e),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
     }
+
   ]
 }
