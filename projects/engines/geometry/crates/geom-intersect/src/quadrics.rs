@@ -1533,13 +1533,24 @@ fn cuts(
     Ok(out)
 }
 
-/// The stretches of `curve` on both domains, and how each ends.
+/// What trimming keeps of a piece.
+enum Part {
+    /// A stretch of it on both domains, and how it ends.
+    Curve(Box<CurveKind<3>>, [CurveEnd; 2]),
+    /// A point for a run of it on both domains no wider than [`STEP`]: a meeting the domains' ends
+    /// make that small is a point at this resolution, never nothing. `width` is how far the run
+    /// reaches from it.
+    Point { at: Vector, width: f64 },
+}
+
+/// The stretches of `curve` on both domains, and how each ends; a run of them on both too short to
+/// be a stretch, a point.
 fn trimmed(
     curve: &CurveKind<3>,
     a: &SurfaceKind,
     b: &SurfaceKind,
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<(CurveKind<3>, [CurveEnd; 2])>, IntersectError> {
+) -> Result<Vec<Part>, IntersectError> {
     let (lo, hi) = crate::curve::finite(curve)?;
     let cut = cuts(curve, a, b, meter)?;
     let loops = closed(curve);
@@ -1553,7 +1564,7 @@ fn trimmed(
                 } else {
                     CurveEnd::Boundary
                 };
-                alloc::vec![(c, [end; 2])]
+                alloc::vec![Part::Curve(Box::new(c), [end; 2])]
             }
             _ => Vec::new(),
         });
@@ -1586,31 +1597,132 @@ fn trimmed(
         }
     }
     ends.push(stop);
-    let mut out = Vec::new();
+    // Each stretch between cuts, and whether it lies on both domains.
+    let mut stretches = Vec::new();
     for end in ends {
+        let part = stretch(curve, start, end)?;
+        let width = match &part {
+            Some(c) => crate::curve::widest(&c.bound((start, end), meter)?),
+            None => 0.0,
+        };
         let middle_of = start * 0.5 + end * 0.5;
         let on_loop = if loops && middle_of > hi {
             middle_of - period
         } else {
             middle_of
         };
-        // Flagged cuts around one point stand a little apart: what lies between them is no stretch.
-        let part = stretch(curve, start, end)?;
-        let long = match &part {
-            Some(c) => crate::curve::widest(&c.bound((start, end), meter)?) > STEP,
-            None => false,
-        };
-        let kept = if long && on_both(curve, on_loop, a, b, meter)? {
-            part
-        } else {
-            None
-        };
-        if let Some(c) = kept {
-            out.push((c, [CurveEnd::Boundary; 2]));
-        }
+        let on = part.is_some() && on_both(curve, on_loop, a, b, meter)?;
+        stretches.push(Stretch {
+            from: start,
+            to: end,
+            part,
+            width,
+            on,
+        });
         start = end;
     }
+    let mut out = Vec::new();
+    for run in runs(&stretches, loops) {
+        out.extend(kept(curve, &stretches, &run, (hi, period, loops), meter)?);
+    }
     Ok(out)
+}
+
+/// A stretch of a piece between cuts.
+struct Stretch {
+    from: f64,
+    to: f64,
+    part: Option<CurveKind<3>>,
+    width: f64,
+    on: bool,
+}
+
+/// The runs of stretches on both domains, end to end; on a loop the last runs on into the first.
+fn runs(stretches: &[Stretch], loops: bool) -> Vec<Vec<usize>> {
+    let mut out: Vec<Vec<usize>> = Vec::new();
+    let mut previous_on = false;
+    for (k, s) in stretches.iter().enumerate() {
+        match out.last_mut() {
+            Some(run) if s.on && previous_on => run.push(k),
+            _ if s.on => out.push(alloc::vec![k]),
+            _ => {}
+        }
+        previous_on = s.on;
+    }
+    let ends_on = stretches.first().is_some_and(|s| s.on) && stretches.last().is_some_and(|s| s.on);
+    if loops && ends_on && out.len() > 1 {
+        let first = out.remove(0);
+        if let Some(last) = out.last_mut() {
+            last.extend(first);
+        }
+    }
+    out
+}
+
+/// What a run keeps: its stretches wider than [`STEP`], or, if none is, a point at its middle.
+/// Flagged cuts around one point stand a little apart: what lies between them is no stretch, and a
+/// stretch no wider than STEP beside a longer one is that one's end; a run no wider than STEP
+/// throughout is a meeting the domains' ends make that small, a point at this resolution.
+fn kept(
+    curve: &CurveKind<3>,
+    stretches: &[Stretch],
+    run: &[usize],
+    (hi, period, loops): (f64, f64, bool),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Part>, IntersectError> {
+    let members: Vec<&Stretch> = run.iter().filter_map(|k| stretches.get(*k)).collect();
+    if members.iter().any(|s| s.width > STEP) {
+        return Ok(members
+            .iter()
+            .filter(|s| s.width > STEP)
+            .filter_map(|s| s.part.clone())
+            .map(|c| Part::Curve(Box::new(c), [CurveEnd::Boundary; 2]))
+            .collect());
+    }
+    let (Some(first), Some(last)) = (members.first(), members.last()) else {
+        return Err(IntersectError::Internal);
+    };
+    // A run that wraps a loop's end ends a turn on.
+    let to = if last.to < first.from {
+        last.to + period
+    } else {
+        last.to
+    };
+    let middle_of = first.from * 0.5 + to * 0.5;
+    let t = if loops && middle_of > hi {
+        middle_of - period
+    } else {
+        middle_of
+    };
+    let width = members.iter().fold(0.0, |w, s| w + s.width);
+    Ok(alloc::vec![Part::Point {
+        at: at_parameter(curve, t, meter)?,
+        width,
+    }])
+}
+
+/// The item of a point on both surfaces, or none if it lies off a domain.
+fn point_item(
+    at: Vector,
+    contact: PointContact,
+    reach: f64,
+    a: &SurfaceKind,
+    b: &SurfaceKind,
+) -> Result<Option<Item>, IntersectError> {
+    let (Some([p, q]), Some([r, s])) = (on_surface(a, at)?, on_surface(b, at)?) else {
+        return Ok(None);
+    };
+    let [x, y, z] = at;
+    let box_of = Bounds {
+        lo: [x.lo(), y.lo(), z.lo()],
+        hi: [x.hi(), y.hi(), z.hi()],
+    };
+    Ok(Some(Item::Point {
+        at: ParamBox::new(&[p, q, r, s])?,
+        xyz: grid_box(&box_of)?,
+        contact,
+        class: class_of(reach),
+    }))
 }
 
 /// The class of a result whose data reach `reach` from the exact conic.
@@ -1663,31 +1775,28 @@ fn items_of(
                 });
             }
             Piece::Point { at, tangent } => {
-                let (Some([p, q]), Some([r, s])) = (on_surface(a, at)?, on_surface(b, at)?) else {
-                    continue;
+                let contact = if tangent {
+                    PointContact::IsolatedTangent
+                } else {
+                    PointContact::Crossing
                 };
-                let [x, y, z] = at;
-                let box_of = Bounds {
-                    lo: [x.lo(), y.lo(), z.lo()],
-                    hi: [x.hi(), y.hi(), z.hi()],
-                };
-                items.push(Item::Point {
-                    at: ParamBox::new(&[p, q, r, s])?,
-                    xyz: grid_box(&box_of)?,
-                    contact: if tangent {
-                        PointContact::IsolatedTangent
-                    } else {
-                        PointContact::Crossing
-                    },
-                    class: class_of(wide(at)),
-                });
+                items.extend(point_item(at, contact, wide(at), a, b)?);
             }
             Piece::Curve {
                 curve,
                 tangent,
                 reach,
             } => {
-                for (part, ends) in trimmed(&curve, a, b, meter)? {
+                for kept in trimmed(&curve, a, b, meter)? {
+                    let (part, ends) = match kept {
+                        Part::Curve(part, ends) => (*part, ends),
+                        Part::Point { at, width } => {
+                            // The point stands within the run's width of every point of it.
+                            let reach = tight::larger(reach, width + wide(at));
+                            items.extend(point_item(at, PointContact::BoundaryTouch, reach, a, b)?);
+                            continue;
+                        }
+                    };
                     let span = crate::curve::finite(&part)?;
                     let box_of = part.bound(span, meter)?;
                     let Some(at) = spans_of(&box_of, a, b)? else {
@@ -1717,12 +1826,28 @@ fn items_of(
     Ok(items)
 }
 
+/// Whether an operand fits the frame's range (12.1): its box over its domain within 2^40 steps of
+/// the origin, or, for a plane that runs on without end, the point it is stored by.
+fn fits(s: &SurfaceKind, meter: &mut WorkMeter<'_>) -> Result<bool, IntersectError> {
+    let inside = |x: f64| x.abs() <= REACH;
+    let ((a, b), (c, d)) = ParamSurface::domain(s);
+    if let SurfaceKind::Plane(p) = s
+        && [a, b, c, d].iter().any(|x| !x.is_finite())
+    {
+        let (o, ..) = p.vectors();
+        return Ok(o.iter().all(|x| inside(*x)));
+    }
+    let bounds = s.bound(((a, b), (c, d)), meter)?;
+    Ok(bounds.lo.iter().chain(&bounds.hi).all(|x| inside(*x)))
+}
+
 /// Where two natural quadrics meet in closed form (12.7); `None` for a pair that is not natural, or
 /// that stands in general position, or that no enclosure can decide.
 ///
 /// # Errors
 ///
-/// A kind's errors, and the meter's stop.
+/// [`IntersectError::FrameRange`] if an operand does not fit the frame's range (12.1), checked
+/// before any closed form; a kind's errors, and the meter's stop.
 pub fn natural(
     a: &SurfaceKind,
     b: &SurfaceKind,
@@ -1732,6 +1857,9 @@ pub fn natural(
     let (Some(first), Some(second)) = (rank(a), rank(b)) else {
         return Ok(None);
     };
+    if !fits(a, meter)? || !fits(b, meter)? {
+        return Err(IntersectError::FrameRange);
+    }
     let turned = first > second;
     let (x, y) = if turned { (b, a) } else { (a, b) };
     let Some(found) = pieces(x, y)? else {

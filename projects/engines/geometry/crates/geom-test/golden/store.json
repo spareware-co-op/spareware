@@ -262,7 +262,7 @@
               "why": "4 new count benchmarks on natural quadrics in closed form (decision 32.44): a plane across a cylinder, two spheres, a pipe tee and two cones through one apex; no existing digest moved"
             }
           ],
-          "sha256": "03dcfc737d1521ed959b6f7f0a347633451b4c278fba625c6fc163a38a163941"
+          "sha256": "c1f49875251e7531753305a07108b249f1f9bb5da0fbf844497795e51ffbc35f"
         },
         {
           "id": "geom-nurbs/operations",
