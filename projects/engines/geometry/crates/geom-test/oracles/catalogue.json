@@ -120,7 +120,10 @@
       "checks": "Mesh booleans",
       "source": "https://github.com/gcherchi/InteractiveAndRobustMeshBooleans",
       "pin": null,
-      "never_linked": [],
+      "never_linked": [
+        "cherchi",
+        "interactive-and-robust-mesh-booleans"
+      ],
       "piece": "G154"
     },
     {

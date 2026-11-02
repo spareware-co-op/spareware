@@ -227,6 +227,11 @@
 //!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
 //!   `static_assertions`.
 //! - Apache-2.0: `num-modular`, which `dashu-int` brings in.
+//! - Apache-2.0: `manifold-rust`, a development dependency (G154), the mesh oracle its
+//!   manifold_rust_oracle test runs.
+//! - Apache-2.0 OR MIT: `rustc-hash`, which `manifold-rust` brings in.
+//! - MIT OR Apache-2.0: `rustversion`, which the older dashu crates of `manifold-rust` bring in.
+//! - BSL-1.0: `clipper2-rust`, which `manifold-rust` brings in (chapter 29 lists it as an oracle).
 //! - MIT/Apache-2.0: `lcov` and `arraydeque` (the older spelling of MIT OR Apache-2.0).
 //! - MIT OR Apache-2.0 OR LGPL-2.1-or-later: `r-efi` (UEFI targets only).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident` and `unicode-normalization`.
