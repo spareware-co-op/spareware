@@ -5396,6 +5396,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant turns over every flap's reversed, the reference flap's too. The flaps go only to geom_poly::order::about, which reads reversed only as a.reversed != b.reversed (turn_about and same_flap), and that is the same with both turned over; turned reads rising, not the flaps."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "replace > with >= in Scene<'a>::touching",
+      "line_text": ".any(|(entry, count)| *count > 0 && there.count(*entry) <= 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A winding vector's pairs hold no zero count, so on each of them a count above 0 and a count of 0 or more are one test."
     }
   ],
   "coverage_off": [],
