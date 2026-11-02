@@ -5652,6 +5652,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "It moves the ray infinitely little to the other side of y, in every face at once. That is another ray from a point infinitely near the first, which orientation's precondition keeps off the shell, so it lies on the same side of it, and the parity of a ray that meets no edge is that side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace | with ^ in divide",
+      "line_text": "key: node.key | bit,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
     }
   ],
   "coverage_off": [],
