@@ -11,10 +11,28 @@ geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row of chapter 27's crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
 
+# Certified enclosures (`tight`) and curve domains for group 2 (G85; chapter 27's row, amended).
+geom-curve = { path = "../geom-curve" }
 geom-intersect = { path = "../geom-intersect" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
+
+[features]
+# Every group of chapter 8.3 at `Level::of_build()` in a release build too: the switch a release test
+# build turns on, so it runs the full set as debug builds do (28.4); shipped builds leave it off and
+# run the cheap groups.
+full = []
+
+[dev-dependencies]
+# Bodies for the tests: their geometry kinds and face boxes.
+geom-math = { path = "../geom-math" }
+geom-surface = { path = "../geom-surface" }
+# NURBS faces, edges and pcurves for the checks on every kind (G177). Ours, MPL-2.0.
+geom-nurbs = { path = "../geom-nurbs" }
+# An allocator that refuses allocations past a limit, so the tests reach every refused
+# reservation (23.10, never abort on memory). cap 0.1.2, MIT OR Apache-2.0.
+cap = "=0.1.2"
 
 [lints.rust]
 unsafe_code = "forbid"

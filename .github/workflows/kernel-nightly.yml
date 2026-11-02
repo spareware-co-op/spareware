@@ -18,8 +18,11 @@ name: Kernel nightly
 # the kernel's certified enclosure, settling any difference by a fixed-point truth. Piece G69 adds
 # the law catalogue of 28.3 for the curve and surface kinds and NURBS (geom-test's tests/laws_nurbs.rs,
 # laws_curves.rs and laws_surfaces.rs), each law's dense refutation sampler drawing from the night's
-# seed. Later pieces add the rest of 28.17's nightly list (hours of fuzzing, slow fixtures, the
-# other outside oracles).
+# seed. Piece G86 adds Python's cbor2, run the same way: geom-op's tests/cbor2_oracle.rs writes the
+# night's seeded values of SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by
+# hash) encodes each value in its canonical mode in a container pinned by digest and reads the
+# kernel's bytes back, and the test fails on any byte that differs. Later pieces add the rest of
+# 28.17's nightly list (hours of fuzzing, slow fixtures, the other outside oracles).
 #
 # --locked: Cargo.lock is committed and must already list every dependency (28.13, the toolchain
 # guard).
@@ -183,4 +186,44 @@ jobs:
       - name: The kernel against Clothoids' points
         run: >-
           cargo test --locked --release -p geom-curve --test clothoids_oracle
+          -- --ignored --exact compare_with_the_answers --nocapture
+
+  cbor2:
+    name: Canonical CBOR against cbor2, out of process
+    runs-on: ubuntu-latest
+    # The kernel's cases build and run in a few minutes; cbor2 installs from one wheel and encodes
+    # them in seconds.
+    timeout-minutes: 30
+    env:
+      # python:3.13-slim, pinned by digest; oracles/cbor2.sh pins cbor2 6.1.5's wheel by SHA-256.
+      PYTHON_IMAGE: python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Tonight's seed, printed, and the files
+        run: |
+          set -euo pipefail
+          seed=$(printf '%016x' "$GITHUB_RUN_ID")
+          echo "SPAREKIT_SEED=$seed" >> "$GITHUB_ENV"
+          echo "seed: $seed (replay with SPAREKIT_SEED=$seed)"
+          mkdir -p "$RUNNER_TEMP/cbor2"
+          echo "CBOR2_CASES=$RUNNER_TEMP/cbor2/cases.txt" >> "$GITHUB_ENV"
+          echo "CBOR2_ANSWERS=$RUNNER_TEMP/cbor2/answers.txt" >> "$GITHUB_ENV"
+      - name: Tonight's cases
+        run: >-
+          cargo test --locked --release -p geom-op --test cbor2_oracle
+          -- --ignored --exact write_the_cases --nocapture
+      - name: cbor2 6.1.5, in the container
+        run: |
+          set -euo pipefail
+          docker run --rm -i -v "$PWD:/work:ro" -w /work "$PYTHON_IMAGE" \
+            bash projects/engines/geometry/crates/geom-op/oracles/cbor2.sh \
+            < "$CBOR2_CASES" > "$CBOR2_ANSWERS"
+      - name: The kernel against cbor2's encodings
+        run: >-
+          cargo test --locked --release -p geom-op --test cbor2_oracle
           -- --ignored --exact compare_with_the_answers --nocapture

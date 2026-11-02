@@ -3,22 +3,6 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/rotation.rs",
-      "mutant": "replace < with <= in givens",
-      "line_text": "if y.abs() < TINY && z.abs() < TINY {",
-      "occurrences": 2,
-      "kind": "equivalent",
-      "reason": "Either < becomes <=: the forms differ only when that input is exactly 2^-1021. The pair is then scaled by 2^100 and r scaled back, both exact there since r is at least 2^-1021, a normal number, and y/r and z/r are unchanged by a common power of two: the same c, s and r either way."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
-      "mutant": "replace < with <= in Svd::jacobi",
-      "line_text": "let (up, length) = if sigma < TINY {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The forms differ only when sigma is exactly 2^-1021, a normal number. UP is a power of two and x*UP is exact, so norm takes the same ratios, the same sum and the same root, and its product rounds to 53 bits on both paths: length is exactly sigma*UP, and x*UP/length rounds the same quotient as x/sigma. The column comes out the same to the bit."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
       "mutant": "replace || with && in Matrix::row_pair",
       "line_text": "if i == j || i >= self.rows || j >= self.rows {",
@@ -555,14 +539,6 @@
       "reason": "A defect check no caller reaches: normal_patches divides only along edges collapsed_edges proved to be one point, where the exact normal patch's row is exactly 0 and its interval enclosure therefore holds 0, so lo <= 0 and hi >= 0 both hold: the test is false with || as with &&."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
-      "mutant": "replace > with >= in BernsteinCurve<D>::clip",
-      "line_text": "if t0 > t1 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
       "mutant": "replace <= with > in check",
       "line_text": "let side = if t <= mid {",
@@ -577,22 +553,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The search runs forward through the pieces. The two differ only from the left at t == a of a piece after the first, and there the piece before, which ends at t and comes earlier, already matched (a' < t and t <= b'), so the same piece is returned."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
-      "mutant": "replace > with >= in Round::radius_sign",
-      "line_text": "Ok(if rho.lo() > 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "They differ only when the radius's enclosure ends exactly at 0: the radius is then of one sign over the span and 0 at most at that end, where the normal vanishes, so the definite sign bounds every normal direction as the undecided one does, only tighter; a torus's form is then the part that reaches the axis at its domain's edge."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
-      "mutant": "replace < with <= in Round::radius_sign",
-      "line_text": "} else if rho.hi() < 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "They differ only when the radius's enclosure ends exactly at 0: the radius is then of one sign over the span and 0 at most at that end, where the normal vanishes, so the definite sign bounds every normal direction as the undecided one does, only tighter; a torus's form is then the part that reaches the axis at its domain's edge."
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/terms.rs",
@@ -817,14 +777,6 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The two differ only when the densest sampling's certificate equals the target to the last bit. The original then removes knots within a budget of 0 and returns a deviation equal to the target; the mutant refuses a tolerance that is met with nothing to spare, or, with no tolerance asked for, reports the surface before knot removal. Both results are certified; no input is known to land on the tie."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/jet.rs",
-      "mutant": "replace >= with < in Jet::quotient",
-      "line_text": "if g0.lo() <= 0.0 && g0.hi() >= 0.0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Every divisor the crate forms, through Jet::div or Jet::div_valued, both of which call quotient, is positive at every point it is formed over: a length |S_u x S_v| that Jet::sqrt has already shown positive (it refuses otherwise), or a NURBS weight function, whose weights geom-nurbs keeps positive. On a positive divisor both tests are false; they differ only for a divisor through or below zero, which no input through the public interface produces."
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/offset.rs",
@@ -2204,22 +2156,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace log_fast -> Option<(f64, f64)> with None",
-      "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "ln_checked turns None into the NaN pair, so left and right are NaN, left == right fails, and every input other than 1 (returned before) goes to log_accurate, which starts again from x and gives the same correctly rounded value: only the time changes. The powers of two, which the fast path alone answers in the original, go there too, the one way they reach Dint::add's equal-magnitude arms: the unit test the_accurate_path_alone_gives_ln_at_every_power_of_two checks each against ln bit for bit. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace log_fast -> Option<(f64, f64)> with Some((0.0, 0.0))",
-      "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "With h = l = 0, left = -ERR and right = +ERR differ, so every input other than 1 (returned before) goes to log_accurate, which gives the same correctly rounded value: only the time changes. The powers of two, which the fast path alone answers in the original, go there too, the one way they reach Dint::add's equal-magnitude arms: the unit test the_accurate_path_alone_gives_ln_at_every_power_of_two checks each against ln bit for bit. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
       "mutant": "replace | with & in log_fast",
       "line_text": "let m = (1u64 << 52) | (v.to_bits() & MANTISSA);",
       "occurrences": 1,
@@ -2276,38 +2212,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace || with && in ln_checked",
-      "line_text": "if x.is_nan() || x < 0.0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "ln_checked is reached only through the port log::ln, and the crate's only calls of that outside tests, math::ln (through log_argument) and Interval::ln (positive bounds only), pass finite x >= 0 or -0 at most, so x.is_nan() and x < 0.0 are both false here and || and && agree."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace < with == in ln_checked",
-      "line_text": "if x.is_nan() || x < 0.0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "ln_checked is reached only through the port log::ln, which sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace < with <= in ln_checked",
-      "line_text": "if x.is_nan() || x < 0.0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "ln_checked is reached only through the port log::ln, which sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace | with ^ in ln_checked",
-      "line_text": "let v = f64::from_bits((0x3ff << 52) | (bits & MANTISSA));",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
       "mutant": "replace | with ^ in Dint::from_f64",
       "line_text": "let m = (bits & MANTISSA) | if biased != 0 { 1u64 << 52 } else { 0 };",
       "occurrences": 1,
@@ -2329,14 +2233,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Dint::log is called only on Dint::from_f64(x), whose hi is a 53-bit significand shifted left by at least 11, so its low 11 bits are 0; the constant's are 0x484. No such hi equals it, so > and >= agree on every input."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "mutant": "replace > with >= in hard_case",
-      "line_text": "let sgn = if iq > 2048 { -1.0 } else { 1.0 };",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "sgn is used only when a listed hard case matches. At iq == 2048, the one value where > and >= differ, the folded index iq & 0x7ff is 0, and no listed case has index 0 or 2048 (they are 76 to 1235), so no case matches and sgn is never read."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2476,42 +2372,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace agreed -> Option<f64> with None",
-      "line_text": "let lb = fh + (fl - eps);",
-      "occurrences": 1,
-      "kind": "proved",
-      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
-      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant never answers, so every pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace + with * in agreed",
-      "line_text": "let lb = fh + (fl - eps);",
-      "occurrences": 1,
-      "kind": "proved",
-      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
-      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's lower end is the high part times the low part with the bound, far from the upper end, so the test fails and the pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace - with / in agreed",
-      "line_text": "let lb = fh + (fl - eps);",
-      "occurrences": 1,
-      "kind": "proved",
-      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
-      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant loosens the test, and it changes real results: for a pair with |y/x| in (2^-53, 2^-47.7) and y/x within 2^-154 relative of zh + zh^3/3 + eps^2, about 80 should exist, the second fast path would answer fh + eps, about 20 ulps off. None is known; finding one needs a lattice search. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace + with * in agreed",
-      "line_text": "let ub = fh + (fl + eps);",
-      "occurrences": 1,
-      "kind": "proved",
-      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
-      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's upper end is the high part times the low part with the bound, far from the lower end, so the test fails and the pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
       "mutant": "delete - in accurate",
       "line_text": "let corr = fma(t, x, -y);",
       "occurrences": 1,
@@ -2541,22 +2401,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant halves v below sqrt 2 instead of from sqrt 2 up. For v in [1, 1.4140625) (at every exponent) i = m >> 44 is 256 to 361 and i - 362 fails: the NaN pair sends x to log_accurate. For v in [1.4140625, sqrt 2) i = m >> 44 is 362 (0x16_a09e_667f_3bcd >> 44 = 362): the fast path runs with e + 1 and y = v/2 in [0.70703125, 0.7071068), interval 362's own range (k = 0), where z = r·y - 1 lies in [-0.0016, -0.0014]. From sqrt 2 up it does not halve, so i = m >> 43 >= 724, in range only at i = 724 (v below 725/512), the entry the original uses for v in [724/512, sqrt 2), where z lies in [-0.00011, 0.00117]; above 725/512 the index is past the table and the NaN poison sends x to log_accurate. In each case the reduction ln x = e ln 2 - ln r + ln(1 + z) uses an interval of F1 with y inside it, z stays inside the polynomial's fitted interval [-0.00203, 0.00212] and e·LOG2_H + l1 stays exact, so the fast path's proof covers it: it returns the correctly rounded value or defers to log_accurate. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace + with * in ln_checked",
-      "line_text": "let left = h + (l - ERR);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutated bound h·(l - ERR) is below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while the other bound, h + (l + ERR), is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two always differ, the fast path never returns and every input goes on to log_accurate, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace - with / in ln_checked",
-      "line_text": "let left = h + (l - ERR);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -2944,23 +2788,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The forms differ only for x = -0x1.6232bdd7abcd2p+9 exactly (bits equal to the threshold). tests/attack_g05.rs (exp_thresholds) checks exp at that very input against the reference, and the full run (5b9778b) found this mutant surviving it: exp is deterministic, so the mutant gives the original's correctly rounded value there (the fast path decides it, so exp_accurate never sees it), and at every other input it is the original."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "mutant": "replace + with - in hard_case",
-      "line_text": "return Some(sgn * h.r + sgn * h.d);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Every listed hard case's offset d is below half an ulp of its r: 2^-110 or 2^-109 for the small r of SINPI_HARD, and 2^-55 against r in [1/2, 1) (half an ulp 2^-54) for the others. So sgn·r + sgn·d and sgn·r - sgn·d both round to sgn·r (C writes the sum for the inexact flag): the same double for every listed case."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
-      "mutant": "replace && with || in hard_case",
-      "line_text": "if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {",
-      "occurrences": 1,
-      "kind": "proved",
-      "proof": "math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs",
-      "reason": "Caught by math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs and its twin cospi_hard_case_answers_exactly_the_listed_pairs, proofs of hard_case's own contract: for every double x and every index iq, the answer is the listed result, with the sign of the fold, exactly where an entry or its mirror image matches in both remainder and folded index. This key's mutant in the mirror's condition, x == -h.x || the mirrored index, answers where only one of the two matches. With this change applied both harnesses report VERIFICATION:- FAILED (Kani 0.68.0, off CI). No input is known to show it through sinpi or cospi: the scan runs only when the low part's significand is all ones or all zeros. The key's other mutant, in the entry's own condition, is caught by tests."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
@@ -3760,71 +3587,7 @@
       "line_text": "Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace within_budget -> bool with true",
-      "line_text": "let [nx, ny, nz] = *n;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& d.unsigned_abs() < OFFSET_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "nx.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& d.unsigned_abs() < OFFSET_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
+      "reason": "Plane::through takes grid points (|coordinate| <= M = 2^40 - 1), so each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude: within_budget holds of every plane it can build, and true in its place is the same function. Plane::new takes coefficients from outside, and its tests reach each limit."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
@@ -4611,14 +4374,6 @@
       "reason": "Two + on this line share the key. The second, (r + er) * sh, makes ub = (r + er)·sh while lb = (r - er) + sh: r is the table point's low part plus the reduced argument's terms, below 2^-10 in magnitude (|z| is at most half a table step, pi/4096 < 2^-10), and er < 2^-59.99 (|z| <= 2^63). Where sh != 0 it is at least sin(pi/2048) > 2^-10 in magnitude, so |ub| < 2^-9·|sh| while lb is within 2^-10 of sh: they differ. Where sh = 0 (x within 2^-12 of a half-integer, so ulp(x) >= 2^-54) ub = 0 and lb = r - er, with |r| at least pi·ulp(x)·(1 - 2^-9) > 2^-53 > er: they differ too. So cospi's fast path never returns and refine gives the same correctly rounded value; only the time changes. The first, r * er, is caught by gate1_libm.rs's COSPI_TROUGH."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
-      "mutant": "replace + with * in ln_checked",
-      "line_text": "let right = h + (l + ERR);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR), below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while left = h + (l - ERR) is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
       "mutant": "replace < with <= in Tint::mul",
       "line_text": "h = h.checked_add(u64::from(m < c))?;",
@@ -5059,12 +4814,969 @@
       "reason": "Only the scan's start moves, and it still meets the same member. last_within is private; members, its one caller, passes it only periodic families from Scalar::critical, whose lower ends c lie in [−1.5, 2.5] up to a rounding (φ = atan2/π in [−1, 1], plus ψ in [−½, ½], 1 − ψ or 1, or the involute's ½ and 3/2), and extent sends spans past 2⁵⁰ to the pieces' route first. With X = (t₁ − c)/2, the answer is ⌊X⌋, or ⌊X⌋ + 1 when rounding a member down lets it meet t₁ (only for X within ¼ below a whole number). The mutant starts at ⌊(t₁ + c)/2⌋ + 2 = ⌊X + c + e⌋ + 2 with |e| ≤ 1/16 (the roundings of t₁ + c, below 2⁵¹, and of its half), which lies at or above the answer and at most ⌊X⌋ + 5: inside the scan's six steps down. The scan returns the first m from the top whose member's lower end is at most t₁, so both return the same m."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+      "mutant": "replace match guard node.bytes == bytes with true in NameGraph::insert",
+      "line_text": "Some(node) if node.bytes == bytes => Ok(id),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard decides only when the graph already holds the NameId being interned. Through the public interface that NameId is the 128-bit cut of SHA-256 over the prefix and the name's canonical bytes, so a node held under it with different bytes needs two encodings whose truncated hashes agree: no such pair is known, and finding one costs about 2^64 hashes (32.19). So no input through the public interface tells the mutant from the original; the unit test graph::tests::a_second_encoding_under_a_held_name_id_is_refused forges the collision directly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with <= in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With <=, the loop makes one more pass when width equals the number of entities. That pass has one chunk, split at its full length, so the right run is empty and the merge copies the left run unchanged. The order, and every comparison's outcome, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with > in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With >, for no entity or one the condition 1 > 0 or 1 > 1 holds and stays true as width doubles and saturates at usize::MAX, so the loop never ends and the tests stop it by their timeout. For two or more entities the loop does not run and the unsorted order fails the tests. It hangs or is caught; it never returns a wrong order unnoticed."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/ball.rs",
       "mutant": "replace > with >= in <impl Scalar for Ball>::sqrt",
       "line_text": "let spread = if root_floor > 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(major | b7);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head. Here the argument is below 24, so b7 is the whole argument."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x18, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x19, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1a, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1b, b0, b1, b2, b3, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "(exponent.checked_sub(format.rebias)? << format.fraction) | (fraction >> format.dropped)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow exponent field is shifted left by the narrow format's fraction width M, so its low M bits are zero, and the narrow fraction is the binary64 fraction shifted right by 52 - M, so it is below 2^M. The two never share a bit, so | and ^ give the same bits for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "let q = (1 << 52) | fraction;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction is the binary64's low 52 bits (bits & (2^52 - 1)), so it is below 2^52 and never has bit 52, the implicit leading bit set here; | and ^ give the same q for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "Some(sign | magnitude)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+      "mutant": "replace > with >= in Column<K, V>::filled",
+      "line_text": "if full > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in same_side",
+      "line_text": "[a.lo() * a.hi(), b.lo() * b.hi(), a.lo() * b.lo()]",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "same_side answers whether the smallest of the three numbers is above 0. Interval bounds are finite and a zero bound is +0, so x / y has the sign of x * y whenever y is not zero, and the answer can differ only where a divisor is 0. Then: in a.lo() / a.hi() and b.lo() / b.hi(), hi = 0 means lo <= 0, giving -inf or NaN where the product gave 0; in a.lo() / b.lo(), b.lo() = 0 makes b.lo() * b.hi() = 0 in the same list. In each case another number of the list, or the replaced one, is at most 0 (a NaN is the largest in tight::smaller's total order, so it never becomes the smallest), and the answer stays false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/report.rs",
+      "mutant": "replace Group::built -> bool with true",
+      "line_text": "matches!(",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Since G85 every group of 8.3 is built: the matches! lists all four Group variants, so built returns true for each, as the mutant does. It stays a function so that a group added later, or a level that drops one, can say it is not built."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace != with == in check",
+      "line_text": "if sink.found() != before {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken body through to the second stage (it runs exactly when the first stage found faults) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace != with == in ring",
+      "line_text": "(n != first).then_some(n)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken ring walk: a ring of one fin (each edge of a sheet) yields its fin forever through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace fin_rings -> Result<(), Stopped> with Ok(())",
+      "line_text": "let (owner, _) = take(scratch, a.rows(Arena::Fin));",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken loop ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace radial_rings -> Result<(), Stopped> with Ok(())",
+      "line_text": "let (on, _) = take(scratch, a.rows(Arena::Fin));",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken radial ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace == with != in Sets<'s>::find",
+      "line_text": "if up == row {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The mutant's find returns only from a row that is not a root and loops at a root, where up == row makes grand = row forever. shells() calls find on every valid body (attack_g85.rs's first test builds cubes), so the first test binary never ends: caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in carrier",
+      "line_text": "slope: slope * s.axial_sign(),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A surface's axial sign is exactly +1 or -1 (geom_surface::analytic, Cone::axial_sign), and for s = +1 or -1, slope / s and slope * s are the same double: both are slope or -slope exactly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in away",
+      "line_text": "a.lo() * a.hi() > 0.0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Interval bounds are finite with lo <= hi and a zero bound stored as +0. Where hi is not zero, lo / hi has the sign of lo * hi; where hi is zero, lo <= 0, so lo / hi is -inf or NaN and lo * hi is 0, and none of them is above 0. So the comparison with 0 is the same for every interval."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
+      "mutant": "replace > with >= in less_exact",
+      "line_text": "if key(b) > key(a) { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace == with != in Cut::order",
+      "line_text": "Ok(ordering(if rising == Sign::Positive {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It reverses every order along every line at once, which is each line run the other way. Stretches, overlaps, covering and sorted crossings ask only how marks on one line lie against each other, and a ray run the other way from a point off the shell crosses it the same number of times modulo two: orientation only asks a body with no fault, so the point is on no face, and a tie falls on one edge, in both its faces at once, so its two changes cancel."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace Cut::holds -> bool with true",
+      "line_text": "[&self.first, &self.second]",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Group 3 runs only on a body groups 1 and 2 passed, and joins asks it only of a vertex or edge the two faces share. Group 2 held each vertex to the plane of each of its faces, so such a corner lies on both planes and on their line: the answer is always true where it is asked."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace > with >= in stood_on",
+      "line_text": "v.saturating_sub(if v > 0 { 1 } else { -1 })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It differs only at v = 0, where the third point moves one step down the axis instead of up. That point, p and q span the same plane, with its normal turned at worst; every use asks whether a corner is on that plane, whether two signs on it agree, or where it crosses a line, and none of those changes with the way it faces."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace != with == in point_side",
+      "line_text": "if ray.at(&o.plane).is_none() || ray.order(&Mark(z), &Mark(o.plane))? != Ordering::Less {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It counts the faces behind the point instead of those ahead of it. Orientation asks only a body with no fault, so the point lies on no face of the closed shell, and a ray each way from a point off a closed shell crosses it the same number of times modulo two. A face whose plane holds the point is crossed nowhere on the face either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace == with != in point_side",
+      "line_text": "let rising = known(line.at(&y))?.weight() == Sign::Positive;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It moves the ray infinitely little to the other side of y, in every face at once. That is another ray from a point infinitely near the first, which orientation's precondition keeps off the shell, so it lies on the same side of it, and the parity of a ray that meets no edge is that side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/rotation.rs",
+      "mutant": "replace < with <= in givens",
+      "line_text": "if y.abs() < TINY && z.abs() < TINY {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either < becomes <=: the forms differ only when that input is exactly 2^-1021. The pair is then scaled by 2^100 and r scaled back, both exact there since r is at least 2^-1021, a normal number, and y/r and z/r are unchanged by a common power of two: the same c, s and r either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace < with <= in Svd::jacobi",
+      "line_text": "let (up, length) = if sigma < TINY {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when sigma is exactly 2^-1021, a normal number. UP is a power of two and x*UP is exact, so norm takes the same ratios, the same sum and the same root, and its product rounds to 53 bits on both paths: length is exactly sigma*UP, and x*UP/length rounds the same quotient as x/sigma. The column comes out the same to the bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/jet.rs",
+      "mutant": "replace >= with < in Jet::quotient",
+      "line_text": "if g0.lo() <= 0.0 && g0.hi() >= 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every divisor the crate forms, through Jet::div or Jet::div_valued, both of which call quotient, is positive at every point it is formed over: a length |S_u x S_v| that Jet::sqrt has already shown positive (it refuses otherwise), or a NURBS weight function, whose weights geom-nurbs keeps positive. On a positive divisor both tests are false; they differ only for a divisor through or below zero, which no input through the public interface produces."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace log_fast -> Option<(f64, f64)> with None",
+      "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ln_checked turns None into the NaN pair, so left and right are NaN, left == right fails, and every input other than 1 (returned before) goes to log_accurate, which starts again from x and gives the same correctly rounded value: only the time changes. The powers of two, which the fast path alone answers in the original, go there too, the one way they reach Dint::add's equal-magnitude arms: the unit test the_accurate_path_alone_gives_ln_at_every_power_of_two checks each against ln bit for bit. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace log_fast -> Option<(f64, f64)> with Some((0.0, 0.0))",
+      "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With h = l = 0, left = -ERR and right = +ERR differ, so every input other than 1 (returned before) goes to log_accurate, which gives the same correctly rounded value: only the time changes. The powers of two, which the fast path alone answers in the original, go there too, the one way they reach Dint::add's equal-magnitude arms: the unit test the_accurate_path_alone_gives_ln_at_every_power_of_two checks each against ln bit for bit. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace || with && in ln_checked",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ln_checked is reached only through the port log::ln, and the crate's only calls of that outside tests, math::ln (through log_argument) and Interval::ln (positive bounds only), pass finite x >= 0 or -0 at most, so x.is_nan() and x < 0.0 are both false here and || and && agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace < with == in ln_checked",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ln_checked is reached only through the port log::ln, which sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace < with <= in ln_checked",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ln_checked is reached only through the port log::ln, which sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace | with ^ in ln_checked",
+      "line_text": "let v = f64::from_bits((0x3ff << 52) | (bits & MANTISSA));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two operands occupy disjoint bits (the 52 significand bits, and bit 52 or the exponent field above them), so | and ^ give the same word for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace > with >= in hard_case",
+      "line_text": "let sgn = if iq > 2048 { -1.0 } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sgn is used only when a listed hard case matches. At iq == 2048, the one value where > and >= differ, the folded index iq & 0x7ff is 0, and no listed case has index 0 or 2048 (they are 76 to 1235), so no case matches and sgn is never read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace agreed -> Option<f64> with None",
+      "line_text": "let lb = fh + (fl - eps);",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant never answers, so every pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in agreed",
+      "line_text": "let lb = fh + (fl - eps);",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's lower end is the high part times the low part with the bound, far from the upper end, so the test fails and the pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace - with / in agreed",
+      "line_text": "let lb = fh + (fl - eps);",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant loosens the test, and it changes real results: for a pair with |y/x| in (2^-53, 2^-47.7) and y/x within 2^-154 relative of zh + zh^3/3 + eps^2, about 80 should exist, the second fast path would answer fh + eps, about 20 ulps off. None is known; finding one needs a lattice search. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in agreed",
+      "line_text": "let ub = fh + (fl + eps);",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike",
+      "reason": "Caught by math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike, a proof of agreed's own contract: for every angle, low part and small positive bound, agreed answers exactly when the two ends of the enclosure round alike, and answers that double. The mutant's upper end is the high part times the low part with the bound, far from the lower end, so the test fails and the pair goes to atan2_accurate. With this change applied the harness reports VERIFICATION:- FAILED on that assertion (Kani 0.68.0, off CI)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace + with * in ln_checked",
+      "line_text": "let left = h + (l - ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound h·(l - ERR) is below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while the other bound, h + (l + ERR), is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two always differ, the fast path never returns and every input goes on to log_accurate, which gives the same correctly rounded value. Only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace - with / in ln_checked",
+      "line_text": "let left = h + (l - ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant accepts when RN(H + l/e) equals RN(H + l + e) (H the high part, l the low part, e > 0 the bound, u an ulp of H) and returns that bound, as the original does. Where the original's test fails a midpoint lies within e of H + l. If e < u/4 that needs |l| > u/4, so |l/e| > 1, many ulps: H + l/e rounds far from H + l + e. If e >= u/4 (values near 0) the low part is the series' next term, about H^2/2 or H^3/3 in size with |H| >= 2^-54, so |l/e| is again more than 2^40 ulps: the mutant refuses too. It accepts only inputs the original accepts, with the same result. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace + with - in hard_case",
+      "line_text": "return Some(sgn * h.r + sgn * h.d);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every listed hard case's offset d is below half an ulp of its r: 2^-110 or 2^-109 for the small r of SINPI_HARD, and 2^-55 against r in [1/2, 1) (half an ulp 2^-54) for the others. So sgn·r + sgn·d and sgn·r - sgn·d both round to sgn·r (C writes the sum for the inexact flag): the same double for every listed case."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace && with || in hard_case",
+      "line_text": "if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {",
+      "occurrences": 1,
+      "kind": "proved",
+      "proof": "math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs",
+      "reason": "Caught by math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs and its twin cospi_hard_case_answers_exactly_the_listed_pairs, proofs of hard_case's own contract: for every double x and every index iq, the answer is the listed result, with the sign of the fold, exactly where an entry or its mirror image matches in both remainder and folded index. This key's mutant in the mirror's condition, x == -h.x || the mirrored index, answers where only one of the two matches. With this change applied both harnesses report VERIFICATION:- FAILED (Kani 0.68.0, off CI). No input is known to show it through sinpi or cospi: the scan runs only when the low part's significand is all ones or all zeros. The key's other mutant, in the entry's own condition, is caught by tests."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace + with * in ln_checked",
+      "line_text": "let right = h + (l + ERR);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR), below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while left = h + (l - ERR) is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/level.rs",
+      "mutant": "replace && with || in ending",
+      "line_text": "overlap(x, u) && overlap(y, v)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A crossing with nothing across it and off the domain stands beside a flagged box, or the trace is broken: an interior crossing always has a box across its side, and that box is settled or flagged. With || the test also accepts a flagged box level with the crossing in one parameter only, which differs only on that broken trace, where the answer is Internal rather than an ended branch."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
+      "mutant": "replace * with / in <impl ImplicitBound for Cone>::enclose_box",
+      "line_text": "let slope = Interval::point(k * self.round.sign)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The axial sign is exactly 1 or -1, so k / sign and k * sign are the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace == with != in Chain::roots",
+      "line_text": "if negative && p.degree % 2 == 1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sign of every element at minus infinity flips with this test, and a sign vector and its negation have the same changes, so the count of changes is the same for either parity."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace == with != in filtered",
+      "line_text": "*slot = if negative && d % 2 == 1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "As in `Chain::roots`: flipping the sign of every element at minus infinity leaves the number of changes where it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace > with >= in filtered_between",
+      "line_text": "let exact = at.num.unsigned_abs() <= LIMIT && at.den.unsigned_abs() <= LIMIT && at.den > 0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A denominator of zero then goes on to the division by zero, which is refused, and the refusal is the same `None`."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+      "mutant": "replace | with ^ in shifted",
+      "line_text": "(low >> part) | (high << 64usize.saturating_sub(part))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two parts of a shifted limb share no bit: the low part holds the top `64 - part` bits and the high part the bottom `part`, so or and exclusive or are the same word."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
+      "mutant": "replace > with >= in clipped_span",
+      "line_text": "if t0 > t1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only at t0 == t1. The curve's clip and the patch's (on the largest coefficient of each row and column) both come here with ranges from nonnegative_range, whose every end is an outward-rounded interval end strictly beyond the exact one (each i/p is a widened quotient), or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one, nor do attack_g164's slabs touching a patch's edge or a curve's end, which keep a range ending exactly there."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace < with <= in line_cone",
+      "line_text": "let flip = if rho.hi() < 0.0 { -1.0 } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at rho.hi() == 0. The line before returns when rho contains 0, and an interval whose upper bound is 0 contains it (its lower bound is at most its upper), so here rho.hi() is never 0 and < and <= choose the same flip for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let least = if difference.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only at difference.lo() == 0. second_order has already returned when difference contains 0, and an interval whose lower bound is 0 contains it, so here the lower bound is never 0 and both pick the same end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let width = exact_steps(if band.hi() > run { band.hi() } else { run });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when band.hi() == run, and then both branches are the same double: the larger of two equal values is either, so the width is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in <impl Field<3> for Contact<'_>>::reach",
+      "line_text": "Ok(if c > s { c } else { s })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when c == s, and then both branches are the same double, so the reach is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace < with <= in near_origin",
+      "line_text": "Ok((lo < hi).then_some((lo, hi)))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the stretch is a single parameter, where the line touches the ball of radius R + r + 1 about the torus's centre or its domain ends there: a point at least a unit from every point of the torus, so the quartic solved on it has no root and no undecided region, and the answer is the same empty, certified intersection. Only the work charged for that solve differs, which the crate does not promise."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace + with * in normals",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with + in normals",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with / in normals",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace / with * in normals",
+      "line_text": "(w != 0.0).then(|| n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with + in normals",
+      "line_text": "(w != 0.0).then(|| n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with / in normals",
+      "line_text": "(w != 0.0).then(|| n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace == with != in normals",
+      "line_text": "if x == 0.0 && y == 0.0 && z == 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace <= with > in normals",
+      "line_text": "let axis = if x <= y && x <= z {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "normals only picks the origin and the two directions of the slabs the projected step clips the patch with. BernsteinCurve::slab bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so every slab holds the piece and every clip keeps every root, and a choice with no direction returns Refused, leaving the box as it stood. So the answer stays complete and certified; only how fast boxes shrink changes, and with it the work, the enclosures' widths and where a tangent band's box stops, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with + in <impl Field<1> for Quartic>::reach",
+      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With + in place of the product it no longer shrinks with the box, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori then run past cargo-mutants' timeout, which is how the tests catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace - with + in <impl Field<1> for Quartic>::reach",
+      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With the sum of t's ends in place of their difference it stays near twice the root's own t however small the box, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace - with / in <impl Field<1> for Quartic>::reach",
+      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With the ratio of t's ends in place of their difference it tends to one, not zero, as the box shrinks, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace closed_form -> Result<Option<Intersection>, IntersectError> with Ok(None)",
+      "line_text": "let seams = seams_of(surface);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With no closed form every line, circle and helix against a plane, sphere, cylinder, cone or torus goes to the subdivision engine instead of its exact or one-dimensional solve, and on attack_g164's long lines, wide surfaces and tangencies that engine splits boxes far past the budgeted meets' work: the tests run past cargo-mutants' timeout, which is how they catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in <impl Field<3> for Contact<'_>>::narrow",
+      "line_text": "if lo > hi {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a coordinate's two clipped ranges meet at a single double, lo == hi. Every clip rounds its ends a step outward (geom-nurbs's clipped_span takes the lower end of the interval below and the upper of the interval above), so a root lies strictly inside each range, and two ranges that both hold a root overlap by more than a point. A box they leave as one point holds no root, so the mutant's None loses nothing; only the work of looking at that box differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace * with / in second_order",
+      "line_text": "let band = Interval::point(2.0 * RESOLUTION_FLOOR.get())?",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate: Real::ONE), so 2.0 * 1.0 and 2.0 / 1.0 are the same double and the band is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace + with * in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with + in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in strip",
+      "line_text": "let w = w.lo() * 0.5 + w.hi() * 0.5;",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace / with * in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with + in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in strip",
+      "line_text": "Some(n.map(|c| (c.lo() * 0.5 + c.hi() * 0.5) / w))",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in strip",
+      "line_text": "if dx == 0.0 && dy == 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace == with != in strip",
+      "line_text": "if dx == 0.0 && dy == 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in second_order",
+      "line_text": "let band = Interval::point(2.0 * RESOLUTION_FLOOR.get())?",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate: Real::ONE), so 2.0 * 1.0 and 2.0 / 1.0 are the same double and the band is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_line",
+      "line_text": "if lo.lo() < s_lo { s_lo } else { lo.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if hi.hi() > s_hi { s_hi } else { hi.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_line",
+      "line_text": "if x.lo() < lo { lo } else { x.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_line",
+      "line_text": "if x.hi() > hi { hi } else { x.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "let [low, high] = if sign > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is 1.0 or -1.0, set two lines above, never 0.0, so > and >= choose the same branch for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in one_circle",
+      "line_text": "if lo.lo() < s.0 { s.0 } else { lo.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "if hi.hi() > s.1 { s.1 } else { hi.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in self_crossings",
+      "line_text": "if s.lo() < t.lo() { s.lo() } else { t.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in self_crossings",
+      "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two values compared are equal, and then both branches give the same double, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "let sign = if way.lo() > 0.0 { 1.0 } else { -1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "way is the product of the two circles' unit normals, and one_circle is called only for two circles of one circle, whose planes are one plane: the normals are equal or opposite, so way is enclosed within a few steps of 1 or -1 and its lower bound is never 0.0, the one value where > and >= differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in one_circle",
+      "line_text": "if start > end {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "start equals end only when an end of the enclosure of b's range on a, phi + sign t moved by whole turns, is exactly an end of a's domain. geom_num::interval widens every bound outward by a step, so where b truly ends at a's end the enclosure strictly holds that end and start < end; equality needs b's true end to lie past a's end by under a step, a miss. There the original reports the boundary touch its enclosure cannot rule out and the mutant reports nothing, which is the truth of the inputs; every touch and overlap that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in items_of",
+      "line_text": "if difference.lo() > 0.0 || difference.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when difference's lower bound is exactly 0.0, where the mutant reads a gap that may be zero as apart. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in items_of",
+      "line_text": "if difference.lo() > 0.0 || difference.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when difference's upper bound is exactly 0.0, where the mutant reads a gap that may be zero as apart. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in items_of",
+      "line_text": "} else if difference.lo() != 0.0 || difference.hi() != 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when exactly one bound of difference is 0.0, where the mutant takes a gap that may not be zero as no gap. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace != with == in items_of",
+      "line_text": "} else if difference.lo() != 0.0 || difference.hi() != 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either mutant differs from the original only when a bound of difference is exactly 0.0. difference is x - y, the two curves' enclosures of the coordinate the shadow leaves out, and geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: two enclosures of a coordinate within about 10^-308 of each other, which only curves of that size give, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in quadratic",
+      "line_text": "None if d.hi() < 0.0 => Meeting::Nowhere,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when the discriminant's upper bound is exactly 0.0, where the mutant counts no meeting and the original leaves the pair to the engine. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in quadratic",
+      "line_text": "None if d.lo() > 0.0 => Meeting::Twice,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the discriminant's lower bound is exactly 0.0. On a discriminant that may be zero the mutant counts two roots, the root of max(d.lo, 0) is an enclosure reaching 0, and the two roots (-b - root) / a and (-b + root) / a both hold -b / a (each rounded outward), so low.hi() >= high.lo() and the function returns None, as the original's fall-through to None does; a, not holding 0, keeps the division defined."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace match guard d.lo() > 0.0 with true in quadratic",
+      "line_text": "None if d.lo() > 0.0 => Meeting::Twice,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard is reached only when d.hi() >= 0.0, the arm before having taken d.hi() < 0.0, so the mutant differs only on a discriminant whose enclosure holds 0. On a discriminant that may be zero the mutant counts two roots, the root of max(d.lo, 0) is an enclosure reaching 0, and the two roots (-b - root) / a and (-b + root) / a both hold -b / a (each rounded outward), so low.hi() >= high.lo() and the function returns None, as the original's fall-through to None does; a, not holding 0, keeps the division defined."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in quadratic",
+      "line_text": "let root = Interval::new(if d.lo() < 0.0 { 0.0 } else { d.lo() }, d.hi())?.sqrt()?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Where d.lo() equals 0.0 both branches give 0.0, so the root is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_conic",
+      "line_text": "if s.hi() < domain.0 || s.lo() > domain.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when s.hi() equals the domain's start. s encloses a root of the line's quadratic, computed by geom_num::interval, which widens every bound outward by a step: where the line truly meets the conic at an end of its domain, s strictly holds that end. A bound of s equal to an end needs the root to lie past that end by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in line_conic",
+      "line_text": "if s.hi() < domain.0 || s.lo() > domain.1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when s.lo() equals the domain's end. s encloses a root of the line's quadratic, computed by geom_num::interval, which widens every bound outward by a step: where the line truly meets the conic at an end of its domain, s strictly holds that end. A bound of s equal to an end needs the root to lie past that end by under a step, a miss; there the original keeps the boundary touch its enclosure cannot rule out and the mutant drops it, which is the truth of the inputs. Every meeting that exists is reported alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in line_conic",
+      "line_text": "Shape::Branch if alpha.hi() < 0.0 => None,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when alpha's upper bound is exactly 0.0, where the mutant drops the root as one on the other branch. alpha is a0 + s a1 by geom_num::interval, which widens every bound outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of -2^-1074, the least subnormal: a hyperbola's first coordinate within about 10^-308 of its centre, though at any root of the branch's equation alpha^2 - beta^2 = 1, so |alpha| >= 1."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with == in self_crossings",
+      "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant's hull ends at t.hi() even where s reaches past it. Pruning on that smaller hull is still sound: a crossing in the box has s0 < t0 <= t.hi() with s0 >= the hull's start, so the curve between them lies in it, and a stretch that runs along one heading cannot cross itself; a pair with s0 > t0 is the mirror of one in a box above the diagonal, which keeps its own full hull. So no crossing is lost, and only which boxes are pruned, and the work, can change; the tests' work pins see no change."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in self_crossings",
+      "line_text": "let join = s.contains(lo) && t.contains(hi);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant drops a zero whose enclosure holds lo or hi alone, the original only one holding both. solve proves a zero unique only when the Krawczyk image of a box lies inside that box, and the image, refined, is the zero's enclosure; every box lies inside the domain, so an enclosure holds an end of the domain only if an outward-rounded bound of the image lands exactly on it, a coincidence of rounding (a zero on the end itself comes out flagged in the tests: its image reaches past the box)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in self_crossings",
+      "line_text": "!(join || diagonal)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant keeps a zero that is the join but not on the diagonal, or on the diagonal but not the join. No proven zero meets the diagonal s = t: every point of the diagonal is a zero of a(s) - a(t), so a box meeting it holds a segment of zeros, while solve proves a zero only where its box holds exactly one (Krawczyk with contraction below 1). A zero at the join needs an enclosure holding both ends: solve proves a zero unique only when the Krawczyk image of a box lies inside that box, and the image, refined, is the zero's enclosure; every box lies inside the domain, so an enclosure holds an end of the domain only if an outward-rounded bound of the image lands exactly on it, a coincidence of rounding (a zero on the end itself comes out flagged in the tests: its image reaches past the box)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in self_crossings",
+      "line_text": "let diagonal = s.lo() <= t.hi() && t.lo() <= s.hi();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "No proven zero meets the diagonal s = t: every point of the diagonal is a zero of a(s) - a(t), so a box meeting it holds a segment of zeros, while solve proves a zero only where its box holds exactly one (Krawczyk with contraction below 1). So for every proven zero the original's diagonal is false; the mutant's needs s.lo() > t.hi(), a zero wholly below the diagonal, but the search keeps only boxes with s.lo() < t.hi() and proves none that meet the diagonal, so every proven zero lies wholly above it and the mutant's is false too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace || with && in second_order",
+      "line_text": "if speed_a.lo() <= 0.0 || speed_b.lo() <= 0.0 || along.contains(0.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant of the first ||, (speed_a.lo() <= 0.0 && speed_b.lo() <= 0.0) || along.contains(0.0), is the original: a speed's bound ax^2 + ay^2 reaches 0 only when both components' boxes hold 0, and then each product of along = ax bx + ay by holds 0, so along holds 0 and the last test already holds. Both are along.contains(0.0). (The second ||'s mutant is killed by a_tangency_too_sharp_to_read_at_one_step_is_higher_order.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let difference = if along.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "along does not hold 0 here, the test before having returned where it does, so along.lo() is never 0.0 and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in second_order",
+      "line_text": "let least = if difference.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "difference does not hold 0 here, the test before having returned where it does, so difference.lo() is never 0.0 and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace * with / in lines_in_space",
+      "line_text": "let [wx, wy, wz] = w.map(|c| c.lo() * 0.5 + c.hi() * 0.5);",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "The midpoint of w, the step from one line's origin to the other's, is used only for parallel lines, to orient the plane they are read in: n = d x w, and across drops the coordinate where n is largest. This branch is reached only on whole-number data (grid_line), so w's enclosures are whole numbers widened by a step. Either mutant gives 2 lo + hi / 2 or lo / 2 + 2 hi, which is 2.5 w to within a few steps of a double, so n becomes 2.5 n to within those steps. The largest of n's components is at least 1, on whole data, and only components of that size can be the largest after so small a change. None of them is 0, the case where dropping that coordinate would read the two lines as one. So the plane keeps them apart, as the original's does, and line_line gives the same answer. (The other mutants of this line are killed by parallel_lines_in_space_apart_stay_apart_in_the_plane_they_are_read_in.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace && with || in lines_in_space",
+      "line_text": "n = if r <= p && r <= q {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in lines_in_space",
+      "line_text": "n = if r <= p && r <= q {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in lines_in_space",
+      "line_text": "} else if q <= p {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Here the two lines are one, and the branch picks the plane to read it in, dropping its smallest coordinate. A plane fails only if the dropped coordinate is the line's only nonzero one, and checked for each direction along an axis, every mutant still drops another: (1,0,0) z or y, (0,1,0) z or x, (0,0,1) y or x. So line_line reads one line, not a point, and finds the same overlap from the same whole data; only the rounding of its ends' enclosures can differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace <= with > in circle_circle",
+      "line_text": "let small_first = r <= q;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "small_first only says which circle Crossing::of measures the crossings from. Swapped, its height is the same: Kahan's Heron area (d + l + s)(l + s - d)(d - (l - s))(d + (l - s)) has the same factors with l - s negated, multiplied in another order. So the tangent, merged and two-crossing decisions and the count are the same, and the points, reached from the other centre by the foot, are the same up to the rounding of their enclosures. That rounding is all the smaller circle's side improves, which the crate does not promise."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in halves",
+      "line_text": "let share = if whole > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole is the width of the solver's domain on this coordinate: a curve's parameter domain, whose ends geom-curve's check_domain and geom-nurbs' Basis::new (EmptyDomain) require ordered and apart and which an infinite line is cut to at the grid's reach, widened by a seam's pad. Its ends differ, and the difference of two different doubles is never 0.0 (gradual underflow), so whole > 0.0 always and the two agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in solve",
+      "line_text": "if range.is_some_and(|r| r.iter().any(|v| v.lo() > 0.0 || v.hi() < 0.0)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a residual's enclosure over the box has a lower bound of exactly 0.0, where the mutant drops a box whose residual may be zero on its edge. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in solve",
+      "line_text": "if range.is_some_and(|r| r.iter().any(|v| v.lo() > 0.0 || v.hi() < 0.0)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a residual's enclosure over the box has an upper bound of exactly 0.0, where the mutant drops a box whose residual may be zero on its edge. geom_num::interval widens every bound of every operation outward by a step and writes -0.0 as 0.0, so a bound of exactly 0.0 comes only from a rounded bound of 2^-1074 or -2^-1074, the least subnormal: values within about 10^-308 of zero, which only data of that size gives, nowhere near a model's coordinates."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace > with >= in solve",
+      "line_text": ".any(|(a, b)| (a.hi() - a.lo()) * 2.0 <= b.hi() - b.lo() && b.hi() > b.lo());",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "b is a side of a box the solver holds or of its widened copy, and no such side is a single point: the domain's sides have ordered, different ends; halves cuts a side only strictly inside it; grown and widened add width; and BernsteinCurve::clip rounds its range's ends outward and clamps them to a domain of positive width. So b.hi() > b.lo() always, and > and >= agree."
     }
   ],
   "coverage_off": [
@@ -5451,27 +6163,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": "let (Some(nx), Some(ny), Some(nz)) = (",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "nx.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
       "occurrences": 1,
       "piece": "G41",
       "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
@@ -5993,6 +6684,13 @@
       "occurrences": 2,
       "piece": "G41",
       "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "line_text": "Err(e) => Err(e),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
     }
   ]
 }

@@ -230,9 +230,93 @@
               "kind": "corpus",
               "piece": "G70",
               "why": "26 new count benchmarks on the hot paths of phase 2's code pieces (decision 32.44): geom-math 7, geom-curve 5, geom-surface 5, geom-nurbs 3, geom-linalg 2, geom-bvh 2, geom-num 2; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G158",
+              "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
+            },
+            {
+              "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63",
+              "kind": "corpus",
+              "piece": "G159",
+              "why": "7 new count benchmarks on the exact decisions on lines and quadrics (decision 32.44): a line with a sphere, cylinder, cone and torus, parallel directions, an axis's gap and a tangent sphere; no existing digest moved"
+            },
+            {
+              "sha256": "d0f5a6b3d51104d1b56c8c8bb6801b4e0b66025a74a9d0670020e1ddc53d2ff4",
+              "kind": "corpus",
+              "piece": "G163",
+              "why": "5 new count benchmarks on where curves meet (decision 32.44): two segments, two circles, a line with a circle, two cubics and a loop; merged with G159's quadric and G162's projection lines; no existing digest moved"
+            },
+            {
+              "sha256": "ad9c15a7d6201c5b6d42ec0316a502e33dbd22a68046da6b5b30336df585d071",
+              "kind": "corpus",
+              "piece": "G164",
+              "why": "3 new count benchmarks on where curves meet surfaces (decision 32.44): a line through a plane, a line along a torus's equator and a cubic through a graph; no existing digest moved"
+            },
+            {
+              "sha256": "0addf11ef9e85ac52b1858fff68014e4dbe595ceb2a811ae5ef5823f7fef51b9",
+              "kind": "corpus",
+              "piece": "G168",
+              "why": "2 new count benchmarks on geom-intersect's tracer (decision 32.44): a sphere through a plane patch and a torus's silhouette; no existing digest moved"
+            },
+            {
+              "sha256": "04d28353bb06b8f4ac478afc9379ac8904b01735a08a01b4770f1214c4f798db",
+              "kind": "corpus",
+              "piece": "G169",
+              "why": "1 new count benchmark on geom-intersect's subdivision (decision 32.44): a sphere through a plane patch; no existing digest moved"
+            },
+            {
+              "sha256": "9fa3a5cb5a890b07c73fb90432b035c17901a9dc19d0318a45830de510df1a3b",
+              "kind": "bug",
+              "piece": "G164",
+              "why": "intersect/surface_torus's result digest moved from 76a47ad1... to 764d5d58..., inputs unchanged (3c7d9153...): a line along a torus's equator crosses it four times, and the three crossings on a seam of the closed torus were BoundaryTouch; a join is no boundary (12.6), so they are Crossing now, at the same 256 points of the 64 inputs; no other digest moved"
+            },
+            {
+              "sha256": "d4e034c4c1b1a3cf8e3334bb49b626025e358895882b5c6abf024bd2e8638839",
+              "kind": "corpus",
+              "piece": "G170",
+              "why": "1 new count benchmark on geom-intersect's marching (decision 32.44): the branches of a sphere through a plane patch; no existing digest moved"
+            },
+            {
+              "sha256": "9b05d1f92fc7c31e7fdcb969965ce415da2905a76a69b53b69e6ea2022bdb7bd",
+              "kind": "corpus",
+              "piece": "G171",
+              "why": "1 new count benchmark on geom-intersect's contact analysis (decision 32.44): a sphere resting on a plane patch. march_plate's digest moves with it: the march now pads each parameter's box at that parameter's speed, without which it could not walk a NURBS surface against a plane at grid scale."
+            },
+            {
+              "sha256": "a39643deef4fb7e171b3b6162517f9e46f940f605f037d6a17403875e776f7a9",
+              "kind": "corpus",
+              "piece": "G173",
+              "why": "1 new count benchmark on geom-intersect's poles and seams (decision 32.44): a whole sphere through a plane holding both its poles, one loop joined through each. trace_patch's, march_plate's and trace_silhouette's digests move with it: their results' branches now say where they pass a seam, a knot line or a pole (Branch::passes, 12.10), which their Debug text writes, empty here."
+            },
+            {
+              "sha256": "60d4d161c7d9e90819b775275dc5dd71da8245c62a8941036bca5f516294e09d",
+              "kind": "corpus",
+              "piece": "G174",
+              "why": "1 new count benchmark on geom-intersect's known curves (decision 32.44): sheets tangent to a plane along a known line, the tube about it proven and taken out of the search; no existing digest moved"
+            },
+            {
+              "sha256": "b2e51b5ead94579078afedb5f158f0fcf2f81c789d8b85222803caaec634d009",
+              "kind": "corpus",
+              "piece": "G176",
+              "why": "1 new count benchmark on geom-intersect's self-intersection (decision 32.44): swept loops crossing themselves along a line; no existing digest moved"
+            },
+            {
+              "sha256": "ba6838fc287e7348432cc3b433385c12e7acdd4c1431ce418f053b627d6fdc4d",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "da864792d9d055457d70a069b3c5edba643b0969416435765c905ae098167c3e",
+              "kind": "corpus",
+              "piece": "G177",
+              "why": "1 new count benchmark on the checker's pcurve bound (decision 32.44): a pcurve held to its edge through a tilted patch, by geom-intersect's gap; no existing digest moved"
             }
           ],
-          "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6"
+          "sha256": "48e007bb1517ae687e83b67a0a5347429760f7137e165d3e8228ff267da9cc99"
         },
         {
           "id": "geom-nurbs/operations",
@@ -484,6 +568,36 @@
             "function": "dense_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-op/determinism",
+          "what": "geom-op's canonical CBOR and SHA-256 corpus (piece G86): every power of two and the edges of each float width and integer head, 3,000 nested values of SKG's subset drawn from a fixed SplitMix64 stream, and the SHA-256 and 128-bit cut of each encoding and of seeded messages of every length to 300 bytes: 22,369 records in the encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-op",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
+        },
+        {
+          "id": "geom-topo/arenas",
+          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
+          "check": {
+            "crate": "geom-topo",
+            "test": "arena_determinism",
+            "function": "arenas_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
+        },
+        {
+          "id": "geom-make/queries",
+          "what": "The core queries (piece G102) over 32 boxes, each also moved, 32 prisms and 8 cylinders from a fixed stream: every face's row, name and roles, twice-area vectors, the bounding box, six times the volume, the exactness report's counts and the validity report's deferred count, as tests/query_determinism.rs records them.",
+          "check": {
+            "crate": "geom-make",
+            "test": "query_determinism",
+            "function": "queries_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "b8f2e38d41f1e8a7dacd616b124f55c6b7b46cc691203456872debd94e8f9c4f"
         }
       ]
     }
