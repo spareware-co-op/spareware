@@ -624,6 +624,26 @@ fn a_face_that_crosses_itself_is_split_and_a_simple_one_kept() {
         let w = weld_one(&touching);
         assert_eq!(w.log.split.len(), 1, "{touching:?}");
     }
+    // A face that turns straight back once, its third corner inside its first side, and its
+    // mirror image, each way round: one pair of sides meets in each, through a different end of
+    // a side each time (the weld starts every loop at its lowest-keyed corner).
+    let fold = [
+        [0, 0, 0],
+        [4 * MM, 0, 0],
+        [2 * MM, 0, 0],
+        [2 * MM, 3 * MM, 0],
+    ];
+    let mirror = fold.map(|[x, y, z]| [4 * MM - x, y, z]);
+    for shape in [fold, mirror] {
+        for reverse in [false, true] {
+            let mut loop_points = shape.to_vec();
+            if reverse {
+                loop_points.reverse();
+            }
+            let w = weld_one(&loop_points);
+            assert_eq!(w.log.split.len(), 1, "{loop_points:?}");
+        }
+    }
     // An L, not convex but simple, with a corner on a straight side: kept as it is.
     let w = weld_one(&[
         [0, 0, 0],
