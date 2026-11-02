@@ -1373,6 +1373,27 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 index.within(*center, *radius, &mut meter)
             },
         )),
+        // The pool's results must be the serial executor's, so both are recomputed serially.
+        ("helper", "lone_serial" | "lone_pool") => {
+            let lists = if name == "lone_serial" {
+                inputs::helper::lone_serial(class)
+            } else {
+                inputs::helper::lone_pool(class)
+            };
+            fold(lists.iter().map(|items| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_run::Exec::serial().map(
+                    &mut meter,
+                    geom_run::Phase::new("bench"),
+                    geom_run::ChunkPlan::fixed::<64>(),
+                    items,
+                    |_, x, meter| {
+                        meter.charge(1)?;
+                        Ok(x.wrapping_mul(3))
+                    },
+                )
+            }))
+        }
         ("linalg", "pivoted_qr") => fold(
             inputs::linalg::pivoted_qr(class)
                 .iter()
