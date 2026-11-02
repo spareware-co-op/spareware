@@ -779,6 +779,27 @@ fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
     ]
 }
 
+/// A context of one `geom-bool` scenario, as the benchmarks run it.
+fn scenario_context() -> geom_op::OpContext<'static> {
+    geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([4; 16])),
+        geom_run::Budget::UNLIMITED,
+    )
+}
+
+/// What a scenario's bodies are read by: their faces, edges and vertices, and how many.
+fn scenario_counts<'b>(bodies: impl IntoIterator<Item = &'b geom_topo::Body>) -> [u32; 4] {
+    let mut sum = [0u32; 4];
+    for body in bodies {
+        let a = body.arenas();
+        sum[0] += a.rows(geom_topo::Arena::Face);
+        sum[1] += a.rows(geom_topo::Arena::Edge);
+        sum[2] += a.rows(geom_topo::Arena::Vertex);
+        sum[3] += 1;
+    }
+    sum
+}
+
 /// The output digest of one run of `kernel` over `batch`, as a benchmark computes it.
 fn kernel_digest<T, R: Canonical>(kernel: fn(&[T], &mut Vec<R>), batch: &[T]) -> Digest {
     let mut out = Vec::with_capacity(batch.len());
@@ -1449,6 +1470,116 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     }),
             )
         }
+        ("scenario", "openings" | "slab_holes" | "moved_door") => {
+            let size = inputs::scenario::reduced();
+            let hosts = match name {
+                "openings" => inputs::scenario::wall(class, size),
+                "slab_holes" => inputs::scenario::slab(class, size),
+                _ => Vec::new(),
+            };
+            let recuts = if name == "moved_door" {
+                inputs::scenario::moved_door(class, size)
+            } else {
+                Vec::new()
+            };
+            let cuts: Vec<geom_bool::batch::Cut<'_>> = hosts
+                .iter()
+                .map(|host| inputs::scenario::cut_of(host, None))
+                .chain(
+                    recuts
+                        .iter()
+                        .map(|r| inputs::scenario::cut_of(&r.host, Some(&r.cache))),
+                )
+                .collect();
+            fold(cuts.iter().map(|one| {
+                geom_bool::batch::cut(
+                    &scenario_context(),
+                    &geom_run::Exec::serial(),
+                    std::slice::from_ref(one),
+                    geom_bool::batch::BatchRule::Atomic,
+                )
+                .map(|out| scenario_counts(out.result.iter().map(|r| &r.result.body)))
+            }))
+        }
+        ("scenario", "union") => fold(
+            inputs::scenario::boxes(class, inputs::scenario::reduced())
+                .iter()
+                .map(|many| {
+                    let operands: Vec<_> = many
+                        .bodies
+                        .iter()
+                        .enumerate()
+                        .map(|(k, b)| inputs::scenario::solid(k, b))
+                        .collect();
+                    geom_bool::combine::unite(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &operands,
+                    )
+                    .map(|out| scenario_counts([&out.result.body]))
+                }),
+        ),
+        ("scenario", "one_selection" | "three_selections") => fold(
+            inputs::scenario::wall(class, inputs::scenario::reduced())
+                .iter()
+                .map(|host| {
+                    use geom_bool::operand::Selection;
+                    let target = inputs::scenario::solid(0, &host.host).key;
+                    let mut select = vec![Selection::Subtract { target }];
+                    if name == "three_selections" {
+                        select.extend([Selection::Unite, Selection::Intersect]);
+                    }
+                    let mut operands = vec![inputs::scenario::solid(0, &host.host)];
+                    operands.extend(
+                        host.tools
+                            .iter()
+                            .enumerate()
+                            .map(|(k, t)| inputs::scenario::solid(k + 1, t)),
+                    );
+                    let input = geom_bool::operand::BooleanInput {
+                        operands,
+                        select,
+                        merge: geom_poly::merge::Merge::RemoveRedundant,
+                        accept: None,
+                    };
+                    geom_bool::combine::combine(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &input,
+                    )
+                    .map(|out| scenario_counts(out.result.iter().flatten().map(|c| &c.body)))
+                }),
+        ),
+        ("scenario", "storey") => fold(
+            inputs::scenario::storey(class, inputs::scenario::reduced())
+                .iter()
+                .map(|storey| {
+                    use geom_bool::operand::{Selection, Term};
+                    let envelope = inputs::scenario::solid(0, &storey.envelope);
+                    let mut test = vec![Term::Inside(envelope.key)];
+                    let mut operands = vec![envelope];
+                    for (k, wall) in storey.walls.iter().enumerate() {
+                        let one = inputs::scenario::solid(k + 1, wall);
+                        test.extend([Term::Inside(one.key), Term::Not, Term::And]);
+                        operands.push(one);
+                    }
+                    let input = geom_bool::operand::BooleanInput {
+                        operands,
+                        select: vec![Selection::Cells {
+                            test,
+                            seeds: inputs::scenario::seeds(storey),
+                        }],
+                        merge: geom_poly::merge::Merge::RemoveRedundant,
+                        accept: None,
+                    };
+                    geom_bool::combine::combine(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &input,
+                    )
+                    .map(|out| scenario_counts(out.result.iter().flatten().map(|c| &c.body)))
+                }),
+        ),
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
             |(entries, query)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

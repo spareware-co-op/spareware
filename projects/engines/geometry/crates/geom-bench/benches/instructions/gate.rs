@@ -2808,3 +2808,63 @@ pub mod make {
         benchmarks = build_box, cylinder, move_box, turn_box
     );
 }
+
+/// The flat boolean's scenarios at reduced scale (piece G140; 23.13): each one whole job at about a
+/// tenth of its full size.
+pub mod scenario {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/openings/typical"))]
+    fn openings(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/moved_door/typical"))]
+    fn moved_door(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/slab_holes/typical"))]
+    fn slab_holes(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/union/typical"))]
+    fn union(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/one_selection/typical"))]
+    fn one_selection(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/three_selections/typical"))]
+    fn three_selections(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/storey/typical"))]
+    fn storey(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = scenario;
+        benchmarks = openings, moved_door, slab_holes, union, one_selection, three_selections, storey
+    );
+}

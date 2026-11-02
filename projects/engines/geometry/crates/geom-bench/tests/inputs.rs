@@ -71,8 +71,14 @@ fn exponent(x: f64) -> i64 {
 
 #[test]
 fn every_benchmark_has_a_full_batch() {
+    // A scenario's batch is one whole job (inputs::scenario).
     for name in names() {
-        assert_eq!(prepare_named(&name).unwrap().len(), BATCH, "{name}");
+        let full = if name.starts_with("scenario/") {
+            1
+        } else {
+            BATCH
+        };
+        assert_eq!(prepare_named(&name).unwrap().len(), full, "{name}");
     }
     assert_eq!(names().len(), cases().count() + growth_cases().count());
 }

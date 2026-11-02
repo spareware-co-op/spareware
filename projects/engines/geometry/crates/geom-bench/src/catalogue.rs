@@ -433,10 +433,78 @@ pub static OPS: &[Op] = &[
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
     Op { group: "math_types", name: "decimal_parse", measures: "geom_math::Decimal::parse", classes: T, prepare: |c| bind(inputs::math_types::decimal_parse(c), kernels::math_types::decimal_parse) },
+    // The flat boolean's scenarios (piece G140; 23.13's scenarios at reduced scale): each batch is
+    // one whole job at about a tenth of its full size (inputs::scenario).
+    Op { group: "scenario", name: "openings", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("openings", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "moved_door", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("moved_door", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "slab_holes", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("slab_holes", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "union", measures: "geom_bool::combine::unite", classes: T, prepare: |c| scenario("union", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "one_selection", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("one_selection", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "three_selections", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("three_selections", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "storey", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("storey", c, inputs::scenario::reduced()) },
 ];
 
+/// The scenarios' names, as the operations of the scenario group name them.
+pub const SCENARIOS: [&str; 7] = [
+    "openings",
+    "moved_door",
+    "slab_holes",
+    "union",
+    "one_selection",
+    "three_selections",
+    "storey",
+];
+
+/// The scenario named `op` of class `class` at `sizes`, bound to its kernel. An unknown name gives
+/// an empty batch, which no catalogued benchmark has.
+fn scenario(op: &str, class: Class, sizes: inputs::scenario::Sizes) -> Prepared {
+    use inputs::scenario as s;
+    use kernels::scenario as k;
+    match op {
+        "openings" => bind(s::wall(class, sizes), k::openings),
+        "moved_door" => bind(s::moved_door(class, sizes), k::moved_door),
+        "slab_holes" => bind(s::slab(class, sizes), k::openings),
+        "union" => bind(s::boxes(class, sizes), k::union),
+        "one_selection" => bind(s::picks(class, sizes, 1), k::selections_of),
+        "three_selections" => bind(s::picks(class, sizes, 3), k::selections_of),
+        "storey" => bind(s::storey(class, sizes), k::storey),
+        _ => bind(s::wall(Class::Degenerate, sizes), k::openings),
+    }
+}
+
+/// `batch` bound to `kernel` if one run of it succeeds on every input.
+fn succeeding<T: Canonical + 'static>(
+    batch: Vec<T>,
+    kernel: Kernel<T, Result<[u32; 4], geom_op::OpError>>,
+) -> Option<Prepared> {
+    let mut out = Vec::with_capacity(batch.len());
+    kernel(&batch, &mut out);
+    (!out.is_empty() && out.iter().all(Result::is_ok)).then(|| bind(batch, kernel))
+}
+
+/// The scenario named `op` at full size, for the wall-clock harness (28.14: nightly, against Spare
+/// Construct's targets), once one run of it has succeeded; `None` for a name [`SCENARIOS`] does
+/// not hold or a run that failed. Full-size results have no golden digests, as the count gates
+/// never run them: the harness checks the reduced batch's digests before timing the full one.
+#[must_use]
+pub fn full_scenario(op: &str) -> Option<Prepared> {
+    use inputs::scenario as s;
+    use kernels::scenario as k;
+    let (class, sizes) = (Class::Typical, s::full());
+    match op {
+        "openings" => succeeding(s::wall(class, sizes), k::openings),
+        "moved_door" => succeeding(s::moved_door(class, sizes), k::moved_door),
+        "slab_holes" => succeeding(s::slab(class, sizes), k::openings),
+        "union" => succeeding(s::boxes(class, sizes), k::union),
+        "one_selection" => succeeding(s::picks(class, sizes, 1), k::selections_of),
+        "three_selections" => succeeding(s::picks(class, sizes, 3), k::selections_of),
+        "storey" => succeeding(s::storey(class, sizes), k::storey),
+        _ => None,
+    }
+}
+
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 31] = [
+pub const GROUPS: [&str; 32] = [
     "predicate",
     "sign",
     "wide",
@@ -468,6 +536,7 @@ pub const GROUPS: [&str; 31] = [
     "quadrature",
     "linalg",
     "make",
+    "scenario",
 ];
 
 /// The group of the growth checks.

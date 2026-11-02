@@ -504,6 +504,13 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_bool",
+        &[
+            ("batch", include_str!("../../geom-bool/src/batch.rs")),
+            ("combine", include_str!("../../geom-bool/src/combine.rs")),
+        ],
+    ),
+    (
         "geom_make",
         &[
             (

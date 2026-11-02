@@ -56,6 +56,7 @@ pub mod predicate;
 pub mod real;
 pub mod rng;
 pub mod roots;
+pub mod scenario;
 pub mod sign;
 pub mod surface;
 pub mod wide;
