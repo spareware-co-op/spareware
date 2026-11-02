@@ -121,6 +121,17 @@ fn closed(m: &Merged, pieces: &[Outward]) {
         assert_eq!(fin.from.max(fin.to), edge.high);
         let plane = m.sheets[m.faces[fin.face].sheet].face;
         assert_eq!(pieces[fin.piece].piece.face, plane, "fin {at}: wrong piece");
+        // Both ends lie on the fin's line: its face's plane and its bound.
+        for end in [fin.from, fin.to] {
+            let point = &m.vertices[end];
+            for on in [plane, fin.bound] {
+                assert_eq!(
+                    on.side_of_tpi(point),
+                    Ok(Sign::Zero),
+                    "fin {at} leaves its line"
+                );
+            }
+        }
     }
     for (at, edge) in m.edges.iter().enumerate() {
         assert!(edge.low < edge.high, "edge {at} runs down");
