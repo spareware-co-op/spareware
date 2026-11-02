@@ -6019,6 +6019,14 @@
       "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in turned",
+      "line_text": "first == Sign::Negative",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With != every line is turned so that its direction's first non-zero component is negative instead of positive, by the one rule keys in machine words and in I256 share. Keys are compared only as coordinates over that component: line_order's ratios, and the cells, which are then not made (Cell::new refuses a denominator not above 0), so the wide comparison runs. a / b against c / d with b and d both negative has b * d positive, so every order is the same; only the work changes."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
       "mutant": "replace plane_words -> Option<([i64; 3], i64)> with None",
       "line_text": "let [x, y, z] = p.n();",

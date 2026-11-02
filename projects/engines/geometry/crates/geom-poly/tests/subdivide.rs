@@ -390,6 +390,44 @@ fn a_split_passes_over_a_plane_that_holds_a_polygon() {
 }
 
 #[test]
+fn every_split_is_on_an_odd_half_step() {
+    // So a piece is bounded only by planes of the polygons, its own and those that cut it, and by
+    // sides of boxes, each on an odd half step, where no polygon of grid data lies.
+    let blocks = [
+        A,
+        B,
+        Block {
+            low: [1, -2, 1],
+            high: [3, 9, 3],
+        },
+    ];
+    let list = polygons(&blocks);
+    let planes: Vec<Plane> = list
+        .iter()
+        .flat_map(|p| std::iter::once(p.piece.face).chain(p.piece.bounds.iter().copied()))
+        .collect();
+    let given = |q: &Plane| {
+        let turned = Plane::new(q.n().map(|v| -v), -q.d()).unwrap();
+        planes.iter().any(|p| *p == *q || *p == turned)
+    };
+    let half_step = |q: &Plane| {
+        let n = q.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.abs() == 2)
+            && q.d() % 2 != 0
+    };
+    for leaf in [1, 2, 4] {
+        let found = run(&blocks, leaf, &[]);
+        assert!(found.iter().any(|c| c.piece.bounds.iter().any(half_step)));
+        for c in &found {
+            for bound in &c.piece.bounds {
+                assert!(given(bound) || half_step(bound), "{bound:?} at leaf {leaf}");
+            }
+        }
+    }
+}
+
+#[test]
 fn twenty_cubes_on_one_top_and_bottom_stop_at_their_shared_planes() {
     // Each overlaps the next, all between z = 0 and z = 4 (EMBER's figure 25).
     let blocks: Vec<Block> = (0..20)
@@ -700,6 +738,13 @@ fn a_box_over_the_subtree_size_splits_level_by_level() {
         };
         let (levels, one) = (at(LEAF_POLYGONS), at(1_000_000));
         assert_eq!(volume(&test, &levels), volume(&test, &one), "{test:?}");
+        // The far cube is in the upper half, a task at the first level, while the lower half is
+        // split again: tree order still puts it last.
+        let far = 25 * 6;
+        if let Some(first) = levels.iter().position(|c| c.polygon >= far) {
+            assert!(first > 0, "{test:?}");
+            assert!(levels[first..].iter().all(|c| c.polygon >= far), "{test:?}");
+        }
     }
     assert_eq!(
         volume(&WindingTest::unite(), &run(&blocks, 1_000_000, &[])),
