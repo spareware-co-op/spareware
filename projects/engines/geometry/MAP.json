@@ -5446,6 +5446,7 @@
           "guarantees": [
             "**Closed inputs only.** The arrangement needs a whole winding number everywhere, so an open mesh is [`MeshError::NotClosed`], whose remedy is healing. Self-intersections are fine.",
             "**A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no two of its faces cross. A solid operand's boxes away from the others are solved without cuts or tracing (11.3 step 4): fewer pieces, the same vectors, the same mesh.",
+            "**As exact as its least exact operand.** A result's class is its operands' combined: the least exact class, the bounds added (9, 19.13), and every face carries that bound.",
             "**Bounded results only.** A test the outside passes, such as \"not A\", has no finite boundary: [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.",
             "**Conforming and exact.** The merge gives maximal faces and edges that end where other edges do, so no T-junction is left. Nothing is rounded, however often a mesh is cut: a corner off the grid stays three planes. Each result passes the mesh checker on the way out.",
             "**The same mesh however it was reached.** The boxes, the threads and the order of the faces do not show. A corner off the grid takes the lowest three planes around it, not the three that happened to cut a piece.",
