@@ -2498,6 +2498,23 @@ fn mesh_typical_batches_all_succeed() {
     all_ok("envelope", k::envelope, &m::envelope(Typical));
 }
 
+/// Every typical batch of `geom-spatial`'s GJK filter (piece G294) proves its two clouds apart.
+#[test]
+fn spatial_typical_batches_are_all_clear() {
+    use geom_bench::inputs::spatial as m;
+    use geom_bench::kernels::spatial as k;
+    let batch = m::gjk_filter(Typical);
+    all_ok("gjk_filter", k::gjk_filter, &batch);
+    let mut out = Vec::new();
+    k::gjk_filter(&batch, &mut out);
+    for (r, (a, b, reach)) in out.iter().zip(&batch) {
+        match r {
+            Ok(geom_spatial::gjk::Filter::Clear(c)) => assert!(c.proves(a, b, *reach)),
+            other => panic!("not clear: {other:?}"),
+        }
+    }
+}
+
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
 /// bounds every input.
 #[test]

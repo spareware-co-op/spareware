@@ -409,6 +409,8 @@ pub static OPS: &[Op] = &[
     Op { group: "mesh", name: "locate", measures: "geom_mesh::Classifier::locate_all", classes: T, prepare: |c| bind(inputs::mesh::locate(c), kernels::mesh::locate) },
     Op { group: "mesh", name: "boolean", measures: "geom_mesh::boolean::boolean", classes: T, prepare: |c| bind(inputs::mesh::boolean(c), kernels::mesh::boolean) },
     Op { group: "mesh", name: "hull", measures: "geom_mesh::Hull::of", classes: T, prepare: |c| bind(inputs::mesh::hull(c), kernels::mesh::hull) },
+    // geom-spatial's certified GJK filter (piece G294; decision 32.44): two clouds a reach apart.
+    Op { group: "spatial", name: "gjk_filter", measures: "geom_spatial::gjk::filter", classes: T, prepare: |c| bind(inputs::spatial::gjk_filter(c), kernels::spatial::gjk_filter) },
     Op { group: "mesh", name: "slice", measures: "geom_mesh::slice::slice", classes: T, prepare: |c| bind(inputs::mesh::slice(c), kernels::mesh::slice) },
     Op { group: "mesh", name: "point_point", measures: "distance::point_point", classes: T, prepare: |c| bind(inputs::mesh::point_point(c), kernels::mesh::point_point) },
     Op { group: "mesh", name: "point_line", measures: "distance::point_line", classes: T, prepare: |c| bind(inputs::mesh::point_line(c), kernels::mesh::point_line) },
@@ -450,7 +452,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 32] = [
+pub const GROUPS: [&str; 33] = [
     "predicate",
     "sign",
     "wide",
@@ -483,6 +485,7 @@ pub const GROUPS: [&str; 32] = [
     "quadrature",
     "linalg",
     "make",
+    "spatial",
 ];
 
 /// The group of the growth checks.

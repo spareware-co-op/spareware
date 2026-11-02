@@ -2296,3 +2296,21 @@ pub mod make {
         });
     }
 }
+
+/// `geom-spatial`'s certified GJK filter (piece G294, decision 32.44): two clouds of points proven
+/// a reach apart, under an unlimited budget.
+pub mod spatial {
+    use geom_num::grid::P3;
+    use geom_run::{Budget, WorkMeter};
+    use geom_spatial::gjk::{Filter, GjkError, filter};
+
+    use super::run;
+
+    /// `gjk::filter` on each pair of clouds, at its reach.
+    #[inline(never)]
+    pub fn gjk_filter(batch: &[(Vec<P3>, Vec<P3>, u64)], out: &mut Vec<Result<Filter, GjkError>>) {
+        run(batch, out, |(a, b, reach)| {
+            filter(a, b, *reach, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+}

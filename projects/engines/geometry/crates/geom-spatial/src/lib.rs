@@ -24,6 +24,9 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G293, G294, G295, G296, G297.
+//! Status: [`gjk`], the certified GJK filter (G294), is built; pieces G293, G295, G296 and G297
+//! build the rest. Chapter 19's table puts the filter beside `distance`, which G293 builds.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+pub mod gjk;

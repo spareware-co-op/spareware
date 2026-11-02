@@ -1544,6 +1544,12 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 index.within(*center, *radius, &mut meter)
             },
         )),
+        ("spatial", "gjk_filter") => fold(inputs::spatial::gjk_filter(class).iter().map(
+            |(a, b, reach)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_spatial::gjk::filter(a, b, *reach, &mut meter)
+            },
+        )),
         ("linalg", "pivoted_qr") => fold(
             inputs::linalg::pivoted_qr(class)
                 .iter()

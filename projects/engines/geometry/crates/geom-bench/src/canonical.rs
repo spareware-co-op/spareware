@@ -883,6 +883,27 @@ impl<T: Canonical> Canonical for Result<T, geom_bvh::BvhError> {
     }
 }
 
+// `geom-spatial`'s certified GJK filter (decision 32.44's count benchmark for piece G294).
+
+impl Canonical for Result<geom_spatial::gjk::Filter, geom_spatial::gjk::GjkError> {
+    // A tag: 0 and a clear verdict's certificate, 1 for undecided, 2 and an error's text.
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(geom_spatial::gjk::Filter::Clear(c)) => {
+                h.update(&[0]);
+                c.direction.encode(h);
+                c.first.encode(h);
+                c.second.encode(h);
+            }
+            Ok(geom_spatial::gjk::Filter::Undecided) => h.update(&[1]),
+            Err(e) => {
+                h.update(&[2]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-nurbs`'s types (decision 32.44's count benchmarks for pieces G56, G58 and G59).
 
 impl<const D: usize> Canonical for geom_nurbs::Bounds<D> {

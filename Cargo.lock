@@ -833,6 +833,7 @@ dependencies = [
  "geom-op",
  "geom-poly",
  "geom-run",
+ "geom-spatial",
  "geom-surface",
  "geom-test",
  "geom-topo",
@@ -1429,6 +1430,7 @@ dependencies = [
  "geom-op",
  "geom-poly",
  "geom-run",
+ "geom-test",
 ]
 
 [[package]]
