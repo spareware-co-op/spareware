@@ -1601,10 +1601,6 @@ fn trimmed(
     let mut stretches = Vec::new();
     for end in ends {
         let part = stretch(curve, start, end)?;
-        let width = match &part {
-            Some(c) => crate::curve::widest(&c.bound((start, end), meter)?),
-            None => 0.0,
-        };
         let middle_of = start * 0.5 + end * 0.5;
         let on_loop = if loops && middle_of > hi {
             middle_of - period
@@ -1615,25 +1611,21 @@ fn trimmed(
         stretches.push(Stretch {
             from: start,
             to: end,
-            part,
-            width,
             on,
         });
         start = end;
     }
     let mut out = Vec::new();
     for run in runs(&stretches, loops) {
-        out.extend(kept(curve, &stretches, &run, (hi, period, loops), meter)?);
+        out.extend(kept(curve, &stretches, &run, (lo, hi, loops), meter)?);
     }
     Ok(out)
 }
 
-/// A stretch of a piece between cuts.
+/// A stretch of a piece between cuts, and whether it lies on both domains.
 struct Stretch {
     from: f64,
     to: f64,
-    part: Option<CurveKind<3>>,
-    width: f64,
     on: bool,
 }
 
@@ -1659,27 +1651,25 @@ fn runs(stretches: &[Stretch], loops: bool) -> Vec<Vec<usize>> {
     out
 }
 
-/// What a run keeps: its stretches wider than [`STEP`], or, if none is, a point at its middle.
-/// Flagged cuts around one point stand a little apart: what lies between them is no stretch, and a
-/// stretch no wider than STEP beside a longer one is that one's end; a run no wider than STEP
-/// throughout is a meeting the domains' ends make that small, a point at this resolution.
+/// What a run keeps. A run is one piece on both domains, whatever cuts lie inside it: there the
+/// curve only touches an edge, or two edges' cuts at one point stand a little apart. A loop on both
+/// all round is whole; a run wider than [`STEP`] is one stretch; and a run no wider is a meeting the
+/// domains' ends make that small, a point at its middle at this resolution, never nothing.
 fn kept(
     curve: &CurveKind<3>,
     stretches: &[Stretch],
     run: &[usize],
-    (hi, period, loops): (f64, f64, bool),
+    (lo, hi, loops): (f64, f64, bool),
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<Part>, IntersectError> {
-    let members: Vec<&Stretch> = run.iter().filter_map(|k| stretches.get(*k)).collect();
-    if members.iter().any(|s| s.width > STEP) {
-        return Ok(members
-            .iter()
-            .filter(|s| s.width > STEP)
-            .filter_map(|s| s.part.clone())
-            .map(|c| Part::Curve(Box::new(c), [CurveEnd::Boundary; 2]))
-            .collect());
+) -> Result<Option<Part>, IntersectError> {
+    let period = hi - lo;
+    if loops && run.len() == stretches.len() {
+        return Ok(stretch(curve, lo, hi)?.map(|c| Part::Curve(Box::new(c), [CurveEnd::Closed; 2])));
     }
-    let (Some(first), Some(last)) = (members.first(), members.last()) else {
+    let (Some(first), Some(last)) = (
+        run.first().and_then(|k| stretches.get(*k)),
+        run.last().and_then(|k| stretches.get(*k)),
+    ) else {
         return Err(IntersectError::Internal);
     };
     // A run that wraps a loop's end ends a turn on.
@@ -1688,17 +1678,23 @@ fn kept(
     } else {
         last.to
     };
+    let Some(part) = stretch(curve, first.from, to)? else {
+        return Ok(None);
+    };
+    let width = crate::curve::widest(&part.bound((first.from, to), meter)?);
+    if width > STEP {
+        return Ok(Some(Part::Curve(Box::new(part), [CurveEnd::Boundary; 2])));
+    }
     let middle_of = first.from * 0.5 + to * 0.5;
     let t = if loops && middle_of > hi {
         middle_of - period
     } else {
         middle_of
     };
-    let width = members.iter().fold(0.0, |w, s| w + s.width);
-    Ok(alloc::vec![Part::Point {
+    Ok(Some(Part::Point {
         at: at_parameter(curve, t, meter)?,
         width,
-    }])
+    }))
 }
 
 /// The item of a point on both surfaces, or none if it lies off a domain.

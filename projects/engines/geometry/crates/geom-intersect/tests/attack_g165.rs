@@ -1395,6 +1395,10 @@ fn every_closed_form_at_its_edges_makes_what_it_made() {
     // from an origin 2^39 along it: the height's terms cancel from 2^39, so its enclosure, some
     // 2^-13 wide, holds zero.
     let (m, far) = (65_536.0, 8_388_608.0);
+    // A level plane through `c` on a box of its own parameters.
+    let boxed = |c: [f64; 3], u: (f64, f64), v: (f64, f64)| {
+        SurfaceKind::Plane(Plane::new(c, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], (u, v)).unwrap())
+    };
     let pairs: Vec<(SurfaceKind, SurfaceKind)> = vec![
         (
             sphere([0.0; 3], 3.000_000_000_000_000_4),
@@ -1477,6 +1481,49 @@ fn every_closed_form_at_its_edges_makes_what_it_made() {
             given([0.0; 3], 5.0, 0.125, z, (-1.0, 1.0)),
             plane([4.0, 0.0, 0.0], [1.0, 0.0, 8.0], [0.0, 1.0, 0.0]),
         ),
+        // A circle in a square its sides touch: one run all round, whatever the cuts.
+        (
+            sphere([0.0; 3], 5.0),
+            boxed([0.0, 0.0, 3.0], (-4.0, 4.0), (-4.0, 4.0)),
+        ),
+        // A thin strip across a great circle twice: two meetings a step wide, two points, apart.
+        (
+            sphere([0.0; 3], 50.0),
+            boxed([0.0, 0.0, 30.0], (-0.5, 0.5), (-100.0, 100.0)),
+        ),
+        // A thin strip across where the circle's turn starts: a point whose run wraps past 2.
+        (
+            sphere([0.0; 3], 50.0),
+            boxed([0.0, 0.0, 30.0], (-100.0, 100.0), (-0.3, 0.7)),
+        ),
+        // A circle touching its square's side where its turn starts and leaving by the opposite
+        // side: one run wraps the start, one stretch.
+        (
+            sphere([0.0; 3], 5.0),
+            boxed([0.0, 0.0, 3.0], (-3.0, 4.0), (-5.0, 5.0)),
+        ),
+        // A cone given by its radius on an axis no double holds the unit of, (3, 4, 0): its apex
+        // (3, 5, 7) is computed inexactly, its middle exact (no binade boundary near it). A plane of whole numbers along a
+        // generator meets it in a parabola only exactly, so the pair is left undecided; and an
+        // exact cone on that apex is no proven match for it.
+        (
+            given([6.0, 9.0, 7.0], 5.0, 1.0, [3.0, 4.0, 0.0], TALL),
+            plane([0.0, 1.0, 1.0], [3.0, 4.0, 5.0], [4.0, -3.0, 0.0]),
+        ),
+        (
+            given([6.0, 9.0, 7.0], 5.0, 1.0, [3.0, 4.0, 0.0], TALL),
+            cone([3.0, 5.0, 7.0], [3.0, 4.0, 0.0], 1.0),
+        ),
+        (
+            cone([3.0, 5.0, 7.0], [3.0, 4.0, 0.0], 1.0),
+            given([6.0, 9.0, 7.0], 5.0, 1.0, [3.0, 4.0, 0.0], TALL),
+        ),
+        // A small cone on a band half a step tall cut along a generator: two meetings under a step,
+        // points, which a cone's extent one short would not reach.
+        (
+            given([0.0; 3], 2.0, 0.125, z, (-0.25, 0.25)),
+            plane([1.0, 0.0, 0.0], [1.0, 0.0, 8.0], [0.0, 1.0, 0.0]),
+        ),
     ];
     let mut out = Vec::new();
     for (k, (a, b)) in pairs.iter().enumerate() {
@@ -1516,6 +1563,14 @@ const AT_EDGES: &[&str] = &[
     "[Curve { at: ParamBox { spans: [Interval { lo: 0.1980240507396195, hi: 0.21181886928313085 }, Interval { lo: -10.0, hi: 9.999999999999838 }, Interval { lo: -1.2500000000000469, hi: 1.249999999999983 }, Interval { lo: 29.580398915497987, hi: 30.413812651491163 }], unknowns: 4 }, curve: Parabola(Parabola { vertex: [-5.0, 0.0, -360.0], axes: Vectors { u: [0.049999999999999996, 0.0, 0.4], v: [0.0, 1.0, 0.0] }, domain: (29.58039891549807, 30.413812651491085), form: Form { shape: Parabolic, doubles: [[-5.0, 0.0, -360.0], [0.049999999999999996, 0.0, 0.4], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: -5.0, hi: -5.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: -360.0, hi: -360.0 }], [Interval { lo: 0.049999999999999996, hi: 0.049999999999999996 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.4, hi: 0.4 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0, hi: 1.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(2), step: Q0 } }, Curve { at: ParamBox { spans: [Interval { lo: 1.788181130716869, hi: 1.8019759492603806 }, Interval { lo: -10.0, hi: 9.999999999999838 }, Interval { lo: -1.25000000000004, hi: 1.249999999999983 }, Interval { lo: -30.413812651491163, hi: -29.58039891549799 }], unknowns: 4 }, curve: Parabola(Parabola { vertex: [-5.0, 0.0, -360.0], axes: Vectors { u: [0.049999999999999996, 0.0, 0.4], v: [0.0, 1.0, 0.0] }, domain: (-30.413812651491085, -29.580398915498073), form: Form { shape: Parabolic, doubles: [[-5.0, 0.0, -360.0], [0.049999999999999996, 0.0, 0.4], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: -5.0, hi: -5.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: -360.0, hi: -360.0 }], [Interval { lo: 0.049999999999999996, hi: 0.049999999999999996 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.4, hi: 0.4 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0, hi: 1.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
     "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: -2.0, hi: 5.0 }, Interval { lo: -7.0000000000000195, hi: 1.73e-322 }, Interval { lo: -2.0000000000000058, hi: 5.000000000000009 }], unknowns: 4 }, curve: Line(Line { origin: [0.0, 0.0, -2.0], direction: [-1.0000000000000007, 0.0, 1.0], domain: (0.0, 6.9999999999999964), form: Form { shape: Linear, doubles: [[0.0, 0.0, -2.0], [-1.0000000000000007, 0.0, 1.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: -2.0, hi: -2.0 }], [Interval { lo: -1.0000000000000007, hi: -1.0000000000000007 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0, hi: 1.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(1), step: Q0 } }, Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: -2.0, hi: 5.0 }, Interval { lo: -1.73e-322, hi: 7.0000000000000195 }, Interval { lo: -2.0000000000000058, hi: 5.000000000000009 }], unknowns: 4 }, curve: Line(Line { origin: [0.0, 0.0, -2.0], direction: [1.0000000000000007, 0.0, 1.0], domain: (0.0, 6.9999999999999964), form: Form { shape: Linear, doubles: [[0.0, 0.0, -2.0], [1.0000000000000007, 0.0, 1.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: -2.0, hi: -2.0 }], [Interval { lo: 1.0000000000000007, hi: 1.0000000000000007 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0, hi: 1.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(1), step: Q0 } }] TopologyCertified",
     "[Point { at: ParamBox { spans: [Interval { lo: 1.7951488080250841, hi: 1.7951488080250855 }, Interval { lo: -0.006945981036338373, hi: -0.006945981036309939 }, Interval { lo: -0.0008682476295423189, hi: -0.00086824762953872 }, Interval { lo: -2.99971057016189, hi: -2.999710570161871 }], unknowns: 4 }, xyz: Box3 { min: P3 { x: Coord(3), y: Coord(-3), z: Coord(-1) }, max: P3 { x: Coord(4), y: Coord(-2), z: Coord(0) } }, contact: BoundaryTouch, class: Certified { bound: Steps(3), step: Q0 } }, Point { at: ParamBox { spans: [Interval { lo: 0.20485119197491483, hi: 0.2048511919749157 }, Interval { lo: -0.006945981036338373, hi: -0.006945981036309939 }, Interval { lo: -0.0008682476295423189, hi: -0.00086824762953872 }, Interval { lo: 2.999710570161871, hi: 2.99971057016189 }], unknowns: 4 }, xyz: Box3 { min: P3 { x: Coord(3), y: Coord(2), z: Coord(-1) }, max: P3 { x: Coord(4), y: Coord(3), z: Coord(0) } }, contact: BoundaryTouch, class: Certified { bound: Steps(3), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 0.15521307072001272, hi: 0.5 }, Interval { lo: -4.0, hi: 4.0 }, Interval { lo: -4.0, hi: 4.0 }], unknowns: 4 }, curve: Circle(Circle { center: [0.0, 0.0, 3.0], radius: 4.0, frame: Frame { x: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] }, domain: (0.0, 2.0), form: Form { shape: Trig, doubles: [[0.0, 0.0, 3.0], [4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 3.0, hi: 3.0 }], [Interval { lo: 4.0, hi: 4.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 4.0, hi: 4.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Closed, Closed], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Point { at: ParamBox { spans: [Interval { lo: 1.4999999999999996, hi: 1.5000000000000004 }, Interval { lo: 0.2048327646991331, hi: 0.20483276469913372 }, Interval { lo: -1.04e-321, hi: 1.04e-321 }, Interval { lo: -40.000000000000114, hi: -39.999999999999865 }], unknowns: 4 }, xyz: Box3 { min: P3 { x: Coord(0), y: Coord(-40), z: Coord(29) }, max: P3 { x: Coord(0), y: Coord(-40), z: Coord(30) } }, contact: BoundaryTouch, class: Certified { bound: Steps(2), step: Q0 } }, Point { at: ParamBox { spans: [Interval { lo: 0.4999999999999998, hi: 0.5000000000000002 }, Interval { lo: 0.2048327646991331, hi: 0.20483276469913372 }, Interval { lo: -1.04e-321, hi: 1.04e-321 }, Interval { lo: 39.999999999999865, hi: 40.000000000000114 }], unknowns: 4 }, xyz: Box3 { min: P3 { x: Coord(0), y: Coord(40), z: Coord(29) }, max: P3 { x: Coord(0), y: Coord(40), z: Coord(30) } }, contact: BoundaryTouch, class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Point { at: ParamBox { spans: [Interval { lo: 0.9984083195785137, hi: 0.998408319578514 }, Interval { lo: 0.20483276469913295, hi: 0.20483276469913395 }, Interval { lo: -39.99949991873497, hi: -39.99949991873465 }, Interval { lo: 0.20001562722207702, hi: 0.20001562722207847 }], unknowns: 4 }, xyz: Box3 { min: P3 { x: Coord(-40), y: Coord(0), z: Coord(29) }, max: P3 { x: Coord(-39), y: Coord(1), z: Coord(31) } }, contact: BoundaryTouch, class: Certified { bound: Steps(3), step: Q0 } }, Point { at: ParamBox { spans: [Interval { lo: 0.001591680421486158, hi: 0.001591680421486169 }, Interval { lo: 0.20483276469913295, hi: 0.20483276469913395 }, Interval { lo: 39.99949991873465, hi: 39.99949991873497 }, Interval { lo: 0.20001562722207702, hi: 0.20001562722207847 }], unknowns: 4 }, xyz: Box3 { min: P3 { x: Coord(39), y: Coord(0), z: Coord(29) }, max: P3 { x: Coord(40), y: Coord(1), z: Coord(31) } }, contact: BoundaryTouch, class: Certified { bound: Steps(3), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 0.15521307072001272, hi: 0.5 }, Interval { lo: -3.0, hi: 4.0 }, Interval { lo: -4.000000000000014, hi: 4.000000000000014 }], unknowns: 4 }, curve: Circle(Circle { center: [0.0, 0.0, 3.0], radius: 4.0, frame: Frame { x: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] }, domain: (1.2300534561626157, 2.769946543837384), form: Form { shape: Trig, doubles: [[0.0, 0.0, 3.0], [4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 3.0, hi: 3.0 }], [Interval { lo: 4.0, hi: 4.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 4.0, hi: 4.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "Ok(None)",
+    "Ok(None)",
+    "Ok(None)",
+    "[Point { at: ParamBox { spans: [Interval { lo: 1.6666517010560111, hi: 1.6666517010560125 }, Interval { lo: -0.0013028531100420808, hi: -0.0013028531100349723 }, Interval { lo: -0.00016285663875527072, hi: -0.0001628566387543712 }, Interval { lo: -1.7319567796924111, hi: -1.731956779692401 }], unknowns: 4 }, xyz: Box3 { min: P3 { x: Coord(0), y: Coord(-2), z: Coord(-1) }, max: P3 { x: Coord(1), y: Coord(-1), z: Coord(0) } }, contact: BoundaryTouch, class: Certified { bound: Steps(2), step: Q0 } }, Point { at: ParamBox { spans: [Interval { lo: 0.33334829894398776, hi: 0.3333482989439887 }, Interval { lo: -0.0013028531100403044, hi: -0.001302853110033196 }, Interval { lo: -0.00016285663875504868, hi: -0.00016285663875414914 }, Interval { lo: 1.7319567796924011, hi: 1.7319567796924114 }], unknowns: 4 }, xyz: Box3 { min: P3 { x: Coord(0), y: Coord(1), z: Coord(-1) }, max: P3 { x: Coord(1), y: Coord(2), z: Coord(0) } }, contact: BoundaryTouch, class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
 ];
 
 /// An operand must fit the frame's range, 2^40 steps each way (12.1), before any closed form is
