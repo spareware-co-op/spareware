@@ -5700,6 +5700,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "axis is the normal's largest component in magnitude, and a plane's normal is never zero (Plane::new refuses one), so that component is never 0 and < 0 and <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "replace && with || in Scene<'a>::seated",
+      "line_text": "*low < half && half < *high",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The box test only refuses a seed outside the cells' box early. The seating that follows traces the seed's vector and refuses a seed no cell holds as SeedOutside too, and a seed outside the box is in no cell: the seeds outside in cells.rs and combine.rs get SeedOutside under the mutant as without it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "replace < with <= in Scene<'a>::seated",
+      "line_text": "*low < half && half < *high",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The cells' box (around) has its faces on odd half steps, and a seed's coordinate doubled is even, so half never equals low or high and < and <= agree."
     }
   ],
   "coverage_off": [],

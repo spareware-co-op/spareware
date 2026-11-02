@@ -515,6 +515,12 @@ fn a_split_gives_one_body_per_cell() {
         "both ends and the middle"
     );
     out.result[0].iter().for_each(|c| checked(&c.body));
+    // The wall's long faces lie in all three bodies, so their pieces' names are qualified.
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "bool.names_qualified")
+    );
     let line = sheet(0, 30, [-10, -10], [20, 70]);
     let out = picked(vec![solid(1, &wall), cutter(2, &line)], selection.clone());
     let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
