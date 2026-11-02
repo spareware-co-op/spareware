@@ -665,3 +665,112 @@ fn a_new_vertex_half_a_step_from_an_old_one_takes_a_name_of_its_own() {
         Origin::Generated { .. }
     ));
 }
+
+/// A box made by operation `op`, with the names its making reported.
+fn cuboid_named(op: u8, low: [i64; 3], size: [u64; 3]) -> (Body, Vec<TopoName>) {
+    let input = BoxInput {
+        min: P3::new(low[0], low[1], low[2]).unwrap(),
+        size: size.map(Steps),
+    };
+    let made = make_box(&ctx_of(op), &input).unwrap().result;
+    (made.body, made.names)
+}
+
+#[test]
+fn a_boolean_reports_every_name_it_made_after_those_it_refers_to() {
+    let (wall, wall_names) = cuboid_named(1, [0, 0, 0], [300, 10, 60]);
+    let door = |x: i64| cuboid_named(2, [x, -5, 0], [20, 20, 40]);
+    let ((one, one_names), (two, two_names), (three, _)) = (door(20), door(120), door(220));
+    for operands in [
+        vec![solid(1, &wall), solid(2, &one), solid(3, &two)],
+        vec![
+            solid(1, &wall),
+            solid(2, &one),
+            solid(3, &two),
+            solid(4, &three),
+        ],
+    ] {
+        let result = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
+        // The operands' names first (a door's twice over is one), then the boolean's, in order.
+        let mut graph = geom_name::NameGraph::new();
+        for name in wall_names.iter().chain(&one_names).chain(&two_names) {
+            graph.intern(name.clone()).unwrap();
+        }
+        for name in &result.names {
+            for parent in geom_name::graph::parents(name) {
+                assert!(graph.name(parent).is_some(), "{name:?} before {parent:?}");
+            }
+            graph.intern(name.clone()).unwrap();
+        }
+        // Every name the result holds is known, so a reference to it can resolve (20.4).
+        for name in all_names(&result.body) {
+            assert!(graph.is_weak(name).is_ok(), "{name:?}");
+        }
+        // And nothing is reported that no name of the result reaches.
+        let held = all_names(&result.body);
+        let mut reached = BTreeSet::new();
+        let mut stack: Vec<NameId> = held.iter().copied().collect();
+        while let Some(id) = stack.pop() {
+            if reached.insert(id)
+                && let Some(name) = graph.name(id)
+            {
+                stack.extend(geom_name::graph::parents(name));
+            }
+        }
+        for name in &result.names {
+            assert!(reached.contains(&name.id().unwrap()), "{name:?}");
+        }
+    }
+}
+
+#[test]
+fn two_doors_of_one_type_rename_none_of_the_walls_own_edges_and_corners() {
+    // The doors of one type bring the same names, so their faces are qualified by their keys; the
+    // wall's edges and corners the doors do not touch were brought by the wall alone, and keep
+    // their names (the rule is per name).
+    let (wall, _) = cuboid_named(1, [0, 0, 0], [300, 10, 60]);
+    let door = |x: i64| cuboid_named(2, [x, -5, 0], [20, 20, 40]).0;
+    let (one, two) = (door(20), door(120));
+    let both = subtract(
+        &ctx(),
+        &SERIAL,
+        key(1),
+        &[solid(1, &wall), solid(2, &one), solid(3, &two)],
+    )
+    .unwrap()
+    .result;
+    let alone = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &wall), solid(2, &one)])
+        .unwrap()
+        .result;
+    let names = |body: &Body| {
+        let n = body.names().unwrap();
+        let of = |list: &[geom_topo::order::NameKey]| -> BTreeSet<NameId> {
+            list.iter().map(|k| NameId::from_bytes(k.0)).collect()
+        };
+        (of(&n.edges), of(&n.vertices))
+    };
+    let (wall_edges, wall_corners) = names(&wall);
+    let (both_edges, both_corners) = names(&both.body);
+    let (alone_edges, alone_corners) = names(&alone.body);
+    // The wall's top edges and corners lie far from both doors: each cut keeps them.
+    let kept_both: BTreeSet<_> = wall_edges.intersection(&both_edges).copied().collect();
+    let kept_alone: BTreeSet<_> = wall_edges.intersection(&alone_edges).copied().collect();
+    assert!(
+        !kept_both.is_empty(),
+        "two doors of one type renamed every wall edge"
+    );
+    assert_eq!(
+        kept_both, kept_alone,
+        "a second door renamed wall edges it does not touch"
+    );
+    let corners_both: BTreeSet<_> = wall_corners.intersection(&both_corners).copied().collect();
+    let corners_alone: BTreeSet<_> = wall_corners.intersection(&alone_corners).copied().collect();
+    assert!(
+        !corners_both.is_empty(),
+        "two doors of one type renamed every wall corner"
+    );
+    assert_eq!(corners_both, corners_alone);
+    // The doors' own edges, brought by both, are not kept by either.
+    let (door_edges, _) = names(&one);
+    assert!(door_edges.is_disjoint(&both_edges));
+}
