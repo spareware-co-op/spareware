@@ -5724,11 +5724,27 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace != with == in dyadic",
+      "line_text": "while part != 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With == the loop runs only while the fraction left is zero, and then for ever: cut(0) leaves it zero and writes another 0 each turn, so a whole number never returns and the tests stop it by their timeout. It hangs; it never writes a wrong number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace == with != in merge",
+      "line_text": "let same = rest.iter().take_while(|(k, _)| k == key).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The first entry's key is key itself, so with != take_while stops at once: the group is empty, the tail is the whole list and the loop takes the same first entry for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong hull."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
       "mutant": "replace | with ^ in to_f32",
       "line_text": "f32::from_bits(sign | (field << 23) | (fraction & 0x007f_ffff))",
-      "occurrences": 1,
+      "occurrences": 2,
       "kind": "equivalent",
-      "reason": "The sign, the exponent and the fraction sit in bits of their own, so or and exclusive or agree."
+      "reason": "The sign, the exponent and the fraction sit in bits of their own, so or and exclusive or agree, at either of the line's two ors."
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
@@ -7052,13 +7068,7 @@
       "occurrences": 2,
       "piece": "G41",
       "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
-      "line_text": "Err(e) => Err(e),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
     }
+
   ]
 }
