@@ -575,7 +575,7 @@ fn drive_rotate() -> Driver {
         })
     };
     let bx = Held::new(a_box());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
+    let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
     let shown = rotate(
         &ctx(),
         unit_box().moved(None),
@@ -620,7 +620,9 @@ fn drive_rotate() -> Driver {
                 }),
             ),
             trigger("NotAccepted", turned(&bx, None)),
-            trigger("NotCertifiedYet", turned(&flat, Some(certified(64)))),
+            // A curved body turned off the grid: the checker certifies its curved pairs of faces
+            // only from G177 on, where a flat one rounded onto committed planes now passes.
+            trigger("NotCertifiedYet", turned(&cyl, Some(certified(64)))),
         ],
         accept: Some(Box::new(move |class| turned(&accepting, class))),
         range: Some((quarter(&unit_box(), 0), quarter(&unit_box(), 1))),
@@ -645,7 +647,6 @@ fn drive_scale() -> Driver {
     let bx = Held::new(a_box());
     let ballish = Held::new(sphere(&ctx(), &ball(p(1, 2, 3), 5)).unwrap());
     let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
     let shown = scale(
         &ctx(),
         unit_box().moved(None),
@@ -675,7 +676,7 @@ fn drive_scale() -> Driver {
             trigger("KindNotCertified", by(&cyl, wide(2), Some(certified(64)))),
             trigger(
                 "NotCertifiedYet",
-                by(&flat, [(1, 3), (1, 7), (1, 1)], Some(certified(64))),
+                by(&cyl, [(1, 3); 3], Some(certified(64))),
             ),
         ],
         accept: Some(Box::new(move |class| by(&accepting, [(2, 1); 3], class))),
@@ -700,7 +701,6 @@ fn drive_pattern() -> Driver {
     };
     let bx = Held::new(a_box());
     let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
     let two = || vec![shift(1, 20), shift(2, 40)];
     let shown = pattern(&ctx(), unit_box().moved(None), &two()).unwrap();
     let accepting = bx.clone();
@@ -729,7 +729,7 @@ fn drive_pattern() -> Driver {
             ),
             trigger(
                 "NotCertifiedYet",
-                of(&flat, Some(certified(64)), vec![tilted(1)]),
+                of(&cyl, Some(certified(64)), vec![tilted(1)]),
             ),
         ],
         accept: Some(Box::new(move |class| {
