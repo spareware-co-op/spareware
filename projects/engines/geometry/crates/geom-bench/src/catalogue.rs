@@ -420,10 +420,14 @@ pub static OPS: &[Op] = &[
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
     Op { group: "math_types", name: "decimal_parse", measures: "geom_math::Decimal::parse", classes: T, prepare: |c| bind(inputs::math_types::decimal_parse(c), kernels::math_types::decimal_parse) },
+    // geom-run's parallel helper: a map whose items fit one chunk, on the serial executor and on a
+    // pool, so its lone wave is counted both ways (decision 32.44).
+    Op { group: "helper", name: "lone_serial", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_serial(c), kernels::helper::lone_serial) },
+    Op { group: "helper", name: "lone_pool", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_pool(c), kernels::helper::lone_pool) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 30] = [
+pub const GROUPS: [&str; 31] = [
     "predicate",
     "sign",
     "wide",
@@ -454,6 +458,7 @@ pub const GROUPS: [&str; 30] = [
     "brent",
     "quadrature",
     "linalg",
+    "helper",
 ];
 
 /// The group of the growth checks.
