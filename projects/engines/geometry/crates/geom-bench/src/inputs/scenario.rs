@@ -18,10 +18,10 @@
 //! Guarantees: every scenario is the same on every target, every body in it is a valid solid made
 //! by `geom-make`, and every result of a scenario is `Ok` (`tests/inputs.rs`).
 //!
-//! Method: chapter 23.13's scenarios at reduced scale (`projects/engines/geometry/architecture/23-performance.md`), on
-//! the shapes of `geom-bool`'s own tests (`tests/batch.rs`'s wall of doors, `tests/cells.rs`'s
-//! rooms), grown to a size, with no randomness: a scenario is a fixed job, as Spare Construct's
-//! targets are (28.14).
+//! Method: chapter 23.13's scenarios at reduced scale
+//! (`projects/engines/geometry/architecture/23-performance.md`), on the shapes of `geom-bool`'s own
+//! tests (`tests/batch.rs`'s wall of doors, `tests/cells.rs`'s rooms), grown to a size, with no
+//! randomness: a scenario is a fixed job, as Spare Construct's targets are (28.14).
 //!
 //! Cost: one box built per body, outside every measured run.
 
