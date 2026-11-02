@@ -242,9 +242,15 @@
               "kind": "corpus",
               "piece": "G188",
               "why": "116 new benchmarks: rational-centre circles and arcs and their generated predicates; no existing digest moved"
+            },
+            {
+              "sha256": "7b4093180097afa334400fcc6295c5e8e795ef51e2f6f9468b16dd78c21ec30a",
+              "kind": "corpus",
+              "piece": "G189",
+              "why": "17 new benchmarks: one-root numbers, their crossings and comparisons; no existing digest moved"
             }
           ],
-          "sha256": "7b4093180097afa334400fcc6295c5e8e795ef51e2f6f9468b16dd78c21ec30a"
+          "sha256": "a7a706906538d34a7684389ebfd4ab02cdbdeaedf6597054fbe7b3da4a595949"
         },
         {
           "id": "geom-nurbs/operations",
@@ -466,6 +472,16 @@
             "function": "root_isolation_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "ce9699711dc7f72a1b12491ffd673e7b720f28e9d22936550f618a24e0bc6421"
+        },
+        {
+          "id": "geom-num/one-root",
+          "what": "One-root numbers (piece G189): 1,500 seeded circles and carriers near them at every scale up to each budget, their crossings, the arcs they lie on and the extreme values, every question of geom_num::one_root asked of them, each answer and error one byte and each crossing its integers, in tests/one_root_determinism.rs.",
+          "check": {
+            "crate": "geom-num",
+            "test": "one_root_determinism",
+            "function": "one_root_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "bdfcc773c361382a95057a0ea8a8401b9052e9642959d4da271d1475ac9a648a"
         },
         {
           "id": "geom-num/arc",
