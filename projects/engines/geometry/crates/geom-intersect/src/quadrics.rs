@@ -393,7 +393,10 @@ fn cut_cylinder(
     if along == Some(Sign::Zero) {
         return Ok(None);
     }
-    if along.is_none() && tilt.contains(0.0) {
+    // Not along the axis, or not known to be, yet no enclosure of the tilt tells it from zero (an
+    // exact plane all but along it): the centre cannot be divided out, so the pair is left
+    // undecided.
+    if tilt.contains(0.0) {
         return Ok(None);
     }
     let reach = dot(minus(sheet.at, tube.at)?, n)?.div(tilt)?;
@@ -492,6 +495,13 @@ fn cut_cone(
     let foot = minus(cone.apex, scale(n, h)?)?;
     let bent = point(1.0)?.sub(k.mul(alpha.square()?)?)?;
     let cross_term = k.mul(h)?.mul(alpha)?.mul(beta)?;
+    // An exact sign can stand where no enclosure of what the conic is divided by tells it from
+    // zero (a plane all but along a generator, or passing all but through the apex): its axes
+    // cannot be divided out, so the pair is left undecided.
+    let divisor = if sign == Sign::Zero { cross_term } else { bent };
+    if divisor.contains(0.0) {
+        return Ok(None);
+    }
     let rest = h.square()?.mul(point(1.0)?.sub(k.mul(beta.square()?)?)?)?;
     Ok(Some(match sign {
         Sign::Positive => {
