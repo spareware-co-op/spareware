@@ -314,20 +314,26 @@ checksum = "baf0a07a401f374238ab8e2f11a104d2851bf9ce711ec69804834de8af45c7af"
 name = "construct-api"
 version = "0.0.0"
 dependencies = [
+ "construct-api",
  "construct-clash",
  "construct-elements",
  "construct-families",
  "construct-interop",
  "construct-model",
+ "construct-regen",
  "construct-transport",
  "construct-versions",
  "construct-views",
  "engine-sim",
+ "kit-core",
  "kit-mcp",
  "kit-ops",
  "kit-plugin",
+ "kit-store",
+ "kit-sync",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -380,17 +386,40 @@ dependencies = [
 name = "construct-model"
 version = "0.0.0"
 dependencies = [
+ "bolero",
  "kit-core",
+ "kit-ops",
  "kit-store",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "construct-regen"
 version = "0.0.0"
 dependencies = [
+ "bolero",
  "construct-model",
+ "construct-regen",
+ "hex",
  "kit-core",
  "kit-ops",
+ "kit-store",
+ "kit-sync",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "construct-shapes"
+version = "0.0.0"
+dependencies = [
+ "construct-model",
+ "construct-regen",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1616,7 +1645,12 @@ dependencies = [
 name = "kit-ops"
 version = "0.0.0"
 dependencies = [
+ "bolero",
+ "hex",
  "kit-core",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1631,16 +1665,26 @@ dependencies = [
 name = "kit-store"
 version = "0.0.0"
 dependencies = [
+ "bolero",
  "kit-core",
+ "kit-store",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
 name = "kit-sync"
 version = "0.0.0"
 dependencies = [
+ "bolero",
  "kit-core",
  "kit-ops",
  "kit-store",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1876,6 +1920,12 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
 ]
+
+[[package]]
+name = "pin-project-lite"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "ppv-lite86"
@@ -2263,6 +2313,27 @@ name = "tinyvec"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
+
+[[package]]
+name = "tokio"
+version = "1.54.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
+dependencies = [
+ "pin-project-lite",
+ "tokio-macros",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
 
 [[package]]
 name = "toml"

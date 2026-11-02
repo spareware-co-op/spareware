@@ -2,6 +2,8 @@
 
 *Working copy for contributors. Copied from the project map on 2026-10-18; change it only through an accepted decision note.*
 
+**Decided 2026-10-31 ([note K08](../kit/notes/K08-cloud-foundation.md)):** people work in the browser, with no local model file. One co-op cloud holds every firm's hub and project, and TiKV holds the edit log and the model's pieces. Where this map still says desktop app, project file or a firm's own server, K08 wins until that section is rewritten.
+
 Oct 18, 2026
 
 Build it from scratch in Rust, kernel included. One core runs headless, on the desktop and in the browser. It is sized for a whole multi-discipline building at better than Revit speed, and designed so a city works too. Every section is open for discussion; the decisions table near the end collects the choices.
@@ -81,7 +83,6 @@ One Rust core, compiled two ways: a native program for desktop, server and headl
 **Discuss**
 
 - Is browser-only mode (no native core) a real use case beyond small models and demos?
-- Server-hosted core for multi-user from day one, or desktop first?
 
 ## Data model
 
@@ -442,7 +443,7 @@ The model is stored in chunks by building, level and spatial cell, with a spatia
 
 **Low level**
 
-- File: one portable project file on desktop (proposed: a SQLite container holding chunk blobs, the operation log and the index), and an object store on a server. SQLite gives crash-safe writes, and any tool can read it.
+- Store: every project's pieces sit in one TiKV cluster in the co-op cloud, under keys per project, with large files in S3-style storage ([note K08](../kit/notes/K08-cloud-foundation.md)). No project file lives on anyone's computer: the browser holds what's in view and a cache of pieces already viewed. A download or export builds one file on demand.
 - Chunk blobs: compact binary with a versioned schema, compressed (zstd) and content-hashed, so unchanged chunks are never re-saved or re-sent.
 - Save: operations append to the log at once and chunks compact in the background. Saving never blocks anyone.
 - Simplified versions of each chunk are generated in the background and cached alongside it.
@@ -450,7 +451,6 @@ The model is stored in chunks by building, level and spatial cell, with a spatia
 
 **Discuss**
 
-- SQLite container, or a custom chunk file?
 - Cell size, and whether chunks follow levels for tall buildings or use pure 3D cells.
 
 ## Multi-user and history
@@ -475,7 +475,6 @@ Changes sync one operation at a time instead of through a central file, so there
 **Discuss**
 
 - Server first, or peer-to-peer with a relay?
-- Self-hosted only, or a hosted service too?
 
 ## Versions and revisions
 
@@ -508,7 +507,7 @@ Sharing between firms is built into the app, not a separate platform. It does th
 
 **High level**
 
-- **Shared project space**: one project that every firm on the job joins. Each firm keeps its own models, on its own server or co-op servers.
+- **Shared project space**: one project that every firm on the job joins. Each firm's models sit in its own hub in the co-op cloud.
 - **Team spaces**: each firm, or each discipline in a large firm, works in its own team space inside the project. Work in progress stays in the team. Inside a team, people take turns through check-out in the first release, and edit live once multi-user sync arrives (see Multi-user and history).
 - **Packages**: a team publishes a package when it is ready: chosen models, views, sheets and files, as one numbered version with a note. A package is the only way work leaves a team.
 - **Sharing timeline**: the main view of the sharing space, open from the start, not a collapsed strip at the top of the page. It does the job of Design Collaboration's timeline in our own design: a row for each team, every package as a mark along it, and for each mark which teams have taken it in and what changed.
@@ -600,7 +599,6 @@ The interface is HTML; the 3D and 2D views come from a GPU renderer fed straight
 **Discuss**
 
 - Our wgpu renderer from day one, or three.js first and replace it later?
-- Tauri, or our own WebView2 host?
 
 ## Headless API, AI and add-ins
 
@@ -812,9 +810,9 @@ Twenty-one choices to settle, each with my lean; change the status as they are a
 | Incremental engine | Salsa crate; our own | Salsa (proven in rust-analyzer) | Open |
 | Renderer | Our own on wgpu; three.js first | wgpu | Open |
 | Multi-user | Server-ordered operation log; peer-to-peer | Server-ordered log | Open |
-| Project file | SQLite container; custom chunk file | SQLite container | Open |
+| Project storage | TiKV and file storage; SQLite ruled out (one writer at a time) | TiKV and file storage | Decided (K08) |
 | Family recipe format | JSON with a schema; purpose-built language | JSON with a schema | Open |
-| Desktop shell | Tauri; our own WebView2 host | Tauri | Open |
+| Where people work | Browser only, no local model file | Browser only | Decided (K08) |
 | Plugins | WebAssembly only; native as well | WebAssembly only | Open |
 | Phases and design options | Day one; later | Day one | Open |
 | Model tolerance | 0.01 mm; other | 0.01 mm | Open |
@@ -823,7 +821,7 @@ Twenty-one choices to settle, each with my lean; change the status as they are a
 | Project-level constraints | Revit-style locks; inside families only | Families first, project locks later | Open |
 | Revit import depth | Editable elements; reference geometry | Reference first, then editable walls, floors and doors | Open |
 | DWG | ODA licence; our own writer; DXF only | DXF first, DWG decided later | Open |
-| Hosting | Self-hosted; hosted service | Self-hosted first | Open |
+| Hosting | One co-op cloud holds every firm's hub and project | One co-op cloud | Decided (K08) |
 | Python bindings | At launch; later | Later (the C interface makes it cheap) | Open |
 | Licence | MPL-2.0 core with Apache-2.0 SDK; Apache-2.0 for all; MIT | MPL-2.0 core, Apache-2.0 SDK | Open |
 | Visibility and ownership | Public now; private until firm sign-off and the first spike | Private until the firm signs off, then public | Open |
