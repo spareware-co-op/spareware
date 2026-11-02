@@ -37,7 +37,8 @@
 //! Cost: O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the
 //! meter one unit per side of a piece, per fin and per shell.
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
@@ -284,6 +285,7 @@ struct Held<'p> {
 }
 
 /// A corner of a piece, its coordinates X / w with w positive.
+#[derive(Clone, Debug, PartialEq)]
 struct Corner {
     point: Tpi,
     x: [I320; 3],
@@ -363,7 +365,7 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
 
 /// The Plücker coordinates of a line: its direction, then its moment, the direction's first
 /// non-zero component positive. Below 2^209, in [`I256`].
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct LineKey {
     coordinates: [I256; 6],
     first: usize,
@@ -645,46 +647,223 @@ fn sheets_of(pieces: &[Outward], merge: Merge) -> Result<(Vec<Sheet>, Vec<Held<'
     Ok((sheets, held))
 }
 
-/// Every corner of `held`, with each corner's number, in piece order, and the list of the distinct
-/// points in order.
+/// Each corner's number, in piece order, the distinct points in order, and the order the corners
+/// sorted into.
+type Numbered = (Vec<usize>, Vec<Corner>, Vec<usize>);
+
+/// Every corner of `parts`, with each corner's number, in piece order, and the list of the distinct
+/// points in order, the sort starting from `start` where given.
 fn numbered(
-    held: &[Held<'_>],
+    parts: &[Arc<Parts>],
+    start: Option<Vec<usize>>,
     meter: &mut WorkMeter<'_>,
-) -> Result<(Vec<usize>, Vec<Corner>), MergeError> {
-    let mut corners = Vec::new();
-    for piece in held {
-        let after = piece.piece.bounds.iter().cycle().skip(1);
-        for (bound, next) in piece.piece.bounds.iter().zip(after) {
+) -> Result<Numbered, MergeError> {
+    let mut corners: Vec<&Corner> = Vec::new();
+    for one in parts {
+        for corner in &one.corners {
             meter.charge(1)?;
-            corners.push(Some(corner(piece.piece.face, *bound, *next)?));
+            corners.push(corner);
         }
     }
-    let mut order: Vec<usize> = (0..corners.len()).collect();
+    // One total order, a point's place among the corners breaking ties as a stable sort of them in
+    // their own order would: whatever order the sort starts from, it ends in this one.
+    let mut order: Vec<usize> = start.unwrap_or_else(|| (0..corners.len()).collect());
     let mut failed = false;
-    let at = |i: &usize| corners.get(*i).and_then(Option::as_ref);
+    let at = |i: &usize| corners.get(*i).copied();
     order.sort_by(|a, b| {
         let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
-        noted(found, &mut failed)
+        noted(found, &mut failed).then(a.cmp(b))
     });
     (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
-    for i in order {
-        let held = corners.get_mut(i).and_then(Option::take);
-        let held = held.ok_or(MergeError::Open)?;
+    for i in &order {
+        let held = corners.get(*i).copied().ok_or(MergeError::Open)?;
         match places.last_mut() {
-            Some(last) if point_order(last, &held) == Some(Ordering::Equal) => {
-                last.through.extend(held.through);
+            Some(last) if point_order(last, held) == Some(Ordering::Equal) => {
+                last.through.extend(held.through.iter().copied());
             }
-            _ => places.push(held),
+            _ => places.push(held.clone()),
         }
         number
             .iter_mut()
-            .skip(i)
+            .skip(*i)
             .take(1)
             .for_each(|slot| *slot = places.len().saturating_sub(1));
     }
-    Ok((number, places))
+    Ok((number, places, order))
+}
+
+/// One piece's corners and its sides' lines, in its bounds' order: what [`numbered`] and
+/// [`sides_of`] read of it, kept for a later merge (G139).
+#[derive(Clone, Debug, PartialEq)]
+struct Parts {
+    corners: Vec<Corner>,
+    lines: Vec<LineKey>,
+}
+
+/// A piece, by its planes' coefficients.
+type PieceKey = (([i128; 3], i128), Vec<([i128; 3], i128)>);
+
+/// `piece`'s key.
+fn key_of_piece(piece: &Piece) -> PieceKey {
+    (
+        (piece.face.n(), piece.face.d()),
+        piece.bounds.iter().map(|b| (b.n(), b.d())).collect(),
+    )
+}
+
+/// What a merge keeps for the next merge of mostly the same pieces (G139): each piece's corners and
+/// its sides' lines, by the piece's planes, and the orders the merge's two sorts found, by piece
+/// and place. A later merge takes the parts of a piece it holds again, and starts its sorts from
+/// those orders, so they find the old pieces in order and sort only the new ones in; as the sorts
+/// end in one total order whatever order they start from, the merge is the one it would be without.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Memo {
+    pieces: Vec<(PieceKey, Arc<Parts>)>,
+    corners: Vec<(usize, usize)>,
+    sides: Vec<(usize, usize)>,
+}
+
+impl Memo {
+    /// How many pieces it holds.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.pieces.len()
+    }
+
+    /// Whether it holds none.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.pieces.is_empty()
+    }
+
+    /// How many of its pieces' parts it shares with `other`, the very parts and not a copy: the
+    /// pieces a merge took from the other's memo.
+    #[must_use]
+    pub fn shared_with(&self, other: &Memo) -> usize {
+        let theirs: BTreeMap<&PieceKey, &Arc<Parts>> = other
+            .pieces
+            .iter()
+            .map(|(key, parts)| (key, parts))
+            .collect();
+        self.pieces
+            .iter()
+            .filter(|(key, parts)| {
+                theirs
+                    .get(key)
+                    .is_some_and(|their| Arc::ptr_eq(parts, their))
+            })
+            .count()
+    }
+}
+
+/// Each held piece's parts, `kept` where it holds them and computed where not: all the corners
+/// first and then all the lines, as the merge has always met their errors.
+fn parts_of(held: &[Held<'_>], kept: Vec<Option<Arc<Parts>>>) -> Result<Vec<Arc<Parts>>, NumError> {
+    let mut corners: Vec<Option<Vec<Corner>>> = Vec::with_capacity(held.len());
+    for (entry, was) in held.iter().zip(&kept) {
+        if was.is_some() {
+            corners.push(None);
+            continue;
+        }
+        let piece = entry.piece;
+        let after = piece.bounds.iter().cycle().skip(1);
+        let mut list = Vec::with_capacity(piece.bounds.len());
+        for (bound, next) in piece.bounds.iter().zip(after) {
+            list.push(corner(piece.face, *bound, *next)?);
+        }
+        corners.push(Some(list));
+    }
+    let mut parts = Vec::with_capacity(held.len());
+    for ((entry, was), list) in held.iter().zip(kept).zip(corners) {
+        let one = if let Some(one) = was {
+            one
+        } else {
+            let piece = entry.piece;
+            let mut lines = Vec::with_capacity(piece.bounds.len());
+            for bound in &piece.bounds {
+                lines.push(line_key(&piece.face, bound)?);
+            }
+            Arc::new(Parts {
+                corners: list.unwrap_or_default(),
+                lines,
+            })
+        };
+        parts.push(one);
+    }
+    Ok(parts)
+}
+
+/// Each held piece's parts, from `reuse` where it holds the same piece, and the orders to start the
+/// sorts from, the old pieces' in their old order and then the new ones', as places among the
+/// corners and among the sides. Pieces held twice here start the sorts from no order.
+#[allow(
+    clippy::type_complexity,
+    reason = "the parts and the two starting orders, used once, by merge_with_reusing"
+)]
+fn reused(
+    held: &[Held<'_>],
+    keys: &[PieceKey],
+    reuse: Option<&Memo>,
+) -> Result<(Vec<Arc<Parts>>, Option<(Vec<usize>, Vec<usize>)>), NumError> {
+    let olds = reuse.map_or(&[][..], |r| r.pieces.as_slice());
+    // A piece the memo holds twice has the same parts both times; either will do.
+    let old: BTreeMap<&PieceKey, usize> = olds
+        .iter()
+        .enumerate()
+        .map(|(at, (key, _))| (key, at))
+        .collect();
+    let from: Vec<Option<usize>> = keys.iter().map(|key| old.get(key).copied()).collect();
+    // A piece held twice here takes its parts twice, but would take one place in the old orders
+    // for two.
+    let mut seen = BTreeSet::new();
+    let whole = keys.iter().all(|key| seen.insert(key));
+    let kept: Vec<Option<Arc<Parts>>> = from
+        .iter()
+        .map(|was| {
+            let one = was.and_then(|at| olds.get(at));
+            one.map(|(_, parts)| Arc::clone(parts))
+        })
+        .collect();
+    let parts = parts_of(held, kept)?;
+    let Some(reuse) = reuse.filter(|_| whole) else {
+        return Ok((parts, None));
+    };
+    // Where each old piece is held now, and where each held piece's corners and sides begin.
+    let mut now = alloc::vec![None; reuse.pieces.len()];
+    for (at, was) in from.iter().enumerate() {
+        if let Some(slot) = was.and_then(|w| now.get_mut(w)) {
+            *slot = Some(at);
+        }
+    }
+    let mut base = Vec::with_capacity(parts.len());
+    let mut total = 0usize;
+    for one in &parts {
+        base.push(total);
+        total = total.saturating_add(one.corners.len());
+    }
+    let start = |list: &[(usize, usize)]| -> Vec<usize> {
+        let mut order: Vec<usize> = list
+            .iter()
+            .filter_map(|(piece, place)| {
+                let at = now.get(*piece).copied().flatten()?;
+                Some(base.get(at)?.saturating_add(*place))
+            })
+            .collect();
+        for (at, was) in from.iter().enumerate() {
+            if was.is_none() {
+                let (first, count) = (
+                    base.get(at).copied().unwrap_or(0),
+                    parts.get(at).map_or(0, |one| one.corners.len()),
+                );
+                order.extend(first..first.saturating_add(count));
+            }
+        }
+        order
+    };
+    let orders = (start(&reuse.corners), start(&reuse.sides));
+    Ok((parts, Some(orders)))
 }
 
 /// Whether `plane` is a split of [`crate::subdivide`]'s, on an odd half step.
@@ -724,21 +903,23 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
 /// Every side of `held`, sorted by line.
 fn sides_of(
     held: &[Held<'_>],
+    parts: &[Arc<Parts>],
     number: &[usize],
+    start: Option<Vec<usize>>,
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<Side>, MergeError> {
+) -> Result<(Vec<Side>, Vec<usize>), MergeError> {
     let mut sides: Vec<Side> = Vec::new();
     let mut base = 0usize;
-    for (at, entry) in held.iter().enumerate() {
+    for (at, (entry, one)) in held.iter().zip(parts).enumerate() {
         let k = entry.piece.bounds.len();
-        for (i, bound) in entry.piece.bounds.iter().enumerate() {
+        for (i, (bound, key)) in entry.piece.bounds.iter().zip(&one.lines).enumerate() {
             meter.charge(1)?;
             // Bound i runs from corner i − 1 to corner i.
             let before = base.saturating_add(i.checked_sub(1).unwrap_or(k.saturating_sub(1)));
             let from = number.get(before).copied().unwrap_or(0);
             let to = number.get(base.saturating_add(i)).copied().unwrap_or(0);
             sides.push(Side {
-                key: line_key(&entry.piece.face, bound)?,
+                key: *key,
                 low: from.min(to),
                 high: from.max(to),
                 rising: from < to,
@@ -749,10 +930,27 @@ fn sides_of(
         }
         base = base.saturating_add(k);
     }
+    // One total order, a side's place breaking ties as a stable sort of the sides in their own
+    // order would.
+    let mut order: Vec<usize> = start.unwrap_or_else(|| (0..sides.len()).collect());
     let mut failed = false;
-    sides.sort_by(|a, b| noted(line_order(&a.key, &b.key), &mut failed));
+    let at = |i: &usize| sides.get(*i).map(|side| &side.key);
+    order.sort_by(|a, b| {
+        let found = at(a).zip(at(b)).and_then(|(p, q)| line_order(p, q));
+        noted(found, &mut failed).then(a.cmp(b))
+    });
     (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
-    Ok(sides)
+    let mut slots: Vec<Option<Side>> = sides.into_iter().map(Some).collect();
+    let mut sorted = Vec::with_capacity(slots.len());
+    for i in &order {
+        sorted.push(
+            slots
+                .get_mut(*i)
+                .and_then(Option::take)
+                .ok_or(MergeError::Open)?,
+        );
+    }
+    Ok((sorted, order))
 }
 
 /// `runs` without seams that have one face on both sides: a cut that ends inside a face leaves it
@@ -1193,8 +1391,9 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
             given,
         })
         .collect();
-    let (number, points) = numbered(&held, meter)?;
-    let sides = sides_of(&held, &number, meter)?;
+    let parts = parts_of(&held, alloc::vec![None; held.len()])?;
+    let (number, points, _) = numbered(&parts, None, meter)?;
+    let (sides, _) = sides_of(&held, &parts, &number, None, meter)?;
     let mut runs: Vec<Run> = Vec::new();
     let mut start = 0usize;
     for end in 1..=sides.len() {
@@ -1249,16 +1448,33 @@ pub fn merge(
 /// # Errors
 ///
 /// As [`merge`]; open pieces need not close.
-#[allow(
-    clippy::too_many_lines,
-    reason = "the steps of one merge in their order, each short, sharing the numbers they fill"
-)]
 pub fn merge_with(
     pieces: &[Outward],
     mode: Merge,
     rules: Rules<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Merged, MergeError> {
+    merge_with_reusing(pieces, mode, rules, None, meter).map(|(merged, _)| merged)
+}
+
+/// [`merge_with`], taking what it can from `reuse`, a merge of mostly the same pieces, and giving
+/// back what the next merge can take from this one (G139). The merge is the one [`merge_with`]
+/// gives, bit for bit, whatever `reuse` holds; it charges `meter` as [`merge_with`] does.
+///
+/// # Errors
+///
+/// As [`merge_with`].
+#[allow(
+    clippy::too_many_lines,
+    reason = "the steps of one merge in their order, each short, sharing the numbers they fill"
+)]
+pub fn merge_with_reusing(
+    pieces: &[Outward],
+    mode: Merge,
+    rules: Rules<'_>,
+    reuse: Option<&Memo>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Merged, Memo), MergeError> {
     let (sheets, mut held) = sheets_of(pieces, mode)?;
     let kept = held.len();
     held.extend(rules.cuts.iter().map(|piece| Held {
@@ -1266,8 +1482,26 @@ pub fn merge_with(
         piece,
         given: CUT,
     }));
-    let (number, points) = numbered(&held, meter)?;
-    let sides = sides_of(&held, &number, meter)?;
+    let keys: Vec<PieceKey> = held.iter().map(|entry| key_of_piece(entry.piece)).collect();
+    let (parts, start) = reused(&held, &keys, reuse)?;
+    let (corner_start, side_start) = start.map_or((None, None), |(c, s)| (Some(c), Some(s)));
+    let (number, points, corner_order) = numbered(&parts, corner_start, meter)?;
+    let (sides, side_order) = sides_of(&held, &parts, &number, side_start, meter)?;
+    let by_piece = |order: &[usize]| -> Vec<(usize, usize)> {
+        let mut at_piece = Vec::with_capacity(order.len());
+        for (piece, one) in parts.iter().enumerate() {
+            at_piece.extend((0..one.corners.len()).map(|place| (piece, place)));
+        }
+        order
+            .iter()
+            .filter_map(|i| at_piece.get(*i).copied())
+            .collect()
+    };
+    let state = Memo {
+        corners: by_piece(&corner_order),
+        sides: by_piece(&side_order),
+        pieces: keys.into_iter().zip(parts).collect(),
+    };
     held.truncate(kept);
 
     // Each line's runs, and which pieces join across them.
@@ -1421,7 +1655,7 @@ pub fn merge_with(
     for id in &used {
         vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
     }
-    Ok(Merged {
+    let merged = Merged {
         sheets,
         vertices,
         edges,
@@ -1429,5 +1663,6 @@ pub fn merge_with(
         faces,
         shells,
         piece_face,
-    })
+    };
+    Ok((merged, state))
 }

@@ -36,7 +36,8 @@ use geom_op::{
 };
 use geom_poly::convex::Piece;
 use geom_poly::merge::{
-    Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with, section, select,
+    Memo, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with,
+    merge_with_reusing, section, select,
 };
 use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange_reusing};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError, winding_at};
@@ -187,6 +188,8 @@ struct Scene<'a> {
     classified: &'a [Classified],
     /// What merges.
     merge: Merge,
+    /// What an earlier merge of mostly the same pieces kept, for a merge to start from (G139).
+    reuse: Option<&'a Memo>,
 }
 
 /// What one result of a selection is told.
@@ -232,6 +235,8 @@ struct Picked {
     qualified: bool,
     /// One entry per cell that holds two seeds: where it is narrowest.
     leaks: Vec<Option<Passage>>,
+    /// What its merge kept for the next, where it merged once.
+    memo: Option<Memo>,
 }
 
 /// Why a selection gave no body.
@@ -469,7 +474,7 @@ impl<'a> Scene<'a> {
         let kept = self.sourced(select(test, self.classified)?);
         labelled(&kept, test, meter)?;
         let rules = Rules { cuts, open: false };
-        let merged = merge_with(&kept, self.merge, rules, meter)?;
+        let (merged, memo) = merge_with_reusing(&kept, self.merge, rules, self.reuse, meter)?;
         let job = Job {
             target,
             open: false,
@@ -482,6 +487,7 @@ impl<'a> Scene<'a> {
             separated: true,
             qualified,
             leaks: Vec::new(),
+            memo: Some(memo),
         })
     }
 
@@ -559,6 +565,7 @@ impl<'a> Scene<'a> {
             separated: walled,
             qualified: false,
             leaks: Vec::new(),
+            memo: None,
         };
         for list in lists.values() {
             let pieces: Vec<Outward> = list.iter().map(|held| held.piece.clone()).collect();
@@ -702,6 +709,7 @@ impl<'a> Scene<'a> {
             separated: true,
             qualified,
             leaks: Vec::new(),
+            memo: None,
         })
     }
 
@@ -720,6 +728,7 @@ impl<'a> Scene<'a> {
             separated: true,
             qualified: false,
             leaks: Vec::new(),
+            memo: None,
         };
         for (number, list) in &lists {
             let seated: Vec<&CellSeed> = seeds
@@ -816,6 +825,7 @@ impl<'a> Scene<'a> {
             separated: true,
             qualified,
             leaks: Vec::new(),
+            memo: None,
         })
     }
 
@@ -900,6 +910,7 @@ impl<'a> Scene<'a> {
             separated: true,
             qualified: false,
             leaks: Vec::new(),
+            memo: None,
         })
     }
 }
@@ -940,11 +951,10 @@ pub fn combine(
     let mut meter = ctx.meter();
     let ready = prepare(input, &mut meter).map_err(|e| prepared(ctx, e, &meter))?;
     let (classified, exactness, _) = arranged_input(ctx, exec, input, &ready, None, &mut meter)?;
-    selected(ctx, input, &ready, &classified, exactness, &mut meter)
+    let scene = (&ready, &classified[..], None);
+    selected(ctx, input, scene, exactness, &mut meter).map(|(out, _)| out)
 }
 
-/// The arrangement of `ready`, taking each box's answer from `reuse` where it holds one; how exact
-/// it is; and the boxes it solved.
 /// The box around every operand's polygons: the least and greatest of the operands' own boxes,
 /// which is [`around`] of all their polygons, as each corner counts the same wherever it is
 /// taken; [`around`] of none when no operand has a polygon.
@@ -970,6 +980,8 @@ fn cell_of(cells: &[Result<Option<Cell>, NumError>]) -> Result<Cell, NumError> {
     whole.map_or_else(|| around(&[]), Ok)
 }
 
+/// The arrangement of `ready`, taking each box's answer from `reuse` where it holds one; how exact
+/// it is; and the boxes it solved.
 pub(crate) fn arranged_input(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
@@ -1002,15 +1014,17 @@ pub(crate) fn arranged_input(
     Ok((classified, exactness, solved))
 }
 
-/// `input`'s selections, read from one arrangement.
+/// Each selection's bodies, and what the last selection that merged once kept for the next merge.
+pub(crate) type Selected = (OpOutput<Vec<Vec<Combined>>>, Option<Memo>);
+
+/// `input`'s selections, read from one arrangement, a merge starting from `reuse` where given.
 pub(crate) fn selected(
     ctx: &OpContext<'_>,
     input: &BooleanInput<'_>,
-    ready: &Prepared,
-    classified: &[Classified],
+    (ready, classified, reuse): (&Prepared, &[Classified], Option<&Memo>),
     exactness: Exactness,
     meter: &mut WorkMeter<'_>,
-) -> Result<OpOutput<Vec<Vec<Combined>>>, OpError> {
+) -> Result<Selected, OpError> {
     let mut operands: Vec<&Operand<'_>> = input.operands.iter().collect();
     operands.sort_by_key(|operand| operand.key);
     let scene = Scene {
@@ -1020,7 +1034,9 @@ pub(crate) fn selected(
         ready,
         classified,
         merge: input.merge,
+        reuse,
     };
+    let mut memo = None;
     let mut lists = Vec::with_capacity(ready.tests.len());
     let mut notes = Vec::new();
     let jobs = input.select.iter().zip(&ready.tests).zip(&ready.targets);
@@ -1064,6 +1080,7 @@ pub(crate) fn selected(
                 "two operands brought one name, so each face is qualified by its operand's key",
             ));
         }
+        memo = picked.memo.or(memo);
         let results = picked.results;
         for body in results.iter().map(|result| &result.body) {
             let report = check(body, exactness, Level::Cheap, meter)
@@ -1086,7 +1103,7 @@ pub(crate) fn selected(
     }
     let mut out = OpOutput::new(lists, exactness);
     out.diagnostics = notes;
-    Ok(out)
+    Ok((out, memo))
 }
 
 /// The one body of `operands` under `selection`.

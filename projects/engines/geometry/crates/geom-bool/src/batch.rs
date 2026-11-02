@@ -27,7 +27,7 @@
 use alloc::vec::Vec;
 
 use geom_op::{CombineDetail, Diagnostic, OpContext, OpError, OpOutput, RunDetail};
-use geom_poly::merge::Merge;
+use geom_poly::merge::{Memo, Merge};
 use geom_poly::subdivide::Solved;
 use geom_poly::trace::Classified;
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
@@ -67,11 +67,12 @@ pub struct Cut<'b> {
 }
 
 /// What a cut keeps for the next cut of its host (G139): each operand's preparation and the boxes
-/// it solved, each keyed by what it was made from.
+/// it solved, each keyed by what it was made from, and what its merge kept.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Recut {
     operands: Operands,
     boxes: Solved,
+    merge: Memo,
 }
 
 impl Recut {
@@ -85,6 +86,12 @@ impl Recut {
     #[must_use]
     pub const fn boxes(&self) -> &Solved {
         &self.boxes
+    }
+
+    /// What the merge kept.
+    #[must_use]
+    pub const fn merge(&self) -> &Memo {
+        &self.merge
     }
 }
 
@@ -168,8 +175,13 @@ fn one_cut(
         cut.reuse.map(Recut::boxes),
         meter,
     )?;
-    let cache = Recut { operands, boxes };
-    let mut out = selected(ctx, &input, &ready, &classified, exactness, meter)?;
+    let scene = (&ready, &classified[..], cut.reuse.map(Recut::merge));
+    let (mut out, merge) = selected(ctx, &input, scene, exactness, meter)?;
+    let cache = Recut {
+        operands,
+        boxes,
+        merge: merge.unwrap_or_default(),
+    };
     let result = out
         .result
         .pop()
