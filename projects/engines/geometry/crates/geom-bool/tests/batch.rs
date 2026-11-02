@@ -337,7 +337,10 @@ fn a_moved_door_is_cut_again_from_the_last_cut_as_a_fresh_cut_would_be() {
     .unwrap();
     assert_eq!(local.result, fresh.result);
     assert_eq!(local.diagnostics, fresh.diagnostics);
-    let (kept, all) = (last.shared_with(&local.result[0].cache), last.len());
+    let (kept, all) = (
+        last.boxes().shared_with(local.result[0].cache.boxes()),
+        last.boxes().len(),
+    );
     assert!(kept * 5 >= all * 4, "{kept} of {all} boxes reused");
     assert!(kept < all);
     assert_eq!(least(&again), least(&cut_of(&wall, &doors)));
@@ -389,8 +392,11 @@ fn a_door_moved_in_a_wall_of_three_hundred_openings_timed() {
         println!(
             "a door moved in 300 openings, {label}: {:?}, {} of {} boxes reused",
             started.elapsed(),
-            first.result[0].cache.shared_with(&out.result[0].cache),
-            out.result[0].cache.len()
+            first.result[0]
+                .cache
+                .boxes()
+                .shared_with(out.result[0].cache.boxes()),
+            out.result[0].cache.boxes().len()
         );
         doors[150] = cuboid([10 + 30 * 150, -5, 10], [20, 20, 30]);
     }

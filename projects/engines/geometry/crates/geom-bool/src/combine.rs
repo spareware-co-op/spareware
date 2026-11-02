@@ -39,7 +39,7 @@ use geom_poly::merge::{
     Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with, section, select,
 };
 use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange_reusing};
-use geom_poly::trace::{Classified, Polygon, TraceError, winding_at};
+use geom_poly::trace::{Cell, Classified, Polygon, TraceError, winding_at};
 use geom_poly::winding::{Entry, Winding, WindingTest};
 use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
 use geom_topo::Body;
@@ -945,6 +945,31 @@ pub fn combine(
 
 /// The arrangement of `ready`, taking each box's answer from `reuse` where it holds one; how exact
 /// it is; and the boxes it solved.
+/// The box around every operand's polygons: the least and greatest of the operands' own boxes,
+/// which is [`around`] of all their polygons, as each corner counts the same wherever it is
+/// taken; [`around`] of none when no operand has a polygon.
+fn cell_of(cells: &[Result<Option<Cell>, NumError>]) -> Result<Cell, NumError> {
+    let mut whole: Option<Cell> = None;
+    for cell in cells {
+        let Some(one) = (*cell)? else {
+            continue;
+        };
+        whole = Some(match whole {
+            None => one,
+            Some(mut both) => {
+                for (low, v) in both.low.iter_mut().zip(one.low) {
+                    *low = (*low).min(v);
+                }
+                for (high, v) in both.high.iter_mut().zip(one.high) {
+                    *high = (*high).max(v);
+                }
+                both
+            }
+        });
+    }
+    whole.map_or_else(|| around(&[]), Ok)
+}
+
 pub(crate) fn arranged_input(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
@@ -962,7 +987,7 @@ pub(crate) fn arranged_input(
     if !accepted(exactness, input.accept) {
         return Err(fail(ctx, CombineDetail::NotAccepted { would: exactness }));
     }
-    let cell = around(&ready.polygons).map_err(|e| numbers(ctx, e))?;
+    let cell = cell_of(&ready.cells).map_err(|e| numbers(ctx, e))?;
     let (classified, solved) = arrange_reusing(
         exec,
         cell,
