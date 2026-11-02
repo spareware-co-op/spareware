@@ -39,8 +39,9 @@ use geom_bench::avnaim;
 use geom_gen::predicate_lang::{Axis, Expr, InputKind, Op, parse};
 use geom_gen::predicates::PREDICATES;
 use geom_num::generated::{
-    incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
-    ssi_side, ssi_weight, tpi_side, tpi_weight,
+    axis_gap, cross_norm, incircle, insphere, limbs, line_cone, line_cone_lead, line_cylinder,
+    line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, ssi_side, ssi_weight,
+    tpi_side, tpi_weight,
 };
 use geom_num::grid::{P2, P3};
 use geom_num::wide::Wide;
@@ -250,6 +251,17 @@ fn call(name: &str, a: &Args) -> Result<[Option<BigInt>; 3], Finding> {
         ),
         "ssi_weight" => three!(ssi_weight, ssi_weight_value; p(0)?, p(1)?, p(2)?, p(3)?),
         "ssi_side" => three!(ssi_side, ssi_side_value; p(0)?, p(1)?, p(2)?, p(3)?, p(4)?, p(5)?),
+        "line_sphere" => three!(line_sphere, line_sphere_value; q(0)?, q(1)?, q(2)?, r(3)?),
+        "line_cylinder" => {
+            three!(line_cylinder, line_cylinder_value; q(0)?, q(1)?, q(2)?, q(3)?, r(4)?)
+        }
+        "line_cone" => three!(line_cone, line_cone_value; q(0)?, q(1)?, q(2)?, q(3)?, r(4)?, r(5)?),
+        "line_cone_lead" => three!(
+            line_cone_lead, line_cone_lead_value;
+            q(0)?, q(1)?, q(2)?, q(3)?, r(4)?, r(5)?
+        ),
+        "cross_norm" => three!(cross_norm, cross_norm_value; q(0)?, q(1)?, q(2)?, q(3)?),
+        "axis_gap" => three!(axis_gap, axis_gap_value; q(0)?, q(1)?, q(2)?, r(3)?),
         other => {
             return Err(Finding {
                 law: "the harness calls every registered predicate".into(),
@@ -341,10 +353,15 @@ pub fn check(inputs: &Inputs) -> Result<(), Finding> {
                 InputKind::Rounded { bits, .. } if bits == NORMAL_BITS => {
                     inputs.normals.get(normal).map(|&v| Arg::Rounded(v))
                 }
-                InputKind::Rounded { bits, .. } if bits == OFFSET_BITS => {
-                    inputs.offsets.get(offset).map(|&v| Arg::Rounded(v))
+                // Every other width takes an offset cut down to it.
+                InputKind::Rounded { bits, .. } => {
+                    let shift = 1_i128 << OFFSET_BITS.saturating_sub(bits);
+                    inputs
+                        .offsets
+                        .get(offset)
+                        .and_then(|v| v.checked_div(shift))
+                        .map(Arg::Rounded)
                 }
-                InputKind::Rounded { .. } => None,
             };
             match input.kind {
                 InputKind::Point { dim: 2 } => i2 = i2.saturating_add(1),
