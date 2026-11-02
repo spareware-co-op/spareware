@@ -1421,9 +1421,11 @@ fn along_curve(curve: &CurveKind<3>, at: Vector) -> Result<Option<Interval>, Int
     }))
 }
 
-/// Whether a kind's domain is a closed loop.
+/// Whether a kind's domain is a closed loop: a circle or an ellipse over a whole turn. An arc, as a
+/// plane across an extrusion cuts from a profile that is one, is open.
 fn closed(curve: &CurveKind<3>) -> bool {
-    matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_))
+    let (lo, hi) = curve.domain();
+    matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_)) && hi - lo >= 2.0
 }
 
 /// `curve` over `(lo, hi)`.
