@@ -2725,3 +2725,27 @@ pub mod quadrature {
         benchmarks = gauss_legendre
     );
 }
+
+/// geom-run's parallel helper: a lone wave on the serial executor and on a pool (decision 32.44).
+pub mod helper {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("helper/lone_serial/typical"))]
+    fn lone_serial(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("helper/lone_pool/typical"))]
+    fn lone_pool(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = helper;
+        benchmarks = lone_serial, lone_pool
+    );
+}

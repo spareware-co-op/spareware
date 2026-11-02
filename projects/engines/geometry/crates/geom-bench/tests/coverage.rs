@@ -535,6 +535,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_surface",
         &[("param", include_str!("../../geom-surface/src/param.rs"))],
     ),
+    (
+        "geom_run",
+        &[("exec", include_str!("../../geom-run/src/exec.rs"))],
+    ),
 ];
 
 /// [`public_functions`], with the methods of every trait implementation in the file too: a kind's
