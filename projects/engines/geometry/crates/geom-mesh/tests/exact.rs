@@ -729,13 +729,15 @@ fn a_pool_changes_nothing() {
     }
 }
 
+/// A budget that runs out stops the build: as the meter's stop where a serial step meets it, or as
+/// the phase over budget where the parallel helper does.
 #[test]
 fn the_budget_stops_a_build() {
     let input = cuboid(2, 3, 4);
     let mut small = WorkMeter::new(Budget::of_work(3));
     assert!(matches!(
         build(&input, &Exec::serial(), &mut small),
-        Err(MeshError::Stopped(_))
+        Err(MeshError::Stopped(_) | MeshError::BudgetExceeded(_))
     ));
 }
 
