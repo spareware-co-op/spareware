@@ -5,7 +5,8 @@
 //! cannot be paired, it fails and says which. Otherwise the faces are built into an
 //! [`ExactMesh`], checked, and handed to the mesh boolean, which keeps where the winding number is
 //! above zero: self-intersections and overlaps are resolved, and the result is a solid with
-//! maximal faces. The result takes the class of what moved, and each of its faces that bound.
+//! maximal faces. The welded mesh carries the class of what moved, and so does the boolean's result,
+//! every face of it that bound.
 //!
 //! Guarantees:
 //!
@@ -165,7 +166,7 @@ pub fn heal(
         .next()
         .ok_or(MeshError::Defect)?;
     Ok(Healed {
-        mesh: classed(outcome.mesh, (class, bound), exec, meter)?,
+        mesh: outcome.mesh,
         history: outcome.history,
         log: HealLog {
             weld: welded.log,
@@ -173,26 +174,6 @@ pub fn heal(
             orient: oriented.log,
         },
     })
-}
-
-/// `mesh` with the class `class` and every face `bound` from its source: the boolean gives its
-/// result the class Exact whatever its operands' were, so healing states its own (19.13: "the
-/// least exact input"). Checked again, and still a solid.
-fn classed(
-    mesh: ExactMesh,
-    (class, bound): (Exactness, Steps),
-    exec: &Exec<'_>,
-    meter: &mut WorkMeter<'_>,
-) -> Result<ExactMesh, HealError> {
-    if class == mesh.parts().class {
-        return Ok(mesh);
-    }
-    let solid = mesh.is_solid();
-    let mut parts = mesh.into_parts();
-    parts.face_dev = vec![bound; parts.face_plane.len()];
-    parts.class = class;
-    let mesh = ExactMesh::new(parts, exec, meter)?;
-    Ok(if solid { mesh.proven_solid() } else { mesh })
 }
 
 /// The builder's input for `faces` on `points`: one run, and each face that moved `bound` from

@@ -191,7 +191,7 @@ fn no_vertex_moves_more_than_epsilon_or_off_the_input() {
         // Each box keeps its volume, give or take its faces' moves.
         let six = six_volume(&h.mesh).to_i128().unwrap();
         let exact = 6 * volumes(&shapes);
-        let slack = 6 * 6 * 3 * (4 * MM as i128).pow(2) * i128::from(bound);
+        let slack = 6 * 6 * 3 * (4 * i128::from(MM)).pow(2) * i128::from(bound);
         assert!((six - exact).abs() <= slack, "{six} against {exact}");
     }
 }

@@ -5714,7 +5714,7 @@
         },
         {
           "cost": "the steps', then the build's O(n log n) and the boolean's arrangement and merge.",
-          "does": "[`heal()`] welds the raw mesh, stitches its cracks and orients it, steps 2 to 4 (step 1, [`super::quantise()`], made the raw mesh). If any boundary is left open, or any edge cannot be paired, it fails and says which. Otherwise the faces are built into an [`ExactMesh`], checked, and handed to the mesh boolean, which keeps where the winding number is above zero: self-intersections and overlaps are resolved, and the result is a solid with maximal faces. The result takes the class of what moved, and each of its faces that bound.",
+          "does": "[`heal()`] welds the raw mesh, stitches its cracks and orients it, steps 2 to 4 (step 1, [`super::quantise()`], made the raw mesh). If any boundary is left open, or any edge cannot be paired, it fails and says which. Otherwise the faces are built into an [`ExactMesh`], checked, and handed to the mesh boolean, which keeps where the winding number is above zero: self-intersections and overlaps are resolved, and the result is a solid with maximal faces. The welded mesh carries the class of what moved, and so does the boolean's result, every face of it that bound.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-mesh/src/repair/heal.rs",
           "guarantees": [
