@@ -42,6 +42,7 @@ use crate::error::NumError;
 use crate::interval::Interval;
 use crate::sign::Sign;
 use crate::wide::Wide;
+use alloc::vec::Vec;
 
 /// The limbs of a chain's integers: 3456 bits, for the budget of the module header.
 pub const LIMBS: usize = 54;
@@ -300,11 +301,11 @@ fn remainder(dividend: &Poly, divisor: &Poly) -> Option<[Big; TERMS]> {
 }
 
 /// A Sturm chain: up to five polynomials of falling degree, the last the greatest common divisor
-/// of the polynomial and its derivative.
+/// of the polynomial and its derivative. They are held on the heap, so a chain of wide numbers
+/// stays off the stack: WebAssembly's has no guard page (principle 13).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chain {
-    polys: [Poly; TERMS],
-    len: usize,
+    polys: Vec<Poly>,
 }
 
 /// How many times the sign changes along `signs`, zeros skipped.
@@ -347,19 +348,22 @@ impl Chain {
             terms: slope,
             degree: degree_of(&slope)?,
         };
-        let mut polys = [first; TERMS];
-        *polys.get_mut(1)? = second;
-        let mut len: usize = 2;
+        let mut polys = Vec::with_capacity(TERMS);
+        polys.push(first);
+        polys.push(second);
         // Cohen's lead and step, as magnitudes.
         let (mut lead, mut step) = (Big::one(), Big::one());
         loop {
-            let above = *polys.get(len.checked_sub(2)?)?;
-            let below = *polys.get(len.checked_sub(1)?)?;
+            let len = polys.len();
+            let (above, below) = (
+                polys.get(len.checked_sub(2)?)?,
+                polys.get(len.checked_sub(1)?)?,
+            );
             if below.degree == 0 {
                 break;
             }
             let gap = above.degree.checked_sub(below.degree)?;
-            let raw = remainder(&above, &below)?;
+            let raw = remainder(above, below)?;
             let divisor = lead.checked_mul(&power(&step, gap)?)?;
             let mut next = [Big::ZERO; TERMS];
             for (slot, term) in next.iter_mut().zip(&raw) {
@@ -368,23 +372,27 @@ impl Chain {
             let Some(degree) = degree_of(&next) else {
                 break;
             };
-            *polys.get_mut(len)? = Poly {
+            let below_lead = magnitude(&below.lead()?)?;
+            // At most five, as the array they were held in before.
+            if len >= TERMS {
+                return None;
+            }
+            polys.push(Poly {
                 terms: next,
                 degree,
-            };
-            len = len.checked_add(1)?;
-            lead = magnitude(&below.lead()?)?;
+            });
+            lead = below_lead;
             step = match gap.checked_sub(1)? {
                 0 => lead,
                 less => div_exact(&power(&lead, gap)?, &power(&step, less)?)?,
             };
         }
-        Some(Chain { polys, len })
+        Some(Chain { polys })
     }
 
     /// The polynomials, first to last.
     fn elements(&self) -> impl Iterator<Item = &Poly> {
-        self.polys.iter().take(self.len)
+        self.polys.iter()
     }
 
     /// The real roots, each counted once, and whether any root is repeated.
