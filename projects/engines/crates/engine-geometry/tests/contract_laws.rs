@@ -9,7 +9,8 @@
 //!
 //! Covers: `make.box`, `make.cone`, `make.cylinder`, `make.prism`, `make.sphere`, `make.torus`,
 //! `transform.mirror`, `transform.move`, `transform.pattern`, `transform.rotate`,
-//! `transform.scale`.
+//! `transform.scale`, `query.area`, `query.bounding_box`, `query.exactness`, `query.faces`,
+//! `query.validity`, `query.volume`.
 
 #![allow(
     clippy::unwrap_used,
@@ -24,9 +25,9 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use engine_geometry::operations::{
-    BoxInput, Copies, Instance, Made, Moved, OPERATIONS, PrismInput, RoundInput, SphereInput,
-    TorusInput, cone, cylinder, make_box, mirror, move_by, pattern, prism, rotate, scale, sphere,
-    torus,
+    BoxInput, Copies, Instance, Level, Made, Moved, OPERATIONS, PrismInput, RoundInput,
+    SphereInput, TorusInput, bounding_box, cone, cylinder, exactness, faces, make_box, mirror,
+    move_by, pattern, prism, rotate, scale, six_volume, sphere, torus, twice_area, validity,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
 use geom_num::{Exactness, GridStep, P3, Steps};
@@ -272,6 +273,9 @@ struct Driver {
     accept: Option<Box<dyn Fn(Option<Exactness>) -> S>>,
     /// A call reaching the frame's edge, and one a step past it.
     range: Option<(S, S)>,
+    /// For a query, which makes no geometry to pass the frame: a call on a body that reaches its
+    /// edge, which must answer.
+    edge: Option<S>,
     /// The schema's example: what its call gave.
     example: Option<(Vec<(&'static str, u64)>, Exactness)>,
 }
@@ -323,6 +327,7 @@ fn drive_box() -> Driver {
             ("size.z", 0, Box::new(move |n| sized([1, 1, n]))),
         ],
         range: Some((at(EDGE - 1), at(EDGE))),
+        edge: None,
         example: Some((counts(&example.result.body), example.exactness)),
         ..Driver::default()
     }
@@ -373,6 +378,7 @@ fn drive_prism() -> Driver {
             let base = vec![p(0, 0, EDGE), p(9, 0, EDGE), p(0, 9, EDGE)];
             on(base, 1)
         })),
+        edge: None,
         example: Some((counts(&example.result.body), example.exactness)),
         ..Driver::default()
     }
@@ -412,6 +418,7 @@ fn drive_round(
             ("height", 0, Box::new(move |n| sized(1, n))),
         ],
         range: Some((at(EDGE - 5, 5), at(EDGE - 4, 5))),
+        edge: None,
         example: Some((counts(&shown.result.body), shown.exactness)),
         ..Driver::default()
     }
@@ -432,6 +439,7 @@ fn drive_sphere() -> Driver {
         ],
         remedies: vec![("radius", 0, Box::new(move |n| on(p(0, 0, 0), n)))],
         range: Some((on(p(EDGE - 5, 0, 0), 5), on(p(EDGE - 4, 0, 0), 5))),
+        edge: None,
         example: Some((counts(&shown.result.body), shown.exactness)),
         ..Driver::default()
     }
@@ -459,6 +467,7 @@ fn drive_torus() -> Driver {
             ("minor", 0, Box::new(move |n| on(p(0, 0, 0), 10, n))),
         ],
         range: Some((on(p(EDGE - 13, 0, 0), 10, 3), on(p(EDGE - 12, 0, 0), 10, 3))),
+        edge: None,
         example: Some((counts(&shown.result.body), shown.exactness)),
         ..Driver::default()
     }
@@ -496,6 +505,7 @@ fn drive_move() -> Driver {
             ),
         ],
         range: Some((by(&edge, EDGE - 1), by(&edge, EDGE))),
+        edge: None,
         example: Some((vec![], shown.exactness)),
         ..Driver::default()
     }
@@ -535,6 +545,7 @@ fn drive_mirror() -> Driver {
             ),
         ],
         range: Some((across(&far, half), across(&unit_box(), half))),
+        edge: None,
         example: Some((vec![], shown.exactness)),
         ..Driver::default()
     }
@@ -613,6 +624,7 @@ fn drive_rotate() -> Driver {
         ],
         accept: Some(Box::new(move |class| turned(&accepting, class))),
         range: Some((quarter(&unit_box(), 0), quarter(&unit_box(), 1))),
+        edge: None,
         example: Some((vec![], shown.exactness)),
         ..Driver::default()
     }
@@ -671,6 +683,7 @@ fn drive_scale() -> Driver {
             by(&unit_box(), wide(u64::try_from(EDGE).unwrap()), None),
             by(&unit_box(), wide(1 << 40), None),
         )),
+        edge: None,
         example: Some((vec![], shown.exactness)),
         ..Driver::default()
     }
@@ -726,6 +739,7 @@ fn drive_pattern() -> Driver {
             of(&unit_box(), None, vec![shift(1, EDGE - 1)]),
             of(&unit_box(), None, vec![shift(1, EDGE)]),
         )),
+        edge: None,
         example: Some((vec![], shown.exactness)),
         ..Driver::default()
     }
@@ -748,7 +762,390 @@ fn drivers() -> Vec<(&'static str, Driver)> {
         ("transform.pattern", drive_pattern()),
         ("transform.rotate", drive_rotate()),
         ("transform.scale", drive_scale()),
+        ("query.area", drive_area()),
+        ("query.bounding_box", drive_bounding_box()),
+        ("query.exactness", drive_exactness()),
+        ("query.faces", drive_faces()),
+        ("query.validity", drive_validity()),
+        ("query.volume", drive_volume()),
     ]
+}
+
+/// The box of 10 by 20 by 30 at the origin, the query schemas' examples' body.
+fn origin_box() -> Held {
+    Held::new(
+        make_box(
+            &ctx(),
+            &BoxInput {
+                min: p(0, 0, 0),
+                size: [Steps(10), Steps(20), Steps(30)],
+            },
+        )
+        .unwrap(),
+    )
+}
+
+/// A box of 10 by 20 by 30 whose far corner is the frame's edge.
+fn edge_box() -> Held {
+    Held::new(
+        make_box(
+            &ctx(),
+            &BoxInput {
+                min: p(EDGE - 10, EDGE - 20, EDGE - 30),
+                size: [Steps(10), Steps(20), Steps(30)],
+            },
+        )
+        .unwrap(),
+    )
+}
+
+/// The box with its rows edited and published again, as a file or a broken operation could hand
+/// a query; `kind` the kind it is published as.
+fn edited(kind: geom_topo::BodyKind, edit: impl FnOnce(&mut geom_topo::Arenas)) -> Arc<Body> {
+    let body = origin_box().body;
+    let mut builder = Builder::edit(&body);
+    edit(&mut builder.arenas);
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    Arc::new(builder.publish(kind, body.outside(), &mut meter).unwrap())
+}
+
+fn face(row: u32) -> geom_topo::FaceIx {
+    geom_topo::Ix::new(row).unwrap()
+}
+
+/// A face list that comes back on itself: the second face's next is the first.
+fn ringed() -> Arc<Body> {
+    edited(geom_topo::BodyKind::Solid, |a| {
+        a.faces.next.set(face(1), Some(face(0))).unwrap();
+    })
+}
+
+/// A loop whose fins never come back round: the first fin's next is a fin of another face.
+fn fin_ring() -> Arc<Body> {
+    edited(geom_topo::BodyKind::Solid, |a| {
+        let fin = |row: u32| -> geom_topo::FinIx { geom_topo::Ix::new(row).unwrap() };
+        let last = a.rows(Arena::Fin) - 1;
+        a.fins.next.set(fin(0), fin(last)).unwrap();
+    })
+}
+
+/// A face's list of loops that comes back on itself: its loop's next is that loop.
+fn loop_ring() -> Arc<Body> {
+    edited(geom_topo::BodyKind::Solid, |a| {
+        let first: geom_topo::LoopIx = geom_topo::Ix::new(0).unwrap();
+        a.loops.next.set(first, Some(first)).unwrap();
+    })
+}
+
+/// Every edge on a circle in place of its line.
+fn circled() -> Arc<Body> {
+    edited(geom_topo::BodyKind::Solid, |a| {
+        let frame = geom_curve::Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        for row in 0..a.rows(Arena::Curve) {
+            let c = geom_curve::Circle::new([0.0; 3], 5.0, frame, (0.0, 1.0)).unwrap();
+            let ix = geom_topo::Ix::new(row).unwrap();
+            a.curves.set(ix, geom_curve::CurveKind::Circle(c)).unwrap();
+        }
+    })
+}
+
+/// Every face on a sphere in place of its plane, its edges still straight.
+fn rounded() -> Arc<Body> {
+    edited(geom_topo::BodyKind::Solid, |a| {
+        let frame = geom_curve::Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let ball =
+            geom_surface::Sphere::new([0.0; 3], 50.0, frame, ((0.0, 2.0), (-0.5, 0.5))).unwrap();
+        for row in 0..a.rows(Arena::Surface) {
+            let ix = geom_topo::Ix::new(row).unwrap();
+            a.surfaces
+                .set(ix, geom_surface::SurfaceKind::Sphere(ball.clone()))
+                .unwrap();
+        }
+    })
+}
+
+/// Every face without its loops.
+fn loopless() -> Arc<Body> {
+    edited(geom_topo::BodyKind::Solid, |a| {
+        for row in 0..a.rows(Arena::Face) {
+            a.faces.first_loop.set(face(row), None).unwrap();
+        }
+    })
+}
+
+/// The box published as a sheet.
+fn sheet() -> Arc<Body> {
+    edited(geom_topo::BodyKind::Sheet, |_| {})
+}
+
+/// A query on a body handed in, whose input must be the same after it.
+fn asked<R: Debug>(
+    label: &str,
+    body: Arc<Body>,
+    run: impl Fn(&OpContext<'_>, &Body) -> Result<OpOutput<R>, OpError> + 'static,
+) -> S {
+    let watched = (Arc::clone(&body), Arc::new((*body).clone()));
+    call(label.to_owned(), move |c| run(c, &body)).watching(move || *watched.0 == *watched.1)
+}
+
+/// The row of the box's face on z = 0, its min.z face.
+fn min_z(body: &Body) -> geom_topo::FaceIx {
+    let a = body.arenas();
+    (0..a.rows(Arena::Face))
+        .map(face)
+        .find(|&f| {
+            let b = a.faces.bound.get(f).unwrap();
+            b.min().z.get() == 0 && b.max().z.get() == 0
+        })
+        .unwrap()
+}
+
+/// What a query's driver shares: no remedy gives a number, no class needs accepting, and nothing
+/// a query gives is geometry that could pass the frame, so its half of the range law is a call
+/// on a body that reaches the edge.
+fn query(
+    good: Vec<(S, Vec<Exactness>)>,
+    triggers: Vec<Trigger<'static, String>>,
+    edge: S,
+    example: Exactness,
+) -> Driver {
+    Driver {
+        good,
+        triggers,
+        remedies: Vec::new(),
+        accept: None,
+        range: None,
+        edge: Some(edge),
+        example: Some((Vec::new(), example)),
+    }
+}
+
+fn drive_area() -> Driver {
+    let held = origin_box();
+    let at = min_z(&held.body);
+    let example = held.on("query.area of min.z, Exact", move |c, h| {
+        let out = twice_area(c, &h.body, at, Exactness::Exact)?;
+        assert_eq!(out.result, [0, 0, -400]);
+        Ok(out)
+    });
+    let recorded = held.on("query.area of min.z, Certified", move |c, h| {
+        twice_area(c, &h.body, at, certified(2))
+    });
+    let edge = edge_box().on("query.area at the edge", |c, h| {
+        twice_area(c, &h.body, face(0), Exactness::Exact)
+    });
+    let area = |label: &str, body: Arc<Body>, row: u32| {
+        asked(label, body, move |c, b| {
+            twice_area(c, b, face(row), Exactness::Exact)
+        })
+    };
+    query(
+        vec![
+            (example, vec![Exactness::Exact]),
+            (recorded, vec![certified(2)]),
+        ],
+        vec![
+            trigger(
+                "Malformed",
+                area("query.area of no such face", Arc::clone(&held.body), 99),
+            ),
+            trigger(
+                "CurvedEdge",
+                area("query.area across circles", circled(), 0),
+            ),
+            trigger("CurvedFace", area("query.area on a sphere", rounded(), 0)),
+            trigger(
+                "NoLoops",
+                area("query.area of a face with no loop", loopless(), 0),
+            ),
+        ],
+        edge,
+        Exactness::Exact,
+    )
+}
+
+fn drive_bounding_box() -> Driver {
+    let held = origin_box();
+    let example = held.on("query.bounding_box, Exact", |c, h| {
+        let out = bounding_box(c, &h.body, Exactness::Exact)?;
+        let b = out.result.as_ref().unwrap();
+        assert!(b.tight);
+        assert_eq!((b.bound.min(), b.bound.max()), (p(0, 0, 0), p(10, 20, 30)));
+        Ok(out)
+    });
+    let recorded = held.on("query.bounding_box, Certified", |c, h| {
+        bounding_box(c, &h.body, certified(2))
+    });
+    let edge = edge_box().on("query.bounding_box at the edge", |c, h| {
+        bounding_box(c, &h.body, Exactness::Exact)
+    });
+    query(
+        vec![
+            (example, vec![Exactness::Exact]),
+            (recorded, vec![certified(2)]),
+        ],
+        vec![trigger(
+            "Malformed",
+            asked(
+                "query.bounding_box of a loop that never closes",
+                fin_ring(),
+                |c, b| bounding_box(c, b, Exactness::Exact),
+            ),
+        )],
+        edge,
+        Exactness::Exact,
+    )
+}
+
+fn drive_volume() -> Driver {
+    let held = origin_box();
+    let example = held.on("query.volume, Exact", |c, h| {
+        let out = six_volume(c, &h.body, Exactness::Exact)?;
+        assert_eq!(out.result, geom_num::wide::I256::from_i128(36_000));
+        Ok(out)
+    });
+    let recorded = held.on("query.volume, Certified", |c, h| {
+        six_volume(c, &h.body, certified(2))
+    });
+    let edge = edge_box().on("query.volume at the edge", |c, h| {
+        six_volume(c, &h.body, Exactness::Exact)
+    });
+    let volume = |label: &str, body: Arc<Body>| {
+        asked(label, body, |c, b| six_volume(c, b, Exactness::Exact))
+    };
+    query(
+        vec![
+            (example, vec![Exactness::Exact]),
+            (recorded, vec![certified(2)]),
+        ],
+        vec![
+            trigger(
+                "Malformed",
+                volume("query.volume of a ring of faces", ringed()),
+            ),
+            trigger(
+                "CurvedEdge",
+                volume("query.volume across circles", circled()),
+            ),
+            trigger("CurvedFace", volume("query.volume on spheres", rounded())),
+            trigger(
+                "NoLoops",
+                volume("query.volume of faces with no loop", loopless()),
+            ),
+            trigger("NotSolid", volume("query.volume of a sheet", sheet())),
+        ],
+        edge,
+        Exactness::Exact,
+    )
+}
+
+fn drive_exactness() -> Driver {
+    let held = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
+    let recorded = held.exactness;
+    let example = held.on("query.exactness of a cylinder", move |c, h| {
+        let out = exactness(c, &h.body, recorded)?;
+        let r = &out.result;
+        assert_eq!(
+            (
+                r.flat_faces,
+                r.curved_faces,
+                r.straight_edges,
+                r.curved_edges
+            ),
+            (2, 1, 0, 2)
+        );
+        assert!(r.report.passed());
+        Ok(out)
+    });
+    let flat = origin_box().on("query.exactness of a box", |c, h| {
+        exactness(c, &h.body, Exactness::Exact)
+    });
+    let edge = edge_box().on("query.exactness at the edge", |c, h| {
+        exactness(c, &h.body, Exactness::Exact)
+    });
+    query(
+        vec![(example, vec![recorded]), (flat, vec![Exactness::Exact])],
+        Vec::new(),
+        edge,
+        recorded,
+    )
+}
+
+fn drive_faces() -> Driver {
+    let made = origin_box_made();
+    let history = Arc::new(made.result.history.clone());
+    let held = Held::new(made);
+    let roles = Arc::clone(&history);
+    let example = held.on("query.faces of a box", move |c, h| {
+        let out = faces(c, &h.body, &[&roles], Exactness::Exact)?;
+        let mut named: Vec<String> = out
+            .result
+            .iter()
+            .flat_map(|f| f.roles.iter().map(|r| format!("{r:?}")))
+            .collect();
+        named.sort();
+        assert_eq!(out.result.len(), 6);
+        for side in ["min.x", "max.x", "min.y", "max.y", "min.z", "max.z"] {
+            assert!(named.iter().any(|r| r.contains(side)), "{side}: {named:?}");
+        }
+        Ok(out)
+    });
+    let bare = held.on("query.faces with no history", |c, h| {
+        faces(c, &h.body, &[], certified(2))
+    });
+    let edge = edge_box().on("query.faces at the edge", |c, h| {
+        faces(c, &h.body, &[], Exactness::Exact)
+    });
+    query(
+        vec![
+            (example, vec![Exactness::Exact]),
+            (bare, vec![certified(2)]),
+        ],
+        vec![trigger(
+            "Malformed",
+            asked("query.faces of a ring of loops", loop_ring(), |c, b| {
+                faces(c, b, &[], Exactness::Exact)
+            }),
+        )],
+        edge,
+        Exactness::Exact,
+    )
+}
+
+fn drive_validity() -> Driver {
+    let held = origin_box();
+    let example = held.on("query.validity of a box, Full", |c, h| {
+        let out = validity(c, &h.body, Exactness::Exact, Level::Full)?;
+        assert!(out.result.passed());
+        Ok(out)
+    });
+    let cheap = held.on("query.validity of a box, Cheap", |c, h| {
+        validity(c, &h.body, certified(2), Level::Cheap)
+    });
+    let edge = edge_box().on("query.validity at the edge", |c, h| {
+        validity(c, &h.body, Exactness::Exact, Level::Full)
+    });
+    query(
+        vec![
+            (example, vec![Exactness::Exact]),
+            (cheap, vec![certified(2)]),
+        ],
+        Vec::new(),
+        edge,
+        Exactness::Exact,
+    )
+}
+
+/// The examples' box as made, with its history.
+fn origin_box_made() -> OpOutput<Made> {
+    make_box(
+        &ctx(),
+        &BoxInput {
+            min: p(0, 0, 0),
+            size: [Steps(10), Steps(20), Steps(30)],
+        },
+    )
+    .unwrap()
 }
 
 #[test]
@@ -819,9 +1216,14 @@ fn exactness_is_never_lost_unasked() {
 
 #[test]
 fn the_range_holds_at_the_frames_edge() {
-    each(|_, driver| {
-        let (inside, outside) = driver.range.as_ref().unwrap();
-        range_holds(inside, outside).unwrap();
+    each(|schema, driver| match (&driver.range, &driver.edge) {
+        (Some((inside, outside)), None) => range_holds(inside, outside).unwrap(),
+        // A query's answer is a number or a report, never geometry past the frame: its half of
+        // the law is that it answers on a body reaching the frame's edge.
+        (None, Some(edge)) if schema.family == geom_op::Family::Query => {
+            edge.once().unwrap();
+        }
+        _ => panic!("{}: no range to hold", schema.name),
     });
 }
 

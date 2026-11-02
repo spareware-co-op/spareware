@@ -1,5 +1,7 @@
 //! A body's faces with their names and roles (22; piece G102): roles read from history, through
 //! every kind of origin, never from anything else about the face.
+//!
+//! Covers: `query.faces`.
 
 #![allow(
     clippy::unwrap_used,

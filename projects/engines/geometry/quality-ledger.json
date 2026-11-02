@@ -6339,46 +6339,6 @@
       "reason": "The first use always has its own end, so nothing is taken: an empty group, the rest unchanged, and the loops that take groups never end."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace Sets<'s>::size -> u32 with 0",
-      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace Sets<'s>::size -> u32 with 1",
-      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with == in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with > in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with <= in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
       "mutant": "replace Decoder<'a>::open -> Result<(), CborError> with Ok(())",
       "line_text": "let (start, end) = head;",
@@ -6928,13 +6888,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "match generated::orient2d::filter(a, b, c) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
       "line_text": "Some(sign) => Ok(sign),",
       "occurrences": 2,
       "piece": "G41",
@@ -7338,6 +7291,13 @@
       "occurrences": 1,
       "piece": "G41",
       "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "match filtered(|| generated::orient2d::filter(a, b, c)) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
     }
   ]
 }
