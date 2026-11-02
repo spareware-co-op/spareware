@@ -20,6 +20,8 @@ use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parab
 use geom_intersect::IntersectError;
 use geom_intersect::curve::{curves, self_crossings};
 use geom_intersect::result::{Coincidence, Coverage, Intersection, Item, PointContact, Unresolved};
+use geom_intersect::solve::{Field, solve};
+use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve};
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_test::{Seed, SplitMix64};
@@ -1049,6 +1051,19 @@ fn the_engine_takes_only_its_work() {
     };
     let wave = [[0.0, 0.0], [1.0, 3.0], [2.0, -2.0], [3.0, 1.0]];
     let other = [[0.0, 1.0], [1.0, -1.0], [2.0, 2.0], [3.0, 0.0]];
+    let two = CurveKind::Nurbs(
+        Curve::new(
+            Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]).unwrap(),
+            &[
+                [0.0, -1000.0],
+                [1000.0, 1000.0],
+                [2000.0, -1000.0],
+                [3000.0, 1000.0],
+            ],
+        )
+        .unwrap(),
+    );
+    let axis = bezier(&[[-1000.0, 0.0], [1500.0, 0.0], [4000.0, 0.0]]);
     let got = [
         work(&bezier(&wave), &bezier(&other)),
         work(&shifted(&wave), &bezier(&other)),
@@ -1061,8 +1076,19 @@ fn the_engine_takes_only_its_work() {
             &bezier(&[[0.0, 0.0], [1.0, 2.0], [2.0, 0.0]]),
             &bezier(&[[0.0, 1.01], [2.0, 1.01]]),
         ),
+        work(&two, &axis),
     ];
-    assert_eq!(got, [(3, 3589), (3, 3589), (3, 3589), (2, 507), (0, 254)]);
+    assert_eq!(
+        got,
+        [
+            (3, 3589),
+            (3, 3589),
+            (3, 3589),
+            (2, 507),
+            (0, 254),
+            (3, 3880)
+        ]
+    );
 }
 
 #[test]
@@ -1355,7 +1381,16 @@ fn a_crossing_through_a_closed_curve_s_join_is_kept_flagged() {
         .items()
         .iter()
         .map(|i| {
-            assert!(matches!(i, Item::Flagged { .. }), "{i:?}");
+            assert!(
+                matches!(
+                    i,
+                    Item::Flagged {
+                        why: Unresolved::UndecidedAtFloor { .. },
+                        ..
+                    }
+                ),
+                "{i:?}"
+            );
             let s = i.at().spans();
             (
                 s[0].lo() * 0.5 + s[0].hi() * 0.5,
@@ -1495,4 +1530,431 @@ fn circles_off_the_axes_are_compared_by_the_distance_of_their_centres() {
     );
     is_empty(&meet(&a, &circle([9.0, 12.0], 4.0)));
     assert_eq!(meet(&a, &circle([9.0, 12.0], 6.0)).items().len(), 2);
+}
+
+#[test]
+fn a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts() {
+    // A whole turn of radius 5000 from 0 or from 1 (half-turns), against lines through its
+    // join, through the point half a turn on, and one slanting through the join from 1. Each
+    // crossing is found once, on the domain, either way round.
+    let turn = |from: f64| {
+        let frame = Frame::standard().unwrap();
+        CurveKind::Circle(Circle::new([0.0, 0.0], 5000.0, frame, (from, from + 2.0)).unwrap())
+    };
+    let east = bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]]);
+    let west = bezier(&[[0.0, 0.0], [-5000.0, 0.0], [-10000.0, 0.0]]);
+    let slant = bezier(&[[-6000.0, -1000.0], [-5000.0, 0.0], [-4000.0, 1000.0]]);
+    for (a, b, s, t) in [
+        (turn(0.0), east.clone(), 0.0, 0.5),
+        (turn(0.0), west.clone(), 1.0, 0.5),
+        (turn(1.0), west.clone(), 1.0, 0.5),
+        (turn(1.0), east.clone(), 2.0, 0.5),
+        (turn(1.0), slant.clone(), 1.0, 0.5),
+        (east.clone(), turn(0.0), 0.5, 0.0),
+        (west.clone(), turn(1.0), 0.5, 1.0),
+    ] {
+        let r = meet(&a, &b);
+        assert!(
+            matches!(
+                r.items(),
+                [Item::Point {
+                    contact: PointContact::Crossing,
+                    ..
+                }]
+            ),
+            "{:?}",
+            r.items()
+        );
+        let at = r.items()[0].at().spans();
+        let (ms, mt) = (
+            at[0].lo() * 0.5 + at[0].hi() * 0.5,
+            at[1].lo() * 0.5 + at[1].hi() * 0.5,
+        );
+        assert!((ms - s).abs() < 1e-4 && (mt - t).abs() < 1e-4, "{at:?}");
+    }
+    // Crossings within the search's pad of the join (a 1024th of a turn), just before it and just
+    // after: each found once, on the domain, where it is.
+    let near = 5000.0 * (core::f64::consts::PI / 4096.0).sin();
+    for (y, s) in [(-near, 2.0 - 1.0 / 4096.0), (near, 1.0 / 4096.0)] {
+        let r = meet(
+            &turn(0.0),
+            &bezier(&[[4000.0, y], [5000.0, y], [6000.0, y]]),
+        );
+        assert_eq!(r.items().len(), 1, "{:?}", r.items());
+        let at = r.items()[0].at().spans()[0];
+        assert!((at.lo() * 0.5 + at.hi() * 0.5 - s).abs() < 1e-9, "{at:?}");
+    }
+    // A line all but tangent at the join crosses on both sides of it, within the pad: two
+    // crossings, never one, whichever side's boxes hold them.
+    let x = 5000.0 * (core::f64::consts::PI / 8192.0).cos();
+    let r = meet(&turn(0.0), &bezier(&[[x, -100.0], [x, 0.0], [x, 100.0]]));
+    let mut at: Vec<f64> = r
+        .items()
+        .iter()
+        .map(|i| {
+            let s = i.at().spans()[0];
+            s.lo() * 0.5 + s.hi() * 0.5
+        })
+        .collect();
+    at.sort_by(f64::total_cmp);
+    assert_eq!(at.len(), 2, "{:?}", r.items());
+    assert!(
+        (at[0] - 1.0 / 8192.0).abs() < 1e-9 && (at[1] - (2.0 - 1.0 / 8192.0)).abs() < 1e-9,
+        "{at:?}"
+    );
+    // An arc from a quarter to three quarters of a turn, whose ends add to 2, is no whole turn:
+    // the y axis touches it at both ends.
+    let r = meet(
+        &infinite([0.0, 0.0], [0.0, 1.0]),
+        &arc([0.0, 0.0], 5.0, (0.5, 1.5)),
+    );
+    assert!(
+        r.items().iter().all(|i| matches!(
+            i,
+            Item::Point {
+                contact: PointContact::BoundaryTouch,
+                ..
+            }
+        )) && r.items().len() == 2,
+        "{:?}",
+        r.items()
+    );
+}
+
+#[test]
+fn a_meeting_at_the_grid_s_edge_is_on_the_grid() {
+    // The lines cross at (2^40 - 1.5, 0): the grid box around the crossing, rounded outward, reaches
+    // 2^40 - 1, the last grid coordinate, and is a box of the grid, not out of its range.
+    let reach = 2.0_f64.powi(40) - 1.0;
+    let x = reach - 0.5;
+    let r = meet(
+        &segment([x, -1.0], [x, 1.0]),
+        &segment([0.0, 0.0], [reach, 0.0]),
+    );
+    assert!(
+        matches!(
+            r.items(),
+            [Item::Point {
+                contact: PointContact::Crossing,
+                ..
+            }]
+        ),
+        "{:?}",
+        r.items()
+    );
+}
+
+#[test]
+fn a_whole_circle_s_search_takes_only_its_work() {
+    // What the engine charges on a whole circle pins where its search runs past the join and how
+    // a box across the join is read: the pad either side, and the stretch moved by a turn.
+    let turn = CurveKind::Circle(
+        Circle::new([0.0, 0.0], 5000.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap(),
+    );
+    let work = |b: &CurveKind<2>| {
+        let mut m = meter();
+        let r = curves(&turn, b, &mut m).unwrap();
+        (r.items().len(), m.used().work)
+    };
+    let x = 5000.0 * (core::f64::consts::PI / 8192.0).cos();
+    let near = 5000.0 * (core::f64::consts::PI / 4096.0).sin();
+    let got = [
+        work(&bezier(&[[x, -100.0], [x, 0.0], [x, 100.0]])),
+        work(&bezier(&[
+            [4000.0, -near],
+            [5000.0, -near],
+            [6000.0, -near],
+        ])),
+        work(&bezier(&[[4000.0, near], [5000.0, near], [6000.0, near]])),
+        work(&bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]])),
+    ];
+    assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1313)]);
+}
+
+#[test]
+fn circles_on_later_turns_cross_on_their_own_domains() {
+    // The circle about (6, 0) on whole turns from 8 or from -6 (half-turns): its two crossings with
+    // the circle about the origin are at the same points, at parameters moved by those turns.
+    let on = |d: (f64, f64)| {
+        CurveKind::Circle(Circle::new([6.0, 0.0], 5.0, Frame::standard().unwrap(), d).unwrap())
+    };
+    let first = 0.704_832_764_699_133;
+    // From 9 the first crossing falls in the next turn: 9.295 and 10.705.
+    for (d, want) in [
+        ((8.0, 10.0), [8.0 + first, 10.0 - first]),
+        ((-6.0, -4.0), [-6.0 + first, -4.0 - first]),
+        ((9.0, 11.0), [10.0 - first, 10.0 + first]),
+    ] {
+        let r = meet(&circle([0.0, 0.0], 5.0), &on(d));
+        let mut t: Vec<f64> = r
+            .items()
+            .iter()
+            .map(|i| {
+                let s = i.at().spans()[1];
+                s.lo() * 0.5 + s.hi() * 0.5
+            })
+            .collect();
+        t.sort_by(f64::total_cmp);
+        assert_eq!(t.len(), 2, "{:?}", r.items());
+        assert!(
+            (t[0] - want[0]).abs() < 1e-9 && (t[1] - want[1]).abs() < 1e-9,
+            "{t:?}"
+        );
+    }
+}
+
+#[test]
+fn a_curve_of_two_spans_crossing_in_each_keeps_every_crossing() {
+    // A quadratic B-spline of two spans zigzags across the x axis three times: in its first span,
+    // at the knot between them and in its second. A box over both spans is clipped by neither.
+    let two = CurveKind::Nurbs(
+        Curve::new(
+            Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]).unwrap(),
+            &[
+                [0.0, -1000.0],
+                [1000.0, 1000.0],
+                [2000.0, -1000.0],
+                [3000.0, 1000.0],
+            ],
+        )
+        .unwrap(),
+    );
+    let r = meet(
+        &two,
+        &bezier(&[[-1000.0, 0.0], [1500.0, 0.0], [4000.0, 0.0]]),
+    );
+    let mut s: Vec<f64> = r
+        .items()
+        .iter()
+        .map(|i| {
+            let s = i.at().spans()[0];
+            s.lo() * 0.5 + s.hi() * 0.5
+        })
+        .collect();
+    s.sort_by(f64::total_cmp);
+    assert_eq!(s.len(), 3, "{:?}", r.items());
+    for (got, want) in s.iter().zip([1.0 / 3.0, 1.0, 5.0 / 3.0]) {
+        assert!((got - want).abs() < 1e-4, "{s:?}");
+    }
+}
+
+#[test]
+fn a_conic_in_the_plane_z_equals_y_meets_a_line_in_it_as_crossings() {
+    // The plane z = y fixes y, so the corner the shared plane is proven from must keep its y.
+    let axes = Axes::Vectors {
+        u: [2.0, 1.0, 1.0],
+        v: [0.0, 1.0, 1.0],
+    };
+    let e = CurveKind::Ellipse(Ellipse::new([1.0, 2.0, 2.0], axes, (0.0, 2.0)).unwrap());
+    let line = bezier(&[[-3.0, 2.0, 2.0], [1.0, 2.0, 2.0], [5.0, 2.0, 2.0]]);
+    let r = meet(&e, &line);
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    assert!(
+        r.items().iter().all(|i| matches!(
+            i,
+            Item::Point {
+                contact: PointContact::Crossing,
+                ..
+            }
+        )),
+        "{:?}",
+        r.items()
+    );
+}
+
+#[test]
+fn curves_apart_in_space_whose_shadows_meet_do_not_meet() {
+    // A line along (1, 1, 1) and a curve at height -10 whose shadow on z = 0 crosses the line's
+    // at (2, 2): 12 apart there. A line along (0, 1, 1) and a curve 5 off it in x whose end lies on
+    // its shadow on x = 0: a run at the end, apart in x. Neither meets, either way round.
+    for (a, b) in [
+        (
+            infinite([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
+            bezier(&[[0.0, 4.0, -10.0], [2.0, 2.0, -10.0], [4.0, 0.0, -10.0]]),
+        ),
+        (
+            infinite([0.0, 0.0, 0.0], [0.0, 1.0, 1.0]),
+            bezier(&[[5.0, -5.0, 5.0], [5.0, 0.0, 5.0], [5.0, 5.0, 5.0]]),
+        ),
+    ] {
+        is_empty(&meet(&a, &b));
+        is_empty(&meet(&b, &a));
+    }
+}
+
+#[test]
+fn a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide() {
+    // 12.7: a pair with a closed form that sent it on to the engine says so; a pair the engine
+    // takes from the start, or one a closed form decides, does not.
+    let routed = |a: &CurveKind<2>, b: &CurveKind<2>| {
+        meet(a, b)
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "closed-form-to-engine")
+    };
+    let k = 2.0_f64.powi(20);
+    assert!(routed(
+        &infinite([k, 0.0], [k, 1.0]),
+        &circle([0.0, 0.0], 1.0)
+    ));
+    let hump = bezier(&[[0.0, -1.0], [2.0, 3.0], [4.0, -1.0]]);
+    let level = infinite([0.0, 0.0], [1.0, 0.0]);
+    let off_grid = [
+        segment([0.5, 0.0], [2.5, 2.0]),
+        segment([0.5, 2.0], [2.5, 0.0]),
+    ];
+    for (a, b) in [
+        (&hump, &level),
+        (&level, &hump),
+        (&circle([2.0, 0.0], 1.0), &hump),
+        (&off_grid[0], &off_grid[1]),
+    ] {
+        assert!(!routed(a, b));
+        assert_ne!(meet(a, b).items().len(), 0);
+    }
+}
+
+#[test]
+fn circles_in_space_are_read_in_their_own_plane() {
+    let frame = |x: [f64; 3], n: [f64; 3]| Frame::new(x, n).unwrap();
+    let ring = |c: [f64; 3], r: f64, f: Frame<3>| CurveKind::Circle(Circle::full(c, r, f).unwrap());
+    // Two circles of radius 5 about the origin, one flat and one standing in the plane y = 0: they
+    // cross at (5, 0, 0) and (-5, 0, 0), though their centres are level in z.
+    let flat = ring([0.0; 3], 5.0, frame([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]));
+    let standing = ring([0.0; 3], 5.0, frame([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]));
+    let r = meet(&flat, &standing);
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    // Two in the plane y = 1, centres 6 apart: they cross twice there.
+    let a = ring(
+        [0.0, 1.0, 0.0],
+        5.0,
+        frame([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+    );
+    let b = ring(
+        [6.0, 1.0, 0.0],
+        5.0,
+        frame([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+    );
+    let r = meet(&a, &b);
+    assert!(
+        r.items().len() == 2
+            && r.items().iter().all(|i| matches!(
+                i,
+                Item::Point {
+                    contact: PointContact::Crossing,
+                    ..
+                }
+            )),
+        "{:?}",
+        r.items()
+    );
+}
+
+#[test]
+fn curves_in_a_plane_off_the_grid_are_read_in_that_plane() {
+    // Both in the plane x = 0.5, off the grid, so no plane is proven: the engine reads them in the
+    // two coordinates they spread over, y and z, never along x, where they are a line.
+    let hump = bezier(&[[0.5, 0.0, 0.0], [0.5, 0.5, 8.0], [0.5, 1.0, 0.0]]);
+    let level = bezier(&[[0.5, 0.0, 2.0], [0.5, 0.5, 2.0], [0.5, 1.0, 2.0]]);
+    // Equal in x but off the grid, so each meeting is a near miss in x the doubles cannot rule
+    // out, at s = t = (1 ± √½) / 2: the level line runs with the hump in y.
+    let r = meet(&hump, &level);
+    let mut s: Vec<(f64, f64)> = r
+        .items()
+        .iter()
+        .map(|i| {
+            let [s, t] = [i.at().spans()[0], i.at().spans()[1]];
+            (s.lo() * 0.5 + s.hi() * 0.5, t.lo() * 0.5 + t.hi() * 0.5)
+        })
+        .collect();
+    s.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let half = 0.5_f64.sqrt();
+    assert_eq!(s.len(), 2, "{:?}", r.items());
+    assert!(
+        [s[0].0, s[0].1, s[1].0, s[1].1]
+            .iter()
+            .zip([1.0 - half, 1.0 - half, 1.0 + half, 1.0 + half])
+            .all(|(got, want)| (got - want / 2.0).abs() < 0.01),
+        "{s:?}"
+    );
+}
+
+#[test]
+fn a_ray_meets_what_lies_ahead_of_it() {
+    // A ray from the origin along x and a hump crossing it at x = 1 and x = 3: the engine cuts the
+    // ray to the grid's reach, as it does a whole line.
+    let ray = CurveKind::Line(Line::ray([0.0, 0.0], [1.0, 0.0]).unwrap());
+    let hump = bezier(&[[1.0, -1.0], [2.0, 3.0], [3.0, -1.0]]);
+    assert_eq!(meet(&ray, &hump).items().len(), 2);
+    assert_eq!(meet(&hump, &ray).items().len(), 2);
+}
+
+/// The residuals (x² - 0.09, y - 0.7): one simple zero in the unit square, at (0.3, 0.7), and no
+/// clipping of its own, so the solver takes its default narrowing, the box as it is. Over the whole
+/// square x² slopes from 0 to 2, too much for the operator to prove the zero at first.
+struct Bent;
+
+impl Field<2> for Bent {
+    fn at(&self, [x, y]: [f64; 2], _: &mut WorkMeter<'_>) -> Result<[Interval; 2], IntersectError> {
+        Ok([
+            Interval::point(x)?.square()?.sub(Interval::point(0.09)?)?,
+            Interval::point(y)?.sub(Interval::point(0.7)?)?,
+        ])
+    }
+
+    fn over(
+        &self,
+        [x, y]: &[Interval; 2],
+        _: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; 2]>, IntersectError> {
+        Ok(Some([
+            x.square()?.sub(Interval::point(0.09)?)?,
+            y.sub(Interval::point(0.7)?)?,
+        ]))
+    }
+
+    fn slope(
+        &self,
+        [x, _]: &[Interval; 2],
+        _: &mut WorkMeter<'_>,
+    ) -> Result<Option<[[Interval; 2]; 2]>, IntersectError> {
+        let (one, zero) = (Interval::point(1.0)?, Interval::point(0.0)?);
+        Ok(Some([[x.mul(Interval::point(2.0)?)?, zero], [zero, one]]))
+    }
+
+    fn reach(&self, [x, y]: &[Interval; 2], _: &mut WorkMeter<'_>) -> Result<f64, IntersectError> {
+        let (w, h) = (x.hi() - x.lo(), y.hi() - y.lo());
+        Ok(if w > h { w } else { h } * 1000.0)
+    }
+}
+
+#[test]
+fn a_field_without_clipping_keeps_its_zero() {
+    let side = Interval::new(0.0, 1.0).unwrap();
+    let solved = solve(&Bent, [side, side], |_, _| Ok(true), &mut meter()).unwrap();
+    assert_eq!(solved.zeros.len(), 1);
+    let [x, y] = solved.zeros[0].enclosure;
+    assert!(x.contains(0.3) && y.contains(0.7), "{x:?} {y:?}");
+}
+
+#[test]
+fn a_line_tangent_at_the_grid_s_edge_is_an_isolated_tangent() {
+    // A circle of radius 5 whose centre is 10 steps in from the grid's edge, and the line x = 5 in
+    // from it, through a point 1 in from the bottom running up 2: both on the grid, so the exact
+    // count says tangent. One step back from that point the line leaves the grid.
+    let reach = 2.0_f64.powi(40) - 1.0;
+    let c = circle([-reach + 10.0, 0.0], 5.0);
+    let line = infinite([-reach + 5.0, -reach + 1.0], [0.0, 2.0]);
+    let r = meet(&line, &c);
+    assert!(
+        matches!(
+            r.items(),
+            [Item::Point {
+                contact: PointContact::IsolatedTangent,
+                ..
+            }]
+        ),
+        "{:?}",
+        r.items()
+    );
 }
