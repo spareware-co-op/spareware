@@ -6,8 +6,10 @@
 //! further than the best distance so far, or once its distance's derivative cannot vanish, and the
 //! ends of a curve and the edges of a surface added as candidates, since a minimum on the boundary
 //! need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters of a point known
-//! to lie on a kind. A point on a round kind's axis has a continuum of nearest points, returned as
-//! a typed [`Continuum`] rather than found by search.
+//! to lie on a kind. A point on a round kind's axis, or on the axis of a surface of revolution
+//! that has only been moved, has a continuum of nearest points, returned as a typed [`Continuum`]
+//! rather than found by search. A closed direction's two ends are one seam: boxes undecided at
+//! both ends of it hold one point, reported once from each side.
 //!
 //! Guarantees:
 //!
@@ -50,7 +52,7 @@ use geom_num::NumError;
 use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Limit};
 use geom_run::WorkMeter;
-use geom_surface::{ParamSurface, SurfaceKind, partial_index};
+use geom_surface::{ParamBox, ParamSurface, SurfaceKind, partial_index};
 
 use crate::IntersectError;
 
@@ -106,7 +108,7 @@ pub enum Projection<const N: usize, const D: usize> {
         distance: Interval,
     },
     /// The search reached the floor undecided in this box: the nearest points may form a continuum
-    /// on a general kind, such as a point on the axis of a revolved NURBS.
+    /// on a general kind, such as a point on the axis of a revolution a transform has turned.
     NonIsolated {
         /// A box of parameters holding what was left undecided.
         enclosure: [Interval; N],
@@ -808,6 +810,127 @@ fn on_axis(
     Ok(None)
 }
 
+/// Whether each parameter direction of `surface` is closed, its two ends one seam: a full turn
+/// (two half-turns, decided by an error-free sum) of a kind whose u, and a torus's v, is an angle
+/// (12.10). A NURBS whose rows close is not read here; its seam stays two edges.
+fn closes(surface: &SurfaceKind) -> [bool; 2] {
+    let ((a, b), (c, d)) = surface.domain();
+    let turn = |x: f64, y: f64| geom_num::eft::two_sum(y, -x) == (2.0, 0.0);
+    match surface {
+        SurfaceKind::Sphere(_)
+        | SurfaceKind::Cylinder(_)
+        | SurfaceKind::Cone(_)
+        | SurfaceKind::Revolution(_) => [turn(a, b), false],
+        SurfaceKind::Torus(_) => [turn(a, b), turn(c, d)],
+        _ => [false, false],
+    }
+}
+
+/// The undecided boxes' hull, as one or two parameter boxes: two when the boxes reach both ends
+/// of a closed direction, the boxes nearer each end hulled on their own side of the seam, since
+/// the seam's two ends are one curve.
+fn hulls(surface: &SurfaceKind, open: &[([Interval; 2], f64)]) -> Option<Vec<ParamBox>> {
+    let ((a, b), (c, d)) = surface.domain();
+    let ends = [(a, b), (c, d)];
+    let span = |boxes: &mut dyn Iterator<Item = &[Interval; 2]>| -> Option<ParamBox> {
+        let mut out: Option<ParamBox> = None;
+        for at in boxes {
+            let [u, v] = at;
+            out = Some(match out {
+                None => ((u.lo(), u.hi()), (v.lo(), v.hi())),
+                Some(((p, q), (r, s))) => (
+                    (smaller(p, u.lo()), larger(q, u.hi())),
+                    (smaller(r, v.lo()), larger(s, v.hi())),
+                ),
+            });
+        }
+        out
+    };
+    let whole = span(&mut open.iter().map(|(at, _)| at))?;
+    for (k, closed) in closes(surface).into_iter().enumerate() {
+        let (lo, hi) = ends.get(k).copied()?;
+        let side = |at: &[Interval; 2]| at.get(k).copied();
+        let reaches_both = open
+            .iter()
+            .any(|(at, _)| side(at).is_some_and(|x| x.lo() <= lo))
+            && open
+                .iter()
+                .any(|(at, _)| side(at).is_some_and(|x| x.hi() >= hi));
+        if !(closed && reaches_both) {
+            continue;
+        }
+        let middle = halfway((lo, hi))?;
+        let near = |high: bool| {
+            move |at: &&[Interval; 2]| side(at).is_some_and(|x| (x.lo() >= middle) == high)
+        };
+        let low = span(&mut open.iter().map(|(at, _)| at).filter(near(false)))?;
+        let high = span(&mut open.iter().map(|(at, _)| at).filter(near(true)))?;
+        return Some(alloc::vec![low, high]);
+    }
+    Some(alloc::vec![whole])
+}
+
+/// What the undecided boxes still in reach come to: one nearest point, pushed onto `points` from
+/// each side of a seam it lies across, or, when their hull is too long to be one point, that
+/// hull's box, returned.
+fn undecided(
+    surface: &SurfaceKind,
+    p: &[f64; 3],
+    open: &[([Interval; 2], f64)],
+    floor: f64,
+    upper: &mut f64,
+    points: &mut Vec<Nearest<2, 3>>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<[Interval; 2]>, IntersectError> {
+    let Some(parts) = hulls(surface, open) else {
+        return Ok(None);
+    };
+    // One point however many sides of a seam it is reached from: the hull of every part's
+    // image, each part reported with it.
+    let mut point: Option<[Interval; 3]> = None;
+    for part in &parts {
+        let image = boxed(&surface.bound(*part, meter)?)?;
+        point = Some(match point {
+            None => image,
+            Some(mut so_far) => {
+                for (x, y) in so_far.iter_mut().zip(image) {
+                    *x = hull(*x, y)?;
+                }
+                so_far
+            }
+        });
+    }
+    let Some(point) = point else {
+        return Err(IntersectError::Internal);
+    };
+    let at = |((a, b), (c, d)): ParamBox| -> Result<[Interval; 2], NumError> {
+        Ok([Interval::new(a, b)?, Interval::new(c, d)?])
+    };
+    if image(&point) > 2.0 * floor {
+        let whole = parts
+            .iter()
+            .copied()
+            .reduce(|((a, b), (c, d)), ((e, f), (g, h))| {
+                ((smaller(a, e), larger(b, f)), (smaller(c, g), larger(d, h)))
+            });
+        let Some(whole) = whole else {
+            return Err(IntersectError::Internal);
+        };
+        return Ok(Some(at(whole)?));
+    }
+    let distance = Interval::norm(&minus(&point, p)?)?;
+    *upper = smaller(*upper, distance.hi());
+    for part in parts {
+        points.push(Nearest {
+            at: at(part)?,
+            point,
+            distance,
+            place: Place::Foot,
+        });
+    }
+    Ok(None)
+}
+
 /// The nearest points of `surface` to `p`, to a floor of `floor` in space.
 ///
 /// # Errors
@@ -822,13 +945,14 @@ pub fn project_surface(
     if floor <= 0.0 || floor.is_nan() {
         return Err(IntersectError::InvalidInput);
     }
-    // A sphere from its centre, or a round kind from its axis, along one meridian: every meridian
-    // gives the same.
+    // A sphere from its centre, or a round kind or a moved surface of revolution from its axis,
+    // along one meridian: every meridian gives the same.
     let round = match surface {
         SurfaceKind::Sphere(s) => Some((s.center(), s.frame(), true)),
         SurfaceKind::Cylinder(s) => Some((s.center(), s.frame(), false)),
         SurfaceKind::Cone(s) => Some((s.center(), s.frame(), false)),
         SurfaceKind::Torus(s) => Some((s.center(), s.frame(), false)),
+        SurfaceKind::Revolution(s) => s.axis().map(|(center, frame)| (center, frame, false)),
         _ => None,
     };
     if let Some((center, frame, ball)) = round
@@ -887,24 +1011,8 @@ pub fn project_surface(
     points.extend(inside.points);
     open.extend(inside.open);
     open.retain(|(_, low)| *low <= upper);
-    let side = |k: usize| open.iter().filter_map(move |(b, _)| b.get(k).copied());
-    let low = |k: usize| side(k).map(Interval::lo).reduce(smaller);
-    let high = |k: usize| side(k).map(Interval::hi).reduce(larger);
-    if let (Some(a), Some(b), Some(c), Some(d)) = (low(0), high(0), low(1), high(1)) {
-        let at = [Interval::new(a, b)?, Interval::new(c, d)?];
-        let point = boxed(&surface.bound(((a, b), (c, d)), meter)?)?;
-        if image(&point) <= 2.0 * floor {
-            let distance = Interval::norm(&minus(&point, p)?)?;
-            upper = smaller(upper, distance.hi());
-            points.push(Nearest {
-                at,
-                point,
-                distance,
-                place: Place::Foot,
-            });
-        } else {
-            return Ok(Projection::NonIsolated { enclosure: at });
-        }
+    if let Some(enclosure) = undecided(surface, p, &open, floor, &mut upper, &mut points, meter)? {
+        return Ok(Projection::NonIsolated { enclosure });
     }
     Ok(Projection::Points(settle(points, upper)?))
 }
