@@ -10676,7 +10676,7 @@
       "provenance": [],
       "sections": "10.2, 19.9 to 19.12 and 23.9; open questions OQ-19.7 and OQ-19.17, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "[`gjk`], the certified GJK filter (G294), is built; pieces G293, G295, G296 and G297 build the rest. Chapter 19's table puts the filter beside `distance`, which G293 builds.",
+      "status": "built by pieces G293, G294, G295, G296, G297; G294's [`gjk`], the certified GJK filter, is in. Chapter 19's table puts the filter beside `distance`, which G293 builds.",
       "summary": "Spare Kit geometry kernel: spatial queries, distance and clash."
     },
     {
