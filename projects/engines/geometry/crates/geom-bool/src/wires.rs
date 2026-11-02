@@ -8,7 +8,8 @@
 //! plane takes at the others. Each piece between stops takes the vector just past its start,
 //! traced from the corner of a box around every polygon and the wire, with the plane it starts on
 //! facing along the edge and moved towards its end, as a piece of face takes the vector in front
-//! of it (11.2). [`kept`] keeps the pieces whose vector passes the test, a run of kept pieces along
+//! of it (11.2); a piece lying in another operand's face is then moved off it a step towards +x,
+//! then +y, then +z, by the two planes through the edge. [`kept`] keeps the pieces whose vector passes the test, a run of kept pieces along
 //! one edge as one; [`trimmed`] keeps the runs of pieces, unbroken by a split or by a wire vertex
 //! on another operand's face, that hold a seed. Both give the [`Curves`] the wire rebuild takes,
 //! their vertices in the order the wire meets them.
@@ -19,6 +20,10 @@
 //!   rounds but the published edges' shadows (8.3).
 //! - **Chosen by the others alone.** A wire has no inside and adds nothing to any vector, so a piece
 //!   is never classified by its own wire (11.1).
+//! - **Drawn either way, chosen the same.** A piece lying in a face falls on the side a step towards
+//!   +x, then +y, then +z, gives (a simulation of simplicity), whichever way its edge runs and
+//!   whatever its direction in the face: a wire along a block's face is inside it on the three low
+//!   faces and outside on the three high ones.
 //! - **Refused, never guessed.** A seed on no piece is [`CombineDetail::SeedOutside`], and one on a
 //!   split, on a wire vertex on another operand's face, or between pieces of two runs, is
 //!   [`CombineDetail::SeedOnBoundary`].
@@ -120,8 +125,34 @@ fn square(p: P3, axis: usize, toward: Sign) -> Result<Plane, NumError> {
     Plane::new(n, d)
 }
 
+/// The plane through `a`, `b` and the grid point a step from `a` along `axis`, turned unless its
+/// normal passes `facing`.
+fn through(
+    a: P3,
+    b: P3,
+    axis: usize,
+    facing: impl Fn([i128; 3]) -> bool,
+) -> Result<Plane, NumError> {
+    let plane = Plane::through(a, b, beside(a, axis)?)?;
+    if facing(plane.n()) {
+        Ok(plane)
+    } else {
+        turned(&plane)
+    }
+}
+
 /// Two planes through `a` and `b`, whose line is the edge's, and the axis along which the edge
-/// changes most with the way it changes there: neither other axis is parallel to the edge.
+/// changes most with the way it changes there.
+///
+/// A piece's vector is traced with the plane across its start moved first, then these two, so a
+/// piece lying in another operand's face is moved off it by them alone. They are chosen to move it
+/// a step towards +x, then +y, then +z (a simulation of simplicity), whichever way the edge runs:
+/// the second holds the edge and the first axis it does not run along, facing where its normal's
+/// first nonzero coordinate is positive; the first holds the edge and an axis out of the second,
+/// facing towards that first axis. Moving the first takes the point within the second towards
+/// that axis, off every plane through the edge whose normal has that coordinate, to the side its
+/// sign gives; a plane through the edge without it is the second's, which then moves the point to
+/// the side of its first nonzero coordinate.
 fn line(a: P3, b: P3) -> Result<([Plane; 2], usize, Sign), NumError> {
     let (ca, cb) = (coordinates(a), coordinates(b));
     let mut axis = 0;
@@ -142,12 +173,20 @@ fn line(a: P3, b: P3) -> Result<([Plane; 2], usize, Sign), NumError> {
     } else {
         Sign::Negative
     };
-    let [i, j] = [axis.saturating_add(1) % 3, axis.saturating_add(2) % 3];
-    let planes = [
-        Plane::through(a, b, beside(a, i)?)?,
-        Plane::through(a, b, beside(a, j)?)?,
-    ];
-    Ok((planes, axis, toward))
+    let first_axis = usize::from(ca.get(1) == cb.get(1) && ca.get(2) == cb.get(2));
+    let second = through(a, b, first_axis, |n| {
+        n.into_iter()
+            .find(|v| *v != 0)
+            .is_some_and(i128::is_positive)
+    })?;
+    let out = [0usize, 1, 2]
+        .into_iter()
+        .find(|k| *k != first_axis && second.n().get(*k).is_some_and(|v| *v != 0))
+        .ok_or(NumError::Degenerate)?;
+    let first = through(a, b, out, |n| {
+        n.get(first_axis).is_some_and(|v| v.is_positive())
+    })?;
+    Ok(([first, second], axis, toward))
 }
 
 /// Whether the meeting point `t` lies on `polygon`, its boundary included.
