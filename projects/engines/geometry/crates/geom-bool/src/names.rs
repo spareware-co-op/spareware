@@ -901,7 +901,46 @@ fn edge_sources(
     Ok(found)
 }
 
-/// Every edge of `merged`, kept or `Bounded`.
+/// Names gathered per vertex, each vertex's sorted and without repeats, as a set of each would
+/// hold them: one list for every vertex.
+struct Grouped {
+    starts: Vec<usize>,
+    names: Vec<NameId>,
+}
+
+impl Grouped {
+    /// `pairs` of a vertex and a name, grouped by vertex, for `count` vertices; a pair past the
+    /// last vertex is dropped.
+    fn new(count: usize, mut pairs: Vec<(usize, NameId)>) -> Self {
+        pairs.sort_unstable();
+        pairs.dedup();
+        let mut starts = Vec::with_capacity(count.saturating_add(1));
+        let mut at = 0usize;
+        for vertex in 0..=count {
+            while pairs.get(at).is_some_and(|(of, _)| *of < vertex) {
+                at = at.saturating_add(1);
+            }
+            starts.push(at);
+        }
+        Grouped {
+            starts,
+            names: pairs.into_iter().map(|(_, name)| name).collect(),
+        }
+    }
+
+    /// The names at `vertex`.
+    fn at(&self, vertex: usize) -> &[NameId] {
+        let from = self.starts.get(vertex).copied().unwrap_or(0);
+        let to = self
+            .starts
+            .get(vertex.saturating_add(1))
+            .copied()
+            .unwrap_or(from);
+        self.names.get(from..to).unwrap_or(&[])
+    }
+}
+
+/// Every edge of `merged`, kept or `Bounded`, and the names of the faces at each vertex.
 fn name_edges(
     merged: &Merged,
     keys: &[Near],
@@ -910,7 +949,7 @@ fn name_edges(
     sources: &Sources<'_>,
     alive: &mut BTreeSet<NameId>,
     mint: &mut Mint<'_>,
-) -> Result<Rows, NamingError> {
+) -> Result<(Rows, Grouped), NamingError> {
     let shared = shared_names(sources.operands.iter().map(|o| o.names.edges.as_slice()));
     let hits = edge_sources(merged, keys, faces, inputs)?;
     let mut users: BTreeMap<(usize, u32), usize> = BTreeMap::new();
@@ -919,15 +958,13 @@ fn name_edges(
         *slot = slot.saturating_add(1);
     }
     let of_row = |at: usize| faces.names.get(at).copied().ok_or(NamingError::Broken);
-    let mut touching: Vec<BTreeSet<NameId>> = alloc::vec![BTreeSet::new(); merged.vertices.len()];
+    let mut pairs = Vec::with_capacity(merged.fins.len().saturating_mul(2));
     for fin in &merged.fins {
         let held = of_row(fin.face)?;
-        for at in [fin.from, fin.to] {
-            touching.iter_mut().skip(at).take(1).for_each(|set| {
-                set.insert(held);
-            });
-        }
+        pairs.push((fin.from, held));
+        pairs.push((fin.to, held));
     }
+    let touching = Grouped::new(merged.vertices.len(), pairs);
     let mut rows = Rows::default();
     for (edge, hit) in merged.edges.iter().zip(&hits) {
         let mut around = BTreeSet::new();
@@ -962,10 +999,11 @@ fn name_edges(
             };
             (own, origin)
         } else {
-            let at_ends = [edge.low, edge.high]
+            let at_ends = [edge.low, edge.high].map(|v| touching.at(v));
+            let ending = at_ends
                 .into_iter()
-                .filter_map(|v| touching.get(v));
-            let ending = at_ends.flatten().filter(|held| !around.contains(*held));
+                .flatten()
+                .filter(|held| !around.contains(*held));
             let name = TopoName::Bounded {
                 kind: EdgeOrVertex::Edge,
                 by,
@@ -982,14 +1020,14 @@ fn name_edges(
         rows.ranks
             .push(Rank(alloc::vec![edge.low, edge.high], rows.names.len()));
     }
-    Ok(rows)
+    Ok((rows, touching))
 }
 
 /// Every vertex of `merged`: a kept operand's name where it had one at the same point, or
 /// `Bounded` by the faces around it.
 fn name_vertices(
     merged: &Merged,
-    keys: &[Near],
+    (keys, around): (&[Near], &Grouped),
     faces: &FacesDone,
     inputs: &[Input<'_>],
     sources: &Sources<'_>,
@@ -997,24 +1035,15 @@ fn name_vertices(
     mint: &mut Mint<'_>,
 ) -> Result<Rows, NamingError> {
     let shared = shared_names(sources.operands.iter().map(|o| o.names.vertices.as_slice()));
-    let mut around: Vec<BTreeSet<NameId>> = alloc::vec![BTreeSet::new(); merged.vertices.len()];
-    let mut made_from = around.clone();
+    let mut pairs = Vec::new();
     for fin in &merged.fins {
-        let held = faces
-            .names
-            .get(fin.face)
-            .copied()
-            .ok_or(NamingError::Broken)?;
+        faces.names.get(fin.face).ok_or(NamingError::Broken)?;
         let names = faces.inputs.get(fin.face).ok_or(NamingError::Broken)?;
         for at in [fin.from, fin.to] {
-            around.iter_mut().skip(at).take(1).for_each(|set| {
-                set.insert(held);
-            });
-            made_from.iter_mut().skip(at).take(1).for_each(|set| {
-                set.extend(names.iter().copied());
-            });
+            pairs.extend(names.iter().map(|name| (at, *name)));
         }
     }
+    let made_from = Grouped::new(merged.vertices.len(), pairs);
     let mut rows = Rows::default();
     // The operands whose names are kept, in order: only they can give a vertex its name.
     let mut keeping = Vec::new();
@@ -1024,8 +1053,8 @@ fn name_vertices(
             keeping.push((operand, one));
         }
     }
-    let places = merged.vertices.iter().zip(&around).zip(&made_from);
-    for (at, ((point, set), from)) in places.enumerate() {
+    for (at, point) in merged.vertices.iter().enumerate() {
+        let (set, from) = (around.at(at), made_from.at(at));
         let mut own = None;
         for (operand, one) in &keeping {
             if own.is_none()
@@ -1169,12 +1198,18 @@ pub fn name(
         .filter(|r| matches!(r.origin, Origin::Unchanged | Origin::Modified { .. }))
         .map(|r| r.output)
         .collect();
-    let edges = name_edges(
+    let (edges, around) = name_edges(
         merged, &keys, &faces, &inputs, sources, &mut alive, &mut mint,
-    )?
-    .finished(&mut records, &mut mint)?;
+    )?;
+    let edges = edges.finished(&mut records, &mut mint)?;
     let vertices = name_vertices(
-        merged, &keys, &faces, &inputs, sources, &mut alive, &mut mint,
+        merged,
+        (&keys, &around),
+        &faces,
+        &inputs,
+        sources,
+        &mut alive,
+        &mut mint,
     )?
     .finished(&mut records, &mut mint)?;
     let regions = name_regions(
@@ -1369,10 +1404,18 @@ pub fn name_fresh(
     };
     let mut records = core::mem::take(&mut faces.records);
     let mut alive = BTreeSet::new();
-    let edges = name_edges(merged, &[], &faces, &[], &sources, &mut alive, &mut mint)?
-        .finished(&mut records, &mut mint)?;
-    let vertices = name_vertices(merged, &[], &faces, &[], &sources, &mut alive, &mut mint)?
-        .finished(&mut records, &mut mint)?;
+    let (edges, around) = name_edges(merged, &[], &faces, &[], &sources, &mut alive, &mut mint)?;
+    let edges = edges.finished(&mut records, &mut mint)?;
+    let vertices = name_vertices(
+        merged,
+        (&[], &around),
+        &faces,
+        &[],
+        &sources,
+        &mut alive,
+        &mut mint,
+    )?
+    .finished(&mut records, &mut mint)?;
     let regions = name_regions(op, merged, &faces.names, None, &mut records, &mut mint)?;
     let names = Names {
         regions: regions.into_iter().map(key_of).collect(),
