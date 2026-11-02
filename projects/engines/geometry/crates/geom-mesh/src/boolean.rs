@@ -69,6 +69,9 @@ const FACES: Phase = Phase::new("boolean: faces into convex polygons");
 /// Faces, a few dozen a task: most are triangles, which split at once.
 const FACE_PLAN: ChunkPlan = ChunkPlan::fixed::<64>();
 
+/// The result's corners: each vertex's grid point or lowest three planes.
+const CORNERS: Phase = Phase::new("boolean: the result's corners");
+
 /// One result.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Outcome {
@@ -469,8 +472,13 @@ fn lowest_triple(mut planes: Vec<Plane>, own: &Tpi) -> Result<[Plane; 3], MeshEr
     Ok(*own.planes())
 }
 
-/// The corners of `merged`: a grid point where a vertex is one, its lowest three planes where not.
-fn corners_of(merged: &Merged) -> Result<Vec<Corner>, MeshError> {
+/// The corners of `merged`: a grid point where a vertex is one, its lowest three planes where not,
+/// each vertex on `exec`'s pool, in vertex order.
+fn corners_of(
+    merged: &Merged,
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Corner>, MeshError> {
     let mut near: Vec<Vec<Plane>> = alloc::vec![Vec::new(); merged.vertices.len()];
     for fin in &merged.fins {
         let face = merged.faces.get(fin.face).ok_or(MeshFault::Shape)?;
@@ -481,26 +489,26 @@ fn corners_of(merged: &Merged) -> Result<Vec<Corner>, MeshError> {
             list.push(fin.bound);
         }
     }
-    let mut out = Vec::with_capacity(merged.vertices.len());
-    for (t, planes) in merged.vertices.iter().zip(near) {
+    let made = exec.try_map(meter, CORNERS, FACE_PLAN, &merged.vertices, |v, t, _| {
         let rounded = t.to_grid()?;
-        out.push(if rounded.is_exact() {
-            Corner::Grid(rounded.value())
-        } else {
-            Corner::Planes(lowest_triple(planes, t)?)
-        });
-    }
-    Ok(out)
+        if rounded.is_exact() {
+            return Ok(Corner::Grid(rounded.value()));
+        }
+        let planes = near.get(v).cloned().ok_or(MeshFault::Shape)?;
+        Ok(Corner::Planes(lowest_triple(planes, t)?))
+    });
+    Ok(made?)
 }
 
 /// `merged` as polygons of the runs given. Vertices are in lexicographic order, so the ring with a
 /// face's lowest vertex is its outer ring, and it comes first.
 fn polygons_of(
     merged: &Merged,
-    face_run: Vec<u32>,
-    runs: Vec<Source>,
+    (face_run, runs): (Vec<u32>, Vec<Source>),
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
 ) -> Result<Polygons, MeshError> {
-    let vertices = corners_of(merged)?;
+    let vertices = corners_of(merged, exec, meter)?;
     let on_grid = |v: usize| matches!(vertices.get(v), Some(Corner::Grid(_)));
     let mut corners = Vec::new();
     let mut loop_start = alloc::vec![0_u32];
@@ -564,7 +572,7 @@ fn outcome(
         meter,
     )?;
     let (history, face_run, runs) = account(&merged, &kept, gathered, op)?;
-    let polygons = polygons_of(&merged, face_run, runs)?;
+    let polygons = polygons_of(&merged, (face_run, runs), exec, meter)?;
     Ok(Outcome {
         // A result's winding is its test's, 0 or 1, and no two of its faces cross.
         mesh: build(&polygons, exec, meter)?.proven_solid(),
