@@ -850,6 +850,13 @@ fn a_walls_end_on_anothers_side_follows_the_shared_face_table() {
         assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
         checked(&out.result.body);
     }
+    // Two that overlap and a third apart keep nothing: the two share volume, not just a face, and
+    // a face of one inside the other has one's material on both sides.
+    let over = cuboid([50, 0, 0], [100, 10, 30]);
+    let far = cuboid([500, 0, 0], [10, 10, 10]);
+    let three = [solid(1, &a), solid(2, &over), solid(3, &far)];
+    let out = intersect(&ctx(), &SERIAL, &three).unwrap();
+    assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
 }
 
 #[test]
