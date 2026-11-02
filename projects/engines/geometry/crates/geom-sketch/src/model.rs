@@ -587,6 +587,13 @@ pub enum ConstraintKind {
         /// The distance, above zero.
         distance: Amount,
     },
+    /// An elliptical arc's length, from its start's parameter to its end's (piece G219).
+    EllipticalArcLength {
+        /// The elliptical arc.
+        arc: ItemId,
+        /// The length, above zero.
+        length: Amount,
+    },
     /// An ellipse's major radius, the length of its major-axis vector (piece G219).
     MajorRadius {
         /// The ellipse.
@@ -723,6 +730,7 @@ impl ConstraintKind {
                 | ConstraintKind::MajorRadius { .. }
                 | ConstraintKind::MinorRadius { .. }
                 | ConstraintKind::FromEllipse { .. }
+                | ConstraintKind::EllipticalArcLength { .. }
         )
     }
 
@@ -1108,6 +1116,18 @@ impl Sketch {
         }
     }
 
+    /// The elliptical arc `id`'s parameters, of its start and of its end.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not an elliptical arc.
+    pub fn elliptical_arc(&self, id: ItemId) -> Result<[ItemId; 2], SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::EllipticalArc { from, to, .. } => Ok([from, to]),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
     /// The ellipse the parameter `id` is on.
     ///
     /// # Errors
@@ -1337,6 +1357,10 @@ impl Sketch {
                 self.check_amount(distance, true)?;
                 point(p)?;
                 self.parameter_ellipse(parameter).map(|_| ())
+            }
+            ConstraintKind::EllipticalArcLength { arc, length } => {
+                self.check_amount(length, true)?;
+                self.elliptical_arc(arc).map(|_| ())
             }
             ConstraintKind::MajorRadius { ellipse, radius }
             | ConstraintKind::MinorRadius { ellipse, radius } => {

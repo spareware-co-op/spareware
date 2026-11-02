@@ -222,6 +222,43 @@ impl Residual<9, 2> for FromEllipse {
     }
 }
 
+/// The length of the ellipse of major-axis vector a and minor radius b from the parameter t₀ to t₁:
+/// the integral of its speed π |Q′(t) / π|, by the 20-node Gauss–Legendre rule of
+/// `geom_num::quadrature_rules`, summed in node order (section 15.3; piece G219).
+fn arc_length<S: Scalar>(a: [S; 2], b: S, t0: S, t1: S) -> Result<S, NumError> {
+    let rule = geom_num::quadrature_rules::GAUSS_LEGENDRE
+        .last()
+        .ok_or(NumError::NotFinite)?;
+    let half = S::constant(Real::new(0.5)?);
+    let middle = t0.add(t1)?.mul(half)?;
+    let reach = t1.sub(t0)?.mul(half)?;
+    let zero = S::constant(Real::ZERO);
+    let mut sum = zero;
+    for (node, weight) in rule.nodes.iter().zip(rule.weights) {
+        let t = middle.add(reach.mul(S::constant(Real::new(*node)?))?)?;
+        let (_, tangent) = at_parameter([zero, zero], a, b, t)?;
+        let speed = dot(tangent, tangent)?.sqrt()?;
+        sum = sum.add(speed.mul(S::constant(Real::new(*weight)?))?)?;
+    }
+    sum.mul(reach)?.mul(S::pi())
+}
+
+/// An elliptical arc of major-axis vector a and minor radius b, from the parameter t₀ to t₁, is
+/// `l` long: its length by [`arc_length`] less `l` (piece G219).
+pub struct EllipseLength;
+
+impl Residual<6, 1> for EllipseLength {
+    fn residuals<S: Scalar>(&self, x: [S; 6]) -> Result<[S; 1], NumError> {
+        let [ax, ay, b, t0, t1, l] = x;
+        Ok([arc_length([ax, ay], b, t0, t1)?.sub(l)?])
+    }
+
+    fn singular(&self, x: &[f64; 6]) -> Option<Singular> {
+        let [ax, ay, b, ..] = *x;
+        oval_singular(0.0, 0.0, ax, ay, b)
+    }
+}
+
 /// The line through s and e touches the ellipse of centre c, major-axis vector a and minor radius
 /// b, the centre on the side `sign` (+1 left, −1 right) of it (piece G219). With w the line's
 /// direction turned a quarter turn anticlockwise, the centre's distance from the line is
@@ -1073,6 +1110,16 @@ pub(crate) fn inputs_of(
             i.amount(distance)?;
             2
         }
+        ConstraintKind::EllipticalArcLength { arc, length } => {
+            let [from, to] = sketch.elliptical_arc(arc)?;
+            for slot in 0..3 {
+                i.variable(arc, slot)?;
+            }
+            i.variable(from, 0)?;
+            i.variable(to, 0)?;
+            i.amount(length)?;
+            1
+        }
         ConstraintKind::MajorRadius { ellipse, radius } => {
             // As a distance from the origin to the point a: (a · a − r²) / 2r.
             i.variable(ellipse, 0)?;
@@ -1564,6 +1611,7 @@ impl Assembly {
             ConstraintKind::CircularPattern { .. } => self.run(&TurnedAbout, row, x),
             ConstraintKind::OnEllipse { .. } => self.run(&OnEllipse, row, x),
             ConstraintKind::FromEllipse { .. } => self.run(&FromEllipse, row, x),
+            ConstraintKind::EllipticalArcLength { .. } => self.run(&EllipseLength, row, x),
             ConstraintKind::TangentAtPoint { .. } => {
                 let [a, b] = row.shapes;
                 self.run(&TangentAtPoint { a, b }, row, x)
@@ -1651,23 +1699,8 @@ pub fn measure(sketch: &Sketch, constraint: &Constraint) -> Result<f64, SketchEr
         ConstraintKind::MinorRadius { ellipse, .. } => Ok(sketch.ellipse(ellipse)?.2),
         ConstraintKind::FromEllipse {
             point, parameter, ..
-        } => {
-            let (centre, axis, minor) = sketch.ellipse(sketch.parameter_ellipse(parameter)?)?;
-            let real = |v: f64| Real::new(v);
-            let EntityKind::Parameter { t, .. } = sketch.entity(parameter)?.kind else {
-                return Err(SketchError::WrongKind(parameter));
-            };
-            let [cx, cy] = at(centre)?;
-            let (q, _) = at_parameter(
-                [real(cx)?, real(cy)?],
-                [real(axis[0])?, real(axis[1])?],
-                real(minor)?,
-                real(t)?,
-            )?;
-            let [px, py] = at(point)?;
-            let gap = [real(px)?.sub(q[0])?, real(py)?.sub(q[1])?];
-            Ok(dot(gap, gap)?.sqrt()?.get())
-        }
+        } => foot_distance(sketch, at(point)?, parameter),
+        ConstraintKind::EllipticalArcLength { arc, .. } => elliptical_arc_length(sketch, arc),
         ConstraintKind::Turned { a, b, .. } => angle_between(along(a)?, along(b)?),
         ConstraintKind::Heading { line, .. } => angle_between([1.0, 0.0], along(line)?),
         ConstraintKind::Sweep { arc, .. } => sweep(arc),
@@ -1678,4 +1711,40 @@ pub fn measure(sketch: &Sketch, constraint: &Constraint) -> Result<f64, SketchEr
         }
         _ => Err(SketchError::NotADimension(id)),
     }
+}
+
+/// A point's distance from its foot on an ellipse, at the foot parameter's stored value.
+fn foot_distance(sketch: &Sketch, p: [f64; 2], parameter: ItemId) -> Result<f64, SketchError> {
+    let (centre, axis, minor) = sketch.ellipse(sketch.parameter_ellipse(parameter)?)?;
+    let EntityKind::Parameter { t, .. } = sketch.entity(parameter)?.kind else {
+        return Err(SketchError::WrongKind(parameter));
+    };
+    let real = |v: f64| Real::new(v);
+    let [cx, cy] = sketch.point(centre)?;
+    let (q, _) = at_parameter(
+        [real(cx)?, real(cy)?],
+        [real(axis[0])?, real(axis[1])?],
+        real(minor)?,
+        real(t)?,
+    )?;
+    let gap = [real(p[0])?.sub(q[0])?, real(p[1])?.sub(q[1])?];
+    Ok(dot(gap, gap)?.sqrt()?.get())
+}
+
+/// An elliptical arc's length now, from its start's parameter to its end's.
+fn elliptical_arc_length(sketch: &Sketch, arc: ItemId) -> Result<f64, SketchError> {
+    let (_, axis, minor) = sketch.ellipse(arc)?;
+    let [from, to] = sketch.elliptical_arc(arc)?;
+    let t = |p: ItemId| match sketch.entity(p)?.kind {
+        EntityKind::Parameter { t, .. } => Ok(t),
+        _ => Err(SketchError::WrongKind(p)),
+    };
+    let real = |v: f64| Real::new(v);
+    Ok(arc_length(
+        [real(axis[0])?, real(axis[1])?],
+        real(minor)?,
+        real(t(from)?)?,
+        real(t(to)?)?,
+    )?
+    .get())
 }

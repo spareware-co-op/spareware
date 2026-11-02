@@ -354,6 +354,10 @@ fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), Ske
             put_kind(out, "point-ellipse", &[point, parameter])?;
             put_amount(out, distance)?;
         }
+        ConstraintKind::EllipticalArcLength { arc, length } => {
+            put_kind(out, "elliptical-arc-length", &[arc])?;
+            put_amount(out, length)?;
+        }
         ConstraintKind::MajorRadius { ellipse, radius } => {
             put_kind(out, "major-radius", &[ellipse])?;
             put_amount(out, radius)?;
@@ -815,6 +819,10 @@ fn read_constraint(words: &mut Words<'_>) -> Result<Constraint, SketchError> {
             point: words.id()?,
             parameter: words.id()?,
             distance: words.amount()?,
+        },
+        "elliptical-arc-length" => ConstraintKind::EllipticalArcLength {
+            arc: words.id()?,
+            length: words.amount()?,
         },
         "major-radius" => ConstraintKind::MajorRadius {
             ellipse: words.id()?,

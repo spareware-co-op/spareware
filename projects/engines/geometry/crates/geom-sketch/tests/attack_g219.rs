@@ -378,3 +378,71 @@ fn the_radii_are_dimensions_and_measure() {
     ));
     assert!(matches!(point, Err(SketchError::NotADimension(_))));
 }
+
+/// The length of the ellipse of axis (a, 0) and minor radius b from the parameter t0 to t1, by
+/// Simpson's rule on 200,000 panels: an oracle of its own, independent of the kernel's quadrature.
+fn simpson(a: f64, b: f64, t0: f64, t1: f64) -> f64 {
+    let n = 200_000;
+    let h = (t1 - t0) / f64::from(n);
+    let speed = |t: f64| {
+        let s = t * std::f64::consts::PI;
+        std::f64::consts::PI * (a * a * s.sin() * s.sin() + b * b * s.cos() * s.cos()).sqrt()
+    };
+    let mut sum = speed(t0) + speed(t1);
+    for k in 1..n {
+        let w = if k % 2 == 1 { 4.0 } else { 2.0 };
+        sum += w * speed(t0 + f64::from(k) * h);
+    }
+    sum * h / 3.0
+}
+
+#[test]
+fn an_elliptical_arcs_length_is_its_quadrature() {
+    // The arc from the parameter 0 to ½ on the ellipse 10 by 5: a quarter of its perimeter.
+    let quarter = simpson(10.0, 5.0, 0.0, 0.5);
+    let s = with(&["elliptical-arc-length 7.0 12"]).unwrap();
+    let mut a = Assembly::new(&s).unwrap();
+    a.evaluate(&s).unwrap();
+    let row = *a.residuals().last().unwrap();
+    assert!(
+        (row - (quarter - 12.0)).abs() < 1e-9,
+        "{row} for {}",
+        quarter - 12.0
+    );
+    // Measured as a reference.
+    let r = parse(&format!(
+        "{}constraint 20.0 reference 0 elliptical-arc-length 7.0 12\n",
+        bare()
+    ))
+    .unwrap();
+    let got = measure(&r, r.constraints().last().unwrap()).unwrap();
+    assert!((got - quarter).abs() < 1e-9, "{got} for {quarter}");
+    // Every derivative, in the axis, the minor radius and both ends' parameters, is the central
+    // difference of the row.
+    let x = jiggled(&a);
+    a.rescale(&x).unwrap();
+    a.evaluate_at(&x).unwrap();
+    let jacobian = a.jacobian().to_dense().unwrap();
+    let last = a.residuals().len() - 1;
+    let h = 1e-6;
+    for j in 0..x.len() {
+        let scale = a.variables()[j].scale;
+        let mut at = |value: f64| {
+            let mut y = x.clone();
+            y[j] = value;
+            a.evaluate_at(&y).unwrap();
+            a.residuals()[last]
+        };
+        let numeric = (at(x[j] + h) - at(x[j] - h)) / (2.0 * h) * scale;
+        let exact = jacobian.get(last, j).unwrap();
+        assert!(
+            (numeric - exact).abs() < 1e-5 * (1.0 + exact.abs()),
+            "variable {j}: {numeric} and {exact}"
+        );
+    }
+    // Only an elliptical arc has this length.
+    assert!(matches!(
+        with(&["elliptical-arc-length 5.0 12"]),
+        Err(SketchError::WrongKind(_))
+    ));
+}
