@@ -915,6 +915,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | DWG and other reverse-engineered formats | 14, 24, 29 | Stays REJECT. Only an owner can clear it, after legal advice (README); Spare Construct's owners say whether they want it |
 | laz-rs contains unsafe code: allow it in Spare Construct's adapter, or port the codec | 24 | Spare Construct's owners |
 | Whether format crates may use std: answered by chapter 24. Readers use no_std byte sources, and point clouds stay in the program adapter | 29 | Answered |
+| Content-defined chunk boundaries: a body's rows are in name order and names are hashes, so an edit that adds or removes entities shifts every later row, and 24.2's fixed 4,096-row runs then rewrite every chunk after the first change. A chunk that ends after a row whose name hashes a set way would keep such edits to the chunks they touch; a door move adds and removes nothing, so G139a does not need it | 23, G139a | 24.2 (its runs are proposed and versioned); not changed for now |
 
 ### Chapter 27: Crates and folders
 
