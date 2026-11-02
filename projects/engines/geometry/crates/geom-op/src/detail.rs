@@ -813,6 +813,12 @@ impl fmt::Display for BoundDetail {
 
 impl core::error::Error for BoundDetail {}
 
+impl From<LocalDetail> for OpErrorDetail {
+    fn from(detail: LocalDetail) -> Self {
+        OpErrorDetail::Local(detail)
+    }
+}
+
 impl From<BoundDetail> for OpErrorDetail {
     fn from(detail: BoundDetail) -> Self {
         OpErrorDetail::Bound(detail)

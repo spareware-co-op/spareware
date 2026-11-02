@@ -1708,6 +1708,29 @@
           "target": "lib"
         },
         {
+          "cost": "the boolean's, or on the fast path the selection's alone. Classifying is linear in the pieces and the history's records, and quadratic only in a deleted vertex's faces. The fast path matches shared faces in O(p²) over the polygons. Recursion: none.",
+          "does": "a local operation is a geometry step followed by one arrangement step (13.1). [`local_step`] is that step: it takes the operation's target, the new faces its geometry step made as tool operands extended past their final size, and the selection to keep. It arranges them once, as a boolean does, and returns the body with its history. That history records every [`TopologyChange`] the step made, and refuses any change its [`AllowSet`] does not hold, as `TopologyChangeNotAllowed`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/local.rs",
+          "guarantees": [
+            "**One arrangement, or a proven skip.** The fast path runs only on the plan's proof that the operands meet on whole shared faces. What it builds then goes through the full path's own selection, rebuild, names and checker, so a valid plan gives the same body either way.",
+            "**Every change recorded, none unallowed.** The history holds each change found, in name order, and a change outside the call's set is an error naming its class and entities.",
+            "**Exact on flat bodies.** Every fate is a winding number of the exact arrangement, or a name in the history; nothing is measured."
+          ],
+          "job": "The arrangement step of local operations, and the topology changes it makes (13.1, 13.14).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 13.1's five steps and fast path and 13.14's taxonomy (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), on chapter 11's arrangement and its names (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::local",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`O(n log n)` in the entities of the result and the operands. Charges the meter nothing of its own: the rows it writes are charged by the publication.",
           "does": "[`name`] gives every region, face, edge and vertex of a merged result its persistent name and its history record, from the names of the faces it came from. A target's face that passes through keeps its name; a tool's is `Created { op, role: tool(key), from }`; several kept pieces of one face are `Split { of, piece: ByTools }`; flush faces become `Merged { of }`. An edge or vertex that was already there keeps its name and a new one is `Bounded` by the faces around it. Names two operands both bring are qualified by the operand's key, and those that would still collide take a weak ordinal.",
           "family": [],
