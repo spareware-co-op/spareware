@@ -19,6 +19,14 @@
       "reason": "The numbers layer refuses nothing a plane within budget can reach (6.2), so no test can make this arm run. Without it the error would come out as ResultInvalid instead of the numbers layer's own: still an error, never a body."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "replace > with >= in Scene<'a>::touching",
+      "line_text": ".any(|(entry, count)| *count > 0 && there.count(*entry) <= 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A winding vector's pairs hold no zero count, so on each of them a count above 0 and a count of 0 or more are one test."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
       "mutant": "replace != with == in side_of_fin",
       "line_text": "while at != own {",
