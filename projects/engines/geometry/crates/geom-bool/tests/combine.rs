@@ -662,6 +662,40 @@ fn a_walls_end_on_anothers_side_follows_the_shared_face_table() {
 }
 
 #[test]
+fn boxes_that_share_only_an_edge_or_a_corner_are_not_nudged_apart() {
+    // 11.5: boxes touching at an edge unite into a shape non-manifold there, a general body, with
+    // the edge shared by four fins; nothing is nudged apart. At a corner every edge still has two
+    // fins, so the union is a solid of two shells sharing that vertex, which the checker passes.
+    // Either way the difference leaves the first box whole, and the intersection is empty.
+    let a = cuboid([0, 0, 0], [10, 10, 10]);
+    for (low, kind, edges, vertices) in [
+        ([10, 10, 0], BodyKind::General, 23, 14),
+        ([10, 10, 10], BodyKind::Solid, 24, 15),
+    ] {
+        let b = cuboid(low, [10, 10, 10]);
+        let both = [solid(1, &a), solid(2, &b)];
+        let one = unite(&ctx(), &SERIAL, &both).unwrap().result;
+        let arenas = one.arenas();
+        assert_eq!(
+            (
+                one.kind(),
+                arenas.shells.len(),
+                arenas.edges.len(),
+                arenas.vertices.len()
+            ),
+            (kind, 2, edges, vertices),
+            "{low:?}"
+        );
+        checked(&one);
+        let cut = subtract(&ctx(), &SERIAL, key(1), &both).unwrap().result;
+        assert_eq!((counted(&cut), sixfold(&cut)), (counted(&a), sixfold(&a)));
+        let met = intersect(&ctx(), &SERIAL, &both).unwrap();
+        assert!(noted(&met, "bool.empty_result"));
+        assert_eq!(counted(&met.result), [0, 0, 0, 0]);
+    }
+}
+
+#[test]
 fn a_box_inside_another_unites_cuts_and_meets() {
     let outer = cuboid([0, 0, 0], [40, 40, 40]);
     let inner = cuboid([10, 10, 10], [10, 10, 10]);
