@@ -421,12 +421,12 @@ pub(crate) fn cmp_height_from(op: &str, class: Class) -> Vec<(Tpi, Tpi)> {
     }
 }
 
-/// The largest speed a moving plane may have, 2^125 − 1 (`Moving::new`).
+/// The largest speed a moving plane may have, 2^125 − 1 (`Moving::at_speed`).
 pub const SPEED_LIMIT: i128 = (1 << 125) - 1;
 
 /// A plane moving at `speed`, if the speed is within its budget.
 fn moving(p: Plane, speed: i128) -> Option<Moving> {
-    Moving::new(p, speed).ok()
+    Moving::at_speed(p, speed).ok()
 }
 
 /// Four typical planes at typical speeds, within ±2^60.

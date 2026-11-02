@@ -933,7 +933,7 @@ impl Tpi {
 /// (chapter 13.11: in a mitre offset each face's plane moves at its own speed, a face's distance
 /// times its normal's length).
 ///
-/// Made by [`Moving::new`], which checks the speed against the offset's budget, |s| < 2^125.
+/// Made by [`Moving::at_speed`], which checks the speed against the offset's budget, |s| < 2^125.
 /// Speeds from 13.11's rule are smaller: a distance of at most 2^40 − 1 steps times a normal's
 /// length, below √3 · 2^83 < 2^84, is below 2^124.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -951,7 +951,7 @@ impl Moving {
     ///
     /// [`NumError::BudgetExceeded`] if |`speed`| ≥ 2^125, the offset's budget, which every
     /// predicate on moving planes is derived for.
-    pub const fn new(plane: Plane, speed: i128) -> Result<Moving, NumError> {
+    pub const fn at_speed(plane: Plane, speed: i128) -> Result<Moving, NumError> {
         if speed.unsigned_abs() < OFFSET_LIMIT {
             Ok(Moving { plane, speed })
         } else {

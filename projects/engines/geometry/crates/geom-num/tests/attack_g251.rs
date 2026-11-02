@@ -154,13 +154,13 @@ fn heights_at_the_extremes_are_exact() {
 /// The plane x + y + z = 10 moving at `speed`, and the three planes x = 0, y = 0, z = 0 standing
 /// still: they meet at the origin when 100 · 10 = t · speed (the plane's normal is 100 (1, 1, 1)).
 fn corner_and(speed: i128) -> [Moving; 4] {
-    let still = axes_at(0).map(|q| Moving::new(q, 0).unwrap());
+    let still = axes_at(0).map(|q| Moving::at_speed(q, 0).unwrap());
     let slant = Plane::through(p(10, 0, 0), p(0, 10, 0), p(0, 0, 10)).unwrap();
     [
         still[0],
         still[1],
         still[2],
-        Moving::new(slant, speed).unwrap(),
+        Moving::at_speed(slant, speed).unwrap(),
     ]
 }
 
@@ -194,10 +194,16 @@ fn planes_that_never_meet_at_one_time_are_degenerate() {
 #[test]
 fn a_speed_past_the_offsets_budget_is_refused() {
     let q = axes_at(0)[0];
-    assert!(Moving::new(q, LIMIT).is_ok());
-    assert!(Moving::new(q, -LIMIT).is_ok());
-    assert_eq!(Moving::new(q, LIMIT + 1), Err(NumError::BudgetExceeded));
-    assert_eq!(Moving::new(q, -LIMIT - 1), Err(NumError::BudgetExceeded));
+    assert!(Moving::at_speed(q, LIMIT).is_ok());
+    assert!(Moving::at_speed(q, -LIMIT).is_ok());
+    assert_eq!(
+        Moving::at_speed(q, LIMIT + 1),
+        Err(NumError::BudgetExceeded)
+    );
+    assert_eq!(
+        Moving::at_speed(q, -LIMIT - 1),
+        Err(NumError::BudgetExceeded)
+    );
 }
 
 #[test]
@@ -211,16 +217,16 @@ fn meetings_at_the_extremes_are_exact() {
         through_corners([[-1, -1, 1], [-1, 1, -1], [1, -1, 1]]),
     ];
     let first = [
-        Moving::new(planes[0], LIMIT).unwrap(),
-        Moving::new(planes[1], LIMIT).unwrap(),
-        Moving::new(planes[2], LIMIT).unwrap(),
-        Moving::new(planes[3], -LIMIT).unwrap(),
+        Moving::at_speed(planes[0], LIMIT).unwrap(),
+        Moving::at_speed(planes[1], LIMIT).unwrap(),
+        Moving::at_speed(planes[2], LIMIT).unwrap(),
+        Moving::at_speed(planes[3], -LIMIT).unwrap(),
     ];
     let second = [
-        Moving::new(planes[0], LIMIT).unwrap(),
-        Moving::new(planes[1], LIMIT).unwrap(),
-        Moving::new(planes[2], LIMIT).unwrap(),
-        Moving::new(planes[4], LIMIT).unwrap(),
+        Moving::at_speed(planes[0], LIMIT).unwrap(),
+        Moving::at_speed(planes[1], LIMIT).unwrap(),
+        Moving::at_speed(planes[2], LIMIT).unwrap(),
+        Moving::at_speed(planes[4], LIMIT).unwrap(),
     ];
     // The same meeting with its planes in another order: a tie of the widest values, which the
     // exact path in I768 settles.
@@ -329,7 +335,7 @@ fn meetings_are_the_exact_order() {
         };
         let moving: Vec<Moving> = planes
             .iter()
-            .map(|q| Moving::new(*q, rng.speed()).unwrap())
+            .map(|q| Moving::at_speed(*q, rng.speed()).unwrap())
             .collect();
         let a: [Moving; 4] = core::array::from_fn(|k| moving[k]);
         let b: [Moving; 4] = core::array::from_fn(|k| moving[k + 4]);

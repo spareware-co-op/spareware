@@ -1181,15 +1181,29 @@ fn expected_module(d: &Desc, x: &Derived, constant: u64, larger: bool) -> Vec<Ex
         _ => "|v| v.signum()",
     };
     // On one line when it fits 100 columns and its arguments 60 (rustfmt's `fn_call_width`),
-    // otherwise the arguments on a line of their own and `.map` after the call, as rustfmt breaks
-    // the chain.
-    let args = args.join(", ");
+    // otherwise the arguments on lines of their own and `.map` after the call, as rustfmt breaks
+    // the chain: short arguments as many to a line as fit 100 columns with its comma.
+    let list = args;
+    let args = list.join(", ");
     let one = format!("    value({args}).map({sign})");
     if one.chars().count() <= 100 && args.chars().count() <= 60 {
         push(one);
     } else {
         push("    value(".to_owned());
-        push(format!("        {args},"));
+        let mut line = String::new();
+        for a in &list {
+            let longer = if line.is_empty() {
+                format!("        {a},")
+            } else {
+                format!("{line} {a},")
+            };
+            if longer.chars().count() > 100 && !line.is_empty() {
+                push(std::mem::replace(&mut line, format!("        {a},")));
+            } else {
+                line = longer;
+            }
+        }
+        push(line);
         push("    )".to_owned());
         push(format!("    .map({sign})"));
     }

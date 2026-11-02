@@ -709,7 +709,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("generated::ssi_side::exact", "one call to generated::ssi_side::value, which is measured, and the sign of the value"),
     ("generated::tpi_height::exact", "one call to generated::tpi_height::value, which is measured, and the sign of the value"),
     ("generated::mitre_time::exact", "one call to generated::mitre_time::value, which is measured, and the sign of the value"),
-    ("Moving::new", "a range check of the speed, on the way to every meeting Moving::cmp_meeting is measured on"),
+    ("Moving::at_speed", "a range check of the speed, on the way to every meeting Moving::cmp_meeting is measured on"),
     ("Moving::plane", "field accessor"),
     ("Moving::speed", "field accessor"),
 ];
