@@ -710,6 +710,31 @@ impl Roots {
         self.iter().count()
     }
 
+    /// These roots of `quartic`, as its [`Quartic::roots`] found them, each stretch halved until
+    /// it is `depth` levels deep or is the root itself. Isolation stops at the first stretch that
+    /// holds a root alone, so a root alone in its piece keeps the whole piece, and
+    /// [`RealRoot::angle`] reads it as widely: a quarter turn. Halving to a stretch 2^−`depth` wide
+    /// in x takes θ = 2 atan t within 2 · 2^−`depth`, as |dθ / dx| = 2 / (1 + x²) on every piece.
+    /// A root on an exact piece is a point already.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] for a `depth` past the depth of comparisons, or a step that did
+    /// not fit, which coefficients within [`COEFFICIENT_BITS`] cannot reach.
+    pub fn narrowed(&self, quartic: &Quartic, depth: u32) -> Result<Roots, NumError> {
+        let simple = square_free(&primitive(&widened(&quartic.c)?)?)?;
+        let mut out = *self;
+        for root in out.list.iter_mut().flatten() {
+            let c = root.piece.open_on_unit(&simple)?;
+            let mut at = Stretch::of(root)?;
+            while !at.point && at.s < depth {
+                at = at.narrowed(&c)?;
+            }
+            *root = at.applied(root)?;
+        }
+        Ok(out)
+    }
+
     fn push(&mut self, root: &RealRoot) -> Result<(), NumError> {
         let Some(slot) = self.list.iter_mut().find(|s| s.is_none()) else {
             return Err(NumError::BudgetExceeded);

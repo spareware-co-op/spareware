@@ -76,6 +76,11 @@ const ROUGH: f64 = 1.0 / 1_048_576.0;
 /// The most bits of a centre's fraction: a weight below a rational point's budget.
 const MOST_BITS: i32 = 82;
 
+/// How deep a crossing with an ellipse is narrowed before its angle is read: within 2^−63 of θ,
+/// below a double's rounding of it. Isolation alone leaves a crossing as wide as its quarter of the
+/// ellipse when the other crossing is past an axis end.
+const ROOT_DEPTH: u32 = 64;
+
 /// Where a curve is touched: which curve, the side of it the circle's centre lies on at that place,
 /// as [`Curve2::side`] says of a point beside it, and a grid point near the place. Of a line's
 /// touches the side is all that counts; of a closed curve's, `near` says which.
@@ -528,9 +533,10 @@ fn ellipse_meet(
     foot: &Foot,
     origin: P2,
 ) -> Result<Meet, PointError> {
-    let Meeting::At { roots, .. } = ellipse.meeting(&Conic::of_disc(disc)?)? else {
+    let Meeting::At { quartic, roots } = ellipse.meeting(&Conic::of_disc(disc)?)? else {
         return Err(NumError::Degenerate.into());
     };
+    let roots = roots.narrowed(&quartic, ROOT_DEPTH)?;
     let mut angles = [[Interval::point(0.0)?; 2]; 4];
     let mut count = 0_usize;
     for (slot, root) in angles.iter_mut().zip(roots.iter()) {
@@ -585,9 +591,16 @@ fn ellipse_meet(
         (second, first)
     };
     let last = count.saturating_sub(1);
-    let (earlier, later) = if high == low.saturating_add(1) {
+    if high != low.saturating_add(1) && (low != 0 || high != last) {
+        return Err(NumError::Degenerate.into());
+    }
+    // Neighbours along the ellipse, either way round its −π: the one the other follows
+    // counter-clockwise, the short way, is the earlier.
+    let ([c1, s1], [c2, s2]) = (at(low)?, at(high)?);
+    let turn = c1.mul(s2)?.sub(s1.mul(c2)?)?;
+    let (earlier, later) = if turn.lo() > 0.0 {
         (low, high)
-    } else if low == 0 && high == last && count > 1 {
+    } else if turn.hi() < 0.0 {
         (high, low)
     } else {
         return Err(NumError::Degenerate.into());

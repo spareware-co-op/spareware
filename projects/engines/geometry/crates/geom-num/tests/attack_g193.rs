@@ -6,6 +6,7 @@
 //!   the [`Round`] or [`Circle2`] it was made from, at the budget's extremes and at random.
 //! - **Every crossing is on both its curves**, as the exact questions read it back.
 //! - **A gap is a bound**, zero exactly at a tangency.
+//! - **A narrowed root is as deep as asked**, and its angle still holds its crossing.
 //! - **A translated equation is the same curve.**
 //!
 //! Seeds: each randomised test prints `seed: <hex>` and runs from a fixed default;
@@ -40,7 +41,7 @@ use geom_num::carrier::{
 use geom_num::conic::{Conic, Ellipse2, Meeting};
 use geom_num::grid::{COORD_MAX, P2};
 use geom_num::one_root::{Crossing2, Root, enclose};
-use geom_num::quartic::Big;
+use geom_num::quartic::{Big, Piece, Quartic, Roots};
 use geom_num::{I256, NumError, Sign};
 
 /// The default seed of every randomised test here (G193).
@@ -842,4 +843,140 @@ fn a_crossing_s_disc_and_fine_line_keep_their_laws() {
         assert_eq!(z.side_of_fine(&larger).unwrap(), side);
     }
     assert!(made > 100, "{made}");
+}
+
+/// The ellipse of semi-axes 5 and 3 along x and the circle of radius 4 about its centre: four
+/// crossings, x = 5 cos θ and y = 3 sin θ with cos θ = ±√175 / 20 and sin θ = ±3/4, one in each
+/// quarter of the ellipse's t, which isolation leaves a quarter wide each.
+fn quarters() -> (Quartic, Roots) {
+    let e = Ellipse2::new(p2(0, 0), [5, 0], 3, 5).unwrap();
+    let small = Disc::new(Rational2::new(0, 0, 1).unwrap(), I256::from_i128(16)).unwrap();
+    let Meeting::At { quartic, roots } = e.meeting(&Conic::of_disc(&small).unwrap()).unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(roots.count(), 4);
+    (quartic, roots)
+}
+
+#[test]
+fn a_narrowed_root_is_as_deep_as_asked() {
+    let (quartic, roots) = quarters();
+    let (cosine, sine) = (0.661_437_827_766_147_7, 0.75);
+    // On (0, π/2) t = x, and the crossing is at x = sin θ / (1 + cos θ) = 0.4514..., in the stretch
+    // (115, 116) / 256 eight levels deep, (57, 58) / 128 at seven and (231, 232) / 512 at nine. The
+    // cosine (1 − x²) / (1 + x²) falls with x and its enclosure is exact at the stretch's ends, so
+    // it shows the depth.
+    let cosine_at = |x: f64| (1.0 - x * x) / (1.0 + x * x);
+    let narrowed = roots.narrowed(&quartic, 8).unwrap();
+    let above: Vec<_> = narrowed
+        .iter()
+        .filter(|r| r.piece() == Piece::Above)
+        .collect();
+    assert_eq!(above.len(), 1);
+    let [c, s] = above[0].angle().unwrap();
+    assert!(c.lo() <= cosine && cosine <= c.hi(), "{c:?}");
+    assert!(s.lo() <= sine && sine <= s.hi(), "{s:?}");
+    // All of the stretch eight levels deep, past the one at nine...
+    assert!(
+        c.lo() <= cosine_at(0.4502) && cosine_at(0.4502) <= c.hi(),
+        "{c:?}"
+    );
+    assert!(
+        c.lo() <= cosine_at(0.453_125) && cosine_at(0.449_3) <= c.hi(),
+        "{c:?}"
+    );
+    // ...and none of the one at seven outside it.
+    assert!(cosine_at(0.447) > c.hi(), "{c:?}");
+    // As isolation left it, the root's angle had the whole quarter.
+    let wide: Vec<_> = roots.iter().filter(|r| r.piece() == Piece::Above).collect();
+    let [c, _] = wide[0].angle().unwrap();
+    assert!(
+        c.lo() <= cosine_at(0.99) && cosine_at(0.01) <= c.hi(),
+        "{c:?}"
+    );
+}
+
+#[test]
+fn every_narrowed_root_holds_its_crossing_in_every_quarter() {
+    let (quartic, roots) = quarters();
+    let (cosine, sine) = (0.661_437_827_766_147_7, 0.75);
+    // In order from θ = −π: below −1, between −1 and 0, between 0 and 1, above 1.
+    let crossings = [
+        (-cosine, -sine),
+        (cosine, -sine),
+        (cosine, sine),
+        (-cosine, sine),
+    ];
+    for depth in [1, 20, 64] {
+        let narrowed = roots.narrowed(&quartic, depth).unwrap();
+        assert_eq!(narrowed.count(), 4);
+        // θ is within 2 · 2^−depth. The interval forms of cos θ and sin θ, a numerator over a
+        // denominator that both move with x, at most double that, and round a few ulps out.
+        let within = 4.0 * 0.5_f64.powi(depth as i32) + 1e-14;
+        for (root, (x, y)) in narrowed.iter().zip(crossings) {
+            let [c, s] = root.angle().unwrap();
+            assert!(
+                c.lo() <= x && x <= c.hi() && s.lo() <= y && y <= s.hi(),
+                "{depth}: {c:?} {s:?}"
+            );
+            assert!(
+                c.hi() - c.lo() <= within && s.hi() - s.lo() <= within,
+                "{depth}: {c:?} {s:?}"
+            );
+            assert_eq!(root.multiplicity(), 1);
+        }
+    }
+}
+
+#[test]
+fn a_root_already_a_point_is_kept() {
+    // The circle of radius 5 touches the ellipse at θ = 0 and θ = π, the exact pieces t = 0 and
+    // t = ∞, twice each.
+    let e = Ellipse2::new(p2(0, 0), [5, 0], 3, 5).unwrap();
+    let five = Disc::new(Rational2::new(0, 0, 1).unwrap(), I256::from_i128(25)).unwrap();
+    let Meeting::At { quartic, roots } = e.meeting(&Conic::of_disc(&five).unwrap()).unwrap() else {
+        panic!()
+    };
+    let narrowed = roots.narrowed(&quartic, 64).unwrap();
+    let pieces: Vec<_> = narrowed
+        .iter()
+        .map(|r| (r.piece(), r.multiplicity()))
+        .collect();
+    assert_eq!(pieces, [(Piece::Zero, 2), (Piece::Infinity, 2)]);
+    for (root, x) in narrowed.iter().zip([1.0, -1.0]) {
+        let [c, s] = root.angle().unwrap();
+        assert_eq!((c.lo(), c.hi(), s.lo(), s.hi()), (x, x, 0.0, 0.0));
+    }
+    // A root that halving lands on: (2t − 1)(t² + 1)(t + 3) has t = 1/2 on (0, 1), a point at the
+    // first halving, kept there however deep the rest go.
+    let c = [-3, 5, -1, 5, 2].map(Big::from_i64);
+    let half = Quartic::new(c);
+    let roots = half.roots().unwrap();
+    let narrowed = roots.narrowed(&half, 64).unwrap();
+    let above: Vec<_> = narrowed
+        .iter()
+        .filter(|r| r.piece() == Piece::Above)
+        .collect();
+    assert_eq!(above.len(), 1);
+    let [c, s] = above[0].angle().unwrap();
+    // t = 1/2: cos θ = 3/5 and sin θ = 4/5, each enclosed within a few ulps.
+    assert!(
+        c.lo() <= 0.6 && 0.6 <= c.hi() && c.hi() - c.lo() < 1e-14,
+        "{c:?}"
+    );
+    assert!(
+        s.lo() <= 0.8 && 0.8 <= s.hi() && s.hi() - s.lo() < 1e-14,
+        "{s:?}"
+    );
+}
+
+#[test]
+fn a_narrowing_past_the_depth_of_comparisons_is_refused() {
+    let (quartic, roots) = quarters();
+    assert!(roots.narrowed(&quartic, 2_470).is_ok());
+    assert!(matches!(
+        roots.narrowed(&quartic, 2_471),
+        Err(NumError::BudgetExceeded)
+    ));
 }

@@ -7,6 +7,8 @@
 //! - **Exact for rational normals and parallels**: exactly tangent, gap exactly zero.
 //! - **Within `ε_ang`**: every Certified gap at most the ladder's angular bound, at every scale.
 //! - **No extra contact**: the other crossing of each neighbour lies off the arc.
+//! - **Wherever it touches an ellipse**, the ends of its axes included, where its two crossings
+//!   fall in two quarters of the ellipse's t.
 //! - **Accepted, atomic**: a refusal says what it would reach, and adds nothing to the table.
 //! - **Every corner**: 100,000 corners of every turn, the same on any number of threads.
 //!
@@ -41,7 +43,7 @@ use geom_2d::tangent::{
     tangent_circle, tangent_from,
 };
 use geom_num::arc::{Circle2 as GridCircle, Contact, Disc};
-use geom_num::conic::Ellipse2;
+use geom_num::conic::{Ellipse2, Meeting};
 use geom_num::grid::{COORD_MAX, GridStep, P2, Steps};
 use geom_num::ladder::ANGULAR;
 use geom_num::one_root::{Crossing2, Root};
@@ -438,6 +440,128 @@ fn a_fillet_of_a_line_and_an_ellipse_joins_at_a_root() {
     .unwrap();
     assert!(matches!(done.end, Pt2::ConicRoot { .. }), "{:?}", done.end);
     sound(&carriers, &done, ground, oval);
+}
+
+/// Where `point`, a root of an ellipse and a circle, lies: its angle, its stretch narrowed past
+/// what a double holds.
+fn conic_point(carriers: &Carriers, point: &Pt2) -> [f64; 2] {
+    let Pt2::ConicRoot { a, b, k } = *point else {
+        panic!("{point:?}")
+    };
+    let Some(Curve2::Ellipse(ellipse)) = carriers.get(a).copied() else {
+        panic!()
+    };
+    let conic = carriers.get(b).unwrap().conic().unwrap();
+    let Meeting::At { quartic, roots } = ellipse.meeting(&conic).unwrap() else {
+        panic!()
+    };
+    let roots = roots.narrowed(&quartic, 64).unwrap();
+    let [c, s] = roots.iter().nth(usize::from(k)).unwrap().angle().unwrap();
+    let (c, s) = (f64::midpoint(c.lo(), c.hi()), f64::midpoint(s.lo(), s.hi()));
+    let ([mx, my], (p, q)) = (ellipse.major(), ellipse.ratio());
+    let (mx, my, ratio) = (mx as f64, my as f64, p as f64 / q as f64);
+    let o = ellipse.centre();
+    [
+        o.x.get() as f64 + c * mx - s * ratio * my,
+        o.y.get() as f64 + c * my + s * ratio * mx,
+    ]
+}
+
+#[test]
+fn a_circle_touching_an_ellipse_at_each_end_of_its_axes() {
+    // The ellipse of semi-axes 20,000 and 12,000 along x, and a wedge of two lines beyond each end
+    // of its axes, opening onto it. The circle touching the ellipse at the end and both lines, from
+    // outside it and from inside, crosses it either side of the end: in two quarters of its t, the
+    // ends at θ = −π and π, 0, π/2 and −π/2, which isolation alone leaves a quarter turn wide each.
+    // Each row: the end, the wedge's sides and a point near each touch, and the ellipse's
+    // (leaving, arriving) roots from outside and from inside.
+    type End = (P2, [P2; 4], [P2; 2], [(u8, u8); 2]);
+    let ends: [End; 4] = [
+        (
+            p2(-20_000, 0),
+            [
+                p2(-40_000, 0),
+                p2(0, 20_000),
+                p2(0, -20_000),
+                p2(-40_000, 0),
+            ],
+            [p2(-28_000, 6_000), p2(-28_000, -6_000)],
+            [(1, 0), (0, 3)],
+        ),
+        (
+            p2(20_000, 0),
+            [p2(40_000, 0), p2(0, -20_000), p2(0, 20_000), p2(40_000, 0)],
+            [p2(28_000, -6_000), p2(28_000, 6_000)],
+            [(0, 1), (2, 1)],
+        ),
+        (
+            p2(0, 12_000),
+            [p2(0, 30_000), p2(40_000, 0), p2(-40_000, 0), p2(0, 30_000)],
+            [p2(12_000, 21_000), p2(-12_000, 21_000)],
+            [(0, 1), (1, 0)],
+        ),
+        (
+            p2(0, -12_000),
+            [
+                p2(0, -30_000),
+                p2(-40_000, 0),
+                p2(40_000, 0),
+                p2(0, -30_000),
+            ],
+            [p2(-12_000, -21_000), p2(12_000, -21_000)],
+            [(0, 1), (1, 0)],
+        ),
+    ];
+    for (end, [a, b, c, d], [one, two], roots) in ends {
+        for (side, (leaving, arriving)) in [Sign::Positive, Sign::Negative].into_iter().zip(roots) {
+            let (mut carriers, [oval, upper, lower]) = table([
+                Curve2::Ellipse(Ellipse2::new(p2(0, 0), [20_000, 0], 3, 5).unwrap()),
+                line(a, b),
+                line(c, d),
+            ]);
+            let touch = |curve, side, near| Touch { curve, side, near };
+            let touches = [
+                touch(oval, side, end),
+                touch(upper, Sign::Negative, one),
+                touch(lower, Sign::Negative, two),
+            ];
+            let done = tangent_circle(&mut carriers, &touches, GridStep::Q0, &certified())
+                .unwrap_or_else(|e| panic!("{end:?} {side:?}: {e:?}"));
+            for (join, name) in done.joins.iter().zip([oval, upper, lower]) {
+                joined(&carriers, &join.leaving, name, done.circle);
+                joined(&carriers, &join.arriving, name, done.circle);
+            }
+            assert!(done.gap.get() <= ANGULAR.get());
+            let join = done.joins[0];
+            let k = |p: &Pt2| match p {
+                Pt2::ConicRoot { k, .. } => *k,
+                other => panic!("{other:?}"),
+            };
+            assert_eq!(
+                (k(&join.leaving), k(&join.arriving)),
+                (leaving, arriving),
+                "{end:?} {side:?}"
+            );
+            // The cap past the ellipse runs counter-clockwise from arriving to leaving, and is a
+            // hair of the circle.
+            let disc = disc_of(&carriers, done.circle);
+            let ([x, y], w) = disc.centre().coordinates();
+            let (cx, cy) = (x as f64 / w as f64, y as f64 / w as f64);
+            let way = |p: [f64; 2]| [p[0] - cx, p[1] - cy];
+            let ([ax, ay], [lx, ly]) = (
+                way(conic_point(&carriers, &join.arriving)),
+                way(conic_point(&carriers, &join.leaving)),
+            );
+            let lengths = geom_num::math::sqrt((ax * ax + ay * ay) * (lx * lx + ly * ly))
+                .unwrap()
+                .get();
+            let (cap, ahead) = ((ax * ly - ay * lx) / lengths, ax * lx + ay * ly);
+            assert!(
+                ahead > 0.0 && 0.0 < cap && cap < 1e-10,
+                "{end:?} {side:?}: {cap:e}"
+            );
+        }
+    }
 }
 
 #[test]
