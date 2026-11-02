@@ -52,6 +52,7 @@ on:
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-num/**"
@@ -75,6 +76,7 @@ on:
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-num/**"
@@ -117,7 +119,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [boxtree_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [boxtree_fuzz, crossings_fuzz, curves_fuzz, general_fuzz, intersect_fuzz, level_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, piercing_fuzz, predicates_fuzz, project_fuzz, quadric_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
