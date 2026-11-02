@@ -571,7 +571,8 @@ fn entry<const N: usize>(row: &[f64; N], j: usize) -> f64 {
 /// Loan, algorithm 3.4.1: at step `k` the row at or below `k` with the largest magnitude in column
 /// `k`, the first on a tie, is swapped up), then `U·X = L⁻¹·P` solved by back substitution
 /// (section 3.1), or `None` when a pivot is zero or an entry of the inverse is not finite.
-fn inverse<const N: usize>(matrix: [[f64; N]; N]) -> Option<[[f64; N]; N]> {
+#[must_use]
+pub fn inverse<const N: usize>(matrix: [[f64; N]; N]) -> Option<[[f64; N]; N]> {
     let mut u = matrix;
     let mut rhs = [[0.0; N]; N];
     for (i, row) in rhs.iter_mut().enumerate() {

@@ -24,6 +24,8 @@ geom-nurbs = { path = "../geom-nurbs" }
 geom-run = { path = "../geom-run" }
 geom-surface = { path = "../geom-surface" }
 geom-test = { path = "../geom-test" }
+# The intersect target (G158): the code under test, and the shapes and boxes its cases are made of.
+geom-intersect = { path = "../geom-intersect" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
 geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
