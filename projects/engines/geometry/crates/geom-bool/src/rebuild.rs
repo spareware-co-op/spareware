@@ -15,6 +15,8 @@
 //!   so the body stores them once.
 //! - **Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a
 //!   [`RebuildError`].
+//! - **Nothing is a valid body.** Pieces that make no face give a general body with no faces,
+//!   which the checker passes: a solid body must hold a solid region (8.3; tested).
 //!
 //! Method: chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), into
 //! the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt
@@ -443,6 +445,10 @@ pub fn rebuild_with(
     let (builder, outside) = arenas(&merged, carriers, rules.open)?;
     let kind = if rules.open {
         BodyKind::Sheet
+    } else if merged.faces.is_empty() {
+        // Nothing kept bounds no volume, and a solid body holds a solid region (8.3): an empty
+        // result, A less A among them (11.17), is a general body, which may hold nothing.
+        BodyKind::General
     } else if merged.edges.iter().all(|e| e.fins.len() == 2) {
         BodyKind::Solid
     } else {
