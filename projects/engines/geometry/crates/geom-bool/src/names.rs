@@ -154,11 +154,12 @@ const fn key_of(name: NameId) -> NameKey {
     NameKey(name.to_bytes())
 }
 
-/// The names one call makes, in the order it takes their ids: a name's id is taken from its
-/// parents' ids, so each comes after those it refers to.
+/// The names one call makes, each with its id, in the order it takes them: a name's id is taken
+/// from its parents' ids, so each comes after those it refers to. An id is a SHA-256 of the name,
+/// taken once.
 #[derive(Default)]
 struct Mint {
-    names: Vec<TopoName>,
+    names: Vec<(NameId, TopoName)>,
     seen: BTreeSet<NameId>,
 }
 
@@ -167,7 +168,7 @@ impl Mint {
     fn id(&mut self, name: TopoName) -> Result<NameId, NameError> {
         let id = name.id()?;
         if self.seen.insert(id) {
-            self.names.push(name);
+            self.names.push((id, name));
         }
         Ok(id)
     }
@@ -175,13 +176,10 @@ impl Mint {
     /// The names kept that `outputs` reach through names this call made, in the order made: a name
     /// made and then replaced (a colliding name told apart, a flush face qualified then merged)
     /// stays only if a kept name refers to it.
-    fn reached(
-        self,
-        outputs: impl IntoIterator<Item = NameId>,
-    ) -> Result<Vec<TopoName>, NameError> {
+    fn reached(self, outputs: impl IntoIterator<Item = NameId>) -> Vec<TopoName> {
         let mut by_id = BTreeMap::new();
-        for name in &self.names {
-            by_id.insert(name.id()?, name);
+        for (id, name) in &self.names {
+            by_id.insert(*id, name);
         }
         let mut needed = BTreeSet::new();
         let mut stack: Vec<NameId> = outputs.into_iter().collect();
@@ -193,12 +191,12 @@ impl Mint {
             }
         }
         let mut out = Vec::with_capacity(needed.len());
-        for name in self.names {
-            if needed.contains(&name.id()?) {
+        for (id, name) in self.names {
+            if needed.contains(&id) {
                 out.push(name);
             }
         }
-        Ok(out)
+        out
     }
 }
 
@@ -1044,7 +1042,7 @@ pub fn name(
             .into_iter()
             .flatten()
             .map(|key| NameId::from_bytes(key.0)),
-    )?;
+    );
     Ok(Naming {
         names,
         made,
@@ -1142,7 +1140,7 @@ pub fn name_curves(
             .into_iter()
             .flatten()
             .map(|key| NameId::from_bytes(key.0)),
-    )?;
+    );
     Ok(Naming {
         names,
         made,
@@ -1225,7 +1223,7 @@ pub fn name_fresh(
             .into_iter()
             .flatten()
             .map(|key| NameId::from_bytes(key.0)),
-    )?;
+    );
     Ok(Naming {
         names,
         made,
