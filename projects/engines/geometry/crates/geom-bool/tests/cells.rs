@@ -224,6 +224,103 @@ fn a_leak_is_reported_where_its_way_first_narrows() {
 }
 
 #[test]
+fn three_rooms_see_their_neighbours_and_share_the_faces_they_split() {
+    // A stud two steps thick cuts the envelope into three cells, each seeded. The rooms at the
+    // ends each see the stud's cell across their wall; the stud's cell sees both of them, and not
+    // itself. The envelope's four long faces lie in all three cells, so each piece takes a name
+    // of its own; each end face lies in one room and keeps its name.
+    let envelope = cuboid(1, [0, 0, 0], [100, 100, 30]);
+    let stud = cuboid(2, [50, -10, -10], [2, 120, 50]);
+    let cutter = Operand {
+        kind: OperandKind::Cutter,
+        ..solid(2, &stud)
+    };
+    let selection = Selection::Cells {
+        test: vec![Term::Inside(key(1))],
+        seeds: vec![
+            seed(50, p(20, 50, 15)),
+            seed(51, p(51, 50, 15)),
+            seed(52, p(80, 50, 15)),
+        ],
+    };
+    let out = picked(vec![solid(1, &envelope), cutter], selection);
+    let rooms = &out.result[0];
+    assert_eq!(rooms.len(), 3);
+    let by_seed = |n: u8| {
+        rooms
+            .iter()
+            .find(|room| room.cell.as_ref().unwrap().keys == [key(n)])
+            .unwrap()
+    };
+    let across = |room: &Combined| -> Vec<usize> {
+        let mut cells: Vec<usize> = room
+            .cell
+            .as_ref()
+            .unwrap()
+            .boundaries
+            .iter()
+            .filter_map(|(_, b)| match b {
+                Beyond::Cell(n) => Some(*n),
+                _ => None,
+            })
+            .collect();
+        cells.sort_unstable();
+        cells.dedup();
+        cells
+    };
+    let (west, middle, east) = (
+        across(by_seed(50)),
+        across(by_seed(51)),
+        across(by_seed(52)),
+    );
+    assert_eq!(west.len(), 1);
+    assert_eq!(west, east, "both ends see the stud's cell");
+    assert_eq!(middle.len(), 2);
+    assert!(
+        !middle.contains(&west[0]),
+        "the stud's cell does not see itself"
+    );
+    let own: Vec<_> = envelope.names().unwrap().faces.clone();
+    let kept = |room: &Combined| {
+        room.body
+            .names()
+            .unwrap()
+            .faces
+            .iter()
+            .filter(|name| own.contains(name))
+            .count()
+    };
+    assert_eq!(
+        [kept(by_seed(50)), kept(by_seed(51)), kept(by_seed(52))],
+        [1, 0, 1]
+    );
+}
+
+#[test]
+fn a_cutter_that_brings_the_envelopes_names_is_reported_qualified() {
+    // A box built as the envelope was brings the envelope's face names under another key: in the
+    // cell around it both operands' faces carry one name, so each is qualified by its operand's
+    // key, and the cells say so.
+    let envelope = cuboid(1, [0, 0, 0], [100, 100, 30]);
+    let inner = cuboid(1, [40, 40, 10], [10, 10, 10]);
+    let cutter = Operand {
+        kind: OperandKind::Cutter,
+        ..solid(2, &inner)
+    };
+    let selection = Selection::Cells {
+        test: vec![Term::Inside(key(1))],
+        seeds: Vec::new(),
+    };
+    let out = picked(vec![solid(1, &envelope), cutter], selection);
+    assert_eq!(out.result[0].len(), 2);
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "bool.names_qualified")
+    );
+}
+
+#[test]
 fn seeds_must_lie_in_a_cell_and_on_no_face() {
     let envelope = cuboid(1, [0, 0, 0], [100, 100, 30]);
     let wall = cuboid(2, [48, 0, 0], [4, 100, 30]);
