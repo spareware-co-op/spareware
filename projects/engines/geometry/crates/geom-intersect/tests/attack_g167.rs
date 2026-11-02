@@ -14,7 +14,9 @@
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
-use geom_curve::{Basis, Circle, CurveKind, Frame, Line, ParamCurve, Trimmed};
+use geom_curve::{
+    Axes, Basis, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola, ParamCurve, Trimmed,
+};
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{Coincidence, CurveContact, CurveEnd, Intersection, Item};
 use geom_intersect::{Projection, project_curve, project_surface};
@@ -725,6 +727,11 @@ fn down() -> Frame<3> {
     Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, -1.0]).unwrap()
 }
 
+/// The conic axes u and v.
+fn axes(u: [f64; 3], v: [f64; 3]) -> Axes<3> {
+    Axes::Vectors { u, v }
+}
+
 /// A cylinder about `c` on `frame`, on part of its turn and height.
 fn tube(c: [f64; 3], r: f64, frame: Frame<3>, turn: (f64, f64), height: (f64, f64)) -> SurfaceKind {
     SurfaceKind::Cylinder(Cylinder::new(c, r, frame, (turn, height)).unwrap())
@@ -971,6 +978,108 @@ fn every_reduction_makes_what_it_made() {
             wall([0.0; 3], [4.0, 3.0, 0.0]),
             tube([0.0; 3], 3.0, up(), ROUND, (20.0, 30.0)),
         ),
+        // A tube the other way up whose height ends ten steps past a crossing (at this scale an
+        // edge within a step of a ring would cut it); a sweep along a direction with every
+        // component, across a plane leaving it at both ends; a sweep high above its start, against
+        // a tall one; profiles of every conic kind, pushed or turned; a circle pushed slantwise
+        // whose image has equal axes that are not square; and two revolutions, one on part of a
+        // turn.
+        (
+            torus(0.0, 300.0, 100.0),
+            tube([0.0; 3], 399.5, down(), ROUND, (-20.0, 300.0)),
+        ),
+        (
+            pushed(
+                segment([0.0; 3], [4.0, 0.0, 0.0]),
+                [1.0, 1.0, 2.0],
+                (0.0, 5.0),
+            ),
+            plane([4.0, 0.0, 1.0], [1.0, 0.0, 3.0], [0.0, 1.0, 1.0]),
+        ),
+        (
+            pushed(
+                segment([0.0, 0.0, 10.0], [4.0, 3.0, 10.0]),
+                [0.0, 0.0, 2.0],
+                (1.0, 4.0),
+            ),
+            pushed(
+                segment([4.0, 0.0, 0.0], [0.0, 3.0, 0.0]),
+                [0.0, 0.0, 1.0],
+                (0.0, 30.0),
+            ),
+        ),
+        (
+            pushed(
+                CurveKind::Ellipse(
+                    Ellipse::new([0.0; 3], axes([4.0, 0.0, 0.0], [0.0, 2.0, 0.0]), (0.0, 0.5))
+                        .unwrap(),
+                ),
+                [0.0, 0.0, 1.0],
+                (0.0, 10.0),
+            ),
+            level(4.0),
+        ),
+        (
+            pushed(
+                CurveKind::Hyperbola(
+                    Hyperbola::new(
+                        [0.0; 3],
+                        axes([2.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+                        (-1.0, 1.0),
+                    )
+                    .unwrap(),
+                ),
+                [0.0, 0.0, 1.0],
+                (0.0, 10.0),
+            ),
+            level(4.0),
+        ),
+        (
+            pushed(
+                CurveKind::Parabola(
+                    Parabola::new(
+                        [0.0; 3],
+                        axes([1.0, 0.0, 0.0], [0.0, 2.0, 0.0]),
+                        (-1.0, 1.0),
+                    )
+                    .unwrap(),
+                ),
+                [0.0, 0.0, 1.0],
+                (0.0, 10.0),
+            ),
+            level(4.0),
+        ),
+        (
+            spun(
+                CurveKind::Ellipse(
+                    Ellipse::new(
+                        [5.0, 0.0, 0.0],
+                        axes([1.0, 0.0, 0.0], [0.0, 0.0, 2.0]),
+                        ROUND,
+                    )
+                    .unwrap(),
+                ),
+                ROUND,
+                up(),
+                ROUND,
+            ),
+            level(1.0),
+        ),
+        (
+            pushed(
+                CurveKind::Circle(Circle::new([0.0; 3], 5.0, up(), (0.0, 0.5)).unwrap()),
+                [1.0, 1.0, 1.0],
+                (0.0, 4.0),
+            ),
+            plane([4.0, 0.0, 3.0], [0.0, 1.0, 0.0], [1.0, 0.0, -2.0]),
+        ),
+        (spun(vase_profile(), (0.0, 1.0), up(), (0.5, 1.5)), cup()),
+        (cup(), spun(vase_profile(), (0.0, 1.0), up(), (0.5, 1.5))),
+        // A wall past the frame's range: refused.
+        (
+            wall([1e17, 0.0, 0.0], [1e17 + 4096.0, 3072.0, 0.0]),
+            plane([1e17, 0.0, 5.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+        ),
     ];
     let mut out = Vec::new();
     for (k, (a, b)) in pairs.iter().enumerate() {
@@ -1062,4 +1171,15 @@ const REDUCTIONS: &[&str] = &[
     "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 1.0 }, Interval { lo: 0.0, hi: 10.0 }, Interval { lo: 1.7951672353008663, hi: 1.7951672353008672 }, Interval { lo: -3.0, hi: 3.5e-323 }], unknowns: 4 }, curve: Line(Line { origin: [2.4000000000000012, 1.7999999999999992, 0.0], direction: [0.0, 0.0, 1.0], domain: (0.0, 3.000000000000001), form: Form { shape: Linear, doubles: [[2.4000000000000012, 1.7999999999999992, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 2.4000000000000012, hi: 2.4000000000000012 }, Interval { lo: 1.7999999999999992, hi: 1.7999999999999992 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0, hi: 1.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
     "Ok(None)",
     "[] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 0.011991974714848426, hi: 0.9894068540950576 }, Interval { lo: 0.0, hi: 2.0 }, Interval { lo: -9.987492177719096, hi: -9.987492177719082 }], unknowns: 4 }, curve: Circle(Circle { center: [0.0, 0.0, 9.987492177719089], radius: 399.5, frame: Frame { x: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] }, domain: (0.0, 2.0), form: Form { shape: Trig, doubles: [[0.0, 0.0, 9.987492177719089], [399.5, 0.0, 0.0], [0.0, 399.5, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 9.987492177719089, hi: 9.987492177719089 }], [Interval { lo: 399.5, hi: 399.5 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 399.5, hi: 399.5 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Closed, Closed], class: Certified { bound: Steps(2), step: Q0 } }, Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 1.0105931459049422, hi: 1.9880080252851517 }, Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 9.987492177719082, hi: 9.987492177719096 }], unknowns: 4 }, curve: Circle(Circle { center: [0.0, 0.0, -9.987492177719089], radius: 399.5, frame: Frame { x: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] }, domain: (0.0, 2.0), form: Form { shape: Trig, doubles: [[0.0, 0.0, -9.987492177719089], [399.5, 0.0, 0.0], [0.0, 399.5, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: -9.987492177719089, hi: -9.987492177719089 }], [Interval { lo: 399.5, hi: 399.5 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 399.5, hi: 399.5 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Closed, Closed], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 1.0 }, Interval { lo: 0.0, hi: 5.0 }, Interval { lo: -4.424242424242445, hi: 5.42424242424245 }, Interval { lo: -8.636363636363676, hi: 13.636363636363697 }], unknowns: 4 }, curve: Line(Line { origin: [5.5, 5.5, 11.0], direction: [-2.000000000000001, -6.0, -12.0], domain: (0.08333333333333326, 0.9166666666666667), form: Form { shape: Linear, doubles: [[5.5, 5.5, 11.0], [-2.000000000000001, -6.0, -12.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 5.5, hi: 5.5 }, Interval { lo: 5.5, hi: 5.5 }, Interval { lo: 11.0, hi: 11.0 }], [Interval { lo: -2.000000000000001, hi: -2.000000000000001 }, Interval { lo: -6.0, hi: -6.0 }, Interval { lo: -12.0, hi: -12.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 1.0 }, Interval { lo: 1.0, hi: 4.0 }, Interval { lo: 0.0, hi: 1.0 }, Interval { lo: 0.0, hi: 30.0 }], unknowns: 4 }, curve: Line(Line { origin: [2.0000000000000018, 1.5, 0.0], direction: [0.0, 0.0, 1.0], domain: (12.0, 18.0), form: Form { shape: Linear, doubles: [[2.0000000000000018, 1.5, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 2.0000000000000018, hi: 2.0000000000000018 }, Interval { lo: 1.5, hi: 1.5 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0, hi: 1.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 0.5 }, Interval { lo: 0.0, hi: 10.0 }, Interval { lo: -1e-322, hi: 4.000000000000013 }, Interval { lo: -1.5e-322, hi: 2.0000000000000075 }], unknowns: 4 }, curve: Ellipse(Ellipse { center: [0.0, 0.0, 4.000000000000001], axes: Vectors { u: [4.000000000000001, 0.0, 0.0], v: [0.0, 2.0000000000000004, 0.0] }, domain: (0.0, 0.5), form: Form { shape: Trig, doubles: [[0.0, 0.0, 4.000000000000001], [4.000000000000001, 0.0, 0.0], [0.0, 2.0000000000000004, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 4.000000000000001, hi: 4.000000000000001 }], [Interval { lo: 4.000000000000001, hi: 4.000000000000001 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 2.0000000000000004, hi: 2.0000000000000004 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Closed, Closed], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: -1.0, hi: 1.0 }, Interval { lo: 0.0, hi: 10.0 }, Interval { lo: 1.9999999999999944, hi: 3.086161269630499 }, Interval { lo: -1.1752011936438063, hi: 1.1752011936438063 }], unknowns: 4 }, curve: Hyperbola(Hyperbola { center: [0.0, 0.0, 4.000000000000001], axes: Vectors { u: [2.0000000000000004, 0.0, 0.0], v: [0.0, 1.0000000000000002, 0.0] }, domain: (-1.0, 1.0), form: Form { shape: Hyperbolic, doubles: [[0.0, 0.0, 4.000000000000001], [2.0000000000000004, 0.0, 0.0], [0.0, 1.0000000000000002, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 4.000000000000001, hi: 4.000000000000001 }], [Interval { lo: 2.0000000000000004, hi: 2.0000000000000004 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0000000000000002, hi: 1.0000000000000002 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: -1.0, hi: 1.0 }, Interval { lo: 0.0, hi: 10.0 }, Interval { lo: -1e-322, hi: 1.0000000000000033 }, Interval { lo: -2.0000000000000067, hi: 2.0000000000000067 }], unknowns: 4 }, curve: Parabola(Parabola { vertex: [0.0, 0.0, 4.000000000000001], axes: Vectors { u: [1.0000000000000002, 0.0, 0.0], v: [0.0, 2.0000000000000004, 0.0] }, domain: (-1.0, 1.0), form: Form { shape: Parabolic, doubles: [[0.0, 0.0, 4.000000000000001], [1.0000000000000002, 0.0, 0.0], [0.0, 2.0000000000000004, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 4.000000000000001, hi: 4.000000000000001 }], [Interval { lo: 1.0000000000000002, hi: 1.0000000000000002 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 2.0000000000000004, hi: 2.0000000000000004 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Boundary, Boundary], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 0.0, hi: 2.0 }, Interval { lo: -5.866025403784452, hi: 5.866025403784452 }, Interval { lo: -5.8660254037844535, hi: 5.8660254037844535 }], unknowns: 4 }, curve: Circle(Circle { center: [0.0, 0.0, 1.0], radius: 5.866025403784437, frame: Frame { x: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] }, domain: (0.0, 2.0), form: Form { shape: Trig, doubles: [[0.0, 0.0, 1.0], [5.866025403784437, 0.0, 0.0], [0.0, 5.866025403784437, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0, hi: 1.0 }], [Interval { lo: 5.866025403784437, hi: 5.866025403784437 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 5.866025403784437, hi: 5.866025403784437 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Closed, Closed], class: Certified { bound: Steps(2), step: Q0 } }, Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 0.0, hi: 2.0 }, Interval { lo: -4.133974596215573, hi: 4.133974596215573 }, Interval { lo: -4.133974596215575, hi: 4.133974596215575 }], unknowns: 4 }, curve: Circle(Circle { center: [0.0, 0.0, 1.0], radius: 4.133974596215561, frame: Frame { x: [1.0, 0.0, 0.0], normal: [0.0, 0.0, 1.0] }, domain: (0.0, 2.0), form: Form { shape: Trig, doubles: [[0.0, 0.0, 1.0], [4.133974596215561, 0.0, 0.0], [0.0, 4.133974596215561, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 1.0, hi: 1.0 }], [Interval { lo: 4.133974596215561, hi: 4.133974596215561 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 4.133974596215561, hi: 4.133974596215561 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Closed, Closed], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "[Curve { at: ParamBox { spans: [Interval { lo: 0.0, hi: 0.5 }, Interval { lo: 0.0, hi: 4.0 }, Interval { lo: 0.33333333333333287, hi: 8.666666666666694 }, Interval { lo: -0.3333333333333343, hi: 1.3333333333333373 }], unknowns: 4 }, curve: Ellipse(Ellipse { center: [3.666666666666667, 3.666666666666667, 3.666666666666667], axes: Vectors { u: [1.6666666666666665, -3.333333333333333, -3.333333333333333], v: [0.0, 5.0, 0.0] }, domain: (0.0, 0.5), form: Form { shape: Trig, doubles: [[3.666666666666667, 3.666666666666667, 3.666666666666667], [1.6666666666666665, -3.333333333333333, -3.333333333333333], [0.0, 5.0, 0.0], [0.0, 0.0, 0.0]], exact: [[Interval { lo: 3.666666666666667, hi: 3.666666666666667 }, Interval { lo: 3.666666666666667, hi: 3.666666666666667 }, Interval { lo: 3.666666666666667, hi: 3.666666666666667 }], [Interval { lo: 1.6666666666666665, hi: 1.6666666666666665 }, Interval { lo: -3.333333333333333, hi: -3.333333333333333 }, Interval { lo: -3.333333333333333, hi: -3.333333333333333 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 5.0, hi: 5.0 }, Interval { lo: 0.0, hi: 0.0 }], [Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }, Interval { lo: 0.0, hi: 0.0 }]] } }), contact: Crossing, ends: [Closed, Closed], class: Certified { bound: Steps(2), step: Q0 } }] TopologyCertified",
+    "Ok(None)",
+    "Ok(None)",
+    "Err(FrameRange)",
 ];
