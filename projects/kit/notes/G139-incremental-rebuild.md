@@ -101,6 +101,9 @@ alone); the gate is about 94 million a move (N42 runs about 5.9 billion a second
 | d42c8995 | The merge's union-find keeps its paths short; runs are cut only at ends between their own | 1.569G |
 | 3eb52ca0 | Publishing takes each vertex's grid rounding from naming | 1.478G |
 | 1970a163 | The names' ids a list by name, merged rather than sorted again | 1.439G |
+| b29c6f4d, e7155268 | A vertex sought only in the operands that keep names; each edge's radial order kept by what it reads (item 4, part) | 1.354G |
+| fe3d4c68 | Nesting traces only the first leg of its path, the rest running along a box clear of every polygon | 1.311G |
+| ba5bef77, c11d6d73 | The names at each vertex one sorted list; the names a result reaches marked by place | 1.296G |
 
 Tried and dropped: sorting on reduced planes (3.496G against 3.424G).
 
@@ -112,7 +115,7 @@ in, which is linear in the comparisons rather than the binary insertion first pl
 second code path to keep equal. A piece held twice starts the sorts from no order, as its one
 place in the old orders would stand for two.
 
-What is left at 480 million a move (1970a163): the merge's passes over the whole wall (40%: nesting's
+What is left at 432 million a move (c11d6d73), in the same proportions as at 480 million (1970a163): the merge's passes over the whole wall (40%: nesting's
 outer test traces every polygon of the wall's shell, radial orders, the sorts' merging, numbering,
 rings), naming per entity (29%: edges, vertices, the names a result reaches), publishing the body
 (11%, about 51 million a move), the arrangement along the moved door's path (9%), and allocation.
