@@ -1597,7 +1597,7 @@
               "shape": "unit"
             },
             {
-              "doc": "The data or a transform collapses the kind: parallel vectors where independent ones are needed, a zero length or direction, or a singular transform.",
+              "doc": "The data or a transform collapses the kind: parallel vectors where independent ones are needed, a zero length or direction, or a singular transform; or an offset whose normal vanishes somewhere on its domain (its basis's tangent zero there, or parallel to its reference direction), where the offset is not defined.",
               "name": "Degenerate",
               "shape": "unit"
             },
@@ -2041,12 +2041,13 @@
           "target": "lib"
         },
         {
-          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives.",
+          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives; where even 128 cannot, only the pieces that need it are halved, each at most about 52 times (to 2^−52 of the domain, or to neighbouring doubles), depth first on an explicit stack of at most one piece per halving, every piece examined charged to the meter.",
           "does": "[`Offset`] stores a trimmed basis curve C and an [`OffsetLaw`]:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
           "guarantees": [
             "**Certified, or refused.** Where the normal may vanish (a cusp of the basis, or a span too wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused, never guessed; a bound on the points still holds there, from the basis's bound widened by the offset's largest size.",
+            "**Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero even over the narrowest piece the conversion cuts (the domain's width times 2^−52, or two neighbouring doubles where those are farther apart), the offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction), and the NURBS form is refused as `Degenerate`, never as `Unbounded`, which names an infinite domain. A normal that only comes near zero, as on a nearly flat helix offset along its axis, is cut finer there until its pieces are bounded (issue #526); only a remainder that overflows the doubles even on the narrowest pieces is refused, as `NotFinite`.",
             "**Exact split and reversal.** A split trims the basis; a reversal reverses the basis and negates the distances (the left normal of the reversed curve is the right normal).",
             "**Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves exactly gives an offset (a mirror negating the side); any other transform gives the moved NURBS cache, with both deviations."
           ],

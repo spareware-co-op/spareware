@@ -157,6 +157,40 @@ fn derivative_norm<K: ParamCurve<D>, const D: usize>(
     Ok((tight::norm(&m)?.hi(), zero))
 }
 
+/// Taylor's remainder R = M·ρ^{p+1}/(p+1)! of the polynomial of degree `degree` at the middle of
+/// the piece [t0, t1] (module documentation), enclosed; `None` where the kind's derivative of order
+/// `degree` + 1 is exactly zero over the piece, so the polynomial is the curve.
+///
+/// # Errors
+///
+/// [`CurveError::Unbounded`] where the kind cannot bound that derivative over the piece, so a
+/// caller may try narrower pieces; the kind's own errors.
+pub(crate) fn remainder<K: ParamCurve<D>, const D: usize>(
+    kind: &K,
+    (t0, t1): (f64, f64),
+    degree: usize,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Interval>, CurveError> {
+    let order = degree.checked_add(1).ok_or(CurveError::Defect)?;
+    let (bound, exact) = derivative_norm(kind, (t0, t1), order, meter)?;
+    if exact {
+        return Ok(None);
+    }
+    let m = f64::midpoint(t0, t1);
+    let alpha = tight::sub(point(t0)?, point(m)?)?;
+    let beta = tight::sub(point(t1)?, point(t0)?)?;
+    let rho = {
+        let far = tight::add(alpha, beta)?;
+        let (x, y) = (tight::magnitude(alpha), tight::magnitude(far));
+        point(tight::larger(x, y))?
+    };
+    let mut r = point(bound)?;
+    for _ in 0..order {
+        r = tight::mul(r, rho)?;
+    }
+    Ok(Some(tight::div(r, factorial(order)?)?))
+}
+
 /// The kind as NURBS of degree `degree` on the same parameter, from pieces at most `width` long
 /// (module documentation).
 ///
@@ -288,7 +322,6 @@ pub fn from_cuts<K: ParamCurve<D>, const D: usize>(
     let mut knots = Vec::with_capacity(count_points.saturating_add(p).saturating_add(1));
     let mut deviation = point(0.0)?;
     let order = p.checked_add(1).ok_or(CurveError::Defect)?;
-    let reach_factorial = factorial(order)?;
     for k in 0..n {
         let (Some(&t0), Some(&t1), Some(e0), Some(e1)) = (
             cuts.get(k),
@@ -312,19 +345,8 @@ pub fn from_cuts<K: ParamCurve<D>, const D: usize>(
         let alpha = tight::sub(point(t0)?, point(m)?)?;
         let beta = tight::sub(point(t1)?, point(t0)?)?;
         let coeffs = bernstein(&c, alpha, beta)?;
-        let (bound, exact) = derivative_norm(kind, (t0, t1), order, meter)?;
         let mut piece = point(0.0)?;
-        if !exact {
-            let rho = {
-                let far = tight::add(alpha, beta)?;
-                let (x, y) = (tight::magnitude(alpha), tight::magnitude(far));
-                point(tight::larger(x, y))?
-            };
-            let mut r = point(bound)?;
-            for _ in 0..order {
-                r = tight::mul(r, rho)?;
-            }
-            r = tight::div(r, reach_factorial)?;
+        if let Some(r) = remainder(kind, (t0, t1), p, meter)? {
             let (Some(first), Some(last)) = (coeffs.first(), coeffs.last()) else {
                 return Err(CurveError::Defect);
             };
